@@ -492,6 +492,11 @@ _FAST_FILES = {
     # socnav_sampling bounded_v2 contracts (issues #9727, #9746) are deterministic
     # planner checks on synthetic grids; the two episode replays stay marked slow.
     "test_issue_9727_socnav_sampling.py",
+    # VV-2 reference-oracle tests are deterministic policy, overlay, and report
+    # contracts; include them in PR changed-line coverage shards.
+    "test_reference_oracle_report.py",
+    "test_stand_still_reference_planner.py",
+    "test_run_reference_planner_oracles.py",
     # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
     # legacy compatibility; include them in PR changed-line coverage shards.
     "test_robot_attributable_force.py",

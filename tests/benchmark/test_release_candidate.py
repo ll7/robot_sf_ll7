@@ -140,6 +140,7 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
     ("mutation", "message"),
     [
         ("fixed", None),
+        ("fixed_current_conflict", "authored limit.*below fixed horizon"),
         ("fixed_wrong_budget", "campaign horizon differs from candidate H600 contract"),
         ("mixed", "scenario_horizons cannot be combined with fixed horizon"),
         ("missing_pin", "candidate requires scenario_horizons_sha256"),
@@ -160,7 +161,10 @@ def test_candidate_budget_contract_rechecks_mutated_real_inputs(candidate_repo, 
     if mutation.startswith("fixed"):
         config.pop("scenario_horizons")
         config.pop("scenario_horizons_sha256")
-        config["horizon"] = 600 if mutation == "fixed" else 599
+        config["horizon"] = 599 if mutation == "fixed_wrong_budget" else 600
+        if mutation == "fixed":
+            # Unidentified historical inputs retain main's runner-only H600 cap.
+            config.pop("protocol_version")
         payload["matrix"] = {"expected_episode_cells": 20160, "horizon_steps": 600}
         # Fixed admission has a smaller closure, including no schedule sidecar.
         for item, _digest in control.pinned_files:

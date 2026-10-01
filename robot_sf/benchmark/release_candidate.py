@@ -475,7 +475,9 @@ def _candidate_horizon_contract(
     if config.get("scenario_horizons") is None:
         if config.get("horizon") != 600:
             raise ValueError("campaign horizon differs from candidate H600 contract")
-        _apply_fixed_campaign_horizon(scenarios, horizon=600)
+        _apply_fixed_campaign_horizon(
+            scenarios, horizon=600, protocol_version=config.get("protocol_version")
+        )
         return {"expected_episode_cells": 20160, "horizon_steps": 600}
     if config.get("horizon") is not None or any(
         p.get("horizon") is not None for p in config["planners"] if p.get("enabled", True)
@@ -486,7 +488,10 @@ def _candidate_horizon_contract(
     if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
         raise ValueError("candidate requires scenario_horizons_sha256")
     patched = _apply_scenario_horizon_schedule(
-        scenarios, schedule_path=path, expected_sha256=digest
+        scenarios,
+        schedule_path=path,
+        expected_sha256=digest,
+        protocol_version=config.get("protocol_version"),
     )
     for authored, effective in zip(scenarios, patched, strict=True):
         if effective["simulation_config"]["max_episode_steps"] != authored.get(

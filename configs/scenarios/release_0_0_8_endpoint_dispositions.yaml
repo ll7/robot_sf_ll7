@@ -1,5 +1,4 @@
-# #10063: exact geometric dispositions for intentional interactions.
-# Development diagnostic review; not collision-free or release-admission evidence.
+# Exact geometry and forced-population state; intended/dormant dispositions require author review.
 schema: scenario_validation_waivers.v1
 release_zones:
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
@@ -7,7 +6,7 @@ release_zones:
   zone: goal[0]
   actor_kind: ped_spawn
   actor: '0'
-  geometry_sha256: 63dc9ee7389fff46951490243ac5314af64c203763cd8847e6f6ac400c0fa87a
+  geometry_sha256: 265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3
   rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
     does not instantiate this population. Listed rather than silently omitted.'
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
@@ -38,7 +37,7 @@ release_zones:
   zone: goal[0]
   actor_kind: ped_spawn
   actor: '0'
-  geometry_sha256: 63dc9ee7389fff46951490243ac5314af64c203763cd8847e6f6ac400c0fa87a
+  geometry_sha256: 265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3
   rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
     does not instantiate this population. Listed rather than silently omitted.'
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
@@ -113,7 +112,7 @@ release_zones:
   zone: goal[0]
   actor_kind: ped_spawn
   actor: '0'
-  geometry_sha256: 63dc9ee7389fff46951490243ac5314af64c203763cd8847e6f6ac400c0fa87a
+  geometry_sha256: 265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3
   rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
     does not instantiate this population. Listed rather than silently omitted.'
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
@@ -122,7 +121,7 @@ release_zones:
   zone: spawn[0]
   actor_kind: ped_spawn
   actor: '0'
-  geometry_sha256: dd10d7aa4bf8c3a63578397c0aae213fbe471b7a33c464d579c934e9bae76c25
+  geometry_sha256: f6895b19839e52007939dc372c1e24fbde6337db4465dba57e97f1e5cbe26a85
   rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
     does not instantiate this population. Listed rather than silently omitted.'
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
@@ -131,7 +130,7 @@ release_zones:
   zone: goal[0]
   actor_kind: ped_spawn
   actor: '1'
-  geometry_sha256: e7aeac8ea97b21a40ada187e9eba18ee6fabc8cf3a1186b9216ded81d2ceabd9
+  geometry_sha256: b6eaa9b2463f9d322eb287d2d4e421dec968c61327d45391840ff371b8d52d27
   rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
     does not instantiate this population. Listed rather than silently omitted.'
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063

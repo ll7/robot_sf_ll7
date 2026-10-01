@@ -100,3 +100,7 @@ overtake from behind without reset relocation. Station-platform reverse crowd sp
 y=20–23 to y=16.5–19.5 and its departure route skirts the robot goal. Robot-crowding
 uses x=6.5–14.5 instead of x=3–17 with density 0.21 preserving 24 pedestrians.
 These release-only successor inputs leave historical SVGs and frozen artifacts intact.
+
+Dormant crowd dispositions bind both density and `population_size`: a forced
+positive count at density zero changes the fingerprint and requires a fresh
+disposition. The audit still lists dormant geometry rather than omitting it.

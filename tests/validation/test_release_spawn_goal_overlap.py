@@ -153,7 +153,7 @@ def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path)
     assert (2.0, 4.8) in hit["evidence"]["points"]
 
 
-def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path):
+def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path, monkeypatch):
     import pytest
     import yaml
 
@@ -172,6 +172,26 @@ def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path):
     write_json(waivers, doc)
     with pytest.raises(WaiverValidationError, match="changed"):
         enforce_release_zone_waivers(rows, waivers)
+
+    # Density zero is not dormant when an exact population override is supplied.
+    # Resolve a real scenario through the normal loader; don't forge the fingerprint.
+    from robot_sf.training import scenario_loader
+
+    original_loader = scenario_loader.load_scenarios
+
+    def force_crowd_population(path):
+        scenarios = original_loader(path)
+        for scenario in scenarios:
+            if scenario["name"] == "classic_bottleneck_low":
+                scenario["simulation_config"]["population_size"] = 3
+        return scenarios
+
+    monkeypatch.setattr(scenario_loader, "load_scenarios", force_crowd_population)
+    forced_rows = inspect_release_zones()
+    with pytest.raises(WaiverValidationError, match="changed"):
+        enforce_release_zone_waivers(
+            forced_rows, Path("configs/scenarios/release_0_0_8_endpoint_dispositions.yaml")
+        )
 
 
 def test_station_route_starts_in_moved_zone_and_crowding_keeps_24_pedestrians():

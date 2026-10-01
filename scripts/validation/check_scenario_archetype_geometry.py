@@ -378,7 +378,9 @@ RELEASE_MATRICES = (
 )
 
 
-def _release_actors(definition: MapDefinition, density: float) -> list[tuple]:
+def _release_actors(
+    definition: MapDefinition, density: float, population_size: int | None = None
+) -> list[tuple]:
     """Resolve static single-pedestrian lanes and all declared crowd start zones."""
     actors = []
     for ped in definition.single_pedestrians:
@@ -395,7 +397,7 @@ def _release_actors(definition: MapDefinition, density: float) -> list[tuple]:
                     kind,
                     str(index),
                     _rect_polygon(zone),
-                    {"density": density},
+                    {"density": density, "population_size": population_size},
                 )
             )
     return actors
@@ -423,7 +425,11 @@ def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
                 raise ValueError(f"Missing map for {scenario['name']}")
             radius = float(config.sim_config.ped_radius)
             for map_id, definition in sorted(config.map_pool.map_defs.items()):
-                actors = _release_actors(definition, config.sim_config.peds_per_area_m2)
+                actors = _release_actors(
+                    definition,
+                    config.sim_config.peds_per_area_m2,
+                    config.sim_config.population_size,
+                )
                 for kind, zones in (
                     ("spawn", definition.robot_spawn_zones),
                     ("goal", definition.robot_goal_zones),

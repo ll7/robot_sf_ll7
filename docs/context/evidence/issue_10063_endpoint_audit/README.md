@@ -5,7 +5,7 @@ Diagnostic development geometry, not a release, evaluation or safety claim.
 `overlaps.json` contains all 51 scenarios and all 102 full robot endpoint rectangles:
 31 intersections before, 27 after. Four unintended intersections are repaired in
 three release-only successor maps. Every remaining intersection has an exact
-fingerprint and rationale in `configs/scenarios/release_0_0_8_endpoint_dispositions.yaml`.
+fingerprint (including any forced population override) and rationale in `configs/scenarios/release_0_0_8_endpoint_dispositions.yaml`.
 
 Resolved scenario pedestrian radius: 0.4 m; substrate radius: 0.35 m. Distance
 is from the closed robot-centre sampling rectangle to the nominal pedestrian
@@ -42,3 +42,8 @@ file was absent on the pinned base; before sweeps retain base-authored budgets; 
 overtaking budget documented above. Final/base four-CPU backfill jobs are
 15972/15973; earlier twelve-CPU jobs 15958/15964 remain queued diagnostics
 (the earlier after geometry is superseded).
+
+The station reverse-route detour adds 4 m at unchanged density; raw traces show
+26 pedestrians before and 27 after. This is a documented distribution change,
+not a claim of matched population or release admission. A resolved positive
+`population_size` invalidates dormant-crowd dispositions even at density zero.

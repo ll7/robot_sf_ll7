@@ -5813,13 +5813,15 @@
       "zone": "goal[0]"
     }
   ],
+  "comparison_allowance_m": 1e-09,
   "distance_convention": "robot_zone_to_nominal_pedestrian_centres",
   "evidence_status": "diagnostic-only",
-  "geometry_sha": "a4955c3d18122a5f424ff84167c295313ab3308d",
+  "geometry_sha": "ab96ad95e114337e5f342f970be70803f7de9234",
   "issue": 10063,
   "ped_radius_m": 0.4,
   "resolved_current_matrix_sha256": "94867f641deea997399d2c2fe0a5c6becb373914ae5e490493287617ab8b3c82",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "release_endpoint_overlap_audit.v1",
-  "substrate_radius_m": 0.35
+  "substrate_radius_m": 0.35,
+  "validation_source_sha": "f0e911aa2d7e90919fe87f633525ac8010b77a63"
 }

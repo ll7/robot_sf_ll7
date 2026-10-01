@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -90,6 +91,21 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
     request = json.load(sys.stdin)
     with patch.object(_util, "get_repository_root", return_value=checkout):
         cfg = load_campaign_config(checkout / request["config_path"], repository_root=checkout)
+        publication = request.get("publication_identity")
+        if publication is not None:
+            if (
+                not isinstance(publication, dict)
+                or set(publication) != {"release_tag", "doi"}
+                or any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in publication.values()
+                )
+            ):
+                raise ValueError(
+                    "publication_identity requires only release_tag and doi as nonempty strings"
+                )
+            # Match load_release_campaign_config: scientific inputs stay source-bound.
+            cfg = replace(cfg, **publication)
         for path in (cfg.source_config_path, cfg.scenario_matrix_path):
             if path is None or not path.resolve().is_relative_to(checkout):
                 raise ValueError("successor config source escapes pinned checkout")

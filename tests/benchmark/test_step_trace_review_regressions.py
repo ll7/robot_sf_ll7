@@ -188,7 +188,7 @@ def test_new_v2_trace_can_have_complete_coverage():
     assert all(c["eligible"] for c in coverage.values()), coverage
 
 
-@pytest.mark.parametrize("seed", [50036, 111])
+@pytest.mark.parametrize("seed", [50036, 111])  # seed-holdout: synthetic-fixture
 def test_trace_generator_refuses_held_out_before_scenario_or_reset(
     monkeypatch, tmp_path, capsys, seed
 ):

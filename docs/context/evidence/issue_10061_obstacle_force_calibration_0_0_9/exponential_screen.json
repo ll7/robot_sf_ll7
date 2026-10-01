@@ -1,0 +1,450 @@
+{
+  "accepted_candidates": 0,
+  "evidence_status": "diagnostic-only",
+  "grid": [
+    [
+      10,
+      0.01
+    ],
+    [
+      10,
+      0.02
+    ],
+    [
+      10,
+      0.04
+    ],
+    [
+      10,
+      0.08
+    ],
+    [
+      10,
+      0.16
+    ],
+    [
+      25,
+      0.01
+    ],
+    [
+      25,
+      0.02
+    ],
+    [
+      25,
+      0.04
+    ],
+    [
+      25,
+      0.08
+    ],
+    [
+      25,
+      0.16
+    ],
+    [
+      50,
+      0.01
+    ],
+    [
+      50,
+      0.02
+    ],
+    [
+      50,
+      0.04
+    ],
+    [
+      50,
+      0.08
+    ],
+    [
+      50,
+      0.16
+    ],
+    [
+      100,
+      0.01
+    ],
+    [
+      100,
+      0.02
+    ],
+    [
+      100,
+      0.04
+    ],
+    [
+      100,
+      0.08
+    ],
+    [
+      100,
+      0.16
+    ],
+    [
+      200,
+      0.01
+    ],
+    [
+      200,
+      0.02
+    ],
+    [
+      200,
+      0.04
+    ],
+    [
+      200,
+      0.08
+    ],
+    [
+      200,
+      0.16
+    ]
+  ],
+  "law": "A*exp((r-d)/B)*unit_normal",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "amplitude": 50,
+      "direct_wall_min_center_distance": 0.30648713711130404,
+      "minimum_lone_center_distance": 0.3812691711858531,
+      "passed": 140,
+      "range": 0.01,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.24774810209765852,
+        0.2599823911420359
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 10,
+      "direct_wall_min_center_distance": 0.29619200658417766,
+      "minimum_lone_center_distance": 0.37837620005413863,
+      "passed": 140,
+      "range": 0.01,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2477481015624129,
+        0.25998239098455633
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 25,
+      "direct_wall_min_center_distance": 0.3053526715011805,
+      "minimum_lone_center_distance": 0.3828233968358667,
+      "passed": 140,
+      "range": 0.01,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2477481017631301,
+        0.2599823910436113
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 10,
+      "direct_wall_min_center_distance": 0.30828061807026996,
+      "minimum_lone_center_distance": 0.3879116581194806,
+      "passed": 140,
+      "range": 0.02,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.24778013307960378,
+        0.259999778283459
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 25,
+      "direct_wall_min_center_distance": 0.31126349531314657,
+      "minimum_lone_center_distance": 0.35623927573632497,
+      "passed": 134,
+      "range": 0.02,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.24782798916924886,
+        0.26002580276495724
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 50,
+      "direct_wall_min_center_distance": 0.3162301131135119,
+      "minimum_lone_center_distance": 0.36235105783242005,
+      "passed": 130,
+      "range": 0.02,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.24790724499805716,
+        0.2600690271402667
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 10,
+      "direct_wall_min_center_distance": 0.32145062321695805,
+      "minimum_lone_center_distance": 0.3924879771495913,
+      "passed": 130,
+      "range": 0.04,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2594683343130265,
+        0.2691766022148182
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 25,
+      "direct_wall_min_center_distance": 0.34320659008791754,
+      "minimum_lone_center_distance": 0.42508014169545727,
+      "passed": 120,
+      "range": 0.04,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2701732811978558,
+        0.278288330789385
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 10,
+      "direct_wall_min_center_distance": 0.3520764280280664,
+      "minimum_lone_center_distance": 0.48011353378089994,
+      "passed": 110,
+      "range": 0.08,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.3477893653014815,
+        0.35330131704430723
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 100,
+      "direct_wall_min_center_distance": 0.30668345274744513,
+      "minimum_lone_center_distance": 0.36304043730451796,
+      "passed": 140,
+      "range": 0.01,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.24774810276671533,
+        0.25998239133888557
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 25,
+      "direct_wall_min_center_distance": 0.4194005048567575,
+      "minimum_lone_center_distance": 0.5441522634066212,
+      "passed": 100,
+      "range": 0.08,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.39215489988614916,
+        0.39653987862881845
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 50,
+      "direct_wall_min_center_distance": 0.3717907778453551,
+      "minimum_lone_center_distance": 0.453926114476005,
+      "passed": 120,
+      "range": 0.04,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.28152613780056546,
+        0.2884133215131398
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 10,
+      "direct_wall_min_center_distance": 0.4365696760621107,
+      "minimum_lone_center_distance": 0.5996351375195269,
+      "passed": 90,
+      "range": 0.16,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.5332590575692294,
+        0.5374798092985723
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 100,
+      "direct_wall_min_center_distance": 0.3261452028044318,
+      "minimum_lone_center_distance": 0.36156388574463816,
+      "passed": 120,
+      "range": 0.02,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2480639051267851,
+        0.26015492077207825
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 25,
+      "direct_wall_min_center_distance": 0.5886446734603434,
+      "minimum_lone_center_distance": 0.8323728496409801,
+      "passed": 80,
+      "range": 0.16,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.6357380293446347,
+        0.6390015225980047
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 200,
+      "direct_wall_min_center_distance": 0.3070760838800388,
+      "minimum_lone_center_distance": 0.35007051064627787,
+      "passed": 140,
+      "range": 0.01,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.24774810410482917,
+        0.25998239173258486
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 100,
+      "direct_wall_min_center_distance": 0.4184793100393538,
+      "minimum_lone_center_distance": 0.4836158483368222,
+      "passed": 110,
+      "range": 0.04,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2954600559226689,
+        0.30125098840875164
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 50,
+      "direct_wall_min_center_distance": 0.4852858483132485,
+      "minimum_lone_center_distance": 0.5950605555340753,
+      "passed": 90,
+      "range": 0.08,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.42962387108141853,
+        0.43334346218829334
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 200,
+      "direct_wall_min_center_distance": 0.3400594904117047,
+      "minimum_lone_center_distance": 0.3871416852227116,
+      "passed": 120,
+      "range": 0.02,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.2483701121573073,
+        0.26032453655300125
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 50,
+      "direct_wall_min_center_distance": 0.7018970738020736,
+      "minimum_lone_center_distance": 0.9470430731004844,
+      "passed": 80,
+      "range": 0.16,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.7200618761482668,
+        0.7227444587613695
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 200,
+      "direct_wall_min_center_distance": 0.4435349286966115,
+      "minimum_lone_center_distance": 0.4991211472049452,
+      "passed": 105,
+      "range": 0.04,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.31157953069221234,
+        0.31645890583077707
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 100,
+      "direct_wall_min_center_distance": 0.5331944049593365,
+      "minimum_lone_center_distance": 0.6546892685663119,
+      "passed": 80,
+      "range": 0.08,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.4697519581031838,
+        0.472931203776222
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 100,
+      "direct_wall_min_center_distance": 0.8095001291751607,
+      "minimum_lone_center_distance": 0.9987687934566655,
+      "passed": 70,
+      "range": 0.16,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.8091302809247894,
+        0.8113327527111923
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 200,
+      "direct_wall_min_center_distance": 0.5959813751754512,
+      "minimum_lone_center_distance": 0.7172670083553816,
+      "passed": 80,
+      "range": 0.08,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.5120336119547456,
+        0.5147754515084194
+      ],
+      "total": 140
+    },
+    {
+      "amplitude": 200,
+      "direct_wall_min_center_distance": 0.8981941275791345,
+      "minimum_lone_center_distance": 1.0999454797777912,
+      "passed": 50,
+      "range": 0.16,
+      "screen_pass": false,
+      "steady_body_clearance_range": [
+        0.9021059279972331,
+        0.903913139671055
+      ],
+      "total": 140
+    }
+  ],
+  "script_sha256": "0e7ce9ef69c4a49693f3965b7cc10ff0e0f2ca69f5e34d624bdd661b3e5143d9",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ],
+  "slurm_job": "16010",
+  "source_head": "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290"
+}

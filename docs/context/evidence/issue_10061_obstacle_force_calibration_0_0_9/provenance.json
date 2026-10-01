@@ -1,0 +1,29 @@
+{
+  "artifact_custody": "Raw calibration archive is tracked in this directory; duplicate copies retained in lane-owned artifact stores on both execution hosts. Preview manifest will record every episode output digest.",
+  "evidence_status": "diagnostic-only",
+  "fit_source_commit": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+  "force_kernel_changed": false,
+  "raw_archive_sha256": "62821eba8c4c3874f80a82ebbfd62c6a82f2f4b8970de09c5ea7dc531db365cd",
+  "raw_scripts_hash_verified": true,
+  "resolved_fit_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ],
+  "resolved_preview_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_source_commit": "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290"
+}

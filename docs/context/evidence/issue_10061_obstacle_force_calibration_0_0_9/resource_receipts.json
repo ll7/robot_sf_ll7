@@ -1,0 +1,199 @@
+{
+  "admission": "Every submission used submit_idle.py: reject pending a30 work or insufficient idle CPUs; observed receipts in tool transcript. Script and accounting preserved in validation archive.",
+  "cpu_peak_from_parent_allocation_intervals": 16,
+  "jobs": [
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:02:04",
+      "exit_code": "0:0",
+      "job": "15991",
+      "name": "wallcal-grid",
+      "start": "2026-10-01T06:01:28",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:03:51",
+      "exit_code": "0:0",
+      "job": "15992",
+      "name": "wallcal-flow",
+      "start": "2026-10-01T06:02:52",
+      "state": "CANCELLED by 1010"
+    },
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:04:47",
+      "exit_code": "0:0",
+      "job": "15993",
+      "name": "wallcal-flow",
+      "start": "2026-10-01T06:03:51",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:06:30",
+      "exit_code": "0:0",
+      "job": "15994",
+      "name": "wallcal-refine",
+      "start": "2026-10-01T06:06:12",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:09:17",
+      "exit_code": "0:0",
+      "job": "15995",
+      "name": "wallcal-refined-flow",
+      "start": "2026-10-01T06:07:16",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:12:13",
+      "exit_code": "0:0",
+      "job": "16002",
+      "name": "wallcal-third",
+      "start": "2026-10-01T06:11:52",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 16,
+      "end": "2026-10-01T06:18:15",
+      "exit_code": "0:0",
+      "job": "16005",
+      "name": "wallcal-third-flow",
+      "start": "2026-10-01T06:14:54",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T06:29:30",
+      "exit_code": "1:0",
+      "job": "16006",
+      "name": "wallcal-pilot",
+      "start": "2026-10-01T06:28:10",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 4,
+      "end": "2026-10-01T07:17:25",
+      "exit_code": "1:0",
+      "job": "16007",
+      "name": "wallcal-suite",
+      "start": "2026-10-01T06:32:26",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T06:34:57",
+      "exit_code": "0:0",
+      "job": "16008",
+      "name": "wallcal-pilot",
+      "start": "2026-10-01T06:33:46",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 12,
+      "end": "2026-10-01T06:45:24",
+      "exit_code": "0:0",
+      "job": "16009",
+      "name": "wallcal-preview",
+      "start": "2026-10-01T06:35:42",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 12,
+      "end": "2026-10-01T06:47:33",
+      "exit_code": "0:0",
+      "job": "16010",
+      "name": "wallcal-exp",
+      "start": "2026-10-01T06:46:56",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:01:54",
+      "exit_code": "1:0",
+      "job": "16011",
+      "name": "wallcal-imports",
+      "start": "2026-10-01T06:54:02",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T06:58:12",
+      "exit_code": "0:0",
+      "job": "16012",
+      "name": "wallcal-legacy",
+      "start": "2026-10-01T06:57:54",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 10,
+      "end": "2026-10-01T07:05:06",
+      "exit_code": "0:0",
+      "job": "16013",
+      "name": "wallcal-wrapped",
+      "start": "2026-10-01T07:00:36",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:15:36",
+      "exit_code": "0:0",
+      "job": "16014",
+      "name": "wallcal-imports",
+      "start": "2026-10-01T07:07:41",
+      "state": "COMPLETED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:21:47",
+      "exit_code": "1:0",
+      "job": "16015",
+      "name": "wallcal-basecheck",
+      "start": "2026-10-01T07:20:23",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:29:13",
+      "exit_code": "1:0",
+      "job": "16016",
+      "name": "wallcal-targets",
+      "start": "2026-10-01T07:27:00",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:35:02",
+      "exit_code": "1:0",
+      "job": "16017",
+      "name": "wallcal-envcheck",
+      "start": "2026-10-01T07:34:42",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:38:51",
+      "exit_code": "1:0",
+      "job": "16018",
+      "name": "wallcal-residual-base",
+      "start": "2026-10-01T07:38:26",
+      "state": "FAILED"
+    },
+    {
+      "cpus": 2,
+      "end": "2026-10-01T07:46:04",
+      "exit_code": "1:0",
+      "job": "16023",
+      "name": "wallcal-release-diag",
+      "start": "2026-10-01T07:45:47",
+      "state": "FAILED"
+    }
+  ],
+  "new_local_episode_processes": 0,
+  "partition": "a30",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "scheduler_timezone": "+0200"
+}

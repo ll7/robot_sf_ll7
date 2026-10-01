@@ -1,0 +1,675 @@
+{
+  "accepted_choice": null,
+  "adoption": "blocked",
+  "benchmark_footprint_radius_m": 0.4,
+  "candidate_ranking": [
+    {
+      "factor": 0.003,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.3592958838568431,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.3124170667393702,
+        "1.2": 1.5729535025468513,
+        "2": 1.6704322187970417,
+        "3.6": 1.5432628032302216
+      },
+      "offset": 0.375,
+      "specific_flow_mse": 1.031666541532993
+    },
+    {
+      "factor": 0.001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.36190353706789324,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.2424519647415353,
+        "1.2": 1.5504027674136962,
+        "2": 1.689384779987415,
+        "3.6": 1.5518633898696206
+      },
+      "offset": 0.4,
+      "specific_flow_mse": 1.066843752088784
+    },
+    {
+      "factor": 0.0003,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.35455929096090627,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.1019848696968269,
+        "1.2": 1.5304936782742367,
+        "2": 1.6630947505890639,
+        "3.6": 1.5533593177402527
+      },
+      "offset": 0.425,
+      "specific_flow_mse": 1.1406979850099002
+    },
+    {
+      "factor": 0.0001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.3741338921841961,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 0.5713757289176103,
+        "1.2": 1.473042286294353,
+        "2": 1.6077926658289206,
+        "3.6": 1.5549096702230003
+      },
+      "offset": 0.45,
+      "specific_flow_mse": 1.5347698076402516
+    },
+    {
+      "factor": 0.003,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.3901610904791779,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 0.509222612564938,
+        "1.2": 1.5154020115402183,
+        "2": 1.6457186232116037,
+        "3.6": 1.524984838454786
+      },
+      "offset": 0.4,
+      "specific_flow_mse": 1.577673690837459
+    },
+    {
+      "factor": 0.001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.3861413490780898,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 0.4298335002879259,
+        "1.2": 1.5188768339974883,
+        "2": 1.6530657161747202,
+        "3.6": 1.5361573954989025
+      },
+      "offset": 0.425,
+      "specific_flow_mse": 1.6523338825932605
+    },
+    {
+      "factor": 0.0003,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.38153254019562266,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 0.2834935933058048,
+        "1.2": 1.4599264375921366,
+        "2": 1.6306555827893834,
+        "3.6": 1.54470505545129
+      },
+      "offset": 0.45,
+      "specific_flow_mse": 1.821789333983609
+    },
+    {
+      "factor": 0.001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": true,
+      "minimum_center_distance": 0.375651819178731,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 0.0,
+        "1.2": 1.4602660712610482,
+        "2": 1.6190437048864568,
+        "3.6": 1.5152273485606818
+      },
+      "offset": 0.45,
+      "specific_flow_mse": 2.153976226035882
+    },
+    {
+      "factor": 0.0003,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": false,
+      "minimum_center_distance": 0.2877547651303918,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.5167271949117374,
+        "1.2": 1.621509010431198,
+        "2": 1.7183059461316872,
+        "3.6": 1.585889717171678
+      },
+      "offset": 0.375,
+      "specific_flow_mse": 0.9534813376436229
+    },
+    {
+      "factor": 0.001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": false,
+      "minimum_center_distance": 0.32577142497967454,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.4909408774514104,
+        "1.2": 1.5979179249047462,
+        "2": 1.7134122642491645,
+        "3.6": 1.5724110134267073
+      },
+      "offset": 0.375,
+      "specific_flow_mse": 0.9659581454491375
+    },
+    {
+      "factor": 0.0003,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": false,
+      "minimum_center_distance": 0.32594948958031256,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.433014195822234,
+        "1.2": 1.5580486287415263,
+        "2": 1.6912777979552038,
+        "3.6": 1.5785440705911287
+      },
+      "offset": 0.4,
+      "specific_flow_mse": 0.9932932245284306
+    },
+    {
+      "factor": 0.0001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": false,
+      "minimum_center_distance": 0.2940547301832694,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.4108562755938523,
+        "1.2": 1.5725784219605525,
+        "2": 1.676249028671623,
+        "3.6": 1.5843922628440348
+      },
+      "offset": 0.4,
+      "specific_flow_mse": 0.9964351646057608
+    },
+    {
+      "factor": 0.0001,
+      "footprint_clearance_pass": false,
+      "force_radius_clearance_pass": false,
+      "minimum_center_distance": 0.3306936269162363,
+      "normal_speed_specific_flows": {
+        "0.8": 0.0,
+        "1": 1.2600849943753698,
+        "1.2": 1.5023175857251003,
+        "2": 1.643275339263566,
+        "3.6": 1.574104456165233
+      },
+      "offset": 0.425,
+      "specific_flow_mse": 1.0734393516818566
+    }
+  ],
+  "chosen_flow_by_width": [
+    {
+      "flow": 0.0,
+      "mean_crossed": 0,
+      "specific_flow": 0.0,
+      "speed": 0.65,
+      "width": 0.8
+    },
+    {
+      "flow": 0.5502801466921314,
+      "mean_crossed": 58.8,
+      "specific_flow": 0.5502801466921314,
+      "speed": 0.65,
+      "width": 1
+    },
+    {
+      "flow": 0.7600318995717831,
+      "mean_crossed": 60,
+      "specific_flow": 0.6333599163098192,
+      "speed": 0.65,
+      "width": 1.2
+    },
+    {
+      "flow": 1.30106382124393,
+      "mean_crossed": 60,
+      "specific_flow": 0.650531910621965,
+      "speed": 0.65,
+      "width": 2
+    },
+    {
+      "flow": 2.1631378591940456,
+      "mean_crossed": 60,
+      "specific_flow": 0.6008716275539016,
+      "speed": 0.65,
+      "width": 3.6
+    },
+    {
+      "flow": 0.0,
+      "mean_crossed": 0,
+      "specific_flow": 0.0,
+      "speed": 1.3,
+      "width": 0.8
+    },
+    {
+      "flow": 1.3124170667393702,
+      "mean_crossed": 60,
+      "specific_flow": 1.3124170667393702,
+      "speed": 1.3,
+      "width": 1
+    },
+    {
+      "flow": 1.8875442030562217,
+      "mean_crossed": 60,
+      "specific_flow": 1.5729535025468513,
+      "speed": 1.3,
+      "width": 1.2
+    },
+    {
+      "flow": 3.3408644375940835,
+      "mean_crossed": 60,
+      "specific_flow": 1.6704322187970417,
+      "speed": 1.3,
+      "width": 2
+    },
+    {
+      "flow": 5.555746091628797,
+      "mean_crossed": 60,
+      "specific_flow": 1.5432628032302216,
+      "speed": 1.3,
+      "width": 3.6
+    }
+  ],
+  "evidence_status": "diagnostic-only",
+  "fit_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ],
+  "force_radius_m": 0.35,
+  "grid_helper_sha256": "3df585df553e4b7374d40464aea64374ca2da4e9ec5412ef2233c8133b02fd13",
+  "lanes": {
+    "candidate": [
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5366182347390778,
+        "order_parameters": {
+          "lane_purity": 0.39344941956882257,
+          "lane_segregation_index": 0.029326132570023502
+        },
+        "seed": 1001
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5228050014759651,
+        "order_parameters": {
+          "lane_purity": 0.33250414593698174,
+          "lane_segregation_index": 0.015615085780099347
+        },
+        "seed": 1001
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5300029222155214,
+        "order_parameters": {
+          "lane_purity": 0.38598673300165837,
+          "lane_segregation_index": 0.11665166360212684
+        },
+        "seed": 1002
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.511610620534686,
+        "order_parameters": {
+          "lane_purity": 0.2806799336650083,
+          "lane_segregation_index": 0.1980690530177009
+        },
+        "seed": 1002
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5430286394145083,
+        "order_parameters": {
+          "lane_purity": 0.4593698175787728,
+          "lane_segregation_index": 0.13030086109230968
+        },
+        "seed": 1003
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5281209226251209,
+        "order_parameters": {
+          "lane_purity": 0.255804311774461,
+          "lane_segregation_index": 0.028120178652655963
+        },
+        "seed": 1003
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5432796034798415,
+        "order_parameters": {
+          "lane_purity": 0.4465174129353234,
+          "lane_segregation_index": 0.2553865624674198
+        },
+        "seed": 1004
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5191347815618041,
+        "order_parameters": {
+          "lane_purity": 0.2533167495854063,
+          "lane_segregation_index": 0.14500917368785055
+        },
+        "seed": 1004
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5297571106483938,
+        "order_parameters": {
+          "lane_purity": 0.43407960199004975,
+          "lane_segregation_index": 0.3150569697911609
+        },
+        "seed": 1005
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5226132912486159,
+        "order_parameters": {
+          "lane_purity": 0.4444444444444444,
+          "lane_segregation_index": 0.2637129004549498
+        },
+        "seed": 1005
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5400399880885889,
+        "order_parameters": {
+          "lane_purity": 0.5095356550580431,
+          "lane_segregation_index": 0.12242896015358846
+        },
+        "seed": 1006
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5123332587123222,
+        "order_parameters": {
+          "lane_purity": 0.2980928689883914,
+          "lane_segregation_index": 0.21164982932557241
+        },
+        "seed": 1006
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5470162392451816,
+        "order_parameters": {
+          "lane_purity": 0.35281923714759533,
+          "lane_segregation_index": 0.1500407026720993
+        },
+        "seed": 1007
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5246335659971291,
+        "order_parameters": {
+          "lane_purity": 0.296849087893864,
+          "lane_segregation_index": 0.18978217440821096
+        },
+        "seed": 1007
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5335583862803843,
+        "order_parameters": {
+          "lane_purity": 0.46102819237147596,
+          "lane_segregation_index": 0.1566940646582116
+        },
+        "seed": 1008
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5015930583397585,
+        "order_parameters": {
+          "lane_purity": 0.2864842454394693,
+          "lane_segregation_index": 0.15055118375353882
+        },
+        "seed": 1008
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5276182799356912,
+        "order_parameters": {
+          "lane_purity": 0.6276948590381426,
+          "lane_segregation_index": 0.5929652142470356
+        },
+        "seed": 1009
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.48637074837497485,
+        "order_parameters": {
+          "lane_purity": 0.42786069651741293,
+          "lane_segregation_index": 0.48248020557038634
+        },
+        "seed": 1009
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.5500420147207674,
+        "order_parameters": {
+          "lane_purity": 0.4191542288557214,
+          "lane_segregation_index": 0.11664045241752145
+        },
+        "seed": 1010
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5223440456353798,
+        "order_parameters": {
+          "lane_purity": 0.332089552238806,
+          "lane_segregation_index": 0.09495109173891418
+        },
+        "seed": 1010
+      }
+    ],
+    "legacy": [
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.716353710408242,
+        "order_parameters": {
+          "lane_purity": 0.35572139303482586,
+          "lane_segregation_index": 0.043319533399879456
+        },
+        "seed": 1001
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.6838372786615989,
+        "order_parameters": {
+          "lane_purity": 0.3561359867330017,
+          "lane_segregation_index": 0.015756209770018112
+        },
+        "seed": 1001
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.633279740687896,
+        "order_parameters": {
+          "lane_purity": 0.3138474295190713,
+          "lane_segregation_index": 0.15446863141897935
+        },
+        "seed": 1002
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5692656252453807,
+        "order_parameters": {
+          "lane_purity": 0.3449419568822554,
+          "lane_segregation_index": 0.20592033505154228
+        },
+        "seed": 1002
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.6969635430180858,
+        "order_parameters": {
+          "lane_purity": 0.32338308457711445,
+          "lane_segregation_index": 0.04359169307295106
+        },
+        "seed": 1003
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.6670155635025734,
+        "order_parameters": {
+          "lane_purity": 0.23880597014925373,
+          "lane_segregation_index": 0.0216692863324397
+        },
+        "seed": 1003
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.653907406727499,
+        "order_parameters": {
+          "lane_purity": 0.29892205638474295,
+          "lane_segregation_index": 0.1760489054785406
+        },
+        "seed": 1004
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.653907406727499,
+        "order_parameters": {
+          "lane_purity": 0.23466003316749584,
+          "lane_segregation_index": 0.13429006329793108
+        },
+        "seed": 1004
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.7093994554242684,
+        "order_parameters": {
+          "lane_purity": 0.3880597014925373,
+          "lane_segregation_index": 0.16910686168474562
+        },
+        "seed": 1005
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.6108981220113145,
+        "order_parameters": {
+          "lane_purity": 0.4407131011608624,
+          "lane_segregation_index": 0.25885518678619646
+        },
+        "seed": 1005
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.6505102289021751,
+        "order_parameters": {
+          "lane_purity": 0.3130182421227197,
+          "lane_segregation_index": 0.09406099099160511
+        },
+        "seed": 1006
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.623319023230086,
+        "order_parameters": {
+          "lane_purity": 0.33167495854063017,
+          "lane_segregation_index": 0.20250768259499202
+        },
+        "seed": 1006
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.7674551329455821,
+        "order_parameters": {
+          "lane_purity": 0.3644278606965174,
+          "lane_segregation_index": 0.258999851279063
+        },
+        "seed": 1007
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.60970445149094,
+        "order_parameters": {
+          "lane_purity": 0.2935323383084577,
+          "lane_segregation_index": 0.16657667862298464
+        },
+        "seed": 1007
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.6344738915945132,
+        "order_parameters": {
+          "lane_purity": 0.32960199004975127,
+          "lane_segregation_index": 0.09136277944139135
+        },
+        "seed": 1008
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.56509156729627,
+        "order_parameters": {
+          "lane_purity": 0.291044776119403,
+          "lane_segregation_index": 0.12386135540121307
+        },
+        "seed": 1008
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.7371792789667033,
+        "order_parameters": {
+          "lane_purity": 0.41956882255389716,
+          "lane_segregation_index": 0.22580097401743796
+        },
+        "seed": 1009
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.5330472361493097,
+        "order_parameters": {
+          "lane_purity": 0.44527363184079605,
+          "lane_segregation_index": 0.45708047060105267
+        },
+        "seed": 1009
+      },
+      {
+        "calibration": "released_default",
+        "min_center_distance": 0.7233147387845955,
+        "order_parameters": {
+          "lane_purity": 0.3034825870646766,
+          "lane_segregation_index": 0.12426857921595809
+        },
+        "seed": 1010
+      },
+      {
+        "calibration": "literature_typical",
+        "min_center_distance": 0.6058610661457238,
+        "order_parameters": {
+          "lane_purity": 0.28524046434494194,
+          "lane_segregation_index": 0.08352914367330609
+        },
+        "seed": 1010
+      }
+    ]
+  },
+  "provisional_choice": {
+    "factor": 0.003,
+    "minimum_center_distance": 0.3592958838568431,
+    "normal_speed_specific_flows": {
+      "0.8": 0.0,
+      "1": 1.3124170667393702,
+      "1.2": 1.5729535025468513,
+      "2": 1.6704322187970417,
+      "3.6": 1.5432628032302216
+    },
+    "offset": 0.375,
+    "specific_flow_mse": 1.031666541532993,
+    "zero_penetration": true
+  },
+  "reason": "No measured refit survivor clears the actual 0.40m benchmark footprint; all have zero 0.8m flow.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_source_head": "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290",
+  "slurm_job": "16013",
+  "social_force_kernel_version": "wrapped_v2",
+  "wrapper_sha256": "93d741d107ab89a4cae67a44f56fba7401e4b6e143114d85728395b9cfc43010"
+}

@@ -1,0 +1,1181 @@
+{
+  "evidence_status": "diagnostic-only",
+  "manifest": {
+    "grid": [
+      [
+        10.0,
+        -0.57
+      ]
+    ],
+    "review_marker": "AI-GENERATED NEEDS-REVIEW",
+    "script_sha256": "ee6d34c09ced3b0418af301b361d6ceb413c578753587ffa3ba9b600c40c33a6",
+    "seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010
+    ],
+    "slurm_job": "16012",
+    "source_head": "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290",
+    "workers": 1
+  },
+  "raw": {
+    "corridor": [
+      {
+        "min_center_distance": 0.597748101428601,
+        "seed": 1001,
+        "steady_body_clearance": 0.9845145012832933,
+        "steady_speed": 0.5233043073789969
+      },
+      {
+        "min_center_distance": 0.6023835768103378,
+        "seed": 1002,
+        "steady_body_clearance": 0.9859102526166469,
+        "steady_speed": 0.5241140155656865
+      },
+      {
+        "min_center_distance": 0.6062448526346274,
+        "seed": 1003,
+        "steady_body_clearance": 0.9870777684398923,
+        "steady_speed": 0.5247874059898662
+      },
+      {
+        "min_center_distance": 0.6099823909451858,
+        "seed": 1004,
+        "steady_body_clearance": 0.9882120968233966,
+        "steady_speed": 0.5254382656170924
+      },
+      {
+        "min_center_distance": 0.6083556165386421,
+        "seed": 1005,
+        "steady_body_clearance": 0.9877178658661242,
+        "steady_speed": 0.5251550929161382
+      },
+      {
+        "min_center_distance": 0.6032615713285436,
+        "seed": 1006,
+        "steady_body_clearance": 0.9861753381071067,
+        "steady_speed": 0.5242672212141871
+      },
+      {
+        "min_center_distance": 0.6085755012507823,
+        "seed": 1007,
+        "steady_body_clearance": 0.9877846230584156,
+        "steady_speed": 0.5251933787235826
+      },
+      {
+        "min_center_distance": 0.6066549450189078,
+        "seed": 1008,
+        "steady_body_clearance": 0.9872020267520104,
+        "steady_speed": 0.5248588659385376
+      },
+      {
+        "min_center_distance": 0.6088699907589312,
+        "seed": 1009,
+        "steady_body_clearance": 0.9878740528874698,
+        "steady_speed": 0.5252446494245637
+      },
+      {
+        "min_center_distance": 0.6081001543407687,
+        "seed": 1010,
+        "steady_body_clearance": 0.9876403253980929,
+        "steady_speed": 0.5251106083419195
+      }
+    ],
+    "factor": 10.0,
+    "lone": [
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255949470574245,
+        "passed": false,
+        "seed": 1001,
+        "speed": 1.0505693754265305e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9887405071430049,
+        "passed": false,
+        "seed": 1001,
+        "speed": 2.4530328678299397e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1001,
+        "speed": 6.374231290685306e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9887405071430049,
+        "passed": false,
+        "seed": 1001,
+        "speed": 2.9200948422382086e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.02408527594592,
+        "min_center_distance": 1.1000966828679648,
+        "passed": true,
+        "seed": 1001,
+        "speed": 0.2077242545477172,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9887405071430049,
+        "passed": false,
+        "seed": 1001,
+        "speed": 2.72706149021338e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019966930190874,
+        "min_center_distance": 1.4000051634970359,
+        "passed": true,
+        "seed": 1001,
+        "speed": 0.4375623095715686,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9887405071430049,
+        "passed": false,
+        "seed": 1001,
+        "speed": 2.8253943463881222e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049375197792239,
+        "min_center_distance": 1.8001261686610077,
+        "passed": true,
+        "seed": 1001,
+        "speed": 0.5319314399037294,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.91380699620383,
+        "min_center_distance": 1.9887405071430049,
+        "passed": false,
+        "seed": 1001,
+        "speed": 3.385567179089382e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255948847462478,
+        "passed": false,
+        "seed": 1002,
+        "speed": 1.0452007103601394e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9880821159483115,
+        "passed": false,
+        "seed": 1002,
+        "speed": 2.4279914687434684e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1002,
+        "speed": 6.373887664561101e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9880821159483115,
+        "passed": false,
+        "seed": 1002,
+        "speed": 2.93845463022369e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024085270544203,
+        "min_center_distance": 1.1000966828105143,
+        "passed": true,
+        "seed": 1002,
+        "speed": 0.2077242541068406,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9880821159483115,
+        "passed": false,
+        "seed": 1002,
+        "speed": 2.7123612657719346e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019966916473216,
+        "min_center_distance": 1.4000051630267114,
+        "passed": true,
+        "seed": 1002,
+        "speed": 0.43756231080054264,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9880821159483115,
+        "passed": false,
+        "seed": 1002,
+        "speed": 2.8134996517142974e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049375173462645,
+        "min_center_distance": 1.8001261493203216,
+        "passed": true,
+        "seed": 1002,
+        "speed": 0.5319314565795412,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.91380699620383,
+        "min_center_distance": 1.9880821159483115,
+        "passed": false,
+        "seed": 1002,
+        "speed": 3.3855995586232093e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255930586289113,
+        "passed": false,
+        "seed": 1003,
+        "speed": 1.0394078104723727e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9687757368268632,
+        "passed": false,
+        "seed": 1003,
+        "speed": 2.432042830640253e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1003,
+        "speed": 6.373859569106896e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9687757368268632,
+        "passed": false,
+        "seed": 1003,
+        "speed": 2.9217122764777596e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024084975640605,
+        "min_center_distance": 1.1000966797389211,
+        "passed": true,
+        "seed": 1003,
+        "speed": 0.20772423003742937,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9687757368268632,
+        "passed": false,
+        "seed": 1003,
+        "speed": 2.7180006685100637e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019966167812575,
+        "min_center_distance": 1.400005148477181,
+        "passed": true,
+        "seed": 1003,
+        "speed": 0.43756237781888785,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9687757368268632,
+        "passed": false,
+        "seed": 1003,
+        "speed": 2.8116781432020482e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049373845755538,
+        "min_center_distance": 1.8001255759866537,
+        "passed": true,
+        "seed": 1003,
+        "speed": 0.5319323662319717,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.913806996203831,
+        "min_center_distance": 1.9687757368268632,
+        "passed": false,
+        "seed": 1003,
+        "speed": 3.3856482658881976e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255912944170152,
+        "passed": false,
+        "seed": 1004,
+        "speed": 1.0353734992070505e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9500880452740714,
+        "passed": false,
+        "seed": 1004,
+        "speed": 2.4246936370008054e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1004,
+        "speed": 6.374160188363515e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9500880452740714,
+        "passed": false,
+        "seed": 1004,
+        "speed": 2.9355180884004098e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024084438482294,
+        "min_center_distance": 1.1000966742085005,
+        "passed": true,
+        "seed": 1004,
+        "speed": 0.20772418619570213,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9500880452740714,
+        "passed": false,
+        "seed": 1004,
+        "speed": 2.723368431033892e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019964805375945,
+        "min_center_distance": 1.4000051330108936,
+        "passed": true,
+        "seed": 1004,
+        "speed": 0.43756249950580783,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9500880452740714,
+        "passed": false,
+        "seed": 1004,
+        "speed": 2.8152847217732676e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049371430131027,
+        "min_center_distance": 1.8001250100816681,
+        "passed": true,
+        "seed": 1004,
+        "speed": 0.5319340193610735,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.91380699620383,
+        "min_center_distance": 1.9500880452740714,
+        "passed": false,
+        "seed": 1004,
+        "speed": 3.385633436306676e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255920617537192,
+        "passed": false,
+        "seed": 1005,
+        "speed": 1.0382927318037556e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9582219173067894,
+        "passed": false,
+        "seed": 1005,
+        "speed": 2.4260926357841603e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1005,
+        "speed": 6.374201705569617e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9582219173067894,
+        "passed": false,
+        "seed": 1005,
+        "speed": 2.922452186433479e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.02408470274425,
+        "min_center_distance": 1.1000966769251037,
+        "passed": true,
+        "seed": 1005,
+        "speed": 0.2077242077642042,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9582219173067894,
+        "passed": false,
+        "seed": 1005,
+        "speed": 2.7163507189482204e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019965475446604,
+        "min_center_distance": 1.4000051399085858,
+        "passed": true,
+        "seed": 1005,
+        "speed": 0.4375624397023852,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9582219173067894,
+        "passed": false,
+        "seed": 1005,
+        "speed": 2.8150179202764174e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049372618084819,
+        "min_center_distance": 1.8001252576725473,
+        "passed": true,
+        "seed": 1005,
+        "speed": 0.5319332066912993,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.913806996203831,
+        "min_center_distance": 1.9582219173067894,
+        "passed": false,
+        "seed": 1005,
+        "speed": 3.3856072631518505e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.625594469316693,
+        "passed": false,
+        "seed": 1006,
+        "speed": 1.0481474226249914e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9836921433572825,
+        "passed": false,
+        "seed": 1006,
+        "speed": 2.425255885757788e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1006,
+        "speed": 6.374180396948904e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9836921433572825,
+        "passed": false,
+        "seed": 1006,
+        "speed": 2.923256629583555e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024085226680203,
+        "min_center_distance": 1.1000966823477245,
+        "passed": true,
+        "seed": 1006,
+        "speed": 0.20772425052675303,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9836921433572825,
+        "passed": false,
+        "seed": 1006,
+        "speed": 2.7208035462232954e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019966805087174,
+        "min_center_distance": 1.4000051598469823,
+        "passed": true,
+        "seed": 1006,
+        "speed": 0.43756232077835505,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9836921433572825,
+        "passed": false,
+        "seed": 1006,
+        "speed": 2.8173311265168984e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049374975911533,
+        "min_center_distance": 1.800126020000072,
+        "passed": true,
+        "seed": 1006,
+        "speed": 0.53193159197442,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.913806996203831,
+        "min_center_distance": 1.9836921433572825,
+        "passed": false,
+        "seed": 1006,
+        "speed": 3.3855834680254645e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255919579823896,
+        "passed": false,
+        "seed": 1007,
+        "speed": 1.0385592384452352e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9571224937460885,
+        "passed": false,
+        "seed": 1007,
+        "speed": 2.420408905074877e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1007,
+        "speed": 6.374182275119802e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9571224937460885,
+        "passed": false,
+        "seed": 1007,
+        "speed": 2.9293722626068552e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.02408466977077,
+        "min_center_distance": 1.1000966765858051,
+        "passed": true,
+        "seed": 1007,
+        "speed": 0.20772420507297895,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9571224937460885,
+        "passed": false,
+        "seed": 1007,
+        "speed": 2.7214774065333814e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019965391817047,
+        "min_center_distance": 1.4000051389911565,
+        "passed": true,
+        "seed": 1007,
+        "speed": 0.437562447170964,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9571224937460885,
+        "passed": false,
+        "seed": 1007,
+        "speed": 2.8182252468564533e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049372469809919,
+        "min_center_distance": 1.800125224320335,
+        "passed": true,
+        "seed": 1007,
+        "speed": 0.5319333081571854,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.91380699620383,
+        "min_center_distance": 1.9571224937460885,
+        "passed": false,
+        "seed": 1007,
+        "speed": 3.385546809307054e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255928648547162,
+        "passed": false,
+        "seed": 1008,
+        "speed": 1.0536973445378455e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9667252749054618,
+        "passed": false,
+        "seed": 1008,
+        "speed": 2.4177554194233566e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1008,
+        "speed": 6.373864352287064e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9667252749054618,
+        "passed": false,
+        "seed": 1008,
+        "speed": 2.9211740072092686e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024084928803866,
+        "min_center_distance": 1.1000966792550542,
+        "passed": true,
+        "seed": 1008,
+        "speed": 0.2077242262147135,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9667252749054618,
+        "passed": false,
+        "seed": 1008,
+        "speed": 2.717698395964584e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019966048953892,
+        "min_center_distance": 1.400005146846272,
+        "passed": true,
+        "seed": 1008,
+        "speed": 0.4375623884489701,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9667252749054618,
+        "passed": false,
+        "seed": 1008,
+        "speed": 2.8251456259481956e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049373634987194,
+        "min_center_distance": 1.8001255144074155,
+        "passed": true,
+        "seed": 1008,
+        "speed": 0.5319325105680616,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.913806996203831,
+        "min_center_distance": 1.9667252749054618,
+        "passed": false,
+        "seed": 1008,
+        "speed": 3.385569128703185e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255918190275096,
+        "passed": false,
+        "seed": 1009,
+        "speed": 1.0434804672771723e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9556500462053439,
+        "passed": false,
+        "seed": 1009,
+        "speed": 2.415101240988348e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1009,
+        "speed": 6.373878039925897e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9556500462053439,
+        "passed": false,
+        "seed": 1009,
+        "speed": 2.9207222342398436e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024084624265496,
+        "min_center_distance": 1.10009667611773,
+        "passed": true,
+        "seed": 1009,
+        "speed": 0.2077242013589344,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9556500462053439,
+        "passed": false,
+        "seed": 1009,
+        "speed": 2.7177040467725267e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019965276413489,
+        "min_center_distance": 1.4000051377551432,
+        "passed": true,
+        "seed": 1009,
+        "speed": 0.43756245747494205,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9556500462053439,
+        "passed": false,
+        "seed": 1009,
+        "speed": 2.8158729359222336e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049372265204427,
+        "min_center_distance": 1.8001251795960054,
+        "passed": true,
+        "seed": 1009,
+        "speed": 0.5319334481555461,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.91380699620383,
+        "min_center_distance": 1.9556500462053439,
+        "passed": false,
+        "seed": 1009,
+        "speed": 3.385577880450315e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      },
+      {
+        "final_x": 6.488987843108122,
+        "min_center_distance": 1.6255921823348278,
+        "passed": false,
+        "seed": 1010,
+        "speed": 1.0414631187071548e-15,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 1.2
+      },
+      {
+        "final_x": 5.101776624281529,
+        "min_center_distance": 1.9594992282961572,
+        "passed": false,
+        "seed": 1010,
+        "speed": 2.423845873298866e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 1.2
+      },
+      {
+        "final_x": 7.0181557481476915,
+        "min_center_distance": 1.401434313442988,
+        "passed": false,
+        "seed": 1010,
+        "speed": 6.37390827913977e-13,
+        "steps": 1000,
+        "thickness": 0.0,
+        "width": 2.0
+      },
+      {
+        "final_x": 5.249307386304013,
+        "min_center_distance": 1.9594992282961572,
+        "passed": false,
+        "seed": 1010,
+        "speed": 2.9275380518789477e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.0
+      },
+      {
+        "final_x": 9.024084739975542,
+        "min_center_distance": 1.1000966773083563,
+        "passed": true,
+        "seed": 1010,
+        "speed": 0.20772421080294387,
+        "steps": 215,
+        "thickness": 0.0,
+        "width": 2.2
+      },
+      {
+        "final_x": 5.300365087450847,
+        "min_center_distance": 1.9594992282961572,
+        "passed": false,
+        "seed": 1010,
+        "speed": 2.724772819223501e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.2
+      },
+      {
+        "final_x": 9.019965569882128,
+        "min_center_distance": 1.4000051409685903,
+        "passed": true,
+        "seed": 1010,
+        "speed": 0.43756243126716216,
+        "steps": 145,
+        "thickness": 0.0,
+        "width": 2.8
+      },
+      {
+        "final_x": 5.496421328873329,
+        "min_center_distance": 1.9594992282961572,
+        "passed": false,
+        "seed": 1010,
+        "speed": 2.8140851703550154e-15,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 2.8
+      },
+      {
+        "final_x": 9.049372785522081,
+        "min_center_distance": 1.8001252963760508,
+        "passed": true,
+        "seed": 1010,
+        "speed": 0.5319330921013777,
+        "steps": 129,
+        "thickness": 0.0,
+        "width": 3.6
+      },
+      {
+        "final_x": 5.913806996203831,
+        "min_center_distance": 1.9594992282961572,
+        "passed": false,
+        "seed": 1010,
+        "speed": 3.3856467441327247e-13,
+        "steps": 1000,
+        "thickness": 0.1,
+        "width": 3.6
+      }
+    ],
+    "offset": -0.57,
+    "review_marker": "AI-GENERATED NEEDS-REVIEW",
+    "screen_pass": false
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "summary": [
+    {
+      "mean_end_speed_m_s": 1.0434191718862249e-15,
+      "mean_final_standoff_m": 1.5110121568918782,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.0,
+      "width": 1.2
+    },
+    {
+      "mean_end_speed_m_s": 6.374035376170787e-13,
+      "mean_final_standoff_m": 0.9818442518523085,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.0,
+      "width": 2.0
+    },
+    {
+      "mean_end_speed_m_s": 0.20772422266282173,
+      "mean_final_standoff_m": -1.024084885285315,
+      "n": 10,
+      "passed": 10,
+      "thickness": 0.0,
+      "width": 2.2
+    },
+    {
+      "mean_end_speed_m_s": 0.43756239825395854,
+      "mean_final_standoff_m": -1.0199659387452944,
+      "n": 10,
+      "passed": 10,
+      "thickness": 0.0,
+      "width": 2.8
+    },
+    {
+      "mean_end_speed_m_s": 0.5319326439724206,
+      "mean_final_standoff_m": -1.0493734396661423,
+      "n": 10,
+      "passed": 10,
+      "thickness": 0.0,
+      "width": 3.6
+    },
+    {
+      "mean_end_speed_m_s": 2.426622076454186e-15,
+      "mean_final_standoff_m": 2.898223375718471,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.1,
+      "width": 1.2
+    },
+    {
+      "mean_end_speed_m_s": 2.9260295209292017e-15,
+      "mean_final_standoff_m": 2.7506926136959873,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.1,
+      "width": 2.0
+    },
+    {
+      "mean_end_speed_m_s": 2.719959878919478e-15,
+      "mean_final_standoff_m": 2.699634912549153,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.1,
+      "width": 2.2
+    },
+    {
+      "mean_end_speed_m_s": 2.8171534888952948e-15,
+      "mean_final_standoff_m": 2.5035786711266708,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.1,
+      "width": 2.8
+    },
+    {
+      "mean_end_speed_m_s": 3.385597973367806e-13,
+      "mean_final_standoff_m": 2.08619300379617,
+      "n": 10,
+      "passed": 0,
+      "thickness": 0.1,
+      "width": 3.6
+    }
+  ]
+}

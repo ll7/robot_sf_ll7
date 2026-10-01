@@ -1,0 +1,8 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_raw.tar.gz",
+  "artifact_sha256": "6c9960adbc6308444138d29ca68b4afa5dcad740df87ab8818ba20909a835cc8",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs-review",
+  "schema_version": "evidence-review-marker.v1"
+}

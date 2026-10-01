@@ -1,0 +1,9 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/calibration_raw.tar.gz",
+  "artifact_sha256": "62821eba8c4c3874f80a82ebbfd62c6a82f2f4b8970de09c5ea7dc531db365cd",
+  "preserved_exact_bytes": true,
+  "purpose": "Complete raw development calibration rows, exact hash-matched producer scripts, and scheduler scripts. No held-out stepping.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs-review",
+  "schema_version": "evidence-review-marker.v1"
+}

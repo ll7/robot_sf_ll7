@@ -1,0 +1,2610 @@
+{
+  "accepted_profile": null,
+  "candidate": {
+    "crowd_min_center_distance_m": 0.3580045155681625,
+    "empirical_narrow_width_mse": 1.011541985213998,
+    "factor": 0.003,
+    "flow": {
+      "0.65/0.8": {
+        "crossed": 0,
+        "min_center_distance_m": 0.41115948104524097,
+        "n": 10,
+        "specific_flow": 0.0
+      },
+      "0.65/1.0": {
+        "crossed": 59,
+        "min_center_distance_m": 0.4426800813045153,
+        "n": 10,
+        "specific_flow": 0.5583809427965989
+      },
+      "0.65/1.2": {
+        "crossed": 60,
+        "min_center_distance_m": 0.4457132838426485,
+        "n": 10,
+        "specific_flow": 0.6649439609586101
+      },
+      "0.65/2.0": {
+        "crossed": 60,
+        "min_center_distance_m": 0.4567883629918521,
+        "n": 10,
+        "specific_flow": 0.7020491230275235
+      },
+      "0.65/3.6": {
+        "crossed": 60,
+        "min_center_distance_m": 0.4782661465093041,
+        "n": 10,
+        "specific_flow": 0.6443474748928845
+      },
+      "1.3/0.8": {
+        "crossed": 0,
+        "min_center_distance_m": 0.3580045155681625,
+        "n": 10,
+        "specific_flow": 0.0
+      },
+      "1.3/1.0": {
+        "crossed": 60,
+        "min_center_distance_m": 0.3846359704661788,
+        "n": 10,
+        "specific_flow": 1.3168331207388446
+      },
+      "1.3/1.2": {
+        "crossed": 60,
+        "min_center_distance_m": 0.39024788466906823,
+        "n": 10,
+        "specific_flow": 1.6499338403161017
+      },
+      "1.3/2.0": {
+        "crossed": 60,
+        "min_center_distance_m": 0.4010299164321687,
+        "n": 10,
+        "specific_flow": 1.774302438939726
+      },
+      "1.3/3.6": {
+        "crossed": 60,
+        "min_center_distance_m": 0.4121036837357952,
+        "n": 10,
+        "specific_flow": 1.6135154584612035
+      }
+    },
+    "flow_rows": 100,
+    "flow_wall_gate_pass": true,
+    "lone_min_center_distance_m": 0.5954824959592283,
+    "lone_passed": 100,
+    "lone_total": 100,
+    "offset_m": 0.375,
+    "phase": "thick",
+    "screen_pass": true,
+    "steady_body_clearance_range_m": [
+      0.3680954394219901,
+      0.3736352101669117
+    ],
+    "thin_or_thick_screen": true
+  },
+  "candidate_profile": "calibrated_v2",
+  "evidence_status": "diagnostic-only",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 3.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.4000717707804826,
+      "lone_passed": 20,
+      "lone_total": 50,
+      "offset_m": 0.0,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        1.0859927040731017,
+        1.0884729896221348
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5745444892134881,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.57,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.270449518970728,
+        0.28219188499366543
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.3,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5838357900003879,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.3,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3903404051854015,
+        0.3992489961488489
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.03,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5783410594040173,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.0,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.323029597719246,
+        0.33221658621778605
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.3,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.7865434795339885,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": 0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.6348965305970095,
+        0.6396180134347395
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 3.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.6001381659550238,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.57,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.6250813508168437,
+        0.6319292557518904
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5901289430115899,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.0,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.41781391260501166,
+        0.42509005145015666
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.03,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.574661751684579,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.3,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2674397517649557,
+        0.27904309660646465
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.03,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5735759965053555,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.57,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.254758992802152,
+        0.2668372354505403
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.03,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5761150619755198,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.1,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2954862755440707,
+        0.30585101639838885
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.24643640068537742,
+      "empirical_narrow_width_mse": 0.036204628186017725,
+      "factor": 0.1,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 54.6,
+          "min_center_distance_m": 0.3209570792315821,
+          "n": 10,
+          "specific_flow": 0.6638844894988329
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3318101852190427,
+          "n": 10,
+          "specific_flow": 0.6101543402007946
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3352112878237907,
+          "n": 10,
+          "specific_flow": 0.6714059885629785
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35120788224644617,
+          "n": 10,
+          "specific_flow": 0.6954962643302587
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.37236019563892064,
+          "n": 10,
+          "specific_flow": 0.6315951807489444
+        },
+        "1.3/0.8": {
+          "crossed": 58,
+          "min_center_distance_m": 0.2549772622051999,
+          "n": 10,
+          "specific_flow": 1.5653968705915662
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.24643640068537742,
+          "n": 10,
+          "specific_flow": 1.6297327167948998
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.26869807323115236,
+          "n": 10,
+          "specific_flow": 1.786751422832367
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.2788536507184863,
+          "n": 10,
+          "specific_flow": 1.8285278227888007
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.30609593210737707,
+          "n": 10,
+          "specific_flow": 1.6373177294885397
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5967218779500356,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.1,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.4778049524863265,
+        0.48381900468864647
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 10.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.40018321058571,
+      "lone_passed": 20,
+      "lone_total": 50,
+      "offset_m": -0.3,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        1.1994393224816466,
+        1.2015034173871784
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.3,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5773563247864189,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.57,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.31100070377837274,
+        0.32195138484734376
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5825170340945242,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.1,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.36944430015177876,
+        0.37799387112902016
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.3,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5997927364974692,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.0,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.5601821356908155,
+        0.5658697850061233
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.03,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5842228154491629,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.1,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3638229673734562,
+        0.3715156912358867
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 1.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.599943661247597,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.3,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.5665747084788147,
+        0.5732755060737703
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.576611755152278,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.3,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.30669104848795203,
+        0.31724325087507366
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 10.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.9500880452740714,
+      "lone_passed": 0,
+      "lone_total": 50,
+      "offset_m": 0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        1.454182864291814,
+        1.4548992659600168
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 1.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5859619312941343,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.57,
+      "phase": "initial",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.4215973741789866,
+        0.43080286585156913
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.3,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5981405929532401,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": -0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.49380408644051565,
+        0.5005554963801447
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 3.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.1000175800660676,
+      "lone_passed": 30,
+      "lone_total": 50,
+      "offset_m": -0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.9983673448838603,
+        1.0014367321409394
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 10.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.1000966742085005,
+      "lone_passed": 30,
+      "lone_total": 50,
+      "offset_m": -0.57,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.9845145012832933,
+        0.9882120968233966
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 3.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.4001563473485963,
+      "lone_passed": 20,
+      "lone_total": 50,
+      "offset_m": 0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        1.172576862487297,
+        1.1745506801104675
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 1.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.9997165017574634,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": 0.0,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.794657665869103,
+        0.7987120150267099
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 3.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.9999785201090767,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": -0.3,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.827567537391492,
+        0.8320709335054944
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 10.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.8000714790115735,
+      "lone_passed": 10,
+      "lone_total": 50,
+      "offset_m": 0.0,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        1.4012883031402348,
+        1.4022415873235987
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 10.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 1.8000098088297707,
+      "lone_passed": 10,
+      "lone_total": 50,
+      "offset_m": -0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        1.340645775779004,
+        1.3418971401833937
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 1.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.9044940097397031,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": -0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.7122377000089962,
+        0.7170983227713356
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 1.0,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.9999953060343683,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": 0.1,
+      "phase": "initial",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.881776899056374,
+        0.8851214225332683
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.2810399320274873,
+      "empirical_narrow_width_mse": 0.8631976532593603,
+      "factor": 0.01,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.35693646207212304,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 59.6,
+          "min_center_distance_m": 0.4069731580138125,
+          "n": 10,
+          "specific_flow": 0.554675239109425
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.41967087623235066,
+          "n": 10,
+          "specific_flow": 0.6773677999006832
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4237126608562267,
+          "n": 10,
+          "specific_flow": 0.7030799855853357
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4455592792829206,
+          "n": 10,
+          "specific_flow": 0.6470980505658684
+        },
+        "1.3/0.8": {
+          "crossed": 1.6,
+          "min_center_distance_m": 0.2810399320274873,
+          "n": 10,
+          "specific_flow": 0.056536290846104495
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35361886826555455,
+          "n": 10,
+          "specific_flow": 1.5713889220230743
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35355362901463216,
+          "n": 10,
+          "specific_flow": 1.708545943709522
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.37778915116251355,
+          "n": 10,
+          "specific_flow": 1.7923085745960956
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.38670161085411703,
+          "n": 10,
+          "specific_flow": 1.6136061096083938
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5972733926959481,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.3,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.39506135770210415,
+        0.4008332919859946
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.31603715604478594,
+      "empirical_narrow_width_mse": 0.9261231159172162,
+      "factor": 0.003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.38390976504323915,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4124030946769368,
+          "n": 10,
+          "specific_flow": 0.5810005609945423
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4175919894503908,
+          "n": 10,
+          "specific_flow": 0.6885135654940038
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4396949823072145,
+          "n": 10,
+          "specific_flow": 0.7249545014840548
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.44243014272563386,
+          "n": 10,
+          "specific_flow": 0.6532338602373806
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.31603715604478594,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35938264820686716,
+          "n": 10,
+          "specific_flow": 1.5581746973159007
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3619844744015337,
+          "n": 10,
+          "specific_flow": 1.7065141176522505
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3652825546364126,
+          "n": 10,
+          "specific_flow": 1.7752587226977583
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3902760606789437,
+          "n": 10,
+          "specific_flow": 1.6167205340223867
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5913033739859149,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.35,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3528525255150007,
+        0.35892880674198213
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.6000127954375315,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.2,
+      "phase": "contact",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.5480351467625523,
+        0.5529166775231925
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.36237502022586476,
+      "empirical_narrow_width_mse": 1.127765112084204,
+      "factor": 0.03,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.43440602762246827,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 53.5,
+          "min_center_distance_m": 0.458633637520352,
+          "n": 10,
+          "specific_flow": 0.5304298676369257
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4799982506424465,
+          "n": 10,
+          "specific_flow": 0.5994102228564103
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6650246791386656
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6242810694963802
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.36237502022586476,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 59,
+          "min_center_distance_m": 0.4142520159184122,
+          "n": 10,
+          "specific_flow": 1.1225562525828163
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4219132507638639,
+          "n": 10,
+          "specific_flow": 1.5378234667933273
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.43119141727728305,
+          "n": 10,
+          "specific_flow": 1.705694694462629
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4554095455510181,
+          "n": 10,
+          "specific_flow": 1.5802136575740497
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.5987013119314943,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.3,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.4863711569814618,
+        0.49116295195461535
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.03,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.6809575448233278,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": 0.35,
+      "phase": "contact",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.5240109494318143,
+        0.5282303644176943
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.01,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5829416448377639,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.2,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.33996039324893934,
+        0.34758040675585444
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.001,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.57392339589818,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.2,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2638249556720301,
+        0.2747259131439733
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.2745291731929333,
+      "empirical_narrow_width_mse": 0.9142414458413088,
+      "factor": 0.001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.34717173964260034,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3874794756592239,
+          "n": 10,
+          "specific_flow": 0.6392410755756556
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.38573485044426015,
+          "n": 10,
+          "specific_flow": 0.717170596756338
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3923553806499642,
+          "n": 10,
+          "specific_flow": 0.7389783071946557
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4153530924843336,
+          "n": 10,
+          "specific_flow": 0.6639149532711478
+        },
+        "1.3/0.8": {
+          "crossed": 0.2,
+          "min_center_distance_m": 0.2745291731929333,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3224244293263485,
+          "n": 10,
+          "specific_flow": 1.608410227192818
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.33086622686022865,
+          "n": 10,
+          "specific_flow": 1.713875534323286
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.33809056586089525,
+          "n": 10,
+          "specific_flow": 1.80746652956704
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35760534142522893,
+          "n": 10,
+          "specific_flow": 1.648677612859325
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5799382985858478,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.35,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3056197801513115,
+        0.3131008853782714
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.878331662636042,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": 0.35,
+      "phase": "contact",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.6683852742279554,
+        0.6719071554671777
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.1,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.814161755821123,
+      "lone_passed": 40,
+      "lone_total": 50,
+      "offset_m": 0.3,
+      "phase": "contact",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.6265820823080875,
+        0.6305121925695104
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.001,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5763086707729411,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.3,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2860941448368691,
+        0.2949970337600575
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.36216618761795893,
+      "empirical_narrow_width_mse": 1.108402605475137,
+      "factor": 0.01,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.42359228849566694,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 55.9,
+          "min_center_distance_m": 0.45318233522345774,
+          "n": 10,
+          "specific_flow": 0.5684498543919831
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.46767956766807905,
+          "n": 10,
+          "specific_flow": 0.6367819183918022
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.48092806180351744,
+          "n": 10,
+          "specific_flow": 0.6821539258909517
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6357374043047602
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.36216618761795893,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 59,
+          "min_center_distance_m": 0.40397081999090323,
+          "n": 10,
+          "specific_flow": 1.1257223924534248
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4199500351286529,
+          "n": 10,
+          "specific_flow": 1.6044839225459946
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4283151083522947,
+          "n": 10,
+          "specific_flow": 1.7154277064890218
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4526554968397134,
+          "n": 10,
+          "specific_flow": 1.6012470459929053
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.594852892759902,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.35,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.4282456889101466,
+        0.43321201085576966
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.003,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5760886265298184,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.2,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2877741568995714,
+        0.2972564903036877
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.30166006879768315,
+      "empirical_narrow_width_mse": 0.03206650128997638,
+      "factor": 0.03,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 53.8,
+          "min_center_distance_m": 0.3602599305791365,
+          "n": 10,
+          "specific_flow": 0.643057640432294
+        },
+        "0.65/1.0": {
+          "crossed": 59.7,
+          "min_center_distance_m": 0.3570835308958422,
+          "n": 10,
+          "specific_flow": 0.6275078182367446
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.37012975462779973,
+          "n": 10,
+          "specific_flow": 0.6947593885565332
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3767369035418927,
+          "n": 10,
+          "specific_flow": 0.7134235388435428
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4052432789364158,
+          "n": 10,
+          "specific_flow": 0.6409819724048761
+        },
+        "1.3/0.8": {
+          "crossed": 58,
+          "min_center_distance_m": 0.30166006879768315,
+          "n": 10,
+          "specific_flow": 1.5547420548849513
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3154323232481362,
+          "n": 10,
+          "specific_flow": 1.6565901427329852
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3155694052116046,
+          "n": 10,
+          "specific_flow": 1.7858867067351112
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.32751881815177697,
+          "n": 10,
+          "specific_flow": 1.8318655617288542
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3332472320747941,
+          "n": 10,
+          "specific_flow": 1.6280444312686142
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5981728375089532,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.2,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.41880057154375006,
+        0.42494692470298523
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": 0.29283424590014995,
+      "empirical_narrow_width_mse": 0.24643520413346717,
+      "factor": 0.003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 49.1,
+          "min_center_distance_m": 0.34897912777098883,
+          "n": 10,
+          "specific_flow": 0.583380612373631
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.36499656017153725,
+          "n": 10,
+          "specific_flow": 0.6690015463821192
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35657636152087324,
+          "n": 10,
+          "specific_flow": 0.7233767543187971
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3762892155529496,
+          "n": 10,
+          "specific_flow": 0.7459760665002676
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.40098321468803455,
+          "n": 10,
+          "specific_flow": 0.656897910215284
+        },
+        "1.3/0.8": {
+          "crossed": 56.9,
+          "min_center_distance_m": 0.29283424590014995,
+          "n": 10,
+          "specific_flow": 0.7916413971845451
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.319314846918755,
+          "n": 10,
+          "specific_flow": 1.6983585118709765
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3207809166141651,
+          "n": 10,
+          "specific_flow": 1.7998955618937273
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3195538946407064,
+          "n": 10,
+          "specific_flow": 1.855516632132616
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3395099254292564,
+          "n": 10,
+          "specific_flow": 1.6667656961774606
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5826334715814647,
+      "lone_passed": 50,
+      "lone_total": 50,
+      "offset_m": 0.3,
+      "phase": "contact",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3259673457376254,
+        0.3332018277208161
+      ],
+      "thin_or_thick_screen": false
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.003,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5965054849194978,
+      "lone_passed": 90,
+      "lone_total": 100,
+      "offset_m": 0.425,
+      "phase": "thick",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.4016980264816624,
+        0.40629081390767874
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.3580045155681625,
+      "empirical_narrow_width_mse": 1.011541985213998,
+      "factor": 0.003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.41115948104524097,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 59,
+          "min_center_distance_m": 0.4426800813045153,
+          "n": 10,
+          "specific_flow": 0.5583809427965989
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4457132838426485,
+          "n": 10,
+          "specific_flow": 0.6649439609586101
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4567883629918521,
+          "n": 10,
+          "specific_flow": 0.7020491230275235
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4782661465093041,
+          "n": 10,
+          "specific_flow": 0.6443474748928845
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.3580045155681625,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3846359704661788,
+          "n": 10,
+          "specific_flow": 1.3168331207388446
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.39024788466906823,
+          "n": 10,
+          "specific_flow": 1.6499338403161017
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4010299164321687,
+          "n": 10,
+          "specific_flow": 1.774302438939726
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4121036837357952,
+          "n": 10,
+          "specific_flow": 1.6135154584612035
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.5954824959592283,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.375,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3680954394219901,
+        0.3736352101669117
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.31501839904251683,
+      "empirical_narrow_width_mse": 0.9330814853870638,
+      "factor": 0.001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.38569357795443976,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.410941698717004,
+          "n": 10,
+          "specific_flow": 0.6095016216826337
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4155034008109411,
+          "n": 10,
+          "specific_flow": 0.6872515327695231
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4306272898022728,
+          "n": 10,
+          "specific_flow": 0.7297551089011522
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4381202558773234,
+          "n": 10,
+          "specific_flow": 0.6625468175573165
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.31501839904251683,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.34739761584746454,
+          "n": 10,
+          "specific_flow": 1.568327450487891
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35723499419962756,
+          "n": 10,
+          "specific_flow": 1.6583306623016492
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3615150767769679,
+          "n": 10,
+          "specific_flow": 1.7967460171242648
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.38519884123557535,
+          "n": 10,
+          "specific_flow": 1.6325890518586628
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.583368668899043,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.375,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3177863482115676,
+        0.324537294849489
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.0001,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5740254914425441,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.375,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2625445084117989,
+        0.27270345199608415
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.003,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5962868489396052,
+      "lone_passed": 90,
+      "lone_total": 100,
+      "offset_m": 0.45,
+      "phase": "thick",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.4198524014096955,
+        0.42403619983599683
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.006,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5934363824728893,
+      "lone_passed": 90,
+      "lone_total": 100,
+      "offset_m": 0.375,
+      "phase": "thick",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.40969892510151207,
+        0.4146607592966888
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.28600782710957545,
+      "empirical_narrow_width_mse": 0.9284454362841027,
+      "factor": 0.0003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.3592411572614024,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.38476290298656934,
+          "n": 10,
+          "specific_flow": 0.6293276555800713
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.386178677625165,
+          "n": 10,
+          "specific_flow": 0.7137385431761375
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3918432116245878,
+          "n": 10,
+          "specific_flow": 0.7545813051574344
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4107278700980532,
+          "n": 10,
+          "specific_flow": 0.6705197020829557
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.28600782710957545,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3264635102709459,
+          "n": 10,
+          "specific_flow": 1.582217754080971
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.324240724209812,
+          "n": 10,
+          "specific_flow": 1.6662719093811607
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3357568858987703,
+          "n": 10,
+          "specific_flow": 1.7900169830114387
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3531201708045808,
+          "n": 10,
+          "specific_flow": 1.6571316396546696
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5763089212868869,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.375,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2814485817889921,
+        0.28995341010655606
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.30698513625501767,
+      "empirical_narrow_width_mse": 0.9585593774223015,
+      "factor": 0.0003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.394862060540764,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4166814791544118,
+          "n": 10,
+          "specific_flow": 0.6046970638208837
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4128365644707088,
+          "n": 10,
+          "specific_flow": 0.6840866504798561
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4222890247691211,
+          "n": 10,
+          "specific_flow": 0.7425857447022429
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4386833835109698,
+          "n": 10,
+          "specific_flow": 0.6683457772137665
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.30698513625501767,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35234506194638016,
+          "n": 10,
+          "specific_flow": 1.4941242852079692
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.35234530600405556,
+          "n": 10,
+          "specific_flow": 1.625263816217441
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.36043094384974506,
+          "n": 10,
+          "specific_flow": 1.7600355434095991
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3838622939166889,
+          "n": 10,
+          "specific_flow": 1.6437251949066978
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5783973739271314,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.4,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.29137964831719676,
+        0.2989759188850728
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.006,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5957564978010614,
+      "lone_passed": 90,
+      "lone_total": 100,
+      "offset_m": 0.4,
+      "phase": "thick",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.42732648471547174,
+        0.43189355889912473
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.35399998748261685,
+      "empirical_narrow_width_mse": 1.0374179273288509,
+      "factor": 0.001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4127926200521142,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 59,
+          "min_center_distance_m": 0.4313213174750503,
+          "n": 10,
+          "specific_flow": 0.5814179500404614
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.43984240844344313,
+          "n": 10,
+          "specific_flow": 0.6691131301297459
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.44984089108724895,
+          "n": 10,
+          "specific_flow": 0.7197062863494836
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4649936599235751,
+          "n": 10,
+          "specific_flow": 0.658142243572944
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.35399998748261685,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3737875111873798,
+          "n": 10,
+          "specific_flow": 1.2689604355445971
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3789792606886504,
+          "n": 10,
+          "specific_flow": 1.6207968355262399
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3937131395302842,
+          "n": 10,
+          "specific_flow": 1.7474854943843536
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4115013725338441,
+          "n": 10,
+          "specific_flow": 1.6166281050632847
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.5887405004926975,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.4,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3314939376547513,
+        0.33754228732524394
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.3799012819073566,
+      "empirical_narrow_width_mse": 1.7475139538818638,
+      "factor": 0.0003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4471653137261035,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 10.1,
+          "min_center_distance_m": 0.4421754165556193,
+          "n": 10,
+          "specific_flow": 0.1144287711476716
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4613898568172585,
+          "n": 10,
+          "specific_flow": 0.653987565367923
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.47559632592765677,
+          "n": 10,
+          "specific_flow": 0.7136706934030094
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6580018927815292
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.38774501047978377,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 36.2,
+          "min_center_distance_m": 0.3799012819073566,
+          "n": 10,
+          "specific_flow": 0.33310938983225924
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.40935502202344853,
+          "n": 10,
+          "specific_flow": 1.5280772947519483
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.42284004344045023,
+          "n": 10,
+          "specific_flow": 1.6911601954654407
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.42747742822845947,
+          "n": 10,
+          "specific_flow": 1.6104638270543465
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.5889102375323574,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.45,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3171469541498827,
+        0.3229486162532783
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.3723908858403717,
+      "empirical_narrow_width_mse": 1.4771476053014638,
+      "factor": 0.0001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4349633520680656,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 46.6,
+          "min_center_distance_m": 0.44019636619775276,
+          "n": 10,
+          "specific_flow": 0.4251774203027202
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.44606865268402274,
+          "n": 10,
+          "specific_flow": 0.6617081805912614
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.45176430590278827,
+          "n": 10,
+          "specific_flow": 0.7298260511222044
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.46618296696685046,
+          "n": 10,
+          "specific_flow": 0.6614402410660161
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.3723908858403717,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 59.2,
+          "min_center_distance_m": 0.38816511154142663,
+          "n": 10,
+          "specific_flow": 0.6252843822489642
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.39499670678365906,
+          "n": 10,
+          "specific_flow": 1.5069201907165601
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4035021649491748,
+          "n": 10,
+          "specific_flow": 1.6789594665690757
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.41126809704793654,
+          "n": 10,
+          "specific_flow": 1.6137518373557058
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.5791083963304061,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.45,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.2874728738623301,
+        0.29458513270422293
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.33511045864627864,
+      "empirical_narrow_width_mse": 1.0399772000144616,
+      "factor": 0.0001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4091425877830503,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.42094292004057987,
+          "n": 10,
+          "specific_flow": 0.5789497537168606
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4249574162300271,
+          "n": 10,
+          "specific_flow": 0.6733652101636474
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4172928928044728,
+          "n": 10,
+          "specific_flow": 0.742973987157764
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4367015240102497,
+          "n": 10,
+          "specific_flow": 0.6674095965495391
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.33511045864627864,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3598268329737042,
+          "n": 10,
+          "specific_flow": 1.3047629120616269
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3608767701885558,
+          "n": 10,
+          "specific_flow": 1.5534373886364383
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3736665223531223,
+          "n": 10,
+          "specific_flow": 1.7066144033131385
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3928193916922371,
+          "n": 10,
+          "specific_flow": 1.6373472946732355
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5762084869530667,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.425,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.27682003679692213,
+        0.28507157886591006
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.006,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.6484964734588878,
+      "lone_passed": 80,
+      "lone_total": 100,
+      "offset_m": 0.45,
+      "phase": "thick",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.46478581609186176,
+        0.46866171896398334
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.38757155474104915,
+      "empirical_narrow_width_mse": 1.5997372591018237,
+      "factor": 0.001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.44203169525521474,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 36.2,
+          "min_center_distance_m": 0.4471895745405125,
+          "n": 10,
+          "specific_flow": 0.3522258364541274
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4683997542939844,
+          "n": 10,
+          "specific_flow": 0.659595734448385
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.47749909674426316,
+          "n": 10,
+          "specific_flow": 0.707768847174776
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.651887936270409
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.38857469479792495,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 51.6,
+          "min_center_distance_m": 0.38757155474104915,
+          "n": 10,
+          "specific_flow": 0.4709935515578181
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.412192057384825,
+          "n": 10,
+          "specific_flow": 1.5637336494168719
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4289551583869544,
+          "n": 10,
+          "specific_flow": 1.7086279680855578
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.43127284111463204,
+          "n": 10,
+          "specific_flow": 1.6012156996419356
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.5938685676396821,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.425,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.34662799189240434,
+        0.3520246199671505
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.3734542108858169,
+      "empirical_narrow_width_mse": 2.141706576639651,
+      "factor": 0.001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4703872858404871,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 0,
+          "min_center_distance_m": 0.44947641323109516,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6273945446097701
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6942185355762888
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6416051036341915
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.40743527703355253,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 0.5,
+          "min_center_distance_m": 0.3734542108858169,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4400258722441297,
+          "n": 10,
+          "specific_flow": 1.4977503521240565
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.44601368981967887,
+          "n": 10,
+          "specific_flow": 1.6904783558566003
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.45969089579731826,
+          "n": 10,
+          "specific_flow": 1.598162357836075
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.591198428772681,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.45,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.36303999168019396,
+        0.3678483501218962
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": null,
+      "empirical_narrow_width_mse": null,
+      "factor": 0.006,
+      "flow": {},
+      "flow_rows": 0,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5992700404173121,
+      "lone_passed": 90,
+      "lone_total": 100,
+      "offset_m": 0.425,
+      "phase": "thick",
+      "screen_pass": false,
+      "steady_body_clearance_range_m": [
+        0.44571419848051674,
+        0.4499196815067782
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.29545629391809786,
+      "empirical_narrow_width_mse": 0.9625516497521135,
+      "factor": 0.0001,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.3765938751455051,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.39099542774846086,
+          "n": 10,
+          "specific_flow": 0.6040270519468629
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.39354130643845764,
+          "n": 10,
+          "specific_flow": 0.6907739144056423
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.395671329289522,
+          "n": 10,
+          "specific_flow": 0.7477271568730757
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.412039415219132,
+          "n": 10,
+          "specific_flow": 0.6707451000388676
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.29545629391809786,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.33445616791505994,
+          "n": 10,
+          "specific_flow": 1.4998476022580425
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.34135679686371034,
+          "n": 10,
+          "specific_flow": 1.6019877612935918
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3457254464055035,
+          "n": 10,
+          "specific_flow": 1.7195761398622043
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.36049996781452265,
+          "n": 10,
+          "specific_flow": 1.6423311263897404
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": false,
+      "lone_min_center_distance_m": 0.5747801245994928,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.4,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.26859087852193697,
+        0.2778894073264774
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.3879267753143824,
+      "empirical_narrow_width_mse": 1.5280451398011212,
+      "factor": 0.003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4478549490011145,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 44.6,
+          "min_center_distance_m": 0.44843699739329734,
+          "n": 10,
+          "specific_flow": 0.43128738065338346
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4738919484810733,
+          "n": 10,
+          "specific_flow": 0.6418116391818346
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6956903897484668
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4850662379255031,
+          "n": 10,
+          "specific_flow": 0.6448681896240661
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.3879267753143824,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 53.9,
+          "min_center_distance_m": 0.390996216359275,
+          "n": 10,
+          "specific_flow": 0.5424721789308793
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3932136728055866,
+          "n": 10,
+          "specific_flow": 1.5837958643065966
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.43209856546046543,
+          "n": 10,
+          "specific_flow": 1.7213525491962995
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.45087444316347547,
+          "n": 10,
+          "specific_flow": 1.5937589669565986
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.591532808334945,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.4,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3844112920168473,
+        0.389456507205996
+      ],
+      "thin_or_thick_screen": true
+    },
+    {
+      "crowd_min_center_distance_m": 0.3610206887760551,
+      "empirical_narrow_width_mse": 1.1173503170151406,
+      "factor": 0.0003,
+      "flow": {
+        "0.65/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.4240264558488712,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "0.65/1.0": {
+          "crossed": 59.7,
+          "min_center_distance_m": 0.43280838992724036,
+          "n": 10,
+          "specific_flow": 0.5522161817021075
+        },
+        "0.65/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4348976789729617,
+          "n": 10,
+          "specific_flow": 0.666189530323018
+        },
+        "0.65/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4389098406665237,
+          "n": 10,
+          "specific_flow": 0.724351627020061
+        },
+        "0.65/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.45946825345178866,
+          "n": 10,
+          "specific_flow": 0.6640933043772294
+        },
+        "1.3/0.8": {
+          "crossed": 0,
+          "min_center_distance_m": 0.3610206887760551,
+          "n": 10,
+          "specific_flow": 0.0
+        },
+        "1.3/1.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3827940426375376,
+          "n": 10,
+          "specific_flow": 1.1240784362635707
+        },
+        "1.3/1.2": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3855877234104499,
+          "n": 10,
+          "specific_flow": 1.5726378503502934
+        },
+        "1.3/2.0": {
+          "crossed": 60,
+          "min_center_distance_m": 0.3895402185684249,
+          "n": 10,
+          "specific_flow": 1.714557394898232
+        },
+        "1.3/3.6": {
+          "crossed": 60,
+          "min_center_distance_m": 0.4036307139580204,
+          "n": 10,
+          "specific_flow": 1.627827111885726
+        }
+      },
+      "flow_rows": 100,
+      "flow_wall_gate_pass": true,
+      "lone_min_center_distance_m": 0.582132116659379,
+      "lone_passed": 100,
+      "lone_total": 100,
+      "offset_m": 0.425,
+      "phase": "thick",
+      "screen_pass": true,
+      "steady_body_clearance_range_m": [
+        0.3033096051699983,
+        0.30998515517106096
+      ],
+      "thin_or_thick_screen": true
+    }
+  ],
+  "selection": "minimum specific-flow MSE at widths 0.8, 1.0, 1.2 against Seyfried N=60 Table 2, among phase-thick candidates satisfying passage, free-corridor clearance and crowd wall-distance gates; all seeds in 1001..1010",
+  "target_specific_flow": [
+    1.61,
+    1.9,
+    1.97
+  ]
+}

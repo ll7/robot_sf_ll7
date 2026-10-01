@@ -7,23 +7,31 @@ import hashlib
 import json
 from copy import deepcopy
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from pysocialforce.forces import ObstacleForce
 
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import _stable_config_hash
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.sim.sim_config import SimulationSettings
-from robot_sf.sim.simulator import _build_pysf_simulation
+from robot_sf.sim.simulator import Simulator, _build_pysf_simulation
+from robot_sf.training.scenario_loader import load_scenarios
+from scripts.validation.calibrate_obstacle_force_10061 import FOOTPRINT_RADIUS
+from scripts.validation.calibrate_obstacle_force_10061 import config as calibration_config
 
 
-def _doorway_force(profile: str):
+def _doorway_force(profile: str | None, law: str | None = None):
     """Construct the production pedestrian substrate for a 1.2 m opening."""
     np.random.seed(1001)
-    settings = SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.0])
+    settings = SimulationSettings(
+        difficulty=0, ped_density_by_difficulty=[0.0], obstacle_force_law=law
+    )
     # Assignment works on the pre-fix class too, exposing silently ignored wiring.
     settings.obstacle_force_profile = profile
     map_def = MapDefinition(
@@ -109,3 +117,37 @@ def test_invalid_profile_fails_closed(value):
     """Malformed selectors must never silently restore released parameters."""
     with pytest.raises((ValueError, TypeError), match="obstacle_force_profile"):
         SimulationSettings(obstacle_force_profile=value)
+
+
+def test_candidate_rejects_a_conflicting_force_law():
+    """A different kernel must not receive parameters fitted to the legacy law."""
+    with pytest.raises(ValueError, match="calibrated_v2 requires"):
+        _doorway_force("calibrated_v2", "surface_distance_unit_normal_v2")
+
+
+def test_metadata_distinguishes_opt_in_from_missing_selector():
+    """Actual substrate records expose the profile without changing legacy payloads."""
+    for profile in (None, "legacy_v1", "calibrated_v2"):
+        substrate, _ = _doorway_force(profile)
+        simulator = Simulator.__new__(Simulator)
+        simulator.config = SimulationSettings(obstacle_force_profile=profile)
+        simulator.pysf_sim = substrate
+        record = simulator.obstacle_force_law_metadata()
+        if profile is None:
+            assert "obstacle_force_profile" not in record
+        else:
+            assert record["obstacle_force_profile"] == profile
+
+
+def test_calibration_matches_the_release_pair_kernel():
+    """Crowd fitting must use the pair kernel selected by the actual preview matrix."""
+    matrix = Path(__file__).resolve().parents[2] / (
+        "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
+    released = yaml.safe_load(matrix.read_text())["scenario_overrides"]["simulation_config"]
+    actual = calibration_config(0.003, 0.375).social_force_config.kernel_version
+    assert actual == released["social_force_kernel_version"]
+    scenario = load_scenarios(matrix)[0]
+    footprint = build_env_config(scenario, scenario_path=matrix).sim_config.ped_radius
+    assert FOOTPRINT_RADIUS == footprint
+    assert calibration_config(0.003, 0.375).scene_config.agent_radius < footprint

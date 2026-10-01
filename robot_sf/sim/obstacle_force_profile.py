@@ -47,7 +47,7 @@ def apply_obstacle_force_profile(config: ObstacleForceConfig, value: str | None)
         return
     if config.law_version != LEGACY_SHIFTED_GRADIENT_V1:
         raise ValueError("calibrated_v2 requires obstacle_force_law=legacy_shifted_gradient_v1")
-    # Development fit, pending the 0.0.9 release decision. Narrow-door flow remains gated.
+    # Rejected prototype: footprint and narrow-door gates fail. Opt-in diagnostics only.
     config.factor = 0.003
     config.threshold = 0.375
     config.sigma = 0.0

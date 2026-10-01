@@ -1,0 +1,789 @@
+{
+  "adoption": "blocked by physical wall penetration and narrow-door flow; no accepted calibration",
+  "base_comparison": {
+    "failed": 83,
+    "nodes": 83
+  },
+  "base_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+  "coverage": {
+    "artifact_uri": "archive-member://validation_raw.tar.gz!/suite_coverage.json",
+    "base_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+    "files": [
+      {
+        "coverage": 96.55172413793103,
+        "file": "robot_sf/sim/obstacle_force_profile.py"
+      },
+      {
+        "coverage": 90.0,
+        "file": "robot_sf/sim/sim_config.py"
+      },
+      {
+        "coverage": 83.33333333333333,
+        "file": "robot_sf/sim/simulator.py"
+      },
+      {
+        "coverage": 100.0,
+        "file": "robot_sf/training/scenario_loader.py"
+      }
+    ],
+    "head_sha": "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290",
+    "location": "Member of tracked validation_raw.tar.gz; original full-suite coverage report.",
+    "passed": true,
+    "sha256": "0df7617556a356c06b3618673011eaf5e31459b6e4fc99d0340911c1682bb6f8"
+  },
+  "direct_importers": {
+    "existing_xfailed": 4,
+    "files": 92,
+    "passed": 1421
+  },
+  "evidence_status": "diagnostic-only",
+  "failures": [
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_is_source_bound_and_diagnostic_only",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_separates_immutable_and_working_tree_source_hashes",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'working-tree source hash robustness'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_missing_working_tree_refresh_hash_keeps_exact_binding_fail_closed",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'working-tree source hash robustness must be SHA-256'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_working_tree_refresh_hash_format_is_fail_closed",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_identity_builder_is_deterministic_and_complete",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_canary_is_disjoint_planned_data_and_uses_every_gate",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_temporal_sidecar_uses_a_distinct_versioned_schema",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_confirmed_failure_rejects_all_positive_signed_margins",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_confirmed_failure_requires_activation_time",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_observed_sidecar_requires_activation_time_for_violated_property",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_planned_sidecar_rejects_observed_values",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_sidecar_rejects_property_drift_monitor_artifact_and_weak_admission",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_ledger_rejects_hidden_retry_duplicate_and_non_native_admission",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_ledger_rejects_per_run_budget_overruns",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_result_lineage_requires_all_gate_records",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_result_rows_reject_outcome_fields",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_result_rows_reject_admission_status_drift_from_sidecar",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_result_rows_reject_supplied_identity_drift",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_confirmed_result_lineage_enforces_three_of_five",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_confirmed_result_requires_passing_certification_and_replay[phase_state0]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_confirmed_result_requires_passing_certification_and_replay[phase_state1]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_invalid_search_proposal_cannot_claim_confirmed_failure",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_invalid_search_proposal_cannot_carry_temporal_sidecar",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_invalid_search_proposal_rejects_additional_lineage",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_result_lineage_rejects_post_outcome_identity_change",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'budget grid'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_mutations_fail_closed[path0-value0-budget grid]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'search seeds'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_mutations_fail_closed[path1-value1-search seeds]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'property IDs'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_mutations_fail_closed[path2-value2-property IDs]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'roster'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_mutations_fail_closed[path3-value3-roster]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'budget grid'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_metadata_budget_and_source_are_fail_closed[<lambda>-budget grid]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'budget contains unsupported fields'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_metadata_budget_and_source_are_fail_closed[<lambda>-budget contains unsupported fields]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'scenario.parameters'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_metadata_budget_and_source_are_fail_closed[<lambda>-scenario.parameters]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'analysis'\n  Actual message: 'source.base_commit cannot be resolved'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_packet_metadata_budget_and_source_are_fail_closed[<lambda>-analysis]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "3 passed in output_contracts_local.log",
+      "base_failure": "AssertionError: <frozen runpy>:128: RuntimeWarning: 'robot_sf.analysis_workbench.review_context' found in sys.modules after import of package 'robot_sf.analysis_workbench', but prior to execution of 'robot_sf.analysis_workbench.review_context'; this may result in unpredictable behaviour\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '-m', 'robot_sf.analysis_workbench.re... but prior to execution of 'robot_sf.analysis_workbench.review_context'; this may result in unpredictable behaviour\\n\").returncode",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis_workbench/test_review_context.py::test_cli_produces_schema_valid_report_from_fixture_request",
+      "root_cause_category": "shared_filesystem_output_retirement"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "assert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin... resolved\") from exc\\nrobot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved\\n').returncode",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_cli_requires_one_explicit_operation_and_uses_check",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "3 passed in output_contracts_local.log",
+      "base_failure": "AssertionError: assert 1 == 0\n +  where 1 = main(['--input', '/home/luttkule/wallcal-10061/baseline/tests/fixtures/scenario_review/review_context/request.json', '--con...fixtures/scenario_review/review_context/config.json', '--output', 'output/scenario_review/srev-06-cli-in-process-test'])",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis_workbench/test_review_context.py::test_cli_main_fixture_request_in_process",
+      "root_cause_category": "shared_filesystem_output_retirement"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_durable_report_is_reproducible_and_source_complete_only_for_fixture",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_public_writers_preserve_report_and_receipt_bytes",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'external_targets'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-external_targets0]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'external_targets'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-external_targets1]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'component_ids'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-component_ids]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'duplicate source id'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-duplicate source id]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'fixture.source_id'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-fixture.source_id]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'scenarios'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-scenarios]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'seeds'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-seeds]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'fixture.seeds'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_config_contract_rejects_unsafe_mutations[<lambda>-fixture.seeds]",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_fixture_components_have_explicit_paired_uncertainty_and_multiplicity",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: Regex pattern did not match.\n  Expected regex: 'fixture.path'\n  Actual message: 'tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_fixture_path_cannot_drift_from_its_source_binding",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_release_crossing_fixture_row_fails_closed",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_missing_pair_is_blocked_without_zero_imputation",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_unavailable_cell_cannot_carry_numeric_value",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.source_bound_component_contrasts.SourceBoundComponentContrastError: tracked commit 0a60f9c225599be21581d9b44e2f02bb4eee31bf does not contain configs/publication/dissertation_coverage_v1.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/analysis/test_issue_8566_source_bound_component_contrasts.py::test_release_lineages_remain_separate",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.radius_sweep_summary.RadiusSweepSummaryError: frozen campaign config blob is unavailable: aabad2e2a82cd8dcca93cc78a01493ec6ead5212:configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_radius_sweep_summary.py::test_frozen_hybrid_manifests_resolve_per_scenario_runtime_identity",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed with uv on batch PATH",
+      "base_failure": "assert 1 == 0",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_doctor.py::test_doctor_cli_emits_json_and_can_skip_env_smoke",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed with uv on batch PATH",
+      "base_failure": "AssertionError: assert 'failed' == 'warning'\n  \n  - warning\n  + failed",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_doctor.py::test_doctor_collect_report_marks_missing_optional_import",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "ValueError: historical evidence binding validation failed: scripts/validation/evidence_registry_historical_bindings.v1.json: reviewed ancestry anchor is unavailable as a commit: 15ce5856ab2d4561c6d000942559da194a120e9a",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_forecast_preparation.py::test_tracked_packet_checksum_manifest_is_valid",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "ValueError: historical evidence binding validation failed: scripts/validation/evidence_registry_historical_bindings.v1.json: reviewed ancestry anchor is unavailable as a commit: 15ce5856ab2d4561c6d000942559da194a120e9a",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_forecast_preparation.py::test_tracked_packet_accepts_exact_historical_reference",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "ValueError: historical evidence binding validation failed: scripts/validation/evidence_registry_historical_bindings.v1.json: reviewed ancestry anchor is unavailable as a commit: 15ce5856ab2d4561c6d000942559da194a120e9a",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_forecast_preparation.py::test_tracked_packet_accepts_exact_historical_pyproject_reference",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "ValueError: historical evidence binding validation failed: scripts/validation/evidence_registry_historical_bindings.v1.json: reviewed ancestry anchor is unavailable as a commit: 15ce5856ab2d4561c6d000942559da194a120e9a",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_forecast_preparation.py::test_tracked_packet_accepts_both_exact_historical_references",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/benchmark/test_map_runner_native_command.py::test_native_command_smoke_produces_schema_valid_row (call)\tgymnasium.np_random\t111\t759567",
+      "nodeid": "tests/benchmark/test_map_runner_native_command.py::test_native_command_smoke_produces_schema_valid_row"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_builds_typed_schema_validated_six_card_atlas",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_cards_preserve_the_full_issue_interpretation_contract",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_source_linkage_digests_are_verified",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_code_config_identities_are_structured_and_bound",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_held_out_missing_outcomes_are_inconclusive",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_boundary_labels_preserve_multi_label_cases",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_unavailable_or_blocked_sources_remain_explicit",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_deterministic_output",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: assert not [AtlasValidationIssue(path='/cards/0/code_or_config_identity/1/commit', message='this_repository commit identity is no..._or_config_identity/2/commit', message='this_repository commit identity is not present on a reachable repository ref')]",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_forbidden_wording_can_name_disallowed_phrases",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_loader_returns_independent_nested_dataclasses",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "FileNotFoundError: [Errno 2] No such file or directory: 'node'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/render/test_audit_workbench.py::test_browser_controller_runtime_covers_normal_and_missing_media_cases",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "FileNotFoundError: [Errno 2] No such file or directory: 'python'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/render/test_review_diagnostics.py::test_cli_descriptor_and_node_runtime",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "FileNotFoundError: [Errno 2] No such file or directory: 'node'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/render/test_review_editor.py::test_python_generated_model_can_save_storyboard_in_browser_runtime",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "FileNotFoundError: [Errno 2] No such file or directory: 'node'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/render/test_review_editor.py::test_node_browser_controller_honours_typing_shortcut_suppression",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "3 passed in output_contracts_local.log",
+      "base_failure": "OSError: [Errno 39] Directory not empty: 'output/test_review_overlays_cli_out/frames'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/render/test_review_overlays.py::test_cli_execution",
+      "root_cause_category": "shared_filesystem_output_retirement"
+    },
+    {
+      "after_repair": "passed with uv on batch PATH",
+      "base_failure": "assert 1 == 0",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/test_cli_doctor.py::test_robot_sf_doctor_happy_path_friendly",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed with uv on batch PATH",
+      "base_failure": "assert 1 == 0",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/test_cli_doctor.py::test_robot_sf_doctor_json_format_roundtrip",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed with uv on batch PATH",
+      "base_failure": "assert 1 == 0",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/test_cli_doctor.py::test_robot_sf_doctor_reports_missing_model_artifacts",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "FileNotFoundError: [Errno 2] No such file or directory: 'node'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/test_review_workbench.py::test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/test_seed_utils.py::test_set_global_seed_determinism (call)\tset_global_seed\t123\t759567",
+      "nodeid": "tests/test_seed_utils.py::test_set_global_seed_determinism"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/test_seed_utils.py::test_seed_changes_sequences (call)\tset_global_seed\t111\t759567",
+      "nodeid": "tests/test_seed_utils.py::test_seed_changes_sequences"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "robot_sf.evidence.historical_bindings.HistoricalBindingError: scripts/validation/evidence_registry_historical_bindings.v1.json: reviewed ancestry anchor is unavailable as a commit: 15ce5856ab2d4561c6d000942559da194a120e9a",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/tools/test_lint_evidence_registry.py::test_tracked_historical_binding_manifest_resolves_all_three_records",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/tools/test_lint_evidence_registry.py::test_committed_baseline_reproduces_from_write_baseline",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/tools/test_lint_evidence_registry.py::test_ratchet_gate_passes_against_committed_baseline",
+      "root_cause_category": "historical_git_objects_or_shallow_checkout"
+    },
+    {
+      "after_repair": "1 passed in release_metadata_local.log",
+      "base_failure": "assert 2 == 0",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/tools/test_run_benchmark_release.py::test_diagnostic_stress_success_is_never_release_success",
+      "root_cause_category": "inherited_slurm_private_source_gate"
+    },
+    {
+      "after_repair": "passed after full Git history / python / Node PATH repair",
+      "base_failure": "FileNotFoundError: [Errno 2] No such file or directory: 'python'",
+      "classification": "environment_failure_reproduced_on_base",
+      "nodeid": "tests/benchmark/test_scenario_coverage.py::test_scenario_coverage_entropy_cli_writes_json_and_markdown",
+      "root_cause_category": "required_command_path"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/benchmark/test_spawn_preflight.py::test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds (call)\tgymnasium.np_random\t111\t759564",
+      "nodeid": "tests/benchmark/test_spawn_preflight.py::test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/benchmark/test_spawn_preflight.py::test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds (call)\tgymnasium.np_random\t111\t759564",
+      "nodeid": "tests/benchmark/test_spawn_preflight.py::test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/benchmark/test_spawn_preflight.py::test_main_grid_doorway_probe_requires_pinned_map_and_oracle (call)\tgymnasium.np_random\t111\t759564",
+      "nodeid": "tests/benchmark/test_spawn_preflight.py::test_main_grid_doorway_probe_requires_pinned_map_and_oracle"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/benchmark/test_spawn_preflight.py::test_station_platform_117_respawn_defect_is_removed_by_successor_map (call)\tgymnasium.np_random\t117\t759564",
+      "nodeid": "tests/benchmark/test_spawn_preflight.py::test_station_platform_117_respawn_defect_is_removed_by_successor_map"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/benchmark/test_spawn_preflight_issue_9725.py::test_reset_only_diagnostic_reports_clear_cell_and_map_warnings (call)\tgymnasium.np_random\t111\t759564",
+      "nodeid": "tests/benchmark/test_spawn_preflight_issue_9725.py::test_reset_only_diagnostic_reports_clear_cell_and_map_warnings"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/training/test_train_expert_ppo_contract.py::test_main_dry_run_manifest_records_config_sha256 (call)\tset_global_seed\t123\t759567",
+      "nodeid": "tests/training/test_train_expert_ppo_contract.py::test_main_dry_run_manifest_records_config_sha256"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/training/test_train_dreamerv3_rllib_runtime.py::test_periodic_eval_prefers_evaluation_scenario_matrix_selection (call)\tgymnasium.np_random\t123\t759564",
+      "nodeid": "tests/training/test_train_dreamerv3_rllib_runtime.py::test_periodic_eval_prefers_evaluation_scenario_matrix_selection"
+    },
+    {
+      "baseline_retest": "not run; protected seed refusal",
+      "classification": "seed_guard_refusal_before_step",
+      "detail": "tests/training/test_train_dreamerv3_rllib_runtime.py::test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract (call)\tgymnasium.np_random\t123\t759564",
+      "nodeid": "tests/training/test_train_dreamerv3_rllib_runtime.py::test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract"
+    }
+  ],
+  "final_conservative_excluded_files": [
+    "tests/adversarial/test_adversarial_search.py",
+    "tests/baselines/test_random_policy.py",
+    "tests/benchmark/test_fidelity_sensitivity_campaign.py",
+    "tests/benchmark/test_hybrid_rule_v4_doorway_regression.py",
+    "tests/benchmark/test_map_runner_native_command.py",
+    "tests/benchmark/test_map_runner_utils.py",
+    "tests/benchmark/test_replay_noop_fidelity_issue_8568.py",
+    "tests/benchmark/test_robot_speed_band_campaign.py",
+    "tests/benchmark/test_runner_native_command_arm.py",
+    "tests/benchmark/test_spawn_overlap_regression_issue_9725.py",
+    "tests/benchmark/test_spawn_preflight.py",
+    "tests/benchmark/test_spawn_preflight_issue_9725.py",
+    "tests/benchmark/test_worked_example_trace_pipeline_issue_5756.py",
+    "tests/examples/test_examples_run.py",
+    "tests/gym_env/test_multi_robot_gymnasium_contract.py",
+    "tests/integration/test_random_baseline_smoke.py",
+    "tests/integration/test_sf_smoke.py",
+    "tests/integration/test_single_episode_run.py",
+    "tests/integration/test_train_expert_ppo.py",
+    "tests/planner/test_drl_vo.py",
+    "tests/planner/test_local_planner_protocol.py",
+    "tests/scenario_certification/test_feasibility_oracle.py",
+    "tests/test_baseline_ppo_smoke.py",
+    "tests/test_crowd_sim_env_contract.py",
+    "tests/test_emergent_phenomena.py",
+    "tests/test_env.py",
+    "tests/test_issue_9724_social_force_resolution_independent.py",
+    "tests/test_jsonl_recording.py",
+    "tests/test_lazy_pygame_init.py",
+    "tests/test_occupancy_gymnasium.py",
+    "tests/test_public_api.py",
+    "tests/test_runner_policy_timeout.py",
+    "tests/test_runner_smoke.py",
+    "tests/test_seed_utils.py",
+    "tests/test_socnav_env_integration.py",
+    "tests/training/test_train_dreamerv3_rllib_runtime.py",
+    "tests/training/test_train_expert_ppo_contract.py",
+    "tests/training/test_train_recurrent_ppo_runtime.py",
+    "tests/unit/test_planner_interface.py",
+    "tests/validation/test_evaluate_predictive_planner_smoke.py"
+  ],
+  "final_profile_tests": {
+    "elapsed_s": 2.36,
+    "passed": 11
+  },
+  "final_sha_checks": "Final routing/coverage/evidence/contract receipts recorded in wallcal_report.md after the delivery commit.",
+  "full_default_suite": {
+    "elapsed_s": 2496.35,
+    "existing_skipped": 10,
+    "existing_xfailed": 7,
+    "failed": 94,
+    "passed": 13862,
+    "status": "completed with failures; not a clean full-lane pass"
+  },
+  "guard_refusals_full_suite": 11,
+  "guard_refusals_initial_importers": 4,
+  "held_out_steps": 0,
+  "initial_excluded_files": [
+    "tests/adversarial/test_adversarial_search.py",
+    "tests/baselines/test_random_policy.py",
+    "tests/benchmark/test_fidelity_sensitivity_campaign.py",
+    "tests/benchmark/test_hybrid_rule_v4_doorway_regression.py",
+    "tests/benchmark/test_replay_noop_fidelity_issue_8568.py",
+    "tests/benchmark/test_robot_speed_band_campaign.py",
+    "tests/benchmark/test_runner_native_command_arm.py",
+    "tests/benchmark/test_spawn_overlap_regression_issue_9725.py",
+    "tests/benchmark/test_worked_example_trace_pipeline_issue_5756.py",
+    "tests/examples/test_examples_run.py",
+    "tests/gym_env/test_multi_robot_gymnasium_contract.py",
+    "tests/integration/test_random_baseline_smoke.py",
+    "tests/integration/test_sf_smoke.py",
+    "tests/integration/test_single_episode_run.py",
+    "tests/integration/test_train_expert_ppo.py",
+    "tests/planner/test_drl_vo.py",
+    "tests/planner/test_local_planner_protocol.py",
+    "tests/test_baseline_ppo_smoke.py",
+    "tests/test_crowd_sim_env_contract.py",
+    "tests/test_emergent_phenomena.py",
+    "tests/test_env.py",
+    "tests/test_jsonl_recording.py",
+    "tests/test_lazy_pygame_init.py",
+    "tests/test_occupancy_gymnasium.py",
+    "tests/test_public_api.py",
+    "tests/test_runner_policy_timeout.py",
+    "tests/test_runner_smoke.py",
+    "tests/test_socnav_env_integration.py",
+    "tests/training/test_train_recurrent_ppo_runtime.py",
+    "tests/unit/test_planner_interface.py",
+    "tests/validation/test_evaluate_predictive_planner_smoke.py"
+  ],
+  "no_new_skips_xfails_timeouts": true,
+  "production_executable_ast_unchanged_since_runtime": {
+    "robot_sf/sim/obstacle_force_profile.py": true,
+    "robot_sf/sim/sim_config.py": true,
+    "robot_sf/sim/simulator.py": true,
+    "robot_sf/training/scenario_loader.py": true
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_source_head": "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290"
+}

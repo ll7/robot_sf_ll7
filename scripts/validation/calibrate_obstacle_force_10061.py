@@ -28,6 +28,9 @@ DOORS = [1.2, 2.0, 2.2, 2.8, 3.6]
 FACTORS = [0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
 OFFSETS = [-0.57, -0.3, -0.1, 0.0, 0.1]
 GRID = [(10.0, -0.57)] + [(f, b) for b in OFFSETS for f in FACTORS if (f, b) != (10.0, -0.57)]
+SOCIAL_FORCE_KERNEL = "wrapped_v2"
+# Collision footprint in all 48 resolved release rows; distinct from the 0.35 m force radius.
+FOOTPRINT_RADIUS = 0.4
 
 
 def config(f, b):
@@ -37,6 +40,7 @@ def config(f, b):
         Measured output for the requested configuration."""
     c = SimulatorConfig()
     c.scene_config.enable_group = False
+    c.social_force_config.kernel_version = SOCIAL_FORCE_KERNEL
     c.obstacle_force_config.factor = f
     c.obstacle_force_config.threshold = b
     return c
@@ -112,7 +116,7 @@ def corridor(f, b, seed):
     Returns:
         Measured output for the requested configuration."""
     rng = np.random.default_rng(seed)
-    y = 1.4 + rng.uniform(-0.01, 0.01)
+    y = 2.0 - FOOTPRINT_RADIUS - 0.25 + rng.uniform(-0.01, 0.01)
     segs = [(-1, 2, 101, 2), (-1, -2, 101, -2)]
     state = np.array([[2, y, 0.5, 0, 100, y, 0.5]])
 
@@ -124,7 +128,8 @@ def corridor(f, b, seed):
     return {
         "seed": seed,
         "min_center_distance": float(d.min()),
-        "steady_body_clearance": float(d[100:].min() - 0.35),
+        "min_body_clearance": float(d.min() - FOOTPRINT_RADIUS),
+        "steady_body_clearance": float(d[100:].min() - FOOTPRINT_RADIUS),
         "steady_speed": float(v[100:].mean()),
     }
 
@@ -137,8 +142,11 @@ def screen(pair):
     f, b = pair
     rows = [lone(f, b, s, w, t) for s in SEEDS for w in DOORS for t in [0.0, 0.1]]
     cr = [corridor(f, b, s) for s in SEEDS]
-    ok = all(r["passed"] and r["min_center_distance"] >= 0.35 for r in rows) and all(
-        r["min_center_distance"] >= 0.35 and 0.2 <= r["steady_body_clearance"] <= 0.5 for r in cr
+    ok = all(r["passed"] and r["min_center_distance"] >= FOOTPRINT_RADIUS for r in rows) and all(
+        r["min_center_distance"] >= FOOTPRINT_RADIUS
+        and 0.2 <= r["min_body_clearance"] <= 0.5
+        and 0.2 <= r["steady_body_clearance"] <= 0.5
+        for r in cr
     )
     return {"factor": f, "offset": b, "screen_pass": ok, "lone": rows, "corridor": cr}
 
@@ -150,9 +158,10 @@ def crowd(f, b, seed, width, speed):
         Measured output for the requested configuration."""
     rng = np.random.default_rng(seed)
     n = 60
-    xs, ys = np.meshgrid(np.arange(6) * 0.75 + 0.8, np.linspace(-3.5, 3.5, 10))
-    x = xs.ravel() + rng.uniform(-0.015, 0.015, n)
-    y = ys.ravel() + rng.uniform(-0.015, 0.015, n)
+    # The archived diagnostic used 0.35 m discs. Correct starts for the 0.40 m footprint.
+    xs, ys = np.meshgrid(np.arange(7) * 0.85 + 0.8, np.linspace(-3.5, 3.5, 9))
+    x = xs.ravel()[:n] + rng.uniform(-0.015, 0.015, n)
+    y = ys.ravel()[:n] + rng.uniform(-0.015, 0.015, n)
     # Unidirectional queue; centreline waypoint 1m beyond plane, then clear downstream.
     state = np.column_stack(
         [x, y, np.full(n, speed / 1.3), np.zeros(n), np.full(n, 9.0), np.zeros(n), np.full(n, 0.5)]
@@ -257,7 +266,7 @@ def main():
     pairs = GRID if a.pairs is None else [tuple(p) for p in json.loads(a.pairs.read_text())]
     if any(not np.isfinite(f) or not np.isfinite(b) or f <= 0 for f, b in pairs):
         raise ValueError("grid factors must be positive and all parameters finite")
-    print("RESOLVED SEEDS", SEEDS, "PAIRS", pairs, flush=True)
+    print("RESOLVED SEEDS", SEEDS, "PAIR KERNEL", SOCIAL_FORCE_KERNEL, "PAIRS", pairs, flush=True)
     a.out.mkdir(parents=True, exist_ok=True)
     task = {"screen": screen, "flow": flow_task, "lanes": lanes}[a.stage]
     with concurrent.futures.ProcessPoolExecutor(a.workers) as pool:
@@ -273,6 +282,9 @@ def main():
         a.out / f"{a.stage}_manifest.json",
         {
             "seeds": SEEDS,
+            "social_force_kernel_version": SOCIAL_FORCE_KERNEL,
+            "force_radius_m": config(1.0, 0.0).scene_config.agent_radius,
+            "footprint_radius_m": FOOTPRINT_RADIUS,
             "grid": pairs,
             "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
             "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

@@ -224,6 +224,28 @@ def test_new_registry_checkpoint_decodes_signed_velocity_delta(monkeypatch):
         "omega": pytest.approx(0.1),
     }
 
+    # Generalizing registry lookup must preserve both historical failure contracts:
+    # optional unknown IDs defer hydration; required legacy entries fail closed.
+    def unavailable_registry(_model_id):
+        raise KeyError("registry entry unavailable")
+
+    monkeypatch.setattr("robot_sf.baselines.ppo.get_registry_entry", unavailable_registry)
+    deferred = PPOPlanner(
+        PPOPlannerConfig(model_id="unregistered", action_space="unicycle"),
+        defer_model_loading=True,
+    )
+    assert deferred.get_metadata()["action_semantics"] == "absolute_velocity"
+    assert deferred._model is None
+    assert deferred._initialized is False
+    with pytest.raises(KeyError, match="registry entry unavailable"):
+        PPOPlanner(
+            PPOPlannerConfig(
+                model_id="ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+                action_space="unicycle",
+            ),
+            defer_model_loading=True,
+        )
+
 
 @pytest.mark.parametrize("declared", ["velocity_delta", "absolute_velocity"])
 def test_new_registry_checkpoint_rejects_conflicting_override(monkeypatch, declared):

@@ -47,10 +47,18 @@ def test_overtaking_exit_goal_retains_forward_overtaking_speed():
     target = pedestrian.trajectory[0] if pedestrian.trajectory else pedestrian.goal
     dx, dy = target[0] - pedestrian.start[0], target[1] - pedestrian.start[1]
     assert dx > 0, "the overtaking pedestrian must continue toward the robot destination"
-    forward_speed = scenario["single_pedestrians"][0]["speed_m_s"] * dx / hypot(dx, dy)
+    walker_speed = scenario["single_pedestrians"][0]["speed_m_s"]
+    walking_time = hypot(dx, dy) / walker_speed
+    forward_speed = dx / walking_time
     assert forward_speed > config.robot_config.max_linear_speed, (
         "the exit goal must leave the pedestrian faster along the robot route"
     )
+    furthest_robot_spawn = max(
+        _rect_polygon(zone).bounds[2] for zone in definition.robot_spawn_zones
+    )
+    assert target[0] > (
+        furthest_robot_spawn + config.robot_config.max_linear_speed * walking_time
+    ), "the pedestrian must nominally pass every robot spawn before parking"
 
 
 def test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle():

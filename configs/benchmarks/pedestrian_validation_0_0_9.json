@@ -1,0 +1,186 @@
+{
+  "schema": "pedval.config.v1",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "radii_m": [
+    0.25,
+    0.3,
+    0.35,
+    0.4
+  ],
+  "model": {
+    "wall_law": "legacy_v1",
+    "wall_factor": 10.0,
+    "wall_offset_m": -0.57,
+    "wall_sigma": 0.0,
+    "pair_kernel": "wrapped_v2",
+    "force_radius_m": 0.35,
+    "baseline_physical_radius_m": 0.4,
+    "native_free_speed_m_s": 0.65,
+    "robot_activation_threshold_m": 2.0
+  },
+  "V1": {
+    "source": "Moussaid et al. 2009; Huber et al. 2014",
+    "location": "issue #10074; original sampling definition not supplied",
+    "targets_m_s": [
+      1.29,
+      1.15,
+      1.42,
+      1.78
+    ],
+    "published_spread_m_s": 0.19,
+    "window_s": [
+      10,
+      20
+    ]
+  },
+  "V2": {
+    "source": "Wilmut et al. 2015",
+    "location": "Fig. 3, typically developing group, graphical reading",
+    "ratios": [
+      0.9,
+      1.1,
+      1.3,
+      1.5,
+      1.7,
+      1.9,
+      2.1
+    ],
+    "shoulder_width_m": null,
+    "drop_window": null,
+    "published_drop_m_s": {
+      "0.9": 0.4,
+      "1.3-2.1": [
+        0.12,
+        0.16
+      ]
+    },
+    "setup_status": "individual shoulder widths and published speed-drop window absent; rigid discs cannot rotate",
+    "diagnostic_widths_m": [
+      0.8,
+      1.0,
+      1.2,
+      2.0,
+      2.2,
+      2.8,
+      3.6
+    ]
+  },
+  "V3": {
+    "source": "Seyfried et al. 2009",
+    "location": "Table 2, N=60; Fig. 2",
+    "widths_m": [
+      0.8,
+      0.9,
+      1.0,
+      1.1,
+      1.2
+    ],
+    "published_specific_flow_persons_m_s": [
+      1.61,
+      1.86,
+      1.9,
+      1.93,
+      1.97
+    ],
+    "plane": "channel centre; y=0.4 is local video coordinate",
+    "window": "60/(t_last-t_first)/width; incomplete runs unavailable",
+    "setup_status": "nominal supply/density matched; archived initial sites adapted for 0.40 m margin; individual human starts unavailable"
+  },
+  "V4": {
+    "source": "Liao et al. 2014",
+    "location": "Section 4; Fig. 9a caption reverses labels",
+    "widths_m": [
+      2.4,
+      3.0,
+      3.6,
+      4.4,
+      5.0
+    ],
+    "published_slopes_persons_m_s": {
+      "all_data": 2.3,
+      "steady_state": 2.5
+    },
+    "counting_line": null,
+    "all_data_window": null,
+    "steady_state_window": null,
+    "setup_status": "original counting line/window not supplied; exit-plane finite-N and 20-80% diagnostics are explicitly not source estimators"
+  },
+  "V5": {
+    "source": "Gerin-Lajoie et al. 2005, cited in 2008",
+    "location": "2008 p.240",
+    "published_longitudinal_m": 2.0,
+    "published_lateral_m": 0.5,
+    "distance_origin": "centre of mass to obstacle edge",
+    "ellipse_extraction": null,
+    "setup_status": "original obstacle geometry and ellipse extraction not supplied; diagnostic closest lateral centre-to-edge distance only"
+  },
+  "V6": {
+    "source": "Huber et al. 2014",
+    "location": "Table 1",
+    "speeds_m_s": [
+      1.15,
+      1.42,
+      1.78
+    ],
+    "published_onset_m": [
+      2.1,
+      2.4,
+      2.7
+    ],
+    "onset_definition": null,
+    "setup_status": "own closest-approach point convention known; turn-detection algorithm absent, so no onset estimate"
+  },
+  "V7": {
+    "source": "Zhang et al. 2012; Feliciani and Nishinari 2016",
+    "location": "target not yet verified",
+    "widths_m": [
+      3.0,
+      3.6
+    ],
+    "persons": 48,
+    "duration_s": 40,
+    "measure": "mean absolute Pearson correlation(direction,lateral position), second half of run",
+    "setup_status": "engineering segregation measure only; no universal numeric target"
+  },
+  "V8": {
+    "source": "Ma et al. 2010",
+    "location": "abstract only",
+    "published_distance_m": 0.4,
+    "distance_origin": null,
+    "setup_status": "centre vs edge unresolved; retain both, no target difference"
+  },
+  "V9": {
+    "status": "context only, skipped"
+  }
+}

@@ -18,6 +18,44 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10056
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2801
+      sha256: 99b486497a3e21645c5f76d88cdea0593f3d14496b299c22548fd453208c6339
+    candidate:
+      count: 2805
+      sha256: 50c3e5018d08342f75dc7c60dc10d6d0f19290ef299d09bcdc14c73ccf1ca1e3
+    files_added: 4
+    finding_delta: none
+    decision: >-
+      RR10057 follow-up: reviewed the dev-seed doorway plausibility summary, corrected-wall
+      queue image with its exact-byte marked sidecar, and additive historical multiseed
+      supersession manifest. Historical bundle status and replacement pointers are registered
+      in the catalog. Three historical README notices have refreshed checksum/packet pins;
+      the atlas-pinned multiseed README and SHA256SUMS remain byte-identical and are marked
+      affected by the additive manifest instead. No numerical historical evidence is deleted
+      or rewritten. Full dev traces are externally retained with their archive hash in the
+      doorway summary. All 446 existing findings are unchanged; there are no new findings,
+      baseline exclusions, or atlas digest waivers. Preregistration and atlas bytes stay fixed.
+  - issue: 10056
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2801
+      sha256: 99b486497a3e21645c5f76d88cdea0593f3d14496b299c22548fd453208c6339
+    files_added: 9
+    finding_delta: none
+    decision: >-
+      Reviewed the corrected-wall diagnostic comparison summary, README, three actual-wall
+      snapshots with their exact-byte marked sidecars, and checksum manifest. Registered the
+      new bundle in the catalog. Both original configurations and seed schedules are retained;
+      all 428 corrected rows and 428 main replay rows have external raw custody with archive
+      SHA-256 2063d0c848274c465761cbce5dd6622a57a466a674d6246955958bc1bbb91189.
+      The 446 existing findings are unchanged; there are no new findings or exclusions to
+      disposition. Historical bundles and preregistered thresholds remain unchanged.
   - issue: 9647
     reviewed_date: 2026-09-26
     previous:

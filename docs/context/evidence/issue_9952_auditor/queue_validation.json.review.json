@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/queue_validation.json",
+  "artifact_sha256": "e7130f24522f0d0f577e08c1993130ef20993863127e0f947ecb55342536defc",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

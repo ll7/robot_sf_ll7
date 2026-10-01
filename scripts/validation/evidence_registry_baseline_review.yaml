@@ -193,6 +193,27 @@ evidence_tree_refresh_addenda:
       across 100 files, with no new finding or per-code increase. This is a reviewed
       inventory/provenance refresh only; no metric change, scientific admission or
       additional human sign-off is claimed.
+  - issue: 9952
+    reviewed_date: 2026-09-30
+    reviewer: Codex CI7; metadata and path inventory verification only
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2826
+      sha256: 9fc3f9730659642fa0a68b6fa219b788e6c7e6a90219065800c06d2633a16901
+    files_added: 34
+    finding_delta: none
+    decision: >-
+      Registered the 17 reviewed #9952 diagnostic artifacts and their 17 review sidecars.
+      All payload bytes remain identical to approved PR head b321e72089af45baedcc40b310b46264cb57dc7c.
+      Sidecar artifact_sha256 values bind those tracked bytes; original pre-normalization hashes
+      remain recorded separately as source_artifact_sha256. The three AUD2 text sidecars now
+      explicitly scope exact-byte preservation to the reviewed tracked presentation, retaining
+      their prior normalization history. The machine baseline retains the same 446 findings
+      across the same 100 files: no finding is added, increased, excluded, or grandfathered.
+      This addendum records inventory and metadata integrity only, claims no new maintainer
+      sign-off, and changes no scientific admission, interpretation, or auditor behavior.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

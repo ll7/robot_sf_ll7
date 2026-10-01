@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/fixture-provenance.json",
+  "artifact_sha256": "f5d64bfdd1e157b2e1fdd3f1ba37eeb2bf30952a0aa7949bc170a9834bb339ee",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

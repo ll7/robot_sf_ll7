@@ -8021,3 +8021,11 @@ entries:
   replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_9952_auditor_detector_readiness.md
+  status: historical
+  freshness: dated
+  area: tooling
+- path: docs/context/evidence/issue_9952_auditor
+  status: evidence
+  freshness: evidence
+  area: tooling

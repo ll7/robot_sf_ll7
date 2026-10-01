@@ -4,7 +4,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, box
 
 from robot_sf.evidence.writers import write_json
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
@@ -24,9 +24,10 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
     parked = Point(pedestrian.trajectory[-1] if pedestrian.trajectory else pedestrian.goal)
     map_path = (MATRIX.resolve().parent / scenario["map_file"]).resolve()
     actor_id = scenario["single_pedestrians"][0]["id"]
+    svg_root = ElementTree.parse(map_path).getroot()
     goal_circle = next(
         node
-        for node in ElementTree.parse(map_path).iter()
+        for node in svg_root.iter()
         if node.get("{http://www.inkscape.org/namespaces/inkscape}label")
         == f"single_ped_{actor_id}_goal"
     )
@@ -38,6 +39,15 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
     assert all(parked.distance(goal) - parking_radius > 3.0 for goal in goals), (
         "parked overtaking pedestrian blocks the full robot goal rectangle"
     )
+    # A goal inside a wall can settle outside its authored circle under SFM.
+    # Read the actual rectangular walls independently of the endpoint checker.
+    for node in svg_root.iter():
+        if node.get("{http://www.inkscape.org/namespaces/inkscape}label") != "obstacle":
+            continue
+        x, y, width, height = (float(node.attrib[key]) for key in ("x", "y", "width", "height"))
+        assert parked.distance(box(x, y, x + width, y + height)) > parking_radius, (
+            "the pedestrian parking circle intersects a wall"
+        )
     for route in definition.robot_routes:
         approach = LineString(route.waypoints)
         assert parked.distance(approach) - parking_radius > 3.0, (

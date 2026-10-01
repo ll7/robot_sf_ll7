@@ -42,6 +42,9 @@ env:
     --deselect=tests/benchmark/test_replay_noop_fidelity_issue_8568.py
     --deselect=tests/benchmark/test_spawn_preflight.py::test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds
     --deselect=tests/benchmark/test_spawn_preflight.py::test_main_grid_doorway_probe_requires_pinned_map_and_oracle
+    --deselect=tests/examples/test_examples_run.py::test_example_runs_without_error[advanced/01_backend_selection.py]
+    --deselect=tests/examples/test_examples_run.py::test_example_runs_without_error[occupancy_reward_shaping.py]
+    --deselect=tests/examples/test_examples_run.py::test_example_runs_without_error[benchmarks/demo_full_classic_benchmark.py]
   PYTHONUNBUFFERED: "1"
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg

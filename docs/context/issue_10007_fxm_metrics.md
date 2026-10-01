@@ -1,6 +1,6 @@
 # Issue #10007 FXM shared metric correction
 
-Current semantics include the FXM2 refinements documented below. Original FXM tables
+Current semantics include the FXM2 refinements and D-055 curvature documented below. Original FXM tables
 remain historical diagnostic receipts; they do not serve as current-v2 anchors.
 
 Evidence: **diagnostic-only development episodes**, with no release, held-out,
@@ -393,3 +393,175 @@ paired timeout normalization retain their separately versioned reference meaning
 Success/collision/timeout outcomes do not change. Matching-definition anchors and
 historical recomputation remain downstream review work; no dissertation source or
 admitted claim was edited.
+
+## CURVFIX: D-055 bounded arc-length curvature (stacked on PR #10014)
+
+This addition supersedes the pre-D-055 curvature definition in unreleased metric v2.
+The lane starts from #10014 head `ca1217c4f9e0ef0570ae172b26722cfc03338702`.
+No other metric, planner, environment or frozen anchor changes. Add `curvature_mean`
+to `CHANGED_METRICS`; cross-definition comparisons suppress it alongside the earlier
+FXM corrections. Existing historical v1 scalar rows remain unchanged.
+
+For consecutive recorded path positions, including reset when supplied, let
+`ds_i = ||p_{i+1} - p_i||` and `phi_i = atan2(p_{i+1} - p_i)`.
+Discard displacement steps shorter than **1e-3 m**. Over consecutive retained steps:
+
+```text
+curvature_mean = sum(abs(wrap(phi_{j+1} - phi_j))) / max(sum(ds_j), 1.0 m)  [rad/m]
+```
+
+Wrap to [-pi, pi]. Subthreshold steps add neither turning nor length. Stopping and
+rotating in place, then departing in a new direction counts one path turn; reversal
+counts pi. Fewer than two retained steps give 0.0. Nonfinite displacements are ignored.
+The result is finite and nonnegative; the **1.0 m floor** bounds very short paths.
+`CURVATURE_MIN_DISPLACEMENT_M` and `CURVATURE_LENGTH_FLOOR_M` name the thresholds.
+
+The previous time-sampled `|v x a| / |v|^3` formula amplified nearly stationary
+creeping and diluted turns with stationary samples. Its body is preserved exactly as
+`_legacy_curvature_mean`; public `curvature_mean` dispatches via the explicit
+`metric_schema_version` keyword. Historical recomputation passes the row's version
+resolved by `metric_definitions.metric_schema_version` (unmarked rows resolve to v1).
+New producers continue to emit v2 and use the new definition by default. Historical
+v1 recomputation matches the starting function exactly on **672/672** recorded traces
+and four analytic controls; see [v1 receipt](evidence/curvfix/v1_parity.json).
+
+### Recorded development data
+
+The requested main rehearsal contains 672 dev1001 scalar rows but disables trace
+recording. The trace-enabled companion contains the same 14 arms x 48 scenarios on
+seed 1001. All paired identities, step counts, terminations and old curvature scalars
+match exactly. Both directories were copied locally; no remote computation or new
+simulation was used. Source commit: `ea414933e61ce267389bd3bcbe97fb669a825c6e`.
+Input file paths, locations, SHA-256s, arm quantiles and the full-receipt checksum
+are in [the compact measurement receipt](evidence/curvfix/measurement.json).
+All 672 per-episode values remain in the local full receipt; no public custody
+is claimed for that raw diagnostic artifact. These are diagnostic
+correctness data, not held-out, calibration, release or admitted research evidence.
+
+Old values are recomputed from post-step positions exactly as before; new values
+include the recorded reset pose. Recomputed old scalars are bit-equal to recorded
+scalars in 653 episodes; the other 19 differ by at most 3.94527e-16 relatively, consistent
+with floating-point reduction roundoff. V1-vs-start-function equality on the same
+local arrays remains exact in all 672 episodes.
+
+| Arm (differential_drive; n=48 each) | Old median | Old p95 | Old max | New median | New p95 | New max |
+|---|---:|---:|---:|---:|---:|---:|
+| goal | 0.0582467588 | 0.192548929 | 0.29020679 | 0.0512666043 | 0.171518231 | 0.277262609 |
+| guarded_ppo | 0.26802832 | 9.19554764e+11 | 1.19303259e+13 | 0.181320717 | 0.370619242 | 0.404624581 |
+| hybrid_rule_v4_fast_progress_static_escape | 0.0974291029 | 0.290618476 | 0.537732196 | 0.076345651 | 0.186870551 | 0.26431637 |
+| hybrid_rule_v4_fast_progress_static_escape_continuous | 0.104042216 | 1.25251414 | 211055.194 | 0.0801537611 | 0.180816456 | 0.220736814 |
+| orca | 0.118361024 | 2.60641808 | 539.805964 | 0.0738001038 | 0.361771303 | 0.918282507 |
+| ppo | 0.281595747 | 0.545537859 | 0.65096568 | 0.264101994 | 0.404612578 | 0.538529319 |
+| prediction_planner | 0.0700293638 | 0.398463081 | 0.751995615 | 0.11259466 | 0.38326374 | 1.01350221 |
+| predictive_mppi | 0.0418562955 | 0.194498281 | 1.0046221 | 0.0727027526 | 0.273120713 | 0.424445382 |
+| risk_dwa | 0.10392883 | 4.62642729e+09 | 1.81600464e+13 | 0.0767430873 | 0.215268201 | 0.281947131 |
+| sacadrl | 0.298265122 | 0.598229083 | 0.625008893 | 0.296773789 | 0.609290466 | 0.7125 |
+| scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4 | 0.100455425 | 0.191206183 | 0.325599668 | 0.0753285171 | 0.18297371 | 0.212634576 |
+| scenario_adaptive_hybrid_orca_v2_collision_guard_v4 | 0.100455425 | 0.190724859 | 0.325599668 | 0.0753285171 | 0.18297371 | 0.212634576 |
+| social_force | 0.296872998 | 4.91911541 | 3283.65408 | 0.167980131 | 1.17661929 | 2.25989155 |
+| socnav_sampling | 0.140731803 | 1.79374735 | 10.8501668 | 0.109747505 | 0.498993118 | 1.23960009 |
+
+New pooled p95 (NumPy linear quantile): **0.41913666808708483 rad/m**.
+This is the future K scale candidate from this development cohort, not an admitted
+anchor. **No episodes exceed 10 rad/m**; the largest new value is
+2.259891548968766 rad/m (social_force). Therefore the requested extreme-case list is empty.
+
+### Regression and test-value evidence
+
+[Starting-head failures](evidence/curvfix/base_failures.txt): 14 intended failures
+(12 geometric cases, changed-metric declaration, updated bent-path characterization),
+9 unchanged-behavior controls pass. A fifteenth failure proves the existing mixed-version
+fallback fixture problem: its synthetic healthy row lacked the v2 marker. Correct only
+that fixture marker so fallback exclusion can be tested on a uniform-definition cohort.
+Four historical-version controls are checked separately against the original function
+AST because the starting API has no version keyword. Final v1 tests use public dispatch.
+
+The 1e-6 m/s synthetic creep probe changes **5e13 -> 0 rad/m**. Stop/rotate/leave
+changes **0 -> pi/4 rad/m** (pi/2 turn over 2 m); reversal changes **0 -> pi/2 rad/m**
+(pi over 2 m); the 0.4 m path changes **1.25 -> pi/2 rad/m** (1 m floor).
+Straight and circle controls pass both definitions, as expected; circles of radius
+0.5, 2 and 10 m give approximately 1/R. The legacy creep stays exactly 5e13.
+
+Test-value gate (no production test seam):
+
+| Behavior protected | Credible regression | Existing coverage gap | Inputs/oracle |
+|---|---|---|---|
+| Creep suppression | Restore time mean or shrink displacement cutoff | Existing circle/straight tests skip creeping | Synthetic perpendicular 1e-7 m displacement; independent zero-turn oracle; real 672-episode probe corroborates defect |
+| Count turns across stops and reversal | Break adjacency at stationary steps or cross-product-only turns | No stationary-to-new-direction case | Hand geometry: pi/2 or pi, divided by 2 m |
+| Short path and inclusive cutoff | Divide by actual short length or use strict greater-than | Previous insufficient-point test skips two-step turning | Hand lengths 0.4 m, 0.999/1 mm steps; literal pi/2 |
+| Time/angle/reset invariance | Reintroduce dt, unwrapped angles or omit reset | Earlier curvature tests use one dt and no reset | Same geometric path at four dt values; independent angle/length values |
+| V1 compatibility | Route historical rows to v2 or change legacy body | No version-specific curvature assertion | Starting-function exact values and 672 identical-array comparisons |
+| Changed-field comparison | Omit curvature from CHANGED_METRICS | Prior changed-field assertions cover earlier FXM fields | Public changed_metric_field call, fails on start |
+| Bent-path characterization | Retain old time-mean value | Existing test explicitly pins old value 1.0 | Two right-angle turns over three unit legs = pi/3 |
+| Fallback exclusion | Drop version marker or include degraded arm | Test failed before reaching exclusion due mixed definitions | Existing row fixture; marker matches producer; excludes degraded row |
+
+### Consumer audit and normalization boundary
+
+`rg -n curvature_mean robot_sf scripts docs configs tests` was inspected by consumer:
+
+- `snqi/compute.py`: K uses `spec.sources["K"] / spec.upper_anchors["K"]`, clipped
+  at one. `v2_spec.py` requires an explicit positive frozen calibration-p95 anchor;
+  `v2_calibration.py` derives the empirical linear p95 from matching-version rows.
+  No historical raw-scale constant appears in the K computation.
+- `metrics.py` legacy/optional curvature term and `baseline_stats.py`: supplied
+  median/p95 normalization, with existing definition compatibility guards retained.
+- Camera-ready reporting/summaries, policy-analysis tables, false-positive replay
+  comparisons, collision scenario similarity and release validators consume scalar
+  values as names, means, deltas or plots; no rescaling for the old singularity.
+- `release_row_anomalies.py` retains an explicit configurable **1.0** raw curvature
+  threshold paired with a minimum path length for a diagnostic orbit heuristic.
+  This is an absolute geometric diagnostic, not the K anchor; its interpretations
+  change with metric semantics. It neither rescales the metric nor assumes the old
+  near-stop magnitudes. This audit does not claim every consumer is scale-free.
+- `policy_analysis_run.py:: _filtered_curvature_mean` is a separate historical
+  speed-filtered diagnostic stored as `curvature_mean_eps0p1`; it is not the robot
+  `curvature_mean` field or K source, and is unchanged.
+- Existing frozen/published normalization assets stay byte-unchanged. Pre-D-055
+  unreleased v2 diagnostic scalars must be recomputed from traces before current
+  v2 pooling or calibration; the unchanged version string alone cannot distinguish
+  those prerelease snapshots. No old assets are relabeled or calibrated here.
+
+All scored consumers are anchor-driven; none assumes the former exploding scale.
+K weights, clipping, sources and frozen anchors are unchanged. Deriving and approving
+matching-definition normalization remains a separate calibration action.
+
+### Final lane validation
+
+Every direct importer of either changed module and every test file matching
+`curvature` was run by explicit file path: **49 files, 1547 passed, 2 existing skips,
+3 held-out simulator nodes deselected**. Pytest ran with `-n0`,
+`OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1`. The skipped distinct-validator-checkout and optional
+0.0.3 publication-bundle checks are named in [validation.json](evidence/curvfix/validation.json),
+along with the complete command and excluded nodes. No new skip/xfail or timeout
+was added. Synthetic held-out row/config identifiers were inspected without planner
+or environment steps; forbidden simulator seeds 111/112 were not executed.
+Existing permitted seed-22 group crossing and seed-3971 pedestrian tests remain
+existing-test validation, not new development evidence. New recorded-data analysis
+uses seed 1001 only. Simulation execution stays serial; native-command child plus
+parent is the largest relevant process pair.
+
+Repository-wide `uv run ruff check`, `uv run ruff format --check`,
+`scripts/validation/check_seed_holdout_diff.py --base-ref origin/main` and
+`git diff --check` pass. Hosted CI is requested by marking the stacked PR ready;
+its outcome and domain review remain separate from these local proofs. No merge.
+
+### Evidence hygiene follow-up after orchestrator review
+
+The orchestrator review of PR #10054 at `b87e472d116fc45fec47cfcf669acce84b75373c`
+confirmed D-055 implementation and measurement correctness; its remaining findings
+were evidence registration, review markers, registry provenance and PR metadata.
+All four CURVFIX evidence files now carry the shared writer's AI-GENERATED /
+NEEDS-REVIEW marker and have exact catalog entries. The probe uses the shared marked
+writer for both summary and local full receipt.
+
+Following the repository artifact policy, the 5,731-line tracked receipt is replaced
+with a compact summary. Full episode values remain in the local diagnostic evidence
+directory, with their file name, location, size and SHA-256 recorded in the summary.
+Source hashes now carry explicit source paths and local locations; all 28 ambiguous
+hash findings are remediated instead of accepted into the baseline. The generated
+registry baseline and its review companion document the evidence-tree refresh and
+absence of new findings. No metric, frozen anchor or measured value changes.
+
+Reproduction uses the existing probe flags plus `--full-output` pointing outside
+`docs/context/evidence/`. The local URI locations in the summary identify copies in
+`~/curvfix_evidence/`; this is local diagnostic preservation, not public archival custody.

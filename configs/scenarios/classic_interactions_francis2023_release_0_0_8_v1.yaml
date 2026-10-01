@@ -94,6 +94,8 @@ scenario_overrides_by_name:
     # h1 still starts behind at x=1.5 and walks at 0.8 m/s. A slower robot makes
     # the pedestrian overtake rather than lose ground; 600 steps covers the
     # unchanged 34 m robot trip at the 0.7 m/s cap plus acceleration/interaction.
+    # OVTFIX2: h1 continues to x=47 instead of parking at x=35 on the robot's
+    # final approach. Keep the passing lane, speed cap and horizon unchanged.
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg
     robot_config:

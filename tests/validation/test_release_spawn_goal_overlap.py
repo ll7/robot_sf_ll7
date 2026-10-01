@@ -3,13 +3,34 @@
 from pathlib import Path
 
 import pytest
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
 
 from robot_sf.evidence.writers import write_json
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 from scripts.validation.check_scenario_archetype_geometry import _rect_polygon
 
 MATRIX = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
+
+
+def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
+    """A faster walker must not become an occupied-goal obstacle after passing."""
+    scenario = next(
+        row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
+    definition = next(iter(config.map_pool.map_defs.values()))
+    parked = Point(definition.single_pedestrians[0].goal)
+    # The review's stalled robots were within 3 m of the goal. Protect the whole
+    # destination rectangle and authored approach, not one RNG draw.
+    goals = [_rect_polygon(zone) for zone in definition.robot_goal_zones]
+    assert all(parked.distance(goal) > 3.0 for goal in goals), (
+        "parked overtaking pedestrian blocks the full robot goal rectangle"
+    )
+    for route in definition.robot_routes:
+        approach = LineString(route.waypoints)
+        assert parked.distance(approach) > 3.0, (
+            "parked overtaking pedestrian blocks the robot's final approach"
+        )
 
 
 def test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle():

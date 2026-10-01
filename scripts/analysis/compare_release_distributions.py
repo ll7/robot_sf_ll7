@@ -595,7 +595,8 @@ def write_report(report: dict, output: Path) -> None:
     lines = [
         report["label"],
         "",
-        "All statistics are descriptive. Flagged cells are combined release differences. Probe excluded from pooling.",
+        "All statistics are descriptive. Arm/scenario/planner-config flags denote combined release differences. "
+        "Degeneracy flags qualify seed uncertainty. Probe excluded from pooling.",
         "",
         "28 predeclared primaries: Holm alpha=0.05. Other unit and arm cells: exploratory BH q=0.05. Fixed-scenario primary; paired joint scenario sensitivity.",
         "",

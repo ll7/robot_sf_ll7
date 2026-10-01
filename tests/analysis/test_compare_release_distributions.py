@@ -400,6 +400,8 @@ def test_degenerate_seed_support_is_flagged_per_scenario_in_all_outputs(
             ):
                 if index >= n:
                     break
+                # Matched definitions isolate the support warning from identity flags.
+                row["_definition"]["scenario"]["map_file"] = "shared.svg"
                 # Synthetic, disjoint development seed IDs; no reset or step.
                 seed = 1001 + index + (15 if release == "0.0.8" else 0)
                 target[slot[0], slot[1], scenario, seed, slot[4]] = row
@@ -413,8 +415,12 @@ def test_degenerate_seed_support_is_flagged_per_scenario_in_all_outputs(
     cmp.write_report(report, tmp_path)
     json_cells = json.loads((tmp_path / "distribution.json").read_text())["cells"]
     csv_cells = list(csv.DictReader((tmp_path / "distribution.csv").open()))
-    md_lines = (tmp_path / "distribution.md").read_text().splitlines()
+    md = (tmp_path / "distribution.md").read_text()
+    assert "Degeneracy flags qualify seed uncertainty." in md
+    md_lines = md.splitlines()
     for c, j, flat in zip(report["cells"], json_cells, csv_cells, strict=True):
+        assert not c["scenario_changed"]
+        assert c["interpretation"] == "release difference"
         expected = thin_n == 1 and c["scenario_id"] in ("scenario_b", "__pooled_non_probe__")
         # Use only rates and avg_speed, all fully defined in the synthetic input.
         if c["metric"] not in (*cmp.RATES, "avg_speed"):

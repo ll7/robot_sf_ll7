@@ -33,9 +33,9 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
     )
     parking_radius = float(goal_circle.attrib["r"])
     assert all(
-        parked.distance(_rect_polygon(zone)) - parking_radius > config.lidar_config.max_scan_dist
+        parked.x + parking_radius < _rect_polygon(zone).bounds[0] - 3.0
         for zone in definition.robot_goal_zones
-    ), "the parked pedestrian remains within lidar range of the robot destination"
+    ), "the parking circle must retreat from the final approach in longitude"
     # Protect the whole authored parking region, not just its nominal centre:
     # the first candidate's centre cleared 3 m while the settled walker did not.
     # The review's 3 m approach margin remains independent of this SVG's values.

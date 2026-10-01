@@ -94,8 +94,8 @@ scenario_overrides_by_name:
     # h1 still starts behind at x=1.5 and walks at 0.8 m/s. A slower robot makes
     # the pedestrian overtake rather than lose ground; 600 steps covers the
     # unchanged 34 m robot trip at the 0.7 m/s cap plus acceleration/interaction.
-    # OVTFIX2: h1 passes along y=6.6 before exiting to (33,17).
-    # Its parked circle clears the whole destination by more than the 10 m lidar range.
+    # OVTFIX2: h1 passes along y=6.6 before exiting up/back to (20,10).
+    # Parking retreats behind the final approach; perfect tracking has no range cutoff.
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg
     single_pedestrians:

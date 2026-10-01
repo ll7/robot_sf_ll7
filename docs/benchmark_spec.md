@@ -292,6 +292,17 @@ Below is the credibility scorecard emitted for the camera-ready campaign `paper_
 Full details live in
 [`docs/dev/issues/social-navigation-benchmark/metrics_spec.md`](./dev/issues/social-navigation-benchmark/metrics_spec.md).
 
+Metric meaning is versioned separately from the episode envelope:
+`robot-sf-metrics.v2` fixes route-goal references, window deadlock, physical jerk,
+and completed-step time/path geometry. Route stalls use projected remaining arclength;
+path efficiency is success-only, NaN/JSON null on failure, and unclipped with an explicit
+reference-violation flag. Zone-entry shortest/ideal references terminate at the goal polygon;
+waypoint-radius completion retains the point reference. Unmarked 0.0.7 rows are v1; changed metrics
+have no direct cross-version release contrast, and SNQI requires matching anchors. Unmarked
+v2-only fields fail closed. Simulation-step/native paired trace schemas are v2; readers accept
+each historical version separately and refuse mixed pairs/cohorts.
+See [the metric migration](context/issue_10007_fxm_metrics.md).
+
 **Core metrics**
 * `success`: goal reached before horizon without collision.
 * `time_to_goal_norm`: backward-compatible horizon normalization (clamped to `1.0` on failure).
@@ -313,7 +324,8 @@ Full details live in
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.
 * `near_misses`: count based on distance thresholds.
-* `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
+* `min_distance`: closest approach. `path_efficiency`: shortest completion reference / actual
+  travel, among successful runs only; undefined failures are excluded from its mean.
 * `aggregated_time`: implementation-only cooperative completion-time diagnostic. When
   `cooperative_agents` is provided, it returns the maximum first goal-reaching step times
   `EpisodeData.dt` from the explicit `EpisodeData.cooperative_goal_steps` mapping. The legacy
@@ -545,3 +557,14 @@ no metric samples, and explicit total/excluded counts. Seed lists/counts describ
 eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.
 
 Release acceptance checks planned counts against `episodes_total` (legacy fallback: `episodes`); `invalid_or_unmeasured_spawn` exclusions are named campaign-defect blockers with K, while `foresight_ineligible` exclusions are reported counts and do not themselves block acceptance.
+
+## Sealed 0.0.8 evaluation schedule (D-049)
+
+0.0.8 uses `release_eval_0_0_8` from `configs/benchmarks/seed_sets_0_0_8.yaml`.
+The source of truth is `robot_sf.benchmark.seed_bands.EVAL_SEEDS_0_0_8`; static
+tests bind the YAML to the approved SHA-256 derivation. Both that set and retired
+0.0.7 seeds 111..140 remain forbidden for tuning, development and calibration.
+Development episodes use 1001..1030. Historical `paper_eval_s30` remains unchanged for static validation of archived
+0.0.7 artifacts only; seeds 111..140 must never be stepped again (D-049). The release grid has 48 x 30 = 1,440 identities per arm
+and 14 x 1,440 = 20,160 total; these counts are computed without running episodes.
+See [D-049](release/0.0.8/decisions.md) and the [runbook](release/0.0.8/runbook.md).

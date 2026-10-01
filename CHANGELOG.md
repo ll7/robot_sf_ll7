@@ -384,6 +384,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Scenario and map review fixes (changes seeded resets).** Three-corner rectangle zones
+  (every SVG `rect` spawn, goal and crowded zone) are sampled uniformly over the full
+  rectangle again instead of only the triangle half below its diagonal; true triangles
+  (authored three-vertex `crowded_zone` paths, synthetic crowd triangles) are marked
+  `TriangleZone` and stay triangular. This moves robot starts, robot goals, route
+  respawns and crowded-zone spawns for every map that uses rectangle zones. Pedestrian
+  spawns and route respawns now reject centres whose pedestrian-radius footprint overlaps
+  an obstacle; crowded-zone behaviours keep the map obstacles for goals re-sampled during
+  the episode. Scenarios that opt into `archetype_composition` without `archetype_seed`
+  take the episode seed. An included manifest's relative `map_file` resolves beside that
+  manifest first, and a same-named file beside the root manifest is rejected as ambiguous.
+  SVG zone indices with an unfillable gap are rejected instead of compacted.
+  Full-rectangle sampling intentionally changes scenario difficulty. In the development
+  sweep of 48 release scenarios (seeds 1001-1030, H600, dt 0.1), goal-planner success
+  changes from 614/1440 on main to 624/1440 after these repairs; ORCA changes from
+  1242/1440 to 1223/1440. ORCA narrow_hallway changes from 27/30 to 17/30 and
+  robot_crowding from 17/30 to 11/30. These are development diagnostics, not held-out
+  release results. Zoned crowds reserve buffered robot spawn zones for their spawns
+  and goals, keeping robot goal zones available. This zoned sampling path adds the
+  reaction buffer; synthesized crowds retain their radius-only spawn/goal-zone
+  reservations without that extra buffer. Actual-start reset checks and route
+  respawns keep one second at the initialized walking-speed cap/current speed plus
+  0.1 m (0.75 m on these maps). The common buffer calculation uses nominal spawn
+  speed times the speed multiplier before population speeds are initialized.
+  Robot zones and maps are unchanged. Missing route-zone fallbacks now encode a
+  proper B-corner rectangle. Remaining goal-wall and bottleneck goal-zone geometry
+  work is tracked for 0.0.9 in #10037.
+
 * **Issue #9725 spawn defects (changes seeded resets).** Robot starts are now sampled
   only where the robot radius plus a 0.1 m margin clears every wall and map bound
   (fail loudly otherwise); pedestrians that overlap the robot footprint at reset are
@@ -2594,7 +2622,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inventory, fail-closed durable-pointer checks, unsupported local snapshots, JSON CLI output, and a
   mocked model/factory step smoke (#3469).
 * Added a lightweight PR body-contract workflow (#3472):
-  [`.github/workflows/pr-body-contracts.yml`](.github/workflows/pr-body-contracts.yml)
+  `.github/workflows/pr-body-contracts.yml` (historical workflow, since removed)
   now validates live pull-request bodies with
   [`scripts/dev/check_pr_followups.py`](scripts/dev/check_pr_followups.py), requiring body input,
   open linked follow-up issues for declared residual work, domain-aware approval for

@@ -1,0 +1,172 @@
+{
+  "claim_boundary": "Path normalization and exact producer-byte custody only; no scientific admission or outcome edits. producer-home/<user>/ denotes the original producer home and producer-root/ the original root. Normalized files are inspection copies; use the pinned sources for checksums.",
+  "evidence_status": "diagnostic-only",
+  "records": [
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10056_wall_order_2026-09/portable/doorway_plausibility.json",
+        "sha256": "f2482260031416f5c2e148df6eebd879198afbb020560536165360b8db6cbad2"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10056_wall_order_2026-09/doorway_plausibility.json",
+        "sha256": "f6c70b91be024f5ea8023baa4c4aa8602853d42c011e4470dff14ccd523ab254"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/changed_outcomes.json",
+        "sha256": "4a8868595062bb7e9f0daa6526bd1dc5acceafed6c6b95521619e24883529cc3"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/changed_outcomes.json",
+        "sha256": "caa70860aa3b9133a9f66b1653fb4ce2c5eaf977c4e3afcc11ac0e68e79f8794"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/empty_world.json",
+        "sha256": "9bfcccbee22b8d6cae773e3fc35705cf0e27f950c13d53488be8e9bee61494dd"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/empty_world.json",
+        "sha256": "c85204242a7ab45cfa594019e942ccfa84aa420d8ff959c200ae6f93cba07d03"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/inner_checkpoints.json",
+        "sha256": "5571695cdf34924b762e9e110cc960cab47a812735c1a379a53693d0d748065c"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/inner_checkpoints.json",
+        "sha256": "83e1dd9cd0cc56b6c6c8c94b2c7897a1509187af96481d1f637d10dc24ddecd2"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/paired_analysis.json",
+        "sha256": "66b218d3ce1614245462af52fbed3dc2c00e16a67a71da37c96bc0248aa38214"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/paired_analysis.json",
+        "sha256": "e260334d0e073cc59e41ebd379ec8609877781e5ec739b11996763611c9b4b5e"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json",
+        "sha256": "0bc30f50b1469e4b7c148b4807dc70406d2b22956248f474477d83d98c712e69"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json",
+        "sha256": "d7d9e825f0e739a4485bd6ee5df457a6f6adc5609c8a063e3da9bb2bc52b2037"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/reproduce.txt",
+        "sha256": "2fa6e672385b10f4dd3a761decae3fb3225202d7af81197188f45b2ed1f671bd"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/reproduce.txt",
+        "sha256": "32418fb811b79c23d375faba6866ea0a97ef3dcd63a43bed1968d121a43d2e51"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/trace_samples.json",
+        "sha256": "faaff50ace502966cdc80d87e0943500c5fef6bf299195625f4eca714084775e"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/trace_samples.json",
+        "sha256": "ed825c26c993548d8027d64e6206d0c60e4918e0647e58cc7afe76e32948ca06"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/validation.json",
+        "sha256": "04bdedef1ca58b59209971ca46bc9fbad84f0b7268133ab6c4603f1c1f38a3d6"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_10064_no_admissible_recovery/validation.json",
+        "sha256": "3122a83a4304ac39f083be560150d0ea32d80652484ddb904011f121238c10c8"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/portable/focused.txt",
+        "sha256": "62d6f1819ccac70ab0fba7470c08f5bf7eb8ef727c90cf2ed1cb2e2b8b3a3086"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/focused.txt",
+        "sha256": "d5a065f1c009951360857891e59477f3bfb733df4ba03a959c4c17640b14a971"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/portable/green.txt",
+        "sha256": "a49ac174fa47b00866715a3f18a288aee7d8d3437c3c089caf8182ed6c9b7697"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/green.txt",
+        "sha256": "af4ec8eb7ec387e0ab9bfd9fc406e5b44822ebefafc1c03e9b84f2a671be1a09"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/portable/queue_validation.json",
+        "sha256": "51a2e39a4d54dd6ba3a391d7060d921aa32a9531aa396018a49bf56461fd311c"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/queue_validation.json",
+        "sha256": "0b9aa55142bbc5a3749f5f5c0507f629acb49b6ffbe4977c839362508ab59646"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged. Relative red-output citation points to the preserved source packet.",
+      "portable": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/portable/test_value.md",
+        "sha256": "1c91e4e8ff3d21075eaeabbf3b7e43cfbf9e6ad07e81c3d6c34820ebc80f2883"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_9952_auditor/aud2/test_value.md",
+        "sha256": "2ed1fd10dd93c1946847e5cb298a77db70e0933d756c6e4ecec938dca0222987"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_9952_auditor/portable/focused-final.txt",
+        "sha256": "36f6cb1d655b05d3bd75fc076a10b51787d3f48bbd8ed2d4a4ec6fab71073f6e"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_9952_auditor/focused-final.txt",
+        "sha256": "e8b7df75fc17ea4bc88532d828ac3ad260cc8abdcd9f7a028b57d326e837e9bd"
+      }
+    },
+    {
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "portable": {
+        "path": "docs/context/evidence/issue_9952_auditor/portable/parent-failures-final.txt",
+        "sha256": "826c372afd9ce1345f00201bb3651ba3f43e972e3524ae26b2a0f09f3592790d"
+      },
+      "source": {
+        "path": "docs/context/evidence/issue_9952_auditor/parent-failures-final.txt",
+        "sha256": "3f56728356c531dd33397565fee182726fd9d2a0dd0d1d7f5fa26afc4a67103d"
+      }
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

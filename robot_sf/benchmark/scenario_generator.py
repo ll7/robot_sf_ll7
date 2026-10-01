@@ -43,6 +43,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.pysf_geometry import endpoint_segments_to_pysf
+
 try:  # Optional heavy import delayed until needed
     import pysocialforce as pysf
 except ImportError:  # pragma: no cover - allow import failure during docs builds
@@ -666,7 +668,9 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
     else:
         # pysocialforce expects None (not empty list) for no obstacles; empty list triggers
         # a broadcasting issue inside EnvState._update_obstacles_raw.
-        sim_obstacles = obstacles if len(obstacles) > 0 else None
+        # Public GeneratedScenario geometry uses endpoint order; EnvState input
+        # groups coordinates by axis. Keep conversion at this boundary only.
+        sim_obstacles = endpoint_segments_to_pysf(obstacles) if obstacles else None
         simulator = pysf.Simulator(state=state, obstacles=sim_obstacles)  # type: ignore[arg-type]
 
     return GeneratedScenario(

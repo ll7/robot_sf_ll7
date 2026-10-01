@@ -21,6 +21,7 @@ from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.abstract_envs import SingleAgentEnv
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.env_util import (
+    global_reset_seed,
     init_ped_collision_and_sensors,
     init_ped_spaces,
     prepare_pedestrian_actions,
@@ -460,29 +461,34 @@ class PedestrianEnv(SingleAgentEnv):
         Returns:
             Tuple of (observation, info) after environment reset.
         """
-        super().reset(seed=seed, options=options)
+        with global_reset_seed(seed):
+            super().reset(seed=seed, options=options)
 
-        # Reset simulator
-        self.simulator.reset_state()
+            # Rebuild private crowd streams before resetting the ego pedestrian.
+            if seed is not None:
+                self.applied_seed = int(seed)
+                self.simulator.repopulate_crowd(seed=int(seed))
+            # Reset simulator
+            self.simulator.reset_state()
 
-        # Reset states
-        self.last_obs_robot = self.robot_state.reset()
-        obs_ped = self.ped_state.reset()
+            # Reset states
+            self.last_obs_robot = self.robot_state.reset()
+            obs_ped = self.ped_state.reset()
 
-        # Reset action tracking
-        self.last_action_robot = None
-        self.last_action_ped = None
+            # Reset action tracking
+            self.last_action_robot = None
+            self.last_action_ped = None
 
-        if self.recording_enabled:
-            self.save_recording()
+            if self.recording_enabled:
+                self.save_recording()
 
-        # Preserve legacy info payload shape.
-        return obs_ped, _build_reset_info(
-            self.config,
-            map_def=self.map_def,
-            seed=getattr(self, "applied_seed", None),
-            simulator=self.simulator,
-        )
+            # Preserve legacy info payload shape.
+            return obs_ped, _build_reset_info(
+                self.config,
+                map_def=self.map_def,
+                seed=getattr(self, "applied_seed", None),
+                simulator=self.simulator,
+            )
 
     def render(self, **kwargs) -> None:
         """Render the environment."""

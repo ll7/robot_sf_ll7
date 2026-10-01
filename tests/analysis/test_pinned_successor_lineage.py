@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from scripts.analysis.compare_release_0_0_7_to_0_0_8 import V4_SLOT_REPLACEMENTS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,12 @@ def _resolve_real_handoff(key: str, mutation: str | None = None) -> subprocess.C
     request = {
         "config_path": TEMPLATE,
         "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
-        "rows": [{"slot": [key, "differential_drive", scenario, 111, ""], "scenario_params": {}}],
+        "rows": [
+            {
+                "slot": [key, "differential_drive", scenario, EVAL_SEEDS_0_0_8[0], ""],
+                "scenario_params": {},
+            }
+        ],
     }
     script = """
 import copy
@@ -88,7 +94,13 @@ def _assert_real_orca_handoff(key: str) -> None:
     rows = json.loads(result.stdout)["rows"]
     assert len(rows) == 1
     row = rows[0]
-    assert row["slot"] == [key, "differential_drive", "francis2023_leave_group", 111, ""]
+    assert row["slot"] == [
+        key,
+        "differential_drive",
+        "francis2023_leave_group",
+        EVAL_SEEDS_0_0_8[0],
+        "",
+    ]
     assert row["algo"] == "orca"
     assert "planner_variant" not in row["config"]
     assert row["config"]["max_linear_speed"] == 1.15
@@ -134,9 +146,9 @@ def test_real_orca_handoff_acceptance_keeps_substitutions_rejected(
 def test_real_frozen_0_0_8_template_resolves_all_four_v4_lineages():
     """Exercise production pinned resolution with the real release matrix and frozen v4 files."""
     slots = [
-        (key, "differential_drive", "classic_bottleneck_low", 111, "")
+        (key, "differential_drive", "classic_bottleneck_low", EVAL_SEEDS_0_0_8[0], "")
         for key in V4_SLOT_REPLACEMENTS.values()
-    ]  # Seed 111 is a static join key; this resolver never steps an environment or planner.
+    ]  # The sealed seed is a static join key; this resolver never steps an environment or planner.
     result = subprocess.run(
         [sys.executable, "-I", str(ROOT / "scripts/analysis/_pinned_successor_runtime.py")],
         cwd=ROOT,

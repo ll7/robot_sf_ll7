@@ -6,6 +6,7 @@ the selector does not exist there, or the legacy command shows the defect (see t
 """
 
 import math
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -256,10 +257,18 @@ def test_braking_helpers_are_consistent() -> None:
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "scenario_id", ["francis2023_crowd_navigation", "francis2023_robot_crowding"]
+    ("scenario_id", "seed"),
+    [("francis2023_crowd_navigation", 1001), ("francis2023_robot_crowding", 1004)],
 )
-def test_diagnostic_cell_replay_reaches_goal_without_wall_contact(scenario_id: str) -> None:
-    """The bounded-v2 diagnostic seed avoids wall contact in both representative cells."""
+def test_non_release_goal_zone_entry_v1_bounded_v2_replay_safety(
+    scenario_id: str, seed: int, record_property: Callable[[str, object], None]
+) -> None:
+    """Protect the non-release goal_zone_entry_v1 / bounded_v2 replay cells.
+
+    Legacy_v1 contacts walls in these dev-seed cells (#9727, #9746). Crowding1004
+    may consume its authored budget while moving safely; other cells must finish.
+    This does not exercise the release matrix or socnav_sampling_release_v0_0_8.yaml.
+    """
     from robot_sf.benchmark.classic_interactions_loader import (
         load_classic_matrix,
         select_scenario,
@@ -270,10 +279,11 @@ def test_diagnostic_cell_replay_reaches_goal_without_wall_contact(scenario_id: s
         "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
     )
     scenario = select_scenario(load_classic_matrix(str(scenario_path)), scenario_id)
+    authored_budget = int(scenario["simulation_config"]["max_episode_steps"])
     record = _run_map_episode(
         scenario,
-        1001,
-        horizon=600,
+        seed,
+        horizon=authored_budget,
         dt=0.1,
         record_forces=False,
         snqi_weights=None,
@@ -281,9 +291,33 @@ def test_diagnostic_cell_replay_reaches_goal_without_wall_contact(scenario_id: s
         algo="socnav_sampling",
         scenario_path=scenario_path,
         algo_config_path=str(V2_CONFIG),
+        record_simulation_step_trace=True,
     )
     assert record["metrics"]["wall_collisions"] == 0
-    assert record["termination_reason"] == "success"
+    assert record["metrics"]["collisions"] == 0
+    trace = record["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    goal = record["algorithm_metadata"]["paired_effect_native_trace"]["goal_position"]
+    final_distance = math.dist(trace[-1]["robot"]["position"], goal)
+    record_property("sampler_outcome", record["outcome"])
+    record_property("sampler_steps", record["steps"])
+    record_property("sampler_final_distance_to_goal_m", final_distance)
+    # Orchestrator ruling 2026-10-01 and #9999: authored400 is the crowding
+    # safety budget, not the old600 runner horizon. Only this moving timeout
+    # may omit goal completion; keep the ruling's freeze guards executable.
+    if (scenario_id, seed) == ("francis2023_robot_crowding", 1004) and record["outcome"][
+        "timeout_event"
+    ]:
+        assert authored_budget == record["steps"] == 400
+        assert record["termination_reason"] == "terminated"
+        longest_stationary = stationary = 0
+        for step in trace:
+            speed = math.hypot(*step["robot"]["velocity"])
+            stationary = stationary + 1 if speed < 0.05 else 0
+            longest_stationary = max(longest_stationary, stationary)
+        assert longest_stationary <= 50
+        assert math.dist(trace[-151]["robot"]["position"], goal) > final_distance
+    else:
+        assert record["termination_reason"] == "success"
 
 
 def test_obstacle_clearance_handles_frames_and_missing_payloads() -> None:

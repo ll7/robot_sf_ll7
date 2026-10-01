@@ -1,0 +1,33 @@
+{
+  "candidates": 20160,
+  "queue_bytes": 824506173,
+  "queue_sha256": "9aafeb5ce541f87e7e593633411236396dcd849a0b523132efd7c76593474e88",
+  "rank_policy": {
+    "control_enabled": false,
+    "control_schedule": [
+      0,
+      3,
+      7,
+      15,
+      31
+    ],
+    "max_age": 10,
+    "max_control_selections": null,
+    "max_defer_count": 3,
+    "mode": "fixed",
+    "policy_version": "audit-queue.fixed.v1.1",
+    "schema_version": "audit-queue-selection.v1",
+    "weights": {
+      "behavior_unexplained": 0.15,
+      "benchmark_config_defect": 0.2,
+      "planner_disagreement": 0.1,
+      "release_impact": 0.2,
+      "safety_severity": 0.05,
+      "signal_strength": 0.4,
+      "statistical_unusualness": 0.1
+    }
+  },
+  "top_100_distinct_cells": 100,
+  "ranked_output_sha256": "57768a67548031e313cd553f9d8a1f403df1ee92d75c487c2f708e22af851928",
+  "ranked_input_same_bytes_as_final": true
+}

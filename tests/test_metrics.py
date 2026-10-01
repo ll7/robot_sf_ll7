@@ -404,7 +404,7 @@ def test_success_and_time_to_goal_norm_success_case():
     ep.reached_goal_step = 5
     vals = compute_all_metrics(ep, horizon=10)
     assert vals["success"] == 1.0
-    assert np.isclose(vals["time_to_goal_norm"], 5 / 10)
+    assert np.isclose(vals["time_to_goal_norm"], 6 / 10)
     # path_efficiency should be 1 for straight line
     assert np.isclose(vals["path_efficiency"], 1.0)
 
@@ -434,9 +434,9 @@ def test_success_only_time_to_goal_metrics_flag_validity() -> None:
     ep.robot_pos[:, 0] = np.linspace(0, 5.0, 6)
     ep.reached_goal_step = 5
     vals = compute_all_metrics(ep, horizon=10, shortest_path_len=5.0, robot_max_speed=1.0)
-    assert np.isclose(vals["time_to_goal_norm_success_only"], 0.5)
+    assert np.isclose(vals["time_to_goal_norm_success_only"], 0.6)
     assert vals["time_to_goal_success_only_valid"] == 1.0
-    assert np.isclose(vals["time_to_goal_ideal_ratio"], 0.1)
+    assert np.isclose(vals["time_to_goal_ideal_ratio"], 0.12)
     assert vals["time_to_goal_ideal_ratio_valid"] == 1.0
 
 
@@ -841,9 +841,8 @@ def test_energy_and_jerk_mean():
     vals = compute_all_metrics(ep, horizon=10)
     # Energy = sum |a_t| = sum_{t=0}^{5} t = 15
     assert np.isclose(vals["energy"], 15.0)
-    # Jerk differences: a_{t+1} - a_t = 1 for t=0..4 -> vector [1,0]; norms=1 (5 values)
-    # Using first T-2=4 jerk vectors => average = 4 / 4 =1
-    assert np.isclose(vals["jerk_mean"], 1.0)
+    # Acceleration increases by 1m/s^2 every 0.1s: jerk is 10m/s^3.
+    assert np.isclose(vals["jerk_mean"], 10.0)
 
 
 def test_curvature_mean():
@@ -1542,7 +1541,7 @@ def test_time_to_goal():
 
     # Goal reached at step 5
     ep.reached_goal_step = 5
-    assert time_to_goal(ep) == 5 * 0.1
+    assert time_to_goal(ep) == 6 * 0.1
 
     # Goal not reached -> NaN
     ep.reached_goal_step = None
@@ -1776,7 +1775,7 @@ def test_aggregated_time():
 
     # Should return time_to_goal for single robot
     result = aggregated_time(ep)
-    assert result == 8 * 0.1
+    assert result == 9 * 0.1
 
     # No goal reached -> NaN
     ep.reached_goal_step = None

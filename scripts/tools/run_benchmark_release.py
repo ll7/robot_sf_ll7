@@ -70,6 +70,7 @@ from robot_sf.benchmark.spawn_preflight import (
     DEFAULT_CLEARANCE_MARGIN_M,
     DEFAULT_GRID_RESOLUTION_M,
     DEFAULT_RESPAWN_WINDOW_STEPS,
+    guard_manifest_execution,
     run_manifest_preflight,
     write_preflight_reports,
 )
@@ -1372,6 +1373,43 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return 2
     validation = validate_release_manifest(manifest, campaign_config=cfg)
+    if validation["status"] != "valid":
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "invalid_manifest",
+                    "manifest_validation": validation,
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
+    try:
+        guard_manifest_execution(
+            manifest, source_commit=runtime_source_commit, repository_root=get_repository_root()
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "seed_execution_refused",
+                    "status_reason": str(exc),
+                    "manifest_validation": validation,
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
 
     resolved_manifest_kwargs: dict[str, Any] = {"campaign_config": cfg}
     if runtime_source_commit is not None:
@@ -1653,6 +1691,21 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return 2
 
+    try:
+        guard_manifest_execution(
+            manifest, source_commit=runtime_source_commit, repository_root=get_repository_root()
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        result.update(
+            status="seed_execution_refused",
+            status_reason=str(exc),
+            benchmark_success=False,
+            campaign_execution_status="not_started",
+            evidence_status="blocked",
+            release_exit_code=2,
+        )
+        print(json.dumps(result, indent=2))
+        return 2
     run_payload = run_campaign(
         cfg,
         output_root=args.output_root,

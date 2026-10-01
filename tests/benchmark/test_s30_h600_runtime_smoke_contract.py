@@ -22,6 +22,7 @@ from robot_sf.benchmark.release_parameter_freeze import (
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.spawn_preflight import _release_manifest_inputs, run_manifest_preflight
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -62,7 +63,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "a5d35d7e250958e84f4d662efa65864d6bf63c6d923a543bab812c9bd10763f5"
+CAMPAIGN_TEMPLATE_SHA256 = "7b04abee37c5763c20e94faf61aa0b3fcc859fd064e0d3c9d56e9dadfc56638e"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -458,6 +459,7 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
         "scenario_matrix",
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",
         "zenodo",
@@ -532,6 +534,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         "paper_facing",  # publication identity
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "workers",  # execution resource policy
     }
@@ -553,6 +556,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         "scenario_matrix",  # scenario subset
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",  # bounded runtime resources
         "zenodo",  # publication identity
@@ -567,7 +571,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     assert {103}.isdisjoint({101, 102} | set(range(111, 141)) | set(range(1001, 1031)))
     assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
     assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
-    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(range(111, 141))
+    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(EVAL_SEEDS_0_0_8)
 
     mismatches: list[str] = []
     for index, label in ((0, "calibration"), (1, "smoke")):
@@ -610,12 +614,17 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze
     validation = validate_release_manifest(manifest)
 
     # Issue #9751: the four v4 slots bind unfrozen placeholders until #9748, so the
-    # smoke manifest is refused with exactly those four blockers and nothing else.
+    # smoke manifest is refused for those four slots and the retired seed (D-049).
     assert validation["manifest_path"] == (
         "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
     )
     assert validation["status"] == "invalid"
-    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
+    assert len(REPLACED_V4_KEYS) == 4
+    assert validation["problem_count"] == 5
+    assert (
+        "retired evaluation seeds are forbidden for non-historical releases (D-049)"
+        in validation["problems"]
+    )
     for key in REPLACED_V4_KEYS:
         assert any(
             problem.startswith(f"planner {key}: release parameters are not frozen")

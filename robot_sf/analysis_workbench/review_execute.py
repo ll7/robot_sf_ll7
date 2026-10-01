@@ -1213,6 +1213,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         env_config = RobotSimulationConfig(
             map_pool=MapDefinitionPool(map_defs={"srev22-tiny-crossing": map_def}),
             sim_config=SimulationSettings(
+                pedestrian_seed=int(job["seed"]),
                 difficulty=0,
                 ped_density_by_difficulty=[0.0],
                 population_size=1,

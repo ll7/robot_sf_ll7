@@ -527,7 +527,7 @@ def test_map_resume_matches_saved_rows_to_declared_jobs(case):
         {"scenario_id": "b", "simulation_config": {}, "seeds": [1003]},
     ]
     kwargs = {
-        "planners": [{"key": "sf"}],
+        "planners": [{"key": "sf", "algo": "goal"}],
         "kinematics_matrix": ["differential_drive"],
         "scenarios": scenarios,
     }

@@ -18,7 +18,7 @@ latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "a5d35d7e250958e84f4d662efa65864d6bf63c6d923a543bab812c9bd10763f5"
+campaign_config_sha256: "7b04abee37c5763c20e94faf61aa0b3fcc859fd064e0d3c9d56e9dadfc56638e"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -56,41 +56,41 @@ scenario:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
+  seed_set: release_eval_0_0_8
   seeds: []
-  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
-  seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+  seed_sets_path: ../../benchmarks/seed_sets_0_0_8.yaml
+  seed_sets_sha256: a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706
   resolved_seeds:
-    - 111
-    - 112
-    - 113
-    - 114
-    - 115
-    - 116
-    - 117
-    - 118
-    - 119
-    - 120
-    - 121
-    - 122
-    - 123
-    - 124
-    - 125
-    - 126
-    - 127
-    - 128
-    - 129
-    - 130
-    - 131
-    - 132
-    - 133
-    - 134
-    - 135
-    - 136
-    - 137
-    - 138
-    - 139
-    - 140
+    - 50036
+    - 50140
+    - 50331
+    - 50403
+    - 50813
+    - 51339
+    - 51709
+    - 51767
+    - 52094
+    - 52175
+    - 52257
+    - 52671
+    - 52850
+    - 52971
+    - 53020
+    - 53198
+    - 53239
+    - 53636
+    - 53671
+    - 53779
+    - 55022
+    - 55379
+    - 55568
+    - 56170
+    - 56966
+    - 57077
+    - 57113
+    - 57494
+    - 57943
+    - 59019
 
 metrics:
   snqi_weights_path: ../snqi_weights_camera_ready_v3.json

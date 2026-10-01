@@ -179,6 +179,28 @@ def time_to_circle_contact(
     return float(contact_time) if contact_time >= 0.0 else float("inf")
 
 
+def least_bad_clearance_rank(
+    min_ped_clearance: float,
+    min_obstacle_clearance: float,
+    *,
+    ped_threshold: float,
+    obstacle_threshold: float,
+    progress: float,
+) -> tuple[float, float]:
+    """Rank infeasible rollouts by their worst hard-clearance margin, then progress.
+
+    Larger is better. Missing actors/obstacles contribute infinity. This is
+    best-effort recovery, never an admissibility override or a safety claim.
+
+    Returns:
+        tuple: Worst clearance margin and progress, in metres.
+    """
+    return (
+        min(min_ped_clearance - ped_threshold, min_obstacle_clearance - obstacle_threshold),
+        progress,
+    )
+
+
 __all__ = [
     "CENTER_CLEARANCE_V1",
     "SURFACE_CLEARANCE_V2",

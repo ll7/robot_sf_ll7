@@ -1,13 +1,13 @@
 schema_version: social-force-goal-approach-regression.v1
 issue: 9428
 claim_boundary: >-
-  Deterministic native regression contract for the classic head-on corridor seed-24
+  Deterministic native regression contract for the classic head-on corridor seed-1013
   limit cycle. This fixture is not benchmark evidence and does not establish a
   planner ranking or a general safety claim.
 
 scenario_matrix: configs/scenarios/archetypes/classic_head_on_corridor.yaml
 scenario_id: classic_head_on_corridor_medium
-seed: 24
+seed: 1013
 horizon: 500
 dt: 0.1
 execution_mode: native

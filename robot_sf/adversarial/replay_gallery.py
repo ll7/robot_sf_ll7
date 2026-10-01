@@ -2335,7 +2335,10 @@ def _render_replay(
     """Render the exact replay trace through existing figure infrastructure."""
     metadata = record.get("algorithm_metadata")
     trace = metadata.get("simulation_step_trace") if isinstance(metadata, dict) else None
-    if not isinstance(trace, dict) or trace.get("schema_version") != "simulation-step-trace.v1":
+    if not isinstance(trace, dict) or trace.get("schema_version") not in {
+        "simulation-step-trace.v1",
+        "simulation-step-trace.v2",
+    }:
         return {"status": "unavailable", "reason": "replay_trace_missing", "artifacts": []}
     if not isinstance(trace.get("steps"), list):
         return {"status": "unavailable", "reason": "replay_trace_steps_missing", "artifacts": []}

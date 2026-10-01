@@ -1048,6 +1048,7 @@ _FAST_FILES = {
     "test_socnav_planner_adapter.py",
     "test_fast_pysf_wrapper.py",
     "test_simulator_init_factory.py",
+    "test_obstacle_force_profile.py",
     # Reset metadata and JSONL recording tests provide deterministic contract
     # coverage for persisted obstacle-force runtime metadata.
     "test_reset_metadata.py",

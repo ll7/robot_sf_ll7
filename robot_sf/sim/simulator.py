@@ -47,6 +47,8 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
+from robot_sf.sim.obstacle_force_profile import apply_obstacle_force_profile
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -450,6 +452,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
         "obstacle_force_law_resolution_mode",
         pysf_config.obstacle_force_config.obstacle_force_law_resolution_mode,
     )
+    apply_obstacle_force_profile(
+        pysf_config.obstacle_force_config, getattr(config, "obstacle_force_profile", None)
+    )
     pysf_config.social_force_config.kernel_version = getattr(
         config, "social_force_kernel_version", None
     )
@@ -784,7 +789,10 @@ class Simulator:
                     None,
                 ),
             )
-        return dict(metadata_fn())
+        metadata = dict(metadata_fn())
+        if getattr(getattr(self, "config", None), "_obstacle_force_profile_explicit", False):
+            metadata["obstacle_force_profile"] = str(self.config.obstacle_force_profile)
+        return metadata
 
     def social_force_kernel_metadata(self) -> dict[str, Any]:
         """Return the active fast-pysf pair-kernel selector and provenance."""

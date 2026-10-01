@@ -20,6 +20,7 @@ from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
     _normalize_residual_adversary_config,
 )
+from robot_sf.sim.obstacle_force_profile import resolve_obstacle_force_profile
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -448,8 +449,16 @@ class SimulationSettings:
     social_force_kernel_version: InitVar[Any] = None
     """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
 
+    obstacle_force_profile: InitVar[str | None] = None
+    """Opt-in wall calibration; missing preserves released parameters and hashes."""
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
+        if name == "obstacle_force_profile":
+            resolved = resolve_obstacle_force_profile(value)
+            object.__setattr__(self, "_obstacle_force_profile", resolved)
+            object.__setattr__(self, "_obstacle_force_profile_explicit", resolved.explicit)
+            return
         if name == "obstacle_force_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -468,6 +477,11 @@ class SimulationSettings:
         Returns:
             The resolved selector for ``social_force_kernel_version`` or the requested attribute.
         """
+        if name == "obstacle_force_profile":
+            try:
+                return object.__getattribute__(self, "_obstacle_force_profile")
+            except AttributeError:
+                return resolve_obstacle_force_profile()
         if name == "social_force_kernel_version":
             try:
                 return object.__getattribute__(self, "_social_force_kernel_version")
@@ -481,9 +495,12 @@ class SimulationSettings:
         Returns:
             Only the non-default selector field, or an empty mapping for the legacy default.
         """
-        if self.social_force_kernel_resolution_mode == "defaulted_missing":
-            return {}
-        return {"social_force_kernel_version": str(self.social_force_kernel_version)}
+        overrides = {}
+        if self.social_force_kernel_resolution_mode != "defaulted_missing":
+            overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
+        if getattr(self, "_obstacle_force_profile_explicit", False):
+            overrides["obstacle_force_profile"] = str(self.obstacle_force_profile)
+        return overrides
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize settings with explicit version selectors while preserving legacy defaults.
@@ -589,6 +606,7 @@ class SimulationSettings:
         """
         if init_vars:
             self.social_force_kernel_version = init_vars[0]
+        self.obstacle_force_profile = init_vars[1] if len(init_vars) > 1 else None
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

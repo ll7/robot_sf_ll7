@@ -444,7 +444,7 @@ def test_global_seed_does_not_mutate_pythonhashseed(monkeypatch):
     monkeypatch.setattr(environment_factory_module.random, "seed", lambda _seed: None)
     monkeypatch.setattr(environment_factory_module, "_optional_import", lambda _name: None)
 
-    environment_factory_module._apply_global_seed(123)
+    environment_factory_module._apply_global_seed(1013)
 
     assert os.environ["PYTHONHASHSEED"] == "caller-value"
 

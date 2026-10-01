@@ -6,10 +6,12 @@ import json
 import math
 import random
 import statistics
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.metric_definitions import (
     metric_schema_version,
     require_anchor_compatibility,
@@ -17,6 +19,7 @@ from robot_sf.benchmark.metric_definitions import (
 )
 from robot_sf.benchmark.rank_metrics import spearman
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi, normalize_metric
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -987,8 +990,13 @@ def collect_episodes_from_campaign_runs(
     run_entries: Sequence[Mapping[str, Any]],
     *,
     repo_root: Path,
+    cohort_metadata: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Load episode records referenced by campaign run entries for diagnostics.
+    """Load eligible campaign episodes for every SNQI diagnostic consumer.
+
+    Optional ``cohort_metadata`` receives counts and mutually exclusive exclusion
+    reasons. Invalid spawn takes precedence when both exclusion markers apply.
+    Historical rows without eligibility markers retain their original behavior.
 
     Returns:
         Flattened list of episode records with planner/kinematics tags.
@@ -1018,7 +1026,25 @@ def collect_episodes_from_campaign_runs(
                 payload["planner_key"] = planner_key
                 payload["kinematics"] = kinematics
                 episodes.append(payload)
-    return episodes
+    eligible, excluded = filter_evidence_eligible_records(episodes)
+    if cohort_metadata is not None:
+        eligible_ids = {id(record) for record in eligible}
+        reasons = Counter(
+            "invalid_or_unmeasured_spawn"
+            if record_has_invalid_spawn(record)
+            else "foresight_ineligible"
+            for record in episodes
+            if id(record) not in eligible_ids
+        )
+        cohort_metadata.update(
+            {
+                "episodes_total": len(episodes),
+                "episodes_eligible": len(eligible),
+                "episodes_excluded": excluded,
+                "exclusion_reasons": dict(sorted(reasons.items())),
+            }
+        )
+    return eligible
 
 
 __all__ = [

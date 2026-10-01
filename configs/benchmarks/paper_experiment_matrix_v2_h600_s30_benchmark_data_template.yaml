@@ -24,8 +24,8 @@ amv_profile:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set: release_eval_0_0_8
+  seed_sets_path: configs/benchmarks/seed_sets_0_0_8.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
@@ -45,9 +45,9 @@ workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
-# Dev-seed rehearsal: 0.893 MB trace JSON/episode; total JSONL projects to
-# 23.9 GB for 20,160 episodes, below the 30 GB recording budget.
-record_simulation_step_trace: true
+# D-057: 0.0.8 release rows stay untraced (record_simulation_step_trace defaults
+# to false). Diagnostic/illustration traces come from rehearsal 2, a separate
+# DEV-seed 1001 run at the freeze commit. No sealed-seed trace run exists.
 checkpoint_provenance_enforcement: error
 resume: true
 # Release execution stops at the first broken arm. Same-ID resume is admitted only
@@ -92,7 +92,7 @@ planners:
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
-    algo_config: configs/algos/socnav_release_v0_0_8.yaml
+    algo_config: configs/algos/orca_release_v0_0_8.yaml
     socnav_missing_prereq_policy: fail-fast
 
   - key: ppo

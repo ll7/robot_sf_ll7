@@ -83,7 +83,7 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_synthetic_actuation_profile,
     validate_synthetic_actuation_variability_distribution,
 )
-from robot_sf.benchmark.utils import _git_hash_fallback
+from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
 
 
@@ -402,12 +402,16 @@ def test_campaign_integrity_accepts_exact_unique_coverage(tmp_path: Path) -> Non
             },
         },
     ]
+    for row in rows:
+        row["scenario_params"] = {"algo": "goal", "algo_config_hash": _config_hash({})}
+        row["config_hash"] = _config_hash(row["scenario_params"])
+        row["result_provenance"]["config_hash"] = row["config_hash"]
     episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     verdict = camera_ready_run_state_module.validate_campaign_integrity(
         [
             {
                 "status": "ok",
-                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "planner": {"key": "goal", "algo": "goal", "kinematics": "differential_drive"},
                 "episodes_path": str(episodes_path),
                 "summary": {"episodes_total": 2},
             }
@@ -442,6 +446,10 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
             },
         }
     ]
+    for row in rows:
+        row["scenario_params"] = {"algo": "goal", "algo_config_hash": _config_hash({})}
+        row["config_hash"] = _config_hash(row["scenario_params"])
+        row["result_provenance"]["config_hash"] = row["config_hash"]
     episodes_path.write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
 
     # The summary has a path that points to a non-existent absolute path,
@@ -452,7 +460,7 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
         [
             {
                 "status": "ok",
-                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "planner": {"key": "goal", "algo": "goal", "kinematics": "differential_drive"},
                 "episodes_path": non_existent_abs_path,
                 "summary": {"episodes_total": 1},
             }
@@ -4230,7 +4238,7 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
 
 
 def test_planner_report_row_preserves_serialized_key_order() -> None:
-    """Planner-row JSON keeps the pre-refactor identity, metric, and metadata order."""
+    """Planner-row JSON retains field order with cohort counts beside eligible N."""
     summary = {
         "status": "ok",
         "written": 1,
@@ -4260,6 +4268,8 @@ def test_planner_report_row_preserves_serialized_key_order() -> None:
         "policy_source",
         "status",
         "episodes",
+        "episodes_total",
+        "episodes_excluded",
         "started_at_utc",
         "finished_at_utc",
         "runtime_sec",
@@ -5385,13 +5395,29 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                     "episode_id": "e-goal-0",
                     "scenario_id": "smoke",
                     "seed": 111,
-                    "config_hash": "scenario-config-smoke",
+                    "config_hash": _config_hash(
+                        {
+                            "algo": "goal",
+                            "algo_config_hash": _config_hash({}),
+                            "metadata": {"archetype": "crossing"},
+                        }
+                    ),
                     "git_hash": _git_hash_fallback(),
-                    "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "scenario_params": {
+                        "algo": "goal",
+                        "algo_config_hash": _config_hash({}),
+                        "metadata": {"archetype": "crossing"},
+                    },
                     "result_provenance": {
                         "scenario_id": "smoke",
                         "seed": 111,
-                        "config_hash": "scenario-config-smoke",
+                        "config_hash": _config_hash(
+                            {
+                                "algo": "goal",
+                                "algo_config_hash": _config_hash({}),
+                                "metadata": {"archetype": "crossing"},
+                            }
+                        ),
                         "repo_commit": _git_hash_fallback(),
                     },
                     "metrics": {

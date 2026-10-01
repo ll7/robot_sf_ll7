@@ -14,6 +14,7 @@ import numpy as np
 
 from robot_sf.benchmark.aggregate import (
     ensure_observation_track_policy,
+    filter_evidence_eligible_records,
     flatten_metrics,
     normalize_observation_track_mode,
     observation_track_group_label,
@@ -357,6 +358,20 @@ def _metric_alias(metric: str) -> str:
     return _PAPER_METRIC_ALIASES.get(metric, metric)
 
 
+def _resolve_confidence_settings(confidence_settings: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolve missing numeric settings while preserving zero and effective provenance.
+
+    Returns:
+        Copied settings with effective defaults for absent or null numeric values.
+    """
+    confidence_settings = dict(confidence_settings or {})
+    confidence_settings.setdefault("method", _BOOTSTRAP_METHOD)
+    for key, default in (("confidence", 0.95), ("bootstrap_samples", 0), ("bootstrap_seed", 123)):
+        if confidence_settings.get(key) is None:
+            confidence_settings[key] = default
+    return confidence_settings
+
+
 def build_seed_variability_rows(
     records: list[dict[str, Any]] | Sequence[dict[str, Any]],
     *,
@@ -372,24 +387,20 @@ def build_seed_variability_rows(
     Returns:
         Aggregate rows grouped by scenario and planner across seeds.
     """
-    confidence_settings = dict(confidence_settings or {})
+    confidence_settings = _resolve_confidence_settings(confidence_settings)
     seed_policy = dict(seed_policy or {})
-    confidence_settings.setdefault("method", _BOOTSTRAP_METHOD)
-    confidence_settings.setdefault("confidence", 0.95)
-    confidence_settings.setdefault("bootstrap_samples", 0)
-    confidence_settings.setdefault("bootstrap_seed", 123)
-    bootstrap_samples = int(confidence_settings.get("bootstrap_samples", 0) or 0)
-    bootstrap_confidence = float(confidence_settings.get("confidence", 0.95) or 0.95)
-    bootstrap_seed = int(confidence_settings.get("bootstrap_seed", 123) or 123)
+    bootstrap_samples = int(confidence_settings["bootstrap_samples"])
+    bootstrap_confidence = float(confidence_settings["confidence"])
+    bootstrap_seed = int(confidence_settings["bootstrap_seed"])
     grouped: dict[
         tuple[str, str, str, str, str, str],
         dict[int, list[dict[str, Any]]],
     ] = defaultdict(lambda: defaultdict(list))
 
+    records = [record for record in records if isinstance(record, dict)]
+    eligible_records, _excluded = filter_evidence_eligible_records(records)
+    eligible_ids = {id(record) for record in eligible_records}
     for record in records:
-        if record_has_invalid_spawn(record):
-            # Issues #9725/#9861: invalid or unmeasured starts are not seed variance.
-            continue
         scenario_id = str(record.get("scenario_id") or "unknown")
         planner_key = str(
             record.get("planner_key")
@@ -406,7 +417,7 @@ def build_seed_variability_rows(
         seed = int(record.get("seed", -1))
         grouped[(scenario_id, planner_key, algo, planner_group, kinematics, benchmark_profile)][
             seed
-        ].append(flatten_metrics(record))
+        ].append(record)
 
     rows: list[dict[str, Any]] = []
     for (
@@ -420,8 +431,15 @@ def build_seed_variability_rows(
         per_seed_rows: list[dict[str, Any]] = []
         across_seed_values: dict[str, list[float]] = {metric: [] for metric in metrics}
         total_episodes = 0
-        for seed, seed_records in sorted(seed_groups.items()):
+        episodes_total = sum(len(items) for items in seed_groups.values())
+        eligible_seeds: list[int] = []
+        for seed, all_seed_records in sorted(seed_groups.items()):
+            seed_records = [
+                flatten_metrics(record) for record in all_seed_records if id(record) in eligible_ids
+            ]
             total_episodes += len(seed_records)
+            if seed_records:
+                eligible_seeds.append(seed)
             metric_rows: dict[str, float] = {}
             for metric in metrics:
                 metric_values: list[float] = []
@@ -437,6 +455,8 @@ def build_seed_variability_rows(
                 {
                     "seed": seed,
                     "episode_count": len(seed_records),
+                    "episodes_total": len(all_seed_records),
+                    "episodes_excluded": len(all_seed_records) - len(seed_records),
                     "metrics": metric_rows,
                 }
             )
@@ -458,10 +478,12 @@ def build_seed_variability_rows(
                 "planner_group": planner_group,
                 "kinematics": kinematics,
                 "benchmark_profile": benchmark_profile,
-                "n": len(seed_groups),
-                "seed_count": len(seed_groups),
+                "n": len(eligible_seeds),
+                "seed_count": len(eligible_seeds),
                 "episode_count": total_episodes,
-                "seed_list": [entry["seed"] for entry in per_seed_rows],
+                "episodes_total": episodes_total,
+                "episodes_excluded": episodes_total - total_episodes,
+                "seed_list": eligible_seeds,
                 "per_seed": per_seed_rows,
                 "summary": summary,
                 "provenance": {
@@ -501,6 +523,12 @@ def build_seed_variability_csv_rows(
                 "benchmark_profile": row.get("benchmark_profile"),
                 "seed": seed_row.get("seed"),
                 "seed_episode_count": seed_row.get("episode_count"),
+                "seed_episodes_total": seed_row.get(
+                    "episodes_total", seed_row.get("episode_count")
+                ),
+                "seed_episodes_excluded": seed_row.get("episodes_excluded", 0),
+                "episodes_total": row.get("episodes_total", row.get("episode_count")),
+                "episodes_excluded": row.get("episodes_excluded", 0),
                 "seed_list": ",".join(str(seed) for seed in row.get("seed_list") or []),
                 "campaign_id": provenance.get("campaign_id"),
                 "config_hash": provenance.get("config_hash"),
@@ -665,6 +693,8 @@ def build_statistical_sufficiency_rows(
                 "algo": row.get("algo"),
                 "seed_count": row.get("seed_count"),
                 "episode_count": row.get("episode_count"),
+                "episodes_total": row.get("episodes_total", row.get("episode_count")),
+                "episodes_excluded": row.get("episodes_excluded", 0),
                 "sufficiency_status": "reported",
                 "metric_half_widths": metric_half_widths,
                 "metrics": metric_entries,

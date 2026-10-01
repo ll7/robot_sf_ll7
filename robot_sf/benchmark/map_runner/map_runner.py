@@ -1296,6 +1296,8 @@ def _attach_guard_decision_stats(
                         "recovery_command_count",
                     ):
                         runtime["last_decision"][key] = runtime[key]
+                    if "recovery_kind" in runtime:
+                        runtime["last_decision"]["recovery_kind"] = runtime["recovery_kind"]
         fallback_target = getattr(guard_adapter, "last_fallback_target_xy", None)
         if fallback_target is not None:
             runtime["planner_target_xy"] = [float(fallback_target[0]), float(fallback_target[1])]
@@ -3294,17 +3296,12 @@ def _compute_resume_identity_payload(
         Identity payload dict used to compute the episode ID for deduplication.
     """
     identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
-    identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
+    identity_algo, identity_cfg = _policy_resolution.resolve_episode_policy_runtime(
         default_algo=ctx.algo,
         algo_config_path=ctx.algo_config_path,
         algo_config=ctx.raw_policy_cfg,
         scenario=identity_scenario,
-    )
-    identity_cfg = _apply_planner_selector_v2_context(
-        identity_algo, identity_cfg, scenario=identity_scenario, seed=int(seed)
-    )
-    identity_cfg = _apply_scenario_uncertainty_envelope_config(
-        identity_algo, identity_cfg, identity_scenario
+        seed=int(seed),
     )
     identity_observation_contract = resolve_learned_checkpoint_observation_contract(
         identity_algo,

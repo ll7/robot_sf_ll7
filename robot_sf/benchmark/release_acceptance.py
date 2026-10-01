@@ -20,6 +20,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.camera_ready._config import (
     _load_campaign_scenarios,
@@ -65,6 +66,8 @@ from robot_sf.benchmark.release_protocol import (
     resolve_campaign_artifact_path,
 )
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -138,6 +141,32 @@ def _strict_int(value: Any) -> int | None:
     if isinstance(value, str) and value.strip().lstrip("-").isdigit():
         return int(value)
     return None
+
+
+def _evidence_exclusion_counts(rows: list[dict[str, Any]]) -> Counter[str]:
+    """Count canonical exclusions from persisted rows, with spawn taking precedence.
+
+    Returns:
+        Counts by mutually exclusive reason, derived from the canonical evidence filter.
+    """
+    eligible, _ = filter_evidence_eligible_records(rows)
+    eligible_ids = {id(row) for row in eligible}
+    return Counter(
+        "invalid_or_unmeasured_spawn" if record_has_invalid_spawn(row) else "foresight_ineligible"
+        for row in rows
+        if id(row) not in eligible_ids
+    )
+
+
+def _append_exclusion_blocker(
+    blockers: list[str], counts: Mapping[str, int], *, label: str
+) -> None:
+    """Reject campaign spawn defects separately from planned episode counts."""
+    count = counts.get("invalid_or_unmeasured_spawn", 0)
+    if count:
+        _append_blocker(
+            blockers, f"{label} spawn_exclusion_defect: K={count} invalid_or_unmeasured_spawn"
+        )
 
 
 def _append_blocker(blockers: list[str], message: str) -> None:
@@ -2350,7 +2379,7 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     if tuple(scenario_ids) != STRESS_SMOKE_EXPECTED_SCENARIO_IDS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve the fixed five scenarios")
     if tuple(seeds) != (STRESS_SMOKE_EXPECTED_SEED,):
-        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 116")
+        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 1001")
     if expected_cells != STRESS_SMOKE_EXPECTED_EPISODE_CELLS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve exactly 70 episode cells")
     if (
@@ -2427,6 +2456,7 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     observed_planner_row_arms: set[tuple[str, str]] = set()
     identities: set[tuple[str, str, str, int]] = set()
     duplicate_identities: set[tuple[str, str, str, int]] = set()
+    exclusion_counts: Counter[str] = Counter()
     observed_rows = 0
     planner_specs = {
         str(getattr(planner, "key", "")).strip(): planner
@@ -2543,6 +2573,9 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         if error:
             _append_blocker(blockers, error)
             continue
+        run_exclusions = _evidence_exclusion_counts(rows)
+        exclusion_counts.update(run_exclusions)
+        _append_exclusion_blocker(blockers, run_exclusions, label=f"runs[{run_index}]")
         algorithm_config_path = getattr(planner_spec, "algo_config_path", None)
         blockers.extend(
             f"{blocker}"
@@ -2615,10 +2648,13 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
                 blockers,
                 f"planner_rows[{planner_row_index}] benchmark_success must be explicitly true",
             )
-        if _strict_int(planner_row.get("episodes")) != expected_per_arm:
+        if (
+            _strict_int(planner_row.get("episodes_total", planner_row.get("episodes")))
+            != expected_per_arm
+        ):
             _append_blocker(
                 blockers,
-                f"planner_rows[{planner_row_index}] episode count is not {expected_per_arm}",
+                f"planner_rows[{planner_row_index}] total episode count is not {expected_per_arm}",
             )
         if _strict_int(planner_row.get("failed_jobs", 0)) != 0:
             _append_blocker(blockers, f"planner_rows[{planner_row_index}] failed_jobs must be 0")
@@ -2720,6 +2756,8 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         "diagnostic_branch_witnesses": branch_coverage["witnesses"],
         "source_provenance": source_report,
         "claim_boundary": "diagnostic execution evidence only; no benchmark, ranking, or SNQI claim",
+        "episodes_excluded": sum(exclusion_counts.values()),
+        "exclusion_reasons": dict(sorted(exclusion_counts.items())),
         "blockers": blockers,
     }
 
@@ -2798,6 +2836,12 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(blockers, blocker)
     if len(scenario_ids) != 48:
         _append_blocker(blockers, "manifest-resolved campaign must contain exactly 48 scenarios")
+    if (
+        "0.0.8" in str(getattr(manifest, "release_tag", ""))
+        or "0_0_8" in str(getattr(manifest, "scenario_matrix_path", ""))
+        or "0_0_8" in str(getattr(manifest, "canonical_campaign_config_path", ""))
+    ) and tuple(resolved_seeds) != EVAL_SEEDS_0_0_8:
+        _append_blocker(blockers, "0.0.8 requires the exact sealed evaluation seeds (D-049)")
     if len(resolved_seeds) != 30:
         _append_blocker(blockers, "manifest-resolved campaign must contain exactly 30 seeds")
     if len(planner_keys) * len(scenario_ids) * len(resolved_seeds) != expected_cells:
@@ -2919,6 +2963,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     forbidden_status_counts: Counter[str] = Counter()
     source_commits: set[str] = set()
     identities: set[tuple[str, str, str, int]] = set()
+    exclusion_counts: Counter[str] = Counter()
     observed_episode_rows = 0
     expected_per_arm = (
         FULL_RELEASE_EXPECTED_EPISODE_CELLS // len(expected_arms) if expected_arms else 0
@@ -2982,6 +3027,9 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         if error:
             _append_blocker(blockers, error)
             continue
+        run_exclusions = _evidence_exclusion_counts(rows)
+        exclusion_counts.update(run_exclusions)
+        _append_exclusion_blocker(blockers, run_exclusions, label=f"runs[{index}]")
         observed_episode_rows += len(rows)
         declared = entry.get("summary")
         declared = declared if isinstance(declared, Mapping) else {}
@@ -3120,9 +3168,9 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         if str(row.get("status", "")).strip().lower() != "ok":
             _append_blocker(blockers, f"planner_rows[{index}] status is not ok")
-        if _strict_int(row.get("episodes", -1)) != expected_per_arm:
+        if _strict_int(row.get("episodes_total", row.get("episodes", -1))) != expected_per_arm:
             _append_blocker(
-                blockers, f"planner_rows[{index}] episode count is not {expected_per_arm}"
+                blockers, f"planner_rows[{index}] total episode count is not {expected_per_arm}"
             )
         if arm not in expected_arms:
             _append_blocker(blockers, f"planner_rows[{index}] is outside the manifest roster")
@@ -3180,6 +3228,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         "unexpected_episode_identities": len(unexpected_identities),
         "source_commits": sorted(source_commits),
         "forbidden_status_counts": dict(sorted(forbidden_status_counts.items())),
+        "episodes_excluded": sum(exclusion_counts.values()),
+        "exclusion_reasons": dict(sorted(exclusion_counts.items())),
         "blockers": blockers,
         "claim_boundary": (
             "Publication-grade benchmark evidence requires all 14 arms, all 20,160 unique "

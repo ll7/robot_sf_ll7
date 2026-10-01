@@ -63,8 +63,12 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.metric_definitions import (
+    LEGACY_METRIC_SCHEMA_VERSION,
     METRIC_SCHEMA_VERSION,
     require_anchor_compatibility,
+)
+from robot_sf.benchmark.metric_definitions import (
+    metric_schema_version as resolve_metric_schema_version,
 )
 from robot_sf.benchmark.path_utils import remaining_route_length
 from robot_sf.benchmark.robot_force_contract import (
@@ -94,6 +98,10 @@ ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
+# D-055: sub-millimetre displacements are standstill, independent of timestep.
+CURVATURE_MIN_DISPLACEMENT_M = 1e-3
+# Bound total turning on short paths without changing the turning numerator.
+CURVATURE_LENGTH_FLOOR_M = 1.0
 
 
 @dataclass
@@ -1328,7 +1336,40 @@ def jerk_mean(data: EpisodeData) -> float:
     return float(norms.sum() / denom)
 
 
-def curvature_mean(data: EpisodeData) -> float:
+def curvature_mean(
+    data: EpisodeData, *, metric_schema_version: str = METRIC_SCHEMA_VERSION
+) -> float:
+    """Arc-length mean absolute path curvature in rad/m for metric v2 (D-055).
+
+    Sum absolute wrapped turns between consecutive displacement directions and
+    divide by max(counted path length, 1 m). Only displacements >= 1e-3 m
+    count: stationary samples add neither turning nor length. A stop followed
+    by a new direction therefore counts one turn. Fewer than two counted steps
+    give zero. Reset geometry is included when supplied; invalid displacement
+    samples are ignored. Timestep and recorded velocity/acceleration do not enter.
+
+    Args:
+        data: Recorded episode positions, optionally including the reset pose.
+        metric_schema_version: Explicit row definition for historical recomputation;
+            v1 retains the original time mean cross-product calculation exactly.
+
+    Returns:
+        Finite, nonnegative path curvature; short paths use the 1 m length floor.
+    """
+    version = resolve_metric_schema_version({"metric_schema_version": metric_schema_version})
+    if version == LEGACY_METRIC_SCHEMA_VERSION:
+        return _legacy_curvature_mean(data)
+    displacement = np.diff(_path_positions(data), axis=0)
+    lengths = np.hypot(displacement[:, 0], displacement[:, 1])
+    counted = np.isfinite(lengths) & (lengths >= CURVATURE_MIN_DISPLACEMENT_M)
+    if np.count_nonzero(counted) < 2:
+        return 0.0
+    directions = np.arctan2(displacement[counted, 1], displacement[counted, 0])
+    turns = np.abs(wrap_angle_pi_array(np.diff(directions)))
+    return float(turns.sum() / max(float(lengths[counted].sum()), CURVATURE_LENGTH_FLOOR_M))
+
+
+def _legacy_curvature_mean(data: EpisodeData) -> float:
     """Mean path curvature.
 
     Curvature is computed using the cross product formula: κ = |v × a| / |v|³
@@ -3066,10 +3107,10 @@ def _is_valid_nonnegative_finite(value: Any) -> bool:
         return False
 
 
-def _cooperative_duration(step: int, dt: Any) -> float:
+def _cooperative_duration(step: int, dt: Any, *, includes_reset: bool = False) -> float:
     """Return a finite cooperative duration, or NaN when multiplication overflows."""
     try:
-        duration = (step + 1) * dt
+        duration = (step + int(not includes_reset)) * dt
         if not math.isfinite(duration) or duration < 0.0:
             return float("nan")
         return float(duration)
@@ -3082,7 +3123,8 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
     From paper 2306.16740v4 Table 1: Aggregated Time (AT).
 
-    Formula: AT = max((reached_goal_step[agent] + 1) * dt) over the requested agents.
+    Formula: AT = max((reached_goal_step[agent] + offset) * dt) over requested agents.
+    The offset is zero for reset-inclusive samples and one for post-step samples.
 
     Parameters
     ----------
@@ -3145,7 +3187,7 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
             max_step = step
     if not seen or max_step is None:
         return float("nan")
-    return _cooperative_duration(max_step, data.dt)
+    return _cooperative_duration(max_step, data.dt, includes_reset=data.robot_pos_includes_reset)
 
 
 # --- Orchestrator ---

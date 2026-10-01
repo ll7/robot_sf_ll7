@@ -140,7 +140,10 @@ def _insert_rows(  # noqa: C901 - independent row admission and compaction guard
         # compared values and a checked source identity for each slot.
         compact = {
             "outcome": row["outcome"],
-            "metrics": row["metrics"],
+            # Historical trace rows stored this series among scalar reductions.
+            "metrics": {
+                key: value for key, value in row["metrics"].items() if key != "robot_force_samples"
+            },
             "termination_reason": row.get("termination_reason"),
             "integrity": row.get("integrity"),
             "metric_schema_version": schema,
@@ -169,6 +172,15 @@ def _insert_rows(  # noqa: C901 - independent row admission and compaction guard
                     "config_hash",
                 )
             }
+            # Identity validation needs only these fields, never diagnostic
+            # arrays (simulation, planner, native-pair or force traces).
+            metadata = row.get("algorithm_metadata")
+            if isinstance(metadata, dict):
+                compact["_provenance"]["algorithm_metadata"] = {
+                    name: metadata[name]
+                    for name in ("algorithm", "canonical_algorithm", "config", "config_hash")
+                    if name in metadata
+                }
         if key in rows:
             if duplicate_counts is None:
                 raise ValueError(f"duplicate slot {key} at {source}:{line_number}")

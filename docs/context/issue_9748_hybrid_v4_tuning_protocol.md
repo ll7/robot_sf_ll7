@@ -43,7 +43,7 @@ The development campaign config
 `configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml` uses the exact
 ordered seed list 1001–1030 and only the existing v4 fast-progress and v4
 continuous candidate configs. It is explicitly marked development-only and
-not release evidence. Release seeds 111–140 remain held out. The config does
+not release evidence. Both the sealed 0.0.8 seeds (D-049) and retired seeds 111–140 remain held out. The config does
 not decide which v4 twins replace the four hybrid release slots.
 
 ## Freeze point and hashes
@@ -114,7 +114,7 @@ because no trial is authorized or recorded by this protocol.
 
 Each entry must contain its own nonempty `seeds` list of integer values and a
 direct `scenario_id` string or `scenario_ids` list of strings. Seeds must
-belong to 1001–1030; any 111–140 value is rejected. Scenario IDs must belong to
+belong to 1001–1030; any sealed 0.0.8 or retired 111–140 value is rejected. Scenario IDs must belong to
 the four development identities. Seed-like aliases such as `episode_seed`,
 `run_seed`, nested seed fields, or top-level seeds are rejected; the checker
 accepts seeds only at `entries[i].seeds`. A scenario identity nested under
@@ -145,7 +145,7 @@ Tune only on the frozen development split. Do not use release-seed outcomes to
 select thresholds, margins, weights, or candidate identities. After tuning,
 record every attempted candidate and the approved split in the structured log,
 then freeze the selected config before the release campaign. The first run on
-seeds 111–140 is held-out evaluation. Any later v4 change is a new candidate
+either sealed evaluation band is held-out evaluation. Any later v4 change is a new candidate
 and cannot be treated as the same frozen release arm.
 
 No Slurm job, tuning result, calibration claim, ranking claim, or paper-facing

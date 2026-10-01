@@ -218,7 +218,27 @@ def test_mppi_moving_recovery_rejects_native_braking_into_wall(clearance):
     assert actual_clearance < clearance
     costs = mppi_costs(adapter, obs, [(0, -1), (0, 0), (0.05, -1)])
     assert np.all(costs >= adapter.config.invalid_sequence_cost), "actual coast decreases clearance"
-    assert adapter.plan(obs) == (0.0, 0.0)
+    command = adapter.plan(obs)
+    # Every command remains rejected. Best-effort turning while braking reduces
+    # the unavoidable coast toward the wall compared with a straight brake.
+    assert command[0] == 0.0
+    assert command[1] < 0.0
+    assert mppi_costs(adapter, obs, [command])[0] >= adapter.config.invalid_sequence_cost
+
+    def physical_minimum(target):
+        body = DifferentialDriveRobot(DifferentialDriveSettings(radius=1.0))
+        body.reset_state((tuple(obs["robot"]["position"]), np.pi / 2))
+        body.state.velocity = (0.3, 0.0)
+        body.state.wheel_speeds = body.movement._resulting_wheel_speeds(body.current_speed)
+        local_env = SimpleNamespace(simulator=SimpleNamespace(robots=[body]))
+        minimum = clearance
+        for _ in range(8):
+            env_action = policy_command_to_env_action(env=local_env, config=config, command=target)
+            body.apply_action(tuple(env_action), 0.1)
+            minimum = min(minimum, 12 - body.pos[1] - 1)
+        return minimum
+
+    assert physical_minimum(command) > physical_minimum((0.0, 0.0))
     diagnostics = adapter.diagnostics()
     assert diagnostics["no_admissible_command"]
     assert not diagnostics["recovery_command"]

@@ -63,7 +63,7 @@ INFEASIBILITY_PROBE_RELEASE_KIND = "benchmark-infeasibility-probe"
 
 
 def _parse_seeds(text: str) -> list[int]:
-    """Parse ``111-140`` or ``111,115,118`` seed lists.
+    """Parse ``1001-1030`` or ``1001,1005,1008`` development seed lists.
 
     Returns:
         Sorted unique seeds.
@@ -1175,6 +1175,47 @@ def _verify_candidate_report_inputs(
         report["input_error"] = f"{prior_error}; {drift_error}" if prior_error else drift_error
 
 
+def guard_manifest_execution(
+    manifest: Any, *, source_commit: str | None = None, repository_root: Path | None = None
+) -> None:
+    """Refuse held-out execution before any environment or campaign is created.
+
+    Historical pins permit static validation only. Sealed execution requires a
+    named release identity bound to the checked-out freeze commit.
+    """
+    from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
+        _resolved_seed_inventory,
+        load_release_campaign_config,
+        sealed_seed_execution_problem,
+    )
+    from robot_sf.benchmark.seed_bands import RETIRED_EVAL_SEEDS_0_0_7  # noqa: PLC0415
+
+    root = (
+        repository_root or getattr(manifest, "repository_root", None) or get_repository_root()
+    ).resolve()
+    _identity, _scenarios, seeds = _release_manifest_inputs(manifest)
+    effective = set(seeds)
+    if getattr(manifest, "canonical_campaign_config_path", None) is not None and not isinstance(
+        manifest, PrepublicationCandidate
+    ):
+        from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415
+
+        cfg = load_release_campaign_config(manifest, repository_root=root)
+        effective.update(
+            _resolved_seed_inventory(_load_campaign_scenarios(cfg, repository_root=root))
+        )
+    if effective.intersection(RETIRED_EVAL_SEEDS_0_0_7):
+        raise ValueError("retired evaluation seeds are forbidden for execution (D-049)")
+    problem = sealed_seed_execution_problem(
+        manifest,
+        tuple(sorted(effective)),
+        source_commit=source_commit,
+        repository_root=root,
+    )
+    if problem is not None:
+        raise ValueError(problem)
+
+
 def run_manifest_preflight(  # noqa: C901
     manifest: Any,
     *,
@@ -1200,6 +1241,7 @@ def run_manifest_preflight(  # noqa: C901
         raise ValueError("grid_resolution_m must be finite and > 0")
 
     try:
+        guard_manifest_execution(manifest, source_commit=source_commit)
         identity, scenarios, seeds = _release_manifest_inputs(manifest)
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         report = {
@@ -1444,6 +1486,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         manifest = load_preflight_input(args.manifest)
+        guard_manifest_execution(manifest)
         report = run_manifest_preflight(
             manifest,
             workers=args.workers,

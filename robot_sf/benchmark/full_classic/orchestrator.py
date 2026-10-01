@@ -414,6 +414,12 @@ def _build_env_config(scenario, cfg, horizon: int):
         RobotSimulationConfig instance.
     """
     raw = dict(getattr(scenario, "raw", {}))
+    # Full-classic consumes these scheduling fields before building the environment.
+    # Keep strict environment validation for the remaining simulation overrides.
+    simulation_overrides = dict(raw.get("simulation_config", {}) or {})
+    for scheduling_field in ("horizon", "max_episodes"):
+        simulation_overrides.pop(scheduling_field, None)
+    raw["simulation_config"] = simulation_overrides
     matrix_path = Path(cfg.scenario_matrix_path)
     matrix_dir = matrix_path.parent
     map_value = raw.get("map_file")

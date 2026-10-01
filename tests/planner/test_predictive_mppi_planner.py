@@ -160,7 +160,9 @@ def test_predictive_mppi_caches_absent_grid_payload_and_accepts_full_elite_fract
     monkeypatch,
 ) -> None:
     """Predictive MPPI should cache a missing grid and keep full-elite configs valid."""
-    cfg = build_predictive_mppi_config({"sample_count": 8, "elite_fraction": 1.0, "iterations": 1})
+    cfg = build_predictive_mppi_config(
+        {"sample_count": 8, "elite_fraction": 1.0, "iterations": 1, "horizon_steps": 4}
+    )
     planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
     planner._predictor = _StubPredictor(np.zeros((0, 4, 2), dtype=np.float32))
     calls = 0
@@ -189,11 +191,17 @@ def test_predictive_mppi_stops_at_goal() -> None:
 def test_predictive_mppi_goal_target_versions_follow_route_contract() -> None:
     """MPPI's optimizer tracks the current stage, including a final zero sentinel."""
     legacy = PredictiveMPPIAdapter(
-        build_predictive_mppi_config({"sample_count": 8, "iterations": 1}), allow_fallback=True
+        build_predictive_mppi_config({"sample_count": 8, "iterations": 1, "horizon_steps": 4}),
+        allow_fallback=True,
     )
     corrected = PredictiveMPPIAdapter(
         build_predictive_mppi_config(
-            {"goal_target_version": "active_waypoint_v2", "sample_count": 8, "iterations": 1}
+            {
+                "goal_target_version": "active_waypoint_v2",
+                "sample_count": 8,
+                "iterations": 1,
+                "horizon_steps": 4,
+            }
         ),
         allow_fallback=True,
     )

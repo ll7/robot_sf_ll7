@@ -1,0 +1,102 @@
+diff --git a/robot_sf/nav/spawn_clearance.py b/robot_sf/nav/spawn_clearance.py
+index 08234fa31..c8400ba08 100644
+--- a/robot_sf/nav/spawn_clearance.py
++++ b/robot_sf/nav/spawn_clearance.py
+@@ -166,0 +167,2 @@ def relocate_overlapping_pedestrians(
++    reaction_clearance_m: Sequence[float] | None = None,
++    route_goals: Sequence[Vec2D] | None = None,
+@@ -184,0 +187,4 @@ def relocate_overlapping_pedestrians(
++        reaction_clearance_m: Extra robot surface clearance per row, beyond margin.
++        route_goals: When set, choose a point whose heading toward its goal is
++            preferably not closing on any robot. The reaction buffer still applies
++            when all clear candidates have closing route headings.
+@@ -200,0 +207,20 @@ def relocate_overlapping_pedestrians(
++        robot_margin = margin + (
++            reaction_clearance_m[row] if reaction_clearance_m is not None else 0.0
++        )
++        clear_candidates = [
++            candidate
++            for candidate in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
++            if _is_clear(
++                candidate,
++                row,
++                positions,
++                robots,
++                ped_radius,
++                margin,
++                (blocked, walls),
++                robot_margin=robot_margin,
++            )
++        ]
++        # Prefer a non-closing route heading. A goal inside a robot footprint
++        # makes that impossible: retain the full reaction buffer and route heading
++        # instead of leaving the pedestrian at an overlapping original position.
+@@ -204,10 +230,3 @@ def relocate_overlapping_pedestrians(
+-                for candidate in _relocation_candidates(positions[row], hit, ped_radius, margin)
+-                if _is_clear(
+-                    candidate,
+-                    row,
+-                    positions,
+-                    robots,
+-                    ped_radius,
+-                    margin,
+-                    (blocked, walls),
+-                )
++                for candidate in clear_candidates
++                if route_goals is None
++                or _route_heading_clears_robots(candidate, route_goals[row], robots)
+@@ -215 +234 @@ def relocate_overlapping_pedestrians(
+-            None,
++            clear_candidates[0] if clear_candidates else None,
+@@ -270,0 +290,2 @@ def _is_clear(
++    *,
++    robot_margin: float | None = None,
+@@ -280 +301,6 @@ def _is_clear(
+-    if _overlapping_robot(candidate, robots, ped_radius, margin) is not None:
++    if (
++        _overlapping_robot(
++            candidate, robots, ped_radius, margin if robot_margin is None else robot_margin
++        )
++        is not None
++    ):
+@@ -292,0 +319,14 @@ def _is_clear(
++def _route_heading_clears_robots(
++    point: Vec2D,
++    goal: Vec2D,
++    robots: Sequence[tuple[Vec2D, float]],
++) -> bool:
++    """Check the route heading at relocation.
++
++    Returns:
++        Whether a velocity toward the goal is non-closing on every robot.
++    """
++    vx, vy = goal[0] - point[0], goal[1] - point[1]
++    return all(vx * (point[0] - xy[0]) + vy * (point[1] - xy[1]) >= -1e-9 for xy, _ in robots)
++
++
+diff --git a/robot_sf/sim/simulator.py b/robot_sf/sim/simulator.py
+index d21dc76e7..1708a21ac 100644
+--- a/robot_sf/sim/simulator.py
++++ b/robot_sf/sim/simulator.py
+@@ -1767 +1767,3 @@ class Simulator:
+-        exclusion circle (robot radius + pedestrian radius + margin); no random numbers
++        exclusion circle (robot radius + pedestrian radius + 0.1 m + one second
++        at the pedestrian speed cap). The new velocity points toward the current
++        route goal, preferring a non-closing heading when feasible; no random numbers
+@@ -1797,0 +1800,5 @@ class Simulator:
++        states = self.pysf_state.pysf_states()
++        # One second at the walking speed cap, plus the existing 0.1 m margin.
++        reaction_clearance = np.maximum(
++            np.linalg.norm(states[:, 2:4], axis=1), self.pysf_sim.peds.max_speeds
++        )
+@@ -1803,0 +1811,2 @@ class Simulator:
++            reaction_clearance_m=reaction_clearance,
++            route_goals=states[:, 4:6],
+@@ -1809,0 +1819 @@ class Simulator:
++            speed = float(np.linalg.norm(states[row, 2:4]))
+@@ -1810,0 +1821,5 @@ class Simulator:
++            direction = states[row, 4:6] - states[row, 0:2]
++            length = float(np.linalg.norm(direction))
++            states[row, 2:4] = direction * speed / length if length > 1e-9 else 0.0
++            if hasattr(self, "ped_headings"):
++                self.ped_headings[row] = np.arctan2(states[row, 3], states[row, 2])

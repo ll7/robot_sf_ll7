@@ -460,7 +460,9 @@ Unit or source-channel metadata that the registry does not own remains explicitl
 When bootstrap sampling is enabled, aggregate output also includes an additive
 `pairwise_contrasts` block when at least two planner groups share paired episode identities. The
 contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is
-`right_minus_left`, and each
+`right_minus_left`. Duplicate keys within either comparison group are rejected;
+repeated episodes must first be reduced under an explicitly declared repeat policy.
+Each
 metric contrast includes the paired mean delta, percentile bootstrap interval, two-sided bootstrap
 sign p-value, Holm-adjusted p-value, and paired Cohen's dz effect size. Holm correction is applied
 within the current aggregate family (`family="all"`) separately for each metric; run aggregation on
@@ -513,7 +515,8 @@ the full pedestrian-pair force magnitude at contact
 3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
 lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
 
-`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+`record_simulation_step_trace: true` explicitly enables persistence of
+`algorithm_metadata.robot_force_samples` (outside scalar `metrics`),
 including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
 reductions and metadata; samples remain in memory for all force reductions. Existing
 post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
@@ -531,3 +534,38 @@ difference (floored at zero for overlap). Velocity uses backward differences, wi
 first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
 or included automatically in the Social Navigation Quality Index. Its reductions use the same
 reference and units. Validation campaign evidence remains separate from release evaluation.
+
+### Campaign reporting cohort counts
+
+New campaign tables use `episodes` for the evidence-eligible N that contributes to
+metric means. `episodes_total` counts all object episode rows run, and
+`episodes_excluded = episodes_total - episodes`. These columns appear in the main,
+core/experimental, parity and scenario/family tables, campaign summary JSON and
+publication payload. The count schema is
+[`campaign-table-row.v2.json`](../robot_sf/benchmark/schemas/campaign-table-row.v2.json)
+and is exported as `reports/campaign_table.schema.json` alongside the tables.
+Historical reports with absent eligibility markers retain their previous N and
+means; readers of old tables default total to `episodes` and excluded to zero.
+
+Legacy SNQI diagnostics filter at the campaign episode collector before baseline
+construction, contract evaluation, calibration, ordering and sensitivity. Their
+`evidence_cohort` block records total, eligible and excluded counts plus exclusion
+reason counts. Invalid or unmeasured spawn takes precedence over foresight
+ineligibility when both apply, so reasons sum to the excluded N.
+
+Scenario/family breakdowns and seed variability retain all-excluded arms with N=0,
+no metric samples, and explicit total/excluded counts. Seed lists/counts describe
+eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.
+
+Release acceptance checks planned counts against `episodes_total` (legacy fallback: `episodes`); `invalid_or_unmeasured_spawn` exclusions are named campaign-defect blockers with K, while `foresight_ineligible` exclusions are reported counts and do not themselves block acceptance.
+
+## Sealed 0.0.8 evaluation schedule (D-049)
+
+0.0.8 uses `release_eval_0_0_8` from `configs/benchmarks/seed_sets_0_0_8.yaml`.
+The source of truth is `robot_sf.benchmark.seed_bands.EVAL_SEEDS_0_0_8`; static
+tests bind the YAML to the approved SHA-256 derivation. Both that set and retired
+0.0.7 seeds 111..140 remain forbidden for tuning, development and calibration.
+Development episodes use 1001..1030. Historical `paper_eval_s30` remains unchanged for static validation of archived
+0.0.7 artifacts only; seeds 111..140 must never be stepped again (D-049). The release grid has 48 x 30 = 1,440 identities per arm
+and 14 x 1,440 = 20,160 total; these counts are computed without running episodes.
+See [D-049](release/0.0.8/decisions.md) and the [runbook](release/0.0.8/runbook.md).

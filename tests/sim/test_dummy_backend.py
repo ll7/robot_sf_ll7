@@ -20,11 +20,23 @@ from robot_sf.sim.backends import dummy_backend
 from robot_sf.sim.backends.dummy_backend import DummySimulator, dummy_factory
 
 
+def test_seeded_dummy_repopulation_preserves_empty_population(test_map: MapDefinition) -> None:
+    """Seeded reset calls must remain valid for the intentionally empty backend."""
+    simulator = DummySimulator(map_def=test_map, seed=1001, step_dt=0.1)
+    pose = simulator.robot_poses[0]
+
+    simulator.repopulate_crowd(seed=1001)
+
+    assert simulator.ped_pos.shape == (0, 2)
+    assert simulator.robot_poses[0] == pose
+    assert simulator.timestep == 0
+
+
 def test_dummy_factory_exposes_robot_env_contract(test_map: MapDefinition) -> None:
     """Verify the factory returns the simulator fields RobotEnv accesses during smoke runs."""
     config = RobotSimulationConfig()
     config.backend = "dummy"
-    config.seed = 123
+    config.seed = 1013
 
     simulator = dummy_factory(config, test_map, False)
 

@@ -87,7 +87,7 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["seed_policy"] == {
         "mode": "fixed-list",
         "seeds": [101, 102],
-        "seed_sets_path": template["seed_policy"]["seed_sets_path"],
+        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
     }
     assert calibration["name"] == "snqi_v2_calibration_dev101_102"
     assert calibration["paper_facing"] is False
@@ -96,11 +96,10 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["arm_isolation"] == "subprocess"
     assert calibration["planners"] == template["planners"]
 
-    # Release traces aid audit coverage; development calibration remains untraced.
-    assert template["record_simulation_step_trace"] is True
+    # D-057 keeps release and calibration rows untraced; rehearsal 2 carries diagnostics.
+    assert template.get("record_simulation_step_trace", False) is False
     assert calibration.get("record_simulation_step_trace", False) is False
     allowed_deviations = {
-        "record_simulation_step_trace",
         "name",
         "paper_facing",
         "seed_policy",
@@ -676,8 +675,29 @@ def records():
             "metrics": metrics(success=success),
         }
         for key, success in (("a", 1), ("b", 0))
-        for seed in (111, 112)
+        for seed in (1001, 1002)
     ]
+
+
+def test_f4_family_rejects_reviewers_uneven_77_cell_seed_grid():
+    """Complete arm pairing alone cannot align episode means with seed-mean CIs."""
+    rows = [
+        {
+            "algo": f"planner_{arm:02d}",
+            "scenario_id": f"s{scenario}",
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(success=int(seed == 1001)),
+        }
+        for arm in range(14)
+        for scenario, seed in (
+            [(i, 1001) for i in range(48)] + [(0, seed) for seed in range(1002, 1031)]
+        )
+    ]
+    # All inputs traverse real validation and scoring. No scored-input mock.
+    assert sum(row["metrics"]["success"] for row in rows) / len(rows) == pytest.approx(48 / 77)
+    with pytest.raises(ValueError, match="equal.*coverage.*seed"):
+        build_family_report(rows, fixture_spec(), bootstrap_samples=2000)
 
 
 def test_legacy_values_preserved_and_legacy_functions_unmodified():
@@ -1451,7 +1471,7 @@ def test_calibration_exact_grid_and_no_imputation():
         derive_calibration_anchors(rows[:-1], **kwargs)
     with pytest.raises(ValueError, match="duplicate"):
         derive_calibration_anchors(rows[:-1] + rows[:1], **kwargs)
-    rows[0]["seed"] = 111
+    rows[0]["seed"] = 1001
     with pytest.raises(ValueError, match="out-of-split"):
         derive_calibration_anchors(rows, **kwargs)
 

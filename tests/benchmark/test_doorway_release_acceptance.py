@@ -23,26 +23,31 @@ def forbid_environment_construction(monkeypatch):
 
     monkeypatch.setattr("robot_sf.gym_env.environment_factory.make_robot_env", abort)
     monkeypatch.setattr("robot_sf.gym_env.robot_env.RobotEnv.__init__", abort)
+    monkeypatch.setattr("robot_sf.gym_env.robot_env.RobotEnv.reset", abort)
+    monkeypatch.setattr("robot_sf.gym_env.robot_env.RobotEnv.step", abort)
 
 
-@pytest.fixture
-def doorway(tmp_path, monkeypatch):
+def build_doorway(tmp_path, monkeypatch, *, seeds=None, width=None, cap=None):
     """Build producer-format JSONLs and sidecars without instantiating any planner."""
     payload = yaml.safe_load(TEMPLATE.read_text())
     scenarios = yaml.safe_load(MATRIX.read_text())["scenarios"]
-    sealed_inventory = tuple(payload["seed_policy"]["resolved_seeds"])
+    inventory = tuple(payload["seed_policy"]["resolved_seeds"]) if seeds is None else seeds
     # seed-holdout: synthetic-fixture begin
     for scenario in scenarios:
-        scenario["seeds"] = list(sealed_inventory)
+        scenario["seeds"] = list(inventory)
         scenario["map_file"] = (
             (MATRIX.parent / scenario["map_file"]).resolve().relative_to(ROOT).as_posix()
         )
+    if width is not None:
+        scenarios[0]["metadata"]["width_slice_m"] = width
+    if cap is not None:
+        scenarios[0]["simulation_config"]["max_episode_steps"] = cap
     roster = tuple(payload["planners"]["keys"])
     algorithms = {key: ("hybrid_rule_local_planner" if "hybrid" in key else key) for key in roster}
     monkeypatch.setattr(fixtures, "_PLANNER_KEYS", roster)
     monkeypatch.setattr(fixtures, "_PLANNER_ALGORITHMS", algorithms)
     monkeypatch.setattr(fixtures, "_SCENARIO_IDS", tuple(s["name"] for s in scenarios))
-    monkeypatch.setattr(fixtures, "_SEEDS", sealed_inventory)
+    monkeypatch.setattr(fixtures, "_SEEDS", inventory)
     campaign, cfg = fixtures._write_provenance_bound_full_campaign(
         tmp_path,
         monkeypatch,
@@ -56,6 +61,12 @@ def doorway(tmp_path, monkeypatch):
     manifest.expected_horizon_steps = 400
     # seed-holdout: synthetic-fixture end
     return campaign, cfg, manifest, scenarios
+
+
+@pytest.fixture
+def doorway(tmp_path, monkeypatch):
+    """Build the correctly bound metadata-only slice."""
+    return build_doorway(tmp_path, monkeypatch)
 
 
 def acceptance(doorway):
@@ -84,14 +95,29 @@ def test_tracked_legacy_kind_requires_bound_slice_contract(doorway):
     doorway[2].expected_horizon_steps = 600
     assert acceptance(doorway)["status"] == "valid"
     doorway[2].width_slice_contract = None
-    assert acceptance(doorway)["status"] == "invalid"
+    report = acceptance(doorway)
+    assert report["status"] == "invalid"
+    assert (
+        "doorway slice requires the exact benchmark-doorway-width-slice.v1 binding"
+        in report["blockers"]
+    )
 
 
 @pytest.mark.parametrize(
-    "mutation",
-    ["width", "scenario", "roster", "seeds", "horizon", "horizon600", "count", "cap", "contract"],
+    "mutation,blocker",
+    [
+        ("width", "doorway slice scenario width, map or H400 cap differs from its binding"),
+        ("scenario", "doorway slice requires exactly the authored 2.2/2.8/3.6 m scenarios"),
+        ("roster", "doorway slice requires the exact main-campaign 14-arm roster"),
+        ("seeds", "doorway slice requires the exact sealed 30-seed inventory"),
+        ("horizon", "doorway slice must declare H400"),
+        ("horizon600", "doorway slice must declare H400"),
+        ("count", "doorway slice requires exactly 1260 cells"),
+        ("cap", "doorway slice scenario width, map or H400 cap differs from its binding"),
+        ("contract", "doorway slice requires the exact benchmark-doorway-width-slice.v1 binding"),
+    ],
 )
-def test_slice_refuses_mutated_axes(doorway, mutation):
+def test_slice_refuses_mutated_axes(doorway, mutation, blocker):
     """A self-declared width kind must not admit any altered frozen axis."""
     _, _, manifest, scenarios = doorway
     if mutation == "width":
@@ -113,8 +139,30 @@ def test_slice_refuses_mutated_axes(doorway, mutation):
     else:
         manifest.width_slice_contract["widths_m"] = [2.2, 2.8, 3.7]
     report = acceptance(doorway)
+    assert blocker in report["blockers"], report
     assert report["status"] == "invalid"
     assert report["benchmark_success"] is False
+
+
+def test_slice_refuses_consistent_wrong_seed_inventory(tmp_path, monkeypatch):
+    """Consistent dev-seed metadata must be refused solely by the sealed binding."""
+    campaign = build_doorway(tmp_path, monkeypatch, seeds=tuple(range(1001, 1031)))
+    report = acceptance(campaign)
+    assert report["blockers"] == ["doorway slice requires the exact sealed 30-seed inventory"]
+    assert report["status"] == "invalid"
+    assert report["observed_episode_rows"] == report["unique_episode_identities"] == 1260
+
+
+@pytest.mark.parametrize("axis,value", [("width", 2.4), ("cap", 399)])
+def test_slice_refuses_consistent_wrong_width_or_cap(tmp_path, monkeypatch, axis, value):
+    """Rehashed matrix and sidecars leave only the width/cap binding to refuse them."""
+    campaign = build_doorway(tmp_path, monkeypatch, **{axis: value})
+    report = acceptance(campaign)
+    assert report["blockers"] == [
+        "doorway slice scenario width, map or H400 cap differs from its binding"
+    ]
+    assert report["status"] == "invalid"
+    assert report["observed_episode_rows"] == report["unique_episode_identities"] == 1260
 
 
 def test_main_refuses_slice_denominator(doorway):

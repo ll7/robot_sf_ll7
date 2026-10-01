@@ -27,6 +27,7 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.evidence.writers import write_json
 
 _PLANNER_KEYS = tuple(f"planner_{index:02d}" for index in range(14))
 _PLANNER_ALGORITHMS = {
@@ -215,8 +216,11 @@ def _write_provenance_bound_full_campaign(
         source_repository_root / "configs/scenarios/classic_interactions_francis2023.yaml"
     )
     scenario_path.parent.mkdir(parents=True, exist_ok=True)
-    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     resolved_scenarios = scenarios or [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    if scenarios is None:
+        scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    else:
+        write_json(scenario_path, {"scenarios": scenarios})
     monkeypatch.setattr(
         release_acceptance, "_load_campaign_scenarios", lambda _cfg: resolved_scenarios
     )

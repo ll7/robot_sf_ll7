@@ -63,6 +63,9 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "tests/benchmark/test_sealed_source_pins.py",
         "tests/benchmark/test_sealed_runtime_sources.py",
         "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
+        # Reviewed guard policy and refusal witnesses (#10053; 2026-10-01 ruling).
+        "tests/support/seedguard_boundaries.py",
+        "tests/test_heldout_seed_guard.py",
     ]
 )
 SEALED_REFERENCE = re.compile(

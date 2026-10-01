@@ -8033,3 +8033,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_train2_custody
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

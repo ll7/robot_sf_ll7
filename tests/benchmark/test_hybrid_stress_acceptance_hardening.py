@@ -210,7 +210,7 @@ def _build_stress_fixture(
             "mode": seed_policy.mode,
             "seed_set": seed_policy.seed_set,
             "seeds": list(seed_policy.seeds),
-            "resolved_seeds": [1001 if seed == 116 else seed],
+            "resolved_seeds": [1001 if seed == 116 else seed],  # seed-holdout: synthetic-fixture
             "seed_sets_path": _repo_relative(seed_policy.seed_sets_path),
         },
         "route_clearance_certifications_path": _repo_relative(
@@ -359,6 +359,16 @@ def _acceptance(root: Path, manifest: Any, campaign_config: Any) -> dict[str, An
         campaign_config=campaign_config,
         expected_source_commit=SOURCE_COMMIT,
     )
+
+
+def test_stress_acceptance_rejects_a_different_development_seed(tmp_path: Path) -> None:
+    """An otherwise complete witness cannot replace the fixed dev seed 1001."""
+    root, manifest, campaign_config = _build_stress_fixture(tmp_path, seed=1002)
+
+    result = _acceptance(root, manifest, campaign_config)
+
+    assert result["status"] == "invalid"
+    assert "diagnostic stress smoke must resolve exactly seed 1001" in result["blockers"]
 
 
 def _first_row_path(root: Path, planner_key: str) -> Path:

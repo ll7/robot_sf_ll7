@@ -92,12 +92,18 @@ def test_single_episode_with_metrics():
         "near_misses",
         "success",
         "time_to_goal_norm",
-        "path_efficiency",
     ]
 
     for metric in expected_metrics:
         assert metric in metrics
         assert isinstance(metrics[metric], int | float)
+
+    # Metric v2 publishes path efficiency only for successful episodes.
+    assert "path_efficiency" in metrics
+    if metrics["success"]:
+        assert isinstance(metrics["path_efficiency"], int | float)
+    else:
+        assert metrics["path_efficiency"] is None
 
 
 if __name__ == "__main__":

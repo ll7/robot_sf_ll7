@@ -18,6 +18,23 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10007
+    reviewed_date: 2026-10-01
+    finding_delta: none
+    remediated_findings:
+      path: docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json
+      code: artifact_hash_mismatch
+      count: 1
+      disposition: remediate
+      resolution: >-
+        Preserve the exact producing-commit MPPI YAML blob in source_predictive_mppi.yaml
+        with an exact-byte review sidecar. Point only the historical resolved_path at it;
+        retain the original SHA-256, source commit, scientific inputs and outcomes.
+        The live MPPI config changed on main/TRAIN1, so comparing this historical
+        measurement pin with live bytes is incorrect. No mismatch is grandfathered.
+        The train registry returns to the 450 already-reviewed findings, with no new
+        finding or per-code increase. This is diagnostic custody repair only, not
+        scientific admission or maintainer sign-off.
   - issue: 10064
     reviewed_date: 2026-10-01
     previous:

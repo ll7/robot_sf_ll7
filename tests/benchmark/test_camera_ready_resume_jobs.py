@@ -50,7 +50,7 @@ def real_campaign(tmp_path_factory):
         "scenario_matrix": str(matrix),
         "seed_policy": {"mode": "fixed-list", "seeds": [1001, 1002, 1003]},
         "snqi_weights": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
-        "snqi_baseline": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+        "snqi_baseline": None,  # Derive anchors from the current-schema real episodes.
         "snqi_contract": {"enabled": False},
         "workers": 1,
         "horizon": 1,

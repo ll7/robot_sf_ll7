@@ -12,6 +12,14 @@ authored-budget refusal or horizon annotation is added to those inputs.
 The 0.0.8+ protocol uses a hash-pinned authored schedule, or a fixed horizon
 that every scenario admits.
 
+Older and unversioned `scenario_horizons` configs retain main's scheduled
+simulator limits and four-field schedule metadata (`source`,
+`recommended_horizon_steps`, `status`, `bucket`). Only declared 0.0.8+ schedules
+add `sha256` and `authored_max_episode_steps`; those reserved fields identify
+the authored-budget contract to the runner and resume identity. Historical
+scheduled rows keep their original episode IDs, timeout labels and row fields,
+including the absence of an automatically added `scenario_params.run_horizon`.
+
 Corrected D-050 preserves main's historical behavior. `horizon: 600` capped the
 runner loop; it never extended a shorter authored simulator limit. Historical
 configs use `legacy_runner_cap`: the simulator retains its authored limit, the

@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Exact-repeat resolution verifies retained data and identities without simulation.
+    "test_exact_repeat_campaign.py",
+    # Historical schedule bytes are static; its native episodes are explicitly slow.
+    "test_scheduled_campaign_compatibility.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

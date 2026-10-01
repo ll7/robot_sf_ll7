@@ -100,6 +100,16 @@ def _select_seeds(
     return [0]
 
 
+def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:
+    """Recognize reserved schedule provenance minted only for explicit 0.0.8+ configs.
+
+    Returns:
+        Whether the runner should enforce the admitted authored schedule.
+    """
+    binding = scenario.get("metadata", {}).get("scenario_horizon", {})
+    return bool(binding.get("sha256")) and "authored_max_episode_steps" in binding
+
+
 def _historical_authored_identity(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep legacy accounting annotations out of the published input identity.
 
@@ -194,7 +204,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
-    elif scenario.get("metadata", {}).get("scenario_horizon") is not None:
+    elif _has_authored_horizon_schedule(scenario):
         # Scheduled callers have no fixed horizon. Use the resolved integer budget
         # at both write-time and resume-time so existing consumers see the same field.
         payload["run_horizon"] = int(scenario["simulation_config"]["max_episode_steps"])

@@ -520,6 +520,12 @@ def _validate_horizon_policy(policy: str | None, protocol_version: str | None) -
         )
 
 
+def _uses_authored_horizon_protocol(protocol_version: str | None) -> bool:
+    """Return whether the config explicitly declares the 0.0.8+ budget contract."""
+    version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?", str(protocol_version))
+    return version is not None and tuple(map(int, version.groups())) >= (0, 0, 8)
+
+
 def _apply_fixed_campaign_horizon(
     scenarios: list[dict[str, Any]],
     *,
@@ -536,8 +542,7 @@ def _apply_fixed_campaign_horizon(
     legacy = horizon_policy == "legacy_runner_cap"
     if horizon is None or horizon <= 0:
         return scenarios
-    version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?", str(protocol_version))
-    current_protocol = version is not None and tuple(map(int, version.groups())) >= (0, 0, 8)
+    current_protocol = _uses_authored_horizon_protocol(protocol_version)
     if not legacy and not current_protocol:
         # Older/unidentified campaigns never bound simulator budgets. Keep their
         # entire payload untouched so historical resume and dedupe IDs survive.
@@ -586,6 +591,7 @@ def _apply_scenario_horizon_schedule(
     *,
     schedule_path: Path | None,
     expected_sha256: str | None = None,
+    protocol_version: str | None = None,
 ) -> list[dict[str, Any]]:
     """Apply a scenario-specific horizon schedule to scenario max-step limits.
 
@@ -632,12 +638,16 @@ def _apply_scenario_horizon_schedule(
             raise ValueError(f"Scenario '{scenario_id}' metadata must be a mapping")
         metadata["scenario_horizon"] = {
             "source": _repo_relative(schedule_path),
-            "sha256": schedule_sha256,
-            "authored_max_episode_steps": authored_limit,
             "recommended_horizon_steps": horizon_steps,
             "status": entry["status"],
             "bucket": entry["bucket"],
         }
+        if _uses_authored_horizon_protocol(protocol_version):
+            # These reserved provenance fields identify an admitted current-protocol
+            # schedule to the runner. Historical schedule payloads stay byte-identical.
+            metadata["scenario_horizon"].update(
+                sha256=schedule_sha256, authored_max_episode_steps=authored_limit
+            )
         patched_scenarios.append(patched)
     return patched_scenarios
 
@@ -885,6 +895,7 @@ def _load_campaign_scenarios(
         scenario_dicts,
         schedule_path=cfg.scenario_horizons_path,
         expected_sha256=cfg.scenario_horizons_sha256,
+        protocol_version=cfg.protocol_version,
     )
     scenario_dicts = _apply_fixed_campaign_horizon(
         scenario_dicts,

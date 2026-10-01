@@ -52,6 +52,7 @@ from robot_sf.benchmark.map_runner.map_runner_env import (
 )
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
+    _has_authored_horizon_schedule,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
     selected_map_identity_from_runtime_inputs,
@@ -1368,8 +1369,10 @@ def _bind_episode_horizon(
     """
     horizon_binding = scenario.get("metadata", {}).get("scenario_horizon", {})
     legacy = horizon_binding.get("policy") == "legacy_runner_cap"
-    bound = scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed" or bool(
-        horizon_binding
+    bound = (
+        scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed"
+        or legacy
+        or _has_authored_horizon_schedule(scenario)
     )
     if bound:
         expected_runner_horizon = (
@@ -3709,7 +3712,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             planner_stats=args.planner_runtime.planner_stats,
             horizon_val=args.horizon_val,
             normalize_budget_timeout=(
-                bool((args.scenario or {}).get("metadata", {}).get("scenario_horizon"))
+                _has_authored_horizon_schedule(args.scenario or {})
                 or (args.scenario or {}).get("metadata", {}).get("campaign_horizon", {}).get("mode")
                 == "fixed"
             )
@@ -4887,7 +4890,7 @@ def _finalize_record_provenance(  # noqa: PLR0913
             **horizon_metadata,
             "applied_max_episode_steps": record["effective_budget_steps"],
         }
-    if horizon_metadata and horizon_metadata.get("policy") != "legacy_runner_cap":
+    if _has_authored_horizon_schedule(scenario):
         scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,

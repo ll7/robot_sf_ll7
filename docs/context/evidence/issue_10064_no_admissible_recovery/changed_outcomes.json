@@ -1,0 +1,1936 @@
+{
+  "complete_matrix": false,
+  "episodes_classified": 17,
+  "every_changed_outcome": [
+    {
+      "after": "S",
+      "arm": "risk_dwa",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 1
+      },
+      "base_features": {
+        "longest_frozen_steps": 3,
+        "min_ped_center_m": 1.3843065119021487,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 2.7811243705972286,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 3,
+      "before": "C",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.069 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 2.7811243705972286,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": 0.0,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 1.4567306087223237,
+        "no_admissible": true,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 2.776423843450557,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": 0.004999999888241291,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 1.460511870605693,
+        "no_admissible": true,
+        "position": [
+          4.392535625277397,
+          9.04623960397109
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.0499999999999979,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 1.4205068308070279,
+        "path_travelled_m": 11.760000000596047,
+        "recovery_kinds": {
+          "least_bad_clearance": 10
+        },
+        "terminal_active_waypoint_distance_m": 9.069356837447664,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.700000011920929
+        },
+        "terminal_position_m": [
+          16.0690862833137,
+          10.070053056821502
+        ],
+        "terminal_speed_m_s": 0.7500000059604531
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.09259259259259259,
+      "pr_steps": 108,
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 343,
+        "min_ped_center_m": 1.8526615692983672,
+        "path_travelled_m": 15.315000178813966,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 12.43814821242622,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          19.852115147169307,
+          16.769764105240917
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 0.686,
+      "base_no_admissible_fraction": 0.69,
+      "base_steps": 500,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step138, base(1.8000,0.0000) -> PR(1.8000,0.1724), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 343 -> 104 steps; terminal active-waypoint distance 12.438 -> 19.423 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 138,
+      "first_divergence_base": {
+        "goal_distance": 10.818164430263623,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": -1.5804274082183838,
+        "infeasible_branch": false,
+        "min_obs_clear": 1.0472958543281616,
+        "min_ped_clear": 1.2332844516163002,
+        "nearest_ped_center": 5.327055538921616,
+        "no_admissible": false,
+        "position": [
+          19.867717331317483,
+          18.389689119179856
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 1.799999976158142
+        },
+        "speed": 1.8499999999999983,
+        "step": 138,
+        "t": 13.9
+      },
+      "first_divergence_pr": {
+        "goal_distance": 10.818160342017022,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": -1.57180917263031,
+        "infeasible_branch": false,
+        "min_obs_clear": 0.7146010173979356,
+        "min_ped_clear": 1.2454889539851797,
+        "nearest_ped_center": 5.327036942201708,
+        "no_admissible": false,
+        "position": [
+          19.86851448506622,
+          18.389681716844485
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.17236513495445252,
+          "linear_velocity": 1.799999976158142
+        },
+        "speed": 1.8499999999999914,
+        "step": 138,
+        "t": 13.9
+      },
+      "mechanism_support": "Inner RiskDWA infeasibility verified at identical-observation checkpoints despite the outer guard safe label.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 104,
+        "min_ped_center_m": 1.8238982214550734,
+        "path_travelled_m": 22.68621132671836,
+        "recovery_kinds": {
+          "brake": 128,
+          "least_bad_clearance": 38
+        },
+        "terminal_active_waypoint_distance_m": 19.422678468572837,
+        "terminal_command": {
+          "angular_velocity": -1.0,
+          "linear_velocity": 1.6491143703460693
+        },
+        "terminal_position_m": [
+          21.53330145307082,
+          9.842773451779914
+        ],
+        "terminal_speed_m_s": 1.7848444938659676
+      },
+      "pr_frozen_fraction": 0.28184281842818426,
+      "pr_no_admissible_fraction": 0.44986449864498645,
+      "pr_steps": 369,
+      "scenario": "classic_bottleneck_medium",
+      "seed": 1004
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 419,
+        "min_ped_center_m": 2.344591021700593,
+        "path_travelled_m": 8.875000004768369,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 5.3576385539005615,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          21.56850255906678,
+          13.31181623724585
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 0.838,
+      "base_no_admissible_fraction": 0.874,
+      "base_steps": 500,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step63, base(0.0000,0.0000) -> PR(1.7000,-0.6000), recovery=fallback_safe. Longest physical freeze 419 -> 0 steps; terminal active-waypoint distance 5.358 -> 8.627 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 63,
+      "first_divergence_base": {
+        "goal_distance": 3.9131182769739863,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": -2.6641175746917725,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.07164475179940943,
+        "min_ped_clear": 1.68229040025523,
+        "nearest_ped_center": 4.071660965757355,
+        "no_admissible": true,
+        "position": [
+          22.893697757747425,
+          13.88713118256155
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 1.749999999999996,
+        "step": 63,
+        "t": 6.4
+      },
+      "first_divergence_pr": {
+        "goal_distance": 3.913210806768927,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": -2.6741175651550293,
+        "infeasible_branch": false,
+        "min_obs_clear": 0.3439139664594162,
+        "min_ped_clear": 0.9826794084324909,
+        "nearest_ped_center": 4.071031149265757,
+        "no_admissible": false,
+        "position": [
+          22.893280201020758,
+          13.887900123251699
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": -0.6,
+          "linear_velocity": 1.699999952316284
+        },
+        "speed": 1.7499999999999902,
+        "step": 63,
+        "t": 6.4
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.1159795511293336,
+        "path_travelled_m": 12.28128245234489,
+        "recovery_kinds": {
+          "brake": 9,
+          "least_bad_clearance": 2
+        },
+        "terminal_active_waypoint_distance_m": 8.626962981061725,
+        "terminal_command": {
+          "angular_velocity": 0.7982913255691528,
+          "linear_velocity": 1.0126326084136963
+        },
+        "terminal_position_m": [
+          18.399155552849866,
+          12.443089213531486
+        ],
+        "terminal_speed_m_s": 1.6252157211303662
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.0728476821192053,
+      "pr_steps": 151,
+      "scenario": "classic_doorway_low",
+      "seed": 1001
+    },
+    {
+      "after": "T",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 17,
+        "min_ped_center_m": 2.056135617298751,
+        "path_travelled_m": 21.506220422424377,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 12.779566559057447,
+        "terminal_command": {
+          "angular_velocity": -0.23126322031021118,
+          "linear_velocity": 1.5624371767044067
+        },
+        "terminal_position_m": [
+          27.746931815120096,
+          20.11646456152109
+        ],
+        "terminal_speed_m_s": 1.746246528625484
+      },
+      "base_frozen_fraction": 0.15217391304347827,
+      "base_no_admissible_fraction": 0.11594202898550725,
+      "base_steps": 414,
+      "before": "S",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance-driven steering changes produce longer sustained stasis and lose completion.",
+      "classification_detail": "First command divergence at step302, base(0.0000,0.0000) -> PR(0.0000,-0.1000), recovery=least_bad_clearance. Longest physical freeze 17 -> 197 steps; terminal active-waypoint distance 12.780 -> 7.306 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering changes produce longer sustained stasis and lose completion.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 302,
+      "first_divergence_base": {
+        "goal_distance": 7.305648535744993,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 1.0775028467178345,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.35369684031009796,
+        "min_ped_clear": 0.5794044632280447,
+        "nearest_ped_center": 2.163083289282798,
+        "no_admissible": true,
+        "position": [
+          21.650104186288168,
+          17.101360725763747
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.05000000000001171,
+        "step": 302,
+        "t": 30.3
+      },
+      "first_divergence_pr": {
+        "goal_distance": 7.3056609972061075,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 1.072502851486206,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.3536854238942466,
+        "min_ped_clear": 0.5794167658360213,
+        "nearest_ped_center": 2.163095746003625,
+        "no_admissible": true,
+        "position": [
+          21.650115188639617,
+          17.101354792957647
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": -0.10000000149011615,
+          "linear_velocity": 1.4901161138336505e-09
+        },
+        "speed": 0.05000000074504983,
+        "step": 302,
+        "t": 30.3
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 197,
+        "min_ped_center_m": 2.033957365051102,
+        "path_travelled_m": 12.151697768755264,
+        "recovery_kinds": {
+          "brake": 52,
+          "least_bad_clearance": 3
+        },
+        "terminal_active_waypoint_distance_m": 7.305660997212789,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          21.650115188675716,
+          17.101354793022825
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "pr_frozen_fraction": 0.486,
+      "pr_no_admissible_fraction": 0.11,
+      "pr_steps": 500,
+      "scenario": "classic_group_crossing_high",
+      "seed": 1003
+    },
+    {
+      "after": "T",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 3,
+        "min_ped_center_m": 2.0954928130620836,
+        "path_travelled_m": 32.84299341216682,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 12.826645201772646,
+        "terminal_command": {
+          "angular_velocity": 0.940653383731842,
+          "linear_velocity": 1.6166621446609497
+        },
+        "terminal_position_m": [
+          27.68162833483729,
+          18.35820590090145
+        ],
+        "terminal_speed_m_s": 1.7500001192093004
+      },
+      "base_frozen_fraction": 0.018404907975460124,
+      "base_no_admissible_fraction": 0.05214723926380368,
+      "base_steps": 326,
+      "before": "S",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step129, base(0.0000,0.0000) -> PR(0.2000,-0.3000), recovery=least_bad_clearance. Longest physical freeze 3 -> 3 steps; terminal active-waypoint distance 12.827 -> 11.069 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 129,
+      "first_divergence_base": {
+        "goal_distance": 4.570581355066895,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": -1.0512511730194092,
+        "infeasible_branch": true,
+        "min_obs_clear": 2.060346401401318,
+        "min_ped_clear": 0.7014371346408955,
+        "nearest_ped_center": 2.1001988364774866,
+        "no_admissible": true,
+        "position": [
+          19.393393167396383,
+          18.91258392667565
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.2499999999999947,
+        "step": 129,
+        "t": 13.0
+      },
+      "first_divergence_pr": {
+        "goal_distance": 4.570581355484782,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": -1.0512511730194092,
+        "infeasible_branch": true,
+        "min_obs_clear": 1.9937623705018486,
+        "min_ped_clear": 0.7014371346408955,
+        "nearest_ped_center": 2.1001988360930075,
+        "no_admissible": true,
+        "position": [
+          19.39339316769492,
+          18.9125839261597
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": -0.3000000357627869,
+          "linear_velocity": 0.20000001192092895
+        },
+        "speed": 0.25000000596048005,
+        "step": 129,
+        "t": 13.0
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 3,
+        "min_ped_center_m": 2.0954928130620836,
+        "path_travelled_m": 67.73599181398747,
+        "recovery_kinds": {
+          "brake": 15,
+          "least_bad_clearance": 2
+        },
+        "terminal_active_waypoint_distance_m": 11.069194229995311,
+        "terminal_command": {
+          "angular_velocity": 0.011261015199124813,
+          "linear_velocity": 0.0179863590747118
+        },
+        "terminal_position_m": [
+          13.117588065353182,
+          9.140059858738894
+        ],
+        "terminal_speed_m_s": 0.2786987304687435
+      },
+      "pr_frozen_fraction": 0.012,
+      "pr_no_admissible_fraction": 0.034,
+      "pr_steps": 500,
+      "scenario": "classic_group_crossing_high",
+      "seed": 1005
+    },
+    {
+      "after": "T",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 2,
+        "min_ped_center_m": 2.042773315440683,
+        "path_travelled_m": 22.471899329200387,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 12.81071299354889,
+        "terminal_command": {
+          "angular_velocity": -0.6672243475914001,
+          "linear_velocity": 1.7905634641647339
+        },
+        "terminal_position_m": [
+          27.776214944771894,
+          20.280954011470545
+        ],
+        "terminal_speed_m_s": 1.7978220582008515
+      },
+      "base_frozen_fraction": 0.01718213058419244,
+      "base_no_admissible_fraction": 0.0859106529209622,
+      "base_steps": 291,
+      "before": "S",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step181, base(0.7875,0.4000) -> PR(0.0000,0.0000), recovery=brake. Longest physical freeze 2 -> 2 steps; terminal active-waypoint distance 12.811 -> 10.733 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 181,
+      "first_divergence_base": {
+        "goal_distance": 6.431089101582744,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.06407096982002258,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.3475898365047927,
+        "min_ped_clear": 0.7006215818622089,
+        "nearest_ped_center": 2.1009935622783007,
+        "no_admissible": false,
+        "position": [
+          20.81525613650599,
+          17.377217566790012
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.4,
+          "linear_velocity": 0.7875
+        },
+        "speed": 0.7875000000000149,
+        "step": 181,
+        "t": 18.2
+      },
+      "first_divergence_pr": {
+        "goal_distance": 6.426633446830911,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.06407096982002258,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.9960186571795628,
+        "min_ped_clear": 0.6855198233065204,
+        "nearest_ped_center": 2.1004268847575216,
+        "no_admissible": true,
+        "position": [
+          20.81026045624809,
+          17.377009771792846
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "brake",
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.7375000000000059,
+        "step": 181,
+        "t": 18.2
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 2,
+        "min_ped_center_m": 2.042773315440683,
+        "path_travelled_m": 54.684904728904364,
+        "recovery_kinds": {
+          "brake": 28,
+          "least_bad_clearance": 40
+        },
+        "terminal_active_waypoint_distance_m": 10.732997322673665,
+        "terminal_command": {
+          "angular_velocity": -1.0,
+          "linear_velocity": 2.0
+        },
+        "terminal_position_m": [
+          20.45897670458488,
+          10.831799965323116
+        ],
+        "terminal_speed_m_s": 1.9570182919502201
+      },
+      "pr_frozen_fraction": 0.01,
+      "pr_no_admissible_fraction": 0.136,
+      "pr_steps": 500,
+      "scenario": "classic_group_crossing_low",
+      "seed": 1003
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 500,
+        "min_ped_center_m": 7.658164294278514,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 5.063836030322186,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          14.716124192359883,
+          3.237036995778612
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 500,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 500 -> 0 steps; terminal active-waypoint distance 5.064 -> 25.554 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 5.063836030322186,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 1.3913688659667969,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.23703694343566895,
+        "min_ped_clear": 7.0666520862606905,
+        "nearest_ped_center": 8.839296552505791,
+        "no_admissible": true,
+        "position": [
+          14.716124192359883,
+          3.237036995778612
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 5.059014859890243,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 1.3963688611984253,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.23703694343566895,
+        "min_ped_clear": 6.958735209846203,
+        "nearest_ped_center": 8.834449171935017,
+        "no_admissible": true,
+        "position": [
+          14.7170042213878,
+          3.241958941421345
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.049999999999998025,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.242279700718719,
+        "path_travelled_m": 31.760707952976244,
+        "recovery_kinds": {
+          "least_bad_clearance": 4
+        },
+        "terminal_active_waypoint_distance_m": 25.554209506981227,
+        "terminal_command": {
+          "angular_velocity": -1.0,
+          "linear_velocity": 2.0
+        },
+        "terminal_position_m": [
+          19.79711070569174,
+          33.22581057550475
+        ],
+        "terminal_speed_m_s": 2.000000000000027
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.022598870056497175,
+      "pr_steps": 177,
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1003
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 500,
+        "min_ped_center_m": 7.536515388565976,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 5.063836030322186,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          14.716124192359883,
+          3.237036995778612
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 500,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 500 -> 60 steps; terminal active-waypoint distance 5.064 -> 25.527 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 5.063836030322186,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 1.3913688659667969,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.23703694343566895,
+        "min_ped_clear": 7.0666520862606905,
+        "nearest_ped_center": 8.839296552505791,
+        "no_admissible": true,
+        "position": [
+          14.716124192359883,
+          3.237036995778612
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 5.059014859890243,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 1.3963688611984253,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.23703694343566895,
+        "min_ped_clear": 6.958735209846203,
+        "nearest_ped_center": 8.834449171935017,
+        "no_admissible": true,
+        "position": [
+          14.7170042213878,
+          3.241958941421345
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.049999999999998025,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 60,
+        "min_ped_center_m": 1.849269828850683,
+        "path_travelled_m": 31.958532465845337,
+        "recovery_kinds": {
+          "brake": 134,
+          "least_bad_clearance": 19
+        },
+        "terminal_active_waypoint_distance_m": 25.52733849153579,
+        "terminal_command": {
+          "angular_velocity": 0.5000000059604645,
+          "linear_velocity": 1.4343729257583617
+        },
+        "terminal_position_m": [
+          20.119706060308946,
+          33.12433667334102
+        ],
+        "terminal_speed_m_s": 1.4843729496002422
+      },
+      "pr_frozen_fraction": 0.34104046242774566,
+      "pr_no_admissible_fraction": 0.4421965317919075,
+      "pr_steps": 346,
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1003
+    },
+    {
+      "after": "T",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 16,
+        "min_ped_center_m": 1.5553162353755268,
+        "path_travelled_m": 36.14882612958552,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 27.539425668133212,
+        "terminal_command": {
+          "angular_velocity": -1.0,
+          "linear_velocity": 2.0
+        },
+        "terminal_position_m": [
+          17.22979548193651,
+          35.65810886496023
+        ],
+        "terminal_speed_m_s": 1.6500000000000061
+      },
+      "base_frozen_fraction": 0.13783783783783785,
+      "base_no_admissible_fraction": 0.20810810810810812,
+      "base_steps": 370,
+      "before": "S",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step92, base(0.0000,0.0000) -> PR(1.5000,-0.3000), recovery=least_bad_clearance. Longest physical freeze 16 -> 10 steps; terminal active-waypoint distance 27.539 -> 16.486 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 92,
+      "first_divergence_base": {
+        "goal_distance": 12.070012104979668,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.7638835906982422,
+        "infeasible_branch": true,
+        "min_obs_clear": 10.056012798661769,
+        "min_ped_clear": 0.34698039822979754,
+        "nearest_ped_center": 2.1320356959658278,
+        "no_admissible": true,
+        "position": [
+          18.101863872098996,
+          19.720388114294632
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 1.5500000476837124,
+        "step": 92,
+        "t": 9.3
+      },
+      "first_divergence_pr": {
+        "goal_distance": 12.07001210495895,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.7638835906982422,
+        "infeasible_branch": true,
+        "min_obs_clear": 8.503043833318367,
+        "min_ped_clear": 0.47904559283962034,
+        "nearest_ped_center": 2.1320356960089493,
+        "no_admissible": true,
+        "position": [
+          18.101863872131528,
+          19.720388114261837
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": -0.3000000357627869,
+          "linear_velocity": 1.5000000238418578
+        },
+        "speed": 1.550000047683708,
+        "step": 92,
+        "t": 9.3
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 10,
+        "min_ped_center_m": 1.9477438620704837,
+        "path_travelled_m": 79.28636247187852,
+        "recovery_kinds": {
+          "brake": 18,
+          "least_bad_clearance": 34
+        },
+        "terminal_active_waypoint_distance_m": 16.486430667711772,
+        "terminal_command": {
+          "angular_velocity": 1.0,
+          "linear_velocity": 2.0
+        },
+        "terminal_position_m": [
+          23.681776530877336,
+          21.80525751375892
+        ],
+        "terminal_speed_m_s": 2.0000000000000053
+      },
+      "pr_frozen_fraction": 0.028,
+      "pr_no_admissible_fraction": 0.104,
+      "pr_steps": 500,
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1004
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 246,
+        "min_ped_center_m": 1.835227379004954,
+        "path_travelled_m": 31.931476865857842,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 24.96314736132994,
+        "terminal_command": {
+          "angular_velocity": 0.5725682973861694,
+          "linear_velocity": 1.1630573272705078
+        },
+        "terminal_position_m": [
+          37.792770045181534,
+          24.920343255144733
+        ],
+        "terminal_speed_m_s": 1.1780206084251579
+      },
+      "base_frozen_fraction": 0.435,
+      "base_no_admissible_fraction": 0.4166666666666667,
+      "base_steps": 600,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step68, base(1.9000,0.0640) -> PR(1.9000,0.2640), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 246 -> 12 steps; terminal active-waypoint distance 24.963 -> 26.200 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 68,
+      "first_divergence_base": {
+        "goal_distance": 7.63789589858798,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": 0.12199404090642929,
+        "infeasible_branch": false,
+        "min_obs_clear": 1.8303803573514381,
+        "min_ped_clear": 0.9808827916829456,
+        "nearest_ped_center": 4.385949077982523,
+        "no_admissible": false,
+        "position": [
+          20.46689087702337,
+          24.89262424624076
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.06402900218963622,
+          "linear_velocity": 1.9
+        },
+        "speed": 1.9499999999999962,
+        "step": 68,
+        "t": 6.9
+      },
+      "first_divergence_pr": {
+        "goal_distance": 7.637766810486729,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": 0.13199403882026672,
+        "infeasible_branch": false,
+        "min_obs_clear": 1.4890208196113521,
+        "min_ped_clear": 1.0112845484393875,
+        "nearest_ped_center": 4.386058778333099,
+        "no_admissible": false,
+        "position": [
+          20.4667753265821,
+          24.893592373874423
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.2640290021896362,
+          "linear_velocity": 1.9
+        },
+        "speed": 1.9500000000000015,
+        "step": 68,
+        "t": 6.9
+      },
+      "mechanism_support": "Inner RiskDWA infeasibility verified at identical-observation checkpoints despite the outer guard safe label.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 12,
+        "min_ped_center_m": 2.8462994970248543,
+        "path_travelled_m": 28.725023044571305,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 26.19992830765191,
+        "terminal_command": {
+          "angular_velocity": -1.0,
+          "linear_velocity": 1.6280014514923096
+        },
+        "terminal_position_m": [
+          39.029654473315844,
+          24.964826864957207
+        ],
+        "terminal_speed_m_s": 1.0866554498672552
+      },
+      "pr_frozen_fraction": 0.076158940397351,
+      "pr_no_admissible_fraction": 0.0,
+      "pr_steps": 302,
+      "scenario": "classic_urban_crossing_medium",
+      "seed": 1004
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 1
+      },
+      "base_features": {
+        "longest_frozen_steps": 3,
+        "min_ped_center_m": 1.3843065119021487,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 2.7811243705972286,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 3,
+      "before": "C",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.184 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 2.7811243705972286,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.0,
+        "infeasible_branch": true,
+        "min_obs_clear": 2.387535572052002,
+        "min_ped_clear": -0.2851253667237742,
+        "nearest_ped_center": 1.4567306087223237,
+        "no_admissible": true,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 2.776423843450557,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.004999999888241291,
+        "infeasible_branch": true,
+        "min_obs_clear": 2.387535572052002,
+        "min_ped_clear": -0.17597647270559225,
+        "nearest_ped_center": 1.460511870605693,
+        "no_admissible": true,
+        "position": [
+          4.392535625277397,
+          9.04623960397109
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.0499999999999979,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 1.4205068308070279,
+        "path_travelled_m": 12.329034184217454,
+        "recovery_kinds": {
+          "least_bad_clearance": 17
+        },
+        "terminal_active_waypoint_distance_m": 9.184407484123104,
+        "terminal_command": {
+          "angular_velocity": 1.0,
+          "linear_velocity": 1.7868813514709472
+        },
+        "terminal_position_m": [
+          16.143356344849867,
+          9.132604135639223
+        ],
+        "terminal_speed_m_s": 1.8368813753128133
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.2125,
+      "pr_steps": 80,
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 325,
+        "min_ped_center_m": 1.497575318961889,
+        "path_travelled_m": 1.5531005568429839,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 1.9492326975233938,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          5.050966893893516,
+          10.02789373397807
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 0.8575,
+      "base_no_admissible_fraction": 0.8975,
+      "base_steps": 400,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step72, base(0.0000,0.0000) -> PR(0.4000,-0.1000), recovery=least_bad_clearance. Longest physical freeze 325 -> 15 steps; terminal active-waypoint distance 1.949 -> 9.069 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 72,
+      "first_divergence_base": {
+        "goal_distance": 1.9669546626769008,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.4700000286102295,
+        "infeasible_branch": true,
+        "min_obs_clear": 3.0108461380004883,
+        "min_ped_clear": 0.593257641344162,
+        "nearest_ped_center": 2.023355077451565,
+        "no_admissible": true,
+        "position": [
+          5.033135528350962,
+          10.018836007834729
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.24999999999999942,
+        "step": 72,
+        "t": 7.300000000000001
+      },
+      "first_divergence_pr": {
+        "goal_distance": 1.958047737288717,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.4650000333786011,
+        "infeasible_branch": true,
+        "min_obs_clear": 3.0108461380004883,
+        "min_ped_clear": 0.6153577170162986,
+        "nearest_ped_center": 2.0141811306537645,
+        "no_admissible": true,
+        "position": [
+          5.042090741117608,
+          10.023286809229
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": -0.1,
+          "linear_velocity": 0.40000001192092893
+        },
+        "speed": 0.3500000000000038,
+        "step": 72,
+        "t": 7.300000000000001
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 15,
+        "min_ped_center_m": 1.497575318961889,
+        "path_travelled_m": 13.320764965526763,
+        "recovery_kinds": {
+          "brake": 37,
+          "least_bad_clearance": 21
+        },
+        "terminal_active_waypoint_distance_m": 9.06887014669435,
+        "terminal_command": {
+          "angular_velocity": 0.5999999284744263,
+          "linear_velocity": 0.9
+        },
+        "terminal_position_m": [
+          16.025856944298273,
+          9.11777998284631
+        ],
+        "terminal_speed_m_s": 0.9032686591148432
+      },
+      "pr_frozen_fraction": 0.11612903225806452,
+      "pr_no_admissible_fraction": 0.3741935483870968,
+      "pr_steps": 155,
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1005
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.1946755239703486,
+        "path_travelled_m": 70.08931572198868,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 18.378840289915395,
+        "terminal_command": {
+          "angular_velocity": 0.31709063053131104,
+          "linear_velocity": 2.0
+        },
+        "terminal_position_m": [
+          24.75948838066784,
+          5.269001917233382
+        ],
+        "terminal_speed_m_s": 2.0000000000000053
+      },
+      "base_frozen_fraction": 0.0,
+      "base_no_admissible_fraction": 0.0075,
+      "base_steps": 400,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery changes steering/path and completes within the unchanged budget; sustained stasis did not improve.",
+      "classification_detail": "First command divergence at step65, base(0.9000,0.0000) -> PR(0.9000,0.1000), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 0 -> 0 steps; terminal active-waypoint distance 18.379 -> 19.555 m. PR completes within the unchanged authored step budget. Clearance recovery changes steering/path and completes within the unchanged budget; sustained stasis did not improve.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 65,
+      "first_divergence_base": {
+        "goal_distance": 7.958881592471728,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": -0.4418790638446808,
+        "infeasible_branch": false,
+        "min_obs_clear": 6.556419372558594,
+        "min_ped_clear": 0.6224340713219435,
+        "nearest_ped_center": 2.889948862873105,
+        "no_admissible": false,
+        "position": [
+          14.834252588492356,
+          11.402954946777024
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.9
+        },
+        "speed": 0.9500000000000068,
+        "step": 65,
+        "t": 6.6000000000000005
+      },
+      "first_divergence_pr": {
+        "goal_distance": 7.959019170931462,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": -0.43687903881073,
+        "infeasible_branch": false,
+        "min_obs_clear": 6.556419372558594,
+        "min_ped_clear": 0.6372688602462907,
+        "nearest_ped_center": 2.89000997623798,
+        "no_admissible": false,
+        "position": [
+          14.834353884238908,
+          11.403169761563182
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.9
+        },
+        "speed": 0.9499999999999958,
+        "step": 65,
+        "t": 6.6000000000000005
+      },
+      "mechanism_support": "Inner RiskDWA infeasibility verified at identical-observation checkpoints despite the outer guard safe label.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.228042107294728,
+        "path_travelled_m": 23.448464717864987,
+        "recovery_kinds": {
+          "brake": 3
+        },
+        "terminal_active_waypoint_distance_m": 19.555039993793933,
+        "terminal_command": {
+          "angular_velocity": -0.700000011920929,
+          "linear_velocity": 1.5000000238418578
+        },
+        "terminal_position_m": [
+          26.53058524092987,
+          10.97766523189308
+        ],
+        "terminal_speed_m_s": 1.5500000476837048
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.021897810218978103,
+      "pr_steps": 137,
+      "scenario": "francis2023_crowd_navigation",
+      "seed": 1001
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 400,
+        "min_ped_center_m": 10.510558809140534,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 2.9135245186429386,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          4.195611596179941,
+          13.210043797889305
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 400,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 400 -> 0 steps; terminal active-waypoint distance 2.914 -> 19.036 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 2.9135245186429386,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.0,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.21004390716552734,
+        "min_ped_clear": 14.243563016690368,
+        "nearest_ped_center": 16.072423210685912,
+        "no_admissible": true,
+        "position": [
+          4.195611596179941,
+          13.210043797889305
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 2.9087087470986126,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.004999999888241291,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.21004390716552734,
+        "min_ped_clear": 14.166733371144494,
+        "nearest_ped_center": 16.069362571900445,
+        "no_admissible": true,
+        "position": [
+          4.200611580554949,
+          13.210056297876285
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.0499999999999979,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 4.248912850072653,
+        "path_travelled_m": 21.99500011682512,
+        "recovery_kinds": {
+          "least_bad_clearance": 13
+        },
+        "terminal_active_waypoint_distance_m": 19.036180066793143,
+        "terminal_command": {
+          "angular_velocity": -0.4,
+          "linear_velocity": 0.6
+        },
+        "terminal_position_m": [
+          26.034376372950412,
+          14.262045088180955
+        ],
+        "terminal_speed_m_s": 0.6000000000000031
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.056768558951965066,
+      "pr_steps": 229,
+      "scenario": "francis2023_intersection_no_gesture",
+      "seed": 1003
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 400,
+        "min_ped_center_m": 9.92887367892923,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 2.9135245186429386,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          4.195611596179941,
+          13.210043797889305
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 400,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 400 -> 0 steps; terminal active-waypoint distance 2.914 -> 19.026 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 2.9135245186429386,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.0,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.21004390716552734,
+        "min_ped_clear": 14.243563016690368,
+        "nearest_ped_center": 16.072423210685912,
+        "no_admissible": true,
+        "position": [
+          4.195611596179941,
+          13.210043797889305
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 2.9087087470986126,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.004999999888241291,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.21004390716552734,
+        "min_ped_clear": 14.166733371144494,
+        "nearest_ped_center": 16.069362571900445,
+        "no_admissible": true,
+        "position": [
+          4.200611580554949,
+          13.210056297876285
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.0499999999999979,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 4.625392623502699,
+        "path_travelled_m": 21.975000106692328,
+        "recovery_kinds": {
+          "least_bad_clearance": 13
+        },
+        "terminal_active_waypoint_distance_m": 19.02604534477698,
+        "terminal_command": {
+          "angular_velocity": -0.49999996423721316,
+          "linear_velocity": 0.6
+        },
+        "terminal_position_m": [
+          26.023899434131863,
+          14.285747758603895
+        ],
+        "terminal_speed_m_s": 0.65000001192094
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.056768558951965066,
+      "pr_steps": 229,
+      "scenario": "francis2023_intersection_proceed",
+      "seed": 1003
+    },
+    {
+      "after": "S",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 400,
+        "min_ped_center_m": 10.031941329082365,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 2.9135245186429386,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          4.195611596179941,
+          13.210043797889305
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 400,
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 400 -> 0 steps; terminal active-waypoint distance 2.914 -> 19.055 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 2.9135245186429386,
+        "goal_progress": 0.0,
+        "guard_label": "stop_best_effort",
+        "heading": 0.0,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.21004390716552734,
+        "min_ped_clear": 14.243563016690368,
+        "nearest_ped_center": 16.072423210685912,
+        "no_admissible": true,
+        "position": [
+          4.195611596179941,
+          13.210043797889305
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 2.9087087470986126,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_best_effort",
+        "heading": 0.004999999888241291,
+        "infeasible_branch": true,
+        "min_obs_clear": 0.21004390716552734,
+        "min_ped_clear": 14.166733371144494,
+        "nearest_ped_center": 16.069362571900445,
+        "no_admissible": true,
+        "position": [
+          4.200611580554949,
+          13.210056297876285
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.1,
+          "linear_velocity": 0.1
+        },
+        "speed": 0.0499999999999979,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 4.625392623502699,
+        "path_travelled_m": 21.96500010967256,
+        "recovery_kinds": {
+          "least_bad_clearance": 13
+        },
+        "terminal_active_waypoint_distance_m": 19.055321529891565,
+        "terminal_command": {
+          "angular_velocity": -0.8,
+          "linear_velocity": 0.8
+        },
+        "terminal_position_m": [
+          26.04999938371411,
+          14.450335528290827
+        ],
+        "terminal_speed_m_s": 0.8000000000000067
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.056768558951965066,
+      "pr_steps": 229,
+      "scenario": "francis2023_intersection_wait",
+      "seed": 1003
+    },
+    {
+      "after": "T",
+      "arm": "guarded_ppo",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "longest_frozen_steps": 31,
+        "min_ped_center_m": 2.0709427031303442,
+        "path_travelled_m": 16.990696657299992,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 9.419136279927903,
+        "terminal_command": {
+          "angular_velocity": -0.20000001192092895,
+          "linear_velocity": 0.40000001192092893
+        },
+        "terminal_position_m": [
+          16.368692993558398,
+          10.973509040689322
+        ],
+        "terminal_speed_m_s": 0.34999999999999687
+      },
+      "base_frozen_fraction": 0.20909090909090908,
+      "base_no_admissible_fraction": 0.12272727272727273,
+      "base_steps": 220,
+      "before": "S",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step26, base(1.8367,-0.7000) -> PR(1.8367,-0.9000), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 31 -> 38 steps; terminal active-waypoint distance 9.419 -> 8.406 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 26,
+      "first_divergence_base": {
+        "goal_distance": 1.2082539215754233,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": 0.07500000298023224,
+        "infeasible_branch": false,
+        "min_obs_clear": 4.577085018157959,
+        "min_ped_clear": 0.6536676503096558,
+        "nearest_ped_center": 4.267564272519338,
+        "no_admissible": false,
+        "position": [
+          6.764557794808853,
+          11.185092615375321
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": -0.700000011920929,
+          "linear_velocity": 1.836651825904846
+        },
+        "speed": 1.8866518735885618,
+        "step": 26,
+        "t": 2.7
+      },
+      "first_divergence_pr": {
+        "goal_distance": 1.2073140950969667,
+        "goal_progress": 0.0,
+        "guard_label": "fallback_safe",
+        "heading": 0.06499999761581421,
+        "infeasible_branch": false,
+        "min_obs_clear": 4.577085018157959,
+        "min_ped_clear": 0.7271638446974186,
+        "nearest_ped_center": 4.266638528597874,
+        "no_admissible": false,
+        "position": [
+          6.764661351413147,
+          11.184154991840646
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": -0.9000000119209289,
+          "linear_velocity": 1.836651825904846
+        },
+        "speed": 1.886651873588564,
+        "step": 26,
+        "t": 2.7
+      },
+      "mechanism_support": "Inner RiskDWA infeasibility verified at identical-observation checkpoints despite the outer guard safe label.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "longest_frozen_steps": 38,
+        "min_ped_center_m": 1.7635211697836382,
+        "path_travelled_m": 12.176993516981625,
+        "recovery_kinds": {
+          "brake": 149,
+          "least_bad_clearance": 174
+        },
+        "terminal_active_waypoint_distance_m": 8.406250040194426,
+        "terminal_command": {
+          "angular_velocity": -1.0,
+          "linear_velocity": 2.0
+        },
+        "terminal_position_m": [
+          15.391994382473905,
+          10.489356743894664
+        ],
+        "terminal_speed_m_s": 0.8124999999999947
+      },
+      "pr_frozen_fraction": 0.26,
+      "pr_no_admissible_fraction": 0.8075,
+      "pr_steps": 400,
+      "scenario": "francis2023_robot_crowding",
+      "seed": 1004
+    }
+  ],
+  "location": "Raw compact archives /home/luttkule/admfix_evidence; original native episodes imech192:/home/luttkule/admfix/out and /direct; compact selected evidence tracked in this bundle",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

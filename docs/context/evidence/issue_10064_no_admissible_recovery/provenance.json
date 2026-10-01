@@ -2,6 +2,16 @@
   "base_importer_failure": "Unchanged issue_5303 v2 preregistration algorithm_metadata digest; reproduced on exact base; frozen contract not edited",
   "base_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
   "behavior_sha": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+  "comparators": [
+    {
+      "commit": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+      "role": "requested_main"
+    },
+    {
+      "commit": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+      "role": "PR_command_implementation"
+    }
+  ],
   "dev_seeds": [
     1001,
     1002,
@@ -24,6 +34,7 @@
     1009,
     1010
   ],
+  "evidence_parent_head": "af8177ff8b85aaa3f3c32e047e2b960284ced07c",
   "external_horizon_schedule": {
     "path": "admfix_horizons.yaml",
     "sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
@@ -122,6 +133,8 @@
       15961
     ]
   },
+  "source_commit": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+  "tested_files_identical_on_evidence_parent": true,
   "unit_probe_base": {
     "module_path": "/home/luttkule/admfix-base/robot_sf/planner/risk_dwa.py",
     "rows": [

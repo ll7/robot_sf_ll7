@@ -21,6 +21,27 @@ evidence_tree_refresh_addenda:
   - issue: 10064
     reviewed_date: 2026-10-01
     previous:
+      count: 2796
+      sha256: c29bfbac7786b5370a8ca35f335b42d37ce38d7d815a11a52b661786bde4c19a
+    candidate:
+      count: 2806
+      sha256: c9bb836013f114c657a52c8b04f9618daffba7f7e273d2381de46c4f478203e8
+    files_added: 10
+    finding_delta: none
+    decision: >-
+      Reviewed the ten additional #10064 diagnostic evidence members: exact map
+      and horizon inputs with checksum review sidecars, reproduction packet,
+      paired analysis, outcome classifications, manually inspected trace windows
+      and inner-component checkpoint verification. All newly added members pass
+      strict provenance lint; 446 existing findings remain unchanged. Twenty-nine
+      guard-safe first divergences have identical-observation replay proof of
+      inner RiskDWA infeasibility; 4416 preceding command pairs are identical.
+      Outcome tables declare their matrix completion status. Five guard success
+      episodes regress to timeout, which is explicitly disclosed. No sealed
+      evaluation, release claim, safety certificate or maintainer sign-off.
+  - issue: 10064
+    reviewed_date: 2026-10-01
+    previous:
       count: 2792
       sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
     candidate:

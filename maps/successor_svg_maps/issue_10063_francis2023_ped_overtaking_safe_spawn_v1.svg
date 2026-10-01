@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Francis 2023 (c): Pedestrian Overtaking -->
-<!-- #10063: Robot spawn y=4.0..4.5 (formerly 4.0..6.0); h1 start y=6.6 (formerly 6.0). Its initial lateral offset is 2.1 m from the spawn rectangle and 1.6 m from the authored robot route; the exit inclines upward, so these are not the runtime passing gaps. h1 starts at x=1.5 behind every robot start and outside the reset reaction buffer. Release robot cap 0.7 m/s, unchanged h1 desired speed 0.8 m/s, 600-step budget: preserves a real overtake rather than outrunning h1. OVTFIX2: h1 now finishes at (35,13), away from the unchanged robot final approach. The nominal parked centre clears the full robot goal rectangle by 7.071 m and the robot route by 8 m. The upper exit area is extended by 5 m so wall repulsion cannot pull the parked walker back onto the final approach; the straight walker route retains a forward overtaking advantage. -->
+<!-- #10063: Robot spawn y=4.0..4.5; h1 starts behind every robot at (1.5,6.6), outside the reset reaction buffer. OVTFIX2: h1 first walks to (33,6.6), overtaking the robot, then exits upwards to park at (33,17). The first leg retains h1's 0.8 m/s forward speed versus the unchanged robot cap 0.7 m/s. The final parking circle is more than 10 m from the full robot goal rectangle, beyond the unchanged 10 m lidar range. The upper exit grows to y=19 for wall clearance; the robot route and bottom/end wall locations are retained. The trajectory is authored in the release YAML using these POIs. -->
 <svg
   width="40"
-  height="15"
-  viewBox="0 0 40 15"
+  height="19"
+  viewBox="0 0 40 19"
   version="1.1"
   xmlns="http://www.w3.org/2000/svg"
   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
   <g inkscape:label="obstacles">
     <rect x="0" y="0" width="40" height="1" fill="#000000" inkscape:label="obstacle" />
-    <rect x="0" y="14" width="40" height="1" fill="#000000" inkscape:label="obstacle" />
-    <rect x="0" y="0" width="1" height="15" fill="#000000" inkscape:label="obstacle" />
-    <rect x="39" y="0" width="1" height="15" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="18" width="40" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="19" fill="#000000" inkscape:label="obstacle" />
+    <rect x="39" y="0" width="1" height="19" fill="#000000" inkscape:label="obstacle" />
   </g>
   <g inkscape:label="robot">
     <rect x="3" y="4" width="2" height="0.5" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
@@ -23,8 +23,9 @@
     <circle cx="1.5" cy="6.6" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_start" />
     <circle cx="1.5" cy="6.6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
-    <circle cx="35" cy="13" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
+    <circle cx="33" cy="17" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_goal" />
-    <circle cx="35" cy="13" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
+    <circle cx="33" cy="17" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
+    <circle cx="33" cy="6.6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_pass" inkscape:label="poi_h1_pass" />
   </g>
 </svg>

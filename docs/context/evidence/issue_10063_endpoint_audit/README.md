@@ -4,8 +4,9 @@
 Diagnostic development evidence; author review and release admission remain separate.
 This bundle records the original #10063 endpoint repair, before OVTFIX2. Its
 stored cohorts, hashes, lane geometry and seed-exclusion receipts describe those
-historical checkouts. PR #10067's OVTFIX2 follow-up moves h1's goal to (35, 13),
-retains the original room, and runs the full suite under the author's updated
+historical checkouts. PR #10067's OVTFIX2 follow-up moves h1's final goal to (33, 17) after an overtaking leg to (33, 6.6),
+extends the upper exit while retaining the robot approach and bottom/end wall locations,
+and runs the full suite under the author's updated
 2026-10-01 seed rule. Its new overtaking cohorts and validation receipts are
 reported separately in PR #10067 and the local `ovtfix2_report.md`.
 

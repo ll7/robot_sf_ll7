@@ -3128,6 +3128,7 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
             {
                 "metric_schema_version": "robot-sf-metrics.v2",
                 "episode_id": "healthy-foresight",
+                "metric_schema_version": "robot-sf-metrics.v2",
                 "scenario_id": "foresight-fallback",
                 "algo": "prediction_planner",
                 "metrics": {"success": 1.0},

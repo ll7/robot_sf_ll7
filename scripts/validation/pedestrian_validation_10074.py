@@ -127,8 +127,16 @@ def run_task(task):
     """Run one dev episode in an isolated worker, retaining the original force defaults."""
     case, seed, variant, radius, mode = task
     original_config = reused.candidate_config
-    # Only geometry/clearance uses the physical radius. Baseline force substrate stays .35.
-    # Robot-free legacy sigma=0 forces are independent of this physical footprint.
+
+    # Preserve the released .35 force/.40 physical mismatch in the baseline only.
+    # All candidate cases use one radius; legacy sigma=0 has no radius-dependent wall term.
+    def configured(candidate, speed):
+        config = original_config(candidate, speed)
+        if mode == "radius":
+            config.scene_config.agent_radius = radius
+        return config
+
+    reused.candidate_config = configured
     reused.RADIUS = radius
     row = {"case": case, "seed": seed, "variant": variant, "radius_m": radius, "mode": mode}
     if case in {"V1", "V5", "V6"}:
@@ -193,8 +201,12 @@ def summary(rows, config):
             "native released preferred speed 0.65 m/s; population speed distribution is not reproduced",
         )
         if case == "V1":
-            published = 1.29
-            difference = stat["mean"] - published
+            published = {
+                "mean_m_s": 1.29,
+                "sd_m_s": 0.19,
+                "slow_normal_fast_m_s": [1.15, 1.42, 1.78],
+            }
+            difference = stat["mean"] - 1.29
         if case == "V3":
             published = src["published_specific_flow_persons_m_s"][
                 src["widths_m"].index(float(variant))
@@ -226,12 +238,52 @@ def summary(rows, config):
                 "difference": difference,
                 "known_reason": reason,
                 "attempted_n": len(group),
+                "crossed": statistics(r.get("crossed") for r in group),
+                "censored_specific_flow": statistics(
+                    r.get("censored_specific_flow_persons_m_s") for r in group
+                ),
+                "initial_pair_overlaps": statistics(
+                    r.get("initial_footprint_pair_overlaps", r.get("initial_pair_overlaps"))
+                    for r in group
+                ),
                 "seeds": [r["seed"] for r in group],
                 "wall_penetration_max_m": max(r.get("wall_penetration_m", 0.0) for r in group),
                 "diagnostic_passed_n": sum(r.get("passed", False) for r in group),
             }
         )
+    table.append(wide_slope_summary(rows, config))
     return table
+
+
+def wide_slope_summary(rows, config):
+    """Retain per-seed wide-flow regression estimators without a stationarity claim."""
+    wide = [r for r in rows if r["case"] == "V4"]
+    slopes, intercept_slopes, central_slopes = [], [], []
+    for seed in config["seeds"]:
+        group = sorted((r for r in wide if r["seed"] == seed), key=lambda r: r["width_m"])
+        if len(group) != len(config["V4"]["widths_m"]) or not all(r["all_crossed"] for r in group):
+            continue
+        widths = np.asarray([r["width_m"] for r in group])
+        flows = np.asarray([r["flow_persons_s"] for r in group])
+        central = np.asarray([r["central_20_80_flow_persons_s"] for r in group])
+        slopes.append(float(widths @ flows / (widths @ widths)))
+        intercept_slopes.append(float(np.polyfit(widths, flows, 1)[0]))
+        central_slopes.append(float(widths @ central / (widths @ widths)))
+    return {
+        "case": "V4",
+        "variant": "diagnostic width slope",
+        "quantity": "persons/(m s)",
+        "published_value": config["V4"]["published_slopes_persons_m_s"],
+        "source": config["V4"]["source"],
+        "location": config["V4"]["location"],
+        "simulated": statistics(slopes),
+        "difference": None,
+        "known_reason": "exit-plane first-to-last fit through origin; original line/window unverified; only complete 350-person runs; fitted-intercept and central-period slopes retained; central period is not proven stationary",
+        "fitted_intercept_slope": statistics(intercept_slopes),
+        "central_period_slope": statistics(central_slopes),
+        "attempted_n": len(config["seeds"]),
+        "seeds": config["seeds"],
+    }
 
 
 def markdown(table):
@@ -245,6 +297,10 @@ def markdown(table):
         text = f"{simulated['mean']} ± {simulated['spread_sd']}; n={simulated['n']}/{row['attempted_n']}; {row['quantity']}"
         if "edge" in simulated:
             text += f"; edge {simulated['edge']}"
+        if row.get("crossed", {}).get("mean") is not None:
+            text += f"; crossed {row['crossed']}; partial-count Js {row['censored_specific_flow']}"
+        if row["case"] == "V2":
+            text += f"; passed {row['diagnostic_passed_n']}/{row['attempted_n']}; max wall penetration {row['wall_penetration_max_m']} m"
         cells = [
             row["case"] + " " + row["variant"],
             f"{row['published_value']} ({row['source']}, {row['location']})",
@@ -290,6 +346,7 @@ def main(argv=None):
             "model": config["model"],
             "mode": args.mode,
             "radius_m": args.radius,
+            "resolved_force_radius_m": 0.35 if args.mode == "baseline" else args.radius,
             "seeds": config["seeds"],
             "episode_n": len(grid),
             "workers": args.workers,
@@ -307,7 +364,14 @@ def main(argv=None):
             print("DONE", len(rows), "/", len(grid), row["case"], row["seed"], flush=True)
     rows.sort(key=lambda r: (r["case"], r["variant"], r["seed"]))
     table = summary(rows, config)
-    write_json(args.out / "table.json", {"schema": "pedval.table.v1", "rows": table})
+    write_json(
+        args.out / "table.json",
+        {
+            "schema": "pedval.table.v1",
+            "identity": json.loads((args.out / "identity.json").read_text()),
+            "rows": table,
+        },
+    )
     write_text(args.out / "table.md", markdown(table), issue_ref="#10074")
 
 

@@ -82,7 +82,7 @@ planners:
 - key: ppo
   algo: ppo
   planner_group: experimental
-  algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+  algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
   benchmark_profile: experimental
   adapter_impact_eval: true
 - key: socnav_sampling

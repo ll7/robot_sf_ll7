@@ -4,7 +4,7 @@
 
 PPO retrained on the release robot; collision-prone learned reference.
 
-Model-only prerelease for author decision D-062 (2026-10-01). This asset replaces the plain `ppo` checkpoint in the forthcoming 0.0.8 benchmark contract. `guarded_ppo` remains unchanged. This is not the 0.0.8 release and does not claim competitive baseline quality or sealed-seed performance.
+Model-only prerelease for author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain). This asset replaces the plain `ppo` checkpoint in the forthcoming 0.0.8 benchmark contract. `guarded_ppo` remains unchanged. This is not the 0.0.8 release and does not claim competitive baseline quality or sealed-seed performance.
 
 Asset: `ppo_release_robot_b1002_last_20261001-model.zip`
 
@@ -40,8 +40,10 @@ Reference arms in PPOEVAL: ORCA 213/22/5, social force 162/2/76, guarded PPO 153
 
 ## Comparability and reproduction
 
-The arm keeps `ppo`, as required by the active `alyassi_comparability_map_v2.yaml` mapping `ppo: ppo`. Its implementation and model identity change; 0.0.7 PPO rows remain historical observations of a different checkpoint and plant contract. The template, calibration configuration and v0_5 runtime-smoke companion resolve the same new profile. Historical campaign profiles and frozen configs retain their existing bindings. These preparation changes are not a release acceptance result.
+The arm keeps `ppo`, as required by the active `alyassi_comparability_map_v2.yaml` mapping `ppo: ppo`. Its implementation and model identity change; 0.0.7 PPO rows remain historical observations of a different checkpoint and plant contract. The main template, three-width doorway slice, calibration configuration and v0_5 runtime-smoke companion resolve the same new profile. Historical campaign profiles and frozen configs retain their existing bindings. These preparation changes are not a release acceptance result.
 
 The evaluation used runner source `e8132439b42a71e4347bff58dfc91d73eecc0c1d`, the 0.0.8 rehearsal matrix `classic_interactions_francis2023_release_0_0_8_v1.yaml`, authored scenario horizons, dt 0.1, and deterministic CPU inference. A arms used `predictive_proxy_selected_v2_full` foresight with its checksum verified and fallback excluded; B arms used no foresight.
 
 Hydrate the selected model through `robot_sf.models.resolve_model_path("ppo_release_robot_b1002_last_20261001")`; the registry checks the public release-asset SHA256. The training recipe and development evaluation-seed manifest are checked in under `configs/training/ppo/`.
+
+Further training in 0.1.0 is deferred to [#10071](https://github.com/ll7/robot_sf_ll7/issues/10071).

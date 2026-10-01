@@ -1,4 +1,4 @@
-# D-062: PPO retrained on the release robot; collision-prone learned reference.
+# author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): PPO retrained on the release robot; collision-prone learned reference.
 # Action semantics are bound by the model registry, without an algo override.
 model_id: ppo_release_robot_b1002_last_20261001
 device: cpu

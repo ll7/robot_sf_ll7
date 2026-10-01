@@ -1,4 +1,4 @@
-"""D-062: the release's plain PPO slot resolves to the retrained robot policy."""
+"""author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): the release's plain PPO slot resolves to the retrained robot policy."""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +20,10 @@ ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
+DOORWAY_TEMPLATE = ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+)
+RELEASE_PPO_PROFILE = ROOT / "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml"
 
 
 def test_release_ppo_registry_has_training_and_observation_contract():
@@ -49,10 +53,12 @@ def test_release_robot_model_id_decodes_signed_delta_without_override():
     assert planner.get_metadata()["action_semantics"] == "velocity_delta"
 
 
-def test_release_campaign_resolver_binds_plain_ppo_to_release_robot():
-    """The real freeze input resolves the PPO implementation, model and comparability key."""
-    campaign = load_campaign_config(TEMPLATE, repository_root=ROOT)
+@pytest.mark.parametrize("campaign_path", [TEMPLATE, DOORWAY_TEMPLATE], ids=["main", "doorway"])
+def test_release_campaign_resolver_binds_plain_ppo_to_release_robot(campaign_path):
+    """Both freeze inputs resolve the PPO profile, model and comparability key."""
+    campaign = load_campaign_config(campaign_path, repository_root=ROOT)
     arm = next(p for p in campaign.planners if p.key == "ppo")
+    assert arm.algo_config_path == RELEASE_PPO_PROFILE
     raw = yaml.safe_load(arm.algo_config_path.read_text())
     algo, resolved = resolve_candidate_manifest_runtime(
         default_algo=arm.algo,

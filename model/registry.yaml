@@ -1122,7 +1122,7 @@ models:
     sensor_geometry: differential_drive
     privileged_input_status: none
   notes:
-  - 'D-062 (2026-10-01): replaces only the 0.0.8 plain ppo arm; guarded_ppo is unchanged.'
+  - 'author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): replaces only the 0.0.8 plain ppo arm; guarded_ppo is unchanged.'
   - 'Training plant: differential drive, 2.0 m/s, no reverse, +/-1 m/s^2 linear acceleration/deceleration,
     +/-1 rad/s^2 angular acceleration, dt 0.1 s.'
   - 'Pre-registered selection on 48 scenarios x dev seeds 1001-1005 only: most successes; within 5 episodes

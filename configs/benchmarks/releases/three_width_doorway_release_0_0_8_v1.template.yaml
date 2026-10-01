@@ -6,7 +6,7 @@ release_id: three_width_doorway_0_0_8_v1
 release_tag: '{{release_tag}}'
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml
-campaign_config_sha256: c5f99c5542c410fff0cd4c5cd3b3d19641377b3063b4533dafa7fc5e793a6200
+campaign_config_sha256: 662f79c5335e1931fe56607a9e429e0373f7f45ad45c20da48f1904941bd0aef
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: doorway-width-slice
 scenario:

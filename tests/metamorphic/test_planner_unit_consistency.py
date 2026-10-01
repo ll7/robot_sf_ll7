@@ -689,7 +689,7 @@ def _assert_reference_and_learned_arm_configs(
     ppo = resolved["ppo"][1]
     assert ppo["v_max"] == pytest.approx(DRIVE.max_linear_speed)
     assert ppo["omega_max"] == pytest.approx(DRIVE.max_angular_speed)
-    # D-062 selects variant B, which has no predictive foresight features.
+    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain) selects variant B, which has no predictive foresight features.
     assert ppo["model_id"] == "ppo_release_robot_b1002_last_20261001"
     assert ppo["predictive_foresight_enabled"] is False
 

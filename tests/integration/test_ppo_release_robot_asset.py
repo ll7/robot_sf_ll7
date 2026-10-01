@@ -1,4 +1,4 @@
-"""Verify the D-062 release policy using real public checkpoint bytes."""
+"""Verify the author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain) release policy using real public checkpoint bytes."""
 
 import pytest
 

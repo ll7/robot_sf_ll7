@@ -1,0 +1,12 @@
+# D-062: PPO retrained on the release robot; collision-prone learned reference.
+# Action semantics are bound by the model registry, without an algo override.
+model_id: ppo_release_robot_b1002_last_20261001
+device: cpu
+deterministic: true
+obs_mode: dict
+predictive_foresight_enabled: false
+predictive_foresight_device: cpu
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: false

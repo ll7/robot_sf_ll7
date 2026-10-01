@@ -174,16 +174,24 @@ class PPOPlanner:
         """Resolve checkpoint declarations before loading or allowing fallback.
 
         Returns:
-            Declared semantics, with the historical absolute default for other policies.
+            Registry-declared semantics, or the historical absolute default when undeclared.
         """
         semantics = config.action_semantics
+        declared = None
+        if config.model_id:
+            try:
+                declared = get_registry_entry(config.model_id).get("action_semantics")
+            except KeyError:
+                # Unknown IDs still fail at model resolution; deferred loading keeps its API.
+                if config.model_id in self.DELTA_CHECKPOINT_IDS:
+                    raise
         if config.model_id in self.DELTA_CHECKPOINT_IDS:
-            declared = get_registry_entry(config.model_id).get("action_semantics")
             if declared != "velocity_delta":
                 raise ValueError(
                     f"Checkpoint {config.model_id} requires registry "
                     "action_semantics: velocity_delta"
                 )
+        if declared is not None:
             if semantics is not None and semantics != declared:
                 raise ValueError("action_semantics conflicts with checkpoint registry declaration")
             semantics = declared

@@ -104,3 +104,11 @@ These release-only successor inputs leave historical SVGs and frozen artifacts i
 Dormant crowd dispositions bind both density and `population_size`: a forced
 positive count at density zero changes the fingerprint and requires a fresh
 disposition. The audit still lists dormant geometry rather than omitting it.
+
+Route crowds are also checked using the actual sampler support: a route anchor
+plus independently clipped x/y offsets of +/-1.5 m (the default 3 m sidewalk
+width). This is a square Minkowski sum, including diagonal segment corners,
+not a round centreline buffer. The station bend at x=74 leaves a 1.5 m gap
+between that entire support and the robot goal. Other shared moving-flow
+intersections have individual exact dispositions; nominal support is not a
+claim of runtime clearance or release admission.

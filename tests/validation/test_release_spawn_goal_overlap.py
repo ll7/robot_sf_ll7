@@ -61,6 +61,34 @@ def test_active_crowd_zones_cannot_intersect_robot_destination_rectangles():
                 ), f"{scenario['name']}: active crowd spawn intersects robot goal"
 
 
+def test_station_route_spread_cannot_spawn_a_pedestrian_in_the_robot_goal():
+    import numpy as np
+
+    from robot_sf.ped_npc.ped_population import PedSpawnConfig, sample_route
+
+    scenario = next(
+        r for r in load_scenarios(MATRIX) if r["name"] == "classic_station_platform_medium"
+    )
+    config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
+    definition = next(iter(config.map_pool.map_defs.values()))
+    route = definition.ped_routes[1]
+    width = PedSpawnConfig.__dataclass_fields__["sidewalk_width"].default
+
+    class BoundaryRng:
+        def normal(self, loc, scale, size):
+            return np.full(size, width / 2)
+
+    # Use the production sampler at the upper/right clipped support boundary.
+    offset = sum(route.section_lengths[:2])
+    points, _ = sample_route(route, 1, width, offset=offset, rng=BoundaryRng())
+    from shapely.geometry import Point
+
+    assert all(
+        _rect_polygon(z).distance(Point(points[0])) > config.sim_config.ped_radius
+        for z in definition.robot_goal_zones
+    ), "crowd route spread intersects robot goal"
+
+
 def test_release_zone_audit_has_all_51_scenarios_and_102_endpoint_rectangles():
     from scripts.validation.check_scenario_archetype_geometry import inspect_release_zones
 
@@ -284,6 +312,7 @@ def test_stationary_single_pedestrian_is_a_radius_expanded_point():
         single_pedestrians=[
             SimpleNamespace(id="stationary", start=(4, 5), goal=None, trajectory=None, role="wait")
         ],
+        ped_routes=[],
         ped_spawn_zones=[],
         ped_crowded_zones=[],
     )

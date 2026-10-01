@@ -7,7 +7,32 @@
         21.904995,
         33.452839
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
       "map_id": "issue_9762_classic_bottleneck_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -71,6 +96,30 @@
             "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
           },
           "geometry_sha256": "a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
         }
       ],
       "map_id": "issue_9762_classic_bottleneck_medium_goal_zone_entry_v2",
@@ -202,6 +251,30 @@
             "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
           },
           "geometry_sha256": "d697e982d061cae917b56f648adb9b7e6811474b3726b40d4ad3fffbe65fe4b1"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
         }
       ],
       "map_id": "issue_9762_classic_bottleneck_high_goal_zone_entry_v2",
@@ -314,6 +387,86 @@
       "intersections": [
         {
           "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "57e936705b42110bf5135a6d88a3fa9f8f783f49fefaf38280ff21380bf18b84"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "c453cff2f9c27c42fbfb6cce5c609ecdd2bda3b38d13975db6f2ed6f7fb3191a"
+        },
+        {
+          "actor": "0",
           "actor_kind": "ped_spawn",
           "distance_m": 0.0,
           "evidence": {
@@ -340,6 +493,86 @@
         16.5
       ],
       "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "fcde112a9daf07a0957b39aff17e394625b77522e4e00f01205fde9fae583636"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "41375784fbbfbe3d10b2a9dd66c39464c9713d1ced07605f5a9957ccf1f9be1d"
+        },
         {
           "actor": "1",
           "actor_kind": "ped_spawn",
@@ -395,7 +628,40 @@
         8.0,
         8.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "b36170db76b366590e56b97bf3f1155db00faac5d9966d4b8be1d0a0d7ba3a7e"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -409,7 +675,40 @@
         36.0,
         36.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "5a6839dd70e14cdd69f24d0e8a395661a8313b48f6298a08da3fc8e1f1483667"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -423,7 +722,40 @@
         8.0,
         8.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "0e4f55f4f4ee8abcaa101306a7e47b9cd07c46748044b2de2d0a0f270f954224"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -437,7 +769,40 @@
         36.0,
         36.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "f736ab294f21a9d7232c9a9cb8b3f52902cff2de93184facb4792e25378e7367"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -451,7 +816,40 @@
         8.0,
         8.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "e07bd318ace052d865e2da212bcee5bbe0f581155ddf083e96546799a08ccd9f"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -465,7 +863,40 @@
         36.0,
         36.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "90bd3259ba79062876baaf78f6c8dfdf04dbab4743d8b5750614e183101085db"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -479,7 +910,36 @@
         30.895477,
         17.63518
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "28e5c29fff6ad04bb95eb928e85cfa68df56f5a3588d5a50461453369441a789"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -493,7 +953,36 @@
         18.440092,
         13.4108419
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a7cecc5b39de01194fe98b0a2d1fcf9cfdb1711bf693b9a6c63d579c98b082e2"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -507,7 +996,36 @@
         30.895477,
         17.63518
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "59211442c47347d170a64cdc88ae4931b74443efd119497c3962edbc991fd0cc"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -521,7 +1039,36 @@
         18.440092,
         13.4108419
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "05747dece460dba8bbce8f90c739112c615bd76a32c672efd158ccceecef83af"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -535,7 +1082,36 @@
         30.895477,
         17.63518
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "9f319cb77beeffe0c3ec5bf2ef550003a11ad092349b01f5cc47c78185c49fa8"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -549,7 +1125,36 @@
         18.440092,
         13.4108419
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a96437f034cbac69662e3cae6415e1d8a711400a3eb3c6268dcca8daf8c043ff"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -759,7 +1364,40 @@
         19.0189119,
         8.227812799999999
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "f8d51e7144227b90076752b8849d7909c315796a167ee2a9e72bb1deee5e1500"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -773,7 +1411,40 @@
         45.457813900000005,
         25.9082579
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "68f3a9ee089dcf688f21f0f45748c2157bbe27ba633b79b41923341568f200ba"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -787,7 +1458,40 @@
         19.0189119,
         8.227812799999999
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "d83b33d13ba9623547824f38bad905a52ecac56e43366ee2796ad5075c665d6d"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -801,7 +1505,40 @@
         45.457813900000005,
         25.9082579
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "295a9c196fe772d10c1974c29ad37cfa621da1aa5de2f41a9311448dedfddbdb"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -829,7 +1566,32 @@
         38.889965,
         20.784306
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "db8c3db46f92e8bd3863423677bdbc14c06ff9a24966c8d3fef8e15aab3f2af0"
+        }
+      ],
       "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -857,7 +1619,32 @@
         38.889965,
         20.784306
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "ed3e487f3374f7bdf1bf01d2aada96fd67f36d50d24f0f39e12400cecfc52b6a"
+        }
+      ],
       "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -1727,7 +2514,72 @@
         5.0,
         11.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((2.5 6.5, 2.5 9.5, 2.5 10.5, 2.5 13.5, 3.5 16.5, 5 18, 8.5 18.5, 11.5 18.5, 15 18, 16.5 16.5, 16.5 13.5, 13.5 13.5, 12 15, 10 15.285714285714286, 8 15, 6.5 13.5, 5.5 10.5, 5.5 9.5, 6.5 6.5, 8 5, 10 4.714285714285714, 12 5, 13.5 6.5, 16.5 6.5, 16.5 3.5, 15 2, 11.5 1.5, 8.5 1.5, 5 2, 3.5 3.5, 2.5 6.5))",
+            "density": 0.06,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.0,
+                5.0
+              ],
+              [
+                13.5,
+                3.5
+              ],
+              [
+                10.0,
+                3.0
+              ],
+              [
+                6.5,
+                3.5
+              ],
+              [
+                5.0,
+                5.0
+              ],
+              [
+                4.0,
+                8.0
+              ],
+              [
+                4.0,
+                12.0
+              ],
+              [
+                5.0,
+                15.0
+              ],
+              [
+                6.5,
+                16.5
+              ],
+              [
+                10.0,
+                17.0
+              ],
+              [
+                13.5,
+                16.5
+              ],
+              [
+                15.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((3 9, 5 9, 5 11, 3 11, 3 9))"
+          },
+          "geometry_sha256": "010dd2ae4dd65bb25fac14d390e7944b3b87e704c494bb8a03afe4288860a3b5"
+        }
+      ],
       "map_id": "issue_9762_francis2023_circular_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2008,7 +2860,32 @@
         21.904995,
         33.452839
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
       "map_id": "issue_9762_classic_bottleneck_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2072,6 +2949,30 @@
             "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
           },
           "geometry_sha256": "a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
         }
       ],
       "map_id": "issue_9762_classic_bottleneck_medium_goal_zone_entry_v2",
@@ -2203,6 +3104,30 @@
             "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
           },
           "geometry_sha256": "d697e982d061cae917b56f648adb9b7e6811474b3726b40d4ad3fffbe65fe4b1"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
         }
       ],
       "map_id": "issue_9762_classic_bottleneck_high_goal_zone_entry_v2",
@@ -2315,6 +3240,86 @@
       "intersections": [
         {
           "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "57e936705b42110bf5135a6d88a3fa9f8f783f49fefaf38280ff21380bf18b84"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "c453cff2f9c27c42fbfb6cce5c609ecdd2bda3b38d13975db6f2ed6f7fb3191a"
+        },
+        {
+          "actor": "0",
           "actor_kind": "ped_spawn",
           "distance_m": 0.0,
           "evidence": {
@@ -2341,6 +3346,86 @@
         16.5
       ],
       "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "fcde112a9daf07a0957b39aff17e394625b77522e4e00f01205fde9fae583636"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "41375784fbbfbe3d10b2a9dd66c39464c9713d1ced07605f5a9957ccf1f9be1d"
+        },
         {
           "actor": "1",
           "actor_kind": "ped_spawn",
@@ -2385,6 +3470,50 @@
       "intersections": [
         {
           "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((16.5 23.5, 19.5 23.5, 28.5 23.5, 31.5 23.5, 40.5 23.5, 43.5 23.5, 52.5 23.5, 55.5 23.5, 64.5 23.5, 67.5 23.5, 79.5 23.5, 79.5 20.5, 67.5 20.5, 64.5 20.5, 55.5 20.5, 52.5 20.5, 43.5 20.5, 40.5 20.5, 31.5 20.5, 28.5 20.5, 19.5 20.5, 16.5 20.5, 4.5 20.5, 4.5 23.5, 16.5 23.5))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                78.0,
+                22.0
+              ],
+              [
+                66.0,
+                22.0
+              ],
+              [
+                54.0,
+                22.0
+              ],
+              [
+                42.0,
+                22.0
+              ],
+              [
+                30.0,
+                22.0
+              ],
+              [
+                18.0,
+                22.0
+              ],
+              [
+                6.0,
+                22.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((77 21, 81 21, 81 24, 77 24, 77 21))"
+          },
+          "geometry_sha256": "d97d07957975c0b82281ee4760f815c3c1b9cbfeab54c8ed11b673b6105238e1"
+        },
+        {
+          "actor": "1",
           "actor_kind": "ped_spawn",
           "distance_m": 0.0,
           "evidence": {
@@ -2410,7 +3539,40 @@
         8.0,
         8.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "b36170db76b366590e56b97bf3f1155db00faac5d9966d4b8be1d0a0d7ba3a7e"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2424,7 +3586,40 @@
         36.0,
         36.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "5a6839dd70e14cdd69f24d0e8a395661a8313b48f6298a08da3fc8e1f1483667"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2438,7 +3633,40 @@
         8.0,
         8.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "0e4f55f4f4ee8abcaa101306a7e47b9cd07c46748044b2de2d0a0f270f954224"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2452,7 +3680,40 @@
         36.0,
         36.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "f736ab294f21a9d7232c9a9cb8b3f52902cff2de93184facb4792e25378e7367"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2466,7 +3727,40 @@
         8.0,
         8.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "e07bd318ace052d865e2da212bcee5bbe0f581155ddf083e96546799a08ccd9f"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2480,7 +3774,40 @@
         36.0,
         36.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "90bd3259ba79062876baaf78f6c8dfdf04dbab4743d8b5750614e183101085db"
+        }
+      ],
       "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2494,7 +3821,36 @@
         30.895477,
         17.63518
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "28e5c29fff6ad04bb95eb928e85cfa68df56f5a3588d5a50461453369441a789"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2508,7 +3864,36 @@
         18.440092,
         13.4108419
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a7cecc5b39de01194fe98b0a2d1fcf9cfdb1711bf693b9a6c63d579c98b082e2"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2522,7 +3907,36 @@
         30.895477,
         17.63518
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "59211442c47347d170a64cdc88ae4931b74443efd119497c3962edbc991fd0cc"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2536,7 +3950,36 @@
         18.440092,
         13.4108419
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "05747dece460dba8bbce8f90c739112c615bd76a32c672efd158ccceecef83af"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2550,7 +3993,36 @@
         30.895477,
         17.63518
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "9f319cb77beeffe0c3ec5bf2ef550003a11ad092349b01f5cc47c78185c49fa8"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2564,7 +4036,36 @@
         18.440092,
         13.4108419
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a96437f034cbac69662e3cae6415e1d8a711400a3eb3c6268dcca8daf8c043ff"
+        }
+      ],
       "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2774,7 +4275,40 @@
         19.0189119,
         8.227812799999999
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "f8d51e7144227b90076752b8849d7909c315796a167ee2a9e72bb1deee5e1500"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2788,7 +4322,40 @@
         45.457813900000005,
         25.9082579
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "68f3a9ee089dcf688f21f0f45748c2157bbe27ba633b79b41923341568f200ba"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2802,7 +4369,40 @@
         19.0189119,
         8.227812799999999
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "d83b33d13ba9623547824f38bad905a52ecac56e43366ee2796ad5075c665d6d"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2816,7 +4416,40 @@
         45.457813900000005,
         25.9082579
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "295a9c196fe772d10c1974c29ad37cfa621da1aa5de2f41a9311448dedfddbdb"
+        }
+      ],
       "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2844,7 +4477,32 @@
         38.889965,
         20.784306
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "db8c3db46f92e8bd3863423677bdbc14c06ff9a24966c8d3fef8e15aab3f2af0"
+        }
+      ],
       "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -2872,7 +4530,32 @@
         38.889965,
         20.784306
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "ed3e487f3374f7bdf1bf01d2aada96fd67f36d50d24f0f39e12400cecfc52b6a"
+        }
+      ],
       "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -3765,7 +5448,72 @@
         5.0,
         11.0
       ],
-      "intersections": [],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((2.5 6.5, 2.5 9.5, 2.5 10.5, 2.5 13.5, 3.5 16.5, 5 18, 8.5 18.5, 11.5 18.5, 15 18, 16.5 16.5, 16.5 13.5, 13.5 13.5, 12 15, 10 15.285714285714286, 8 15, 6.5 13.5, 5.5 10.5, 5.5 9.5, 6.5 6.5, 8 5, 10 4.714285714285714, 12 5, 13.5 6.5, 16.5 6.5, 16.5 3.5, 15 2, 11.5 1.5, 8.5 1.5, 5 2, 3.5 3.5, 2.5 6.5))",
+            "density": 0.06,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.0,
+                5.0
+              ],
+              [
+                13.5,
+                3.5
+              ],
+              [
+                10.0,
+                3.0
+              ],
+              [
+                6.5,
+                3.5
+              ],
+              [
+                5.0,
+                5.0
+              ],
+              [
+                4.0,
+                8.0
+              ],
+              [
+                4.0,
+                12.0
+              ],
+              [
+                5.0,
+                15.0
+              ],
+              [
+                6.5,
+                16.5
+              ],
+              [
+                10.0,
+                17.0
+              ],
+              [
+                13.5,
+                16.5
+              ],
+              [
+                15.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((3 9, 5 9, 5 11, 3 11, 3 9))"
+          },
+          "geometry_sha256": "010dd2ae4dd65bb25fac14d390e7944b3b87e704c494bb8a03afe4288860a3b5"
+        }
+      ],
       "map_id": "issue_9762_francis2023_circular_crossing_goal_zone_entry_v2",
       "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
       "ped_radius_m": 0.4,
@@ -4070,7 +5818,7 @@
   "geometry_sha": "a4955c3d18122a5f424ff84167c295313ab3308d",
   "issue": 10063,
   "ped_radius_m": 0.4,
-  "resolved_current_matrix_sha256": "6d31a10eac7ba945fab5e6c02f02444aae54cc87bb2cb38aa64563327f8131be",
+  "resolved_current_matrix_sha256": "94867f641deea997399d2c2fe0a5c6becb373914ae5e490493287617ab8b3c82",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "release_endpoint_overlap_audit.v1",
   "substrate_radius_m": 0.35

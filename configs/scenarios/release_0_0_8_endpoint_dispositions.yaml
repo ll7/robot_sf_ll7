@@ -1,6 +1,16 @@
-# Exact geometry and forced-population state; intended/dormant dispositions require author review.
+# Exact nominal geometry and population state; intended/dormant dispositions require author review.
 schema: scenario_validation_waivers.v1
 release_zones:
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_low
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   scenario: classic_bottleneck_low
   zone: goal[0]
@@ -20,6 +30,16 @@ release_zones:
     opposite end and walk through the robot destination and later its departure end.
     Interaction at the interior bottleneck is the task; no pedestrian starts in the
     robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_medium
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   scenario: classic_bottleneck_medium
@@ -76,6 +96,16 @@ release_zones:
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   scenario: classic_bottleneck_high
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
   zone: goal[0]
   actor_kind: single
   actor: h1
@@ -119,6 +149,26 @@ release_zones:
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   scenario: classic_realworld_double_bottleneck_high
   zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 57e936705b42110bf5135a6d88a3fa9f8f783f49fefaf38280ff21380bf18b84
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_realworld_double_bottleneck_high
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '1'
+  geometry_sha256: c453cff2f9c27c42fbfb6cce5c609ecdd2bda3b38d13975db6f2ed6f7fb3191a
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_realworld_double_bottleneck_high
+  zone: spawn[0]
   actor_kind: ped_spawn
   actor: '0'
   geometry_sha256: f6895b19839e52007939dc372c1e24fbde6337db4465dba57e97f1e5cbe26a85
@@ -128,11 +178,263 @@ release_zones:
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   scenario: classic_realworld_double_bottleneck_high
   zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: fcde112a9daf07a0957b39aff17e394625b77522e4e00f01205fde9fae583636
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_realworld_double_bottleneck_high
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '1'
+  geometry_sha256: 41375784fbbfbe3d10b2a9dd66c39464c9713d1ced07605f5a9957ccf1f9be1d
+  rationale: 'Dormant route crowd: density zero and no forced population; the declared
+    moving route support is listed, not omitted. A population override invalidates
+    this disposition.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_realworld_double_bottleneck_high
+  zone: goal[0]
   actor_kind: ped_spawn
   actor: '1'
   geometry_sha256: b6eaa9b2463f9d322eb287d2d4e421dec968c61327d45391840ff371b8d52d27
   rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
     does not instantiate this population. Listed rather than silently omitted.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_cross_trap_low
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: b36170db76b366590e56b97bf3f1155db00faac5d9966d4b8be1d0a0d7ba3a7e
+  rationale: Intentional weaving/crossing crowd route connects the trap approaches
+    and traverses the robot departure/destination stream; cutting the stream at these
+    nominal endpoints would remove part of the crossing sequence. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_cross_trap_low
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 5a6839dd70e14cdd69f24d0e8a395661a8313b48f6298a08da3fc8e1f1483667
+  rationale: Intentional weaving/crossing crowd route connects the trap approaches
+    and traverses the robot departure/destination stream; cutting the stream at these
+    nominal endpoints would remove part of the crossing sequence. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_cross_trap_medium
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 0e4f55f4f4ee8abcaa101306a7e47b9cd07c46748044b2de2d0a0f270f954224
+  rationale: Intentional weaving/crossing crowd route connects the trap approaches
+    and traverses the robot departure/destination stream; cutting the stream at these
+    nominal endpoints would remove part of the crossing sequence. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_cross_trap_medium
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: f736ab294f21a9d7232c9a9cb8b3f52902cff2de93184facb4792e25378e7367
+  rationale: Intentional weaving/crossing crowd route connects the trap approaches
+    and traverses the robot departure/destination stream; cutting the stream at these
+    nominal endpoints would remove part of the crossing sequence. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_cross_trap_high
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: e07bd318ace052d865e2da212bcee5bbe0f581155ddf083e96546799a08ccd9f
+  rationale: Intentional weaving/crossing crowd route connects the trap approaches
+    and traverses the robot departure/destination stream; cutting the stream at these
+    nominal endpoints would remove part of the crossing sequence. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_cross_trap_high
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 90bd3259ba79062876baaf78f6c8dfdf04dbab4743d8b5750614e183101085db
+  rationale: Intentional weaving/crossing crowd route connects the trap approaches
+    and traverses the robot departure/destination stream; cutting the stream at these
+    nominal endpoints would remove part of the crossing sequence. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_doorway_low
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 28e5c29fff6ad04bb95eb928e85cfa68df56f5a3588d5a50461453369441a789
+  rationale: Intentional moving doorway flow shares the entrance/exit approach with
+    the robot while traversing the interior bottleneck; crowd anchors are distributed
+    along this passage, rather than forming a parked endpoint crowd. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_doorway_low
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: a7cecc5b39de01194fe98b0a2d1fcf9cfdb1711bf693b9a6c63d579c98b082e2
+  rationale: Intentional moving doorway flow shares the entrance/exit approach with
+    the robot while traversing the interior bottleneck; crowd anchors are distributed
+    along this passage, rather than forming a parked endpoint crowd. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_doorway_medium
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 59211442c47347d170a64cdc88ae4931b74443efd119497c3962edbc991fd0cc
+  rationale: Intentional moving doorway flow shares the entrance/exit approach with
+    the robot while traversing the interior bottleneck; crowd anchors are distributed
+    along this passage, rather than forming a parked endpoint crowd. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_doorway_medium
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 05747dece460dba8bbce8f90c739112c615bd76a32c672efd158ccceecef83af
+  rationale: Intentional moving doorway flow shares the entrance/exit approach with
+    the robot while traversing the interior bottleneck; crowd anchors are distributed
+    along this passage, rather than forming a parked endpoint crowd. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_doorway_high
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 9f319cb77beeffe0c3ec5bf2ef550003a11ad092349b01f5cc47c78185c49fa8
+  rationale: Intentional moving doorway flow shares the entrance/exit approach with
+    the robot while traversing the interior bottleneck; crowd anchors are distributed
+    along this passage, rather than forming a parked endpoint crowd. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_doorway_high
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: a96437f034cbac69662e3cae6415e1d8a711400a3eb3c6268dcca8daf8c043ff
+  rationale: Intentional moving doorway flow shares the entrance/exit approach with
+    the robot while traversing the interior bottleneck; crowd anchors are distributed
+    along this passage, rather than forming a parked endpoint crowd. The actual-pose
+    reset/route-respawn reaction-buffer guards apply. This disposition accepts nominal
+    moving-route support, not a guarantee that all draws avoid endpoints or later
+    collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_overtaking_low
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: f8d51e7144227b90076752b8849d7909c315796a167ee2a9e72bb1deee5e1500
+  rationale: Intentional co-directional background crowd lane spans the robot departure
+    and arrival portions of the corridor so the robot can overtake moving people;
+    population is distributed along the whole lane. The actual-pose reset/route-respawn
+    reaction-buffer guards apply. This disposition accepts nominal moving-route support,
+    not a guarantee that all draws avoid endpoints or later collisions; author review
+    remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_overtaking_low
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 68f3a9ee089dcf688f21f0f45748c2157bbe27ba633b79b41923341568f200ba
+  rationale: Intentional co-directional background crowd lane spans the robot departure
+    and arrival portions of the corridor so the robot can overtake moving people;
+    population is distributed along the whole lane. The actual-pose reset/route-respawn
+    reaction-buffer guards apply. This disposition accepts nominal moving-route support,
+    not a guarantee that all draws avoid endpoints or later collisions; author review
+    remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_overtaking_medium
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: d83b33d13ba9623547824f38bad905a52ecac56e43366ee2796ad5075c665d6d
+  rationale: Intentional co-directional background crowd lane spans the robot departure
+    and arrival portions of the corridor so the robot can overtake moving people;
+    population is distributed along the whole lane. The actual-pose reset/route-respawn
+    reaction-buffer guards apply. This disposition accepts nominal moving-route support,
+    not a guarantee that all draws avoid endpoints or later collisions; author review
+    remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_overtaking_medium
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 295a9c196fe772d10c1974c29ad37cfa621da1aa5de2f41a9311448dedfddbdb
+  rationale: Intentional co-directional background crowd lane spans the robot departure
+    and arrival portions of the corridor so the robot can overtake moving people;
+    population is distributed along the whole lane. The actual-pose reset/route-respawn
+    reaction-buffer guards apply. This disposition accepts nominal moving-route support,
+    not a guarantee that all draws avoid endpoints or later collisions; author review
+    remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_t_intersection_low
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: db8c3db46f92e8bd3863423677bdbc14c06ff9a24966c8d3fef8e15aab3f2af0
+  rationale: Intentional moving background stream crosses/joins the robot arrival
+    branch at the T junction; the shared arrival approach is part of the merging interaction.
+    The actual-pose reset/route-respawn reaction-buffer guards apply. This disposition
+    accepts nominal moving-route support, not a guarantee that all draws avoid endpoints
+    or later collisions; author review remains required.
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_t_intersection_medium
+  zone: goal[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: ed3e487f3374f7bdf1bf01d2aada96fd67f36d50d24f0f39e12400cecfc52b6a
+  rationale: Intentional moving background stream crosses/joins the robot arrival
+    branch at the T junction; the shared arrival approach is part of the merging interaction.
+    The actual-pose reset/route-respawn reaction-buffer guards apply. This disposition
+    accepts nominal moving-route support, not a guarantee that all draws avoid endpoints
+    or later collisions; author review remains required.
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
 - matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   scenario: francis2023_frontal_approach
@@ -219,6 +521,18 @@ release_zones:
     far robot goal rectangle and moves to (16,11) while the robot approaches from
     outside. Preserve entering an occupied elevator; the pedestrian is absent from
     the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_circular_crossing
+  zone: spawn[0]
+  actor_kind: crowd_route
+  actor: '0'
+  geometry_sha256: 010dd2ae4dd65bb25fac14d390e7944b3b87e704c494bb8a03afe4288860a3b5
+  rationale: Intentional circulating crowd crosses the robot entry into the circular
+    lane; nominal route spawn support reaches the departure region while the crowd
+    continues around the loop. The actual-pose reset/route-respawn reaction-buffer
+    guards apply. This disposition accepts nominal moving-route support, not a guarantee
+    that all draws avoid endpoints or later collisions; author review remains required.
   decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
 - matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
   scenario: francis2023_narrow_doorway_width_2p20

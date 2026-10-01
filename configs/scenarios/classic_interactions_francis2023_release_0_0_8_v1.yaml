@@ -23,6 +23,7 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   classic_station_platform_medium:
+    # #10063: route bend x=74 clears the goal even with +/-1.5 m x/y spawn jitter.
     # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg

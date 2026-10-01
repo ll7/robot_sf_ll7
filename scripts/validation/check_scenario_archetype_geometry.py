@@ -30,7 +30,8 @@ from itertools import pairwise
 from math import dist
 from pathlib import Path
 
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, MultiPoint, Point, Polygon
+from shapely.ops import unary_union
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.svg_map_parser import SvgMapConverter
@@ -378,6 +379,29 @@ RELEASE_MATRICES = (
 )
 
 
+def _route_spawn_support(route, half_width: float):
+    """Exact nominal support of per-anchor axis-clipped x/y route jitter.
+
+    sample_route draws an anchor anywhere along the route and independently
+    clips both coordinate offsets to +/- sidewalk_width/2. Each segment's
+    support is its Minkowski sum with an axis-aligned square, not a round buffer.
+    Obstacle rejection and live-pose guards are separate runtime constraints.
+    """
+    return unary_union(
+        [
+            MultiPoint(
+                [
+                    (x + dx, y + dy)
+                    for x, y in (a, b)
+                    for dx in (-half_width, half_width)
+                    for dy in (-half_width, half_width)
+                ]
+            ).convex_hull
+            for a, b in pairwise(route.waypoints)
+        ]
+    )
+
+
 def _release_actors(
     definition: MapDefinition, density: float, population_size: int | None = None
 ) -> list[tuple]:
@@ -387,6 +411,23 @@ def _release_actors(
         points = [ped.start] + (ped.trajectory or ([ped.goal] if ped.goal else []))
         lane = LineString(points) if len(points) > 1 else Point(points[0])
         actors.append(("single", ped.id, lane, {"points": points, "role": ped.role}))
+    from robot_sf.ped_npc.ped_population import PedSpawnConfig
+
+    sidewalk_width = PedSpawnConfig.__dataclass_fields__["sidewalk_width"].default
+    for index, route in enumerate(definition.ped_routes):
+        actors.append(
+            (
+                "crowd_route",
+                str(index),
+                _route_spawn_support(route, sidewalk_width / 2),
+                {
+                    "points": route.waypoints,
+                    "sidewalk_width": sidewalk_width,
+                    "density": density,
+                    "population_size": population_size,
+                },
+            )
+        )
     for kind, zones in (
         ("ped_spawn", definition.ped_spawn_zones),
         ("crowded", definition.ped_crowded_zones),

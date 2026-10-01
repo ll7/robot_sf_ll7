@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Station hall with stair and elevator cores -->
-<!-- #10063: Move reverse-flow crowd spawn from y=20..23 to 16.5..19.5; retain 12 m2 area and bidirectional traffic. Robot goal y=21..24 has 1.5 m centre-zone separation. -->
+<!-- #10063: Route bend x=74 leaves 1.5 m between its full 3 m axis-clipped spawn support and the robot goal. Move reverse-flow crowd spawn from y=20..23 to 16.5..19.5; retain 12 m2 area and bidirectional traffic. Robot goal y=21..24 has 1.5 m centre-zone separation. -->
 <svg
   width="84"
   height="28"
@@ -51,7 +51,7 @@
       fill="none"
       inkscape:label="ped_route_0_0" />
     <path
-      d="M 80 18 L 75.5 18 L 75.5 22 L 66 22.0 L 54 22.0 L 42 22.0 L 30 22.0 L 18 22.0 L 6 22.0"
+      d="M 80 18 L 74 18 L 74 22 L 66 22.0 L 54 22.0 L 42 22.0 L 30 22.0 L 18 22.0 L 6 22.0"
       stroke="#c40202"
       stroke-width="0.4"
       fill="none"

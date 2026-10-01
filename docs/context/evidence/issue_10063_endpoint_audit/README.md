@@ -3,7 +3,7 @@
 
 Diagnostic development geometry, not a release, evaluation or safety claim.
 `overlaps.json` contains all 51 scenarios and all 102 full robot endpoint rectangles:
-31 intersections before, 27 after. Four unintended intersections are repaired in
+58 intersections before, 53 after. Five unintended intersections are repaired in
 three release-only successor maps. Every remaining intersection has an exact
 fingerprint (including any forced population override) and rationale in `configs/scenarios/release_0_0_8_endpoint_dispositions.yaml`.
 
@@ -23,7 +23,7 @@ versioned YAML/SVG bytes through the scenario loader and prove that the original
 map is rejected before any simulation. Radius-only crossings, trajectory overrides,
 stationary pedestrians, missing maps, changed fingerprints and CLI enforcement are
 covered. The two geometry witnesses fail on exact base d3370652cdd90efbbbe3dc484bcc869a2a533e96;
-All 28 static/importing-file tests pass. The scripted trajectory probe uses
+All 29 static/importing-file tests pass. The scripted trajectory probe uses
 no environment or planner steps.
 
 Current release-template matrix pin is refreshed. The retained PEDFIX historical
@@ -47,3 +47,10 @@ The station reverse-route detour adds 4 m at unchanged density; raw traces show
 26 pedestrians before and 27 after. This is a documented distribution change,
 not a claim of matched population or release admission. A resolved positive
 `population_size` invalidates dormant-crowd dispositions even at density zero.
+
+The audit includes both named SVG crowd start boxes and the actual route-anchor
+spawn support (3 m independently axis-clipped x/y spread). The station bend
+moves from x=75.5 to x=74 to clear this support too. The remaining 26 nominal
+route-support intersections are either dormant (7) or intended moving-flow
+interactions (19), with specific rationales and exact fingerprints. No dynamic
+safety or release-admission conclusion follows from these dispositions.

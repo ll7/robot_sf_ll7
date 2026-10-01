@@ -151,3 +151,35 @@ def test_calibration_matches_the_release_pair_kernel():
     footprint = build_env_config(scenario, scenario_path=matrix).sim_config.ped_radius
     assert FOOTPRINT_RADIUS == footprint
     assert calibration_config(0.003, 0.375).scene_config.agent_radius < footprint
+
+
+def test_gradient_profile_is_the_negative_gradient_of_its_potential():
+    """Bind the new profile to real geometry and an independent finite-difference oracle."""
+    from shapely.geometry import LineString, Point
+
+    sim, force = _doorway_force("gradient_v3")
+    position = np.array([6.7, 2.05])
+    sim.peds.state[0, :2] = position
+    segments = [LineString([(a, b), (c, d)]) for a, b, c, d in force.get_obstacles()[:, :4]]
+
+    def potential(point):
+        return sum(
+            0.001 / (2 * (segment.distance(Point(point)) - 0.4) ** 2) for segment in segments
+        )
+
+    epsilon = 1e-5
+    gradient = np.array(
+        [
+            (potential(position + epsilon * axis) - potential(position - epsilon * axis))
+            / (2 * epsilon)
+            for axis in np.eye(2)
+        ]
+    )
+    np.testing.assert_allclose(force()[0], -gradient, rtol=1e-7, atol=1e-9)
+    assert force.config.law_version == "surface_distance_unit_normal_v2"
+
+
+def test_gradient_profile_preserves_explicit_law_conflict_detection():
+    """A supplied legacy law cannot silently become a corrected law."""
+    with pytest.raises(ValueError, match="gradient_v3 requires"):
+        _doorway_force("gradient_v3", "legacy_shifted_gradient_v1")

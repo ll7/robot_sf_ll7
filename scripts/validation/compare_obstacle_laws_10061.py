@@ -170,13 +170,13 @@ def bottleneck(candidate, seed, width, wide=False):
         # Liao holding semicircle: radius 8.618 m, N=350, density 3/m².
         # Deterministic hex sites within the semicircle; jitter is seed controlled.
         radius = 8.618
-        spacing = (2 / (np.sqrt(3) * density)) ** 0.5 * 0.97
+        spacing = (2 / (np.sqrt(3) * density)) ** 0.5 * 0.94
         sites = []
         for row in range(-18, 19):
             yy = row * spacing * np.sqrt(3) / 2
             for column in range(-20, 1):
                 xx = (column + (row % 2) * 0.5) * spacing
-                if xx < -0.2 and xx * xx + yy * yy < radius * radius:
+                if xx < -0.42 and xx * xx + yy * yy < radius * radius:
                     sites.append((xx, yy))
         sites = np.asarray(sites)[rng.choice(len(sites), n, replace=False)]
         if len(sites) != n:

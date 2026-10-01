@@ -2616,7 +2616,14 @@ def test_worktree_shared_venv_standalone_mode_bypasses_stale_project_env(
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
-    assert "pythonpath=\n" in result.stderr
+    # Standalone drops project injection; the session safety bootstrap still propagates.
+    support = ROOT / "tests" / "support"
+    guard_path = (
+        os.pathsep.join((str(support / "seedguard_bootstrap"), str(support)))
+        if os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
+        else ""
+    )
+    assert f"pythonpath={guard_path}\n" in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(

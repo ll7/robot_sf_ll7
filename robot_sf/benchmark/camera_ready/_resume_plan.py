@@ -24,6 +24,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
+from robot_sf.benchmark.camera_ready._runtime_identity import (
+    expected_runtime_identity,
+    row_runtime_identity_errors,
+)
 from robot_sf.benchmark.camera_ready._util import _utc_now
 from robot_sf.benchmark.utils import load_optional_json
 
@@ -229,6 +233,34 @@ def _build_verdict_str(
     return f"continue-from-{episodes_found}"
 
 
+def _validate_resume_runtime_identities(
+    episodes_path: Path, planner: dict[str, Any], scenarios: list[dict[str, Any]]
+) -> None:
+    """Refuse contaminated complete or partial arms before any rows are reused."""
+    scenarios_by_id = {
+        str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
+        for sc in scenarios
+    }
+    expected_identities: dict[tuple[str, int], tuple[str, str]] = {}
+    with episodes_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            try:
+                key = (str(record["scenario_id"]), int(record["seed"]))
+                scenario = scenarios_by_id[key[0]]
+                if key not in expected_identities:
+                    expected_identities[key] = expected_runtime_identity(planner, scenario, key[1])
+                errors = row_runtime_identity_errors(record, expected_identities[key])
+            except (KeyError, TypeError, ValueError, OSError) as exc:
+                errors = {"expected_runtime_identity": str(exc)}
+            if errors:
+                raise ResumeMismatchError(
+                    f"resume runtime identity mismatch in {episodes_path}: {errors}"
+                )
+
+
 def build_resume_plan(
     runs_dir: Path,
     *,
@@ -285,6 +317,7 @@ def build_resume_plan(
 
             if episodes_path is not None and episodes_path.is_file():
                 _validate_resume_job_identities(episodes_path, identities)
+                _validate_resume_runtime_identities(episodes_path, planner, scenarios)
 
             episodes_remaining = max(0, expected_jobs - episodes_found)
             verdict = _build_verdict_str(episodes_found, expected_jobs)

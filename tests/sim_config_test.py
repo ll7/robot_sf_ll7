@@ -50,6 +50,10 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     assert legacy.social_force_kernel_resolution_mode == "defaulted_missing"
     assert "social_force_kernel_version" not in asdict(legacy)
     legacy_settings_payload = asdict(legacy)
+    # Freeze the historical payload projection; the new pedestrian fields carry
+    # a changed simulation contract and intentionally change the current hash.
+    assert legacy_settings_payload.pop("pedestrian_seed") is None
+    assert legacy_settings_payload.pop("groups") is None
     # This newer field is omitted by the environment hash serializer for legacy configs.
     legacy_settings_payload.pop("robot_goal_sampling_policy")
     serialized_settings = json.dumps(

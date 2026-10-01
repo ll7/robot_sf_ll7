@@ -11,13 +11,13 @@ release_tag: paper-matrix-v2-h600-s30-hybrid-stress-smoke
 maturity: diagnostic
 release_kind: benchmark-stress-smoke
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml
-campaign_config_sha256: "1201cc1c5d374659e045071d035e87cb0a3684d8dcfd172f149e127d9102d455"
+campaign_config_sha256: "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: diagnostic-stress-no-ranking
 
 scenario:
   matrix_path: ../../scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml
-  matrix_sha256: "5eba52486609b45960469ff13f4e2c2530c54aa7c93bf4690f4e3e6706e63f9b"
+  matrix_sha256: "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9"
   suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
   suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
   route_certification_path: ../route_clearance_certifications_v1.yaml
@@ -25,7 +25,7 @@ scenario:
 
 seed_policy:
   mode: fixed-list
-  seeds: [116]
+  seeds: [1001]
   seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
   seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
 
@@ -128,19 +128,19 @@ stress_smoke_contract:
     - issue4365/job13378-original
   representative_cells:
     - scenario_id: classic_urban_crossing_medium
-      seed: 116
+      seed: 1001
       mechanism: urban-crossing
     - scenario_id: classic_cross_trap_high
-      seed: 116
+      seed: 1001
       mechanism: cross-trap
     - scenario_id: classic_doorway_high
-      seed: 116
+      seed: 1001
       mechanism: doorway
     - scenario_id: francis2023_exiting_elevator
-      seed: 116
+      seed: 1001
       mechanism: elevator-exit
     - scenario_id: francis2023_robot_crowding
-      seed: 116
+      seed: 1001
       mechanism: robot-crowding
   pinned_assets:
     seed_sets_path: ../../benchmarks/seed_sets_v1.yaml

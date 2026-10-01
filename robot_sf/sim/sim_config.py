@@ -311,6 +311,16 @@ class SimulationSettings:
     difficulty: int = 0
     """Difficulty level"""
 
+    pedestrian_seed: int | None = None
+    """Episode seed for private pedestrian random streams; set by env reset/factory."""
+
+    groups: float | None = None
+    """Large-crowd expected fraction of pedestrians in multi-person groups.
+
+    Last-group truncation lowers the realised fraction in small crowds; this
+    does not allocate an exact fraction per reset. None retains the default law.
+    """
+
     max_peds_per_group: int = 3
     """Maximum number of pedestrians per group"""
 

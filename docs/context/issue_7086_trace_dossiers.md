@@ -63,6 +63,13 @@ behaviour-preserving: `tests/test_render_emergent_phenomena_videos.py` and
 `issue_5149_emergent_phenomena_multiseed_2026-08` bundle's four replay seeds
 and six majority verdicts from its own `runs.jsonl` and require an exact match.
 
+That archive is historical and affected by the misplaced-wall defect #10056.
+Selector compatibility checks do not validate scene geometry or admit its
+measurements as current face-validity evidence. Use the
+[corrected-wall replay](evidence/issue_10056_wall_order_2026-09/README.md)
+for current geometry diagnostics; retain old replay-seed pins only as historical
+selector-contract regressions.
+
 ### Known divergence from `trace_dossier_selector.v1`
 
 The two selectors are intentionally distinct contracts, not accidental duplicate
@@ -88,7 +95,9 @@ implementations. Issue #7131 records the following four decisions:
 4. **Archived exhibits:** do not regenerate the committed campaign bundle in
    this decision. Its exact replay-seed regression remains in
    `tests/test_render_emergent_phenomena_videos.py`; the bundle predates and
-   continues under the pinned campaign convention. This decision performs no
+   continues under the pinned campaign convention as an affected historical
+   archive; #10056 supersedes its geometry evidence with a separate corrected
+   replay. This decision performs no
    trace acquisition, benchmark run, evidence admission, or paper-facing
    claim.
 

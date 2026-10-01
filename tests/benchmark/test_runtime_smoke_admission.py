@@ -28,6 +28,7 @@ from robot_sf.benchmark.runtime_smoke_admission import (
     _validate_age,
     validate_runtime_smoke_result,
 )
+from robot_sf.benchmark.utils import _config_hash
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -119,19 +120,25 @@ def _fixture(
     planner_rows: list[dict] = []
     for index, planner in enumerate(planners):
         episodes = root / "runs" / f"{planner}__differential_drive" / "episodes.jsonl"
+        scenario_params = {
+            "algo": f"algo-{index}",
+            "algo_config_hash": _config_hash({"planner_key": planner}),
+        }
+        config_hash = _config_hash(scenario_params)
         episode_row = {
+            "scenario_params": scenario_params,
             "algo": f"algo-{index}",
             "episode_id": f"runtime-smoke-scenario--111--{index}",
             "scenario_id": "runtime-smoke-scenario",
             "seed": seed,
             "horizon": 600,
-            "config_hash": f"config-{index}",
+            "config_hash": config_hash,
             "git_hash": "a" * 40,
             "result_provenance": {
                 "repo_commit": "a" * 40,
                 "scenario_id": "runtime-smoke-scenario",
                 "seed": seed,
-                "config_hash": f"config-{index}",
+                "config_hash": config_hash,
             },
             "algorithm_metadata": {
                 "algorithm": "ppo" if planner == "guarded_ppo" else f"algo-{index}",
@@ -167,7 +174,7 @@ def _fixture(
         )
         sidecar["run"]["repo_commit"] = "a" * 40
         sidecar["rows"][0]["repo_commit"] = "a" * 40
-        sidecar["rows"][0]["config_hash"] = f"config-{index}"
+        sidecar["rows"][0]["config_hash"] = config_hash
         _write_json(episodes.with_name(f"{episodes.name}.provenance.json"), sidecar)
         arm_summary = {
             "status": "ok",

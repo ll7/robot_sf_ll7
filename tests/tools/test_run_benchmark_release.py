@@ -27,7 +27,9 @@ _ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY = (
 
 @pytest.fixture(autouse=True)
 def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep release CLI unit tests focused unless they exercise the new matrix gate."""
+    """Stub execution admission for synthetic publication/campaign test doubles."""
+    # Real-byte D-049 guard coverage is in test_sealed_execution_policy.py.
+    monkeypatch.setattr(run_benchmark_release, "guard_manifest_execution", lambda *_a, **_kw: None)
     monkeypatch.setattr(
         run_benchmark_release,
         "_campaign_id",
@@ -1381,14 +1383,8 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "invalid_manifest"
     assert payload["benchmark_success"] is False
-    assert payload["campaign_execution_status"] == "failed"
-    assert payload["evidence_status"] == "invalid"
-    assert payload["row_status_summary"] == {
-        "successful_evidence_rows": 0,
-        "accepted_unavailable_rows": 0,
-        "unexpected_failed_rows": 0,
-        "fallback_or_degraded_rows": 0,
-    }
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["evidence_status"] == "blocked"
 
 
 def test_release_run_stops_before_campaign_when_spawn_matrix_is_blocked(

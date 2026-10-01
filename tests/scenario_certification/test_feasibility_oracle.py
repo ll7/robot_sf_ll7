@@ -996,7 +996,7 @@ def test_oracle_end_to_end_on_committed_head_on_corridor_scenario() -> None:
         config=FeasibilityOracleConfig(
             scenario_path=_SCENARIO_PATH,
             envelope_radii_m=(1.0,),
-            rollout_seed=int(scenario.get("seeds", [111])[0]),
+            rollout_seed=1001,
         ),
         envelope_radius_m=1.0,
     )

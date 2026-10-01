@@ -249,6 +249,10 @@ class MultiRobotEnv(MultiAgentEnv):
         """
         with global_reset_seed(seed):
             super().reset(seed=seed, options=options)
+            if seed is not None:
+                self.applied_seed = int(seed)
+                for sim in self.simulators:
+                    sim.repopulate_crowd(seed=int(seed))
             self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
             for state in self.states:
                 reset_episode_counter_for_seed(state, seed)

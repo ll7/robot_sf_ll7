@@ -421,6 +421,10 @@ _FAST_FILES = {
     "test_unit_edge_cases.py",
     # Train coverage repair: deterministic resume job identity contracts (#10029).
     "test_resume_plan.py",
+    # Campaign integrity/resume contracts use static rows and mocked runner seams.
+    "test_cmpfix_integrity.py",
+    "test_campaign_resume_scheduler.py",
+    "test_camera_ready_campaign_characterization.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).
     "test_ppo_action_semantics.py",
     # TRAIN1 deterministic benchmark contracts from PR #10019.
@@ -439,6 +443,20 @@ _FAST_FILES = {
     "test_issue_7330_assert_inventory.py",
     "test_issue_7331_benchmark_namespace_inventory.py",
     "test_coverage_paths_remap.py",
+    # Static runtime-copy admission: small Git fixtures, no environment or episode.
+    "test_sealed_runtime_sources.py",
+    "test_heldout_seed_guard.py",
+    "test_emergent_wall_geometry.py",
+    # Generator contracts construct scenes without stepping an environment.
+    "test_scenario_generator.py",
+    # Rehearsal pipeline and release audit regressions use dev-seed row fixtures
+    # and offline files; keep their real campaign branches covered in PR CI.
+    "test_pipefix_pipeline.py",
+    "test_scan_release_audit.py",
+    # Scenario/map sampling and reserved-polygon regressions use dev seeds and
+    # authored geometry without environment steps; include them in PR coverage.
+    "test_scenario_map_review_fixes.py",
+    "test_reserved_zone_polygons.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",
@@ -509,6 +527,8 @@ _FAST_FILES = {
     # adapters; keep their planner contracts and frame checks in PR shards.
     "test_guarded_ppo.py",
     "test_risk_dwa.py",
+    "test_no_admissible_recovery.py",
+    "test_no_admissible_recovery_trace.py",
     # Surface-distance pedestrian-term contracts include deterministic rollout
     # and construction-validation checks; keep changed lines in PR shards.
     "test_socnav_ped_surface_v3.py",
@@ -567,6 +587,7 @@ _FAST_FILES = {
     # offline contracts; keep changed coverage in the exact-head fast lane.
     "test_audit_scan.py",
     "test_audit_detectors.py",
+    "test_audit_release_regressions.py",
     # VV-4 release-row bundle and anomaly checks are deterministic offline
     # contracts; include them in fast shards for changed-line coverage.
     "test_release_row_bundle.py",

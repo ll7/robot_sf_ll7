@@ -1,8 +1,9 @@
+<!-- AI-GENERATED (robot_sf#10007, 2026-10-01) - NEEDS-REVIEW -->
 FFFFFFFFFFFFFF                                                           [100%]
 =================================== FAILURES ===================================
 _ test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_planner_data] _
 
-collector = <module 'scripts.training.collect_predictive_planner_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_planner_data.py'>
+collector = <module 'scripts.training.collect_predictive_planner_data' from 'scripts/training/collect_predictive_planner_data.py'>
 flat = False
 
     @pytest.mark.parametrize(
@@ -39,7 +40,7 @@ E        DESIRED: array([ 0., -1.])
 tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
 _ test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_hardcase_data] _
 
-collector = <module 'scripts.training.collect_predictive_hardcase_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_hardcase_data.py'>
+collector = <module 'scripts.training.collect_predictive_hardcase_data' from 'scripts/training/collect_predictive_hardcase_data.py'>
 flat = False
 
     @pytest.mark.parametrize(
@@ -76,7 +77,7 @@ E        DESIRED: array([ 0., -1.])
 tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
 _ test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_planner_data] _
 
-collector = <module 'scripts.training.collect_predictive_planner_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_planner_data.py'>
+collector = <module 'scripts.training.collect_predictive_planner_data' from 'scripts/training/collect_predictive_planner_data.py'>
 flat = True
 
     @pytest.mark.parametrize(
@@ -113,7 +114,7 @@ E        DESIRED: array([ 0., -1.])
 tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
 _ test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_hardcase_data] _
 
-collector = <module 'scripts.training.collect_predictive_hardcase_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_hardcase_data.py'>
+collector = <module 'scripts.training.collect_predictive_hardcase_data' from 'scripts/training/collect_predictive_hardcase_data.py'>
 flat = True
 
     @pytest.mark.parametrize(
@@ -425,7 +426,7 @@ E       Failed: DID NOT RAISE ValueError
 
 tests/planner/test_prediction_fxp_regressions.py:121: Failed
 ----------------------------- Captured stderr call -----------------------------
-2026-09-30 10:36:46.554 | INFO     | robot_sf.models.registry:_cached_release_path_is_valid:426 - Using cached model artifact: /home/luttkule/fxp_base/output/model_cache/predictive_proxy_selected_v1/predictive_proxy_selected_v1-predictive_model.pt
+2026-09-30 10:36:46.554 | INFO     | robot_sf.models.registry:_cached_release_path_is_valid:426 - Using cached model artifact: output/model_cache/predictive_proxy_selected_v1/predictive_proxy_selected_v1-predictive_model.pt
 2026-09-30 10:36:46.591 | DEBUG    | robot_sf.planner.predictive_model:_log_unexpected_checkpoint_keys:31 - Ignoring unexpected checkpoint keys when loading PredictiveTrajectoryModel: ['value_head.0.bias', 'value_head.0.weight', 'value_head.2.bias', 'value_head.2.weight']
 ________________ test_mppi_preserves_requested_shorter_horizon _________________
 

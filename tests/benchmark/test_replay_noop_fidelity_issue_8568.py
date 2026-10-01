@@ -1,6 +1,6 @@
 """Replay/no-op fidelity for the first nominated #8568 case.
 
-Nominated case: ``classic_head_on_corridor_medium``, seed 115, first canonical
+Nominated case: ``classic_head_on_corridor_medium``, seed 1005, first canonical
 planner arm in manifest order. The September payload retains no source-complete
 planner continuation (all 14 arms disable both trace recorders), so the native
 seam drives the simulator with a deterministic constant action — the ruling's
@@ -35,7 +35,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import init_simulators
 
 _SCENARIO_ID = "classic_head_on_corridor_medium"
-_SEED = 115
+_SEED = 1005
 _PREFIX_STEPS = 6
 _CONTINUATION_STEPS = 6
 _FIXTURE_MAP = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_head_on_corridor.svg"

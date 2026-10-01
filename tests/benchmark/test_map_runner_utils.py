@@ -3127,7 +3127,7 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
             record,
             {
                 "episode_id": "healthy-foresight",
-                "metric_schema_version": "robot-sf-metrics.v2",
+                "metric_schema_version": record["metric_schema_version"],
                 "scenario_id": "foresight-fallback",
                 "algo": "prediction_planner",
                 "metrics": {"success": 1.0},
@@ -5757,7 +5757,7 @@ def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
 
     record = _run_map_episode(
         {"name": "no_force_recording", "simulation_config": {"max_episode_steps": 1}},
-        123,
+        1013,
         horizon=1,
         dt=0.1,
         record_forces=False,

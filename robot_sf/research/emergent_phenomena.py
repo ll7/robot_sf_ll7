@@ -48,6 +48,8 @@ from pysocialforce.config import (
     SocialForceConfig,
 )
 
+from robot_sf.common.pysf_geometry import endpoint_segments_to_pysf
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -384,7 +386,8 @@ def build_bidirectional_corridor(
 
     Returns:
         Tuple of ``(state, obstacles, desired_directions)`` where ``state`` has
-        shape ``(N, 7)``, ``obstacles`` is the wall line segments, and
+        shape ``(N, 7)``, ``obstacles`` uses PySocialForce's axis-grouped
+        ``(x1, x2, y1, y2)`` wall order, and
         ``desired_directions`` has shape ``(N, 2)`` unit vectors.
     """
     rng = np.random.default_rng(config.seed)
@@ -421,7 +424,7 @@ def build_bidirectional_corridor(
         (-1.0, -hw, length + 1.0, -hw),  # bottom wall
     ]
     desired_directions = np.array(dirs, dtype=float)
-    return state, obstacles, desired_directions
+    return state, endpoint_segments_to_pysf(obstacles), desired_directions
 
 
 def build_narrow_doorway(
@@ -439,7 +442,8 @@ def build_narrow_doorway(
         calibration: Desired-speed calibration.
 
     Returns:
-        Tuple of ``(state, obstacles, desired_directions)``.
+        Tuple of ``(state, obstacles, desired_directions)``; obstacles use
+        PySocialForce's ``(x1, x2, y1, y2)`` input order.
     """
     rng = np.random.default_rng(config.seed)
     n = config.n_pedestrians
@@ -477,7 +481,7 @@ def build_narrow_doorway(
         (door_x, -door_half, door_x, -hw - 1.0),  # lower jamb
     ]
     desired_directions = np.array(dirs, dtype=float)
-    return state, obstacles, desired_directions
+    return state, endpoint_segments_to_pysf(obstacles), desired_directions
 
 
 def build_high_density_exit(
@@ -496,7 +500,8 @@ def build_high_density_exit(
         calibration: Desired-speed calibration.
 
     Returns:
-        Tuple of ``(state, obstacles, desired_directions)``.
+        Tuple of ``(state, obstacles, desired_directions)``; obstacles use
+        PySocialForce's ``(x1, x2, y1, y2)`` input order.
     """
     rng = np.random.default_rng(config.seed)
     n = config.n_pedestrians
@@ -534,7 +539,7 @@ def build_high_density_exit(
         (length, -exit_half, length, -hw - 1.0),  # lower exit jamb
     ]
     desired_directions = np.array(dirs, dtype=float)
-    return state, obstacles, desired_directions
+    return state, endpoint_segments_to_pysf(obstacles), desired_directions
 
 
 _BUILDERS = {

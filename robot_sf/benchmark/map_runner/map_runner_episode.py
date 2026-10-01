@@ -107,10 +107,8 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
 )
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
-    _apply_planner_selector_v2_context,
-    _apply_scenario_uncertainty_envelope_config,
     _parse_algo_config,
-    _resolve_policy_search_candidate_runtime,
+    resolve_episode_policy_runtime,
 )
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_stress_profile,
@@ -1469,19 +1467,13 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     raw_policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
-    algo, policy_cfg = _resolve_policy_search_candidate_runtime(
+    algo, policy_cfg = resolve_episode_policy_runtime(
         default_algo=algo,
         algo_config_path=algo_config_path,
         algo_config=raw_policy_cfg,
         scenario=scenario,
-    )
-    policy_cfg = _apply_planner_selector_v2_context(
-        algo,
-        policy_cfg,
-        scenario=scenario,
         seed=int(seed),
     )
-    policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
     return _EpisodeRunContext(
         scenario=scenario,
         scenario_id=scenario_id,
@@ -2284,8 +2276,11 @@ def _prepare_episode_env(  # noqa: C901
             # Record the *instantiated* count so the readiness gate and any
             # future triage can see declared-vs-actual without re-running.
             simulation_config["population_size"] = instantiated_count
-            simulation_config["instantiated_population_size"] = instantiated_count
-            simulation_config["declared_population_size"] = expected_population_size
+            metadata = scenario.setdefault("metadata", {})
+            metadata["population_realization"] = {
+                "instantiated_population_size": instantiated_count,
+                "declared_population_size": expected_population_size,
+            }
     if callable(planner_bind_env):
         planner_bind_env(env)
     if callable(planner_reset):
@@ -3006,6 +3001,9 @@ def _step_build_simulation_trace(
     planner_payload.update(
         _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
     )
+    decision = getattr(sim, "planner_step_decision", None)
+    if isinstance(decision, dict) and "recovery_kind" in decision:
+        planner_payload["recovery_kind"] = decision["recovery_kind"]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3313,6 +3311,7 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "recovery_kind",
         "no_admissible_command",
         "no_admissible_command_count",
         "recovery_command",

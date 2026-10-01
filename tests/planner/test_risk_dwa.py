@@ -646,8 +646,8 @@ def test_surface_v2_config_requires_positive_body_radii() -> None:
         )
 
 
-def test_release_all_rejected_commands_report_emergency_brake_and_reset_flag() -> None:
-    """An overlapping obstacle rejects every candidate; the bounded brake is a fallback."""
+def test_release_all_rejected_commands_report_least_bad_recovery_and_reset_flag() -> None:
+    """An overlapping obstacle rejects every candidate; move away while respecting the window."""
     release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
     planner = RiskDWAPlannerAdapter(build_risk_dwa_config(yaml.safe_load(release_path.read_text())))
     observation = _observation(robot=(1.1, 1.1), speed=0.7, goal=(5.0, 1.1))
@@ -662,7 +662,7 @@ def test_release_all_rejected_commands_report_emergency_brake_and_reset_flag() -
         "channel_indices": [0, -1, -1, 0],
         "use_ego_frame": [0.0],
     }
-    assert planner.plan(observation) == pytest.approx((0.6, 0.3))
+    assert planner.plan(observation) == pytest.approx((0.8, 0.3))
     diagnostics = planner.diagnostics()
     assert diagnostics.get("no_admissible_command") is True
     assert diagnostics.get("no_admissible_command_count") == 1

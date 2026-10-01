@@ -90,6 +90,8 @@ class CrowdSimEnv(gym.Env):
         # Keep constructor-time selection independent from the process-wide NumPy generator.
         # Factories pass an explicit seed so their initial map choice remains reproducible.
         self._map_rng = np.random.default_rng(seed)
+        if seed is not None:
+            self.config.sim_config.pedestrian_seed = seed
 
         self._reset_simulator()
         self._sync_pedestrian_capacity()
@@ -112,6 +114,7 @@ class CrowdSimEnv(gym.Env):
         """
         super().reset(seed=seed)
         if seed is not None:
+            self.config.sim_config.pedestrian_seed = int(seed)
             self._map_rng = self.np_random
         options = options or {}
         self._reset_simulator(map_id=options.get("map_id"))

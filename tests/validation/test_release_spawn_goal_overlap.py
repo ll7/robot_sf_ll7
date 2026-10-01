@@ -4,6 +4,7 @@ from pathlib import Path
 
 from shapely.geometry import LineString
 
+from robot_sf.evidence.writers import write_json
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 from scripts.validation.check_scenario_archetype_geometry import _rect_polygon
 
@@ -88,7 +89,6 @@ def test_checked_in_dispositions_are_exact_and_do_not_waive_overtaking():
 
 def test_original_overtaking_map_is_refused_without_a_disposition(tmp_path):
     import pytest
-    import yaml
 
     from scripts.validation.check_scenario_archetype_geometry import (
         enforce_release_zone_waivers,
@@ -97,59 +97,54 @@ def test_original_overtaking_map_is_refused_without_a_disposition(tmp_path):
     from scripts.validation.scenario_validation_waivers import WaiverValidationError
 
     manifest = tmp_path / "original.yaml"
-    manifest.write_text(
-        yaml.safe_dump(
-            {
-                "scenarios": [
-                    {
-                        "name": "francis2023_pedestrian_overtaking",
-                        "map_file": str(
-                            Path(
-                                "maps/successor_svg_maps/issue_9762_francis2023_ped_overtaking_goal_zone_entry_v2.svg"
-                            ).resolve()
-                        ),
-                        "simulation_config": {"ped_density": 0.0},
-                    }
-                ]
-            }
-        )
+    write_json(
+        manifest,
+        {
+            "scenarios": [
+                {
+                    "name": "francis2023_pedestrian_overtaking",
+                    "map_file": str(
+                        Path(
+                            "maps/successor_svg_maps/issue_9762_francis2023_ped_overtaking_goal_zone_entry_v2.svg"
+                        ).resolve()
+                    ),
+                    "simulation_config": {"ped_density": 0.0},
+                }
+            ]
+        },
     )
     rows = inspect_release_zones([manifest])
     assert rows[0]["bounds"] == [3.0, 4.0, 5.0, 6.0]
     assert rows[0]["intersections"][0]["actor"] == "h1"
     waivers = tmp_path / "waivers.yaml"
-    waivers.write_text(
-        yaml.safe_dump({"schema": "scenario_validation_waivers.v1", "release_zones": []})
-    )
+    write_json(waivers, {"schema": "scenario_validation_waivers.v1", "release_zones": []})
     with pytest.raises(WaiverValidationError, match="missing release zone overlap"):
         enforce_release_zone_waivers(rows, waivers)
 
 
 def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path):
-    import yaml
 
     from scripts.validation.check_scenario_archetype_geometry import inspect_release_zones
 
     manifest = tmp_path / "radius.yaml"
-    manifest.write_text(
-        yaml.safe_dump(
-            {
-                "scenarios": [
-                    {
-                        "name": "radius_probe",
-                        "map_file": str(
-                            Path(
-                                "maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg"
-                            ).resolve()
-                        ),
-                        "simulation_config": {"ped_density": 0.0},
-                        "single_pedestrians": [
-                            {"id": "h1", "goal": None, "trajectory": [[2, 4.8], [8, 4.8]]}
-                        ],
-                    }
-                ]
-            }
-        )
+    write_json(
+        manifest,
+        {
+            "scenarios": [
+                {
+                    "name": "radius_probe",
+                    "map_file": str(
+                        Path(
+                            "maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg"
+                        ).resolve()
+                    ),
+                    "simulation_config": {"ped_density": 0.0},
+                    "single_pedestrians": [
+                        {"id": "h1", "goal": None, "trajectory": [[2, 4.8], [8, 4.8]]}
+                    ],
+                }
+            ]
+        },
     )
     rows = inspect_release_zones([manifest])
     hit = rows[0]["intersections"][0]
@@ -174,7 +169,7 @@ def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path):
     )
     doc["release_zones"][0]["geometry_sha256"] = "0" * 64
     waivers = tmp_path / "waivers.yaml"
-    waivers.write_text(yaml.safe_dump(doc))
+    write_json(waivers, doc)
     with pytest.raises(WaiverValidationError, match="changed"):
         enforce_release_zone_waivers(rows, waivers)
 
@@ -207,7 +202,6 @@ def test_station_route_starts_in_moved_zone_and_crowding_keeps_24_pedestrians():
 
 
 def test_release_zone_cli_enforces_dispositions(capsys, tmp_path):
-    import yaml
 
     from scripts.validation.check_scenario_archetype_geometry import main
 
@@ -225,9 +219,7 @@ def test_release_zone_cli_enforces_dispositions(capsys, tmp_path):
     assert main(["--release-zones"]) == 2
     assert "requires --waiver-file" in capsys.readouterr().err
     invalid = tmp_path / "invalid.yaml"
-    invalid.write_text(
-        yaml.safe_dump({"schema": "scenario_validation_waivers.v1", "release_zones": []})
-    )
+    write_json(invalid, {"schema": "scenario_validation_waivers.v1", "release_zones": []})
     assert main(["--release-zones", "--waiver-file", str(invalid)]) == 2
     assert "missing release zone overlap" in capsys.readouterr().err
 
@@ -236,7 +228,6 @@ def test_invalid_disposition_and_missing_map_fail_closed(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     import pytest
-    import yaml
 
     from robot_sf.training import scenario_loader
     from scripts.validation.check_scenario_archetype_geometry import (
@@ -246,13 +237,12 @@ def test_invalid_disposition_and_missing_map_fail_closed(tmp_path, monkeypatch):
     from scripts.validation.scenario_validation_waivers import WaiverValidationError
 
     invalid = tmp_path / "invalid.yaml"
-    invalid.write_text(
-        yaml.safe_dump(
-            {
-                "schema": "scenario_validation_waivers.v1",
-                "release_zones": [{"rationale": "test", "decision_ref": "#10063"}],
-            }
-        )
+    write_json(
+        invalid,
+        {
+            "schema": "scenario_validation_waivers.v1",
+            "release_zones": [{"rationale": "test", "decision_ref": "#10063"}],
+        },
     )
     with pytest.raises(WaiverValidationError, match="requires exact identity"):
         enforce_release_zone_waivers([], invalid)

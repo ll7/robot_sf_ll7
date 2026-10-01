@@ -275,6 +275,8 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         "enabled": True,
         "applied": True,
         "resolution_mode": "explicit",
+        "config_hash": "stale-config",
+        "source_commit": "stale-source",
     }
 
     def policy_builder(_algo, _algo_config, **_kwargs):
@@ -286,6 +288,10 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         policy._planner_stats = lambda: {
             "planner_type": "SocialForcePlannerAdapter",
             "obstacle_force_law": planner_metadata,
+            "fallback": True,
+            "fallback_count": 2,
+            "fallback_reason": "synthetic_diagnostic",
+            "fallback_reasons": {"synthetic_diagnostic": 2},
         }
         return policy, {"status": "ok"}
 
@@ -352,6 +358,23 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     assert runtime["sites"]["fast_pysf"]["applied"] is True
     assert runtime["sites"]["fast_pysf"]["config_hash"] == record["config_hash"]
     assert runtime["sites"]["fast_pysf"]["source_commit"] == record["git_hash"]
+    fast_receipt = runtime["sites"]["fast_pysf"]["diagnostic_receipt"]
+    assert fast_receipt["claim_boundary"] == "diagnostic_only"
+    assert fast_receipt["fallback"]["used"] is False
+    assert fast_receipt["input_identity"]["config_hash"] == record["config_hash"]
+    assert fast_receipt["input_identity"]["source_commit"] == record["git_hash"]
+    planner_receipt = runtime["sites"]["socnav_social_force"]["diagnostic_receipt"]
+    assert runtime["sites"]["socnav_social_force"]["config_hash"] == record["config_hash"]
+    assert runtime["sites"]["socnav_social_force"]["source_commit"] == record["git_hash"]
+    assert planner_receipt["input_identity"]["config_hash"] == record["config_hash"]
+    assert planner_receipt["input_identity"]["source_commit"] == record["git_hash"]
+    assert planner_receipt["fallback"] == {
+        "used": True,
+        "count": 2,
+        "first_reason": "synthetic_diagnostic",
+        "reasons": {"synthetic_diagnostic": 2},
+    }
+    json.dumps(record, allow_nan=False)
     assert runtime["sites"]["socnav_social_force"]["law_version"] == (
         "surface_distance_unit_normal_v2"
     )

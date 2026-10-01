@@ -1,5 +1,6 @@
 """Tests for SocNavBench-inspired planner adapters."""
 
+import json
 from itertools import pairwise
 from pathlib import Path
 
@@ -10,9 +11,12 @@ from pysocialforce.config import (
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
 )
 
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.planner import socnav as _socnav_module
 from robot_sf.planner import socnav_social_force as _social_force_module
 from robot_sf.planner.socnav import (
+    SOCIAL_FORCE_PLANNER_LEGACY_V1,
+    SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -1648,6 +1652,254 @@ def test_social_force_obstacle_no_grid_returns_zero():
     robot_pos = np.array([0.0, 0.0])
     got = adapter._compute_obstacle_force(obs, robot_pos, 0.0, np.array([1.0, 0.0]), obs["robot"])
     assert np.array_equal(got, np.zeros(2))
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert metadata["fallback_triggered"] is False
+    assert runtime_fallback_or_degraded_marker({"planner_runtime": metadata}) is None
+
+
+@_sf_available
+@pytest.mark.parametrize("channel_indices", ([0, 1, -1, 2], [0, 1, -1, -1]))
+def test_social_force_accepts_missing_channel_sentinel_without_fallback(channel_indices):
+    """Canonical absent-channel sentinels preserve obstacle extraction and force output."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs["occupancy_grid_meta_channel_indices"] = np.asarray(channel_indices, dtype=np.int32)
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+
+    force = adapter._compute_obstacle_force(
+        obs,
+        robot_pos,
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.all(np.isfinite(force))
+    assert np.linalg.norm(force) > 0.0
+    assert metadata["applied"] is True
+    assert metadata["fallback"] is False
+    assert metadata["fallback_count"] == 0
+    assert metadata["parameters"]["obstacle_channel_index"] == 0
+
+
+@_sf_available
+@pytest.mark.parametrize(
+    ("metadata_key", "metadata_value"),
+    [
+        ("resolution", np.array([np.nan], dtype=np.float32)),
+        ("resolution", "not-a-number"),
+        ("origin", np.array([np.nan, 0.0], dtype=np.float32)),
+        ("origin", "malformed-origin"),
+        ("use_ego_frame", np.array([np.inf], dtype=np.float32)),
+        ("channel_indices", np.array([np.inf, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.5, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([-0.5, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([-2.0, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([True, False, False, False], dtype=bool)),
+        ("channel_indices", np.array([0.0, 1.0, 2.0, 4.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.0, 1.0, 2.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float32)),
+        ("use_ego_frame", np.array([-1.0], dtype=np.float32)),
+        ("use_ego_frame", np.array([0.5], dtype=np.float32)),
+        ("use_ego_frame", np.array([2.0], dtype=np.float32)),
+    ],
+)
+@pytest.mark.parametrize(
+    "planner_version",
+    [SOCIAL_FORCE_PLANNER_LEGACY_V1, SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2],
+)
+def test_social_force_malformed_grid_metadata_fails_closed(
+    metadata_key, metadata_value, planner_version
+):
+    """Malformed/non-finite grid metadata yields structured zero-force diagnostics."""
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(social_force_planner_version=planner_version)
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs[f"occupancy_grid_meta_{metadata_key}"] = metadata_value
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+
+    got = adapter._compute_obstacle_force(
+        obs,
+        robot_pos,
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    assert np.array_equal(got, np.zeros(2))
+    diagnostics = adapter.diagnostics()
+    metadata = diagnostics["obstacle_force_law"]
+    assert metadata["applied"] is False
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == "malformed_or_nonfinite_occupancy_grid_metadata"
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
+    assert metadata["parameters_sha256"]
+    json.dumps(metadata, allow_nan=False)
+
+
+@_sf_available
+def test_social_force_non_mapping_grid_metadata_fails_closed():
+    """A malformed nested metadata payload returns structured zero-force diagnostics."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    for key in tuple(obs):
+        if key.startswith("occupancy_grid_meta_"):
+            del obs[key]
+    obs["occupancy_grid_meta"] = "malformed-grid-metadata"
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+
+    got = adapter._compute_obstacle_force(
+        obs,
+        robot_pos,
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    assert np.array_equal(got, np.zeros(2))
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert metadata["applied"] is False
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == "malformed_or_nonfinite_occupancy_grid_metadata"
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
+    json.dumps(metadata, allow_nan=False)
+
+
+@_sf_available
+def test_social_force_malformed_metadata_records_degraded_fallback_after_valid_step():
+    """A later malformed grid remains visible after an earlier valid obstacle step."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 2)],
+        origin=(-2.0, -2.0),
+    )
+    valid_force = adapter._compute_obstacle_force(
+        obs,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+    assert np.all(np.isfinite(valid_force))
+
+    malformed = dict(obs)
+    malformed["occupancy_grid_meta_resolution"] = np.array([np.nan], dtype=np.float32)
+    degraded_force = adapter._compute_obstacle_force(
+        malformed,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        malformed["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.array_equal(degraded_force, np.zeros(2))
+    assert metadata["applied"] is True
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
+    json.dumps(metadata, allow_nan=False)
+
+
+@_sf_available
+def test_social_force_v2_malformed_grid_metadata_records_degraded_fallback():
+    """The resolution-independent obstacle path preserves malformed-grid provenance."""
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(
+            social_force_planner_version=SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2
+        )
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs["occupancy_grid_meta_resolution"] = np.array([np.nan], dtype=np.float32)
+
+    force = adapter._compute_obstacle_force(
+        obs,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.array_equal(force, np.zeros(2))
+    assert metadata["applied"] is False
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == ("malformed_or_nonfinite_occupancy_grid_metadata")
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
+
+
+@_sf_available
+@pytest.mark.parametrize(
+    ("planner_version", "metadata_key", "metadata_value"),
+    [
+        (None, "origin", np.array([[0.0, 0.0]], dtype=np.float32)),
+        (None, "resolution", np.array([[1.0]], dtype=np.float32)),
+        (None, "use_ego_frame", np.array([[1.0]], dtype=np.float32)),
+        (
+            SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+            "origin",
+            np.array([[0.0, 0.0]], dtype=np.float32),
+        ),
+        (
+            SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+            "resolution",
+            np.array([[1.0]], dtype=np.float32),
+        ),
+        (
+            SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+            "use_ego_frame",
+            np.array([[1.0]], dtype=np.float32),
+        ),
+    ],
+)
+def test_social_force_shaped_grid_metadata_fails_closed(
+    planner_version, metadata_key, metadata_value
+):
+    """Size-valid but shaped metadata must take the structured degraded path."""
+    config = (
+        SocNavPlannerConfig()
+        if planner_version is None
+        else SocNavPlannerConfig(social_force_planner_version=planner_version)
+    )
+    adapter = SocialForcePlannerAdapter(config)
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs[f"occupancy_grid_meta_{metadata_key}"] = metadata_value
+
+    force = adapter._compute_obstacle_force(
+        obs,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.array_equal(force, np.zeros(2))
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == ("malformed_or_nonfinite_occupancy_grid_metadata")
 
 
 @_sf_available
@@ -1726,3 +1978,109 @@ def test_social_force_corrected_obstacle_force_is_finite_and_monotonic_near_cont
         magnitudes.append(float(np.linalg.norm(force)))
 
     assert all(left < right for left, right in pairwise(magnitudes))
+
+
+class _ObstaclePayloadHarness:
+    """Minimal host for the occupancy payload helper (no planner needed)."""
+
+
+def _payload_harness():
+    from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
+
+    class _Harness(_ObstaclePayloadHarness, OccupancyAwarePlannerMixin):
+        pass
+
+    return _Harness()
+
+
+_PAYLOAD_FAILURE_REASON = "malformed_or_nonfinite_occupancy_grid_metadata"
+
+
+def test_obstacle_payload_records_reason_when_metadata_missing() -> None:
+    """A grid without any metadata fails closed with an explicit reason."""
+    harness = _payload_harness()
+    obs = _make_obs()
+    obs["occupancy_grid"] = np.zeros((4, 4, 4), dtype=np.float32)
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_for_shallow_grid() -> None:
+    """A grid that cannot carry channels fails closed even with metadata."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    harness_call = harness._extract_grid_payload
+    harness._extract_grid_payload = lambda observation: (
+        np.zeros((4, 4), dtype=np.float32),
+        dict(harness_call(observation)[1]),
+    )
+    try:
+        assert harness._obstacle_grid_payload(obs) is None
+        assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+    finally:
+        del harness._extract_grid_payload
+
+
+def test_obstacle_payload_records_reason_for_nonfinite_channel_indices() -> None:
+    """Non-finite channel indices fail closed instead of indexing blindly."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    obs["occupancy_grid_meta_channel_indices"] = np.array([np.inf, 1.0, 2.0, 3.0], dtype=np.float32)
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+@pytest.mark.parametrize("channel_indices", ([0, 1, -1, 2], [0, 1, -1, -1]))
+def test_obstacle_payload_accepts_canonical_missing_channel_sentinel(channel_indices) -> None:
+    """Canonical/default metadata remains a valid obstacle-grid payload."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs(), obstacle_cells=[(2, 3)])
+    obs["occupancy_grid_meta_channel_indices"] = np.asarray(channel_indices, dtype=np.int32)
+
+    payload = harness._obstacle_grid_payload(obs)
+
+    assert payload is not None
+    grid, _meta, channel_idx, resolution = payload
+    assert channel_idx == 0
+    assert grid[channel_idx, 2, 3] == pytest.approx(1.0)
+    assert resolution == pytest.approx(1.0)
+    assert harness._obstacle_grid_payload_failure_reason is None
+
+
+def test_obstacle_payload_records_reason_for_unresolvable_channel_indices() -> None:
+    """Unparseable channel indices fail closed instead of raising."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    obs["occupancy_grid_meta_channel_indices"] = "not-a-number"
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_when_channel_missing() -> None:
+    """A grid without a usable obstacle channel fails closed with a reason."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    del obs["occupancy_grid_meta_channel_indices"]
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_for_non_positive_resolution() -> None:
+    """A non-positive resolution fails closed instead of scaling by garbage."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    obs["occupancy_grid_meta_resolution"] = np.array([-1.0], dtype=np.float32)
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_grid_channel_index_returns_minus_one_on_overflow() -> None:
+    """Unrepresentable channel indices degrade to missing instead of raising."""
+    harness = _payload_harness()
+
+    assert harness._grid_channel_index({"channel_indices": [float("inf")]}, "obstacles") == -1

@@ -8,6 +8,11 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
+    ObstacleForceDiagnosticReceiptError,
+    validate_obstacle_force_diagnostic_receipt,
+)
+
 
 @dataclass(frozen=True)
 class BenchmarkAvailability:
@@ -102,7 +107,7 @@ def is_verified_guarded_ppo(metadata: Any, *, expected_algorithm: str | None) ->
     )
 
 
-def runtime_fallback_or_degraded_marker(  # noqa: C901
+def runtime_fallback_or_degraded_marker(  # noqa: C901, PLR0915
     payload: Any,
     *,
     expected_algorithm: str | None = None,
@@ -131,6 +136,29 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
         algorithm_metadata, expected_algorithm=expected_algorithm
     )
 
+    def _diagnostic_receipt_marker(item: Any, item_path: str) -> tuple[str, str] | None:
+        """Validate a complete receipt without treating its false fallback as telemetry.
+
+        Obstacle-force diagnostic receipts intentionally use a structured ``fallback`` object,
+        while this scanner's historical runtime contract uses boolean ``fallback`` markers. A
+        complete, valid, unused receipt is neutral; a used or malformed receipt remains
+        fail-closed. The producer-side validator is repeated here because this scanner admits
+        untrusted persisted metadata and must not let unknown receipt fields hide runtime flags.
+
+        Returns:
+            A path/value marker for malformed or used fallback state, otherwise ``None``.
+        """
+        if not isinstance(item, Mapping):
+            return item_path, "invalid"
+        try:
+            normalized = validate_obstacle_force_diagnostic_receipt(item)
+        except ObstacleForceDiagnosticReceiptError:
+            return item_path, "invalid"
+        fallback = normalized["fallback"]
+        if fallback["used"]:
+            return f"{item_path}.fallback.used", "true"
+        return None
+
     def _counter_marker(item: Any, item_path: str) -> tuple[str, str] | None:
         if not isinstance(item, (int, float)) or isinstance(item, bool):
             return item_path, "invalid"
@@ -149,6 +177,11 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
             for raw_key, item in value.items():
                 key = str(raw_key)
                 item_path = f"{path}.{key}" if path else key
+                if key == "diagnostic_receipt":
+                    receipt_marker = _diagnostic_receipt_marker(item, item_path)
+                    if receipt_marker is not None:
+                        return receipt_marker
+                    continue
                 if key == "decision_label":
                     normalized = str(item).strip().lower().replace("-", "_")
                     if normalized == _RUNTIME_STOP_BEST_EFFORT and not guarded_ppo_identity:
@@ -186,12 +219,34 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                     if item is None or item == "":
                         if (
                             value.get("fallback_used") is False
+                            or value.get("fallback") is False
                             or value.get("fallback_triggered") is False
                         ):
                             pass
                         else:
                             return item_path, "invalid"
                     else:
+                        return item_path, "invalid"
+                elif key == "fallback_reasons":
+                    if not isinstance(item, Mapping):
+                        return item_path, "invalid"
+                    has_false_sibling = (
+                        value.get("fallback_used") is False
+                        or value.get("fallback") is False
+                        or value.get("fallback_triggered") is False
+                    )
+                    for reason, reason_count in item.items():
+                        if (
+                            not isinstance(reason, str)
+                            or not reason.strip()
+                            or isinstance(reason_count, bool)
+                            or not isinstance(reason_count, int)
+                            or reason_count < 0
+                        ):
+                            return item_path, "invalid"
+                        if reason_count > 0:
+                            return f"{item_path}.{reason}", str(reason_count)
+                    if not has_false_sibling:
                         return item_path, "invalid"
                 elif key == "fallback_controller_state":
                     if not isinstance(item, dict) or not guarded_ppo_identity:

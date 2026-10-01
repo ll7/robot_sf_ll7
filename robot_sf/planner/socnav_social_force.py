@@ -101,6 +101,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             )
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters: dict[str, Any] = {}
+        self._obstacle_force_fallback_reasons: dict[str, int] = {}
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters: dict[str, Any] = {}
         self._last_turn_sign = 0.0
@@ -118,6 +119,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._last_simulation_timestep = None
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters = {}
+        self._obstacle_force_fallback_reasons = {}
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters = {}
         self._last_turn_sign = 0.0
@@ -658,6 +660,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             getattr(self.config, "social_force_obstacle_law", None)
         )
         centers, radii = self._extract_obstacles_from_grid(observation, robot_pos, robot_heading)
+        failure_reason = getattr(self, "_obstacle_grid_payload_failure_reason", None)
+        if isinstance(failure_reason, str) and failure_reason:
+            self._record_obstacle_force_fallback(failure_reason)
         if centers.size == 0:
             return np.zeros(2, dtype=float)
 
@@ -722,6 +727,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         points, normals, distances = self._visible_obstacle_points(
             observation, robot_pos, robot_heading
         )
+        failure_reason = getattr(self, "_obstacle_grid_payload_failure_reason", None)
+        if isinstance(failure_reason, str) and failure_reason:
+            self._record_obstacle_force_fallback(failure_reason)
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
         strength = float(self.config.social_force_obstacle_v2_strength)
         length = max(float(self.config.social_force_obstacle_v2_length), self._EPS)
@@ -882,6 +890,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             return float(self.config.social_force_obstacle_factor) != 0.0
         except (AttributeError, TypeError, ValueError):
             return True
+
+    def _record_obstacle_force_fallback(self, reason: str) -> None:
+        """Record one diagnostic-only fallback/degraded obstacle-force path."""
+        self._obstacle_force_fallback_reasons[reason] = (
+            self._obstacle_force_fallback_reasons.get(reason, 0) + 1
+        )
 
     @staticmethod
     def _grid_cell_centers(
@@ -1212,7 +1226,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             )
             != SOCIAL_FORCE_PLANNER_LEGACY_V1
         )
-        return obstacle_force_law_metadata(
+        metadata = obstacle_force_law_metadata(
             getattr(config, "social_force_obstacle_law", None),
             site="socnav_social_force",
             geometry_convention=(
@@ -1232,6 +1246,25 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             ),
             parameters=parameters,
         )
+        fallback_reasons = dict(
+            sorted(getattr(self, "_obstacle_force_fallback_reasons", {}).items())
+        )
+        fallback_count = sum(fallback_reasons.values())
+        metadata.update(
+            {
+                "fallback": bool(fallback_count),
+                "fallback_count": fallback_count,
+                "fallback_triggered": bool(fallback_count),
+            }
+        )
+        if fallback_count:
+            metadata.update(
+                {
+                    "fallback_reason": next(iter(fallback_reasons), None),
+                    "fallback_reasons": fallback_reasons,
+                }
+            )
+        return metadata
 
 
 def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:

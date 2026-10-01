@@ -1,5 +1,6 @@
 """Occupancy-grid helpers shared by SocNav-family planner adapters."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,7 @@ class OccupancyAwarePlannerMixin:
     """Shared helpers for planners that can leverage occupancy grid observations."""
 
     _CHANNEL_KEYS = tuple(channel.value for channel in OBSERVATION_CHANNEL_ORDER)
+    _OBSTACLE_GRID_METADATA_FAILURE_REASON = "malformed_or_nonfinite_occupancy_grid_metadata"
 
     def _simulation_timestep(self, observation: dict) -> float:
         """Read a finite positive sim dt from the nested or flat observation.
@@ -135,7 +137,7 @@ class OccupancyAwarePlannerMixin:
         if not meta:
             meta = observation.get("occupancy_grid_meta")
 
-        if meta is None or not meta:
+        if not isinstance(meta, Mapping) or not meta:
             return None
 
         try:
@@ -204,12 +206,55 @@ class OccupancyAwarePlannerMixin:
             return -1
         try:
             pos = self._CHANNEL_KEYS.index(key)
-            idx_arr = self._as_1d_float(indices)
-            if pos >= idx_arr.size:
+            raw_idx_arr = np.asarray(indices)
+            if raw_idx_arr.ndim != 1 or pos >= raw_idx_arr.size:
                 return -1
-            return int(idx_arr[pos])
-        except (ValueError, TypeError, IndexError):
+            raw_idx = raw_idx_arr[pos]
+            if isinstance(raw_idx, (bool, np.bool_, str, bytes)) or np.ndim(raw_idx) != 0:
+                return -1
+            numeric_idx = float(raw_idx)
+            if not np.isfinite(numeric_idx) or numeric_idx < 0.0:
+                return -1
+            if not numeric_idx.is_integer():
+                return -1
+            return int(numeric_idx)
+        except (OverflowError, ValueError, TypeError, IndexError):
             return -1
+
+    @staticmethod
+    def _validated_channel_indices(
+        meta: Mapping[str, Any], channel_count: int
+    ) -> np.ndarray | None:
+        """Return integral, in-range channel indices or ``None`` when malformed."""
+        raw_indices = meta.get("channel_indices")
+        if raw_indices is None:
+            return None
+        try:
+            raw_array = np.asarray(raw_indices)
+        except (TypeError, ValueError):
+            return None
+        # Boolean, object, string, and complex arrays are not channel-index
+        # metadata even when a coercion might happen to produce integers.
+        if (
+            raw_array.ndim != 1
+            or raw_array.size != len(OBSERVATION_CHANNEL_ORDER)
+            or raw_array.dtype.kind not in "iuf"
+        ):
+            return None
+        try:
+            indices = np.asarray(raw_array, dtype=float)
+        except (OverflowError, TypeError, ValueError):
+            return None
+        # Occupancy metadata uses exactly -1 for a channel that is absent;
+        # every present channel must still be an integral in-range index.
+        if (
+            not np.all(np.isfinite(indices))
+            or not np.all(np.equal(indices, np.floor(indices)))
+            or np.any(indices < -1.0)
+            or np.any(indices >= float(channel_count))
+        ):
+            return None
+        return indices.astype(np.int64)
 
     def _preferred_channel(self, meta: dict[str, Any]) -> int:
         """Prefer combined channel, else obstacles, else pedestrians.
@@ -329,21 +374,50 @@ class OccupancyAwarePlannerMixin:
             tuple[np.ndarray, dict[str, Any], int, float] | None: Grid, metadata, obstacle
             channel, and resolution when available.
         """
+        self._obstacle_grid_payload_failure_reason = None
         payload = self._extract_grid_payload(observation)
         if payload is None:
+            if observation.get("occupancy_grid") is not None:
+                self._obstacle_grid_payload_failure_reason = (
+                    self._OBSTACLE_GRID_METADATA_FAILURE_REASON
+                )
             return None
         grid, meta = payload
         if grid.ndim < 3:
+            self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
+            return None
+        if self._validated_channel_indices(meta, grid.shape[0]) is None:
+            self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
             return None
         channel_idx = self._grid_channel_index(meta, "obstacles")
         if channel_idx < 0:
             channel_idx = self._grid_channel_index(meta, "combined")
         if channel_idx < 0 or channel_idx >= grid.shape[0]:
+            self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
             return None
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
+        try:
+            resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]))
+            origin_arr = self._as_1d_float(meta.get("origin", [0.0, 0.0]))
+            use_ego_arr = self._as_1d_float(meta.get("use_ego_frame", [0.0]))
+        except (OverflowError, TypeError, ValueError):
+            self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
+            return None
+        if (
+            resolution_arr.ndim != 1
+            or resolution_arr.size != 1
+            or not np.all(np.isfinite(resolution_arr))
+            or resolution_arr[0] <= 0.0
+            or origin_arr.ndim != 1
+            or origin_arr.size != 2
+            or not np.all(np.isfinite(origin_arr))
+            or use_ego_arr.ndim != 1
+            or use_ego_arr.size != 1
+            or not np.all(np.isfinite(use_ego_arr))
+            or not np.all(np.isin(use_ego_arr, (0.0, 1.0)))
+        ):
+            self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
+            return None
         resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return None
         return grid, meta, channel_idx, resolution
 
     def _path_penalty(

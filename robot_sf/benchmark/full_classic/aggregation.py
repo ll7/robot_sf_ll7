@@ -117,9 +117,10 @@ def _bootstrap_ci(
     """Bootstrap mean/median confidence intervals for values.
 
     Returns:
-        Tuple of (mean_ci, median_ci).
+        Tuple of (mean_ci, median_ci). Disabled resampling (samples <= 0)
+        returns NaN pairs; analytic rate intervals are computed by the caller.
     """
-    if not values:
+    if not values or samples <= 0:
         nan_pair = (math.nan, math.nan)
         return nan_pair, nan_pair
     n = len(values)
@@ -203,12 +204,13 @@ def hierarchical_bootstrap_ci(
 
     Returns:
         Tuple of ``(mean_ci, median_ci)`` as ``(low, high)`` tuples. Returns
-        ``(nan, nan)`` pairs when there is no data and collapses to the single
-        value when there is exactly one episode overall.
+        ``(nan, nan)`` pairs when there is no data or resampling is disabled,
+        and collapses to the single value when there is exactly one episode
+        overall and resampling is enabled.
     """
     nan_pair = (math.nan, math.nan)
     cells = [c for c in clustered_values if c]
-    if not cells:
+    if not cells or samples <= 0:
         return nan_pair, nan_pair
     total = sum(len(c) for c in cells)
     if total == 1:  # degenerate: CI collapses to the single observed value

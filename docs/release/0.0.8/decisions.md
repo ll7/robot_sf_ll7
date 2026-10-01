@@ -1609,7 +1609,7 @@ Historical measurements below are attributed to the named review report; they we
 ### D-074: The release campaign template binds the sealed seeds
 - **Date:** 2026-10-01
 - **Question:** #9999 adds the authored-budget release template
-  (`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml`) with seed set `paper_eval_s30`
+  ([authored candidate on the open #9999 head](https://github.com/ll7/robot_sf_ll7/blob/9c9c53c9d7e05541f231b909ffce6d1c666fce5a/configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml)) with seed set `paper_eval_s30`
   (111-140), and #10039's sealed allowlist names only the other template. The
   strict guard would refuse the release run on release day.
 - **Choice:** In train 2 part 2: point the template the campaign uses at the

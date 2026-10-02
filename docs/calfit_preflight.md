@@ -119,3 +119,12 @@ proxy, or dropping the blocked verdict during output. Existing estimator tests
 do not join all six cases with actual admission and geometry; the old gate test
 uses only V1. No production test seam is introduced. This is added diagnostic
 functionality, not a claimed model fix or a claimed failing-base regression.
+
+The acquisition empty-wall control exercises the actual selected exponential
+force on NumPy empty-array bytes. Before the fix it raises Numba TypingError
+on dev case V1; afterward it returns an exactly zero `(N,2)` force. The
+existing wall-family comparisons never exercised a free-space protocol with
+this diagnostic kernel. A test replaces trajectory generation only, invokes
+the real configured force, and uses no production test seam. Nonempty-wall
+force equations are unchanged. Failed exponential acquisition attempts are
+preserved and retried only after this verified cause is fixed.

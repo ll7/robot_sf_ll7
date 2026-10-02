@@ -391,6 +391,13 @@ def protocol_simulate(  # noqa: PLR0913
     return np.asarray(positions), np.asarray(speeds), desired
 
 
+def calfit_exponential_force(force):
+    """Keep the diagnostic wall law defined for free-space source protocols."""
+    if np.asarray(force.get_obstacles()).size == 0:
+        return np.zeros_like(force.get_peds())
+    return reused.exponential_force(force)
+
+
 def run_task(task):  # noqa: C901, PLR0915
     """One source-protocol dev episode, or historical byte-compatibility episode."""
     case, seed, variant, radius, mode = task[:5]
@@ -423,7 +430,7 @@ def run_task(task):  # noqa: C901, PLR0915
             cfg.obstacle_force_config.threshold = wall_candidate["offset_m"]
             cfg.obstacle_force_config.sigma = 0.0
             if wall_candidate["family"] == "exponential_edge":
-                reused.ObstacleForce.__call__ = reused.exponential_force
+                reused.ObstacleForce.__call__ = calfit_exponential_force
         if literature:
             cfg.scene_config.desired_speed_mean = 1.29 if options.get("calfit") else 1.3
             cfg.scene_config.desired_speed_std = 0.19 if options.get("calfit") else 0.2

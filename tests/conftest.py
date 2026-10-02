@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_limited_reverse.py",
     "test_release_decision_ledgers.py",
     # Main CI repair guards: filesystem/Sphinx and stubbed diagnostic contracts.
     # The full real-site build keeps its explicit slow marker.

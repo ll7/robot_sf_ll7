@@ -9,6 +9,7 @@ from loguru import logger
 
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner import socnav as _socnav
+from robot_sf.robot.reverse_drive import bound_drive_settings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
@@ -968,6 +969,97 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             )
         return new_velocity
 
+    def bind_env(self, env: Any) -> None:
+        """Bind reverse limits and rear geometry from the opt-in live plant."""
+        super().bind_env(env)
+        drive = bound_drive_settings(env)
+        self._reverse_drive = drive if getattr(drive, "limited_reverse", False) else None
+        if self._reverse_drive is not None:
+            self._bind_static_obstacles(env)
+
+    def _reverse_command_clear(
+        self,
+        linear: float,
+        angular: float,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        observation: dict,
+    ) -> bool:
+        """Check the rear swept footprint and pedestrian prediction through braking.
+
+        Uses observed pedestrians and bound static geometry or the local grid.
+        Missing rear geometry refuses translation. This is a conservative adapter
+        guard, not a proof of preservation of ORCA's world-velocity half-planes.
+
+        Returns:
+            Whether the rear translation is clear through the braking horizon.
+        """
+        drive = self._reverse_drive
+        dt = self._simulation_timestep(observation)
+        accel = float(getattr(drive, "max_linear_accel", getattr(drive, "max_accel", 1.0)))
+        decel = float(getattr(drive, "max_linear_decel", getattr(drive, "max_decel", 1.0)))
+        robot, _, pedestrians = self._socnav_fields(observation)
+        current = float(self._as_1d_float(robot.get("speed", [0.0]))[0])
+        # Check the requested speed as well as residual reverse speed: the latter
+        # may take several control periods to brake after a cap change.
+        peak = max(abs(min(current, 0.0)), abs(linear))
+        horizon = dt + peak / min(accel, decel)
+        radius = float(self._as_1d_float(robot.get("radius", [drive.radius]))[0])
+        count = int(self._as_1d_float(pedestrians.get("count", [0]))[0])
+        positions = np.asarray(pedestrians.get("positions", []), dtype=float).reshape(-1, 2)[:count]
+        velocities = np.asarray(
+            pedestrians.get("velocities", np.zeros_like(positions)), dtype=float
+        ).reshape(-1, 2)[:count]
+        rotation = np.array(
+            [[cos(robot_heading), -sin(robot_heading)], [sin(robot_heading), cos(robot_heading)]]
+        )
+        velocities = velocities @ rotation.T
+        ped_radius = float(self._as_1d_float(pedestrians.get("radius", [0.4]))[0])
+        geometry = getattr(self, "_static_clearance", None)
+        payload = self._extract_grid_payload(observation)
+        if geometry is None and payload is None:
+            return False
+        previous = np.asarray(robot_pos, dtype=float)
+        # <= 0.025 m centre increments, plus a half-step spatial safety margin.
+        steps = max(1, int(np.ceil(horizon * max(peak, 0.1) / 0.025)))
+        margin = peak * horizon / steps
+        for elapsed in np.linspace(0.0, horizon, steps + 1):
+            heading = robot_heading + angular * elapsed
+            point = robot_pos - peak * elapsed * np.array([cos(heading), sin(heading)])
+            if positions.size and np.any(
+                np.linalg.norm(positions + velocities * elapsed - point, axis=1)
+                <= radius + ped_radius + margin
+            ):
+                return False
+            if geometry is not None:
+                if geometry.clearance(point, radius + margin, previous) <= 0.0:
+                    return False
+            else:
+                grid, meta = payload
+                channel = self._grid_channel_index(meta, "obstacles")
+                if channel < 0:
+                    return False
+                if not self._reverse_grid_footprint_clear(
+                    point, radius + margin, grid, meta, channel
+                ):
+                    return False
+            previous = point
+        return True
+
+    def _reverse_grid_footprint_clear(self, point, radius, grid, meta, channel) -> bool:
+        """Check the rear footprint against the static observation channel.
+
+        Returns:
+            Whether all sampled footprint cells are free.
+        """
+        for offset in np.linspace(-radius, radius, 9):
+            for lateral in np.linspace(-radius, radius, 9):
+                if offset**2 + lateral**2 > radius**2:
+                    continue
+                if self._grid_value(point + [offset, lateral], grid, meta, channel) > 0.0:
+                    return False
+        return True
+
     def _velocity_world_to_command(
         self,
         *,
@@ -976,7 +1068,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         robot_heading: float,
         observation: dict,
     ) -> tuple[float, float]:
-        """Convert world velocity to a forward-only differential-drive command.
+        """Convert world velocity to a versioned differential-drive command.
 
         Project speed onto the current forward axis: sideways/backward targets
         command zero translation while turning. Occupancy and the optional
@@ -1000,9 +1092,11 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         world_dir, occ_penalty = self._get_safe_heading(robot_pos, world_dir, observation)
         desired_heading = atan2(world_dir[1], world_dir[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
+        reverse = getattr(self, "_reverse_drive", None) is not None and cos(heading_error) < 0.0
+        turn_error = self._wrap_angle(heading_error + pi) if reverse else heading_error
         angular = float(
             np.clip(
-                1.5 * self.config.angular_gain * heading_error,
+                1.5 * self.config.angular_gain * turn_error,
                 -self.config.max_angular_speed,
                 self.config.max_angular_speed,
             )
@@ -1014,6 +1108,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         linear = float(
             min(speed, self.config.max_linear_speed) * max(0.0, 1.0 - occ_penalty) * heading_scale
         )
+        if reverse:
+            linear = -min(speed * abs(cos(heading_error)), self._reverse_drive.max_reverse_speed)
+            linear *= max(0.0, 1.0 - occ_penalty)
+            if not self._reverse_command_clear(
+                linear, angular, robot_pos, robot_heading, observation
+            ):
+                linear = 0.0
         self._record_adapter_trace(
             velocity_world=velocity_world,
             robot_heading=robot_heading,

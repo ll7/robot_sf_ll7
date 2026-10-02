@@ -29,6 +29,7 @@ from robot_sf.planner.safety_shield import (
     shield_contract_metadata,
     update_shield_stats,
 )
+from robot_sf.robot.reverse_drive import bound_drive_settings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -126,7 +127,28 @@ def build_adapter_policy(  # noqa: C901
     _policy._kinematics_model = adapter_kinematics_model
     _policy._meta = meta
     if hasattr(adapter, "bind_env"):
-        _policy._planner_bind_env = adapter.bind_env
+
+        def _bind_env(env: Any) -> None:
+            """Bind the adapter and opt-in projection to the same live plant."""
+            nonlocal adapter_kinematics_model
+            adapter.bind_env(env)
+            drive = bound_drive_settings(env)
+            if getattr(drive, "limited_reverse", False):
+                adapter_kinematics_model = resolve_benchmark_kinematics_model(
+                    robot_kinematics=robot_kinematics,
+                    command_limits={
+                        **algo_config,
+                        "limited_reverse": True,
+                        "max_reverse_speed": drive.max_reverse_speed,
+                    },
+                )
+            else:
+                adapter_kinematics_model = resolve_benchmark_kinematics_model(
+                    robot_kinematics=robot_kinematics, command_limits=algo_config
+                )
+            _policy._kinematics_model = adapter_kinematics_model
+
+        _policy._planner_bind_env = _bind_env
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
     adapter_diagnostics = getattr(adapter, "diagnostics", None)

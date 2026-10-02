@@ -148,6 +148,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
         if callable(selector_overrides):
             config_payload["sim_config"].update(selector_overrides())
+        robot_config = getattr(cfg, "robot_config", None)
+        robot_overrides = getattr(robot_config, "_config_hash_overrides", None)
+        if callable(robot_overrides):
+            config_payload["robot_config"].update(robot_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,

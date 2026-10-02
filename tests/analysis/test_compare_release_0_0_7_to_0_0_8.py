@@ -1650,18 +1650,21 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     )
     assert scoped_hash == _config_hash(runner_scenarios)
     # Static recorded-row reconstruction only; the worker does not step a planner.
-    params = {
-        **scenario,
-        **expected["controls"],
-        "seed": 1001,  # Static recorded-row reconstruction only.
-        "algo": "goal",
-    }
-    # Main now seeds these simulator defaults at the actual episode boundary.
     from robot_sf.benchmark.map_runner import map_runner_identity
 
-    params = getattr(
-        map_runner_identity, "_scenario_with_episode_seed_defaults", lambda scenario, **_: scenario
-    )(params, seed=1001)
+    # Match the canonical producer envelope; the row slot binds dev seed 1001.
+    params = _scenario_identity_payload(
+        map_runner_identity._scenario_with_episode_seed_defaults(scenario, seed=1001),
+        algo="goal",
+        algo_config=expected["config"],
+        horizon=budget if budget is not None else cfg.horizon,
+        dt=cfg.dt,
+        record_forces=cfg.record_forces,
+        observation_mode=expected["controls"]["observation_mode"],
+        observation_level=expected["controls"]["observation_level"],
+        record_planner_decision_trace=cfg.record_planner_decision_trace,
+        record_simulation_step_trace=cfg.record_simulation_step_trace,
+    )
     # The resolver hashes the recorded row as well as reconstructing its controls.
     result = subprocess.run(
         [sys.executable, "-I", str(worker)],
@@ -1695,8 +1698,8 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
             "config_hash": expected["config_hash"],
         },
         "provenance": {
-            "commit_hash": source_commit,
-            "config_identity": {"algo": "goal", "algo_config_path": None},
+            "git_hash": source_commit,
+            "config_hash": _config_hash(params),
         },
     }
     comparator._validate_successor_row(

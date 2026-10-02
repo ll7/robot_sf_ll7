@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_calfit_preflight.py",
     "test_pedestrian_validation.py",
     "test_valsuite_source_regressions.py",
     "test_single_pedestrian_radius.py",

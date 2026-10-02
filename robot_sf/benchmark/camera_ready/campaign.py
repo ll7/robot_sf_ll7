@@ -2060,7 +2060,9 @@ def _write_breakdown_and_parity_artifacts(
 def _write_parity_table(
     reports_dir: Path, planner_rows: list[dict[str, Any]], *, legacy_snqi_declared: bool = True
 ) -> tuple[Path, Path]:
-    """Write the kinematics parity table and return its CSV and Markdown paths."""
+    """Write the kinematics parity table.
+    Returns:
+        Paths to the CSV and Markdown files."""
     parity_rows = sorted(
         [
             {

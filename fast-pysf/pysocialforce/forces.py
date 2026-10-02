@@ -32,6 +32,7 @@ from pysocialforce.config import (
     GroupReplusiveForceConfig,
     ObstacleForceConfig,
     SocialForceConfig,
+    _parameters_sha256,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
     resolve_social_force_kernel_version,
@@ -488,6 +489,24 @@ class ObstacleForce:
 
     def law_metadata(self) -> dict[str, object]:
         """Return the fast-pysf law and site conventions used by this force."""
+        if getattr(self.config, "wall_contact_rule", None) == "bounded_edge_v1":
+            parameters = {
+                **self.contact_wall_parameters,
+                "agent_radius": float(self.get_agent_radius()),
+            }
+            return {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "bounded_edge_v1",
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "corrected_opt_in",
+                "enabled": True,
+                "applied": bool(self._obstacle_force_applied),
+                "resolution_mode": "explicit",
+                "parameters": parameters,
+                "parameters_sha256": _parameters_sha256(parameters),
+            }
         factor = float(getattr(self.config, "factor", 1.0))
         sigma = float(getattr(self.config, "sigma", 0.0))
         threshold = float(getattr(self.config, "threshold", 0.0))

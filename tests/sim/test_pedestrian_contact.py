@@ -136,6 +136,36 @@ def test_manifest_rejects_disagreement_with_live_wall_law():
         validate_physics_manifest(sim, declared)
 
 
+def test_runtime_wall_record_names_executed_law_and_parameters():
+    """The #10084 runtime site must describe the bounded force actually evaluated."""
+    import hashlib
+    import json
+
+    cfg = config(wall=True)
+    cfg.obstacle_force_config.wall_contact_decay_m = 0.08
+    sim = Simulator(
+        np.array([[0.0, 0.30, 0.0, 0.0, 10.0, 0.30, 0.5]]),
+        obstacles=[(-2.0, 2.0, 0.0, 0.0)],
+        config=cfg,
+    )
+    before = sim.obstacle_force_law_metadata()
+    assert before["applied"] is False
+    sim.step()
+    record = sim.obstacle_force_law_metadata()
+    assert record["law_version"] == "bounded_edge_v1"
+    assert record["resolution_mode"] == "explicit"
+    assert record["applied"] is True
+    assert record["radius_convention"] == "physical_body_edge_clearance"
+    assert record["parameters"]["decay_m"] == 0.08
+    assert record["parameters"]["agent_radius"] == 0.28
+    assert (
+        record["parameters_sha256"]
+        == hashlib.sha256(
+            json.dumps(record["parameters"], sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+
+
 def test_robot_benchmark_manual_pedestrian_step_enforces_contact():
     """The benchmark's manual integration path must enforce the same body exclusion."""
     state = np.array([[0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5], [0.4, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5]])

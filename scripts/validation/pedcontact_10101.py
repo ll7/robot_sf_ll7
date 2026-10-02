@@ -138,27 +138,37 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
             "table": table,
             "overlap_pair_steps": sum(row["pair_overlap"]["all"]["below_2r_count"] for row in rows),
             "wall_penetration_ped_steps": sum(row["wall_penetration_ped_steps"] for row in rows),
+            "runtime_ms_per_step": 1000
+            * sum(r["step_time_s"] for row in rows for r in row["step_runtime"])
+            / sum(r["steps"] for row in rows for r in row["step_runtime"]),
+            "runtime_scope": "Integration only; V6 no-interferer baseline timing excluded",
         }
     on = result["arms"]["on"]
-    result["fit_admitted"] = on["overlap_pair_steps"] == 0 and all(
-        bank["passed_n"] == bank["attempted_n"]
-        for key, bank in on["per_case"].items()
-        if key.startswith("V2/")
+    result["fit_admitted"] = (
+        on["overlap_pair_steps"] == 0
+        and on["wall_penetration_ped_steps"] == 0
+        and all(
+            bank["passed_n"] == bank["attempted_n"]
+            for key, bank in on["per_case"].items()
+            if key.startswith("V2/")
+        )
+    )
+    result["runtime_on_off_ratio"] = (
+        on["runtime_ms_per_step"] / result["arms"]["off"]["runtime_ms_per_step"]
     )
     write_json(out, result, issue_ref="#10101")
     text = "AI-GENERATED / NEEDS-REVIEW\n\nPEDCONTACT full-dev CALFIT comparison.\n\n"
+    text += "Intervals cover observed dev-seed measurements, not censored episodes. V6 baseline integration is excluded from runtime timing.\n\n"
     for arm, bank in result["arms"].items():
         text += f"{arm}: overlaps {bank['overlap_pair_steps']}; wall penetration ped-steps {bank['wall_penetration_ped_steps']}; gate {bank['gate']['exit_code']}.\n\n"
-        text += (
-            "| Item | Value | 95% interval | Status | Accepted interval |\n|---|---|---|---|---|\n"
-        )
+        text += "| Item | Value | 95% interval | Observed n | Status | Accepted interval |\n|---|---|---|---|---|---|\n"
         for check in bank["gate"]["checks"]:
             measurement = (
                 bank["per_case"]
                 .get(f"{check['case']}/{check['variant']}", {})
                 .get("measurement", {})
             )
-            text += f"| {check['case']}/{check['variant']} | {check['estimate']} | {measurement.get('ci95')} | {check['status']} | {check['tolerance_range']} |\n"
+            text += f"| {check['case']}/{check['variant']} | {check['estimate']} | {measurement.get('ci95')} | {measurement.get('n', 0)} | {check['status']} | {check['tolerance_range']} |\n"
         text += "\n"
     write_text(out.with_suffix(".md"), text, issue_ref="#10101")
     return result

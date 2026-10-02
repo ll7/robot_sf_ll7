@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
@@ -188,3 +189,88 @@ def test_debug_records_braking_rejection_with_short_contact_horizon():
     constraints = {r["constraint"]: r for r in debug["constraints"]}
     assert constraints["braking_infeasible"]["threshold"] == 0.7
     assert constraints["braking_infeasible"]["rejected"] > 0
+
+
+@pytest.mark.parametrize("wall_x", [4.05, 4.10])
+def test_physical_exclusion_checks_committed_plant_step_and_whole_sweep(wall_x):
+    """A thin wall inside the first 0.10 s must reject a clear 0.20 s rollout."""
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+    from robot_sf.robot.differential_drive import (
+        DifferentialDriveMotion,
+        DifferentialDriveSettings,
+        DifferentialDriveState,
+    )
+
+    planner = _planner(physical_static_exclusion_enabled=True)
+    planner.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                map_def=SimpleNamespace(width=30, height=30),
+                get_obstacle_lines=lambda: np.array([[wall_x, 9.99, wall_x, 10.01]]),
+            )
+        )
+    )
+    obs = _obs(robot=(4, 10), goal=(20, 10), speed=1)
+    obs["robot"]["radius"] = np.array([0.01])
+    settings = DifferentialDriveSettings()
+    wheel_rate = 1 / settings.wheel_radius
+    plant = DifferentialDriveState(
+        pose=((4, 10), 0), velocity=(1, 0), wheel_speeds=(wheel_rate, wheel_rate)
+    )
+    DifferentialDriveMotion(settings).move(plant, (0, 0), 0.1)
+    assert plant.pose[0] == pytest.approx((4.1, 10))
+    assert planner._continuous_static_collision(np.array([4.2, 10]), 0.01) is False
+    # In the 4.05 case even the committed endpoint is clear: only the sweep catches it.
+    assert planner._continuous_static_collision(np.array(plant.pose[0]), 0.01) == (wall_x == 4.1)
+    evaluation = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(1, 0, "forward"),
+        observation=obs,
+        state=planner._extract_state(obs),
+        speed_cap=2,
+        nearest_ped=float("inf"),
+    )
+    assert not evaluation["accepted"], "unchecked first plant interval crosses a physical wall"
+    assert evaluation["reason"] == "static_collision"
+    assert evaluation["swept_plant_interval"]
+    assert evaluation["time"] == pytest.approx(0.1)
+    assert evaluation["hard_static_clearance"] == 0.01
+
+
+def test_physical_flag_keeps_terminal_goal_when_successor_is_absent():
+    """The native sensor's absent successor must not target the world origin."""
+    planner = _planner(physical_static_exclusion_enabled=True)
+    obs = _obs(robot=(25.6, 3), goal=(26.4, 3.1))
+    obs["goal"]["next"] = np.zeros(2)  # SocNavObservation: None -> zero world position
+    assert planner._extract_state(obs)["goal"] == pytest.approx((26.4, 3.1)), (
+        "terminal waypoint replaced by the absent [0, 0] successor"
+    )
+    # An ordinary successor remains selectable; the fix does not suppress route lookahead.
+    obs["goal"]["next"] = np.array([28, 3])
+    assert planner._extract_state(obs)["goal"] == pytest.approx((28, 3))
+
+
+def test_admissible_speed_flag_samples_above_comfort_band_without_relaxing_safety():
+    """A 0.50 m surface gap permits more than the historical 0.60 m/s band."""
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+
+    planner = _planner(platform_speed_candidates_enabled=True)
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16)])
+    state = planner._extract_state(obs)  # radius sum 0.50, gap 0.50 m
+    cap = planner._v4_human_speed_cap(state)
+    # The default drive brakes at 1 m/s²: 0.8*0.1 + 0.8²/2 = 0.50 - 0.10.
+    assert planner._last_v4_speed_safety["braking_cap"] == pytest.approx(0.8)
+    assert cap == 0.6
+    candidates = planner._generate_candidates(state, cap)
+    assert max(c.linear for c in candidates) > 0.8, "scalar caps still prune admissible candidates"
+    assert max(c.linear for c in candidates) == pytest.approx(1.2)
+    # The original pedestrian comfort exclusion and braking rejection remain hard.
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=1.9, ped_positions=[(5, 15)])
+    evaluation = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(1.5, 0, "forward"),
+        observation=obs,
+        state=planner._extract_state(obs),
+        speed_cap=2,
+        nearest_ped=1,
+    )
+    assert not evaluation["accepted"]
+    assert evaluation["collision_radius"] == 0.7

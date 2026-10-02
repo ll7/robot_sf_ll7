@@ -66,7 +66,7 @@ def load_cells(names):
     return cells
 
 
-def hybrid_config(scenario, enabled=False):
+def hybrid_config(scenario, enabled=False, platform=False):
     """Load the named hybrid candidate including its scenario overrides."""
     _, payload, cfg, path = load_candidate_definition(ROOT / _DEFAULT_REGISTRY, CANDIDATE)
     algo, cfg = _effective_candidate_runtime_for_scenario(
@@ -76,6 +76,8 @@ def hybrid_config(scenario, enabled=False):
     cfg["debug_candidate_evaluator"] = True
     if enabled:
         cfg["physical_static_exclusion_enabled"] = True
+    if platform:
+        cfg["platform_speed_candidates_enabled"] = True
     return cfg
 
 
@@ -129,13 +131,13 @@ def motion_metrics(rows, dt):
     forced = sum(r["debug"]["feasible_moving_count"] == 0 for r in rows if r.get("debug"))
     longest = current = 0
     # A robot that moves less than 0.5 m net over 10 s is stuck/oscillating.
-    width = round(10 / dt)
+    width = int(np.floor(10 / dt)) + 1  # strictly more than 10 s
     for row in rows:
         current = current + 1 if row["displacement_m"] / dt <= 0.05 else 0
         longest = max(longest, current)
     oscillating = any(
         np.linalg.norm(np.array(rows[i]["position"]) - np.array(rows[i - width]["position"])) < 0.5
-        for i in range(width + 1, len(rows))
+        for i in range(width, len(rows))
     )
     return {
         "freezing": longest * dt > 10 or oscillating,
@@ -161,6 +163,8 @@ def evaluate_orca_step(shadow, obs, state, command, end):
 
 def missing_candidate_probe(planner, obs, state, command):
     """Find an admissible forward action excluded by the scalar proximity speed cap."""
+    if planner.config.platform_speed_candidates_enabled:
+        return None  # The drive-reachable endpoint is now in the generated set.
     cap = planner._last_v4_speed_safety["speed_cap"]
     _, reachable, _, _ = planner._dynamic_window(
         state["current_speed"], planner._v4_effective_max_speed()
@@ -200,7 +204,9 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         scenario.get("simulation_config") or {}, max_episode_steps=horizon
     )
     cfg = _build_env_config(scenario, scenario_path=matrix)
-    hcfg = hybrid_config(scenario, enabled=arm == "on")
+    hcfg = hybrid_config(
+        scenario, enabled=arm in {"on", "static", "both"}, platform=arm in {"platform", "both"}
+    )
     algo = "orca" if arm == "orca" else "hybrid_rule_local_planner"
     pcfg = (
         yaml.safe_load((ROOT / "configs/algos/orca_release_v0_0_8.yaml").read_text())
@@ -256,6 +262,17 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
                 "displacement_m": float(np.linalg.norm(end - pre)),
                 "goal_distance_m": float(np.linalg.norm(env.simulator.goal_pos[0] - end)),
                 "collision": contact,
+                "pedestrian_separation_m": (
+                    float(meta["min_distance"])
+                    if np.isfinite(meta.get("min_distance", float("nan")))
+                    else None
+                ),
+                "pedestrian_surface_gap_m": (
+                    float(meta["min_clearance"])
+                    if np.isfinite(meta.get("min_clearance", float("nan")))
+                    else None
+                ),
+                "near_miss": bool(meta.get("near_misses", 0)),
                 "debug": debug,
                 "decision": decision,
                 "missing_candidate_probe": probe,
@@ -300,6 +317,16 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
                 for r in rows
             ),
         }
+        separations = [r["pedestrian_separation_m"] for r in rows]
+        separations = [v for v in separations if v is not None and np.isfinite(v)]
+        result["metrics"].update(
+            minimum_pedestrian_separation_m=min(separations) if separations else None,
+            near_miss_steps=sum(r["near_miss"] for r in rows),
+            near_miss_events=sum(
+                r["near_miss"] and (i == 0 or not rows[i - 1]["near_miss"])
+                for i, r in enumerate(rows)
+            ),
+        )
     finally:
         env.close()
     path = Path(output) / f"{name}__{seed}__{arm}__{'empty' if empty else 'crowd'}"
@@ -318,7 +345,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenarios", nargs="+", default=list(TARGETS))
     parser.add_argument("--seeds", nargs="+", type=int, default=list(range(1001, 1011)))
-    parser.add_argument("--arms", nargs="+", choices=["off", "on", "orca"], default=["off", "orca"])
+    parser.add_argument(
+        "--arms",
+        nargs="+",
+        choices=["off", "on", "static", "platform", "both", "orca"],
+        default=["off", "orca"],
+    )
     parser.add_argument("--empty", action="store_true")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--horizon", type=int, default=600)

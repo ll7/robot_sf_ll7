@@ -175,15 +175,27 @@ body exclusion from the soft static clearance preference. Hard exclusion uses
 the observed body radius; clearance preference uses the occupancy-grid estimate
 of surface gap divided by `desired_static_clearance`, clamped to [0, 1]. The
 coarse estimate affects preference, while exact geometry determines wall contact.
+Every rollout interval uses the observed plant timestep, trapezoidal velocity,
+and midpoint heading. Exact swept-disc clearance covers each complete interval,
+including the first committed step. This flag also keeps the terminal goal when
+SocNav reports its absent successor as `[0, 0]`, preventing origin-target orbits.
 Unbound geometry and older variants retain the existing exclusion policy.
-Pedestrian exclusion and braking checks retain their existing thresholds.
+
+Independently, `platform_speed_candidates_enabled: true` (default: false) adds
+the drive-reachable speeds omitted by scalar pedestrian proximity/braking caps,
+at the existing candidates' angular rates. It keeps every legacy candidate and
+score term. All commands pass the existing trajectory collision and braking
+checks, including the hard pedestrian comfort margin; the extension requires
+`v4_braking_check_enabled`. No pedestrian exclusion or preference is relaxed.
+These experimental flags require paired collision, pedestrian-separation, and
+empty-world validation before acceptance; neither changes the release config.
 
 The development-only driver uses the benchmark environment and action adapter:
 
 ```bash
 uv run python -m scripts.validation.run_hybrid_feasibility_diagnostics \
   --scenarios francis2023_narrow_doorway_width_2p20 --seeds 1001 \
-  --arms off on orca --workers 1 --output output/hybrid_feasibility
+  --arms off static platform both --workers 1 --output output/hybrid_feasibility
 ```
 
 It validates resolved seeds before environment creation and permits only
@@ -194,6 +206,10 @@ Summary JSON and compressed per-step JSONL retain forced/preferred decisions,
 actual-plant stopped-time fraction (speed <= 0.05 m/s), time without a feasible
 moving command, longest stationary interval, and diagnostic freezing (stationary
 for >10 s, or net displacement <0.5 m across a window longer than 10 s).
+The four arms toggle neither flag, the static flag, the platform flag, or both;
+`on` remains an alias for `static`. Native pedestrian minimum center separation
+and near-miss steps/events are retained. A near miss has a surface gap in
+`[0, 0.50)` m; an event starts when the per-step near-miss indicator turns on.
 
 ORCA output separately reports the first rejected *executed* endpoint segment
 and the first rejected hypothetical constant-command horizon. The latter is not

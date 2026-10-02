@@ -144,3 +144,12 @@ and rejects deliberately corrupted bytes. The nearest suite acquisition test
 covers the old runner, not the new candidate writer. The one-round control
 protects unique bounded refinement settings and forbids ranking censored flow
 as zero. These are new feature controls, not pre-existing bug claims.
+
+The dated physics rule also covers initialization. A real pair-distance control
+has one initial overlap and zero later overlaps; the previous gate incorrectly
+returned PASS. The revised gate returns the hard physical failure. Numeric
+flow and tolerance values are unchanged. The inherited V3 holding lattice is
+therefore an input-admissibility confound for rigid-disc calibration, which
+must be distinguished from a wall-law safety/flow trade-off. Acquisition
+receipts remain immutable; final reanalysis records its acceptance-policy head
+separately from the producer head. No start-layout or physics default is changed.

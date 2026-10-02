@@ -237,7 +237,9 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         f"{r['case']}/{r['variant']}/{r['seed']}"
         for r in rows
         if (
-            r.get("wall_penetration_m", 0.0) > 0.0 or r["pair_overlap"]["all"]["below_2r_count"] > 0
+            r.get("wall_penetration_m", 0.0) > 0.0
+            or r["pair_overlap"]["all"]["below_2r_count"] > 0
+            or r["pair_overlap"]["all"].get("initial_overlapping_pairs", 0) > 0
         )
     ]
     checks = []

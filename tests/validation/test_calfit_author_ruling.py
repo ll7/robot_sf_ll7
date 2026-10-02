@@ -60,3 +60,30 @@ def test_v1_author_tolerance_boundary_and_residual(estimate, status):
     assert check["status"] == status
     assert check["difference"] == pytest.approx(estimate - 1.29)
     assert check["tolerance_range"] == [1.10, 1.48]
+
+
+def test_initial_overlap_is_hard_failure_even_if_later_samples_are_clear():
+    import numpy as np
+
+    from robot_sf.research.pedestrian_validation import pair_overlap
+
+    positions = np.zeros((2, 60, 2))
+    positions[:, :, 0] = np.arange(60)
+    positions[0, 1, 0] = 0.3
+    measured = pair_overlap(positions, 0.25)
+    assert measured["all"]["initial_overlapping_pairs"] == 1
+    assert measured["all"]["below_2r_count"] == 0
+    result = suite.acceptance_gate(
+        [
+            {
+                "case": "V3",
+                "variant": "1.0",
+                "seed": 1001,
+                "radius_m": 0.25,
+                "specific_flow_persons_m_s": 1.9,
+                "wall_penetration_m": 0.0,
+                "pair_overlap": measured,
+            }
+        ]
+    )
+    assert result["exit_code"] == 3

@@ -19,6 +19,9 @@ from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _sc
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    resolve_episode_policy_runtime,
+)
 from robot_sf.benchmark.release_acceptance import (
     _stress_effective_branch_coverage,
     validate_diagnostic_stress_smoke_acceptance,
@@ -113,9 +116,10 @@ def _repo_relative(path: Path) -> str:
     return path.resolve().relative_to(REPO_ROOT).as_posix()
 
 
-def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
+def _row(*, algo: str, algo_config: dict[str, Any], scenario_id: str, seed: int) -> dict[str, Any]:
     scenario_params = {
         "algo": algo,
+        "algo_config_hash": _config_hash(algo_config),
         "id": scenario_id,
         "robot_config": {"type": "differential_drive"},
         "run_dt": 0.1,
@@ -161,16 +165,44 @@ def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
 
 @pytest.fixture
 def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
+    """Build the existing fixed-seed stress contract without rollouts."""
+    return _build_stress_fixture(tmp_path)
+
+
+def _build_stress_fixture(
+    tmp_path: Path,
+    *,
+    seed: int = 1001,
+) -> tuple[Path, Any, Any]:
     """Build a complete accepted 14-arm stress campaign with tiny JSONL files."""
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
+    if seed != 1001:
+        campaign_config = replace(
+            campaign_config,
+            seed_policy=replace(
+                campaign_config.seed_policy, mode="fixed-list", seed_set=None, seeds=(seed,)
+            ),
+        )
+        manifest = replace(manifest, resolved_seeds=(seed,))
     scenarios = _load_campaign_scenarios(campaign_config)
-    assert campaign_config.horizon_policy == "legacy_runner_cap"
-    assert all(
-        row["metadata"]["scenario_horizon"]["applied_max_episode_steps"]
-        == min(row["simulation_config"]["max_episode_steps"], 600)
-        for row in scenarios
+    # The approved diagnostic re-pin retains the historical runner-cap policy.
+    assert (campaign_config.protocol_version, campaign_config.horizon_policy) == (
+        "0.0.7",
+        "legacy_runner_cap",
     )
+    assert [row["simulation_config"]["max_episode_steps"] for row in scenarios] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    for row in scenarios:
+        binding = row["metadata"]["scenario_horizon"]
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert binding["applied_max_episode_steps"] == row["simulation_config"]["max_episode_steps"]
     effective_scenarios = [
         _scenario_with_kinematics(
             scenario,
@@ -195,7 +227,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
             "mode": seed_policy.mode,
             "seed_set": seed_policy.seed_set,
             "seeds": list(seed_policy.seeds),
-            "resolved_seeds": [116],
+            "resolved_seeds": [seed],
             "seed_sets_path": _repo_relative(seed_policy.seed_sets_path),
         },
         "route_clearance_certifications_path": _repo_relative(
@@ -227,10 +259,25 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
         arm = f"{planner.key}__differential_drive"
         episodes_path = root / "runs" / arm / "episodes.jsonl"
         summary_path = root / "runs" / arm / "summary.json"
-        rows = [
-            _row(algo=planner.algo, scenario_id=scenario_id, seed=116)
-            for scenario_id in scenario_ids
-        ]
+        rows = []
+        fixture_seed = campaign_manifest["seed_policy"]["resolved_seeds"][0]
+        for scenario in effective_scenarios:
+            algo, algo_config = resolve_episode_policy_runtime(
+                default_algo=planner.algo,
+                algo_config_path=str(planner.algo_config_path)
+                if planner.algo_config_path
+                else None,
+                scenario=scenario,
+                seed=fixture_seed,
+            )
+            rows.append(
+                _row(
+                    algo=algo,
+                    algo_config=algo_config,
+                    scenario_id=str(scenario["name"]),
+                    seed=fixture_seed,
+                )
+            )
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
         episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
         provenance = build_result_provenance_manifest(
@@ -261,6 +308,9 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
                 "planner": {
                     "key": planner.key,
                     "algo": planner.algo,
+                    "algo_config_path": str(planner.algo_config_path)
+                    if planner.algo_config_path
+                    else None,
                     "kinematics": "differential_drive",
                     "horizon": 600,
                     "dt": 0.1,
@@ -292,7 +342,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
     integrity = validate_campaign_integrity(
         runs,
         scenarios=scenarios,
-        resolved_seeds=[116],
+        resolved_seeds=[fixture_seed],
         campaign_root=root,
         campaign_manifest=campaign_manifest,
     )
@@ -326,6 +376,16 @@ def _acceptance(root: Path, manifest: Any, campaign_config: Any) -> dict[str, An
         campaign_config=campaign_config,
         expected_source_commit=SOURCE_COMMIT,
     )
+
+
+def test_stress_acceptance_rejects_a_different_development_seed(tmp_path: Path) -> None:
+    """An otherwise complete witness cannot replace the fixed dev seed 1001."""
+    root, manifest, campaign_config = _build_stress_fixture(tmp_path, seed=1002)
+
+    result = _acceptance(root, manifest, campaign_config)
+
+    assert result["status"] == "invalid"
+    assert "diagnostic stress smoke must resolve exactly seed 1001" in result["blockers"]
 
 
 def _first_row_path(root: Path, planner_key: str) -> Path:
@@ -1305,3 +1365,46 @@ def test_private_runtime_identity_requires_exact_launch_pin_and_clean_worktree()
     assert missing_pin["status"] == "invalid"
     assert dirty["status"] == "invalid"
     assert local_dirty["status"] == "invalid"
+
+
+@pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
+def test_stress_planned_counts_and_exclusions(tmp_path, monkeypatch, case):
+    """Stress admission reports expected exclusions separately from missing planned cells."""
+    monkeypatch.setattr(release_acceptance, "STRESS_SMOKE_EXPECTED_SEED", 1001)
+    root, manifest, config = _build_stress_fixture(tmp_path, seed=1001)
+    path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if case == "foresight":
+        rows[0]["algorithm_metadata"]["foresight_prediction"] = {"evidence_eligible": False}
+    elif case == "spawn":
+        rows[0]["spawn_validity"] = {"invalid_run": True, "invalid_reason": "spawn_overlap"}
+    elif case == "missing":
+        rows.pop()
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(path)
+    summary_path = root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text())
+    planner_row = next(
+        row for row in summary["planner_rows"] if row["planner_key"] == "guarded_ppo"
+    )
+    planner_row.update(
+        episodes=5 - int(case != "eligible"),
+        episodes_total=len(rows),
+        episodes_excluded=int(case in {"spawn", "foresight"}),
+    )
+    _write_json(summary_path, summary)
+    report = _acceptance(root, manifest, config)
+    if case in {"eligible", "foresight"}:
+        assert report["status"] == "valid", report["blockers"]
+        assert report["episodes_excluded"] == int(case == "foresight")
+        assert report["exclusion_reasons"] == (
+            {"foresight_ineligible": 1} if case == "foresight" else {}
+        )
+    else:
+        assert report["status"] == "invalid"
+        message = (
+            "spawn_exclusion_defect: K=1 invalid_or_unmeasured_spawn"
+            if case == "spawn"
+            else "total episode count is not 5"
+        )
+        assert any(message in blocker for blocker in report["blockers"])

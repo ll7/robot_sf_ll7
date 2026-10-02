@@ -222,7 +222,8 @@ def test_path_motion_metrics_on_curved_nonuniform_trajectory() -> None:
 
     assert path_length(data) == pytest.approx(3.0)
     assert jerk_mean(data) == pytest.approx(2.0)
-    assert curvature_mean(data) == pytest.approx(1.0)
+    # Two right-angle turns over three unit legs (D-055 metric v2).
+    assert curvature_mean(data) == pytest.approx(np.pi / 3)
 
 
 def test_path_length_single_timestep_is_zero() -> None:

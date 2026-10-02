@@ -48,7 +48,7 @@ snqi_contract:
 workers: 16
 # Match the candidate's authored per-scenario budgets, including H650/H700.
 scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
-scenario_horizons_sha256: 3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650
+scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
@@ -85,12 +85,12 @@ planners:
   algo: orca
   planner_group: core
   benchmark_profile: baseline-safe
-  algo_config: configs/algos/socnav_release_v0_0_8.yaml
+  algo_config: configs/algos/orca_release_v0_0_8.yaml
   socnav_missing_prereq_policy: fail-fast
 - key: ppo
   algo: ppo
   planner_group: experimental
-  algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+  algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
   benchmark_profile: experimental
   adapter_impact_eval: true
 - key: socnav_sampling

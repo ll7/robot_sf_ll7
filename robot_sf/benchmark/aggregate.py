@@ -390,9 +390,14 @@ def _resolve_group_key(
     if group_by.startswith("scenario_params"):
         _ensure_mapping(record, "scenario_params", episode_ref)
 
-    nested_algo = _normalize_algo(_get_nested(record, group_by))
-    if nested_algo is not None:
-        return nested_algo
+    group_value = _get_nested(record, group_by)
+    if group_by in {"algo", "scenario_params.algo", "algorithm_metadata.algorithm"}:
+        nested_algo = _normalize_algo(group_value)
+        if nested_algo is not None:
+            return nested_algo
+    elif group_value is not None:
+        # Generic grouping fields are identities, not algorithm identifiers.
+        return str(group_value)
 
     top_level_algo = _normalize_algo(record.get("algo"))
     if top_level_algo is not None:
@@ -1282,17 +1287,30 @@ def _paired_metric_differences(
     left_rows: list[dict[str, Any]],
     right_rows: list[dict[str, Any]],
 ) -> dict[str, np.ndarray]:
-    """Return paired ``right - left`` metric differences keyed by metric name."""
-    left_by_id = {
-        identity: _numeric_items(row)
-        for row in left_rows
-        if (identity := _pair_identity(row)) is not None
-    }
-    right_by_id = {
-        identity: _numeric_items(row)
-        for row in right_rows
-        if (identity := _pair_identity(row)) is not None
-    }
+    """Return paired ``right - left`` differences, rejecting repeated cells.
+
+    Repeats must be reduced upstream under a declared policy before using this
+    generic comparison. Row order must never select a surviving observation.
+    """
+
+    def index_unique(
+        rows: list[dict[str, Any]], side: str
+    ) -> dict[tuple[str, str], dict[str, float]]:
+        indexed: dict[tuple[str, str], dict[str, float]] = {}
+        for row in rows:
+            identity = _pair_identity(row)
+            if identity is None:
+                continue
+            if identity in indexed:
+                raise ValueError(
+                    f"duplicate (scenario_id, seed) key in {side} paired comparison: {identity!r}; "
+                    "reduce repeats under a declared policy before pairing"
+                )
+            indexed[identity] = _numeric_items(row)
+        return indexed
+
+    left_by_id = index_unique(left_rows, "left")
+    right_by_id = index_unique(right_rows, "right")
     paired_ids = sorted(set(left_by_id) & set(right_by_id))
     diffs: dict[str, list[float]] = defaultdict(list)
     for identity in paired_ids:

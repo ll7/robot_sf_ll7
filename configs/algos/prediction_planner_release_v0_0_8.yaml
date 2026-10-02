@@ -46,9 +46,10 @@ predictive_pedestrian_radius: 0.4
 predictive_clearance_model: surface_v2
 predictive_speed_clearance_gain: 0.6
 
-# Adaptive horizon and lattice controls.
-predictive_adaptive_horizon_enabled: true
-predictive_horizon_boost_steps: 6
+# The released predictor supports only 8 x 0.1 s = 0.8 s; horizon boosts cannot extend it.
+# Near-field lattice controls.
+predictive_adaptive_horizon_enabled: false
+predictive_horizon_boost_steps: 0
 predictive_near_field_distance: 2.6
 predictive_near_field_speed_cap: 0.65
 predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]
@@ -72,3 +73,8 @@ predictive_phase_align_weight: 0.4
 predictive_phase_recover_weight: 1.5
 
 occupancy_weight: 0.25
+
+# A2 retains the base default/hash identity; this planner has no effective wall term.
+predictive_occupancy_version: pedestrians_v1
+# A4: distinct reachable horizon heading options.
+predictive_heading_lattice_version: horizon_scaled_v2

@@ -111,7 +111,7 @@ def _slot(row: Mapping[str, Any], run_name: str) -> tuple[str, str, str, int, st
     return planner, kinematics, scenario, seed, track or ""
 
 
-def _insert_rows(
+def _insert_rows(  # noqa: C901 - independent row admission and compaction guards
     rows: dict[tuple[str, str, str, int, str], dict[str, Any]],
     raw_lines: Any,
     run_name: str,
@@ -130,15 +130,30 @@ def _insert_rows(
         key = _slot(row, run_name)
         if not isinstance(row.get("outcome"), dict) or not isinstance(row.get("metrics"), dict):
             raise ValueError(f"{source}:{line_number}: outcome and metrics must be objects")
+        schema = metric_schema_version(row)
+        # Discard bulky evidence before retaining a row (one JSON line at a time).
+        for container in (row, row.get("algorithm_metadata", {})):
+            for name in ("simulation_step_trace", "planner_decision_trace"):
+                container.pop(name, None)
+        row["metrics"].pop("robot_force_samples", None)
         # The published bundle is hundreds of MB uncompressed. Keep only the
         # compared values and a checked source identity for each slot.
         compact = {
             "outcome": row["outcome"],
-            "metrics": row["metrics"],
-            "metric_schema_version": metric_schema_version(row),
+            # Historical trace rows stored this series among scalar reductions.
+            "metrics": {
+                key: value for key, value in row["metrics"].items() if key != "robot_force_samples"
+            },
             "termination_reason": row.get("termination_reason"),
             "integrity": row.get("integrity"),
+            "metric_schema_version": schema,
             "_source_commit": _row_source_commit(row),
+            "_definition": {
+                "scenario": row.get("scenario_params", {}),
+                "algo_config_hash": row.get("scenario_params", {}).get("algo_config_hash"),
+                "steps": row.get("steps"),
+                "horizon": row.get("horizon"),
+            },
         }
         if retain_provenance:
             compact["_provenance"] = {
@@ -157,6 +172,15 @@ def _insert_rows(
                     "config_hash",
                 )
             }
+            # Identity validation needs only these fields, never diagnostic
+            # arrays (simulation, planner, native-pair or force traces).
+            metadata = row.get("algorithm_metadata")
+            if isinstance(metadata, dict):
+                compact["_provenance"]["algorithm_metadata"] = {
+                    name: metadata[name]
+                    for name in ("algorithm", "canonical_algorithm", "config", "config_hash")
+                    if name in metadata
+                }
         if key in rows:
             if duplicate_counts is None:
                 raise ValueError(f"duplicate slot {key} at {source}:{line_number}")
@@ -350,6 +374,8 @@ def _runtime_successor_identity(
     commit: str,
     config_path: str,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
+    *,
+    publication_identity: Mapping[str, str] | None = None,
 ) -> tuple[
     str,
     str,
@@ -378,6 +404,8 @@ def _runtime_successor_identity(
                     for slot, row in rows.items()
                 ],
             }
+            if publication_identity is not None:
+                request["publication_identity"] = dict(publication_identity)
             resolved = subprocess.run(
                 [sys.executable, "-I", str(worker)],
                 input=json.dumps(request),
@@ -475,8 +503,20 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
         actual = hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
         if actual != expected:
             raise ValueError(f"successor planner binding SHA-256 mismatch: {key}")
+    publication = manifest["campaign_config"].get("publication_identity")
+    if "publication_identity" in manifest["campaign_config"] and (
+        not isinstance(publication, dict)
+        or set(publication) != {"release_tag", "doi"}
+        or any(not isinstance(value, str) or not value.strip() for value in publication.values())
+    ):
+        raise ValueError(
+            "publication_identity requires only release_tag and doi as nonempty strings"
+        )
+    runtime_kwargs = {"publication_identity": publication} if publication is not None else {}
     config_hash, scenario_hash, runtime_rows, scoped_hashes, expected_slots = (
-        _runtime_successor_identity(source_root, commit, manifest["campaign_config"]["path"], rows)
+        _runtime_successor_identity(
+            source_root, commit, manifest["campaign_config"]["path"], rows, **runtime_kwargs
+        )
     )
     for key, actual in (("campaign_config", config_hash), ("scenario_matrix", scenario_hash)):
         if manifest[key]["runtime_hash"] != actual:
@@ -516,16 +556,6 @@ def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _matches_config_path(observed: Any, expected: str | None) -> bool:
-    if expected is None:
-        return observed is None
-    if not isinstance(observed, str) or not observed:
-        return False
-    observed_parts = Path(observed).parts
-    expected_parts = Path(expected).parts
-    return observed_parts[-len(expected_parts) :] == expected_parts
-
-
 def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail independently
     slot: tuple[str, str, str, int, str],
     row: Mapping[str, Any],
@@ -559,7 +589,9 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
             field not in scenario or scenario[field] != expected
         ):
             raise ValueError(f"0.0.8 row {field} differs from pinned scenario at {slot}")
-    if scenario.get("seed") != slot[3]:
+    # Camera-ready identity payloads omit seed; the row slot and pinned seed
+    # inventory bind it. A legacy explicit seed must still agree.
+    if "seed" in scenario and scenario["seed"] != slot[3]:
         raise ValueError(f"0.0.8 row seed differs from pinned slot at {slot}")
     controls = planner["controls"]
     control_fields = {
@@ -597,13 +629,17 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
             raise ValueError(f"0.0.8 row {field} differs from pinned episode controls at {slot}")
     if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
         raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")
-    if metadata.get("algorithm") != planner["algo"]:
+    if metadata.get("algorithm") != planner["metadata_algorithm"]:
         raise ValueError(f"0.0.8 row algorithm metadata differs from configured planner at {slot}")
-    if recorded["planner_key"] is not None and recorded["planner_key"] != slot[0]:
+    if ("canonical_algorithm" in metadata or planner["algo"] == "guarded_ppo") and metadata.get(
+        "canonical_algorithm"
+    ) != planner["algo"]:
+        raise ValueError(f"0.0.8 row canonical algorithm differs from configured planner at {slot}")
+    if recorded.get("planner_key") is not None and recorded["planner_key"] != slot[0]:
         raise ValueError(f"0.0.8 row planner_key differs from run directory at {slot}")
     if (
-        metadata.get("config") != planner["config"]
-        or metadata.get("config_hash") != planner["config_hash"]
+        metadata.get("config") != planner["metadata_config"]
+        or metadata.get("config_hash") != planner["metadata_config_hash"]
     ):
         raise ValueError(f"0.0.8 row effective planner config differs from pinned source at {slot}")
     if recorded["config_hash"] != planner["scenario_config_hash"]:
@@ -614,33 +650,34 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
         raise ValueError(
             f"0.0.8 row scenario planner config hash differs from pinned source at {slot}"
         )
-    if not isinstance(provenance, dict) or provenance.get("commit_hash") != source_commit:
+    if not isinstance(provenance, dict) or provenance.get("git_hash") != source_commit:
         raise ValueError(f"0.0.8 row run provenance source differs from campaign at {slot}")
-    identity = provenance.get("config_identity")
-    if (
-        not isinstance(identity, dict)
-        or identity.get("algo") != planner["algo"]
-        or not _matches_config_path(identity.get("algo_config_path"), planner["path"])
-    ):
-        raise ValueError(f"0.0.8 row run provenance differs from configured planner at {slot}")
 
 
 def _validate_row_runner_hashes(
-    slot: tuple[str, str, str, int, str],
-    row: Mapping[str, Any],
-    scoped_hash: str,
-    campaign_config_hash: str,
+    slot: tuple[str, str, str, int, str], row: Mapping[str, Any]
 ) -> None:
-    """Bind every row in a configured arm to its pinned runner scope."""
-    provenance = row["_provenance"]["provenance"]
-    identity = provenance.get("config_identity") if isinstance(provenance, dict) else None
-    if not isinstance(identity, dict) or identity.get("scenario_matrix_hash") != scoped_hash:
+    """Verify camera-ready episode provenance against its effective scenario.
+
+    The map runner records a scenario config_hash and git_hash, not the classic
+    runner's config_identity. Campaign/matrix hashes are verified on the pinned
+    campaign manifest; expected slots and effective controls bind rows to that
+    scope in _validate_successor_row.
+    """
+    from robot_sf.benchmark.utils import _config_hash
+
+    recorded = row["_provenance"]
+    provenance = recorded["provenance"]
+    scenario = recorded["scenario_params"]
+    if (
+        not isinstance(provenance, dict)
+        or not isinstance(scenario, dict)
+        or provenance.get("config_hash") != recorded["config_hash"]
+        or provenance.get("config_hash") != _config_hash(scenario)
+    ):
         raise ValueError(
-            f"0.0.8 row scenario_matrix_hash differs from pinned scoped runner at {slot}"
+            f"0.0.8 row provenance config_hash differs from effective scenario at {slot}"
         )
-    for field in ("campaign_config_hash", "config_hash"):
-        if field in identity and identity[field] != campaign_config_hash:
-            raise ValueError(f"0.0.8 row {field} differs from pinned campaign config at {slot}")
 
 
 def _fields(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -951,7 +988,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
         scoped_hash = verified_successor["scoped_hashes"].get(key[:2])
         if scoped_hash is not None:
-            _validate_row_runner_hashes(key, row, scoped_hash, successor_identity["config_hash"])
+            _validate_row_runner_hashes(key, row)
         if key in extra_slots:
             continue
         _validate_successor_row(

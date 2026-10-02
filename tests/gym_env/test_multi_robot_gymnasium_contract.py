@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import numpy as np
 from gymnasium import spaces
-from gymnasium.utils.env_checker import check_env
 
 from robot_sf.gym_env.environment_factory import make_multi_robot_env, make_robot_env
 from robot_sf.gym_env.unified_config import MultiRobotConfig, RobotSimulationConfig
 from robot_sf.sensor.range_sensor import LidarScannerSettings
+from tests.support.gymnasium_dev_seeds import check_env_on_dev_seeds as check_env
 
 
 def test_multi_robot_observation_space_contains_reset_and_step_observations() -> None:
     """MultiRobotEnv should publish the vectorized observation contract it returns."""
-    env = make_multi_robot_env(config=MultiRobotConfig(num_robots=2), seed=123)
+    env = make_multi_robot_env(config=MultiRobotConfig(num_robots=2), seed=1013)
 
     try:
         assert isinstance(env.observation_space, spaces.Dict)
 
-        reset_obs, reset_info = env.reset(seed=123)
-        assert reset_info["seed"] == 123
+        reset_obs, reset_info = env.reset(seed=1013)
+        assert reset_info["seed"] == 1013
         assert env.observation_space.contains(reset_obs)
 
         action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)

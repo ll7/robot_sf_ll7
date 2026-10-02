@@ -75,11 +75,11 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     frozen_bytes = FROZEN_007_CAMPAIGN.read_bytes()
     assert hashlib.sha256(frozen_bytes).hexdigest() == FROZEN_007_CAMPAIGN_SHA256
     frozen = yaml.safe_load(frozen_bytes)
-    calibration = yaml.safe_load((ASSETS / "calibration.dev101_102.yaml").read_bytes())
+    calibration = yaml.safe_load((ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml").read_bytes())
     template = yaml.safe_load(
         (
             ROOT
-            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
         ).read_bytes()
     )
 
@@ -87,7 +87,7 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["seed_policy"] == {
         "mode": "fixed-list",
         "seeds": [1001, 1002],
-        "seed_sets_path": template["seed_policy"]["seed_sets_path"],
+        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
     }
     assert calibration["name"] == "snqi_v2_calibration_dev1001_1002"
     assert calibration["paper_facing"] is False
@@ -95,8 +95,14 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["export_publication_bundle"] is False
     assert calibration["arm_isolation"] == "subprocess"
     assert calibration["planners"] == template["planners"]
+    assert template["protocol_version"] == "0.0.8"
+    assert calibration.get("protocol_version") is None
 
+    # D-057 keeps release and calibration rows untraced; rehearsal 2 carries diagnostics.
+    assert template.get("record_simulation_step_trace", False) is False
+    assert calibration.get("record_simulation_step_trace", False) is False
     allowed_deviations = {
+        "protocol_version",  # calibration has no fixed horizon; its schedule binds the budget
         "name",
         "paper_facing",
         "seed_policy",
@@ -683,8 +689,29 @@ def records():
             "metrics": metrics(success=success),
         }
         for key, success in (("a", 1), ("b", 0))
-        for seed in (201, 202)
+        for seed in (1001, 1002)
     ]
+
+
+def test_f4_family_rejects_reviewers_uneven_77_cell_seed_grid():
+    """Complete arm pairing alone cannot align episode means with seed-mean CIs."""
+    rows = [
+        {
+            "algo": f"planner_{arm:02d}",
+            "scenario_id": f"s{scenario}",
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(success=int(seed == 1001)),
+        }
+        for arm in range(14)
+        for scenario, seed in (
+            [(i, 1001) for i in range(48)] + [(0, seed) for seed in range(1002, 1031)]
+        )
+    ]
+    # All inputs traverse real validation and scoring. No scored-input mock.
+    assert sum(row["metrics"]["success"] for row in rows) / len(rows) == pytest.approx(48 / 77)
+    with pytest.raises(ValueError, match="equal.*coverage.*seed"):
+        build_family_report(rows, fixture_spec(), bootstrap_samples=2000)
 
 
 def test_legacy_values_preserved_and_legacy_functions_unmodified():
@@ -1460,7 +1487,7 @@ def test_calibration_exact_grid_and_no_imputation():
         derive_calibration_anchors(rows[:-1], **kwargs)
     with pytest.raises(ValueError, match="duplicate"):
         derive_calibration_anchors(rows[:-1] + rows[:1], **kwargs)
-    rows[0]["seed"] = 111
+    rows[0]["seed"] = 1001
     with pytest.raises(ValueError, match="out-of-split"):
         derive_calibration_anchors(rows, **kwargs)
 
@@ -2072,7 +2099,7 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
     from robot_sf.benchmark.snqi.v2_calibration import _validated_calibration_config
 
     config = _validated_calibration_config(None)
-    source = ASSETS / "calibration.dev101_102.yaml"
+    source = ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml"
     assert config.source_config_path == source
     assert config.source_config_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
     assert config.horizon is None
@@ -2080,7 +2107,7 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
         ROOT / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
     )
     assert config.scenario_horizons_sha256 == (
-        "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650"
+        "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
     )
     assert config.seed_policy.seeds == (1001, 1002)
     path = tmp_path / "changed.yaml"
@@ -2803,8 +2830,8 @@ def test_snqifix_candidate_drops_legacy_snqi():
     """Real candidate and calibration bytes must not send v1 anchors to v2 rows."""
     for path in (
         ROOT
-        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-        ASSETS / "calibration.dev101_102.yaml",
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+        ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml",
     ):
         config = yaml.safe_load(path.read_bytes())
         assert config.get("snqi_weights") is None

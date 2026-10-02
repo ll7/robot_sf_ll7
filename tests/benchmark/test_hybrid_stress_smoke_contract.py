@@ -83,7 +83,7 @@ def _resolve_manifest_path(value: str) -> Path:
     return path if path.is_absolute() else (MANIFEST_PATH.parent / path).resolve()
 
 
-def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
+def test_dev_stress_h600_legacy_runner_cap_preserves_authored_budgets() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     report = validate_release_manifest(manifest, campaign_config=campaign_config)
@@ -91,24 +91,44 @@ def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
     assert report["status"] == "valid", report["problems"]
     resolved = _load_campaign_scenarios(campaign_config)
     assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {400, 500, 600}
-    assert [s["metadata"]["scenario_horizon"]["authored_max_episode_steps"] for s in resolved] == [
+    assert (campaign_config.protocol_version, campaign_config.horizon_policy) == (
+        "0.0.7",
+        "legacy_runner_cap",
+    )
+    assert [s["simulation_config"]["max_episode_steps"] for s in resolved] == [
         600,
         600,
         500,
         400,
         400,
     ]
-    assert all(s["metadata"]["scenario_horizon"]["policy"] == "legacy_runner_cap" for s in resolved)
+    for scenario in resolved:
+        binding = scenario["metadata"]["scenario_horizon"]
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert (
+            binding["applied_max_episode_steps"]
+            == scenario["simulation_config"]["max_episode_steps"]
+        )
     from dataclasses import replace
 
-    with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):
-        _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
+    ordinary = _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
+    assert [s["simulation_config"]["max_episode_steps"] for s in ordinary] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
     from robot_sf.training.scenario_loader import load_scenarios
 
     scenarios = load_scenarios(campaign_config.scenario_matrix_path)
     scenario_ids = tuple(str(scenario["name"]) for scenario in scenarios)
     assert scenario_ids == EXPECTED_SCENARIOS
-    assert campaign_config.seed_policy.seeds == (116,)
+    from robot_sf.benchmark.camera_ready._config import _resolved_seed_inventory
+
+    assert _resolved_seed_inventory(resolved) == [1001]
     assert campaign_config.horizon == 600
     assert campaign_config.dt == pytest.approx(0.1)
     assert tuple(planner.key for planner in campaign_config.planners) == EXPECTED_PLANNER_ARMS
@@ -147,7 +167,7 @@ def test_stress_contract_pins_source_axes_and_fail_closed_policy() -> None:
 
     cells = contract["representative_cells"]
     assert [(cell["scenario_id"], cell["seed"]) for cell in cells] == [
-        (scenario, 116) for scenario in EXPECTED_SCENARIOS
+        (scenario, 1001) for scenario in EXPECTED_SCENARIOS
     ]
     assert {cell["mechanism"] for cell in cells} == {
         "urban-crossing",
@@ -526,7 +546,7 @@ def test_stress_source_provenance_rejects_mixed_campaign_rows(tmp_path: Path) ->
         (root / name).write_text(json.dumps(payload), encoding="utf-8")
     episodes = root / "runs" / "goal__differential_drive" / "episodes.jsonl"
     episodes.write_text(
-        json.dumps({"git_hash": wrong, "scenario_id": "s", "seed": 116}) + "\n",
+        json.dumps({"git_hash": wrong, "scenario_id": "s", "seed": 1001}) + "\n",
         encoding="utf-8",
     )
     (root / "reports" / "campaign_summary.json").write_text(

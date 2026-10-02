@@ -100,6 +100,16 @@ def _select_seeds(
     return [0]
 
 
+def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:
+    """Recognize reserved schedule provenance minted only for explicit 0.0.8+ configs.
+
+    Returns:
+        Whether the runner should enforce the admitted authored schedule.
+    """
+    binding = scenario.get("metadata", {}).get("scenario_horizon", {})
+    return bool(binding.get("sha256")) and "authored_max_episode_steps" in binding
+
+
 def _historical_authored_identity(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep legacy accounting annotations out of the published input identity.
 
@@ -194,7 +204,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
-    elif scenario.get("metadata", {}).get("scenario_horizon") is not None:
+    elif _has_authored_horizon_schedule(scenario):
         # Scheduled callers have no fixed horizon. Use the resolved integer budget
         # at both write-time and resume-time so existing consumers see the same field.
         payload["run_horizon"] = int(scenario["simulation_config"]["max_episode_steps"])
@@ -229,11 +239,20 @@ def _scenario_with_episode_seed_defaults(
     Some scenario-level generators use their own NumPy ``default_rng`` instances. When those
     fields are left unset they bypass the episode seed and make benchmark rows depend on process
     history. Fill only missing values here so explicit scenario provenance remains unchanged.
+
+    ``archetype_seed`` is filled only when the scenario opts into ``archetype_composition``;
+    scenarios without archetypes keep their identity payload unchanged.
     """
     updated = deepcopy(scenario)
     sim_config = updated.setdefault("simulation_config", {})
     if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
         sim_config["route_spawn_seed"] = int(seed)
+    if (
+        isinstance(sim_config, dict)
+        and sim_config.get("archetype_composition") is not None
+        and sim_config.get("archetype_seed") is None
+    ):
+        sim_config["archetype_seed"] = int(seed)
     return updated
 
 

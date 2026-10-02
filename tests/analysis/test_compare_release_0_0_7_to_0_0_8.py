@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import csv
 import gzip
+import inspect
 import json
 import subprocess
 import sys
@@ -12,10 +13,12 @@ import tarfile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
 import scripts.analysis.compare_release_0_0_7_to_0_0_8 as comparator
+from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_identity_payload
 from robot_sf.benchmark.utils import _config_hash
 from scripts.analysis.compare_release_0_0_7_to_0_0_8 import (
     BASELINE_CAMPAIGN,
@@ -81,9 +84,6 @@ def _root(
         tmp_path, rows=rows, run=run, enable_all_v4=enable_all_v4
     )
     manifest = json.loads(manifest_path.read_text())
-    _, _, _, scoped_hashes, _ = comparator._runtime_successor_identity(
-        source, source_commit, "configs/benchmarks/synthetic.yaml", {}
-    )
     root = tmp_path / "successor"
     path = root / "runs" / run / "episodes.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,7 +103,6 @@ def _root(
             "id": row["scenario_id"],
             "map_file": "maps/svg_maps/classic_crossing.svg",
             "algo": algo,
-            "seed": row["seed"],
         }
         if row.get("benchmark_track"):
             scenario["benchmark_track"] = row["benchmark_track"]
@@ -111,18 +110,11 @@ def _root(
         row["config_hash"] = _config_hash(scenario)
         row["algorithm_metadata"] = {
             "algorithm": algo,
+            "canonical_algorithm": algo,
             "config": config,
             "config_hash": _config_hash(config),
         }
-        row["provenance"] = {
-            "commit_hash": source_commit,
-            "config_identity": {
-                "algo": algo,
-                "algo_config_path": binding["path"] if binding else None,
-                "scenario_matrix_hash": scoped_hashes[(run_planner, run.rsplit("__", 1)[1])],
-                "campaign_config_hash": manifest["campaign_config"]["runtime_hash"],
-            },
-        }
+        row["provenance"] = {"git_hash": source_commit, "config_hash": row["config_hash"]}
     _, _, runtime_rows, _, _ = comparator._runtime_successor_identity(
         source,
         source_commit,
@@ -147,14 +139,20 @@ def _root(
             row.get("benchmark_track") or "",
         )
         if slot in runtime_rows:
-            # Carry the legitimate producer binding before applying episode controls.
-            row["scenario_params"].update(copy.deepcopy(runtime_rows[slot]["scenario"]))
-            row["scenario_params"].update(runtime_rows[slot]["controls"])
-            row["scenario_params"]["robot_config"] = {
-                "type": slot[1],
-                **({"command_mode": "vx_vy"} if slot[1] == "holonomic" else {}),
-            }
+            runtime = runtime_rows[slot]
+            row["scenario_params"] = _scenario_identity_payload(
+                runtime["scenario"],
+                algo=runtime["algo"],
+                algo_config=runtime["config"],
+                horizon=600,
+                dt=0.1,
+                record_forces=runtime["controls"]["record_forces"],
+                observation_mode=runtime["controls"]["observation_mode"],
+                observation_level=runtime["controls"]["observation_level"],
+                benchmark_track=slot[4] or None,
+            )
         row["config_hash"] = _config_hash(row["scenario_params"])
+        row["provenance"]["config_hash"] = row["config_hash"]
     path.write_text("".join(json.dumps(row) + "\n" for row in updated), encoding="utf-8")
     (root / "campaign_manifest.json").write_text(
         json.dumps(
@@ -202,6 +200,9 @@ def _successor_contract(
         ],
         check=True,
     )
+    # Older Git versions default to non-cone sparse patterns, omitting parent
+    # files such as maps/registry.yaml needed by real scenario manifests.
+    subprocess.run(["git", "-C", str(source), "sparse-checkout", "init", "--cone"], check=True)
     subprocess.run(
         [
             "git",
@@ -236,6 +237,7 @@ def _successor_contract(
         "".join(
             f"- name: {name}\n  map_file: ../../maps/svg_maps/classic_crossing.svg\n"
             f"  seeds: {sorted(item['seeds'])}\n"
+            "  simulation_config: {ped_density: 0.0}\n"
             + (f"  benchmark_track: {item['track']}\n" if item["track"] else "")
             for name, item in by_scenario.items()
         )
@@ -688,29 +690,29 @@ def test_missing_extra_and_duplicate_successor_slots_are_unclassifiable_findings
     assert comparator.main() == 1
     assert (output / "findings.csv").exists()
 
-    extra["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    extra["provenance"]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], extra]))
-    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
     duplicate = copy.deepcopy(recorded[0])
-    duplicate["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    duplicate["provenance"]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], duplicate]))
-    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
 
-def test_mixed_scoped_matrix_hashes_exit_two_before_report(tmp_path: Path, monkeypatch) -> None:
-    """Rows from differently scoped runner inputs cannot share one campaign."""
+def test_mixed_episode_config_hashes_exit_two_before_report(tmp_path: Path, monkeypatch) -> None:
+    """Rows with invalid effective scenario hashes cannot share one campaign."""
     rows = [_row("s1", 111), _row("s2", 111)]
     bundle, digest = _archive(tmp_path, rows)
     root = _root(tmp_path, rows)
     path = root / "runs/goal__differential_drive/episodes.jsonl"
     recorded = [json.loads(line) for line in path.read_text().splitlines()]
-    recorded[1]["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    recorded[1]["provenance"]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in recorded))
 
-    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
     real_compare = comparator.compare
@@ -752,12 +754,10 @@ def test_mixed_scoped_matrix_hashes_exit_two_before_report(tmp_path: Path, monke
     assert exc.value.code == 2
     assert not (output / "report.json").exists()
 
-    recorded[1]["provenance"]["config_identity"]["scenario_matrix_hash"] = recorded[0][
-        "provenance"
-    ]["config_identity"]["scenario_matrix_hash"]
-    recorded[1]["provenance"]["config_identity"]["campaign_config_hash"] = "f" * 16
+    recorded[1]["provenance"]["config_hash"] = recorded[1]["config_hash"]
+    recorded[1]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in recorded))
-    with pytest.raises(ValueError, match="campaign_config_hash differs from pinned campaign"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
 
@@ -1150,6 +1150,7 @@ def test_forged_row_map_with_recomputed_self_hash_exits_two(tmp_path: Path, monk
     forged = json.loads(path.read_text())
     forged["scenario_params"]["map_file"] = "maps/svg_maps/forged.svg"
     forged["config_hash"] = _config_hash(forged["scenario_params"])
+    forged["provenance"]["config_hash"] = forged["config_hash"]
     path.write_text(json.dumps(forged) + "\n")
     with pytest.raises(ValueError, match="map_file differs from pinned scenario"):
         _compare(bundle, root, digest)
@@ -1202,6 +1203,7 @@ def test_row_identity_alias_must_match_pinned_scenario(tmp_path: Path) -> None:
     forged = json.loads(path.read_text())
     forged["scenario_params"]["id"] = "s2"
     forged["config_hash"] = _config_hash(forged["scenario_params"])
+    forged["provenance"]["config_hash"] = forged["config_hash"]
     path.write_text(json.dumps(forged) + "\n")
     with pytest.raises(ValueError, match="scenario provenance differs from run slot"):
         _compare(bundle, root, digest)
@@ -1228,6 +1230,7 @@ def test_recorded_episode_controls_must_match_pinned_h600_campaign(
     changed = json.loads(path.read_text())
     changed["scenario_params"][field] = wrong
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     with pytest.raises(
         ValueError, match=rf"row {field} differs from pinned (episode controls|slot)"
@@ -1245,6 +1248,7 @@ def test_differential_drive_row_declaring_holonomic_exits_two(tmp_path: Path, mo
     changed = json.loads(path.read_text())
     changed["scenario_params"]["robot_config"]["type"] = "holonomic"
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     with pytest.raises(ValueError, match="robot_config.type differs from pinned scoped runner"):
         _compare(bundle, root, digest)
@@ -1260,6 +1264,7 @@ def test_holonomic_row_command_mode_must_match_scoped_runner(tmp_path: Path, mon
     changed = json.loads(path.read_text())
     changed["scenario_params"]["robot_config"]["command_mode"] = "unicycle_vw"
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     with pytest.raises(
         ValueError, match="holonomic command_mode differs from pinned scoped runner"
@@ -1310,9 +1315,9 @@ def test_v4_scenario_algorithm_override_to_goal_exits_two(tmp_path: Path, monkey
     changed["algorithm_metadata"]["algorithm"] = "goal"
     changed["algorithm_metadata"]["config"] = {}
     changed["algorithm_metadata"]["config_hash"] = _config_hash({})
-    changed["provenance"]["commit_hash"] = commit
-    changed["provenance"]["config_identity"]["algo"] = "goal"
+    changed["provenance"]["git_hash"] = commit
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     campaign_path = root / "campaign_manifest.json"
     campaign = json.loads(campaign_path.read_text())
@@ -1366,7 +1371,7 @@ def test_v4_key_bound_to_v3_config_fails_even_with_re_pinned_manifest(
     row_path = root / "runs" / f"{v4}__differential_drive" / "episodes.jsonl"
     recorded = json.loads(row_path.read_text())
     recorded["git_hash"] = commit
-    recorded["provenance"]["commit_hash"] = commit
+    recorded["provenance"]["git_hash"] = commit
     row_path.write_text(json.dumps(recorded) + "\n")
     campaign_path = root / "campaign_manifest.json"
     campaign = json.loads(campaign_path.read_text())
@@ -1441,14 +1446,12 @@ def test_effective_planner_config_and_referenced_path_must_match(tmp_path: Path)
         "planner_variant": "hybrid_rule_v4_clearance_braking",
         "name": v4,
     }
-    original["provenance"]["config_identity"]["algo_config_path"] = "configs/algos/other.yaml"
+    original["provenance"]["config_hash"] = "f" * 16
     path.write_text(json.dumps(original) + "\n")
-    with pytest.raises(ValueError, match="run provenance differs"):
+    with pytest.raises(ValueError, match="provenance config_hash differs"):
         _compare(bundle, root, digest)
-    original["provenance"]["config_identity"]["algo_config_path"] = json.loads(
-        (tmp_path / "successor-manifest.json").read_text()
-    )["versioned_planner_bindings"][v4]["path"]
-    original["provenance"]["commit_hash"] = "f" * 40
+    original["provenance"]["config_hash"] = original["config_hash"]
+    original["provenance"]["git_hash"] = "f" * 40
     path.write_text(json.dumps(original) + "\n")
     with pytest.raises(ValueError, match="run provenance source differs"):
         _compare(bundle, root, digest)
@@ -1527,35 +1530,15 @@ def test_pinned_v4_lineage_rejects_contradictory_config_declaration(tmp_path: Pa
     assert f"successor planner binding lacks reviewed v4 lineage: {key}" in result.stderr
 
 
-@pytest.mark.parametrize("mixed_successor_definitions", [False, True])
-def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_successor_definitions):
-    """Read actual JSONL bytes and fence metrics even when numerical values agree."""
-    old = _row("s", 1001)
-    other = _row("s", 1002)
-    bundle, digest = _archive(tmp_path, [old, other] if mixed_successor_definitions else [old])
-    new = copy.deepcopy(old)
-    new["metric_schema_version"] = "robot-sf-metrics.v2"
-    new["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
-    root = _root(tmp_path, [new, other] if mixed_successor_definitions else [new])
-    report = _compare(bundle, root, digest)
-    summary = next(
-        x for x in report["planner_scenario_metrics"] if x["field"] == "metrics.path_length"
-    )
-    assert summary["mean_paired_delta"] is None
-    assert summary["metric_comparability"] == "incompatible_definitions"
-    finding = next(x for x in report["findings"] if x["field"] == "metrics.path_length")
-    assert finding["classification"] == "metric_definition_change"
-    assert finding["delta_0_0_8_minus_0_0_7"] is None
-
-
+@pytest.mark.parametrize("protocol,current", [(None, False), ("0.0.7", False), ("0.0.8", True)])
 @pytest.mark.parametrize("budget", [None, 500, 700])
 def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
-    tmp_path: Path, budget: int | None
+    tmp_path: Path, budget: int | None, protocol: str | None, current: bool
 ) -> None:
-    """Compare producer binding and hashes for scheduled and fixed arms.
+    """Pinned rows match the real producer's protocol-scoped budgets and hashes.
 
-    On base, H500 isolates a budget mismatch; scheduled/H700 cases fail on missing
-    provenance fields. Those metadata failures do not independently prove budget bugs.
+    Current fixed arms bind H500/H700; older arms retain the authored simulator
+    limit and use a runner cap. Historical schedules keep their old provenance.
     """
     from dataclasses import replace
     from types import SimpleNamespace
@@ -1570,6 +1553,7 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     )
     from robot_sf.benchmark.camera_ready.campaign import _prepare_campaign_planner_variant_run
     from robot_sf.benchmark.runner import _apply_track_metadata_to_scenarios
+    from robot_sf.evidence.writers import write_text
 
     _, _, source, source_commit = _successor_contract(tmp_path)
     # The minimal-row helper replaces this SVG; restore the real matrix input.
@@ -1580,10 +1564,11 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
     )
     payload = yaml.safe_load(template_path.read_text())
+    payload["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}
+    payload["protocol_version"] = protocol
     payload["planners"] = [p for p in payload["planners"] if p["key"] == "goal"]
     if budget is not None:
         payload["planners"][0]["horizon"] = budget
-    if budget is not None:
         # A fixed-budget arm may shorten a declared scenario, but may not silently extend it.
         # Keep real bottleneck geometry; this explicit fixture authors a 700-step limit.
         from robot_sf.training.scenario_loader import load_scenarios
@@ -1592,13 +1577,13 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         for item in authored:
             item["simulation_config"]["max_episode_steps"] = 700
         fixture_matrix = source / "configs/scenarios/arm_budgets.yaml"
-        fixture_matrix.write_text(yaml.safe_dump(authored))
+        write_text(fixture_matrix, "# AI-GENERATED / NEEDS-REVIEW\n" + yaml.safe_dump(authored))
         payload["scenario_matrix"] = "configs/scenarios/arm_budgets.yaml"
         payload.pop("scenario_horizons", None)
         payload.pop("scenario_horizons_sha256", None)
         payload["horizon"] = 600
     config_path = source / "configs/benchmarks/override.yaml"
-    config_path.write_text(yaml.safe_dump(payload))
+    write_text(config_path, "# AI-GENERATED / NEEDS-REVIEW\n" + yaml.safe_dump(payload))
     with patch.object(_util, "get_repository_root", return_value=source):
         cfg = load_campaign_config(config_path, repository_root=source)
         scenarios = _load_campaign_scenarios(cfg, repository_root=source)
@@ -1624,7 +1609,7 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         "goal",
         "differential_drive",
         "classic_bottleneck_low",
-        111,
+        1001,
         "",
     )  # Static join key only.
     worker = Path(comparator.__file__).with_name("_pinned_successor_runtime.py")
@@ -1645,32 +1630,41 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     assert result.returncode == 0, result.stderr
     resolved = json.loads(result.stdout)
     expected = resolved["rows"][0]
-    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == (budget or 500)
+    expected_steps = 500 if budget is None else (budget if current else 700)
+    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == expected_steps
     if budget is None:
         assert (
             expected["scenario"]["metadata"]["scenario_horizon"]["recommended_horizon_steps"] == 500
         )
-        assert (
-            expected["scenario"]["metadata"]["scenario_horizon"]["sha256"]
-            == payload["scenario_horizons_sha256"]
+        assert expected["scenario"]["metadata"]["scenario_horizon"].get("sha256") == (
+            payload["scenario_horizons_sha256"] if current else None
         )
     else:
-        assert expected["scenario"]["metadata"]["campaign_horizon"] == {
-            "mode": "fixed",
-            "horizon_steps": budget,
-            "authored_max_episode_steps": 700,
-        }
+        assert expected["scenario"]["metadata"].get("campaign_horizon") == (
+            {"mode": "fixed", "horizon_steps": budget, "authored_max_episode_steps": 700}
+            if current
+            else None
+        )
     scoped_hash = next(
         item["hash"] for item in resolved["scoped_hashes"] if item["planner"] == "goal"
     )
     assert scoped_hash == _config_hash(runner_scenarios)
     # Static recorded-row reconstruction only; the worker does not step a planner.
-    params = {
-        **scenario,
-        **expected["controls"],
-        "seed": 111,  # seed-holdout: setup-only
-        "algo": "goal",
-    }
+    from robot_sf.benchmark.map_runner import map_runner_identity
+
+    # Match the canonical producer envelope; the row slot binds dev seed 1001.
+    params = _scenario_identity_payload(
+        map_runner_identity._scenario_with_episode_seed_defaults(scenario, seed=1001),
+        algo="goal",
+        algo_config=expected["config"],
+        horizon=budget if budget is not None else cfg.horizon,
+        dt=cfg.dt,
+        record_forces=cfg.record_forces,
+        observation_mode=expected["controls"]["observation_mode"],
+        observation_level=expected["controls"]["observation_level"],
+        record_planner_decision_trace=cfg.record_planner_decision_trace,
+        record_simulation_step_trace=cfg.record_simulation_step_trace,
+    )
     # The resolver hashes the recorded row as well as reconstructing its controls.
     result = subprocess.run(
         [sys.executable, "-I", str(worker)],
@@ -1704,10 +1698,356 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
             "config_hash": expected["config_hash"],
         },
         "provenance": {
-            "commit_hash": source_commit,
-            "config_identity": {"algo": "goal", "algo_config_path": None},
+            "git_hash": source_commit,
+            "config_hash": _config_hash(params),
         },
     }
     comparator._validate_successor_row(
         slot, {"_provenance": recorded}, {slot: expected}, source_commit
     )
+
+
+@pytest.mark.parametrize("mixed_successor_definitions", [False, True])
+def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_successor_definitions):
+    """Read actual JSONL bytes and fence metrics even when numerical values agree."""
+    old = _row("s", 1001)
+    other = _row("s", 1002)
+    bundle, digest = _archive(tmp_path, [old, other] if mixed_successor_definitions else [old])
+    new = copy.deepcopy(old)
+    new["metric_schema_version"] = "robot-sf-metrics.v2"
+    new["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    root = _root(tmp_path, [new, other] if mixed_successor_definitions else [new])
+    report = _compare(bundle, root, digest)
+    summary = next(
+        x for x in report["planner_scenario_metrics"] if x["field"] == "metrics.path_length"
+    )
+    assert summary["mean_paired_delta"] is None
+    assert summary["metric_comparability"] == "incompatible_definitions"
+    finding = next(x for x in report["findings"] if x["field"] == "metrics.path_length")
+    assert finding["classification"] == "metric_definition_change"
+    assert finding["delta_0_0_8_minus_0_0_7"] is None
+
+
+def _real_fixture_json(name):
+    """Read unchanged snapshot bytes in their original source namespace."""
+    archive = Path(__file__).parents[1] / "fixtures/cmpreal/rehearsal_snapshot.zip"
+    with ZipFile(archive) as snapshot:
+        return json.loads(snapshot.read(name))
+
+
+def test_real_camera_ready_row_provenance_is_admitted():
+    """The unedited dev1001 row binds its scenario through camera-ready provenance."""
+    row = _real_fixture_json("camera_ready_row.json")
+    slot = ("goal", "differential_drive", "classic_bottleneck_low", 1001, "")
+    compact = {"_provenance": row}
+    # Scoped/campaign hashes live in campaign manifests, not episode provenance.
+    # Exercise either API so dependency-only base fails on provenance, not arity.
+    validate = comparator._validate_row_runner_hashes
+    kwargs = {}
+    if "scoped_hash" in inspect.signature(validate).parameters:
+        kwargs = {"scoped_hash": "unused-by-camera-ready", "campaign_config_hash": "unused"}
+    validate(slot, compact, **kwargs)
+    assert row["provenance"]["config_hash"] == "9384ad90b6d65de0"
+
+
+@pytest.mark.parametrize("arm", ["goal", "guarded_ppo"])
+def test_real_camera_ready_rows_match_pinned_runtime(arm):
+    """Actual producer rows have no scenario seed and retain typed PPO metadata."""
+    row = _real_fixture_json(f"{arm}_row.json")
+    expected = next(
+        r for r in _real_fixture_json("pinned_runtime_rows.json") if r["slot"][0] == arm
+    )
+    slot = tuple(expected.pop("slot"))
+    comparator._validate_successor_row(
+        slot, {"_provenance": row}, {slot: expected}, "ea414933e61ce267389bd3bcbe97fb669a825c6e"
+    )
+    if arm == "guarded_ppo":
+        row["algorithm_metadata"]["canonical_algorithm"] = "ppo"
+        with pytest.raises(ValueError, match="canonical algorithm differs"):
+            comparator._validate_successor_row(
+                slot,
+                {"_provenance": row},
+                {slot: expected},
+                "ea414933e61ce267389bd3bcbe97fb669a825c6e",
+            )
+
+
+@pytest.fixture
+def real_runtime_source(tmp_path):
+    """Reconstruct archived dev config companions in a pinned production checkout.
+
+    Original row bytes stay unchanged. This is config-resolution proof only;
+    the full rehearsal CLI separately binds the actual freeze commit.
+    """
+    source = tmp_path / "real-runtime-source"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--shared",
+            "--quiet",
+            "--sparse",
+            str(Path(__file__).parents[2]),
+            str(source),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "sparse-checkout",
+            "add",
+            "robot_sf",
+            "fast-pysf",
+            "configs",
+            "model",
+            "maps/svg_maps",
+            "maps/successor_svg_maps",
+        ],
+        check=True,
+    )
+    archive = Path(__file__).parents[1] / "fixtures/cmpreal/rehearsal_snapshot.zip"
+    paths = []
+    with ZipFile(archive) as snapshot:
+        for name in snapshot.namelist():
+            if name.startswith("source/"):
+                relative = name.removeprefix("source/")
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(snapshot.read(name))
+                paths.append(relative)
+    # Keep archived companions intact; select only the real row arms. Other
+    # rehearsal arms have rehearsal-only configs absent from this checkout.
+    import yaml
+
+    original = source / "configs/benchmarks/rehearsal_0_0_8_dev_seeds.yaml"
+    config = yaml.safe_load(original.read_text())
+    config["planners"] = [p for p in config["planners"] if p["key"] in {"goal", "guarded_ppo"}]
+    # The current identity builder predates the rehearsal's per-scenario
+    # schedule support. This single captured slot has an authored 500-step
+    # budget (pinned_runtime_rows.json controls), preserved explicitly here.
+    config.pop("scenario_horizons")
+    config.pop("scenario_horizons_sha256")
+    config["horizon"] = 500
+    subset = "configs/benchmarks/real-row-subset.yaml"
+    (source / subset).write_text(yaml.safe_dump(config))
+    paths.append(subset)
+    subprocess.run(["git", "-C", str(source), "add", "--sparse", *paths], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "archived dev companions",
+        ],
+        check=True,
+    )
+    commit = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    return source, commit
+
+
+@pytest.mark.parametrize(
+    ("arm", "mutation"),
+    [
+        ("goal", "extra_parameter"),
+        ("goal", "missing_algo_hash"),
+        ("guarded_ppo", "missing_algo_hash"),
+    ],
+)
+def test_real_rows_refuse_self_consistent_config_mutations(real_runtime_source, arm, mutation):
+    """A row agreeing with its own hash must still bind the full pinned payload."""
+    source, _commit = real_runtime_source
+    row = _real_fixture_json(f"{arm}_row.json")
+    slot = (arm, "differential_drive", row["scenario_id"], 1001, "")
+
+    def validate(candidate):
+        compact = {slot: {"_provenance": candidate}}
+        # The archive keeps the freeze's normalized source projection. Replay
+        # that loader output, independent of the candidate row, because current
+        # scenario lineage metadata differs from the historical freeze. Policy
+        # and full identity payload construction remain production code.
+        pinned = next(
+            r for r in _real_fixture_json("pinned_runtime_rows.json") if r["slot"][0] == arm
+        )
+        worker = Path(comparator.__file__).with_name("_pinned_successor_runtime.py")
+        script = """
+import json, runpy, sys
+from pathlib import Path
+from unittest.mock import patch
+root = Path.cwd()
+sys.path[:0] = [str(root), str(root / 'fast-pysf')]
+from robot_sf.benchmark.camera_ready import _config
+from robot_sf.benchmark.map_runner_policies import map_runner_policy_resolution as policies
+scenario = json.loads(sys.argv[2])
+planner_config = json.loads(sys.argv[3])
+original_parse = policies._parse_algo_config
+
+def parse_config(path):
+    if path and Path(path).name == 'guarded_ppo_release_v0_0_8.yaml':
+        return planner_config
+    return original_parse(path)
+
+with patch.object(_config, '_load_campaign_scenarios', return_value=[scenario]), patch.object(
+    policies, '_parse_algo_config', side_effect=parse_config
+):
+    runpy.run_path(sys.argv[1], run_name='__main__')
+"""
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                script,
+                str(worker),
+                json.dumps(pinned["scenario"]),
+                json.dumps(pinned["config"]),
+            ],
+            cwd=source,
+            input=json.dumps(
+                {
+                    "config_path": "configs/benchmarks/real-row-subset.yaml",
+                    "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
+                    "rows": [{"slot": slot, "scenario_params": candidate["scenario_params"]}],
+                }
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        runtime = {tuple(r.pop("slot")): r for r in json.loads(result.stdout)["rows"]}
+        # Freeze-era PPO adds action_semantics to typed metadata. Hydrate that
+        # independent captured projection rather than imposing current defaults
+        # on historical rows; the payload hash remains the worker's result.
+        for name in ("metadata_config", "metadata_config_hash"):
+            runtime[slot][name] = pinned[name]
+
+        comparator._validate_successor_row(
+            slot, compact[slot], runtime, "ea414933e61ce267389bd3bcbe97fb669a825c6e"
+        )
+        comparator._validate_row_runner_hashes(slot, compact[slot])
+
+    validate(row)  # Same real bytes pass before testing the refusal boundary.
+    changed = copy.deepcopy(row)
+    if mutation == "extra_parameter":
+        changed["scenario_params"]["ped_speed_scale"] = 1.5
+    else:
+        del changed["scenario_params"]["algo_config_hash"]
+    changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
+    changed["result_provenance"]["config_hash"] = changed["config_hash"]
+    with pytest.raises(ValueError, match="scenario config_hash differs from effective scenario"):
+        validate(changed)
+
+
+@pytest.mark.parametrize("retain_provenance", [False, True])
+def test_small_real_trace_read_discards_series(retain_provenance):
+    """Even one diagnostic episode cannot keep trace/sample arrays in the audit index."""
+    fixture = Path(__file__).parents[1] / "fixtures/cmpreal/rehearsal_traces.jsonl.gz"
+    with gzip.open(fixture, "rt") as stream:
+        raw = stream.readline()
+    original = json.loads(raw)
+    assert original["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    assert original["metrics"]["robot_force_samples"]
+    rows = {}
+    comparator._insert_rows(
+        rows, [raw], "goal__differential_drive", "real fixture", retain_provenance=retain_provenance
+    )
+    compact = next(iter(rows.values()))
+    assert "robot_force_samples" not in compact["metrics"]
+    if retain_provenance:
+        assert compact["_provenance"]["algorithm_metadata"] == {
+            name: original["algorithm_metadata"][name]
+            for name in ("algorithm", "canonical_algorithm", "config", "config_hash")
+            if name in original["algorithm_metadata"]
+        }
+
+
+def test_cmpfix_runner_seeded_scenario_matches_expected_mapping(tmp_path: Path) -> None:
+    from robot_sf.benchmark.map_runner.map_runner_identity import (
+        _scenario_with_episode_seed_defaults,
+    )
+
+    row = _row("s1", 1001)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row])
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    recorded = json.loads(path.read_text())
+    recorded["scenario_params"] = _scenario_with_episode_seed_defaults(
+        recorded["scenario_params"], seed=1001
+    )
+    recorded["config_hash"] = _config_hash(recorded["scenario_params"])
+    path.write_text(json.dumps(recorded) + "\n")
+    result = _compare(bundle, root, digest)
+    assert result["paired_rows"] == 1
+
+
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_resolved_publication_config_hash_is_bound(tmp_path: Path, mismatch: bool) -> None:
+    """Publication fields affect campaign hashes without changing scientific inputs."""
+    from dataclasses import replace
+
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload
+
+    manifest_path, _, source, commit = _successor_contract(tmp_path, rows=[_row("s1", 1001)])
+    manifest = json.loads(manifest_path.read_text())
+    config_path = manifest["campaign_config"]["path"]
+    publication = {"release_tag": "diagnostic-" + commit, "doi": "diagnostic-unpublished"}
+    cfg = load_campaign_config(source / config_path, repository_root=source)
+    from unittest.mock import patch
+
+    with patch("robot_sf.benchmark.camera_ready._util.get_repository_root", return_value=source):
+        expected = _config_hash(_config_hash_payload(replace(cfg, **publication)))
+    assert expected != manifest["campaign_config"]["runtime_hash"]
+    manifest["campaign_config"]["publication_identity"] = publication
+    manifest["campaign_config"]["runtime_hash"] = "f" * 16 if mismatch else expected
+    manifest_path.write_text(json.dumps(manifest))
+    digest = sha256(manifest_path.read_bytes()).hexdigest()
+    if mismatch:
+        with pytest.raises(
+            ValueError, match="campaign_config runtime_hash differs from pinned source"
+        ):
+            comparator._verified_successor_manifest(manifest_path, digest, source, {})
+    else:
+        verified = comparator._verified_successor_manifest(manifest_path, digest, source, {})
+        assert verified["campaign_config"]["runtime_hash"] == expected
+        assert verified["expected_slots"]
+
+
+@pytest.mark.parametrize(
+    "publication",
+    [
+        {"release_tag": "dev", "doi": "unpublished", "workers": 2},
+        {"release_tag": "dev", "doi": "unpublished", "scenario_matrix": "x"},
+        {"release_tag": "dev"},
+        {"release_tag": "dev", "doi": None},
+    ],
+)
+def test_publication_binding_refuses_scientific_or_incomplete_overlays(
+    tmp_path, publication, monkeypatch
+):
+    """The pinned manifest permits exactly two nonempty publication fields."""
+    path, _, source, _ = _successor_contract(tmp_path, rows=[_row("s1", 1001)])
+    manifest = json.loads(path.read_text())
+    manifest["campaign_config"]["publication_identity"] = publication
+    path.write_text(json.dumps(manifest))
+
+    def forbidden_runtime(*args, **kwargs):
+        pytest.fail("invalid publication overlay reached detached runtime resolution")
+
+    monkeypatch.setattr(comparator, "_runtime_successor_identity", forbidden_runtime)
+    with pytest.raises(ValueError, match="publication_identity requires only release_tag and doi"):
+        comparator._verified_successor_manifest(
+            path, sha256(path.read_bytes()).hexdigest(), source, {}
+        )

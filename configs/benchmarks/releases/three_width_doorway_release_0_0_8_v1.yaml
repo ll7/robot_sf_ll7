@@ -5,7 +5,7 @@ release_id: three_width_doorway_0_0_8_v1
 release_tag: three-width-doorway-0.0.8-v1
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml
-campaign_config_sha256: f2b04bc5fd475e872701e170671eadf5cbe338c8250634c62cc4cf1307b7e7e5
+campaign_config_sha256: 9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: doorway-width-slice
 scenario:
@@ -13,42 +13,42 @@ scenario:
   matrix_sha256: 9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
+  seed_set: release_eval_0_0_8
   seeds: []
-  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
-  seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  seed_sets_path: ../../benchmarks/seed_sets_0_0_8.yaml
+  seed_sets_sha256: a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706
   resolved_seeds:
   # seed-holdout: release-evaluation begin
-  - 111
-  - 112
-  - 113
-  - 114
-  - 115
-  - 116
-  - 117
-  - 118
-  - 119
-  - 120
-  - 121
-  - 122
-  - 123
-  - 124
-  - 125
-  - 126
-  - 127
-  - 128
-  - 129
-  - 130
-  - 131
-  - 132
-  - 133
-  - 134
-  - 135
-  - 136
-  - 137
-  - 138
-  - 139
-  - 140
+  - 50036
+  - 50140
+  - 50331
+  - 50403
+  - 50813
+  - 51339
+  - 51709
+  - 51767
+  - 52094
+  - 52175
+  - 52257
+  - 52671
+  - 52850
+  - 52971
+  - 53020
+  - 53198
+  - 53239
+  - 53636
+  - 53671
+  - 53779
+  - 55022
+  - 55379
+  - 55568
+  - 56170
+  - 56966
+  - 57077
+  - 57113
+  - 57494
+  - 57943
+  - 59019
   # seed-holdout: release-evaluation end
 metrics:
   snqi_weights_path: ../snqi_weights_camera_ready_v3.json
@@ -116,7 +116,7 @@ width_slice_contract:
   planner_arms: 14
   evaluation_seeds: 30
   expected_episode_rows: 1260
-  requested_horizon_steps: 600
+  requested_horizon_steps: 400
   scenario_horizon_cap_steps: 400
   dt: 0.1
   pairing: same_seed_across_widths_requires_initial_actor_and_external_rng_identity_receipts

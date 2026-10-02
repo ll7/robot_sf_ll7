@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from math import cos, dist, pi, sin
 from typing import TYPE_CHECKING, Protocol
 
+import numpy as np
 from loguru import logger
 from shapely.geometry import Point as ShapelyPoint
 from shapely.prepared import prep
@@ -16,7 +17,6 @@ from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import sample_zone
 
 if TYPE_CHECKING:
-    import numpy as np
     from pysocialforce.scene import PedState
     from shapely.prepared import PreparedGeometry
 
@@ -68,17 +68,15 @@ class CrowdedZoneBehavior:
     crowded_zones: list[Zone]
     goal_proximity_threshold: float = 1
     obstacle_polygons: list["PreparedGeometry"] | None = None
-    rng: "np.random.Generator | None" = None
+    rng: "np.random.Generator" = field(default_factory=np.random.default_rng, repr=False)
     goal_sample_max_attempts_per_point: int = 20
 
     def _sample_goal(self, zone: Zone) -> Vec2D:
-        """Sample a zone goal, preserving the legacy call when unconstrained.
+        """Sample a zone goal from the private population generator.
 
         Returns:
             A sampled goal inside ``zone``.
         """
-        if self.obstacle_polygons is None and self.rng is None:
-            return sample_zone(zone, 1)[0]
         return sample_zone(
             zone,
             1,
@@ -163,6 +161,8 @@ class FollowRouteBehavior:
     """Offset from this route-only state view to the simulator pedestrian rows."""
     robot_pose_provider: Callable[[], list[RobotPose]] | None = None
     """Current robot poses; respawns keep clear of these footprints (issue #9725)."""
+    rng: np.random.Generator = field(default_factory=np.random.default_rng, repr=False)
+    guard_rng: np.random.Generator = field(default_factory=np.random.default_rng, repr=False)
     robot_exclusion_radius: float = 0.0
     """Centre distance (robot radius + ped radius + margin) respawns keep from each robot."""
     respawn_overlap_events: list[dict] = field(default_factory=list)
@@ -285,6 +285,7 @@ class FollowRouteBehavior:
             spawn_zone,
             num_peds,
             obstacle_polygons=self.obstacle_polygons,
+            rng=self.rng,
         )
         robot_exclusions = self._robot_exclusions() if guard_robot else []
         if robot_exclusions and _any_inside(spawn_positions, robot_exclusions):
@@ -294,6 +295,7 @@ class FollowRouteBehavior:
                     num_peds,
                     obstacle_polygons=self.obstacle_polygons,
                     exclusions=robot_exclusions,
+                    rng=self.guard_rng,
                 )
             except RuntimeError:
                 logger.warning(

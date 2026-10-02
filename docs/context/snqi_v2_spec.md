@@ -54,11 +54,11 @@ semantics. V2 adds `metrics.snqi_v2` and `metrics.snqi_v2_terms`.
 
 ## Calibration before evaluation
 
-For 0.0.8, the candidate acquisition config remains at
-`configs/benchmarks/snqi_v2/calibration.dev101_102.yaml` for path compatibility,
-but now declares development seeds **1001/1002**. It covers the 14 arm slots and
+For 0.0.8, the development acquisition config is
+`configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml` (renamed from
+`calibration.dev101_102.yaml` under D-068) and declares development seeds **1001/1002**. It covers the 14 arm slots and
 all 48 scenarios at dt .1 with the SHA-pinned authored #9999 schedule:
-25×H400, 13×H500, 8×H600, 1×H650 and 1×H700. The freeze path checks each row
+24×H400, 13×H500, 9×H600, 1×H650 and 1×H700 (D-084). The freeze path checks each row
 and producer-sidecar budget against its independently resolved scenario, and
 snapshots the schedule with the other acquisition inputs. The producer sidecar
 records each episode's horizon rather than the global scheduled-mode `None`. A row's own
@@ -164,6 +164,10 @@ seed-bootstrap 95% intervals, rank correlations against declared/success orderin
 top-1 frequencies, top-3 overlap, pairwise flips, and leave-one-out rank changes.
 The separate existing ranking-stability helper resamples seeds independently per
 planner and is explicitly labeled unpaired; the confidence intervals share seed draws.
+Family reports require unique paired scenario/seed cells across arms and equal episode
+counts across seeds. Uneven seed coverage is rejected: under balanced coverage the
+mean of seed means bootstrapped by the CI is exactly the reported episode-weighted
+planner mean. A shared but uneven grid does not meet this reporting contract.
 Undefined correlations are null. Correlations use average ties; tied top-1 values
 split credit; top-3 boundary ties use lexical arm identity. Bootstrap intervals
 with very few seeds are diagnostic and do not establish population precision.

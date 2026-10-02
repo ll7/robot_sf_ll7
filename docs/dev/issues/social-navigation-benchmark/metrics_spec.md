@@ -5,7 +5,7 @@ Use Euclidean norm $\|\cdot\|$.
 
 ## Metric definition versions
 
-`robot-sf-metrics.v2` corrects issue #10007 F4/F5/F7/F8. Unmarked historical
+`robot-sf-metrics.v2` corrects issue #10007 F4/F5/F7/F8 and D-055 path curvature. Unmarked historical
 rows and anchors, including published 0.0.7, mean `robot-sf-metrics.v1`.
 The episode JSON envelope remains `v1`; its `metric_schema_version` identifies meaning.
 These versions cannot be pooled or scored with each other's SNQI normalization assets.
@@ -75,7 +75,30 @@ See [the migration and probe evidence](../../../context/issue_10007_fxm_metrics.
 
 ## Smoothness / Energy
 11. $\text{jerk\_mean} = \frac{1}{T-2} \sum_{t=0}^{T-3} \| (a_{t+1} - a_t)/dt \|$ (m/s^3) where $a_t$ is robot acceleration.
-12. $\text{curvature\_mean} = \operatorname{mean}_t \frac{\| v_t \times a_t \|}{\|v_t\|^3}$ computed from discrete differences with $\Delta t$; entries with $\|v_t\| \le \varepsilon$ are excluded; non-finite values filtered; returns $0$ if no valid samples.
+12. Metric v2 `curvature_mean` is the arc-length mean absolute path curvature (rad/m):
+    $\sum_{j=0}^{M-2}|\operatorname{wrap}_{[-\pi,\pi]}(\phi_{j+1}-\phi_j)| /
+    \max(\sum_{j=0}^{M-1} ds_j, 1.0\,\mathrm{m})$.
+    For consecutive recorded path positions (including reset when available),
+    $ds_i=\|p_{i+1}-p_i\|$ and $\phi_i=\operatorname{atan2}(p_{i+1}-p_i)$.
+    Retain **only steps with $ds_i\ge 10^{-3}$ m**, then turn between consecutive
+    retained directions: discarded steps add neither turning nor length. Rotating in
+    place followed by departure counts the path turn once; reversal counts $\pi$.
+    The denominator floor is **1.0 m**, and fewer than two retained steps return
+    **0.0**. Nonfinite displacements are ignored; the result is finite and nonnegative.
+    Named implementation constants: `CURVATURE_MIN_DISPLACEMENT_M` and
+    `CURVATURE_LENGTH_FLOOR_M`. Timestep does not enter this geometric definition.
+
+    Historical metric v1 retains the original time mean $|v\times a|/|v|^3$
+    from position differences. Speeds **<=1e-9 m/s contribute zero samples** to
+    that mean (they are not removed from its denominator); nonfinite curvature
+    samples are filtered. Fewer than four positions or invalid `dt` return zero.
+    Pass the historical row's resolved `metric_schema_version` explicitly to
+    `curvature_mean` for v1 recomputation. New computations default to v2.
+
+    D-055 replaces the near-zero-speed singularity, which otherwise lets creeping
+    dominate smoothness. SNQI-v2 K still divides by its frozen matching-definition
+    p95 anchor and clips to [0,1]; recalibration is separate. Pre-D-055 v2 rehearsal
+    scalars are superseded diagnostic values, never current-v2 calibration inputs.
 13. $\text{energy} = \sum_{t=0}^{T-1} \| a_t \|$.
 
 ## Optional Field Metrics

@@ -134,7 +134,7 @@ scenarios:
     recommended_horizon_steps: 400
     status: authored
   francis2023_pedestrian_overtaking:
-    recommended_horizon_steps: 400
+    recommended_horizon_steps: 600
     status: authored
   francis2023_perpendicular_traffic:
     recommended_horizon_steps: 400

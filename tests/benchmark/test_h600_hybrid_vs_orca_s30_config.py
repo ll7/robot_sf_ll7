@@ -113,8 +113,8 @@ def test_h600_hybrid_vs_orca_s30_config_identity() -> None:
     assert (REPO_ROOT / EXPECTED_PPO_CONFIG).is_file()
 
 
-def test_h600_hybrid_vs_orca_s30_loader_preserves_s30_expansion_hash() -> None:
-    """Campaign loader resolves the predeclared S30 scenario-plus-seed payload."""
+def test_h600_hybrid_vs_orca_s30_loader_detects_authored_source_delta() -> None:
+    """Live source changes are distinct from the preserved historical S30 preregistration."""
     cfg = load_campaign_config(CONFIG_PATH)
 
     assert cfg.name == "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30"
@@ -142,4 +142,27 @@ def test_h600_hybrid_vs_orca_s30_loader_preserves_s30_expansion_hash() -> None:
             row["simulation_config"]["max_episode_steps"] == binding["authored_max_episode_steps"]
         )
         row["metadata"].pop("campaign_horizon")
+    overtaking = next(
+        row for row in authored_inputs if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    assert overtaking["simulation_config"]["max_episode_steps"] == 600
+    # D-085 adds the speed-envelope caveat and retires stale plausibility metrics.
+    plausibility = overtaking["metadata"]["plausibility"]
+    assert "outside its trained speed range" in plausibility["notes"]
+    assert plausibility["metrics"] is None
+    assert plausibility["metrics_updated_on"] is None
+    # Reconstruct the retained pre-D-085 authored bytes for the historical pin.
+    plausibility["notes"] = None
+    plausibility["metrics"] = {
+        "min_distance": 2.2223542321899186,
+        "mean_distance": 8.737510755793421,
+        "robot_ped_within_5m_frac": 0.28587024062018307,
+        "ped_force_mean": 0.24676126309566468,
+        "force_q95": 1.208259633473192,
+    }
+    plausibility["metrics_updated_on"] = "2026-01-30T14:19:28.225110+01:00"
+    assert _hash_payload(authored_inputs) == "655aff73b8a6"
+    # Keep the historical preregistration bytes and prove the authored-budget delta.
+    overtaking["simulation_config"]["max_episode_steps"] = 400
     assert _hash_payload(authored_inputs) == EXPECTED_S30_SCENARIO_SEED_HASH
+    assert _hash_payload(scenarios) != EXPECTED_S30_SCENARIO_SEED_HASH

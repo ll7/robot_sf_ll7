@@ -84,7 +84,7 @@ def assert_dev_seeds(seeds: Any) -> list[int]:
         if not DEV_SEED_MIN <= seed <= DEV_SEED_MAX:
             raise SeedGuardError(
                 f"seed {seed} is outside the development range {DEV_SEED_MIN}-{DEV_SEED_MAX} "
-                "(111-140 is the evaluation holdout); aborting"
+                "(retired 111-140 and the sealed 0.0.8 seeds remain held out); aborting"
             )
         checked.append(seed)
     return checked

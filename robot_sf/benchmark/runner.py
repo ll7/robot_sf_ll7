@@ -44,7 +44,9 @@ from loguru import logger
 
 try:
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-except ImportError:  # pragma: no cover - optional dependency
+except (ImportError, PermissionError):  # pragma: no cover - optional dependency
+    # MoviePy reads a discovered .env during import; unavailable optional
+    # configuration must not prevent CLI help or non-video benchmark use.
     ImageSequenceClip = None  # type: ignore[assignment]
 
 try:
@@ -107,6 +109,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import set_global_seed
 from robot_sf.planner.protocol import BaselineStepToLocalAdapter, normalize_planner_diagnostics
+from robot_sf.robot.dynamics import RobotDynamicsState, UnicycleDynamics
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -301,7 +304,7 @@ def _scenario_ped_radius_m(scenario_params: dict[str, Any]) -> float:
     return DEFAULT_BENCHMARK_PED_RADIUS_M
 
 
-def _build_observation(
+def _build_observation(  # noqa: PLR0913
     ObservationCls,
     robot_pos,
     robot_vel,
@@ -311,6 +314,7 @@ def _build_observation(
     *,
     robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
     ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+    robot_drive_state: RobotDynamicsState | None = None,
 ):
     """Build an Observation instance from robot and pedestrian state.
 
@@ -323,6 +327,7 @@ def _build_observation(
         dt: Timestep duration.
         robot_radius: Robot radius in meters.
         ped_radius: Shared pedestrian radius in meters.
+        robot_drive_state: Current physical unicycle drive state, when available.
 
     Returns:
         Observation instance with current state data.
@@ -331,14 +336,20 @@ def _build_observation(
         {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": float(ped_radius)}
         for pos in ped_positions
     ]
+    robot = {
+        "position": robot_pos.tolist(),
+        "velocity": robot_vel.tolist(),
+        "goal": robot_goal.tolist(),
+        "radius": float(robot_radius),
+    }
+    if robot_drive_state is not None:
+        robot["speed"] = np.asarray(
+            [robot_drive_state.linear_speed, robot_drive_state.angular_speed], dtype=np.float32
+        )
+        robot["heading"] = float(robot_drive_state.heading)
     return ObservationCls(
         dt=dt,
-        robot={
-            "position": robot_pos.tolist(),
-            "velocity": robot_vel.tolist(),
-            "goal": robot_goal.tolist(),
-            "radius": float(robot_radius),
-        },
+        robot=robot,
         agents=agents,
         obstacles=[],
     )
@@ -1386,7 +1397,32 @@ def _step_planner_with_retry(
             return {"vx": 0.0, "vy": 0.0}
 
 
-def _build_baseline_policy_fn(  # noqa: PLR0913
+def _advance_delta_ppo_drive(
+    drive: UnicycleDynamics,
+    state: RobotDynamicsState | None,
+    action: dict[str, float],
+    dt: float,
+) -> tuple[RobotDynamicsState, tuple[float, float]]:
+    """Apply the absolute PPO command.
+
+    Returns:
+        Updated drive state and world displacement velocity.
+    """
+    if state is None:
+        raise RuntimeError("delta PPO drive state is not initialized")
+    if "v" in action and "omega" in action:
+        control = (action["v"], action["omega"])
+    elif action == {"vx": 0.0, "vy": 0.0}:
+        # The existing worker-error/timeout fallback is a physical stop.
+        control = (0.0, 0.0)
+    else:
+        raise ValueError("delta PPO requires a unicycle velocity command")
+    next_state = drive.step(state, control, dt)
+    velocity = ((next_state.x - state.x) / dt, (next_state.y - state.y) / dt)
+    return next_state, velocity
+
+
+def _build_baseline_policy_fn(  # noqa: C901, PLR0913 - optional physical delta-PPO drive path.
     *,
     algo: str,
     planner: Any,
@@ -1411,6 +1447,18 @@ def _build_baseline_policy_fn(  # noqa: PLR0913
     # runner's world-velocity semantics, including heading-aware unicycle
     # actions and holonomic velocity clamping.
     projection_context: dict[str, Any] = {}
+    # The synthetic harness normally integrates world velocity directly. A
+    # delta-unicycle policy needs persistent physical (v, omega), including yaw
+    # rate and signed reverse speed; Cartesian velocity cannot recover these.
+    drive = (
+        UnicycleDynamics(
+            max_linear_speed=planner.config.v_max,
+            max_angular_speed=planner.config.omega_max,
+        )
+        if metadata.get("action_semantics") == "velocity_delta"
+        else None
+    )
+    drive_state: RobotDynamicsState | None = None
 
     def _step_executor(_planner: Any, observation: Any) -> Any:
         """Execute a baseline step through the existing isolated retry path.
@@ -1428,8 +1476,14 @@ def _build_baseline_policy_fn(  # noqa: PLR0913
         Returns:
             The existing two-dimensional world-velocity command.
         """
+        nonlocal drive_state
         if not projection_context:
             raise RuntimeError("baseline action projection context is not initialized")
+        if drive is not None:
+            drive_state, velocity = _advance_delta_ppo_drive(
+                drive, drive_state, action, projection_context["dt"]
+            )
+            return velocity
         velocity = _action_to_velocity(
             action,
             projection_context["robot_pos"],
@@ -1458,6 +1512,10 @@ def _build_baseline_policy_fn(  # noqa: PLR0913
         Returns:
             Velocity command as 2D array.
         """
+        nonlocal drive_state
+        if drive is not None and drive_state is None:
+            # Matches the synthetic episode's initial heading and resting state.
+            drive_state = RobotDynamicsState(x=float(robot_pos[0]), y=float(robot_pos[1]))
         obs = _build_observation(
             observation_cls,
             robot_pos,
@@ -1467,11 +1525,13 @@ def _build_baseline_policy_fn(  # noqa: PLR0913
             dt,
             robot_radius=robot_radius,
             ped_radius=ped_radius,
+            robot_drive_state=drive_state,
         )
         projection_context.update(
             robot_pos=robot_pos,
             robot_vel=robot_vel,
             robot_goal=robot_goal,
+            dt=dt,
         )
         command = adapter.plan(obs)
         return np.asarray(command, dtype=float)

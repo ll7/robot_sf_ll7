@@ -31,13 +31,14 @@ from robot_sf.benchmark.release_protocol import (
     _scenario_matrix_include_paths,
     load_release_manifest,
 )
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 CANDIDATE_SCHEMA = "benchmark-release-prepublication-candidate.v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
-_EXPECTED_SEEDS = tuple(range(111, 141))
+_EXPECTED_SEEDS = EVAL_SEEDS_0_0_8
 _HISTORICAL_SCENARIO_MATRIX = (
     "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
 )
@@ -105,6 +106,7 @@ _APPROVED_008_ACTIVE_WAYPOINT_CONFIGS = {
     "predictive_mppi": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
     "guarded_ppo": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
 }
+# Single reviewed override table for every slot. Non-hybrid additions require approval.
 _APPROVED_008_HYBRID_ALGO_OVERRIDES = {
     "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
         "francis2023_leave_group": ("orca", "configs/algos/issue707_orca_tuned.yaml")
@@ -204,7 +206,7 @@ def _planner_config_paths(root: Path, config_path: Path) -> set[Path]:
     return paths
 
 
-def _validate_v4_hybrid_runtime(
+def _validate_planner_scenario_runtime(
     planner_key: str,
     planner_algo: str,
     manifest: dict[str, Any],
@@ -212,14 +214,27 @@ def _validate_v4_hybrid_runtime(
     root: Path,
     scenarios: list[dict[str, Any]],
 ) -> None:
-    """Resolve every release scenario before admitting a v4-named slot."""
+    """Reject unreviewed overrides and resolve every scenario for every release slot."""
+
+    overrides = manifest.get("scenario_algo_overrides", {})
+    if not isinstance(overrides, dict) or any(
+        not isinstance(override, dict) for override in overrides.values()
+    ):
+        raise ValueError("candidate scenario algorithm overrides must be mappings")
+    observed = {
+        scenario_id: (override.get("algo"), override.get("base_config_path"))
+        for scenario_id, override in overrides.items()
+    }
+    approved = _APPROVED_008_HYBRID_ALGO_OVERRIDES.get(planner_key, {})
+    if observed != approved:
+        raise ValueError(f"slot {planner_key} has an unapproved scenario algorithm override")
 
     def load_config(value: object) -> dict[str, Any]:
         path = _full_release_nested_config_path(
             value,
             config_anchor=config_path.parent,
             source_repository_root=root,
-            label="v4 hybrid runtime base_config_path",
+            label="candidate runtime base_config_path",
         )
         return _load_mapping(path)
 
@@ -230,12 +245,23 @@ def _validate_v4_hybrid_runtime(
             scenario=scenario,
             load_config=load_config,
         )
-        if algo == "orca":
-            continue  # The exact reviewed ORCA hand-off is checked below.
-        if algo != "hybrid_rule_local_planner" or (
-            effective.get("planner_variant") != "hybrid_rule_v4_clearance_braking"
+        scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+        if (
+            planner_key in _APPROVED_008_HYBRID_CONFIGS
+            and scenario_id not in approved
+            and (
+                algo != "hybrid_rule_local_planner"
+                or effective.get("planner_variant") != "hybrid_rule_v4_clearance_braking"
+            )
         ):
             raise ValueError(f"v4 hybrid slot {planner_key} resolves to a non-v4 planner variant")
+        expected_algo = approved.get(
+            scenario_id, (_APPROVED_008_PLANNER_ALGOS.get(planner_key, planner_algo), None)
+        )[0]
+        if algo != expected_algo:
+            raise ValueError(
+                f"slot {planner_key} resolves to an unapproved algorithm at {scenario_id}"
+            )
 
 
 def _validate_v4_hybrid_manifest(
@@ -260,21 +286,6 @@ def _validate_v4_hybrid_manifest(
         for override in section.values():
             if not isinstance(override, dict):
                 raise ValueError(f"v4 hybrid {section_name} entries must be mappings")
-    overrides = manifest.get("scenario_algo_overrides") or {}
-    if not isinstance(overrides, dict) or any(
-        not isinstance(override, dict) for override in overrides.values()
-    ):
-        raise ValueError("v4 hybrid scenario algorithm overrides must be mappings")
-    observed_overrides = {
-        scenario_id: (override.get("algo"), override.get("base_config_path"))
-        for scenario_id, override in overrides.items()
-    }
-    expected_overrides = _APPROVED_008_HYBRID_ALGO_OVERRIDES.get(planner_key, {})
-    if observed_overrides != expected_overrides:
-        raise ValueError(
-            f"v4 hybrid slot {planner_key} has an unapproved scenario algorithm override"
-        )
-    _validate_v4_hybrid_runtime(planner_key, planner_algo, manifest, config_path, root, scenarios)
 
 
 def _expected_input_paths(
@@ -311,7 +322,19 @@ def _expected_input_paths(
             _validate_v4_hybrid_manifest(
                 planner["key"], planner["algo"], planner_config_path, root, scenarios
             )
+            _validate_planner_scenario_runtime(
+                planner["key"],
+                planner["algo"],
+                _load_mapping(planner_config_path),
+                planner_config_path,
+                root,
+                scenarios,
+            )
             paths.update(_planner_config_paths(root, planner_config_path))
+        else:
+            _validate_planner_scenario_runtime(
+                planner["key"], planner["algo"], {}, config_path, root, scenarios
+            )
     for scenario in scenarios:
         if scenario.get("map_id"):
             raise ValueError("candidate scenarios must resolve to explicit map_file paths")
@@ -412,7 +435,7 @@ def _candidate_seed_policy(
     policy = _require_mapping(payload.get("seed_policy"), "seed_policy")
     seeds = policy.get("resolved_seeds")
     if not isinstance(seeds, list) or tuple(seeds) != _EXPECTED_SEEDS:
-        raise ValueError("seed_policy.resolved_seeds must be seeds 111 through 140")
+        raise ValueError("seed_policy.resolved_seeds must be the sealed 0.0.8 evaluation seeds")
     if policy.get("mode") != "seed-set" or not isinstance(policy.get("seed_set"), str):
         raise ValueError("seed_policy must name a seed-set")
     _nonempty(policy["seed_set"], "seed_policy.seed_set")
@@ -475,7 +498,9 @@ def _candidate_horizon_contract(
     if config.get("scenario_horizons") is None:
         if config.get("horizon") != 600:
             raise ValueError("campaign horizon differs from candidate H600 contract")
-        _apply_fixed_campaign_horizon(scenarios, horizon=600)
+        _apply_fixed_campaign_horizon(
+            scenarios, horizon=600, protocol_version=config.get("protocol_version")
+        )
         return {"expected_episode_cells": 20160, "horizon_steps": 600}
     if config.get("horizon") is not None or any(
         p.get("horizon") is not None for p in config["planners"] if p.get("enabled", True)
@@ -486,7 +511,10 @@ def _candidate_horizon_contract(
     if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
         raise ValueError("candidate requires scenario_horizons_sha256")
     patched = _apply_scenario_horizon_schedule(
-        scenarios, schedule_path=path, expected_sha256=digest
+        scenarios,
+        schedule_path=path,
+        expected_sha256=digest,
+        protocol_version=config.get("protocol_version"),
     )
     for authored, effective in zip(scenarios, patched, strict=True):
         if effective["simulation_config"]["max_episode_steps"] != authored.get(

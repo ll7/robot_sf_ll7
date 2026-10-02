@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_10007_fxb/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/issue_9750_baseline_physical_faithfulness.md
   status: current
   freshness: maintained
@@ -505,27 +509,33 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/README.md
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/artifact_provenance.json
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/summary.json
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_analysis_trace_overhead_2026-08-12/README.md
@@ -1092,7 +1102,8 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5149_emergent_phenomena_2026-07
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_4991_closure_audit_2026-07-10.md
@@ -5693,7 +5704,8 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08
-  status: evidence
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json
@@ -7951,6 +7963,30 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxb
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxp
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxs_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxs2_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxs_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxs2_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_10007_fxm/fxm2_paired_metrics.json
   status: evidence
   freshness: evidence
@@ -7988,6 +8024,68 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/snqifix_0_0_8_diagnostic.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/curvfix/measurement.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/curvfix/v1_parity.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/curvfix/validation.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/curvfix/base_failures.txt
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10056_wall_order_2026-09
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6969_lane_formation_reference
+  status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/issue_9952_auditor_detector_readiness.md
+  status: historical
+  freshness: dated
+  area: tooling
+- path: docs/context/evidence/issue_9952_auditor
+  status: evidence
+  freshness: evidence
+  area: tooling
+- path: docs/context/evidence/issue_10064_no_admissible_recovery
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_train2_custody
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10063_endpoint_audit
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/source_release_matrix.yaml
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/source_release_matrix.yaml.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

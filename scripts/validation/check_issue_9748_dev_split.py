@@ -24,14 +24,14 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
 from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
+from robot_sf.benchmark.seed_bands import DEV_SEEDS, HELD_OUT_SEEDS
 from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml"
 RELEASE_CONFIG_RELATIVE_PATH = "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
 DEFAULT_RELEASE_MATRIX = (
-    ROOT
-    / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml"
+    ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 )
 RELEASE_PARITY_SIMULATION_OVERRIDES = {
     "goal_completion_policy": "goal_zone_entry_v1",
@@ -54,8 +54,8 @@ SIMULATOR_CAMPAIGN_FIELDS = (
     "scenario_candidates",
     "radius_sweep",
 )
-EXPECTED_DEV_SEEDS = tuple(range(1001, 1031))
-RELEASE_SEEDS = frozenset(range(111, 141))
+EXPECTED_DEV_SEEDS = DEV_SEEDS
+RELEASE_SEEDS = HELD_OUT_SEEDS
 EXPECTED_PLANNER_ALGO = "hybrid_rule_local_planner"
 EXPECTED_VARIANTS = {
     "issue_9748_dev_classic_doorway_medium": {
@@ -418,7 +418,9 @@ def _require_exact_dev_seed_list(raw: Any, *, label: str) -> None:
 
 
 def _source_scenario_row(spec: Mapping[str, Any]) -> Mapping[str, Any]:
-    source_path = ROOT / spec["source_file"]
+    # D-083: compare dev variants with the selected release matrix's current
+    # geometry and goal policy, preserving only the approved dev overrides.
+    source_path = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     source_id = spec["source_id"]
     source_rows = _load_scenario_rows(source_path, label=f"source scenario {source_id}")
     matches = [
@@ -457,6 +459,13 @@ def _validate_variant_source(
         "source_scenario": source_id,
         "development_variant": spec["development_variant"],
     }
+    # The release and dev manifests sit at different directory depths. Compare
+    # resolved map paths so spelling differences do not hide or invent drift.
+    actual = dict(actual)
+    expected["map_file"] = _repo_path(
+        expected["map_file"], relative_to=DEFAULT_RELEASE_MATRIX.parent
+    )
+    actual["map_file"] = _repo_path(actual["map_file"], relative_to=ROOT / "configs/scenarios/sets")
     differences = sorted(
         key
         for key in expected.keys() | actual.keys()

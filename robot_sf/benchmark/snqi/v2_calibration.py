@@ -351,7 +351,7 @@ def _validated_calibration_config(config: Any | None) -> Any:
     from robot_sf.benchmark.camera_ready_campaign import load_campaign_config  # noqa: PLC0415
 
     path = (
-        get_repository_root() / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
+        get_repository_root() / "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
         if config is None
         else config.source_config_path
     )

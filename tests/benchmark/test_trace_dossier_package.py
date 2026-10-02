@@ -26,7 +26,8 @@ from scripts.tools.export_trace_dossier import TraceDossierExportError
 
 _ROOT = Path(__file__).resolve().parents[2]
 _RELEASE = _ROOT / "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
-_REAL_RELEASE = _ROOT / "configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml"
+# Retained trace provenance binds the historical config bytes, including comments.
+_REAL_RELEASE = _ROOT / "tests/fixtures/trace_dossier_retained_release/release.yaml"
 _TRACE_FIXTURE = (
     _ROOT / "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json"
 )

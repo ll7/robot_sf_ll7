@@ -1,7 +1,7 @@
 """Metric meaning versions, independent of the episode JSON envelope version.
 
 Unmarked historical rows/assets use v1 (including published release 0.0.7).
-Version v2 fixes issue #10007 F4/F5/F7/F8; it requires fresh normalization.
+Version v2 fixes issue #10007 F4/F5/F7/F8 and D-055 curvature; it requires fresh normalization.
 """
 
 from collections.abc import Iterable, Mapping
@@ -22,6 +22,7 @@ CHANGED_METRICS = frozenset(
         "deadlock",
         "deadlock_stall",
         "jerk_mean",
+        "curvature_mean",
         "time_to_goal",
         "time_to_goal_norm",
         "time_to_goal_norm_success_only",

@@ -8,19 +8,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark import published_release_audit, zenodo_publisher
-from robot_sf.benchmark.post_execution_release_doctor import (
-    EXPECTED_CAMPAIGN_ID,
-    EXPECTED_VALIDATOR_SHA,
-    collect_post_execution_release_doctor_report,
-)
-from robot_sf.benchmark.release_doctor import collect_release_doctor_report
 from robot_sf.benchmark.release_erratum import (
     ERRATUM_CONTRACT_SCHEMA,
     ErratumContract,
     ReleaseErratumError,
     load_erratum_contract,
 )
-from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -32,6 +25,32 @@ if TYPE_CHECKING:
 # explicit pre-reservation exception; every operation after that point must
 # carry the reviewed manifest binding before an authenticated session is built.
 _RELEASE_BOUND_ZENODO_MODES = frozenset({"recover", "upload", "verify", "publish"})
+
+
+def collect_release_doctor_report(**kwargs: Any) -> dict[str, Any]:
+    """Load campaign diagnostics only when the release doctor is executed.
+
+    Returns:
+        The existing release doctor report.
+    """
+    from robot_sf.benchmark.release_doctor import (  # noqa: PLC0415
+        collect_release_doctor_report as collect,
+    )
+
+    return collect(**kwargs)
+
+
+def collect_post_execution_release_doctor_report(**kwargs: Any) -> dict[str, Any]:
+    """Defer preserved-evidence diagnostics until that doctor is executed.
+
+    Returns:
+        The existing post-execution doctor report.
+    """
+    from robot_sf.benchmark.post_execution_release_doctor import (  # noqa: PLC0415
+        collect_post_execution_release_doctor_report as collect,
+    )
+
+    return collect(**kwargs)
 
 
 def _add_new_version_arguments(parser: Any) -> None:
@@ -261,6 +280,11 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
         The parsed manifest and credential-free publisher binding, or ``None``
         for the explicit pre-reservation reserve/new-version route.
     """
+    from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
+        load_release_manifest,
+        validate_release_manifest,
+    )
+
     manifest_path = getattr(args, "manifest", None)
     if manifest_path is None:
         return None
@@ -376,6 +400,11 @@ def _handle_post_execution_doctor(args: argparse.Namespace, repo_root: Path) -> 
     Returns:
         Process-style exit code.
     """
+    from robot_sf.benchmark.post_execution_release_doctor import (  # noqa: PLC0415
+        EXPECTED_CAMPAIGN_ID,
+        EXPECTED_VALIDATOR_SHA,
+    )
+
     report = collect_post_execution_release_doctor_report(
         repo=repo_root,
         manifest_path=_repo_relative_path(args.manifest, repo_root),

@@ -52,6 +52,7 @@ from robot_sf.benchmark.map_runner.map_runner_env import (
 )
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
+    _has_authored_horizon_schedule,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
     selected_map_identity_from_runtime_inputs,
@@ -78,6 +79,7 @@ from robot_sf.benchmark.map_runner.map_runner_trace import (
     _fast_bicycle_actor_summary,
     _intent_conditioned_behavior_summary,
     _observation_heading,
+    _optional_trace_float,
     _single_pedestrian_intent_metadata,
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,
@@ -106,10 +108,8 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
 )
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
-    _apply_planner_selector_v2_context,
-    _apply_scenario_uncertainty_envelope_config,
     _parse_algo_config,
-    _resolve_policy_search_candidate_runtime,
+    resolve_episode_policy_runtime,
 )
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_stress_profile,
@@ -1372,8 +1372,10 @@ def _bind_episode_horizon(
     """
     horizon_binding = scenario.get("metadata", {}).get("scenario_horizon", {})
     legacy = horizon_binding.get("policy") == "legacy_runner_cap"
-    bound = scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed" or bool(
-        horizon_binding
+    bound = (
+        scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed"
+        or legacy
+        or _has_authored_horizon_schedule(scenario)
     )
     if bound:
         expected_runner_horizon = (
@@ -1503,19 +1505,13 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     raw_policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
-    algo, policy_cfg = _resolve_policy_search_candidate_runtime(
+    algo, policy_cfg = resolve_episode_policy_runtime(
         default_algo=algo,
         algo_config_path=algo_config_path,
         algo_config=raw_policy_cfg,
         scenario=scenario,
-    )
-    policy_cfg = _apply_planner_selector_v2_context(
-        algo,
-        policy_cfg,
-        scenario=scenario,
         seed=int(seed),
     )
-    policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
     return _EpisodeRunContext(
         scenario=scenario,
         scenario_id=scenario_id,
@@ -1591,7 +1587,6 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
     ped_positions: list[np.ndarray],
     ped_forces: list[np.ndarray],
     robot_force_samples: list[dict[str, Any]] | None = None,
-    persist_robot_force_samples: bool = False,
     visibility_trace: list[np.ndarray | None],
     track_confidence_trace: list[np.ndarray | None],
     visibility_evidence_statuses: list[str],
@@ -1749,8 +1744,6 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
         )
-    if persist_robot_force_samples and robot_force_samples:
-        metrics_raw["robot_force_samples"] = robot_force_samples
     _floor_collision_metrics_from_flags(
         metrics_raw,
         collision_seen=collision_seen,
@@ -1934,6 +1927,7 @@ class _EpisodeStepLoopResult:
     initial_robot_heading: float
     initial_ped_positions: np.ndarray
     initial_robot_velocity: np.ndarray | None
+    initial_robot_angular_velocity: float | None
     initial_ped_velocities: np.ndarray | None
     initial_ped_headings: np.ndarray | None
     trace_actor_ids: list[str] | None
@@ -2024,6 +2018,7 @@ class _StepLoopState:
     initial_robot_heading: float = 0.0
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
     initial_robot_velocity: np.ndarray | None = None
+    initial_robot_angular_velocity: float | None = None
     initial_ped_velocities: np.ndarray | None = None
     initial_ped_headings: np.ndarray | None = None
     trace_actor_ids: list[str] | None = field(default_factory=list)
@@ -2242,6 +2237,32 @@ class _StepSimResult:
     action_conversion_payload: dict[str, Any] | None
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
+    # Goals the planner acted on this step (read before the env step); trace-only (#9979).
+    goal_current: list[float] | None = None
+    goal_next: list[float] | None = None
+
+
+def _read_step_goals(env: Any) -> tuple[list[float] | None, list[float] | None]:
+    """Return the robot's (current, next) goal positions, or ``None`` when unavailable.
+
+    Returns:
+        Pair of ``[x, y]`` lists; ``next`` is ``None`` when no next waypoint exists.
+    """
+    simulator = getattr(env, "simulator", None)
+    if simulator is None:
+        return None, None
+    try:
+        current = [float(v) for v in np.asarray(simulator.goal_pos[0], dtype=float).reshape(2)]
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return None, None
+    try:
+        nxt = simulator.next_goal_pos[0]
+        next_goal = (
+            None if nxt is None else [float(v) for v in np.asarray(nxt, dtype=float).reshape(2)]
+        )
+    except (AttributeError, IndexError, TypeError, ValueError):
+        next_goal = None
+    return current, next_goal
 
 
 def _prepare_episode_env(  # noqa: C901
@@ -2293,8 +2314,11 @@ def _prepare_episode_env(  # noqa: C901
             # Record the *instantiated* count so the readiness gate and any
             # future triage can see declared-vs-actual without re-running.
             simulation_config["population_size"] = instantiated_count
-            simulation_config["instantiated_population_size"] = instantiated_count
-            simulation_config["declared_population_size"] = expected_population_size
+            metadata = scenario.setdefault("metadata", {})
+            metadata["population_realization"] = {
+                "instantiated_population_size": instantiated_count,
+                "declared_population_size": expected_population_size,
+            }
     if callable(planner_bind_env):
         planner_bind_env(env)
     if callable(planner_reset):
@@ -2350,6 +2374,7 @@ def _init_step_loop_state(
         state.completion_policy = getattr(navigators[0], "completion_policy", "waypoint_radius_v1")
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
+    state.initial_robot_angular_velocity = _initial_robot_angular_velocity(env.simulator)
     state.initial_ped_velocities = initial_ped_velocities
     state.initial_ped_headings = initial_ped_headings
     state.trace_actor_ids = trace_actor_ids
@@ -2379,6 +2404,27 @@ def _reset_robot_heading(simulator: Any, obs: Any) -> float:
         if numeric is not None and np.isfinite(numeric):
             return numeric
     return _observation_heading(obs)
+
+
+def _initial_robot_angular_velocity(simulator: Any) -> float | None:
+    """Read the differential-drive reset yaw rate from measured robot state.
+
+    Returns:
+        A finite rad/s value, or None for unavailable/unsupported state.
+    """
+    from robot_sf.robot.differential_drive import DifferentialDriveState  # noqa: PLC0415
+
+    robots = getattr(simulator, "robots", None)
+    if not isinstance(robots, (list, tuple)) or not robots:
+        return None
+    state = getattr(robots[0], "state", None)
+    if not isinstance(state, DifferentialDriveState):
+        return None
+    try:
+        value = float(state.velocity[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:  # noqa: C901
@@ -2948,6 +2994,26 @@ def _surface_clearances_m(
     return clearance
 
 
+def _simulation_trace_decision_fields(decision: Any) -> dict[str, Any]:
+    """Copy the available planner decision counters into a simulation trace.
+
+    Returns:
+        Available counters, or an empty mapping when the decision is unavailable.
+    """
+    if not isinstance(decision, dict):
+        return {}
+    return {
+        key: decision[key]
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        )
+        if key in decision
+    }
+
+
 def _step_build_simulation_trace(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2970,16 +3036,12 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    planner_payload.update(
+        _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
+    )
     decision = getattr(sim, "planner_step_decision", None)
-    if isinstance(decision, dict):
-        for key in (
-            "no_admissible_command",
-            "no_admissible_command_count",
-            "recovery_command",
-            "recovery_command_count",
-        ):
-            if key in decision:
-                planner_payload[key] = decision[key]
+    if isinstance(decision, dict) and "recovery_kind" in decision:
+        planner_payload["recovery_kind"] = decision["recovery_kind"]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3038,6 +3100,16 @@ def _step_build_simulation_trace(
         },
     }
     sim_info = getattr(sim, "info", None)
+    goal_current = getattr(sim, "goal_current", None)
+    if goal_current is not None:
+        trace_entry["goal"] = {"current": goal_current, "next": getattr(sim, "goal_next", None)}
+    sim_meta = sim_info.get("meta") if isinstance(sim_info, dict) else None
+    if isinstance(sim_meta, dict):
+        trace_entry["collision"] = {
+            "pedestrian": bool(sim_meta.get("is_pedestrian_collision", False)),
+            "obstacle": bool(sim_meta.get("is_obstacle_collision", False)),
+            "robot": bool(sim_meta.get("is_robot_collision", False)),
+        }
     oracle_trace = sim_info.get("oracle_transition_trace") if isinstance(sim_info, dict) else None
     if oracle_trace is not None:
         # Preserve the evaluator-only trace as a sibling of planner data. It is
@@ -3277,6 +3349,7 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "recovery_kind",
         "no_admissible_command",
         "no_admissible_command_count",
         "recovery_command",
@@ -3508,6 +3581,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
+        initial_robot_angular_velocity=state.initial_robot_angular_velocity,
         initial_ped_velocities=state.initial_ped_velocities,
         initial_ped_headings=state.initial_ped_headings,
         trace_actor_ids=(
@@ -3620,6 +3694,9 @@ def _execute_step_loop(
     for step_idx in range(horizon_val):
         if slc.active_harness is not None:
             slc.active_harness.start_cycle()
+        step_goal_current, step_goal_next = (
+            _read_step_goals(env) if slc.record_simulation_step_trace else (None, None)
+        )
         policy_command, _ = _step_policy_inference(state, slc, env=env)
         step_is_native, planner_step_decision = _step_hybrid_and_planner_stats(
             state,
@@ -3683,6 +3760,8 @@ def _execute_step_loop(
             action_conversion_payload=action_conversion_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
+            goal_current=step_goal_current,
+            goal_next=step_goal_next,
         )
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)
@@ -3758,10 +3837,12 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             env=env,
             planner_stats=args.planner_runtime.planner_stats,
             horizon_val=args.horizon_val,
-            normalize_budget_timeout=(args.scenario or {})
-            .get("metadata", {})
-            .get("scenario_horizon", {})
-            .get("policy")
+            normalize_budget_timeout=(
+                _has_authored_horizon_schedule(args.scenario or {})
+                or (args.scenario or {}).get("metadata", {}).get("campaign_horizon", {}).get("mode")
+                == "fixed"
+            )
+            and (args.scenario or {}).get("metadata", {}).get("scenario_horizon", {}).get("policy")
             != "legacy_runner_cap",
         )
         state.planner_obstacle_force_law_metadata = _read_policy_obstacle_force_law_metadata(
@@ -4147,6 +4228,7 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
     ped_radius: float,
     scenario: dict[str, Any] | None,
     sampler_capture: dict[str, Any] | None = None,
+    initial_robot_angular_velocity: float | None = None,
 ) -> dict[str, Any]:
     """Build the reset-time provenance block for the simulation step trace.
 
@@ -4213,6 +4295,7 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
             "position": [float(origin[0]), float(origin[1])] if origin_ok else None,
             "heading": robot_heading,
             "velocity": robot_velocity,
+            "angular_velocity": _optional_trace_float(initial_robot_angular_velocity),
         },
         "pedestrians": pedestrians,
         "min_surface_clearance_m": min_clearance,
@@ -4253,6 +4336,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     termination_reason: str,
     safety_events: list[dict[str, Any]],
     sampler_capture: dict[str, Any] | None = None,
+    initial_robot_angular_velocity: float | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -4277,6 +4361,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 initial_robot_pos=initial_robot_pos,
                 initial_robot_heading=initial_robot_heading,
                 initial_robot_velocity=initial_robot_velocity,
+                initial_robot_angular_velocity=initial_robot_angular_velocity,
                 initial_ped_positions=initial_ped_positions,
                 initial_ped_velocities=initial_ped_velocities,
                 initial_ped_headings=initial_ped_headings,
@@ -4709,6 +4794,7 @@ def _finalize_metadata_outputs(
         initial_robot_heading=loop_result.initial_robot_heading,
         initial_ped_positions=loop_result.initial_ped_positions,
         initial_robot_velocity=loop_result.initial_robot_velocity,
+        initial_robot_angular_velocity=loop_result.initial_robot_angular_velocity,
         initial_ped_velocities=loop_result.initial_ped_velocities,
         initial_ped_headings=loop_result.initial_ped_headings,
         trace_actor_ids=loop_result.trace_actor_ids,
@@ -4928,14 +5014,20 @@ def _finalize_record_provenance(  # noqa: PLR0913
     track_schema_version: str | None,
 ) -> None:
     """Attach provenance, evidence, event ledger, and track fields to the record."""
-    record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
     horizon_metadata = scenario.get("metadata", {}).get("scenario_horizon", {})
+    authored_schedule = _has_authored_horizon_schedule(scenario)
+    if (
+        not horizon_metadata
+        or authored_schedule
+        or horizon_metadata.get("policy") == "legacy_runner_cap"
+    ):
+        record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
     if horizon_metadata.get("policy") == "legacy_runner_cap":
         record.setdefault("metadata", {})["scenario_horizon"] = {
             **horizon_metadata,
             "applied_max_episode_steps": record["effective_budget_steps"],
         }
-    if horizon_metadata and horizon_metadata.get("policy") != "legacy_runner_cap":
+    if authored_schedule:
         scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,
@@ -5638,7 +5730,6 @@ def run_map_episode(  # noqa: PLR0913
         ped_positions=loop_result.ped_positions,
         ped_forces=loop_result.ped_forces,
         robot_force_samples=loop_result.robot_force_samples,
-        persist_robot_force_samples=record_simulation_step_trace,
         visibility_trace=loop_result.visibility_trace,
         track_confidence_trace=loop_result.track_confidence_trace,
         visibility_evidence_statuses=loop_result.visibility_evidence_statuses,
@@ -5680,6 +5771,10 @@ def run_map_episode(  # noqa: PLR0913
         record_simulation_step_trace=record_simulation_step_trace,
         paired_wrapper_off_record=paired_wrapper_off_record,
     )
+    if record_simulation_step_trace and loop_result.robot_force_samples:
+        episode_record["algorithm_metadata"]["robot_force_samples"] = (
+            loop_result.robot_force_samples
+        )
     realized_map_id = (
         resolve_map_id(ctx.config, loop_result.map_def) if loop_result.map_def is not None else None
     )

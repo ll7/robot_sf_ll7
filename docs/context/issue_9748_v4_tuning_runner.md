@@ -6,7 +6,7 @@ hash-pinned authored schedule: doorway/group crossing H500, perpendicular
 traffic/crowd navigation H400. The original v1 config declared H600, but its
 simulator already used those same authored budgets: 500/500/400/400. Main's
 runner cap did not extend them. There is no effective tuning-budget mismatch
-with 0.0.8 (corrected D-054). The original v1 inputs, recorded log and frozen v4
+with 0.0.8 (D-064). The original v1 inputs, recorded log and frozen v4
 parameters stay byte-identical; no retuning is performed by this migration.
 The details below describe the historical v1 declared protocol; use
 `--config configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml` for current

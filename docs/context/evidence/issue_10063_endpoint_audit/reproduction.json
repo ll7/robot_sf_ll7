@@ -1,0 +1,329 @@
+{
+  "ci_smoke_seed_proof": {
+    "cli_log": {
+      "location": "Owned local CLI log; both repetitions print resolved dev seeds1001 and1002.",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/repro_cli_dev.log",
+      "sha256": "e64afc86ade72142589f3b9a990058aa53342e33333d581e0c3080990c153cdb"
+    },
+    "cli_result": {
+      "error": null,
+      "reproducible": true,
+      "run1": {
+        "aggregate_time": 0.31060028076171875,
+        "episode_gen_time": 5.965359449386597,
+        "episodes_count": 2,
+        "error": null,
+        "stage": "completed",
+        "status": "passed",
+        "summary_groups": 2
+      },
+      "run2": {
+        "aggregate_time": 0.3018171787261963,
+        "episode_gen_time": 0.2629575729370117,
+        "episodes_count": 2,
+        "error": null,
+        "stage": "completed",
+        "status": "passed",
+        "summary_groups": 2
+      },
+      "schema": "benchmark_repro_check.report.v1",
+      "stage": "completed",
+      "status": "passed",
+      "timestamp": "2026-10-01 03:45:35"
+    },
+    "example_selection_proof": {
+      "collection_log": "${SOURCE_HOME}/ovtfix_artifacts/ci_examples_collection.log",
+      "excluded_nodes": [
+        "advanced/01_backend_selection.py",
+        "occupancy_reward_shaping.py",
+        "benchmarks/demo_full_classic_benchmark.py"
+      ],
+      "green_log": "${SOURCE_HOME}/ovtfix_artifacts/ci_example_seed_guard.log",
+      "green_result": "41 passed",
+      "reason": "Two examples reset and step seed123; classic example uses an unresolved classic matrix and master seed123. No simulation used to inspect or verify the selector.",
+      "red_log": "${SOURCE_HOME}/ovtfix_artifacts/ci_example_seed_red.log"
+    },
+    "green_log": {
+      "location": "Owned local validation log; 65 importing/contract tests pass, real episodes use dev seeds1001\u20131002.",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/ci_smoke_seed_green.log",
+      "sha256": "550941c5efcae564e9bcd739da992912f7420c6ebce6acc30cb7e5a1b65f54ad"
+    },
+    "static_red_log": {
+      "location": "Owned local validation log; static exact-base witnesses, no episodes.",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/ci_smoke_seed_red.log",
+      "sha256": "0a78fcbae20d40bf651f05e762c0821fffaabdd59f3704d5a934da6e768f97cf"
+    }
+  },
+  "distance_convention": "center_center",
+  "evidence_status": "diagnostic-only",
+  "failed_attempt": {
+    "job": 15950,
+    "reason": "Later rehearsal horizon file absent on pinned base. Corrected producer uses each version authored budget.",
+    "stepped": false
+  },
+  "historical_collection_seed_audit": {
+    "correction": "The initial seed-123 breach alert was retracted: these auto-slow files were not executed. Future hosted wheel/reproducibility smoke defaults repaired to development seeds before readiness.",
+    "receipts": [
+      {
+        "path": "${SOURCE_HOME}/ovtfix_artifacts/initial_full_suite",
+        "selected_nodes": 14047,
+        "slow_heldout_episode_files_absent_from_command_and_collection": [
+          "tests/test_benchmark_repro_check.py",
+          "tests/test_runner_smoke.py",
+          "tests/test_runner_batch.py",
+          "tests/test_runner_resume.py",
+          "tests/test_manifest_resume.py",
+          "tests/test_runner_resume_parallel.py",
+          "tests/benchmark/test_runner_native_command_arm.py",
+          "tests/gym_env/test_multi_robot_gymnasium_contract.py",
+          "tests/baselines/test_random_policy.py",
+          "tests/integration/test_random_baseline_smoke.py",
+          "tests/test_socnav_env_integration.py",
+          "tests/benchmark/test_robot_speed_band_campaign.py"
+        ]
+      },
+      {
+        "path": "${SOURCE_HOME}/ovtfix_artifacts/green_suite_8eaf",
+        "selected_nodes": 14048,
+        "slow_heldout_episode_files_absent_from_command_and_collection": [
+          "tests/test_benchmark_repro_check.py",
+          "tests/test_runner_smoke.py",
+          "tests/test_runner_batch.py",
+          "tests/test_runner_resume.py",
+          "tests/test_manifest_resume.py",
+          "tests/test_runner_resume_parallel.py",
+          "tests/benchmark/test_runner_native_command_arm.py",
+          "tests/gym_env/test_multi_robot_gymnasium_contract.py",
+          "tests/baselines/test_random_policy.py",
+          "tests/integration/test_random_baseline_smoke.py",
+          "tests/test_socnav_env_integration.py",
+          "tests/benchmark/test_robot_speed_band_campaign.py"
+        ]
+      },
+      {
+        "path": "${SOURCE_HOME}/ovtfix_artifacts",
+        "selected_nodes": 14048,
+        "slow_heldout_episode_files_absent_from_command_and_collection": [
+          "tests/test_benchmark_repro_check.py",
+          "tests/test_runner_smoke.py",
+          "tests/test_runner_batch.py",
+          "tests/test_runner_resume.py",
+          "tests/test_manifest_resume.py",
+          "tests/test_runner_resume_parallel.py",
+          "tests/benchmark/test_runner_native_command_arm.py",
+          "tests/gym_env/test_multi_robot_gymnasium_contract.py",
+          "tests/baselines/test_random_policy.py",
+          "tests/integration/test_random_baseline_smoke.py",
+          "tests/test_socnav_env_integration.py",
+          "tests/benchmark/test_robot_speed_band_campaign.py"
+        ]
+      }
+    ]
+  },
+  "independent_reproduction": "Recorded launch commands identify the actual jobs, not instructions to overwrite their outputs. Use fresh output/ownership directories. For a new base cohort use the embedded original producer, which has no duplicate-completion guard; the final producer uses an atomic owner guard for each fresh output. Preserve completed cohorts.",
+  "issue": 10063,
+  "launch_commands": [
+    "ssh imech192 sbatch --job-name=ovtfix-base-backfill ${SOURCE_HOME}/ovtfix_artifacts/sweep_backfill.sbatch ${SOURCE_HOME}/ovtfix-before ${SOURCE_HOME}/ovtfix_artifacts/base-backfill",
+    "ssh imech192 sbatch --job-name=ovtfix-final-4 ${SOURCE_HOME}/ovtfix_artifacts/sweep_final_4cpu.sbatch ${SOURCE_HOME}/ovtfix-final-v2 ${SOURCE_HOME}/ovtfix_artifacts/final-v2"
+  ],
+  "local_concurrency_exception": "Discarded exploratory prototype briefly overlapped the two vector-env workers, exceeding the local process limit. No held-out seed was involved. Later probes were serialized; formal evidence uses Slurm.",
+  "path_normalization": {
+    "claim_boundary": "Path display only. Numeric outcomes, raw hashes, input hashes and measured source identities are unchanged.",
+    "home_prefix_placeholder": "${SOURCE_HOME}",
+    "kind": "portable_display_copy",
+    "original_document_sha256": "04bb2932a8fed40d3d85c98220bc188fa910cd779ada4727665ead149ed1b7bd",
+    "original_document_url": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json",
+    "original_git_commit": "f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9",
+    "original_repository_path": "docs/context/evidence/issue_10063_endpoint_audit/reproduction.json",
+    "producer_body_policy": "Exact bodies remain in the original document; references bind their UTF-8 hashes. No normalized script is presented as executable producer text.",
+    "recovery_archive_sha256": "1deb1616f5b58678d4a5cba5fd4e44e97fd8e94c9148f587da819ce0442e42e4",
+    "schema_version": "source-display-normalization.v1"
+  },
+  "physics_guard": "uv sync --all-extras --reinstall-package robot-sf after exact checkout, then every installed pysocialforce *.py compared byte-for-byte to tracked fast-pysf. Python file hashes are in experiments.json provenance.",
+  "raw_archives": [
+    {
+      "custody": "Owned same-host recovery copies; not a durable public archive.",
+      "local_path": "${SOURCE_HOME}/ovtfix_artifacts/base-backfill.tar.gz",
+      "location": "Local owned recovery copy, with imech192 recovery copy; not committed raw data.",
+      "name": "base-backfill.tar.gz",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/base-backfill.tar.gz",
+      "remote_path": "imech192:${SOURCE_HOME}/ovtfix_artifacts/base-backfill.tar.gz",
+      "sha256": "4e108e947a381826afe9950b2cb44cb9ae292c757bf5ac5c8135ac4b3117bb7e",
+      "size_bytes": 204390008,
+      "status": "official-development-cohort"
+    },
+    {
+      "custody": "Owned same-host recovery copies; not a durable public archive.",
+      "local_path": "${SOURCE_HOME}/ovtfix_artifacts/final-v2.tar.gz",
+      "location": "Local owned recovery copy, with imech192 recovery copy; not committed raw data.",
+      "name": "final-v2.tar.gz",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/final-v2.tar.gz",
+      "remote_path": "imech192:${SOURCE_HOME}/ovtfix_artifacts/final-v2.tar.gz",
+      "sha256": "51321dad36fcfd009e0f9a0eff5f632af6fbd05075db8064f612db61c513aec7",
+      "size_bytes": 226918199,
+      "status": "official-development-cohort"
+    },
+    {
+      "custody": "Owned same-host recovery copies; not a durable public archive.",
+      "local_path": "${SOURCE_HOME}/ovtfix_artifacts/superseded-final.tar.gz",
+      "location": "Local owned recovery copy, with imech192 recovery copy; not committed raw data.",
+      "name": "superseded-final.tar.gz",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/superseded-final.tar.gz",
+      "remote_path": "imech192:${SOURCE_HOME}/ovtfix_artifacts/superseded-final.tar.gz",
+      "sha256": "dc23a3a996f8ed6aec18ca7a4c473e8d46aa9fa2d5f94e462d800a5a084f2934",
+      "size_bytes": 227003522,
+      "status": "superseded-diagnostic"
+    }
+  ],
+  "resources": {
+    "after": {
+      "cpus": 4,
+      "job": 15985,
+      "memory_gib": 8,
+      "time_limit": "01:30:00"
+    },
+    "before": {
+      "cpus": 4,
+      "job": 15973,
+      "memory_gib": 8,
+      "time_limit": "04:00:00"
+    },
+    "partition": "a30",
+    "qos": "a30-cpu",
+    "submit_host": "imech192"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_tree_inventory_sha256": "d86ff6bfc39a5f20b4464c7552ab33a5b0a4cbd2d15a9524ea64f8d8dae79705",
+  "runtime_tree_paths": [
+    "robot_sf",
+    "fast-pysf",
+    "maps",
+    "configs"
+  ],
+  "schema_version": "endpoint_development_reproduction.v1",
+  "scripts": [
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "sweep_original.py",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/sweep_original.py",
+      "sha256": "82edaef2e4e4ce8fbedc665c49cf820a3ba40ef3379ee3c02d12dc07c046fd5d",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/0/body",
+        "sha256_utf8": "82edaef2e4e4ce8fbedc665c49cf820a3ba40ef3379ee3c02d12dc07c046fd5d",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    },
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "sweep.py",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/sweep.py",
+      "sha256": "b0bcd58c5c0b676061d525ea2febb53842c19d30ce1e2af75d1f98e987e9f6b8",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/1/body",
+        "sha256_utf8": "b0bcd58c5c0b676061d525ea2febb53842c19d30ce1e2af75d1f98e987e9f6b8",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    },
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "summarize.py",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/summarize.py",
+      "sha256": "29c042f13abb57d1941fb05221759a7e6f2feb0563ee50c2029dfc92a17b4107",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/2/body",
+        "sha256_utf8": "29c042f13abb57d1941fb05221759a7e6f2feb0563ee50c2029dfc92a17b4107",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    },
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "sweep_backfill.sbatch",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/sweep_backfill.sbatch",
+      "sha256": "8796cb15eddc6aaae9b76888a11a09150cfb82eee1c140749d3cfad3736c217f",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/3/body",
+        "sha256_utf8": "8796cb15eddc6aaae9b76888a11a09150cfb82eee1c140749d3cfad3736c217f",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    },
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "sweep_final_v2.sbatch",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/sweep_final_v2.sbatch",
+      "sha256": "92c119900e42b7978a59518d7a0e4369e0282f7bd778fb4150060ea1178e554c",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/4/body",
+        "sha256_utf8": "92c119900e42b7978a59518d7a0e4369e0282f7bd778fb4150060ea1178e554c",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    },
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "sweep_final_4cpu.sbatch",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/sweep_final_4cpu.sbatch",
+      "sha256": "740eb510561e17cb2b1f244de81317a2b9b07c17e9ac13eedd07c2f8db135729",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/5/body",
+        "sha256_utf8": "740eb510561e17cb2b1f244de81317a2b9b07c17e9ac13eedd07c2f8db135729",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    },
+    {
+      "location": "Exact body embedded in this reproduction document and owned tool source under ${SOURCE_HOME}/ovtfix_artifacts.",
+      "name": "endpoint_bounds.json",
+      "path": "${SOURCE_HOME}/ovtfix_artifacts/endpoint_bounds.json",
+      "sha256": "ec28bd259e1130f6320b9d312f5ae6b21acd33453f98a7f7f4c5333a052be725",
+      "verbatim_body_reference": {
+        "json_pointer": "/scripts/6/body",
+        "sha256_utf8": "ec28bd259e1130f6320b9d312f5ae6b21acd33453f98a7f7f4c5333a052be725",
+        "source_document": "https://github.com/ll7/robot_sf_ll7/blob/f2ff302bae3c1df9a1bcfc9fc6659f6e6a86d3e9/docs/context/evidence/issue_10063_endpoint_audit/reproduction.json"
+      }
+    }
+  ],
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "source_after": "ab96ad95e114337e5f342f970be70803f7de9234",
+  "source_before": "d3370652cdd90efbbbe3dc484bcc869a2a533e96",
+  "summary_bounds_note": "The embedded endpoint_bounds.json was captured before metadata finalization and retains its older geometry tag; its entire after-row content is verified identical to the current audit. Summary occupancy uses only robot endpoint bounds and radius; episode source/map identity is independently verified from every raw record.",
+  "superseded_jobs": {
+    "15958": "Duplicate base queue attempt stops before episodes when completed base receipt is present.",
+    "15964": "Obsolete initial geometry queue attempt stops before episodes.",
+    "15972": "Earlier a495 station geometry, completed 270 cells; retained as diagnostic only.",
+    "15984": "Eight-CPU attempt shares atomic source-bound ownership guard with four-CPU backfill; only one produces the cohort."
+  },
+  "tangency_regression": {
+    "location": "Owned local static real-YAML regression log; exact decimal radius contact missed before conservative comparison repair.",
+    "path": "${SOURCE_HOME}/ovtfix_artifacts/tangent_red.log",
+    "sha256": "c4f654a487dc161dd301437c7bc8b17f9962db06052b65769b3d1512d0431857"
+  }
+}

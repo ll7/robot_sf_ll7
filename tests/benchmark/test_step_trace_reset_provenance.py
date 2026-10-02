@@ -13,6 +13,7 @@ from robot_sf.benchmark.map_runner.map_runner_episode import (
     _finalize_trace_metadata,
     _read_sampler_capture,
     _read_simulator_ped_headings,
+    _read_step_goals,
     _step_build_simulation_trace,
     _step_hybrid_and_planner_stats,
     _StepLoopState,
@@ -284,7 +285,7 @@ def test_step_builder_annotates_heading_and_clearance() -> None:
 
 
 def test_finalize_attaches_reset_block_with_schema_version() -> None:
-    """Finalization labels the metric-v2 producer's trace v2 and keeps the reset ledger."""
+    """Finalization keeps the metric-v2 trace schema and attaches the reset ledger."""
     algo_meta: dict[str, object] = {}
     config = SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1))
 
@@ -547,3 +548,65 @@ def test_simulation_trace_records_no_admissible_command_without_decision_trace(r
     block = state.simulation_step_trace[0]["planner"]
     assert block.get("no_admissible_command") is rejected
     assert block.get("no_admissible_command_count") == int(rejected)
+
+
+def test_step_builder_records_pre_step_goals_and_collision_flags() -> None:
+    """The trace carries goal.current/next and per-step collision flags for #9979 checks."""
+    state, slc, sim = _step_harness()
+    sim.goal_current = [8.0, 5.0]
+    sim.goal_next = None
+    sim.info = {"meta": {"is_pedestrian_collision": True, "is_obstacle_collision": False}}
+
+    _step_build_simulation_trace(state, slc, step_idx=0, sim=sim)
+
+    entry = state.simulation_step_trace[0]
+    assert entry["goal"] == {"current": [8.0, 5.0], "next": None}
+    assert entry["collision"] == {"pedestrian": True, "obstacle": False, "robot": False}
+
+
+def test_read_step_goals_handles_missing_next_and_missing_simulator() -> None:
+    """A null next waypoint stays ``None``; a missing simulator yields no goals."""
+    simulator = SimpleNamespace(goal_pos=[np.array([3.0, 4.0])], next_goal_pos=[None])
+    assert _read_step_goals(SimpleNamespace(simulator=simulator)) == ([3.0, 4.0], None)
+    simulator.next_goal_pos = [np.array([1.0, 2.0])]
+    assert _read_step_goals(SimpleNamespace(simulator=simulator)) == ([3.0, 4.0], [1.0, 2.0])
+    assert _read_step_goals(SimpleNamespace()) == (None, None)
+
+
+def test_reset_yaw_rate_is_measured_and_missing_state_is_not_zero_imputed():
+    """Nonzero simulator yaw rates survive reset serialization; unknowns stay null."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import _initial_robot_angular_velocity
+    from robot_sf.robot.differential_drive import DifferentialDriveState
+
+    simulator = SimpleNamespace(
+        robots=[SimpleNamespace(state=DifferentialDriveState(velocity=(1.0, -0.4)))]
+    )
+    value = _initial_robot_angular_velocity(simulator)
+    reset = _build_reset_provenance(**_reset_kwargs(), initial_robot_angular_velocity=value)
+    assert reset["robot"]["angular_velocity"] == -0.4
+    assert _initial_robot_angular_velocity(SimpleNamespace()) is None
+    simulator.robots[0].state.velocity = (1.0, float("nan"))
+    assert _initial_robot_angular_velocity(simulator) is None
+    assert _build_reset_provenance(**_reset_kwargs())["robot"]["angular_velocity"] is None
+
+
+@pytest.mark.parametrize("velocity", [(1.0,), (1.0, "unknown"), (1.0, None)])
+def test_reset_yaw_rate_malformed_velocity_stays_unavailable(velocity) -> None:
+    """Missing or nonnumeric measured yaw rates must stay null rather than crash."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import _initial_robot_angular_velocity
+    from robot_sf.robot.differential_drive import DifferentialDriveState
+
+    simulator = SimpleNamespace(
+        robots=[SimpleNamespace(state=DifferentialDriveState(velocity=velocity))]
+    )
+    assert _initial_robot_angular_velocity(simulator) is None
+
+
+def test_reset_yaw_rate_unsupported_state_stays_unavailable() -> None:
+    """A lookalike state cannot establish differential-drive reset provenance."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import _initial_robot_angular_velocity
+
+    simulator = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(velocity=(1.0, 0.7)))]
+    )
+    assert _initial_robot_angular_velocity(simulator) is None

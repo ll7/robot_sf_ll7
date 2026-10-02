@@ -17,8 +17,8 @@ identity_resolution:
 latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
-canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "088b2b15a9bbddf6bb8eed4ef01c41c29c08f169ad56ea5efb26d9517abb616f"
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml
+campaign_config_sha256: "abc410028a7779e4577c083362ee2d668afc28121e64f8cfd523fdfa45794c63"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -29,7 +29,7 @@ matrix:
   expected_episode_cells: 20160
   horizon_steps: null
   scenario_horizons: ../horizon_schedules/release_0_0_8_authored_v1.yaml
-  scenario_horizons_sha256: "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650"
+  scenario_horizons_sha256: "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
   dt: 0.1
 
 publication:
@@ -50,7 +50,7 @@ claim_boundary:
 
 scenario:
   matrix_path: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
-  matrix_sha256: "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8"
+  matrix_sha256: "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
   suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
   suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
   route_certification_path: ../route_clearance_certifications_v1.yaml
@@ -58,41 +58,41 @@ scenario:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
+  seed_set: release_eval_0_0_8
   seeds: []
-  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
-  seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+  seed_sets_path: ../../benchmarks/seed_sets_0_0_8.yaml
+  seed_sets_sha256: a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706
   resolved_seeds:
-    - 111
-    - 112
-    - 113
-    - 114
-    - 115
-    - 116
-    - 117
-    - 118
-    - 119
-    - 120
-    - 121
-    - 122
-    - 123
-    - 124
-    - 125
-    - 126
-    - 127
-    - 128
-    - 129
-    - 130
-    - 131
-    - 132
-    - 133
-    - 134
-    - 135
-    - 136
-    - 137
-    - 138
-    - 139
-    - 140
+    - 50036
+    - 50140
+    - 50331
+    - 50403
+    - 50813
+    - 51339
+    - 51709
+    - 51767
+    - 52094
+    - 52175
+    - 52257
+    - 52671
+    - 52850
+    - 52971
+    - 53020
+    - 53198
+    - 53239
+    - 53636
+    - 53671
+    - 53779
+    - 55022
+    - 55379
+    - 55568
+    - 56170
+    - 56966
+    - 57077
+    - 57113
+    - 57494
+    - 57943
+    - 59019
 
 metrics:
   snqi_claim_policy: advisory_no_ranking

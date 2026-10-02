@@ -1,4 +1,5 @@
 """End-to-end contract tests for non-self-referential release identity resolution."""
+# robot-sf-test-lane: slow -- repeated native identity generation and Git freezes
 
 from __future__ import annotations
 
@@ -23,10 +24,19 @@ from robot_sf.benchmark.release_protocol import (
     write_resolved_release_identity,
 )
 from robot_sf.benchmark.release_tag_identity import derive_sha_tag
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.zenodo_publisher import build_release_binding
+from robot_sf.evidence.writers import write_text
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release
+from tests.benchmark.test_sealed_source_pins import bind_runtime_sources, copy_runtime_sources
+
+
+@pytest.fixture(autouse=True)
+def runtime_source_location(tmp_path, monkeypatch):
+    """Bind synthetic freezes to copied tracked runtime files, without simulation."""
+    bind_runtime_sources(tmp_path / "source", monkeypatch)
 
 
 def _sha256(path: Path) -> str:
@@ -44,7 +54,8 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _write_yaml(path: Path, payload: object) -> None:
-    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_text(path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(payload, sort_keys=False))
 
 
 def _write_canonical_json(path: Path, payload: object) -> None:
@@ -67,7 +78,7 @@ PUBLIC_RELEASE_TEMPLATE = REPO_ROOT / (
     "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
 )
 CAMPAIGN_TEMPLATE = REPO_ROOT / (
-    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
 )
 ZENODO_METADATA_TEMPLATE = REPO_ROOT / (
     "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json"
@@ -111,7 +122,7 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     assert "horizon" not in campaign
     assert {key: campaign[key] for key in ("scenario_horizons", "scenario_horizons_sha256")} == {
         "scenario_horizons": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
-        "scenario_horizons_sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+        "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
     }
     assert (
         _sha256(REPO_ROOT / campaign["scenario_horizons"]) == campaign["scenario_horizons_sha256"]
@@ -137,7 +148,7 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "expected_episode_cells": 20160,
         "horizon_steps": None,
         "scenario_horizons": "../horizon_schedules/release_0_0_8_authored_v1.yaml",
-        "scenario_horizons_sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+        "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
         "dt": 0.1,
     }
     scenario_matrix = (
@@ -167,8 +178,10 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "unresolved_rows": "fail_admission",
     }
     assert "issue_9856_" in by_name["francis2023_entering_room"]["map_file"]
-    assert "issue_9762_" in by_name["classic_station_platform_medium"]["map_file"]
-    assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
+    assert by_name["classic_station_platform_medium"]["map_file"].endswith(
+        "issue_10063_classic_station_platform_safe_spawn_v1.svg"
+    )
+    assert manifest["seed_policy"]["resolved_seeds"] == list(EVAL_SEEDS_0_0_8)
     loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
         PUBLIC_RELEASE_TEMPLATE,
         repository_root=REPO_ROOT,
@@ -192,7 +205,7 @@ def test_three_width_doorway_slice_binds_full_roster_and_1260_rows() -> None:
     assert campaign["scenario_matrix"] == matrix_path.relative_to(REPO_ROOT).as_posix()
     assert [row["metadata"]["width_slice_m"] for row in scenarios] == [2.2, 2.8, 3.6]
     assert len(campaign["planners"]) == len(manifest["planners"]["keys"]) == 14
-    assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
+    assert manifest["seed_policy"]["resolved_seeds"] == list(EVAL_SEEDS_0_0_8)
     assert manifest["width_slice_contract"]["expected_episode_rows"] == 1260
     assert all(row["simulation_config"]["max_episode_steps"] == 400 for row in scenarios)
 
@@ -206,11 +219,14 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     (repo / ".gitignore").write_text("output/\n", encoding="utf-8")
     _git(repo, "add", ".gitignore")
     _git(repo, "commit", "-qm", "fixture: initialize ignored output")
+    copy_runtime_sources(repo)
 
-    scenarios = repo / "scenarios.yaml"
-    _write_yaml(scenarios, [{"name": f"scenario_{index:02d}"} for index in range(48)])
-    seed_sets = repo / "seed_sets.yaml"
-    _write_yaml(seed_sets, {"paper_eval_s30": list(range(111, 141))})
+    scenarios = repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    _write_yaml(
+        scenarios, {"scenarios": [{"name": f"scenario_{index:02d}"} for index in range(48)]}
+    )
+    seed_sets = repo / "configs/benchmarks/seed_sets_0_0_8.yaml"
+    _write_yaml(seed_sets, {"release_eval_0_0_8": list(EVAL_SEEDS_0_0_8)})
     for name in ("suite.yaml", "route.yaml", "comparability.yaml"):
         _write_yaml(repo / name, {"schema_version": "fixture.v1"})
     (repo / "CITATION.cff").write_text("cff-version: 1.2.0\n", encoding="utf-8")
@@ -219,7 +235,10 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     _write_yaml(planner_config, {"schema_version": "fixture-planner.v1"})
 
     planner_keys = [f"planner_{index:02d}" for index in range(14)]
-    campaign = repo / "campaign.yaml"
+    campaign = (
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+    )
     _write_yaml(
         campaign,
         {
@@ -227,13 +246,13 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "paper_facing": True,
             "paper_profile_version": "paper-matrix-v1",
             "paper_interpretation_profile": "baseline-ready-core",
-            "scenario_matrix": "scenarios.yaml",
-            "comparability_mapping": "comparability.yaml",
-            "route_clearance_certifications": "route.yaml",
+            "scenario_matrix": "../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+            "comparability_mapping": "../../comparability.yaml",
+            "route_clearance_certifications": "../../route.yaml",
             "seed_policy": {
                 "mode": "seed-set",
-                "seed_set": "paper_eval_s30",
-                "seed_sets_path": "seed_sets.yaml",
+                "seed_set": "release_eval_0_0_8",
+                "seed_sets_path": "seed_sets_0_0_8.yaml",
             },
             "workers": 1,
             "horizon": 600,
@@ -248,7 +267,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
                     "algo": "goal",
                     "planner_group": "core",
                     "socnav_missing_prereq_policy": "fail-fast",
-                    **({"algo_config": planner_config.name} if index == 0 else {}),
+                    **({"algo_config": "../../planner.yaml"} if index == 0 else {}),
                 }
                 for index, key in enumerate(planner_keys)
             ],
@@ -307,7 +326,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "release_kind": "benchmark-data",
             "latest_main_base_commit": "{{latest_main_base_commit}}",
             "planning_base_sha": "{{latest_main_base_commit}}",
-            "canonical_campaign_config": "campaign.yaml",
+            "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
             "campaign_config_sha256": _sha256(campaign),
             "expected_paper_profile_version": "paper-matrix-v1",
             "expected_paper_interpretation_profile": "baseline-ready-core",
@@ -320,7 +339,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
                 "metadata_sha256": _sha256(metadata_template),
             },
             "scenario": {
-                "matrix_path": scenarios.name,
+                "matrix_path": scenarios.relative_to(repo).as_posix(),
                 "matrix_sha256": _sha256(scenarios),
                 "suite_policy_path": "suite.yaml",
                 "suite_policy_sha256": _sha256(repo / "suite.yaml"),
@@ -329,11 +348,11 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             },
             "seed_policy": {
                 "mode": "seed-set",
-                "seed_set": "paper_eval_s30",
+                "seed_set": "release_eval_0_0_8",
                 "seeds": [],
-                "seed_sets_path": seed_sets.name,
+                "seed_sets_path": seed_sets.relative_to(repo).as_posix(),
                 "seed_sets_sha256": _sha256(seed_sets),
-                "resolved_seeds": list(range(111, 141)),
+                "resolved_seeds": list(EVAL_SEEDS_0_0_8),
             },
             "metrics": {"snqi_claim_policy": "advisory_no_ranking"},
             "planners": {
@@ -415,7 +434,8 @@ def test_clean_candidate_generates_and_verifies_byte_identical_resolved_identity
         "output/release/zenodo_metadata.resolved.json"
     )
     assert second_identity["resolved_manifest"]["canonical_campaign_config_sha256"] == _sha256(
-        repo / "campaign.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     assert second_identity["resolved_manifest"]["identity_resolution"] == {
         "schema_version": "benchmark-release-resolved-identity.v1",
@@ -593,12 +613,14 @@ def test_verification_rejects_post_freeze_mutation_and_alternate_checkout(
         output_path=output,
         **_identity_inputs(repo, template, source_commit),
     )
-    scenarios = repo / "scenarios.yaml"
+    scenarios = repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     scenarios.write_text(scenarios.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
     with pytest.raises(ValueError, match="not clean"):
         verify_resolved_release_identity(output, repository_root=repo)
 
-    _git(repo, "restore", "scenarios.yaml")
+    _git(
+        repo, "restore", "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
     planner_config = repo / "planner.yaml"
     planner_config.write_text(
         planner_config.read_text(encoding="utf-8") + "# changed after freeze\n",
@@ -623,7 +645,9 @@ def test_generation_rechecks_cleanliness_after_resolving_inputs(
 
     def _mutating_build(**kwargs: Any) -> Any:
         result = original_build(**kwargs)
-        scenarios = repo / "scenarios.yaml"
+        scenarios = (
+            repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+        )
         scenarios.write_text(
             scenarios.read_text(encoding="utf-8") + "# mutated after resolution\n",
             encoding="utf-8",
@@ -654,7 +678,9 @@ def test_generation_rejects_source_mutation_during_materialization(
         nonlocal mutation_applied
         if not mutation_applied:
             mutation_applied = True
-            scenarios = repo / "scenarios.yaml"
+            scenarios = (
+                repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+            )
             scenarios.write_text(
                 scenarios.read_text(encoding="utf-8") + "# changed before replacement\n",
                 encoding="utf-8",
@@ -714,14 +740,17 @@ def test_generation_rejects_invalid_resolved_zenodo_metadata(tmp_path: Path) -> 
 
 def test_generation_requires_campaign_publication_identity_slots(tmp_path: Path) -> None:
     repo, template, _ = _release_template_repository(tmp_path)
-    campaign_path = repo / "campaign.yaml"
+    campaign_path = (
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+    )
     campaign = yaml.safe_load(campaign_path.read_text(encoding="utf-8"))
     campaign["release_tag"] = "stale-semantic-tag"
     _write_yaml(campaign_path, campaign)
     template_payload = yaml.safe_load(template.read_text(encoding="utf-8"))
     template_payload["campaign_config_sha256"] = _sha256(campaign_path)
     _write_yaml(template, template_payload)
-    _git(repo, "add", template.name, campaign_path.name)
+    _git(repo, "add", template.name, campaign_path.relative_to(repo).as_posix())
     _git(repo, "commit", "-qm", "fixture: concrete campaign publication identity")
     source_commit = _git(repo, "rev-parse", "HEAD")
 
@@ -736,7 +765,7 @@ def test_generation_rejects_symlinked_or_escaped_output(tmp_path: Path) -> None:
     repo, template, source_commit = _release_template_repository(tmp_path)
     inputs = _identity_inputs(repo, template, source_commit)
     linked_output = repo / "output" / "linked-identity.json"
-    linked_output.parent.mkdir(parents=True)
+    linked_output.parent.mkdir(parents=True, exist_ok=True)
     linked_output.symlink_to(repo / "output" / "redirected-identity.json")
 
     with pytest.raises(ValueError, match="symlink"):
@@ -776,27 +805,32 @@ def test_verification_validates_publication_coordinates_before_reproduction(
         verify_resolved_release_identity(output, repository_root=repo)
 
 
-def test_cold_checkout_reproduces_and_verifies_identity(tmp_path: Path) -> None:
+def test_cold_checkout_reproduces_and_verifies_identity(tmp_path: Path, monkeypatch) -> None:
     repo, template, source_commit = _release_template_repository(tmp_path)
     output = repo / "output" / "release" / "release_identity.resolved.json"
     write_resolved_release_identity(
         output_path=output,
         **_identity_inputs(repo, template, source_commit),
     )
+    original_manifest = load_release_manifest(output, repository_root=repo)
     cold = tmp_path / "cold"
     _git(repo, "worktree", "add", "--detach", "-q", str(cold), source_commit)
     cold_output = cold / output.relative_to(repo)
     cold_output.parent.mkdir(parents=True)
     shutil.copy2(output, cold_output)
     shutil.copy2(output.parent / "zenodo_metadata.resolved.json", cold_output.parent)
+    shutil.copytree(repo / "output/runtime", cold / "output/runtime")
+    bind_runtime_sources(cold, monkeypatch)
 
     manifest = verify_resolved_release_identity(cold_output, repository_root=cold)
-    original_manifest = load_release_manifest(output, repository_root=repo)
     cold_campaign = load_release_campaign_config(original_manifest, repository_root=cold)
 
     assert manifest.source_sha == source_commit
     assert manifest.identity_template_path == cold / template.name
-    assert cold_campaign.scenario_matrix_path == cold / "scenarios.yaml"
+    assert (
+        cold_campaign.scenario_matrix_path
+        == cold / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
     assert cold_output.read_bytes() == output.read_bytes()
 
 
@@ -934,7 +968,7 @@ def test_doctor_and_acceptance_resolve_the_same_identity_bound_campaign(
     assert blockers == []
     assert axis_blockers == []
     assert len(scenario_ids) == 48
-    assert seeds == tuple(range(111, 141))
+    assert seeds == EVAL_SEEDS_0_0_8
 
 
 def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
@@ -966,7 +1000,7 @@ def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
     assert axis_blockers == []
     assert planner_blockers == []
     assert len(scenario_ids) == 48
-    assert seeds == tuple(range(111, 141))
+    assert seeds == EVAL_SEEDS_0_0_8
     assert len(release_acceptance._full_release_planner_items(planner_candidates)) == 14
 
     legacy_manifest = replace(manifest, resolved_identity_path=None)
@@ -991,12 +1025,15 @@ def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path,
     from collections import Counter
 
     repo, template, _source = _release_template_repository(tmp_path)
+    payload = yaml.safe_load(template.read_text())
+    campaign_path = (template.parent / payload["canonical_campaign_config"]).resolve()
+    matrix_path = (template.parent / payload["scenario"]["matrix_path"]).resolve()
     budgets = [400] * 25 + [500] * 13 + [600] * 8 + [650, 700]
     scenarios = [
         {"name": f"scenario_{index:02d}", "simulation_config": {"max_episode_steps": budget}}
         for index, budget in enumerate(budgets)
     ]
-    _write_yaml(repo / "scenarios.yaml", scenarios)
+    _write_yaml(matrix_path, {"scenarios": scenarios})
     schedule = repo / "horizons.yaml"
     _write_yaml(
         schedule,
@@ -1010,18 +1047,16 @@ def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path,
             },
         },
     )
-    campaign_path = repo / "campaign.yaml"
     campaign = yaml.safe_load(campaign_path.read_text())
     campaign.update(
         protocol_version="0.0.8",
         horizon=None,
-        scenario_horizons=schedule.name,
+        scenario_horizons=schedule.relative_to(repo).as_posix(),
         scenario_horizons_sha256=_sha256(schedule),
     )
     _write_yaml(campaign_path, campaign)
-    payload = yaml.safe_load(template.read_text())
     payload["campaign_config_sha256"] = _sha256(campaign_path)
-    payload["scenario"]["matrix_sha256"] = _sha256(repo / "scenarios.yaml")
+    payload["scenario"]["matrix_sha256"] = _sha256(matrix_path)
     payload["matrix"].update(
         horizon_steps=None,
         scenario_horizons=schedule.name,
@@ -1032,7 +1067,14 @@ def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path,
     elif mutation == "fixed_horizon":
         payload["matrix"]["horizon_steps"] = 600
     _write_yaml(template, payload)
-    _git(repo, "add", "scenarios.yaml", "horizons.yaml", "campaign.yaml", "release.template.yaml")
+    _git(
+        repo,
+        "add",
+        matrix_path.relative_to(repo).as_posix(),
+        "horizons.yaml",
+        campaign_path.relative_to(repo).as_posix(),
+        template.relative_to(repo).as_posix(),
+    )
     _git(repo, "commit", "-qm", "fixture: freeze independent authored schedule")
     source = _git(repo, "rev-parse", "HEAD")
     output = repo / "output/mixed/release_identity.resolved.json"

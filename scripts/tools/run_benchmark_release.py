@@ -49,6 +49,7 @@ from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
     is_diagnostic_stress_smoke,
+    is_doorway_width_slice,
     load_release_campaign_config,
     load_release_manifest,
     parse_release_args,
@@ -70,6 +71,7 @@ from robot_sf.benchmark.spawn_preflight import (
     DEFAULT_CLEARANCE_MARGIN_M,
     DEFAULT_GRID_RESOLUTION_M,
     DEFAULT_RESPAWN_WINDOW_STEPS,
+    guard_manifest_execution,
     run_manifest_preflight,
     write_preflight_reports,
 )
@@ -973,6 +975,10 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
         cfg = (
             load_release_campaign_config(manifest)
             if getattr(manifest, "resolved_identity_path", None) is not None
+            or (
+                getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+                and is_doorway_width_slice(manifest)
+            )
             else load_campaign_config(manifest.canonical_campaign_config_path)
         )
         source_commit = _current_source_commit()
@@ -1281,6 +1287,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     cfg = (
         load_release_campaign_config(manifest)
         if getattr(manifest, "resolved_identity_path", None) is not None
+        or (
+            getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+            and is_doorway_width_slice(manifest)
+        )
         else load_campaign_config(manifest.canonical_campaign_config_path)
     )
     stress_smoke = is_diagnostic_stress_smoke(manifest)
@@ -1392,6 +1402,43 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return 2
     validation = validate_release_manifest(manifest, campaign_config=cfg)
+    if validation["status"] != "valid":
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "invalid_manifest",
+                    "manifest_validation": validation,
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
+    try:
+        guard_manifest_execution(
+            manifest, source_commit=runtime_source_commit, repository_root=get_repository_root()
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "seed_execution_refused",
+                    "status_reason": str(exc),
+                    "manifest_validation": validation,
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
 
     resolved_manifest_kwargs: dict[str, Any] = {"campaign_config": cfg}
     if runtime_source_commit is not None:
@@ -1615,6 +1662,29 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             return 2
         result["runtime_smoke_receipt"] = {"path": smoke_path, **smoke_receipt}
 
+        if is_doorway_width_slice(manifest):
+            identity_admission, identities_match = _compare_rehearsal_checkpoint_identities(
+                checkpoint_receipt,
+                smoke_result_path,
+                release_receipt_sha256=sha256_file(args.checkpoint_receipt),
+                runtime_smoke_receipt_sha256=str(
+                    smoke_receipt.get("checkpoint_receipt_sha256") or ""
+                ),
+            )
+            result["checkpoint_identity_admission"] = identity_admission
+            if not identities_match:
+                result.update(
+                    {
+                        "benchmark_success": False,
+                        "status": "checkpoint_identity_mismatch",
+                        "status_reason": "doorway slice and runtime smoke checkpoint identities differ",
+                        "campaign_execution_status": "not_started",
+                        "evidence_status": "blocked",
+                    }
+                )
+                print(json.dumps(result, indent=2))
+                return 2
+
     try:
         resume_receipt = _admit_release_resume(
             args=args,
@@ -1674,6 +1744,21 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return 2
 
+    try:
+        guard_manifest_execution(
+            manifest, source_commit=runtime_source_commit, repository_root=get_repository_root()
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        result.update(
+            status="seed_execution_refused",
+            status_reason=str(exc),
+            benchmark_success=False,
+            campaign_execution_status="not_started",
+            evidence_status="blocked",
+            release_exit_code=2,
+        )
+        print(json.dumps(result, indent=2))
+        return 2
     run_payload = run_campaign(
         cfg,
         output_root=args.output_root,

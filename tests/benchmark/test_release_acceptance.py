@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -27,6 +28,7 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.evidence.writers import write_json
 
 _PLANNER_KEYS = tuple(f"planner_{index:02d}" for index in range(14))
 _PLANNER_ALGORITHMS = {
@@ -98,7 +100,9 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     assert any("has unexpected ['unexpected']" in blocker for blocker in roster_blockers)
 
 
-def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = None) -> Path:
+def _write_full_campaign(
+    tmp_path: Path, *, budgets: dict[str, int] | None = None, horizon: int = 600
+) -> Path:
     """Write a complete 14-arm fixture with 48 scenarios and 30 seeds."""
     campaign_root = tmp_path / "campaign"
     runs: list[dict[str, Any]] = []
@@ -118,10 +122,10 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                             "episode_id": f"{planner_key}-{scenario_id}-{seed}",
                             "scenario_id": scenario_id,
                             "seed": seed,
-                            "horizon": budgets[scenario_id] if budgets else 600,
-                            "effective_budget_steps": budgets[scenario_id] if budgets else 600,
+                            "horizon": budgets[scenario_id] if budgets else horizon,
+                            "effective_budget_steps": budgets[scenario_id] if budgets else horizon,
                             "scenario_params": {
-                                "run_horizon": budgets[scenario_id] if budgets else 600
+                                "run_horizon": budgets[scenario_id] if budgets else horizon
                             },
                             "status": "success",
                             "algo": expected_algo,
@@ -132,7 +136,7 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                                 "scenario_id": scenario_id,
                                 "seed": seed,
                                 "simulator_settings": {
-                                    "horizon": budgets[scenario_id] if budgets else 600
+                                    "horizon": budgets[scenario_id] if budgets else horizon
                                 },
                             },
                             "algorithm_metadata": {
@@ -150,11 +154,11 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                 "planner": {
                     "key": planner_key,
                     "kinematics": "differential_drive",
-                    "horizon": None if budgets else 600,
+                    "horizon": None if budgets else horizon,
                 },
                 "status": "ok",
                 "episodes_path": relative_path.as_posix(),
-                "summary": {"episodes_total": 1440, "written": 1440},
+                "summary": {"episodes_total": len(lines), "written": len(lines)},
             }
         )
         planner_rows.append(
@@ -165,7 +169,7 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                 "readiness_status": "available",
                 "availability_status": "available",
                 "benchmark_success": "true",
-                "episodes": 1440,
+                "episodes": len(lines),
             }
         )
     (campaign_root / "reports").mkdir(parents=True, exist_ok=True)
@@ -205,9 +209,11 @@ def _write_provenance_bound_full_campaign(
     shared_first_algorithm: bool = False,
     telemetry: dict[str, str] | None = None,
     budgets: dict[str, int] | None = None,
+    horizon: int = 600,
+    scenarios: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, SimpleNamespace]:
     """Write a full fixture with the same sidecars and arm paths as production."""
-    campaign_root = _write_full_campaign(tmp_path, budgets=budgets)
+    campaign_root = _write_full_campaign(tmp_path, budgets=budgets, horizon=horizon)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     source_repository_root = tmp_path / "frozen-source"
@@ -220,8 +226,11 @@ def _write_provenance_bound_full_campaign(
         source_repository_root / "configs/scenarios/classic_interactions_francis2023.yaml"
     )
     scenario_path.parent.mkdir(parents=True, exist_ok=True)
-    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
-    resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    resolved_scenarios = scenarios or [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    if scenarios is None:
+        scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    else:
+        write_json(scenario_path, {"scenarios": scenarios})
     schedule_path = None
     schedule_digest = None
     if budgets:
@@ -229,10 +238,11 @@ def _write_provenance_bound_full_campaign(
 
         import yaml
 
-        resolved_scenarios = [
-            {"id": sid, "simulation_config": {"max_episode_steps": budget}}
-            for sid, budget in budgets.items()
-        ]
+        if scenarios is None:
+            resolved_scenarios = [
+                {"id": sid, "simulation_config": {"max_episode_steps": budget}}
+                for sid, budget in budgets.items()
+            ]
         scenario_path.write_text(
             yaml.safe_dump({"scenarios": resolved_scenarios}), encoding="utf-8"
         )
@@ -321,7 +331,7 @@ def _write_provenance_bound_full_campaign(
             suite_key="classic_interactions",
             total_jobs=len(rows),
             written=len(rows),
-            horizon=None if budgets else 600,
+            horizon=None if budgets else horizon,
             dt=0.1,
             record_forces=False,
             active_observation_mode=None,
@@ -342,7 +352,7 @@ def _write_provenance_bound_full_campaign(
         scenario_horizons_path=schedule_path,
         scenario_horizons_sha256=schedule_digest,
         protocol_version="0.0.8" if budgets else None,
-        horizon=None if budgets else 600,
+        horizon=None if budgets else horizon,
     )
     return campaign_root, config
 
@@ -1715,10 +1725,12 @@ def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
 ):
     """The full 20,160-row gate accepts mixed authored budgets and rejects drift.
 
-    Synthetic JSONL rows use the old held-out band as identity data only; this
+    Synthetic JSONL rows use dev seeds as diagnostic identity data only; this
     test never constructs an environment or calls a planner.
     """
     from collections import Counter
+
+    monkeypatch.setattr(sys.modules[__name__], "_SEEDS", tuple(range(1001, 1031)))
 
     budgets = dict(
         zip(_SCENARIO_IDS, [400] * 25 + [500] * 13 + [600] * 8 + [650, 700], strict=True)
@@ -1729,7 +1741,8 @@ def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
     )
     manifest = _full_manifest()
     manifest.expected_horizon_steps = None
-    manifest.release_tag = "0.0.8"
+    manifest.release_tag = "diagnostic-authored-budget-contract"
+    config.protocol_version = "0.0.8"
     manifest.scenario_horizons_path = config.scenario_horizons_path
     manifest.scenario_horizons_sha256 = config.scenario_horizons_sha256
     expected = None
@@ -1771,3 +1784,166 @@ def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
     else:
         assert report["status"] == "invalid"
         assert any(expected in blocker for blocker in report["blockers"]), report["blockers"]
+
+
+@pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
+def test_planned_counts_and_exclusion_admission(tmp_path, monkeypatch, case):
+    """Full admission reports expected foresight exclusions and separately rejects spawn defects."""
+    monkeypatch.setattr(sys.modules[__name__], "_SEEDS", tuple(range(1001, 1031)))
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    summary_path = campaign_root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text())
+    # Exercise the guarded arm with real persisted rows and byte-bound provenance.
+    path = campaign_root / "runs/planner_11__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if case == "foresight":
+        rows[0]["algorithm_metadata"]["foresight_prediction"] = {"evidence_eligible": False}
+    elif case == "spawn":
+        rows[0]["spawn_validity"] = {"invalid_run": True, "invalid_reason": "spawn_overlap"}
+    elif case == "missing":
+        rows.pop()
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    sidecar_path = path.with_name(path.name + ".provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(path)
+    sidecar_path.write_text(json.dumps(sidecar))
+    planner = summary["planner_rows"][11]
+    planner.update(
+        episodes=1440 - int(case != "eligible"),
+        episodes_total=len(rows),
+        episodes_excluded=int(case in {"spawn", "foresight"}),
+    )
+    summary_path.write_text(json.dumps(summary))
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    if case in {"eligible", "foresight"}:
+        assert result["status"] == "valid", result["blockers"]
+        assert result["exclusion_reasons"] == (
+            {"foresight_ineligible": 1} if case == "foresight" else {}
+        )
+        assert result["episodes_excluded"] == int(case == "foresight")
+    elif case == "spawn":
+        assert result["status"] == "invalid"
+        assert (
+            "runs[11] spawn_exclusion_defect: K=1 invalid_or_unmeasured_spawn" in result["blockers"]
+        )
+        assert not any("total episode count" in blocker for blocker in result["blockers"])
+    else:
+        assert result["status"] == "invalid"
+        assert "planner_rows[11] total episode count is not 1440" in result["blockers"]
+
+
+def test_full_release_008_rejects_complete_retired_seed_fixture(tmp_path, monkeypatch):
+    """Real acceptance rejects otherwise valid synthetic rows on the retired band."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    manifest = _full_manifest()
+    manifest.release_tag = "paper-matrix-v2-h600-s30-2026-09-" + _SOURCE_SHA
+    manifest.scenario_matrix_path = Path("scenarios_release_0_0_8_v1.yaml")
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert "0.0.8 requires the exact sealed evaluation seeds (D-049)" in result["blockers"]
+
+
+@pytest.mark.heldout_seed_ok(
+    reason="Static release identities only; no RNG, environment or planner"
+)
+def test_three_width_v02_binds_merged_authored_h400_schedule():
+    """Real v0.2 template pins H400 independently and still refuses unfrozen execution."""
+    # seed-holdout: setup-only begin
+    from hashlib import sha256
+
+    import yaml
+
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+
+    root = Path(__file__).resolve().parents[2]
+    template = (
+        root / "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml"
+    )
+    payload = yaml.safe_load(template.read_text())
+    assert payload["width_slice_contract"]["requested_horizon_steps"] == 400
+    assert payload["width_slice_contract"]["scenario_horizon_cap_steps"] == 400
+    assert payload["matrix"].get("horizon_steps") is None
+    campaign = (template.parent / payload["canonical_campaign_config"]).resolve()
+    assert payload["campaign_config_sha256"] == sha256(campaign.read_bytes()).hexdigest()
+    matrix = (template.parent / payload["scenario"]["matrix_path"]).resolve()
+    assert payload["scenario"]["matrix_sha256"] == sha256(matrix.read_bytes()).hexdigest()
+    schedule = (template.parent / payload["matrix"]["scenario_horizons"]).resolve()
+    assert (
+        payload["matrix"]["scenario_horizons_sha256"] == sha256(schedule.read_bytes()).hexdigest()
+    )
+    from robot_sf.benchmark.release_protocol import (
+        resolve_release_horizon_budgets,
+        sealed_seed_execution_problem,
+    )
+
+    cfg = load_campaign_config(campaign, repository_root=root)
+    manifest = SimpleNamespace(
+        scenario_horizons_path=schedule,
+        scenario_horizons_sha256=payload["matrix"]["scenario_horizons_sha256"],
+        expected_horizon_steps=None,
+        canonical_campaign_config_path=campaign,
+        scenario_matrix_path=matrix,
+        release_kind=payload["release_kind"],
+        release_id=payload["release_id"],
+        source_sha=None,
+    )
+    assert resolve_release_horizon_budgets(manifest, cfg) == {
+        "francis2023_narrow_doorway_width_2p20": 400,
+        "francis2023_narrow_doorway_width_2p80": 400,
+        "francis2023_narrow_doorway_width_3p60": 400,
+    }
+    assert payload["matrix"]["expected_episode_cells"] == 14 * 3 * 30 == 1260
+    resolved_seeds = tuple(payload["seed_policy"]["resolved_seeds"])
+    seed_sets = yaml.safe_load(cfg.seed_policy.seed_sets_path.read_text())
+    assert resolved_seeds == tuple(seed_sets[cfg.seed_policy.seed_set])
+    assert "require source_sha equal to HEAD" in sealed_seed_execution_problem(
+        manifest, resolved_seeds, repository_root=root
+    )
+    # seed-holdout: setup-only end
+
+
+@pytest.mark.parametrize("budget", [400, 399])
+def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monkeypatch, budget):
+    """Real rows/sidecars admit authored H400 and refuse a rehashed H399 width.
+
+    Static metadata only: no environment or planner is constructed or stepped.
+    """
+    from copy import deepcopy
+
+    from tests.benchmark.test_doorway_release_acceptance import build_doorway
+
+    _, _, manifest, scenarios = build_doorway(tmp_path / "fixed", monkeypatch)
+    manifest.width_slice_contract["requested_horizon_steps"] = 600  # Retained legacy request hint.
+    scenarios = deepcopy(scenarios)
+    scenarios[0]["simulation_config"]["max_episode_steps"] = budget
+    budgets = {s["name"]: s["simulation_config"]["max_episode_steps"] for s in scenarios}
+    campaign, cfg = _write_provenance_bound_full_campaign(
+        tmp_path / "scheduled", monkeypatch, scenarios=scenarios, budgets=budgets
+    )
+    manifest.expected_horizon_steps = None
+    manifest.scenario_horizons_path = cfg.scenario_horizons_path
+    manifest.scenario_horizons_sha256 = cfg.scenario_horizons_sha256
+    report = validate_full_benchmark_release_acceptance(
+        campaign,
+        manifest=manifest,
+        campaign_config=cfg,
+        source_repository_root=cfg.source_repository_root,
+    )
+    if budget == 400:
+        assert report["status"] == "valid", report["blockers"]
+        assert report["unique_episode_identities"] == 1260
+    else:
+        assert report["status"] == "invalid"
+        assert (
+            f"doorway scenario {scenarios[0]['name']} budget is 399; must be 400"
+            in report["blockers"]
+        )

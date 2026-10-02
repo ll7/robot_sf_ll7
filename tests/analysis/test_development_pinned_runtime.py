@@ -8,9 +8,11 @@ pinned resolver compute identities; an environment sentinel prohibits execution.
 # seed-holdout: synthetic-fixture begin
 import io
 import json
+import subprocess
 from pathlib import Path
 
 from scripts.analysis import _pinned_successor_runtime as pinned
+from scripts.analysis import compare_release_0_0_7_to_0_0_8 as comparator
 from scripts.analysis.compare_release_0_0_7_to_0_0_8 import V4_SLOT_REPLACEMENTS
 from tests.benchmark.test_release_campaign_authority import no_execution
 
@@ -46,6 +48,29 @@ def test_pinned_runtime_projects_development_inventory_without_execution(monkeyp
     assert {slot[3] for slot in slots} == {1001, 1002, 1003}
     assert len({slot[0] for slot in slots}) == 14
     assert len({slot[2] for slot in slots}) == 48
+
+
+def test_detached_comparator_serializes_development_inventory():
+    """Real detached-source execution must receive the explicit development tuple.
+
+    A dropped request field silently resolves sealed slots; the existing paired
+    comparator tests do not pass this field. This calls its public internal
+    source resolver with real D-083 bytes and no episode rows to execute.
+    """
+    source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    _, _, _, _, slots = comparator._runtime_successor_identity(
+        ROOT,
+        source,
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+        {},
+        publication_identity={
+            "release_tag": "development-rehearsal-" + source,
+            "doi": "10.5281/zenodo.99000002",
+        },
+        development_rehearsal_seeds=(1001, 1002, 1003),
+    )
+    assert len(slots) == 2016
+    assert {slot[3] for slot in slots} == {1001, 1002, 1003}
 
 
 # seed-holdout: synthetic-fixture end

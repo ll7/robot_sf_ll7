@@ -24,7 +24,7 @@ from robot_sf.benchmark import release_protocol as protocol
 from robot_sf.benchmark import runtime_smoke_admission as smoke
 from robot_sf.benchmark import spawn_preflight as spawn
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
-from robot_sf.evidence.writers import write_json
+from robot_sf.evidence.writers import write_json, write_review_sidecar
 from scripts.analysis import _distribution_admission
 from scripts.tools import resolve_benchmark_release_identity as cli
 from tests.benchmark.test_release_campaign_authority import (
@@ -423,6 +423,45 @@ def test_development_comparator_uses_same_pinned_runtime(sealed_repository, monk
         "release_tag": manifest.release_tag,
         "doi": manifest.doi,
     }
+    # Read-only baseline readers record routing; public successor verification
+    # and its digest remain real. Stop at the common row-identity stage rather
+    # than manufacturing a complete admitted comparison.
+    baseline = root / "baseline.bin"
+    baseline.write_bytes(b"recording baseline")
+    write_review_sidecar(baseline, repo_root=repo)
+    admission = _distribution_admission.admission
+    monkeypatch.setattr(
+        admission, "BASELINE_SHA256", hashlib.sha256(baseline.read_bytes()).hexdigest()
+    )
+    monkeypatch.setattr(admission, "_archive_source_commit", lambda *_: admission.BASELINE_SOURCE)
+    monkeypatch.setattr(admission, "_bundle_campaign_id", lambda *_: admission.BASELINE_CAMPAIGN)
+    monkeypatch.setattr(
+        admission,
+        "_bundle_scenario_identity",
+        lambda *_: {
+            "manifest": admission.EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
+            "sha256": admission.EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
+        },
+    )
+    monkeypatch.setattr(admission, "_bundle_rows", lambda *_: {})
+    monkeypatch.setattr(admission, "_root_rows", lambda *_: ({}, set(), []))
+
+    def common_rows(*args):
+        assert args[1]["source_commit"] == manifest.source_sha
+        assert args[1]["manifest_sha256"] == digest
+        raise ValueError("reached common row admission")
+
+    monkeypatch.setattr(admission, "_root_identity", common_rows)
+    with pytest.raises(ValueError, match="reached common row admission"):
+        _distribution_admission.admit(
+            baseline,
+            root,
+            successor_manifest=identity,
+            successor_manifest_sha256=digest,
+            successor_source_root=repo,
+            diagnostic_partial=True,
+        )
+    assert len(calls) == 2
 
 
 # seed-holdout: synthetic-fixture end

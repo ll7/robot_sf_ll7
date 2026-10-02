@@ -1,6 +1,6 @@
 """Bicycle drive model for vehicle dynamics simulation."""
 
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from math import cos, isfinite, sin, tan
 from numbers import Real
 
@@ -10,6 +10,7 @@ from gymnasium import spaces
 from robot_sf.common.math_utils import clip_scalar, normalize_angle_atan2
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.common.types import BicycleAction, PolarVec2D, RobotPose, Vec2D
+from robot_sf.robot.reverse_drive import reverse_identity, validate_reverse_settings
 
 
 @dataclass
@@ -36,13 +37,23 @@ class BicycleDriveSettings:
     # (issue #4976).
     max_decel: float | None = None
 
-    def __post_init__(self) -> None:
+    # InitVars keep dataclasses.asdict() byte-identical for historical configs.
+    # Explicit limited_reverse selects the versioned plant, independently of the
+    # legacy allow_backwards flag (which retains full-speed reverse semantics).
+    limited_reverse: InitVar[bool] = False
+    max_reverse_speed: InitVar[float] = 0.5
+
+    def __post_init__(self, limited_reverse: bool, max_reverse_speed: float) -> None:
         """Resolve the braking-authority default for backward compatibility.
 
         When ``max_decel`` is unset, braking authority defaults to the forward
         acceleration so existing symmetric-clip behavior is preserved. Only an
         explicit ``max_decel`` decouples braking from forward acceleration.
         """
+        validate_reverse_settings(limited_reverse, max_reverse_speed)
+        self.limited_reverse = limited_reverse
+        self.max_reverse_speed = float(max_reverse_speed)
+
         if self.max_decel is None:
             self.max_decel = self.max_accel
         if (
@@ -61,7 +72,17 @@ class BicycleDriveSettings:
         If backwards movement is allowed, the minimum velocity is -max_velocity.
         Otherwise, the minimum velocity is 0.
         """
+        if self.limited_reverse:
+            return -self.max_reverse_speed
         return -self.max_velocity if self.allow_backwards else 0.0
+
+    def _config_hash_overrides(self) -> dict:
+        """Bind the opt-in plant version and cap in canonical config identity.
+
+        Returns:
+            Opt-in selectors, or no additions for legacy settings.
+        """
+        return reverse_identity(self)
 
 
 @dataclass

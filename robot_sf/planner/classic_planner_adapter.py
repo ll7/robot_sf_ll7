@@ -97,6 +97,8 @@ class PlannerActionAdapter:
                 max_velocity=cfg.max_velocity,
                 max_angular_speed=max_angular_speed,
                 allow_backwards=cfg.allow_backwards,
+                limited_reverse=cfg.limited_reverse,
+                max_reverse_speed=cfg.max_reverse_speed,
             )
         if isinstance(self.robot, DifferentialDriveRobot):
             cfg = self.robot.config
@@ -104,6 +106,8 @@ class PlannerActionAdapter:
                 max_linear_speed=cfg.max_linear_speed,
                 max_angular_speed=cfg.max_angular_speed,
                 allow_backwards=cfg.allow_backwards,
+                limited_reverse=cfg.limited_reverse,
+                max_reverse_speed=cfg.max_reverse_speed,
             )
         msg = f"Unsupported robot type for planner adapter: {type(self.robot)}"
         raise ValueError(msg)

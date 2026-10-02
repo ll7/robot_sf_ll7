@@ -1,5 +1,6 @@
 # Robot SF Documentation
 
+* [CALFIT bounded search results](./calfit_results.md) — 114 coarse settings plus one refinement, full diagnostic gates and the new-evidence author packet.
 * [CALFIT preflight and bounded search contract](./calfit_preflight.md) — Synthetic V1–V6 estimator controls, admission-policy blockers, and the proposed dev-seed search grid.
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.

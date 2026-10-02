@@ -987,8 +987,11 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         """Latch reverse after three stationary, occupancy-blocked forward steps.
 
         Grid occupancy, bound static geometry and observed pedestrians can
-        establish the obstruction. A 110-degree entry / 70-degree exit band prevents heading-boundary
-        chatter. Three consecutive clear forward probes also leave escape mode.
+        establish the obstruction. Enter at 110 degrees and leave when forward
+        alignment is no worse than rear alignment (90 degrees), preventing
+        heading-boundary chatter. Rear-aligned rotation increases forward error;
+        the angular exit responds to a changing world target. Three consecutive
+        clear forward probes also leave escape mode.
         Heading slowdown alone never counts as an obstruction.
 
         Returns:
@@ -1015,7 +1018,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         ped_radius = float(self._as_1d_float(pedestrians.get("radius", [0.4]))[0])
         if positions.size:
             occupied |= bool(
-                np.any(np.linalg.norm(positions - probe, axis=1) <= radius + ped_radius)
+                np.any(
+                    ((positions - robot_pos) @ forward > self._EPS)
+                    & (np.linalg.norm(positions - probe, axis=1) <= radius + ped_radius)
+                )
             )
         stationary = abs(float(self._as_1d_float(robot.get("speed", [0.0]))[0])) < 0.05
         self._reverse_blocked_steps = (
@@ -1023,10 +1029,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         self._reverse_clear_steps = 0 if occupied else self._reverse_clear_steps + 1
         if self._reverse_mode:
-            if abs(heading_error) <= np.deg2rad(70.0) + self._EPS or self._reverse_clear_steps >= 3:
+            reverse_error = abs(self._wrap_angle(heading_error + pi))
+            if abs(heading_error) <= reverse_error + self._EPS or self._reverse_clear_steps >= 3:
                 self._reverse_mode = False
                 self._reverse_blocked_steps = 0
-        elif abs(heading_error) >= np.deg2rad(110.0) and self._reverse_blocked_steps >= 3:
+        elif (
+            abs(heading_error) >= np.deg2rad(110.0) - self._EPS and self._reverse_blocked_steps >= 3
+        ):
             self._reverse_mode = True
         return self._reverse_mode
 
@@ -1041,6 +1050,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         """Check the rear swept footprint and pedestrian prediction through braking.
 
         Uses observed pedestrians and bound static geometry or the local grid.
+        At each predicted sample, only pedestrians at or behind the centre in
+        the travel heading count as rear obstructions. A person blocking the
+        nose must not prevent movement away from them; predicted rear crossings
+        and lateral pedestrians still participate in the clearance check.
         Missing rear geometry refuses translation. This is a conservative adapter
         guard, not a proof of preservation of ORCA's world-velocity half-planes.
 
@@ -1078,10 +1091,14 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         margin = peak * horizon / steps
         for elapsed in np.linspace(0.0, horizon, steps + 1):
             heading = robot_heading + angular * elapsed
-            point = robot_pos - peak * elapsed * np.array([cos(heading), sin(heading)])
+            forward = np.array([cos(heading), sin(heading)])
+            point = robot_pos - peak * elapsed * forward
             if positions.size and np.any(
-                np.linalg.norm(positions + velocities * elapsed - point, axis=1)
-                <= radius + ped_radius + margin
+                ((positions + velocities * elapsed - point) @ forward <= self._EPS)
+                & (
+                    np.linalg.norm(positions + velocities * elapsed - point, axis=1)
+                    <= radius + ped_radius + margin
+                )
             ):
                 return False
             if geometry is not None:

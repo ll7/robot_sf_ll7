@@ -30,14 +30,20 @@ The ORCA world-velocity adapter uses reverse as an opt-in escape, not whenever a
 goal is behind it. It enters after three consecutive stationary steps (speed
 below 0.05 m/s) with mean combined occupancy penalty at least 0.95 over two forward probes
 just beyond the robot radius (0.15 and 0.30 m, shortened with lookahead), and a
-heading error of at least 110 degrees. It exits at 70 degrees or after three
-consecutive clear forward probes. This hysteresis prevents switching at every
+heading error of at least 110 degrees, inclusive within numerical tolerance.
+It exits when the forward heading error is no greater than the reverse heading
+error (90 degrees), or after three consecutive clear forward probes.
+The robot's own rear-aligned rotation increases forward error; the angular exit
+responds to a swing in the goal or ORCA world target. This hysteresis prevents switching at every
 90-degree crossing; free space retains the forward turn toward the goal.
 Bound static geometry intersecting a 0.30 m forward footprint sweep, or an
-observed pedestrian overlapping that projected footprint, also establishes
+observed pedestrian ahead of the robot centre overlapping that projected footprint, also establishes
 obstruction without a grid; this supports canonical tracked-agent observations.
 Backward travel turns toward the reverse travel axis and checks the rear
 footprint and constant-velocity pedestrian prediction through a braking horizon.
+The pedestrian rear check includes lateral and rear positions at each predicted
+sample, including crossings from ahead; pedestrians still ahead of that sample
+do not refuse movement away from a nose obstruction.
 Absent rear geometry/grid data or an obstructed rear sweep restores the complete
 forward command, including its turn. HRVO inherits this adapter.
 This projection is an adapter heuristic; it does not preserve ORCA's holonomic
@@ -56,6 +62,7 @@ retraining or lattice changes for those planners are separate work. Canonical
 map-runner binding warns once, naming any adapter that is not reverse-aware,
 when its live plant enables limited reverse. Hybrid v3 also gets this warning;
 hybrid v4 and ORCA/HRVO do not.
+Plain policies without a bound planner adapter do not emit an adapter warning.
 
 The default LiDAR angle portion is 1.0 (a full 360-degree scan). Reverse guards
 use observed pedestrian state and static map/grid geometry rather than assuming

@@ -154,8 +154,8 @@ def test_orca_reverse_hysteresis_does_not_chatter_at_ninety_degrees():
     for _ in range(3):
         _project_heading(adapter, obs)
     commands = [_project_heading(adapter, obs, angle) for angle in [89.0, 91.0] * 3]
-    assert [command[1] for command in commands] == [-1.0] * 6
-    assert all(command[0] <= 0.0 for command in commands)
+    assert [command[1] for command in commands] == [1.0] * 6
+    assert all(command[0] >= 0.0 for command in commands)
     assert _project_heading(adapter, obs, 70.0)[1] == 1.0
     assert _project_heading(adapter, obs, 100.0) == pytest.approx((0.0, 1.0))
     for _ in range(3):
@@ -361,3 +361,113 @@ def test_hybrid_static_escape_reverses_but_rejects_a_rear_wall():
     )
     assert not evaluation["accepted"]
     assert evaluation["reason"] == "static_collision"
+
+
+def test_orca_front_pedestrian_does_not_refuse_rear_escape():
+    """A nose-to-nose pedestrian must block entry without blocking clear rear travel."""
+    adapter = _reverse_adapter()
+    adapter.reset(seed=1001)
+    obs = _escape_observation(front_blocked=False, pedestrians=[[0.85, 0.0]])
+    assert _project_heading(adapter, obs) == pytest.approx((0.0, 1.0))
+    assert _project_heading(adapter, obs) == pytest.approx((0.0, 1.0))
+    assert _project_heading(adapter, obs) == pytest.approx((-0.5, 0.0))
+
+
+@pytest.mark.parametrize("position", [(0.0, 0.8), (-0.05, 0.1)])
+def test_orca_side_or_rear_pedestrian_does_not_count_as_forward_blockage(position):
+    """Nearby lateral/rear discs are not evidence of obstruction ahead of the nose."""
+    adapter = _reverse_adapter()
+    adapter.reset(seed=1001)
+    obs = _escape_observation(front_blocked=False, pedestrians=[position])
+    for _ in range(3):
+        assert not adapter._use_reverse_escape(np.pi, np.zeros(2), 0.0, obs)
+        assert adapter._reverse_blocked_steps == 0
+
+
+def test_orca_exact_110_degree_reverse_entry_includes_roundoff():
+    """The documented inclusive entry boundary survives wrapped-angle roundoff."""
+    adapter = _reverse_adapter()
+    adapter.reset(seed=1001)
+    obs = _escape_observation()
+    for _ in range(2):
+        assert _project_heading(adapter, obs, 110.0) == pytest.approx((0.0, 1.0))
+    assert _project_heading(adapter, obs, 110.0) == pytest.approx((-0.5, -1.0))
+
+
+def test_orca_reverse_exit_uses_shorter_alignment_after_goal_swing():
+    """Rear alignment increases forward error; a changed target can favor forward again."""
+    adapter = _reverse_adapter()
+    adapter.reset(seed=1001)
+    obs = _escape_observation()
+    for _ in range(3):
+        _project_heading(adapter, obs)
+    # The robot's own reverse-aligned rotation heads toward 180 degrees of
+    # forward error, not the old 70-degree exit. Retain a stable escape here.
+    heading = 0.0
+    direction = 2.0 * np.array([np.cos(np.deg2rad(110)), np.sin(np.deg2rad(110))])
+    for _ in range(3):
+        command = adapter._velocity_world_to_command(
+            velocity_world=direction, robot_pos=np.zeros(2), robot_heading=heading, observation=obs
+        )
+        assert command[0] < 0.0
+        heading += command[1] * 0.1
+    # Swing the world target so forward alignment is strictly shorter than
+    # reverse alignment: 85 vs 95 degrees. Forward translation/turn must resume.
+    target_heading = heading + np.deg2rad(85.0)
+    command = adapter._velocity_world_to_command(
+        velocity_world=2.0 * np.array([np.cos(target_heading), np.sin(target_heading)]),
+        robot_pos=np.zeros(2),
+        robot_heading=heading,
+        observation=obs,
+    )
+    assert command == pytest.approx((2.0 * np.cos(np.deg2rad(85.0)), 1.0))
+    assert not adapter._reverse_mode
+
+
+@pytest.mark.parametrize("kind", ["function", "partial"])
+def test_non_adapter_policy_has_no_misnamed_reverse_warning(monkeypatch, kind):
+    """The real runner must not describe plain policies as unsupported 'function' adapters."""
+    from functools import partial
+
+    from loguru import logger
+
+    from robot_sf.benchmark.map_runner import map_runner_episode as episode
+
+    def policy(obs):
+        return (0.0, 0.0)
+
+    if kind == "partial":
+        policy = partial(policy)
+    env = _env(_drive())
+    env.close = lambda: None
+    monkeypatch.setattr(episode, "make_robot_env", lambda **kwargs: env)
+
+    # Stop at the existing setup boundary, after its real warning call and
+    # before reset/step. No test seam is added to production.
+    def stop_before_reset(*args, **kwargs):
+        raise RuntimeError("witness stops before reset")
+
+    monkeypatch.setattr(episode, "_prepare_episode_env", stop_before_reset)
+    runtime = SimpleNamespace(
+        policy_fn=policy,
+        planner_bind_env=None,
+        planner_reset=None,
+        planner_stats=None,
+        planner_close=None,
+    )
+    args = SimpleNamespace(
+        planner_runtime=runtime,
+        config=env.env_config,
+        seed=1001,
+        scenario={},
+        expected_population_size=None,
+        pedestrian_control_trace_label_builder=None,
+    )
+    messages = []
+    sink = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        with pytest.raises(RuntimeError, match="witness stops before reset"):
+            episode._setup_and_run_step_loop(args)
+    finally:
+        logger.remove(sink)
+    assert not [message for message in messages if "not reverse-aware" in message], messages

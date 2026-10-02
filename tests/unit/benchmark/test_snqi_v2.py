@@ -3092,10 +3092,8 @@ def test_snqifix2_force_clipping_does_not_hide_raw_redundancy():
 
 
 @pytest.mark.heldout_seed_ok(reason="Static seed-list commitment equality; no episode execution")
-def test_snqifix2_sealed_seed_companion_equality():
-    """The temporary static companion must agree with the seed authority when available."""
-    import importlib.util
-
+def test_snqifix2_sealed_seed_commitment_validation():
+    """The static companion digest and programmatic commitment must fail closed."""
     from robot_sf.benchmark.snqi.evaluation_seeds import (
         SEALED_EVALUATION_SEEDS,
         SEALED_EVALUATION_SEEDS_SHA256,
@@ -3105,12 +3103,6 @@ def test_snqifix2_sealed_seed_companion_equality():
         SEALED_EVALUATION_SEEDS_SHA256
         == "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6"
     )
-    if importlib.util.find_spec("robot_sf.benchmark.seed_bands") is not None:
-        # seed-holdout: setup-only begin
-        from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
-
-        assert tuple(EVAL_SEEDS_0_0_8) == SEALED_EVALUATION_SEEDS
-        # seed-holdout: setup-only end
     spec = replace(fixture_spec(), calibration_seeds=(1001, 1002))
     spec.validate_evaluation_commitment(SEALED_EVALUATION_SEEDS)
     with pytest.raises(ValueError, match="sealed commitment"):

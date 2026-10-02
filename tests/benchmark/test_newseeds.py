@@ -249,3 +249,12 @@ def test_stress_gate_resolves_only_dev_seed():
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
     assert {seed for row in scenarios for seed in row["seeds"]} == {1001}
     assert len(scenarios) * sum(arm.enabled for arm in cfg.planners) == 70
+
+
+@pytest.mark.heldout_seed_ok(reason="Static SNQI/canonical seed equality; no episode execution")
+def test_snqi_companion_matches_canonical_seed_authority():
+    """SNQI's static seed companion must exactly match the release seed authority."""
+    from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
+    from robot_sf.benchmark.snqi.evaluation_seeds import SEALED_EVALUATION_SEEDS
+
+    assert tuple(EVAL_SEEDS_0_0_8) == SEALED_EVALUATION_SEEDS == SEALED

@@ -26,6 +26,7 @@ TEMPLATE = (
 RELEASE = ROOT / "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("source", [TEMPLATE, SMOKE], ids=["release-path", "smoke"])
 def test_excluded_legacy_snqi_dev_campaign_writes_episodes_and_publication(tmp_path, source):
     """Real candidate bytes run a dev episode and cold-verify without legacy assets."""
@@ -90,3 +91,79 @@ def test_excluded_legacy_snqi_dev_campaign_writes_episodes_and_publication(tmp_p
             column.startswith("snqi")
             for column in (path.read_text().splitlines() or [""])[0].split(",")
         )
+
+
+def test_release_bundle_rejects_weights_without_baseline(tmp_path):
+    """A release with only one legacy asset fails on the paired-asset contract."""
+    run_root = tmp_path / "run"
+    (run_root / "release").mkdir(parents=True)
+    write_json(
+        run_root / "release/release_manifest.resolved.json",
+        {
+            "metrics": {
+                "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json"
+            },
+            "provenance": {"citation_path": "CITATION.cff"},
+        },
+    )
+    write_json(run_root / "release/release_result.json", {"status": "ok"})
+    with pytest.raises(
+        ValueError, match="^Release legacy SNQI requires both weights and baseline$"
+    ):
+        export_publication_bundle(run_root, tmp_path / "bundles", include_videos=False)
+
+
+def _excluded_bundle_payload(tmp_path):
+    """Create a real excluded payload for cold-verification guard tests.
+
+    Returns:
+        The bundle payload directory.
+    """
+    payload = tmp_path / "bundle/payload"
+    payload.mkdir(parents=True)
+    write_json(payload / "campaign_manifest.json", {"legacy_snqi": "excluded"})
+    return payload
+
+
+def test_excluded_bundle_rejects_legacy_diagnostics(tmp_path):
+    """Cold verification must detect diagnostics contradicting explicit exclusion."""
+    from robot_sf.benchmark.artifact_publication import _publication_snqi_evidence
+
+    payload = _excluded_bundle_payload(tmp_path)
+    (payload / "reports").mkdir()
+    write_json(payload / "reports/snqi_diagnostics.json", {})
+    assert _publication_snqi_evidence(payload) == {
+        "checked": False,
+        "reason": "legacy_snqi_excluded",
+        "violations": ["Legacy SNQI is excluded but its diagnostics are present"],
+    }
+
+
+def test_excluded_bundle_rejects_declared_legacy_assets(tmp_path):
+    """Cold verification must reject paired legacy declarations in an excluded bundle."""
+    from robot_sf.benchmark.artifact_publication import _publication_snqi_evidence
+
+    payload = _excluded_bundle_payload(tmp_path)
+    (payload / "release").mkdir()
+    write_json(
+        payload / "release/release_manifest.resolved.json",
+        {"metrics": {"snqi_weights_path": "weights.json", "snqi_baseline_path": "baseline.json"}},
+    )
+    assert _publication_snqi_evidence(payload) == {
+        "checked": False,
+        "reason": "legacy_snqi_excluded",
+        "violations": ["Legacy SNQI is excluded but the release declares legacy assets"],
+    }
+
+
+def test_excluded_bundle_rejects_staged_legacy_asset_directory(tmp_path):
+    """Cold verification must detect the reserved legacy-asset directory itself."""
+    from robot_sf.benchmark.artifact_publication import _publication_snqi_evidence
+
+    payload = _excluded_bundle_payload(tmp_path)
+    (payload / "release_metadata/snqi").mkdir(parents=True)
+    assert _publication_snqi_evidence(payload) == {
+        "checked": False,
+        "reason": "legacy_snqi_excluded",
+        "violations": ["Legacy SNQI is excluded but its bundle assets are present"],
+    }

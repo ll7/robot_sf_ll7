@@ -761,6 +761,17 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         REPO_ROOT / successor["scenario_matrix"]
     )
     assert new_manifest["planners"]["keys"] == EXPECTED_0_0_8_PLANNER_KEYS
+    assert new_manifest["artifacts"]["required_paths"] == [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "preflight/validate_config.json",
+        "preflight/preview_scenarios.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_report.md",
+        "reports/matrix_summary.json",
+        "reports/campaign_table.md",
+    ]
 
     manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
     validation = validate_release_manifest(manifest)

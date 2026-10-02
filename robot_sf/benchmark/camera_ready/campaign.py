@@ -182,6 +182,36 @@ _CAMPAIGN_TABLE_HEADERS = (
     "fairness_in_ranking_subset",
 )
 
+_KINEMATICS_PARITY_TABLE_HEADERS = (
+    "planner_key",
+    "algo",
+    "human_model_variant",
+    "human_model_source",
+    "planner_group",
+    "kinematics",
+    "execution_mode",
+    "status",
+    "episodes",
+    "episodes_total",
+    "episodes_excluded",
+    "success_mean",
+    "success_ci_low",
+    "success_ci_high",
+    "collisions_mean",
+    "ped_collision_count_mean",
+    "obstacle_collision_count_mean",
+    "total_collision_count_mean",
+    "collision_ci_low",
+    "collision_ci_high",
+    "near_misses_mean",
+    "comfort_exposure_mean",
+    "snqi_mean",
+    "snqi_ci_low",
+    "snqi_ci_high",
+    "projection_rate",
+    "infeasible_rate",
+)
+
 _CORE_EXPERIMENTAL_TABLE_HEADERS = (
     "planner_key",
     "algo",
@@ -2061,8 +2091,10 @@ def _write_parity_table(
     reports_dir: Path, planner_rows: list[dict[str, Any]], *, legacy_snqi_declared: bool = True
 ) -> tuple[Path, Path]:
     """Write the kinematics parity table.
+
     Returns:
-        Paths to the CSV and Markdown files."""
+        Paths to the CSV and Markdown files.
+    """
     parity_rows = sorted(
         [
             {
@@ -2105,35 +2137,7 @@ def _write_parity_table(
         "kinematics_parity_table",
         parity_rows,
         headers=_score_table_headers(
-            (
-                "planner_key",
-                "algo",
-                "human_model_variant",
-                "human_model_source",
-                "planner_group",
-                "kinematics",
-                "execution_mode",
-                "status",
-                "episodes",
-                "episodes_total",
-                "episodes_excluded",
-                "success_mean",
-                "success_ci_low",
-                "success_ci_high",
-                "collisions_mean",
-                "ped_collision_count_mean",
-                "obstacle_collision_count_mean",
-                "total_collision_count_mean",
-                "collision_ci_low",
-                "collision_ci_high",
-                "near_misses_mean",
-                "comfort_exposure_mean",
-                "snqi_mean",
-                "snqi_ci_low",
-                "snqi_ci_high",
-                "projection_rate",
-                "infeasible_rate",
-            ),
+            _KINEMATICS_PARITY_TABLE_HEADERS,
             legacy_snqi_declared,
         ),
     )

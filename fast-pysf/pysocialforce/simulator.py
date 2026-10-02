@@ -18,6 +18,7 @@ from pysocialforce.config import (
     SimulatorConfig,
     obstacle_force_law_metadata,
 )
+from pysocialforce.contact import apply_contact_step, contact_law_metadata, validate_contact_rules
 from pysocialforce.force_trace import ForceComputationResult, compute_force_components
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_behavior import PedestrianBehavior
@@ -152,6 +153,7 @@ class Simulator_v2:
         if config is None:
             config = SimulatorConfig()
         self.config = config
+        validate_contact_rules(config)
         self.on_step = on_step
         self.states, self.groupings, self.behaviors = populate(self.config, map_definition)
         obstacles = (
@@ -255,10 +257,25 @@ class Simulator_v2:
         """
         Performs a single step in the simulation.
         """
+        contact = (
+            getattr(self.config, "pedestrian_contact_rule", None) is not None
+            or getattr(self.config.obstacle_force_config, "wall_contact_rule", None) is not None
+        )
+        previous = self.peds.state.copy() if contact else None
         forces = _sum_forces_explicitly(self.forces, self.peds)
         self.peds.step(forces)
+        if previous is not None:
+            apply_contact_step(self, previous)
         for behavior in self.behaviors:
             behavior.step()
+
+    def pedestrian_physics_metadata(self) -> dict[str, object]:
+        """Return effective contact/wall physics for explicitly requested manifests.
+
+        Returns:
+            Effective live physics mapping.
+        """
+        return contact_law_metadata(self)
 
     def step(self, n: int = 1) -> None:
         """
@@ -298,6 +315,7 @@ class Simulator:
         if config is None:
             config = SimulatorConfig()
         self.config = config
+        validate_contact_rules(config)
         self.on_step = on_step
         resolution = self.config.scene_config.resolution
         self.env = EnvState(obstacles or [], resolution)
@@ -401,7 +419,22 @@ class Simulator:
 
     def step_once(self) -> None:
         """step once"""
+        contact = (
+            getattr(self.config, "pedestrian_contact_rule", None) is not None
+            or getattr(self.config.obstacle_force_config, "wall_contact_rule", None) is not None
+        )
+        previous = self.peds.state.copy() if contact else None
         self.peds.step(self.compute_forces())
+        if previous is not None:
+            apply_contact_step(self, previous)
+
+    def pedestrian_physics_metadata(self) -> dict[str, object]:
+        """Return effective contact/wall physics for explicitly requested manifests.
+
+        Returns:
+            Effective live physics mapping.
+        """
+        return contact_law_metadata(self)
 
     def step(self, n: int = 1) -> None:
         """Step n time"""

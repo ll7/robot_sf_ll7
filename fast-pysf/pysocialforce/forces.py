@@ -36,6 +36,12 @@ from pysocialforce.config import (
     resolve_obstacle_force_law,
     resolve_social_force_kernel_version,
 )
+from pysocialforce.contact import (
+    WALL_AMPLITUDE_M_S2,
+    WALL_DECAY_M,
+    WALL_RANGE_M,
+    bounded_wall_force,
+)
 from pysocialforce.logging import logger
 from pysocialforce.scene import Line2D, PedState, Point2D
 
@@ -429,6 +435,16 @@ class ObstacleForce:
         self.get_peds = sim.peds.pos
         self.get_agent_radius = lambda: sim.peds.agent_radius
         self._obstacle_force_applied = False
+        if getattr(config, "wall_contact_rule", None) == "bounded_edge_v1":
+            self.contact_wall_parameters = {
+                "amplitude_m_s2": float(
+                    getattr(config, "wall_contact_amplitude_m_s2", WALL_AMPLITUDE_M_S2)
+                ),
+                "decay_m": float(getattr(config, "wall_contact_decay_m", WALL_DECAY_M)),
+                "range_m": float(getattr(config, "wall_contact_range_m", WALL_RANGE_M)),
+            }
+            if any(not np.isfinite(v) or v <= 0 for v in self.contact_wall_parameters.values()):
+                raise ValueError("wall contact parameters must be finite and positive")
 
     def __call__(self) -> np.ndarray:
         """Compute obstacle forces for each pedestrian.
@@ -443,6 +459,17 @@ class ObstacleForce:
         obstacles = self.get_obstacles()
         if len(obstacles) == 0:
             return forces
+
+        if getattr(self.config, "wall_contact_rule", None) == "bounded_edge_v1":
+            self._obstacle_force_applied = True
+            return bounded_wall_force(
+                ped_positions,
+                obstacles,
+                self.get_agent_radius(),
+                self.contact_wall_parameters["amplitude_m_s2"],
+                self.contact_wall_parameters["decay_m"],
+                self.contact_wall_parameters["range_m"],
+            )
 
         factor = float(self.config.factor)
         sigma = self.config.sigma

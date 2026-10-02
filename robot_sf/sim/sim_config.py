@@ -459,8 +459,19 @@ class SimulationSettings:
     Explicit selection overrides ``ped_radius`` at every physical consumer.
     """
 
+    pedestrian_contact_rule: InitVar[str | None] = None
+    """Opt-in frictionless projection; absent preserves released serialization."""
+    pedestrian_wall_rule: InitVar[str | None] = None
+    """Opt-in bounded body-edge wall force and swept nonpenetration."""
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
+        if name in {"pedestrian_contact_rule", "pedestrian_wall_rule"}:
+            expected = "projection_v1" if name == "pedestrian_contact_rule" else "bounded_edge_v1"
+            if value is not None and value != expected:
+                raise ValueError(f"unsupported {name}: {value!r}")
+            object.__setattr__(self, "_" + name, value)
+            return
         if name == "pedestrian_radius_m":
             if value is not None:
                 if isinstance(value, bool) or not isinstance(value, int | float):
@@ -493,6 +504,8 @@ class SimulationSettings:
         Returns:
             The resolved selector for ``social_force_kernel_version`` or the requested attribute.
         """
+        if name in {"pedestrian_contact_rule", "pedestrian_wall_rule"}:
+            return object.__getattribute__(self, "__dict__").get("_" + name)
         if name in {"ped_radius", "pedestrian_radius_m"}:
             try:
                 radius = object.__getattribute__(self, "_pedestrian_radius_m")
@@ -519,6 +532,10 @@ class SimulationSettings:
             Only the non-default selector field, or an empty mapping for the legacy default.
         """
         overrides = {}
+        for name in ("pedestrian_contact_rule", "pedestrian_wall_rule"):
+            value = getattr(self, name)
+            if value is not None:
+                overrides[name] = value
         if self.pedestrian_radius_m is not None:
             overrides["pedestrian_radius_m"] = self.pedestrian_radius_m
         if self.social_force_kernel_resolution_mode != "defaulted_missing":
@@ -633,6 +650,8 @@ class SimulationSettings:
             self.social_force_kernel_version = init_vars[0]
         self.obstacle_force_profile = init_vars[1] if len(init_vars) > 1 else None
         self.pedestrian_radius_m = init_vars[2] if len(init_vars) > 2 else None
+        self.pedestrian_contact_rule = init_vars[3] if len(init_vars) > 3 else None
+        self.pedestrian_wall_rule = init_vars[4] if len(init_vars) > 4 else None
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

@@ -1904,6 +1904,7 @@ class _EpisodeStepLoopResult:
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
     sampler_capture: dict[str, Any] | None = None
+    pedestrian_physics_metadata: dict[str, Any] | None = None
     robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
@@ -1964,6 +1965,7 @@ class _StepLoopState:
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
+    pedestrian_physics_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
     sampler_capture: dict[str, Any] | None = None
     reset_spawn_clearance: dict[str, Any] | None = None
@@ -3460,6 +3462,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
         sampler_capture=state.sampler_capture,
+        pedestrian_physics_metadata=state.pedestrian_physics_metadata,
         reset_spawn_clearance=state.reset_spawn_clearance,
         reset_spawn_clearance_error=state.reset_spawn_clearance_error,
         respawn_overlap_events=list(state.respawn_overlap_events),
@@ -3670,6 +3673,9 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
         if getattr(env, "simulator", None) is not None:
             state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
+            physics_reader = getattr(env.simulator, "pedestrian_physics_metadata", None)
+            if callable(physics_reader):
+                state.pedestrian_physics_metadata = physics_reader()
             state.map_def = env.simulator.map_def
             state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
@@ -4742,6 +4748,8 @@ def _finalize_metadata_phase(
     )
     if loop_result.obstacle_force_law_metadata is not None:
         algo_meta["obstacle_force_law"] = deepcopy(loop_result.obstacle_force_law_metadata)
+    if loop_result.pedestrian_physics_metadata is not None:
+        algo_meta["pedestrian_physics"] = deepcopy(loop_result.pedestrian_physics_metadata)
     return _finalize_metadata_outputs(
         algo_meta,
         ctx=ctx,

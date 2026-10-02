@@ -67,7 +67,10 @@ def read_json(path):
 def _identity(point, seeds, config):
     substrate = Path(pysocialforce.__file__).parent
     files = {}
-    for name in ["forces.py", "config.py", "scene.py"]:
+    names = ["forces.py", "config.py", "scene.py"]
+    if point.get("pedcontact_measurement"):
+        names += ["contact.py", "simulator.py"]
+    for name in names:
         source = suite.ROOT / "fast-pysf/pysocialforce" / name
         installed = substrate / name
         digest = hashlib.sha256(installed.read_bytes()).hexdigest()
@@ -140,6 +143,14 @@ def run_candidate(point, seeds, out, workers=2, config_path=None) -> dict[str, o
         "shoulder_width_m": config["V2"]["shoulder_proxy_m"],
         "equivalence": {f"V{i}": config[f"V{i}"]["equivalence"] for i in range(1, 7)},
     }
+    for key in (
+        "pedestrian_contact_rule",
+        "pedestrian_wall_rule",
+        "wall_contact_parameters",
+        "pedcontact_measurement",
+    ):
+        if key in point:
+            options[key] = point[key]
     grid = suite.protocol_tasks(config, point["radius_m"], "radius", options)
     print("RESOLVED SEEDS", seeds, "CANDIDATE", point, "CASES", len(grid), flush=True)
     out = Path(out)

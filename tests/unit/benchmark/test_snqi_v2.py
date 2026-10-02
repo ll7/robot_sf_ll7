@@ -3106,9 +3106,11 @@ def test_snqifix2_sealed_seed_companion_equality():
         == "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6"
     )
     if importlib.util.find_spec("robot_sf.benchmark.seed_bands") is not None:
+        # seed-holdout: setup-only begin (static commitment equality; no simulation)
         from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 
         assert tuple(EVAL_SEEDS_0_0_8) == SEALED_EVALUATION_SEEDS
+        # seed-holdout: setup-only end
     spec = replace(fixture_spec(), calibration_seeds=(1001, 1002))
     spec.validate_evaluation_commitment(SEALED_EVALUATION_SEEDS)
     with pytest.raises(ValueError, match="sealed commitment"):

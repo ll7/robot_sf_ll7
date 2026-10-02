@@ -152,7 +152,7 @@ def test_undeclared_shorter_scenario_limit_is_refused(tmp_path, arm_override):
         "snqi_weights",
         "snqi_baseline",
     ):
-        if field in raw:
+        if raw.get(field) is not None:
             raw[field] = str(ROOT / raw[field])
     raw.pop("scenario_horizons", None)
     raw.pop("scenario_horizons_sha256", None)
@@ -268,7 +268,7 @@ def test_legacy_horizon_policy_requires_historical_version(tmp_path, version):
         "snqi_weights",
         "snqi_baseline",
     ):
-        if field in raw:
+        if raw.get(field) is not None:
             raw[field] = str(ROOT / raw[field])
     raw.update(horizon_policy="legacy_runner_cap", horizon=600)
     raw["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}

@@ -22,7 +22,13 @@ def test_every_tracked_campaign_preserves_main_admission_and_simulator_limits():
     """Preserve main admission and limits, with D-084's explicit source-budget amendment."""
     fixture = json.loads(FIXTURE.read_text())
     assert fixture["source_revision"] == "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
-    expected = fixture["configs"]
+    # D-068 changes the active path; preserve the historical snapshot bytes.
+    renamed_calibration = {
+        "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml": "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+    }
+    expected = {
+        renamed_calibration.get(path, path): oracle for path, oracle in fixture["configs"].items()
+    }
     tracked = tracked_campaign_yaml(ROOT)
     assert set(expected) <= set(tracked), "a main-era input disappeared from the inventory"
     differences = {}

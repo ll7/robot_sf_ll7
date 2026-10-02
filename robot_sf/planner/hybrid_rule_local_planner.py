@@ -309,6 +309,7 @@ class HybridRuleLocalPlannerConfig:
     hard_safety_margin: float = 0.05
     static_hard_safety_margin: float = -1.0
     debug_candidate_evaluator: bool = False
+    physical_static_exclusion_enabled: bool = False
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9
     obstacle_threshold: float = 0.5
@@ -2596,6 +2597,16 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 or bool(self.config.continuous_static_clearance_enabled)
             )
         )
+        physical_static_exclusion = (
+            self._v4_clearance_braking
+            and bool(self.config.physical_static_exclusion_enabled)
+            and use_continuous_static_check
+        )
+        if physical_static_exclusion:
+            # Exact map geometry excludes the physical body. The discretionary
+            # margin stays a soft preference below; it is not wall contact.
+            hard_static_clearance = float(state["robot_radius"])
+            required_static_clearance = hard_static_clearance + corridor_clearance_buffer
         proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
         return {
             "dt": dt,
@@ -2612,6 +2623,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "corridor_clearance_buffer": corridor_clearance_buffer,
             "required_static_clearance": required_static_clearance,
             "use_continuous_static_check": use_continuous_static_check,
+            "physical_static_exclusion": physical_static_exclusion,
             "proxemic_enabled": proxemic_enabled,
             "proxemic_costmap_config": self._proxemic_costmap_config if proxemic_enabled else None,
             "rollout_points": [np.array(robot_pos, dtype=float)] if proxemic_enabled else None,
@@ -2921,6 +2933,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance / max(float(self.config.desired_static_clearance), _EPS)
             )
         )
+        if ctx["physical_static_exclusion"] and not np.isinf(min_static_clearance):
+            static_clearance = _clip01(
+                (min_static_clearance - float(state["robot_radius"]))
+                / max(float(self.config.desired_static_clearance), _EPS)
+            )
         rollout_mean_linear, rollout_max_linear = self._rollout_linear_stats(rollout_commands)
         dynamic_clearance = (
             1.0
@@ -3504,6 +3521,16 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             moving = [item for item in accepted if abs(item["candidate"].linear) > _EPS]
             best_moving = max(moving, key=lambda item: float(item["score"]), default=None)
             self._candidate_evaluator_debug = {
+                "speed_cap_m_s": float(speed_cap),
+                "constraint_context": {
+                    "hard_collision_horizon_s": float(self.config.hard_collision_horizon),
+                    "near_human_activation_distance_m": float(
+                        self.config.near_human_angular_limit_distance
+                    ),
+                    "braking_moving_threshold_m_s": float(self.config.freezing_speed_threshold),
+                    "physical_robot_radius_m": float(state["robot_radius"]),
+                    "physical_pedestrian_radius_m": float(state["ped_radius"]),
+                },
                 "constraints": [
                     {
                         "constraint": name,

@@ -159,6 +159,32 @@ def evaluate_orca_step(shadow, obs, state, command, end):
     return rejected, full
 
 
+def missing_candidate_probe(planner, obs, state, command):
+    """Find an admissible forward action excluded by the scalar proximity speed cap."""
+    cap = planner._last_v4_speed_safety["speed_cap"]
+    _, reachable, _, _ = planner._dynamic_window(
+        state["current_speed"], planner._v4_effective_max_speed()
+    )
+    if reachable <= cap + 1e-9:
+        return None
+    candidate = HybridRuleCandidate(reachable, float(command[1]), "unsampled_forward_probe")
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=obs,
+        state=state,
+        speed_cap=cap,
+        nearest_ped=planner._nearest_ped_distance(state["robot_pos"], state["ped_pos"]),
+    )
+    return {
+        "command": [candidate.linear, candidate.angular],
+        "generated_speed_cap_m_s": cap,
+        "accepted": evaluation["accepted"],
+        "evaluation": planner._candidate_diagnostic(evaluation)
+        if evaluation["accepted"]
+        else planner._rejection_diagnostic(evaluation),
+    }
+
+
 def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays within one try/finally
     """Run one native episode and persist complete step diagnostics atomically."""
     name, seed, arm, empty, output, horizon = task
@@ -209,6 +235,9 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
             decision = evaluator.last_decision()
             state = evaluator._extract_state(obs)
             debug = decision.get("candidate_evaluator_debug") if decision else None
+            probe = (
+                missing_candidate_probe(evaluator, obs, state, command) if shadow is None else None
+            )
             action = _policy_command_to_env_action(env=env, config=cfg, command=command)
             next_obs, _, terminated, truncated, info = env.step(action)
             end = np.array(env.simulator.robot_pos[0], dtype=float)
@@ -229,6 +258,7 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
                 "collision": contact,
                 "debug": debug,
                 "decision": decision,
+                "missing_candidate_probe": probe,
             }
             if shadow is not None:
                 rejected, full = evaluate_orca_step(shadow, obs, state, command, end)
@@ -265,6 +295,10 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
             "algorithm_metadata": metadata,
             "runtime": runtime,
             "final_goal_distance_m": rows[-1]["goal_distance_m"],
+            "admissible_unsampled_steps": sum(
+                bool(r.get("missing_candidate_probe") and r["missing_candidate_probe"]["accepted"])
+                for r in rows
+            ),
         }
     finally:
         env.close()

@@ -3106,7 +3106,7 @@ def test_snqifix2_sealed_seed_companion_equality():
         == "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6"
     )
     if importlib.util.find_spec("robot_sf.benchmark.seed_bands") is not None:
-        # seed-holdout: setup-only begin (static commitment equality; no simulation)
+        # seed-holdout: setup-only begin
         from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 
         assert tuple(EVAL_SEEDS_0_0_8) == SEALED_EVALUATION_SEEDS
@@ -3216,3 +3216,111 @@ def test_snqifix2_release_seed_commitment_cannot_be_overridden():
     spec = replace(fixture_spec(), evaluation_seeds_sha256=evaluation_seeds_sha256(substituted))
     with pytest.raises(ValueError, match="sealed commitment"):
         spec.validate_evaluation_commitment(substituted)
+
+
+def test_snqirefresh_campaign_loader_validates_v2_anchor_schedule(spec_files, tmp_path):
+    """Real acquisition YAML must bind current-schema anchors to its authored budgets."""
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from robot_sf.evidence.writers import write_json
+
+    document = anchor_document()
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    write_json(spec_files[1], document)
+    rows = [
+        {"name": name, "simulation_config": {"max_episode_steps": 600}}
+        for name in document["calibration"]["scenarios"]
+    ]
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(yaml.safe_dump(rows))
+    acquisition = tmp_path / "acquisition.yaml"
+    acquisition.write_text(
+        yaml.safe_dump(
+            {
+                "name": "static-schema-and-budget-binding",
+                "scenario_matrix": str(matrix),
+                "horizon": 600,
+                "seed_policy": {"mode": "fixed-list", "seeds": [1001]},
+                "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
+                "snqi_v2_spec": dict(
+                    zip(
+                        ("weights_path", "anchors_path", "family_path"),
+                        map(str, spec_files),
+                        strict=True,
+                    )
+                ),
+            }
+        )
+    )
+    config = load_campaign_config(acquisition)
+    assert config.snqi_v2_spec.metric_schema_version == "robot-sf-metrics.v2"
+    assert len(config.snqi_v2_spec.scenario_horizons) == 48
+    rows[0]["simulation_config"]["max_episode_steps"] = 700
+    matrix.write_text(yaml.safe_dump(rows))
+    with pytest.raises(ValueError, match="budget|schedule"):
+        load_campaign_config(acquisition)
+
+
+def test_snqirefresh_manifest_refuses_uncommitted_evaluation_split(tmp_path):
+    """Manifest construction must enforce the seal after checking development overlap."""
+    from robot_sf.benchmark.camera_ready._preflight import _build_campaign_manifest_payload
+    from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, SeedPolicy
+
+    spec = replace(fixture_spec(), hashes={"anchors": "a" * 64})
+    config = CampaignConfig(
+        "static-manifest-refusal",
+        tmp_path / "matrix.yaml",
+        (),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(201, 202)),
+        snqi_v2_spec=spec,
+    )
+    with pytest.raises(ValueError, match="sealed commitment"):
+        _build_campaign_manifest_payload(
+            config,
+            campaign_id="static-refusal",
+            created_at_utc="2026-10-02T00:00:00Z",
+            metadata={
+                "resolved_seeds": [201, 202],
+                "scenario_hash": "b" * 64,
+                "git_meta": {"commit": "c" * 40},
+                "config_hash": "d" * 64,
+                "scenario_horizons_summary": {},
+                "noise_spec": {},
+                "noise_hash": None,
+            },
+            invoked_command=None,
+            route_clearance_warnings=[],
+            route_clearance_warning_summary={},
+            amv_summary={},
+            comparability_summary=None,
+            comparability_mapping_path=None,
+            planner_entries=[],
+            artifact_block={},
+            tuning_ledger={
+                "schema_version": "test",
+                "record_schema_version": "test",
+                "ledger_sha256": "e" * 64,
+                "records": [],
+                "summary": {},
+                "policy": {},
+            },
+            tuning_ledger_path=tmp_path / "ledger.json",
+        )
+
+
+@pytest.mark.parametrize("diagnostic", [False, True])
+def test_snqirefresh_enrichment_refuses_wrong_split_before_replacing_bytes(tmp_path, diagnostic):
+    """A wrong release seal or non-dev diagnostic row cannot replace custody inputs."""
+    entries, before = [], {}
+    for planner in ("a", "b"):
+        path = tmp_path / f"{planner}.jsonl"
+        write_campaign_arm(path, [row for row in records() if row["algo"] == planner])
+        entries.append({"status": "ok", "planner": {"key": planner}, "episodes_path": str(path)})
+        before[path] = path.read_bytes()
+    spec = replace(fixture_spec(), hashes={"anchors": "a" * 64}, diagnostic=diagnostic)
+    message = "diagnostics require development" if diagnostic else "sealed commitment"
+    with pytest.raises(ValueError, match=message):
+        enrich_campaign_v2(
+            entries, spec, tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=2
+        )
+    assert all(path.read_bytes() == original for path, original in before.items())
+    assert not list(tmp_path.glob("*.snqi-v2.*"))

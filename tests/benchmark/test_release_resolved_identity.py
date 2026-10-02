@@ -122,7 +122,7 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     assert "horizon" not in campaign
     assert {key: campaign[key] for key in ("scenario_horizons", "scenario_horizons_sha256")} == {
         "scenario_horizons": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
-        "scenario_horizons_sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+        "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
     }
     assert (
         _sha256(REPO_ROOT / campaign["scenario_horizons"]) == campaign["scenario_horizons_sha256"]
@@ -148,7 +148,7 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "expected_episode_cells": 20160,
         "horizon_steps": None,
         "scenario_horizons": "../horizon_schedules/release_0_0_8_authored_v1.yaml",
-        "scenario_horizons_sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+        "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
         "dt": 0.1,
     }
     scenario_matrix = (

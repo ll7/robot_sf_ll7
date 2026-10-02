@@ -2056,7 +2056,7 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
         ROOT / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
     )
     assert config.scenario_horizons_sha256 == (
-        "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650"
+        "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
     )
     assert config.seed_policy.seeds == (101, 102)
     path = tmp_path / "changed.yaml"

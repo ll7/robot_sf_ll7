@@ -157,6 +157,14 @@ from the resolved authored closure and pinned by SHA-256
 The H650/H700 scenarios now receive their full authored budgets. Source scenario,
 frozen planner and historical evidence bytes remain unchanged.
 
+The author ruling of 2026-10-02, recorded as D-084 in the
+[0.0.8 decision ledger](../release/0.0.8/decisions.md), supersedes the overtaking
+entry only: `francis2023_pedestrian_overtaking` now has a 600-step release schedule
+budget (24/13/9/1/1 scenarios at H400/H500/H600/H650/H700). The digest above records
+the earlier schedule, not the current pin. Current campaign and manifest pins are
+regenerated from bytes. #10067 owns the corresponding authored scenario change;
+strict source/schedule parity continues to refuse the intervening mismatch.
+
 Only explicitly declared 0.0.8+ campaign and arm admission refuses an authored
 limit below the requested fixed horizon, before execution. Older and unidentified
 fixed-horizon configs retain main's runner-only cap and untouched authored limits

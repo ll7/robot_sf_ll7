@@ -55,7 +55,8 @@ AUTHORED_BUDGETS = {
     "francis2023_narrow_hallway": 400,
     "francis2023_parallel_traffic": 400,
     "francis2023_pedestrian_obstruction": 400,
-    "francis2023_pedestrian_overtaking": 400,
+    # D-084 author ruling; #10067 owns the matching authored source update.
+    "francis2023_pedestrian_overtaking": 600,
     "francis2023_perpendicular_traffic": 400,
     "francis2023_robot_crowding": 400,
     "francis2023_robot_overtaking": 400,

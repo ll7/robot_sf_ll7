@@ -631,6 +631,15 @@ def _apply_scenario_horizon_schedule(
                 f"Scenario '{scenario_id}' simulation_config must be a mapping for horizon patching"
             )
         authored_limit = simulation_config.get("max_episode_steps")
+        if (
+            _uses_authored_horizon_protocol(protocol_version)
+            and authored_limit is not None
+            and horizon_steps < int(authored_limit)
+        ):
+            raise ValueError(
+                f"Scenario '{scenario_id}' authored limit {authored_limit} "
+                f"exceeds scheduled horizon {horizon_steps}"
+            )
         simulation_config["max_episode_steps"] = horizon_steps
 
         metadata = patched.setdefault("metadata", {})

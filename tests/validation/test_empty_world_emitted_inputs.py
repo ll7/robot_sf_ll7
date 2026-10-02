@@ -31,7 +31,7 @@ def test_unchanged_emitted_scenarios_load_from_arbitrary_output_dir(tmp_path, su
         cfg.scenario_horizons_sha256
         == hashlib.sha256(cfg.scenario_horizons_path.read_bytes()).hexdigest()
     )
-    expected_budgets = {400: 25, 500: 13, 600: 8, 650: 1, 700: 1} if suite == "main" else {400: 3}
+    expected_budgets = {400: 24, 500: 13, 600: 9, 650: 1, 700: 1} if suite == "main" else {400: 3}
     assert Counter(row["simulation_config"]["max_episode_steps"] for row in scenarios) == (
         expected_budgets
     )

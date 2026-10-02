@@ -18,7 +18,7 @@ latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml
-campaign_config_sha256: "a9d2a7f1da47ae38ed297013fe8cc2dec90ecd384239665aa69c83122b0eb583"
+campaign_config_sha256: "8063f034e229c3038dae7ef3df0b78ee53f57aba7258d311adae6e8dd14d8cfc"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -29,7 +29,7 @@ matrix:
   expected_episode_cells: 20160
   horizon_steps: null
   scenario_horizons: ../horizon_schedules/release_0_0_8_authored_v1.yaml
-  scenario_horizons_sha256: "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650"
+  scenario_horizons_sha256: "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
   dt: 0.1
 
 publication:

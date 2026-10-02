@@ -17,6 +17,57 @@ from tests.benchmark.campaign_horizon_support import (
 )
 
 
+@pytest.mark.parametrize("protocol", ["0.0.8", "0.0.9"])
+def test_schedule_below_authored_limit_is_refused(tmp_path, protocol):
+    """A pinned schedule cannot silently truncate an authored current-protocol budget."""
+    from robot_sf.benchmark.camera_ready._config import _apply_scenario_horizon_schedule
+    from robot_sf.evidence.writers import write_text
+
+    scenario = {
+        "name": "dev_authored_h600",
+        "seeds": [1001],
+        "simulation_config": {"max_episode_steps": 600},
+    }
+    original = deepcopy(scenario)
+    schedule = tmp_path / "schedule.yaml"
+    write_text(
+        schedule,
+        "# AI-GENERATED / NEEDS-REVIEW: synthetic dev-seed schedule\n"
+        "scenarios:\n  dev_authored_h600:\n"
+        "    recommended_horizon_steps: 400\n    status: authored\n",
+    )
+    with pytest.raises(
+        ValueError, match="dev_authored_h600.*authored limit 600.*scheduled horizon 400"
+    ):
+        _apply_scenario_horizon_schedule(
+            [scenario], schedule_path=schedule, protocol_version=protocol
+        )
+    assert scenario == original
+    # Historical schedules retain main's original truncation and provenance behavior.
+    historical = _apply_scenario_horizon_schedule(
+        [scenario], schedule_path=schedule, protocol_version="0.0.7"
+    )[0]
+    assert historical["simulation_config"]["max_episode_steps"] == 400
+    assert "authored_max_episode_steps" not in historical["metadata"]["scenario_horizon"]
+
+
+def test_d084_selected_release_schedules_overtaking_at_600():
+    """Resolve the real D-083 campaign: D-084's overtaking budget survives runner binding."""
+    cfg = load_campaign_config(
+        ROOT
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+    )
+    scenario = next(
+        s
+        for s in _load_campaign_scenarios(cfg, repository_root=ROOT)
+        if s["name"] == "francis2023_pedestrian_overtaking"
+    )
+    assert scenario["simulation_config"]["max_episode_steps"] == 600
+    assert scenario["metadata"]["scenario_horizon"]["recommended_horizon_steps"] == 600
+    context = _scheduled_context(scenario, cfg.dt)
+    assert context.horizon_val == context.config.sim_config.max_sim_steps == 600
+
+
 def test_real_release_0_0_8_template_preserves_authored_budgets():
     """All 48 real release scenarios use the explicitly pinned authored schedule."""
     from collections import Counter
@@ -30,7 +81,7 @@ def test_real_release_0_0_8_template_preserves_authored_budgets():
     assert cfg.scenario_horizons_path is not None
     schedule_bytes = cfg.scenario_horizons_path.read_bytes()
     assert len(scenarios) == 48
-    assert Counter(authored.values()) == {400: 25, 500: 13, 600: 8, 650: 1, 700: 1}
+    assert Counter(authored.values()) == {400: 24, 500: 13, 600: 9, 650: 1, 700: 1}
     for scenario in scenarios:
         expected = authored[scenario["name"]]
         config = build_env_config(scenario, scenario_path=ROOT / "scoped_scenarios.json")

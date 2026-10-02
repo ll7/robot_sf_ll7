@@ -125,8 +125,8 @@ def test_h600_hybrid_roster_uses_exact_verified_four_arm_roster() -> None:
         assert key in comparability["planner_key_mapping"]
 
 
-def test_h600_hybrid_roster_loads_and_keeps_expected_hash() -> None:
-    """Campaign loader accepts the config and resolves the h600 scenario surface."""
+def test_h600_hybrid_roster_loader_detects_authored_source_delta() -> None:
+    """Current authored inputs must not be mistaken for the historical preregistration."""
     cfg = load_campaign_config(CONFIG_PATH)
 
     assert cfg.name == "paper_experiment_matrix_v1_h600_hybrid_roster"
@@ -138,7 +138,13 @@ def test_h600_hybrid_roster_loads_and_keeps_expected_hash() -> None:
 
     scenarios = _load_campaign_scenarios(cfg)
     assert len(scenarios) == 48
-    assert _hash_payload(scenarios) == "c10df617a87c"
+    # The 2026-10-02 authored overtaking budget/caveat changes live input identity.
+    # Preserve the historical preregistration; do not re-label old evidence.
+    assert _hash_payload(scenarios) == "a3b15eab3a21"
+    assert (
+        _hash_payload(scenarios)
+        != _load_yaml(CONFIG_PATH)["preregistration"]["expected_scenario_matrix_hash"]
+    )
 
 
 def test_h600_hybrid_roster_keeps_hybrid_rule_explicit_opt_in() -> None:

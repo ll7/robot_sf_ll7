@@ -113,8 +113,8 @@ def test_h600_hybrid_vs_orca_s30_config_identity() -> None:
     assert (REPO_ROOT / EXPECTED_PPO_CONFIG).is_file()
 
 
-def test_h600_hybrid_vs_orca_s30_loader_preserves_s30_expansion_hash() -> None:
-    """Campaign loader resolves the predeclared S30 scenario-plus-seed payload."""
+def test_h600_hybrid_vs_orca_s30_loader_detects_authored_source_delta() -> None:
+    """Live source changes are distinct from the preserved historical S30 preregistration."""
     cfg = load_campaign_config(CONFIG_PATH)
 
     assert cfg.name == "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30"
@@ -125,4 +125,7 @@ def test_h600_hybrid_vs_orca_s30_loader_preserves_s30_expansion_hash() -> None:
 
     scenarios = _load_campaign_scenarios(cfg)
     assert len(scenarios) == 48
-    assert _hash_payload(scenarios) == EXPECTED_S30_SCENARIO_SEED_HASH
+    # Authored overtaking budget and reporting metadata changed on 2026-10-02.
+    # The original preregistration stays historical; current inputs have a new pin.
+    assert _hash_payload(scenarios) == "916a451a6ae9"
+    assert _hash_payload(scenarios) != EXPECTED_S30_SCENARIO_SEED_HASH

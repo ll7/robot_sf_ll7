@@ -1,9 +1,11 @@
 """Static witnesses for release endpoint safety; no environment is constructed."""
 
+from math import ceil
 from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
+import yaml
 from shapely.geometry import LineString, Point, box
 
 from robot_sf.evidence.writers import write_json
@@ -11,6 +13,8 @@ from robot_sf.training.scenario_loader import build_robot_config_from_scenario, 
 from scripts.validation.check_scenario_archetype_geometry import _rect_polygon
 
 MATRIX = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
+AUTHORED = Path("configs/scenarios/single/francis2023_pedestrian_overtaking.yaml")
+HORIZON_SCHEDULE = Path("configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml")
 
 
 def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
@@ -32,15 +36,16 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
         == f"single_ped_{actor_id}_goal"
     )
     parking_radius = float(goal_circle.attrib["r"])
+    approach_margin = config.robot_config.radius + 1.0
     assert all(
-        parked.x + parking_radius < _rect_polygon(zone).bounds[0] - 3.0
+        parked.x + parking_radius < _rect_polygon(zone).bounds[0] - approach_margin
         for zone in definition.robot_goal_zones
     ), "the parking circle must retreat from the final approach in longitude"
     # Protect the whole authored parking region, not just its nominal centre:
     # the first candidate's centre cleared 3 m while the settled walker did not.
-    # The review's 3 m approach margin remains independent of this SVG's values.
+    # Include the resolved robot footprint plus an independent 1 m approach margin.
     goals = [_rect_polygon(zone) for zone in definition.robot_goal_zones]
-    assert all(parked.distance(goal) - parking_radius > 3.0 for goal in goals), (
+    assert all(parked.distance(goal) - parking_radius > approach_margin for goal in goals), (
         "parked overtaking pedestrian blocks the full robot goal rectangle"
     )
     # A goal inside a wall can settle outside its authored circle under SFM.
@@ -49,12 +54,12 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
         if node.get("{http://www.inkscape.org/namespaces/inkscape}label") != "obstacle":
             continue
         x, y, width, height = (float(node.attrib[key]) for key in ("x", "y", "width", "height"))
-        assert parked.distance(box(x, y, x + width, y + height)) > parking_radius, (
-            "the pedestrian parking circle intersects a wall"
-        )
+        assert parked.distance(box(x, y, x + width, y + height)) > (
+            parking_radius + config.sim_config.ped_radius
+        ), "the pedestrian parking region and body must clear every wall"
     for route in definition.robot_routes:
         approach = LineString(route.waypoints)
-        assert parked.distance(approach) - parking_radius > 3.0, (
+        assert parked.distance(approach) - parking_radius > approach_margin, (
             "parked overtaking pedestrian blocks the robot's final approach"
         )
 
@@ -72,6 +77,10 @@ def test_overtaking_exit_goal_retains_forward_overtaking_speed():
     target = pedestrian.trajectory[0] if pedestrian.trajectory else pedestrian.goal
     dx, dy = target[0] - pedestrian.start[0], target[1] - pedestrian.start[1]
     assert dx > 0, "the overtaking pedestrian must continue toward the robot destination"
+    # Authored initial speed is 0.8 m/s; legacy SFM targets 1.3 * 0.8 = 1.04.
+    # Keep the conservative initial-speed margin: a prompt overtake with usable
+    # lead is the constraint, not merely arriving at the first turn before the robot.
+    # A 0.9 m/s cap can finish sooner but delays or eliminates the actual pass.
     walker_speed = scenario["single_pedestrians"][0]["speed_m_s"]
     walking_time = hypot(dx, dy) / walker_speed
     forward_speed = dx / walking_time
@@ -114,9 +123,53 @@ def test_overtaking_retains_a_faster_pedestrian_behind_the_full_robot_spawn():
     assert config.robot_config.max_linear_speed < walker_speed, (
         "the robot must be slower than the pedestrian being tested as an overtaker"
     )
-    assert config.sim_config.sim_time_in_secs > (34 / config.robot_config.max_linear_speed + 5), (
+    required_time = 34 / config.robot_config.max_linear_speed + 5
+    assert config.sim_config.sim_time_in_secs > required_time, (
         "the slower robot needs enough time to finish the unchanged route"
     )
+    if HORIZON_SCHEDULE.exists():
+        schedule = yaml.safe_load(HORIZON_SCHEDULE.read_text())
+        scheduled_steps = schedule["scenarios"][scenario["name"]]["recommended_horizon_steps"]
+        required_steps = max(
+            ceil(required_time / config.sim_config.time_per_step_in_secs),
+            scenario["simulation_config"]["max_episode_steps"],
+        )
+        assert scheduled_steps >= required_steps, (
+            "the authored schedule must preserve the required overtaking budget"
+        )
+
+
+def test_overtaking_budget_is_authored_and_release_inherits_it():
+    """The 600-step ruling must reach authored and release consumers equally."""
+    authored = yaml.safe_load(AUTHORED.read_text())["scenarios"][0]
+    assert authored["simulation_config"]["max_episode_steps"] == 600, (
+        "the author-granted overtaking budget belongs in the source scenario"
+    )
+    override = yaml.safe_load(MATRIX.read_text())["scenario_overrides_by_name"][authored["name"]]
+    assert "max_episode_steps" not in override["simulation_config"], (
+        "the release must inherit the authored budget rather than hide an override"
+    )
+    resolved = next(row for row in load_scenarios(MATRIX) if row["name"] == authored["name"])
+    assert resolved["simulation_config"]["max_episode_steps"] == 600
+
+
+def test_guarded_ppo_overtaking_cell_preserves_speed_envelope_caveat():
+    """The published scenario metadata must carry the author-required cell note."""
+    scenario = next(
+        row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    note = scenario["metadata"]["plausibility"]["notes"]
+    assert isinstance(note, str) and "guarded_ppo" in note, (
+        "the guarded_ppo overtaking cell must carry its reporting caveat"
+    )
+    assert "outside its trained speed range" in note
+    assert "0.7" in note and "2.0" in note and "D-085" in note
+    ledger = Path("docs/release/0.0.8/decisions.md").read_text()
+    entry = ledger.split("### D-085:", 1)[1].split("\n### ", 1)[0]
+    assert "guarded_ppo" in entry and "outside its trained speed range" in entry
+    assert "test_guarded_ppo_overtaking_cell_preserves_speed_envelope_caveat" in entry
+    assert scenario["metadata"]["plausibility"]["metrics"] is None
+    assert scenario["metadata"]["plausibility"]["metrics_updated_on"] is None
 
 
 def test_active_crowd_zones_cannot_intersect_robot_destination_rectangles():

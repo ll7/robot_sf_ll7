@@ -4,11 +4,16 @@
 Diagnostic development evidence; author review and release admission remain separate.
 This bundle records the original #10063 endpoint repair, before OVTFIX2. Its
 stored cohorts, hashes, lane geometry and seed-exclusion receipts describe those
-historical checkouts. PR #10067's OVTFIX2 follow-up moves h1's final goal to (20, 10) after an overtaking leg to (33, 6.6),
+historical checkouts. PR #10067's current OVTFIX2 follow-up moves h1's final goal to (20, 9.9) after an overtaking leg to (33, 6.6),
 extends the upper exit while retaining the robot approach and bottom/end wall locations,
 and runs the full suite under the author's updated
 2026-10-01 seed rule. Its new overtaking cohorts and validation receipts are
 reported separately in PR #10067 and the local `ovtfix2_report.md`.
+The 9a5f187c cohorts and controls describe parking at (20, 10), not the
+current body-clear parking point (20, 9.9). They remain historical evidence;
+the disputed pedestrian-free recovery aggregate is withdrawn from current
+PR claims. The author-granted 600-step source budget and guarded-PPO
+out-of-training-speed-envelope caveat are recorded under D-085.
 
 `overlaps.json` lists all 48 release scenarios and three doorway widths: 102 full
 robot spawn/goal rectangles, with 58 intersections before and 53 after. Five
@@ -26,7 +31,8 @@ reset/respawn guards and dynamic contact are separate runtime constraints.
 The 26 retained route-support intersections comprise seven dormant cases and
 19 intended moving-flow cases; each rationale is reviewable individually.
 
-Overtaking preserves h1 start x=1.5 and desired speed 0.8 m/s. Robot spawn y=4–4.5
+Overtaking preserves h1 start x=1.5 and authored initial speed 0.8 m/s
+(effective SFM target 1.04 m/s). Robot spawn y=4–4.5
 and h1 lane y=6.6 give a 2.1 m gap; unchanged robot route y=5 gives a 1.6 m
 passing gap. Robot cap 0.7 m/s and budget 600 steps restore an actual pass from
 behind; merely shrinking the spawn allowed the faster robot to outrun h1.
@@ -80,3 +86,6 @@ SVGs, frozen candidates and 0.0.2/0.0.7 artifacts remain intact.
 Final full-suite, exact-SHA routing/coverage and hosted-CI receipts are reported
 in PR #10067 and the local `ovtfix_report.md`; this bundle does not admit
 scientific, safety, performance or release claims.
+
+Current follow-up SVG SHA256: `265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592`.
+Current release-matrix SHA256: `af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f`.

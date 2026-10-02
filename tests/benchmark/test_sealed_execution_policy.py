@@ -191,17 +191,31 @@ def test_smoke_static_validation_stays_valid():
     assert result["status"] == "valid", result["problems"]
 
 
-def test_resolved_slice_matrix_carries_real_derived_dimensions():
-    manifest = protocol.load_release_manifest(RELEASES / SLICE)
-    payload = protocol.build_resolved_release_manifest(manifest)
+def test_resolved_slice_matrix_carries_real_derived_dimensions(sealed_repository):
+    # Exercise the public v0.2 freeze resolver; v0.1 has no independent schedule pin.
+    manifest = materialize(sealed_repository, "slice")
+    payload = protocol.build_resolved_release_manifest(manifest, repository_root=sealed_repository)
     assert payload["matrix"] == {
         "planner_arms": 14,
         "scenarios": 3,
         "seeds": 30,
         "expected_episode_cells": 1260,
-        "horizon_steps": 600,
+        "horizon_steps": None,
+        "scenario_horizons": "configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml",
+        "scenario_horizons_sha256": "e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9",
         "dt": 0.1,
     }
+    cfg = protocol.load_release_campaign_config(manifest, repository_root=sealed_repository)
+    assert protocol.resolve_release_horizon_budgets(manifest, cfg) == {
+        "francis2023_narrow_doorway_width_2p20": 400,
+        "francis2023_narrow_doorway_width_2p80": 400,
+        "francis2023_narrow_doorway_width_3p60": 400,
+    }
+    assert "require source_sha equal to HEAD" in protocol.sealed_seed_execution_problem(
+        replace(manifest, source_sha=None),
+        manifest.resolved_seeds,
+        repository_root=sealed_repository,
+    )
 
 
 # seed-holdout: synthetic-fixture end

@@ -13,7 +13,6 @@ import yaml
 from robot_sf.benchmark import release_protocol
 from robot_sf.benchmark.camera_ready._config import (
     _load_campaign_scenarios,
-    _resolved_seed_inventory,
 )
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
@@ -84,16 +83,42 @@ def _resolve_manifest_path(value: str) -> Path:
     return path if path.is_absolute() else (MANIFEST_PATH.parent / path).resolve()
 
 
-def test_manifest_and_campaign_are_valid_and_resolve_exact_stress_axes() -> None:
+def test_dev_stress_h600_ordinary_runner_cap_preserves_authored_budgets() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     report = validate_release_manifest(manifest, campaign_config=campaign_config)
 
-    assert report["status"] == "valid"
-    scenarios = _load_campaign_scenarios(campaign_config)
+    assert report["status"] == "valid", report["problems"]
+    resolved = _load_campaign_scenarios(campaign_config)
+    assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {400, 500, 600}
+    assert campaign_config.horizon_policy is None
+    assert [s["simulation_config"]["max_episode_steps"] for s in resolved] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    assert all("scenario_horizon" not in s.get("metadata", {}) for s in resolved)
+    from dataclasses import replace
+
+    ordinary = _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
+    assert [s["simulation_config"]["max_episode_steps"] for s in ordinary] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    scenarios = load_scenarios(campaign_config.scenario_matrix_path)
     scenario_ids = tuple(str(scenario["name"]) for scenario in scenarios)
     assert scenario_ids == EXPECTED_SCENARIOS
-    assert _resolved_seed_inventory(scenarios) == [1001]
+    from robot_sf.benchmark.camera_ready._config import _resolved_seed_inventory
+
+    assert _resolved_seed_inventory(resolved) == [1001]
     assert campaign_config.horizon == 600
     assert campaign_config.dt == pytest.approx(0.1)
     assert tuple(planner.key for planner in campaign_config.planners) == EXPECTED_PLANNER_ARMS

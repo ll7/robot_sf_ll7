@@ -28,6 +28,8 @@ def _build_config() -> SimpleNamespace:
         sim_config=SimpleNamespace(
             time_per_step_in_secs=0.1,
             sim_time_in_secs=5.0,
+            episode_step_limit=None,
+            max_sim_steps=50,
             ped_radius=0.3,
             goal_radius=0.5,
         ),
@@ -84,8 +86,18 @@ class _FakeSimulator:
 class _FakeRobotState:
     """RobotState stub that emits deterministic observations and metadata."""
 
-    def __init__(self, nav, occupancy, sensors, d_t: float, sim_time_limit: float):
+    def __init__(
+        self,
+        nav,
+        occupancy,
+        sensors,
+        d_t: float,
+        sim_time_limit: float,
+        *,
+        episode_step_limit: int | None = None,
+    ):
         self.nav = nav
+        self.episode_step_limit = episode_step_limit
         self.occupancy = occupancy
         self.sensors = sensors
         self.timestep = 0

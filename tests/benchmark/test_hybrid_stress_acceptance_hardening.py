@@ -172,12 +172,12 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
 def _build_stress_fixture(
     tmp_path: Path,
     *,
-    seed: int = 116,  # seed-holdout: synthetic-fixture
+    seed: int = 1001,
 ) -> tuple[Path, Any, Any]:
     """Build a complete accepted 14-arm stress campaign with tiny JSONL files."""
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
-    if seed != 116:
+    if seed != 1001:
         campaign_config = replace(
             campaign_config,
             seed_policy=replace(
@@ -186,6 +186,17 @@ def _build_stress_fixture(
         )
         manifest = replace(manifest, resolved_seeds=(seed,))
     scenarios = _load_campaign_scenarios(campaign_config)
+    # Main's dev-seed edit changed the config digest; it is ordinary runner-cap
+    # input, rather than an immutable historical registry entry.
+    assert campaign_config.horizon_policy is None
+    assert [row["simulation_config"]["max_episode_steps"] for row in scenarios] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    assert all("scenario_horizon" not in row.get("metadata", {}) for row in scenarios)
     effective_scenarios = [
         _scenario_with_kinematics(
             scenario,
@@ -210,7 +221,7 @@ def _build_stress_fixture(
             "mode": seed_policy.mode,
             "seed_set": seed_policy.seed_set,
             "seeds": list(seed_policy.seeds),
-            "resolved_seeds": [1001 if seed == 116 else seed],  # seed-holdout: synthetic-fixture
+            "resolved_seeds": [seed],
             "seed_sets_path": _repo_relative(seed_policy.seed_sets_path),
         },
         "route_clearance_certifications_path": _repo_relative(

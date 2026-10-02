@@ -138,7 +138,32 @@ def test_h600_hybrid_roster_loads_and_keeps_expected_hash() -> None:
 
     scenarios = _load_campaign_scenarios(cfg)
     assert len(scenarios) == 48
-    assert _hash_payload(scenarios) == "c10df617a87c"
+    # The historical digest describes authored inputs + seeds, before the
+    # historical runner-cap accounting. Strip only its two accounting annotations
+    # for the authored-input digest.
+    from copy import deepcopy
+
+    authored_inputs = deepcopy(scenarios)
+    for row in authored_inputs:
+        binding = row["metadata"].pop("scenario_horizon")
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert binding["applied_max_episode_steps"] == min(
+            binding["authored_max_episode_steps"], 600
+        )
+        assert (
+            row["simulation_config"]["max_episode_steps"] == binding["authored_max_episode_steps"]
+        )
+        row["metadata"].pop("campaign_horizon")
+    # D-084 (author 2026-10-02): the shared overtaking source now declares H600.
+    assert _hash_payload(authored_inputs) == "f67349a6d555"
+    overtaking = next(
+        row for row in authored_inputs if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    assert overtaking["simulation_config"]["max_episode_steps"] == 600
+    # Keep the historical preregistration bytes and prove this is the sole change.
+    overtaking["simulation_config"]["max_episode_steps"] = 400
+    assert _hash_payload(authored_inputs) == "c10df617a87c"
 
 
 def test_h600_hybrid_roster_keeps_hybrid_rule_explicit_opt_in() -> None:

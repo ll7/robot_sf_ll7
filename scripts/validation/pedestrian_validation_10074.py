@@ -381,8 +381,8 @@ def protocol_simulate(  # noqa: C901, PLR0913
             # Forces see desired speeds; only velocity integration sees the cap.
             desired_speeds = sim.peds.max_speeds.copy()
             sim.peds.max_speeds = np.full(sim.peds.size(), speed_cap_m_s)
-            if getattr(sim.config, "pedestrian_contact_rule", None) or getattr(
-                sim.config.obstacle_force_config, "wall_contact_rule", None
+            if getattr(config, "pedestrian_contact_rule", None) or getattr(
+                getattr(config, "obstacle_force_config", None), "wall_contact_rule", None
             ):
                 sim.peds.contact_step_speed_caps = sim.peds.max_speeds.copy()
             try:

@@ -29,8 +29,9 @@ text, superseded for these runs by the estimator identity and explicit row field
 Uniform-grid candidate cells have size 2r plus a micrometre margin. Their search radius
 expands conservatively for swept motion. Large motion falls back to all candidate pairs.
 Alternating Gauss-Seidel with 1.6 over-relaxation handles contact chains; every admission
-also checks actual pair and wall geometry. This choice avoids a Jacobi contact-chain
-slowdown; the warmed dense-scene measurement determines whether it meets the cost target.
+also checks actual pair and wall geometry. Sequential corrections propagate local chain
+constraints within a pass. On the same congested probe, 1.6 reduced the maximum passes
+from 74 at 1.2 to 40. The warmed measurement determines whether it meets the cost target.
 Capsule AABBs cull irrelevant wall constraints. Start push-out repairs invalid corner
 starts. Segment lines and both endpoint planes are independent constraints; shared vertices
 cannot shadow the wall interior. At the 256-pass cap, deterministic endpoint push-out
@@ -45,7 +46,7 @@ Both robot gate arms explicitly use [milestone 0.1.0's 0.28 m radius](https://gi
 
 ## Test value and pre-fix witnesses
 
-The ten new cases failed on ead48d9c at physical assertions, not imports or fixtures.
+The first ten new cases failed on ead48d9c at physical assertions, not imports or fixtures.
 - Protect: feasible corner repair, non-aborting cap fallback, stationary repair velocity,
   continuity across a gap, unchanged unset radius, and onset sensitive to actual manoeuvres.
 - Credible regressions: choosing one corner plane; raising at iteration cap; writing
@@ -56,6 +57,10 @@ The ten new cases failed on ead48d9c at physical assertions, not imports or fixt
 - No production test seam: real simulator steps and geometry; the fallback witness only
   temporarily lowers the existing iteration-limit constant. The radius oracle is the
   independent backend default; onset controls use analytic paths and tiny yaw perturbations.
+A further normal-impact witness fails with the exact reviewed contact module: closing
+velocity must be removed even when over-relaxation leaves a positive positional margin.
+The original CALFIT preflight saturated-onset oracle is replaced by numerical-yaw
+rejection and independently known five-metre manoeuvre-translation controls.
 The warmed congestion probe and complete robot JSON records verify runtime and spawn
 receipt findings directly, without fragile machine-speed pytest assertions.
 

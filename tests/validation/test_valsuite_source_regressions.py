@@ -57,7 +57,7 @@ def _fake_trace(case):
         ("V2", "0.9", "speed_drop_m_s", 0.32),
         ("V4", "2.4", "all_data_specific_flow_persons_m_s", 350 / (349 * 0.02 * 2.4)),
         ("V5", "diagnostic", "lateral_cm_to_edge_m", 0.5),
-        ("V6", "1.15", "onset_m", 2.99),
+        ("V6", "1.15", "onset_m", (2.0, 2.9)),
     ],
 )
 def test_source_case_known_answer_replaces_wrong_or_missing_estimator(
@@ -80,6 +80,12 @@ def test_source_case_known_answer_replaces_wrong_or_missing_estimator(
         if case == "V4"
         else None
     )
+    if case == "V6":
+        # Turn starts at x=4, PoMD x=6. A .05rad/s threshold bounds the
+        # Gaussian lead to <.9m; the old near-zero threshold reported 2.99m.
+        assert expected[0] < row[key] < expected[1]
+        assert row["onset_threshold_rad_s"] == 0.05
+        return
     assert row.get(key, fallback) == pytest.approx(expected, abs=1e-8), (
         f"{case} source quantity {key}"
     )

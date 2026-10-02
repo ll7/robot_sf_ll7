@@ -334,29 +334,54 @@ def project_step(previous, proposed, obstacles, radius, pairs, walls, max_passes
 
 
 @njit(cache=True)
-def project_velocity(positions, velocity, obstacles, radius, pairs, walls, fixed):
+def project_velocity(positions, velocity, obstacles, radius, pairs, walls, fixed, motion):
     """Remove closing relative normal velocity; never add displacement divided by dt.
 
     Returns:
         Velocities with closing contact components removed.
     """
+    attempted, previous = motion
     v = velocity.copy()
-    candidates = grid_pairs(positions, positions, 2 * radius + 1e-5)
+    candidates = (
+        grid_pairs(positions, attempted, 2 * radius + 1e-5)
+        if pairs
+        else np.empty((0, 2), dtype=np.int64)
+    )
+    contacts = np.empty_like(candidates)
+    normals = np.empty((len(candidates), 2))
+    count = 0
+    for pair in candidates:
+        i, j = pair[0], pair[1]
+        delta = positions[i] - positions[j]
+        distance = np.sqrt(np.dot(delta, delta))
+        if distance < 1e-12:
+            continue
+        attempted_delta = attempted[i] - attempted[j]
+        touched = np.dot(attempted_delta, attempted_delta) < (2 * radius + SEPARATION_MARGIN_M) ** 2
+        if not touched and distance > 2 * radius + 1e-4:
+            hit, _ = circle_hit(
+                previous[i] - previous[j],
+                attempted_delta,
+                np.zeros(2),
+                2 * radius + SEPARATION_MARGIN_M,
+            )
+            if hit > 1:
+                continue
+        contacts[count] = pair
+        normals[count] = delta / distance
+        count += 1
     for _ in range(8):
-        if pairs:
-            for pair in candidates:
-                i, j = pair[0], pair[1]
-                delta = positions[i] - positions[j]
-                distance = np.sqrt(np.dot(delta, delta))
-                if distance > 2 * radius + 1e-4 or distance < 1e-12:
-                    continue
-                normal = delta / distance
-                closing = np.dot(v[i] - v[j], normal)
-                if closing < 0 and not (fixed[i] and fixed[j]):
-                    wi = 0.0 if fixed[i] else (1.0 if fixed[j] else 0.5)
-                    wj = 0.0 if fixed[j] else (1.0 if fixed[i] else 0.5)
-                    v[i] -= wi * closing * normal
-                    v[j] += wj * closing * normal
+        for index in range(count):
+            i, j = contacts[index, 0], contacts[index, 1]
+            nx, ny = normals[index, 0], normals[index, 1]
+            closing = (v[i, 0] - v[j, 0]) * nx + (v[i, 1] - v[j, 1]) * ny
+            if closing < 0 and not (fixed[i] and fixed[j]):
+                wi = 0.0 if fixed[i] else (1.0 if fixed[j] else 0.5)
+                wj = 0.0 if fixed[j] else (1.0 if fixed[i] else 0.5)
+                v[i, 0] -= wi * closing * nx
+                v[i, 1] -= wi * closing * ny
+                v[j, 0] += wj * closing * nx
+                v[j, 1] += wj * closing * ny
         if walls:
             for i in range(len(positions)):
                 for segment in obstacles:
@@ -408,11 +433,24 @@ def apply_contact_step(sim, previous: np.ndarray) -> None:
         if not converged:
             sim.contact_projection_unresolved_count += 1
         sim.peds.state[~fixed, 2:4] = 0.0
+    attempted = current.copy()
     sim.peds.state[:, :2] = corrected
-    velocity = project_velocity(corrected, sim.peds.vel(), obstacles, radius, pairs, walls, fixed)
+    velocity = project_velocity(
+        corrected,
+        sim.peds.vel(),
+        obstacles,
+        radius,
+        pairs,
+        walls,
+        fixed,
+        (attempted, previous_positions),
+    )
     speed = np.linalg.norm(velocity, axis=1)
     cap = getattr(sim.peds, "contact_step_speed_caps", sim.peds.max_speeds)
-    over = speed > cap
+    # Already integrated velocities have already been capped. Re-capping them
+    # can change an uncongested diagonal trajectory by one floating-point ULP.
+    changed_velocity = np.any(velocity != sim.peds.vel(), axis=1)
+    over = (speed > cap) & changed_velocity
     velocity[over] *= (cap[over] / speed[over])[:, None]
     sim.peds.state[:, 2:4] = velocity
     sim.contact_projection_passes = passes

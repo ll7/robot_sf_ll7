@@ -61,6 +61,14 @@ def test_wall_force_is_continuous_across_aperture_medial_axis():
     np.testing.assert_allclose(f[1], [0, 0], atol=1e-12)
 
 
+def test_contact_removes_closing_velocity_after_overrelaxed_position_repair():
+    """A normal head-on impact cannot keep its closing velocity after push-out."""
+    state = np.array([[-0.35, 0, 1, 0, 10, 0, 0.5], [0.35, 0, -1, 0, -10, 0, 0.5]], float)
+    sim = Simulator(state, config=config(), make_forces=free_forces)
+    sim.step()
+    np.testing.assert_allclose(sim.peds.vel(), np.zeros((2, 2)), atol=1e-12)
+
+
 @pytest.mark.parametrize("pair,wall", [(True, False), (False, True), (True, True)])
 def test_unset_radius_is_not_changed_by_law_selection(pair, wall):
     """Selectors preserve the backend radius when no physical radius is supplied."""

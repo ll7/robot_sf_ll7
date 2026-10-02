@@ -71,7 +71,7 @@ arms:
   - role: h500
     horizon: 500
     config: configs/benchmarks/issue_5409_horizon_ablation_h500.yaml
-    config_sha256: b0e7ff12bd7f23add6fca3d9cf6c2a0f735cb11dfc81db5512c036608a3b411e
+    config_sha256: 2452f04b200bc48c55f12afbea39e91ed3cb3b8f52e2a94f364a1bd77b86a11b
     campaign_id: issue5409_horizon_ablation_h500
     output_root: output/benchmarks/camera_ready
     results_dir_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h500"
@@ -79,7 +79,7 @@ arms:
   - role: h600
     horizon: 600
     config: configs/benchmarks/issue_5409_horizon_ablation_h600.yaml
-    config_sha256: 3fc6aa58cdf7dc99e8e610244acfe59f97328862a3dc0a542f6c0aad121e4844
+    config_sha256: 0dafdf16fa80d1c5fed3b62dee08d4a23e508dabe8cfc39633ec5a2716f35675
     campaign_id: issue5409_horizon_ablation_h600
     output_root: output/benchmarks/camera_ready
     results_dir_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h600"

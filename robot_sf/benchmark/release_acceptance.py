@@ -56,6 +56,8 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
     _resolve_policy_search_candidate_runtime,
 )
 from robot_sf.benchmark.release_protocol import (
+    DOORWAY_RELEASE_CELLS,
+    DOORWAY_RELEASE_HORIZON,
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
     STRESS_SMOKE_EXPECTED_HORIZON_STEPS,
@@ -64,6 +66,8 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
     StressSmokeBranchWitness,
+    doorway_width_slice_blockers,
+    is_doorway_width_slice,
     load_release_campaign_config,
     resolve_campaign_artifact_path,
     resolve_release_horizon_budgets,
@@ -765,6 +769,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
     expected_algo_config_path: Path | None,
     expected_rows: list[dict[str, Any]],
     scenario_budgets: Mapping[str, int] | None = None,
+    expected_horizon: int = STRESS_SMOKE_EXPECTED_HORIZON_STEPS,
 ) -> list[str]:
     """Require one complete, input-bound result-provenance sidecar per stress arm.
 
@@ -946,7 +951,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
         expected_horizon = (
             scenario_budgets.get(str(row.get("scenario_id", "")))
             if scenario_budgets is not None
-            else STRESS_SMOKE_EXPECTED_HORIZON_STEPS
+            else expected_horizon
         )
         if (
             expected_horizon is None
@@ -1783,7 +1788,9 @@ def _full_release_campaign_config(
         return None, ["canonical campaign config is required for full-release provenance"]
     try:
         source_root = Path(source_repository_root or get_repository_root()).resolve()
-        if getattr(manifest, "resolved_identity_path", None) is not None:
+        if getattr(manifest, "resolved_identity_path", None) is not None or is_doorway_width_slice(
+            manifest
+        ):
             return load_release_campaign_config(manifest, repository_root=source_root), []
         return load_campaign_config(_source_repository_path(config_path, source_root)), []
     except (OSError, ValueError, KeyError, TypeError):
@@ -2820,6 +2827,9 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             "blockers": [],
         }
 
+    slice_release = is_doorway_width_slice(manifest)
+    required_cells = DOORWAY_RELEASE_CELLS if slice_release else FULL_RELEASE_EXPECTED_EPISODE_CELLS
+    row_horizon = DOORWAY_RELEASE_HORIZON if slice_release else FULL_RELEASE_EXPECTED_HORIZON_STEPS
     blockers: list[str] = []
     trusted_source_root = Path(source_repository_root or get_repository_root()).resolve()
     if not trusted_source_root.is_dir():
@@ -2836,10 +2846,10 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             blockers,
             f"manifest must declare exactly {FULL_RELEASE_EXPECTED_PLANNER_ARMS} planner arms",
         )
-    if expected_cells != FULL_RELEASE_EXPECTED_EPISODE_CELLS:
+    if expected_cells != required_cells:
         _append_blocker(
             blockers,
-            f"manifest expected_episode_cells must be {FULL_RELEASE_EXPECTED_EPISODE_CELLS}",
+            f"manifest expected_episode_cells must be {required_cells}",
         )
     if kinematics != (FULL_RELEASE_KINEMATICS,):
         _append_blocker(
@@ -2862,7 +2872,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         match is not None and tuple(map(int, match.groups())) >= (0, 0, 8)
     )
     scenario_budgets: dict[str, int] = {}
-    if current_release:
+    if current_release and (scheduled_release or not slice_release):
         try:
             schedule_path = getattr(manifest, "scenario_horizons_path", None)
             bound_manifest = manifest
@@ -2879,7 +2889,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             )
         except (OSError, ValueError, KeyError, TypeError) as exc:
             _append_blocker(blockers, f"scenario horizon contract invalid: {exc}")
-    elif expected_horizon != FULL_RELEASE_EXPECTED_HORIZON_STEPS:
+    elif not slice_release and expected_horizon != FULL_RELEASE_EXPECTED_HORIZON_STEPS:
         _append_blocker(
             blockers,
             f"manifest expected_horizon_steps must be {FULL_RELEASE_EXPECTED_HORIZON_STEPS}",
@@ -2894,8 +2904,23 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     )
     for blocker in axis_blockers:
         _append_blocker(blockers, blocker)
-    if len(scenario_ids) != 48:
-        _append_blocker(blockers, "manifest-resolved campaign must contain exactly 48 scenarios")
+    if slice_release:
+        for scenario_id in scenario_ids:
+            budget = (
+                scenario_budgets.get(scenario_id)
+                if scheduled_release
+                else getattr(resolved_campaign_config, "horizon", expected_horizon)
+            )
+            if budget != DOORWAY_RELEASE_HORIZON:
+                _append_blocker(
+                    blockers,
+                    f"doorway scenario {scenario_id} budget is {budget}; must be 400",
+                )
+    if len(scenario_ids) != (3 if slice_release else 48):
+        _append_blocker(
+            blockers,
+            f"manifest-resolved campaign must contain exactly {3 if slice_release else 48} scenarios",
+        )
     if (
         "0.0.8" in str(getattr(manifest, "release_tag", ""))
         or "0_0_8" in str(getattr(manifest, "scenario_matrix_path", ""))
@@ -2906,7 +2931,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(blockers, "manifest-resolved campaign must contain exactly 30 seeds")
     if len(planner_keys) * len(scenario_ids) * len(resolved_seeds) != expected_cells:
         _append_blocker(
-            blockers, "manifest-resolved planner/scenario/seed product mismatches 20,160"
+            blockers,
+            f"manifest-resolved planner/scenario/seed product mismatches {required_cells:,}",
         )
 
     planner_specs: dict[str, Any] = {}
@@ -2957,6 +2983,10 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 expected_scenario_hash = sha256_file(expected_scenario_path)
         except OSError:
             _append_blocker(blockers, "campaign scenario matrix cannot be hashed")
+
+    if slice_release:
+        for blocker in doorway_width_slice_blockers(manifest, resolved_scenarios, resolved_seeds):
+            _append_blocker(blockers, blocker)
 
     summary, summary_error = _read_campaign_summary(campaign_root.resolve())
     if summary_error:
@@ -3025,9 +3055,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     identities: set[tuple[str, str, str, int]] = set()
     exclusion_counts: Counter[str] = Counter()
     observed_episode_rows = 0
-    expected_per_arm = (
-        FULL_RELEASE_EXPECTED_EPISODE_CELLS // len(expected_arms) if expected_arms else 0
-    )
+    expected_per_arm = required_cells // len(expected_arms) if expected_arms else 0
     expected_source = str(campaign.get("git_hash", "")).strip().lower()
     effective_algorithm_cache: dict[tuple[str, str], tuple[str | None, str | None]] = {}
     allowed_scenario_ids = set(scenarios_by_producer_id)
@@ -3071,8 +3099,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         if current_release:
             if entry_horizon is not None:
                 _append_blocker(blockers, f"runs[{index}] scheduled planner horizon must be null")
-        elif entry_horizon_value != FULL_RELEASE_EXPECTED_HORIZON_STEPS:
-            _append_blocker(blockers, f"runs[{index}] planner horizon is not 600")
+        elif entry_horizon_value != row_horizon:
+            _append_blocker(blockers, f"runs[{index}] planner horizon is not {row_horizon}")
         raw_path = str(entry.get("episodes_path", "")).strip()
         if not raw_path:
             _append_blocker(blockers, f"runs[{index}] is missing episodes_path")
@@ -3140,6 +3168,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                     source_repository_root=trusted_source_root,
                     expected_rows=rows,
                     scenario_budgets=scenario_budgets if current_release else None,
+                    expected_horizon=row_horizon,
                 ):
                     _append_blocker(blockers, blocker)
         arm_identities: set[tuple[str, str, str, int]] = set()
@@ -3203,6 +3232,14 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 )
             elif commit:
                 source_commits.add(commit)
+            if (
+                slice_release
+                and _strict_int(
+                    _nested_value(row, "result_provenance", "simulator_settings", "horizon")
+                )
+                != row_horizon
+            ):
+                _append_blocker(blockers, "doorway slice result provenance horizon must be 400")
             horizon, present = _episode_horizon(row)
             if current_release:
                 budget = scenario_budgets.get(scenario_id)
@@ -3227,8 +3264,10 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                     _append_blocker(
                         blockers, f"{prefix} legacy horizon policy is forbidden in 0.0.8+"
                     )
-            elif not present or horizon != FULL_RELEASE_EXPECTED_HORIZON_STEPS:
-                _append_blocker(blockers, f"runs[{index}].rows[{row_index}] horizon is not 600")
+            elif not present or horizon != row_horizon:
+                _append_blocker(
+                    blockers, f"runs[{index}].rows[{row_index}] horizon is not {row_horizon}"
+                )
 
     if duplicate_arms:
         _append_blocker(blockers, f"duplicate planner arms: {sorted(duplicate_arms)!r}")
@@ -3277,15 +3316,15 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(blockers, "episode source commits do not match campaign.git_hash")
     if len(source_commits) != 1:
         _append_blocker(blockers, "episode provenance must name exactly one source commit")
-    if observed_episode_rows != FULL_RELEASE_EXPECTED_EPISODE_CELLS:
+    if observed_episode_rows != required_cells:
         _append_blocker(
             blockers,
-            f"observed episode rows must be {FULL_RELEASE_EXPECTED_EPISODE_CELLS}",
+            f"observed episode rows must be {required_cells}",
         )
-    if len(identities) != FULL_RELEASE_EXPECTED_EPISODE_CELLS:
+    if len(identities) != required_cells:
         _append_blocker(
             blockers,
-            f"unique episode identities must be {FULL_RELEASE_EXPECTED_EPISODE_CELLS}",
+            f"unique episode identities must be {required_cells}",
         )
     missing_identities = expected_identities - identities
     unexpected_identities = identities - expected_identities
@@ -3306,7 +3345,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             for entry in runs
             if isinstance(entry, Mapping) and str(entry.get("status", "")).strip().lower() == "ok"
         ),
-        "expected_episode_cells": FULL_RELEASE_EXPECTED_EPISODE_CELLS,
+        "expected_episode_cells": required_cells,
         "expected_scenario_count": len(scenario_ids),
         "expected_seed_count": len(resolved_seeds),
         "observed_episode_rows": observed_episode_rows,
@@ -3319,7 +3358,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         "exclusion_reasons": dict(sorted(exclusion_counts.items())),
         "blockers": blockers,
         "claim_boundary": (
-            "Publication-grade benchmark evidence requires all 14 arms, all 20,160 unique "
+            f"Publication-grade benchmark evidence requires all 14 arms, all {required_cells:,} unique "
             "manifest-resolved planner/scenario/seed identities, one source commit, and zero "
             "fallback/degraded/failed/unavailable rows."
         ),

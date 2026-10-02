@@ -179,7 +179,10 @@ def test_h600_hybrid_roster_loader_detects_authored_source_delta() -> None:
     overtaking["simulation_config"]["max_episode_steps"] = 400
     assert _hash_payload(authored_inputs) == "c10df617a87c"
     # The current source identity includes both authored-budget and caveat deltas.
-    assert _hash_payload(scenarios) != _load_yaml(CONFIG_PATH)["preregistration"]["expected_scenario_matrix_hash"]
+    assert (
+        _hash_payload(scenarios)
+        != _load_yaml(CONFIG_PATH)["preregistration"]["expected_scenario_matrix_hash"]
+    )
 
 
 def test_h600_hybrid_roster_keeps_hybrid_rule_explicit_opt_in() -> None:

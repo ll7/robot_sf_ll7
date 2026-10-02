@@ -28,6 +28,7 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.evidence.writers import write_json
 
 _PLANNER_KEYS = tuple(f"planner_{index:02d}" for index in range(14))
 _PLANNER_ALGORITHMS = {
@@ -99,7 +100,9 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     assert any("has unexpected ['unexpected']" in blocker for blocker in roster_blockers)
 
 
-def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = None) -> Path:
+def _write_full_campaign(
+    tmp_path: Path, *, budgets: dict[str, int] | None = None, horizon: int = 600
+) -> Path:
     """Write a complete 14-arm fixture with 48 scenarios and 30 seeds."""
     campaign_root = tmp_path / "campaign"
     runs: list[dict[str, Any]] = []
@@ -119,10 +122,10 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                             "episode_id": f"{planner_key}-{scenario_id}-{seed}",
                             "scenario_id": scenario_id,
                             "seed": seed,
-                            "horizon": budgets[scenario_id] if budgets else 600,
-                            "effective_budget_steps": budgets[scenario_id] if budgets else 600,
+                            "horizon": budgets[scenario_id] if budgets else horizon,
+                            "effective_budget_steps": budgets[scenario_id] if budgets else horizon,
                             "scenario_params": {
-                                "run_horizon": budgets[scenario_id] if budgets else 600
+                                "run_horizon": budgets[scenario_id] if budgets else horizon
                             },
                             "status": "success",
                             "algo": expected_algo,
@@ -133,7 +136,7 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                                 "scenario_id": scenario_id,
                                 "seed": seed,
                                 "simulator_settings": {
-                                    "horizon": budgets[scenario_id] if budgets else 600
+                                    "horizon": budgets[scenario_id] if budgets else horizon
                                 },
                             },
                             "algorithm_metadata": {
@@ -151,11 +154,11 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                 "planner": {
                     "key": planner_key,
                     "kinematics": "differential_drive",
-                    "horizon": None if budgets else 600,
+                    "horizon": None if budgets else horizon,
                 },
                 "status": "ok",
                 "episodes_path": relative_path.as_posix(),
-                "summary": {"episodes_total": 1440, "written": 1440},
+                "summary": {"episodes_total": len(lines), "written": len(lines)},
             }
         )
         planner_rows.append(
@@ -166,7 +169,7 @@ def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = Non
                 "readiness_status": "available",
                 "availability_status": "available",
                 "benchmark_success": "true",
-                "episodes": 1440,
+                "episodes": len(lines),
             }
         )
     (campaign_root / "reports").mkdir(parents=True, exist_ok=True)
@@ -206,9 +209,11 @@ def _write_provenance_bound_full_campaign(
     shared_first_algorithm: bool = False,
     telemetry: dict[str, str] | None = None,
     budgets: dict[str, int] | None = None,
+    horizon: int = 600,
+    scenarios: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, SimpleNamespace]:
     """Write a full fixture with the same sidecars and arm paths as production."""
-    campaign_root = _write_full_campaign(tmp_path, budgets=budgets)
+    campaign_root = _write_full_campaign(tmp_path, budgets=budgets, horizon=horizon)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     source_repository_root = tmp_path / "frozen-source"
@@ -221,8 +226,11 @@ def _write_provenance_bound_full_campaign(
         source_repository_root / "configs/scenarios/classic_interactions_francis2023.yaml"
     )
     scenario_path.parent.mkdir(parents=True, exist_ok=True)
-    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
-    resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    resolved_scenarios = scenarios or [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    if scenarios is None:
+        scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    else:
+        write_json(scenario_path, {"scenarios": scenarios})
     schedule_path = None
     schedule_digest = None
     if budgets:
@@ -230,10 +238,11 @@ def _write_provenance_bound_full_campaign(
 
         import yaml
 
-        resolved_scenarios = [
-            {"id": sid, "simulation_config": {"max_episode_steps": budget}}
-            for sid, budget in budgets.items()
-        ]
+        if scenarios is None:
+            resolved_scenarios = [
+                {"id": sid, "simulation_config": {"max_episode_steps": budget}}
+                for sid, budget in budgets.items()
+            ]
         scenario_path.write_text(
             yaml.safe_dump({"scenarios": resolved_scenarios}), encoding="utf-8"
         )
@@ -322,7 +331,7 @@ def _write_provenance_bound_full_campaign(
             suite_key="classic_interactions",
             total_jobs=len(rows),
             written=len(rows),
-            horizon=None if budgets else 600,
+            horizon=None if budgets else horizon,
             dt=0.1,
             record_forces=False,
             active_observation_mode=None,
@@ -343,7 +352,7 @@ def _write_provenance_bound_full_campaign(
         scenario_horizons_path=schedule_path,
         scenario_horizons_sha256=schedule_digest,
         protocol_version="0.0.8" if budgets else None,
-        horizon=None if budgets else 600,
+        horizon=None if budgets else horizon,
     )
     return campaign_root, config
 
@@ -1900,3 +1909,41 @@ def test_three_width_v02_binds_merged_authored_h400_schedule():
         manifest, resolved_seeds, repository_root=root
     )
     # seed-holdout: setup-only end
+
+
+@pytest.mark.parametrize("budget", [400, 399])
+def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monkeypatch, budget):
+    """Real rows/sidecars admit authored H400 and refuse a rehashed H399 width.
+
+    Static metadata only: no environment or planner is constructed or stepped.
+    """
+    from copy import deepcopy
+
+    from tests.benchmark.test_doorway_release_acceptance import build_doorway
+
+    _, _, manifest, scenarios = build_doorway(tmp_path / "fixed", monkeypatch)
+    manifest.width_slice_contract["requested_horizon_steps"] = 600  # Retained legacy request hint.
+    scenarios = deepcopy(scenarios)
+    scenarios[0]["simulation_config"]["max_episode_steps"] = budget
+    budgets = {s["name"]: s["simulation_config"]["max_episode_steps"] for s in scenarios}
+    campaign, cfg = _write_provenance_bound_full_campaign(
+        tmp_path / "scheduled", monkeypatch, scenarios=scenarios, budgets=budgets
+    )
+    manifest.expected_horizon_steps = None
+    manifest.scenario_horizons_path = cfg.scenario_horizons_path
+    manifest.scenario_horizons_sha256 = cfg.scenario_horizons_sha256
+    report = validate_full_benchmark_release_acceptance(
+        campaign,
+        manifest=manifest,
+        campaign_config=cfg,
+        source_repository_root=cfg.source_repository_root,
+    )
+    if budget == 400:
+        assert report["status"] == "valid", report["blockers"]
+        assert report["unique_episode_identities"] == 1260
+    else:
+        assert report["status"] == "invalid"
+        assert (
+            f"doorway scenario {scenarios[0]['name']} budget is 399; must be 400"
+            in report["blockers"]
+        )

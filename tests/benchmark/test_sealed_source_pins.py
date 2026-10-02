@@ -18,6 +18,7 @@ from robot_sf.benchmark.camera_ready import _run_state as campaign_paths
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.evidence.writers import write_json, write_text
 from scripts.benchmark import preflight_spawn_clearance as standalone
+from scripts.tools import rebuild_campaign_reports_from_rows as rebuild
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release as runner
 
@@ -122,6 +123,36 @@ def materialize(repo, kind):
         == 0
     )
     return protocol.load_release_manifest(output, repository_root=repo)
+
+
+def test_rebuild_materialized_slice_uses_bound_h400_config(sealed_repository, monkeypatch, capsys):
+    """Real slice materialization must validate at the reconstruction entry point."""
+    repo = sealed_repository
+    manifest = materialize(repo, "slice")
+    before = manifest.canonical_campaign_config_path.read_bytes()
+    capsys.readouterr()
+    horizons = []
+    validate = rebuild.validate_release_manifest
+
+    def validate_bound(manifest, *, campaign_config):
+        report = validate(manifest, campaign_config=campaign_config)
+        # Check admission before downstream archival rejects the raw DOI placeholders.
+        assert report["status"] == "valid", report
+        return report
+
+    def prepare(cfg, **_kwargs):
+        horizons.append(cfg.horizon)
+        return {"campaign_id": "static-rebuild", "campaign_root": repo / "output/rebuilt"}
+
+    monkeypatch.setattr(rebuild, "check_orca_rvo2_preflight", lambda *_a, **_kw: None)
+    monkeypatch.setattr(rebuild, "prepare_campaign_preflight", prepare)
+    monkeypatch.setattr(rebuild, "validate_release_manifest", validate_bound)
+    exit_code = rebuild.main(["--manifest", str(manifest.path), "--mode", "preflight"])
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0, payload["manifest_validation"]
+    assert payload["manifest_validation"]["status"] == "valid"
+    assert horizons == [400]
+    assert manifest.canonical_campaign_config_path.read_bytes() == before
 
 
 class EnvironmentAttempt(BaseException):
@@ -365,6 +396,10 @@ def test_real_materialized_identity_passes_frozen_guard(
     validation = protocol.validate_release_manifest(manifest, repository_root=repo)
     assert validation["status"] == "valid", validation
     assert manifest.expected_episode_cells == cells
+    if kind == "slice":
+        assert manifest.release_kind == protocol.DOORWAY_RELEASE_KIND
+        assert manifest.expected_horizon_steps == 400
+        assert protocol.load_release_campaign_config(manifest).horizon == 400
     spawn.guard_manifest_execution(
         manifest, source_commit=git(repo, "rev-parse", "HEAD"), repository_root=repo
     )

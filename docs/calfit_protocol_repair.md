@@ -58,7 +58,7 @@ The recorded11-ID grid is bound to the preceding ranking before submission.
 
 Regression evidence before repair: V3 dev1001 minimum centre distance .421414 m <.52 m;
 V4 dev1001 radius.30 minimum spacing .563106 m <.62 m; overlapping inputs reached Simulator.
-The same controls pass after repair. Distribution controls returned exit5 before
+The same controls pass after repair, including direct refusal of the independently specified old60-person lattice (54 overlapping pairs) before Simulator construction. Distribution controls returned exit5 before
 the fallback and PASS0 afterward. The new fallback exposed a preflight float
 comparison (.61 < .6100000000000001); the independent isolated geometry test
 failed before a1e-12 comparison slack and passes afterward. The CLI now admits

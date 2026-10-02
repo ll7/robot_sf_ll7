@@ -52,7 +52,7 @@ def initial_admissibility(state, segments, radius_m) -> dict[str, object]:
     }
 
 
-def require_initial_admissibility(state, segments, radius_m):
+def require_initial_admissibility(state, segments, radius_m) -> dict[str, object]:
     """Refuse invalid protocol inputs before constructing or stepping the model.
 
     Returns:
@@ -64,7 +64,7 @@ def require_initial_admissibility(state, segments, radius_m):
     return receipt
 
 
-def attach_initial_receipts(row, audits, holdings):
+def attach_initial_receipts(row, audits, holdings) -> None:
     """Attach actual simulated input geometry rather than the inherited constructor's labels."""
     if audits:
         row["initial_admissibility"] = audits[0]
@@ -75,7 +75,9 @@ def attach_initial_receipts(row, audits, holdings):
         row["initial_footprint_pair_overlaps"] = audits[0]["overlapping_pairs"]
 
 
-def holding_state(state, segments, *, wide, radius_m, seed, aperture_width_m):
+def holding_state(
+    state, segments, *, wide, radius_m, seed, aperture_width_m
+) -> tuple[np.ndarray, list[tuple[float, ...]], dict[str, object]]:
     """Retain all people; expand the holding area only when required by disc spacing.
 
     Returns:

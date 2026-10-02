@@ -6,10 +6,18 @@ import pytest
 from scripts.validation import pedestrian_validation_10074 as suite
 
 
-def test_overlapping_input_is_refused_before_simulator_construction(monkeypatch):
+@pytest.mark.parametrize("old_lattice", [False, True])
+def test_overlapping_input_is_refused_before_simulator_construction(monkeypatch, old_lattice):
     config = suite.reused.candidate_config(suite.CANDIDATE, 1.3)
     config.scene_config.agent_radius = 0.25
     state = np.array([[0, 0, 0, 0, 10, 0, 0.5], [0.4, 0, 0, 0, 10, 0, 0.5]])
+
+    if old_lattice:
+        # Independently specified old 10×6 holding layout: 54 horizontal pairs overlap.
+        x, y = np.meshgrid(np.linspace(-6.45, -2.50, 10), np.linspace(-1.70, 1.70, 6))
+        state = np.column_stack(
+            [x.ravel(), y.ravel(), np.zeros((60, 2)), np.full(60, 10), y.ravel(), np.full(60, 0.5)]
+        )
 
     def constructor(*args, **kwargs):
         raise AssertionError("simulator reached an inadmissible initial state")

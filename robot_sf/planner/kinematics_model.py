@@ -106,9 +106,9 @@ class BicycleDriveKinematicsModel:
         if (
             self.max_curvature is None
             or not math.isfinite(self.max_curvature)
-            or self.max_curvature <= 0
+            or self.max_curvature < 0
         ):
-            raise ValueError("bicycle max_curvature must be positive: tan(max_steer)/wheelbase")
+            raise ValueError("bicycle max_curvature must be nonnegative: tan(max_steer)/wheelbase")
         if not math.isfinite(self.creep_speed) or self.creep_speed < 0:
             raise ValueError("bicycle creep_speed must be finite and nonnegative")
 
@@ -152,7 +152,7 @@ class BicycleDriveKinematicsModel:
             Command2D: Projected command in feasible set.
         """
         v, omega = command
-        if 0.0 <= v < 1e-3 and abs(omega) >= math.radians(1.0):
+        if self.creep_speed > v and 0.0 <= v < 1e-3 and abs(omega) >= math.radians(1.0):
             v = min(self.creep_speed, self.max_velocity)
         v = float(np.clip(v, self.min_velocity, self.max_velocity))
         yaw_limit = min(self.max_angular_speed, abs(v) * self.curvature_limit)

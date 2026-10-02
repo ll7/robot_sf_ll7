@@ -145,7 +145,8 @@ def test_runner_model_uses_actual_bicycle_caps():
 
 
 @pytest.mark.parametrize("variant,steer", [("30deg", 0.52), ("45deg", 0.79)])
-def test_opt_in_t60_config_reaches_real_robot(variant, steer):
+@pytest.mark.parametrize("creep_speed", [0.0, 0.07])
+def test_opt_in_t60_config_reaches_real_robot(variant, steer, creep_speed):
     """Load tracked bytes through the scenario builder into physical settings."""
     from pathlib import Path
 
@@ -155,6 +156,7 @@ def test_opt_in_t60_config_reaches_real_robot(variant, steer):
 
     root = Path(__file__).resolve().parents[1]
     selected = yaml.safe_load((root / f"configs/robots/t60_bicycle_{variant}_v1.yaml").read_text())
+    selected["robot_config"]["creep_speed"] = creep_speed
     config = build_robot_config_from_scenario(
         selected, scenario_path=root / f"configs/robots/t60_bicycle_{variant}_v1.yaml"
     )
@@ -166,6 +168,9 @@ def test_opt_in_t60_config_reaches_real_robot(variant, steer):
     assert robot.config.max_velocity == 1.34
     assert robot.config.max_accel == robot.config.max_decel == 1.0
     assert robot.config.min_velocity == 0.0
+    adapter = PlannerActionAdapter(robot, robot.action_space, 0.1)
+    robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.5))), 0.1)
+    assert robot.state.velocity == pytest.approx(creep_speed), "scenario creep setting was ignored"
 
 
 def test_episode_policy_receives_t60_limits():

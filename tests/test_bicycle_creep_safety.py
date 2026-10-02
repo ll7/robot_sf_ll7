@@ -45,10 +45,24 @@ def test_small_reverse_request_never_becomes_forward():
     )
 
 
+@pytest.mark.parametrize("creep_speed", [0.0, 0.0001])
+def test_creep_never_reduces_a_positive_request(creep_speed):
+    """Disabling creep or selecting a lower creep speed preserves bounded requested speed."""
+    assert model(creep_speed=creep_speed).project((0.0005, 0.2)) == (0.0005, 0.0001)
+
+
 def test_bicycle_requires_physical_curvature():
     """Separate scalar caps cannot substitute for wheelbase and steering physics."""
     with pytest.raises(ValueError, match="max_curvature"):
         BicycleDriveKinematicsModel(max_velocity=2.0, max_angular_speed=0.4)
+
+
+def test_explicit_zero_curvature_is_a_valid_straight_plant():
+    """Zero steering is physical, whereas an unspecified curvature is ambiguous."""
+    straight = BicycleDriveKinematicsModel(
+        max_velocity=2.0, max_angular_speed=0.4, max_curvature=0.0
+    )
+    assert straight.project((1.0, 0.2)) == (1.0, 0.0)
 
 
 @pytest.mark.parametrize("recovery,hard_stop", [(False, True), (True, True), (True, False)])
@@ -75,7 +89,9 @@ def test_hard_stop_remains_stopped_through_bicycle_conversion(recovery, hard_sto
         return {}, 0.0, False, False, {}
 
     env.step = step
-    runtime = SafetyWrapperRuntimeConfig(enabled=True, deadlock_recovery_enabled=recovery)
+    runtime = SafetyWrapperRuntimeConfig(
+        enabled=True, arm_key="wrapper_on", deadlock_recovery_enabled=recovery
+    )
     slc = SimpleNamespace(
         config=config,
         safety_wrapper_runtime=runtime,
@@ -108,12 +124,13 @@ def test_hard_stop_remains_stopped_through_bicycle_conversion(recovery, hard_sto
         assert any(r["deadlock_recovery"]["recovery_active"] for r in state.safety_wrapper_trace)
 
 
-def test_one_step_opt_in_turn_does_not_persist():
+@pytest.mark.parametrize("creep_speed", [0.05, 0.1])
+def test_one_step_opt_in_turn_does_not_persist(creep_speed):
     """A meaningful isolated turn moves at most one centimetre then stops immediately."""
     robot = BicycleDriveRobot(BicycleDriveSettings(wheelbase=1.0, max_steer=math.pi / 4))
-    adapter = PlannerActionAdapter(robot, robot.action_space, 0.1, model(creep_speed=0.05))
+    adapter = PlannerActionAdapter(robot, robot.action_space, 0.1, model(creep_speed=creep_speed))
     robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.5))), 0.1)
-    assert robot.state.velocity == pytest.approx(0.05)
+    assert robot.state.velocity == pytest.approx(creep_speed)
     for _ in range(40):
         robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.0))), 0.1)
     assert robot.state.velocity == 0.0

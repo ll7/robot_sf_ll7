@@ -8066,3 +8066,6 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_10063_endpoint_audit
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

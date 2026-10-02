@@ -466,6 +466,10 @@ _FAST_FILES = {
     # and offline files; keep their real campaign branches covered in PR CI.
     "test_pipefix_pipeline.py",
     "test_scan_release_audit.py",
+    # #10063 static full-rectangle audit; no planner/environment steps.
+    "test_release_spawn_goal_overlap.py",
+    "test_check_scenario_archetype_geometry.py",
+    "test_scenario_validation_waivers.py",
     # Scenario/map sampling and reserved-polygon regressions use dev seeds and
     # authored geometry without environment steps; include them in PR coverage.
     "test_scenario_map_review_fixes.py",

@@ -139,6 +139,7 @@ def _write_reproducibility_report(
     return report_path
 
 
+# #10063: both generated episodes use development seeds 1001 and 1002.
 def run_benchmark_pipeline(work_dir: Path, seed: int = 1001) -> dict[str, Any]:
     """Run complete benchmark pipeline in isolated directory."""
     from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
@@ -148,6 +149,7 @@ def run_benchmark_pipeline(work_dir: Path, seed: int = 1001) -> dict[str, Any]:
 
     # Create scenario configuration
     scenario = create_minimal_scenario()
+    print(f"RESOLVED EPISODE SEEDS: {[seed + i for i in range(scenario['repeats'])]}")
     episodes_path = work_dir / "episodes.jsonl"
     schema_path = EPISODE_SCHEMA_PATH
 

@@ -1,21 +1,11 @@
-# Issue #5409 horizon ablation — h500 arm.
-#
-# Roster-matched, seed-matched counterpart to issue_5409_horizon_ablation_h600.yaml.
-# Everything is identical except the campaign-level horizon (500 vs 600).
-# This is the first defensible config for the "does horizon change planner
-# conclusions?" question: the naive/controlled tables (#4.10/#4.11) differ on
-# roster, seed budget, and tier composition at once, so they cannot answer it.
-#
-# Claim boundary: diagnostic-only. This config enables the ablation campaign
-# but does not submit, run, or interpret it.  No benchmark, paper, or
-# dissertation claim follows from this file alone.
-
-name: issue_5409_horizon_ablation_h500
+# Issue #4404 runnable config for the issue #4206 / #4350 trace-capable h600 re-run.
+# Claim boundary: campaign enablement only. This config does not submit a campaign,
+# interpret outputs, change thresholds, or establish paper/dissertation evidence.
+name: paper_experiment_matrix_v1_h600_trace_capable_rerun
 paper_facing: false
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
-route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 
 amv_profile:
   name: amv-paper-v1
@@ -28,9 +18,8 @@ amv_profile:
     maneuver_type: [overtake, crossing, bottleneck]
 
 seed_policy:
-  mode: seed-set
-  seed_set: eval
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  mode: fixed-list
+  seeds: [20, 21, 22, 23, 24]
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
@@ -46,113 +35,104 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 
-workers: 2
-horizon: 500
+workers: 1
+horizon: 600
 dt: 0.1
 record_forces: true
+record_planner_decision_trace: true
+record_simulation_step_trace: true
 resume: true
-stop_on_failure: false
+stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123
-
 kinematics_matrix:
   - differential_drive
-
 export_publication_bundle: false
 include_videos_in_publication: false
 overwrite_publication_bundle: false
 repository_url: https://github.com/ll7/robot_sf_ll7
 release_tag: "{release_tag}"
 doi: 10.5281/zenodo.<record-id>
-paper_interpretation_profile: diagnostic-horizon-ablation-h500
+paper_interpretation_profile: diagnostic-h600-trace-capable-rerun-preregistered
 
 preregistration:
-  issue: 5409
+  issue: 4404
+  parent_issue: 4206
+  implements_contract: configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml
+  feeds_issue: 4206
   claim_boundary: >-
-    Diagnostic-only horizon ablation config. No benchmark, paper, or dissertation
-    claim from this config alone. The paired h600 config must use the same roster
-    and seed budget; any comparison requires both campaigns to complete.
-  # Historical preregistration pin, not the current authored-input identity (OVTFIX2/D-085).
+    Campaign enablement only. No benchmark campaign run, no Slurm/GPU submission,
+    no threshold changes, no result interpretation, and no paper/dissertation claim edits.
+  source_h600_jobs: [13268, 13273]
   expected_scenario_matrix_hash: c10df617a87c
-  ablation_role: h500
-  counterpart_config: configs/benchmarks/issue_5409_horizon_ablation_h600.yaml
-  hypothesis: >
-    A longer horizon (600 vs 500) does not change planner relative rankings
-    when roster, seed budget, scenario matrix, and comparability mapping are
-    held constant.  Failure to preserve rankings is a horizon finding.
+  expected_predecessor_limitation: retained h600 exports predate trace-capable episode rows
+  trace_capture_required: true
+  availability_gates:
+    guarded_ppo:
+      status: dependency_gated
+      fail_closed_reason: >-
+        guarded_ppo remains in the pre-registered roster, but campaign launch must
+        verify its checkpoint/config availability before execution; unavailable
+        guarded_ppo rows must fail closed instead of being silently dropped.
 
-# Full 12-arm roster, sorted by structural class (matching the trace-capable
-# h600 re-run roster so the ablation is roster-matched).
 planners:
   - key: scenario_adaptive_hybrid_orca_v1
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
     benchmark_profile: experimental
-
   - key: hybrid_rule_v3_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
     benchmark_profile: experimental
-
   - key: ppo
     algo: ppo
     planner_group: experimental
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
-    workers: 1
-
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
     algo_config: configs/algos/orca_prior_guarded_ppo_v1.yaml
     benchmark_profile: experimental
-    # The promoted checkpoint and registry observation contract now resolve in the
-    # issue-specific availability preflight; keep this arm in the 12-planner matrix.
-
+    availability_gate: dependency_gated
+    fail_closed_reason: guarded_ppo_checkpoint_observation_contract_missing
   - key: prediction_planner
     algo: prediction_planner
     planner_group: experimental
     algo_config: configs/algos/prediction_planner_camera_ready.yaml
     benchmark_profile: experimental
-
   - key: prediction_mpc
     algo: prediction_mpc
     planner_group: experimental
     algo_config: configs/algos/prediction_mpc_cv.yaml
     benchmark_profile: experimental
-
   - key: prediction_mpc_cbf
-    algo: prediction_mpc
+    algo: prediction_mpc_cbf
     planner_group: experimental
     algo_config: configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml
     benchmark_profile: experimental
-
   - key: goal
     algo: goal
     planner_group: core
     benchmark_profile: baseline-safe
-
   - key: social_force
     algo: social_force
     planner_group: core
     benchmark_profile: baseline-safe
-
   - key: orca
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
     socnav_missing_prereq_policy: fallback
-
   - key: socnav_sampling
     algo: socnav_sampling
     planner_group: experimental
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
-
   - key: sacadrl
     algo: sacadrl
     planner_group: experimental

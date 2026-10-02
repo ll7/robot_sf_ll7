@@ -62,6 +62,7 @@ preregistration:
   feeds_issue: 4195
   claim_boundary: no F-C4(ii), paper, or dissertation claim before author sign-off
   source_h600_job: 13282
+  # Historical preregistration pin, not the current authored-input identity (OVTFIX2/D-085).
   expected_scenario_matrix_hash: c10df617a87c
   expected_s30_scenario_seed_hash: 152eba3969a9
   hypothesis: 'The targeted hybrid-vs-ORCA success lead separates over the predeclared

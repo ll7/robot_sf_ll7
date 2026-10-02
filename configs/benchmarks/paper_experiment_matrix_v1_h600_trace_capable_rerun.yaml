@@ -65,6 +65,7 @@ preregistration:
     Campaign enablement only. No benchmark campaign run, no Slurm/GPU submission,
     no threshold changes, no result interpretation, and no paper/dissertation claim edits.
   source_h600_jobs: [13268, 13273]
+  # Historical preregistration pin, not the current authored-input identity (OVTFIX2/D-085).
   expected_scenario_matrix_hash: c10df617a87c
   expected_predecessor_limitation: retained h600 exports predate trace-capable episode rows
   trace_capture_required: true

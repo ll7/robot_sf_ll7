@@ -65,7 +65,7 @@ def test_release_campaign_config_runs_single_worker() -> None:
 def test_diagnostic_trace_pin_validates_against_non_paper_config() -> None:
     """The #7086 trace pin validates without admitting a paper-facing release."""
     manifest = load_release_manifest(
-        Path("configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml")
+        Path("tests/fixtures/trace_dossier_retained_release/release.yaml")
     )
 
     validation = validate_release_manifest(manifest)

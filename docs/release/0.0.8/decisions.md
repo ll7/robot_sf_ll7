@@ -1837,6 +1837,28 @@ Historical measurements below are attributed to the named review report; they we
 - **Enforced by:** `tests/benchmark/test_campaign_horizon_contracts.py::test_d084_selected_release_schedules_overtaking_at_600` resolves the real authoritative campaign through runner binding; `tests/benchmark/test_campaign_horizon_contracts.py::test_schedule_below_authored_limit_is_refused` checks current-protocol refusal and historical preservation without episode execution.
 - **Reopen:** New material evidence about the intended overtaking interaction or an explicit author/orchestrator ruling.
 
+
+### D-085: Guarded-PPO overtaking is reported outside its trained speed range
+- **Date:** 2026-10-02
+- **Question:** How should the guarded_ppo / francis2023_pedestrian_overtaking
+  release cell be interpreted under the 0.7 m/s scenario speed cap?
+- **Choice:** Report the cell with the explicit caveat that the policy runs
+  outside its trained speed range (policy v_max 2.0 m/s; scenario cap 0.7 m/s).
+  Keep the cap and pedestrian overtake; authorise 600 steps in the source scenario.
+- **Reason:** Refute traces show about 94% speed-clamp saturation, terminal
+  misses of 0.5–1 m and an inactive guard. This cell measures cap/budget
+  sensitivity and must not be presented as a planner-quality regression or
+  parked-pedestrian obstruction.
+- **Decided by:** author, explicit 2026-10-02 ruling in the OVTFIX2 task.
+- **Alternatives:** change the cap (refuted: late or absent overtakes), omit
+  the cell, or report it without the speed-envelope caveat.
+- **Evidence:** PR #10067 refute review of 9a5f187c; author ruling, 2026-10-02.
+- **Implemented in:** PR #10067; existing scenario metadata.plausibility.notes
+  for this planner/scenario cell. Authored horizon schedule and scheduled
+  feasibility guard belong to PR #9999.
+- **Enforced by:** tests/validation/test_release_spawn_goal_overlap.py::test_guarded_ppo_overtaking_cell_preserves_speed_envelope_caveat;
+  tests/validation/test_release_spawn_goal_overlap.py::test_overtaking_budget_is_authored_and_release_inherits_it.
+- **Reopen:** changed policy training envelope, scenario speed cap or explicit author ruling.
 ## Private working labels
 
 These private labels were never public ledger IDs. Read each citation in its PR context; a collision does not supersede the public entry of the same number. Bodies of the 100 most recently updated PRs were scanned, including every PR citing the labels named in this catch-up request.

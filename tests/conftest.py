@@ -605,6 +605,7 @@ _FAST_FILES = {
     # Differential-drive kinematics tests are deterministic unit coverage for
     # the changed robot motion module; keep them in the exact-head fast lane.
     "differential_drive_test.py",
+    "test_bicycle_drive.py",
     # Shared-world contract tests are deterministic simulator-backed coverage
     # for the changed multi-robot modules (issue #9344).
     "test_shared_world.py",

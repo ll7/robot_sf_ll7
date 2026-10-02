@@ -11,6 +11,7 @@ import hashlib
 import json
 from dataclasses import fields, replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -395,14 +396,24 @@ def test_development_smoke_keeps_shared_admission_and_digest_checks(
         ]
 
 
-def test_development_comparator_uses_same_pinned_runtime(sealed_repository, monkeypatch):
-    """Diagnostic comparison changes the inventory passed to the existing runtime resolver."""
+@pytest.mark.parametrize("relative_source_root", [False, True])
+def test_development_comparator_uses_same_pinned_runtime(
+    sealed_repository, monkeypatch, relative_source_root
+):
+    """Real identities retain common routing for absolute and CLI-relative roots.
+
+    The relative case catches the real rehearsal's path failure; previous
+    comparator fixtures supplied only absolute source roots. Public D-083
+    identity bytes and recording readers witness routing without row execution.
+    """
     repo = sealed_repository
     code, identity = generate(repo)
     assert code == 0
     manifest = protocol.load_release_manifest(identity, repository_root=repo)
     root = repo / "output/comparator"
     root.mkdir()
+    monkeypatch.chdir(repo)
+    source_root = Path(".") if relative_source_root else repo
     write_json(root / "campaign_manifest.json", {"campaign_id": "rehearsal"})
     calls = []
 
@@ -413,7 +424,7 @@ def test_development_comparator_uses_same_pinned_runtime(sealed_repository, monk
     monkeypatch.setattr(_distribution_admission.admission, "_runtime_successor_identity", pinned)
     digest = hashlib.sha256(identity.read_bytes()).hexdigest()
     verified = _distribution_admission._verified_development_successor(
-        identity, digest, repo, root, {}
+        identity, digest, source_root, root, {}
     )
     assert verified["source_commit"] == manifest.source_sha
     assert verified["expected_slots"] == {("slot",)}
@@ -458,7 +469,7 @@ def test_development_comparator_uses_same_pinned_runtime(sealed_repository, monk
             root,
             successor_manifest=identity,
             successor_manifest_sha256=digest,
-            successor_source_root=repo,
+            successor_source_root=source_root,
             diagnostic_partial=True,
         )
     assert len(calls) == 2

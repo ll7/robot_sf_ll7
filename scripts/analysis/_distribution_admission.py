@@ -137,6 +137,7 @@ def _verified_development_successor(path, digest, source_root, campaign_root, ro
     """Bind a rehearsal to its verified public identity and the same pinned runtime."""
     from robot_sf.benchmark.release_protocol import is_development_rehearsal, load_release_manifest
 
+    source_root = source_root.resolve()
     admission._verify_sha256(
         path,
         admission._hex_digest(digest, "successor manifest digest"),

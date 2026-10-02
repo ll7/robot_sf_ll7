@@ -1833,7 +1833,7 @@ Historical measurements below are attributed to the named review report; they we
 - **Decided by:** author ruling, 2026-10-02, relayed by the orchestrator for #9999 and #10067.
 - **Reason:** The required 0.7 speed cap needs 456–490 steps. Raising the cap to finish within 400 steps does not preserve a real overtake; the release budget must represent the intended interaction, consistent with D-064.
 - **Alternatives:** Keep H400 and truncate; raise the cap and lose the intended overtake. Neither is adopted.
-- **Evidence:** Opus review P1-1 of [#10067](https://github.com/ll7/robot_sf_ll7/pull/10067), author ruling 2026-10-02. #10067 owns the authored single-scenario H600 change and removal of its matrix override; #9999 owns the schedule and loader floor guard.
+- **Evidence:** Opus review P1-1 of [#10067](https://github.com/ll7/robot_sf_ll7/pull/10067), author ruling 2026-10-02. #9999 includes the authored single-scenario H600 change, schedule and loader floor guard so its release path is self-consistent. #10067 makes the identical source change and owns removal of the release-matrix override.
 - **Enforced by:** `tests/benchmark/test_campaign_horizon_contracts.py::test_d084_selected_release_schedules_overtaking_at_600` resolves the real authoritative campaign through runner binding; `tests/benchmark/test_campaign_horizon_contracts.py::test_schedule_below_authored_limit_is_refused` checks current-protocol refusal and historical preservation without episode execution.
 - **Reopen:** New material evidence about the intended overtaking interaction or an explicit author/orchestrator ruling.
 

@@ -162,8 +162,9 @@ The author ruling of 2026-10-02, recorded as D-084 in the
 entry only: `francis2023_pedestrian_overtaking` now has a 600-step release schedule
 budget (24/13/9/1/1 scenarios at H400/H500/H600/H650/H700). The digest above records
 the earlier schedule, not the current pin. Current campaign and manifest pins are
-regenerated from bytes. #10067 owns the corresponding authored scenario change;
-strict source/schedule parity continues to refuse the intervening mismatch.
+regenerated from bytes. #9999 includes the matching authored scenario H600 change
+so source/schedule parity holds independently. #10067 makes the identical source
+change and owns removal of the release-matrix override.
 
 Only explicitly declared 0.0.8+ campaign and arm admission refuses an authored
 limit below the requested fixed horizon, before execution. Older and unidentified

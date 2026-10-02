@@ -1,5 +1,6 @@
 """Main's complete config inventory and native identity guard fixed-horizon compatibility."""
 
+import copy
 import json
 from pathlib import Path
 
@@ -18,7 +19,7 @@ THREE_WIDTH = (
 
 
 def test_every_tracked_campaign_preserves_main_admission_and_simulator_limits():
-    """Visit every tracked benchmark YAML; compare every main-era input with the frozen oracle."""
+    """Preserve main admission and limits, with D-084's explicit source-budget amendment."""
     fixture = json.loads(FIXTURE.read_text())
     assert fixture["source_revision"] == "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
     expected = fixture["configs"]
@@ -28,8 +29,22 @@ def test_every_tracked_campaign_preserves_main_admission_and_simulator_limits():
     for path in tracked:
         actual = campaign_admission(ROOT / path, ROOT)
         if path in expected:
-            if actual != expected[path]:
-                differences[path] = {"main": expected[path], "head": actual}
+            oracle = copy.deepcopy(expected[path])
+            if oracle["admitted"]:
+                cfg = load_campaign_config(ROOT / path, repository_root=ROOT)
+                # D-084 changes only the authored overtaking source H400 -> H600.
+                # Fixed runner caps preserve that source limit. D-084 also
+                # amends the authoritative release schedule; other historical
+                # schedules keep their original entries, even below H600.
+                if cfg.scenario_horizons_path is None or cfg.scenario_horizons_path == (
+                    ROOT / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
+                ):
+                    for limit in oracle["limits"]:
+                        if limit["scenario"] == "francis2023_pedestrian_overtaking":
+                            assert limit["max_episode_steps"] == 400
+                            limit["max_episode_steps"] = 600
+            if actual != oracle:
+                differences[path] = {"main_with_d084": oracle, "head": actual}
         elif actual["admitted"]:
             # New scheduled inputs have no main revision. Their independent authored
             # matrix is the oracle, rather than a value calculated by the binding.

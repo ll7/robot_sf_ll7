@@ -23,7 +23,7 @@ def test_target_records_expose_policy_block_before_model_search():
     assert result["ideal_gate"]["measurement_missing"] == []
     assert result["ideal_gate"]["physical_violations"] == []
     assert result["ideal_gate"]["exit_code"] == 5
-    assert {g["exit_code"] for g in result["per_case_gate"].values()} == {5}
+    assert {g["exit_code"] for g in result["per_case_gate"].values()} == {0, 5}
     assert result["search_admissible"] is False
     assert result["experiment_episodes"] == 0
 
@@ -42,11 +42,11 @@ def test_narrowest_aperture_requires_penetration_at_every_requested_radius():
 def test_actual_gate_keeps_missingness_and_physics_separate_from_policy():
     rows = preflight.ideal_gate_records()
     rows[0]["fitted_tau_s"] = None
-    rows[1]["wall_penetration_m"] = 0.043
+    rows[2]["wall_penetration_m"] = 0.043
     gate = suite.acceptance_gate(rows)
-    assert gate["exit_code"] == 2
+    assert gate["exit_code"] == 3
     assert gate["measurement_missing"] == ["V1/native/1001"]
-    assert gate["physical_violations"] == ["V2/0.9/1001"]
+    assert gate["physical_violations"] == ["V2/0.61/1001"]
 
 
 def test_cli_persists_blocked_receipt_with_source_identity(tmp_path):

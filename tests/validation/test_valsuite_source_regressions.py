@@ -100,7 +100,7 @@ def test_all_cases_carry_pair_step_measure_not_initial_overlap_only(monkeypatch)
     assert pair["minimum_centre_distance_m"] == pytest.approx(0.02)
 
 
-def test_gate_reports_censoring_contact_and_unapproved_tolerances():
+def test_gate_reports_censoring_contact_and_author_tolerances():
     row = {
         "case": "V1",
         "variant": "native",
@@ -109,12 +109,12 @@ def test_gate_reports_censoring_contact_and_unapproved_tolerances():
         "fitted_tau_s": 0.54,
         "pair_overlap": {"all": {"below_2r_count": 0}},
     }
-    assert suite.acceptance_gate([row])["exit_code"] == 5
+    assert suite.acceptance_gate([row])["exit_code"] == 0
     row["pair_overlap"]["all"]["below_2r_count"] = 1
     assert suite.acceptance_gate([row])["exit_code"] == 3
     row["fitted_desired_speed_m_s"] = None
     result = suite.acceptance_gate([row])
-    assert result["exit_code"] == 2
+    assert result["exit_code"] == 3
     assert len(result["physical_violations"]) == 1
     assert len(result["measurement_missing"]) == 1
 
@@ -239,7 +239,7 @@ def test_acquisition_cli_writes_replayable_known_answer_raw_trace(tmp_path, monk
     assert row["fitted_desired_speed_m_s"] == pytest.approx(1.3)
     raw = np.load(out / row["raw_trajectory"])
     assert np.array_equal(raw["positions"], fake(None, None, None, None)[0])
-    assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 5
+    assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 0
     trace_path = out / row["raw_trajectory"]
     trace_path.write_bytes(trace_path.read_bytes() + b"corrupt")
     assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 4

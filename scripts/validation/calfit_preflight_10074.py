@@ -14,6 +14,7 @@ import numpy as np
 
 from robot_sf.evidence.writers import write_json
 from robot_sf.research import pedestrian_validation as m
+from robot_sf.research.pedestrian_acceptance import feasible_apertures
 from scripts.validation import pedestrian_validation_10074 as suite
 
 
@@ -86,23 +87,52 @@ def ideal_gate_records() -> list[dict[str, object]]:
     These hypothetical records are not simulated evidence. In particular they
     do not assert that the incompatible V2 disc geometry can produce them.
     """
+    config = suite.load_config(suite.DEFAULT_CONFIG)
     values = [
         ("V1", "native", {"fitted_desired_speed_m_s": 1.29, "fitted_tau_s": 0.54}),
-        ("V2", "0.9", {"speed_drop_m_s": 0.4}),
-        ("V3", "1.0", {"specific_flow_persons_m_s": 1.9}),
-        (
-            "V4",
-            "2.4",
-            {"all_data_specific_flow_persons_m_s": 2.3, "steady_specific_flow_persons_m_s": 2.5},
-        ),
         ("V5", "diagnostic", {"lateral_cm_to_edge_m": 0.5}),
-        ("V6", "1.42", {"onset_m": 2.4}),
     ]
+    for width in feasible_apertures(0.28):
+        ratio = width / 0.46
+        alpha = np.clip((ratio - 0.9) / 0.4, 0.0, 1.0)
+        values.append(
+            (
+                "V2",
+                str(width),
+                {
+                    "speed_drop_m_s": float((1 - alpha) * 0.4 + alpha * 0.14),
+                    "aperture_shoulder_ratio": ratio,
+                    "passed": True,
+                },
+            )
+        )
+    for width, target in zip(
+        config["V3"]["widths_m"], config["V3"]["published_specific_flow_persons_m_s"], strict=True
+    ):
+        values.append(("V3", str(width), {"specific_flow_persons_m_s": target}))
+    for width in config["V4"]["widths_m"]:
+        values.append(
+            (
+                "V4",
+                str(width),
+                {
+                    "all_data_specific_flow_persons_m_s": 2.3,
+                    "steady_specific_flow_persons_m_s": 2.5,
+                    "all_data_flow_persons_s": 2.3 * width,
+                    "steady_flow_persons_s": 2.5 * width,
+                },
+            )
+        )
+    for speed, target in zip(
+        config["V6"]["speeds_m_s"], config["V6"]["published_onset_m"], strict=True
+    ):
+        values.append(("V6", str(speed), {"onset_m": target}))
     return [
         {
             "case": case,
             "variant": variant,
             "seed": 1001,
+            "radius_m": 0.28,
             "wall_penetration_m": 0.0,
             "pair_overlap": {"all": {"below_2r_count": 0}},
             **fields,
@@ -136,11 +166,14 @@ def audit() -> dict[str, object]:
         "all_estimators_known_answer_pass": all(c["known_answer_pass"] for c in controls),
         "ideal_gate_records": records,
         "ideal_gate": gate,
-        "per_case_gate": {r["case"]: suite.acceptance_gate([r]) for r in records},
+        "per_case_gate": {
+            case: suite.acceptance_gate([r for r in records if r["case"] == case])
+            for case in sorted({r["case"] for r in records})
+        },
         "rigid_disc_aperture_geometry": geometry,
         "search_admissible": gate["exit_code"] == 0
         and all(c["known_answer_pass"] for c in controls)
-        and all(g["centre_slack_m"] >= 0 for g in geometry),
+        and all(width >= 2 * 0.28 + 0.05 for width in feasible_apertures(0.28)),
         "source_sha256": {
             str(path.relative_to(suite.ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (

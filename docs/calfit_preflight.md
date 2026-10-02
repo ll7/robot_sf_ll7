@@ -25,8 +25,8 @@ miss contact; skipping across a wall would not establish physical feasibility.
 
 ## Search grid recorded before execution
 
-This is a proposed grid, **not an executed experiment**. Launch remains blocked
-until a numeric policy and a feasible treatment of V2 are specified.
+This grid was recorded before execution. The author ruling below authorizes its
+execution; acquisition receipts, rather than this contract, establish which points ran.
 
 - All candidates: radius 0.25/0.28/0.30 m, persistent positive desired speeds
   from underlying N(1.29, 0.19) m/s; negative draws rejected, no upper clipping;
@@ -56,7 +56,46 @@ until a numeric policy and a feasible treatment of V2 are specified.
   allocations accordingly. Preserve commit/config/environment identity, raw
   arrays, scheduler receipts and checksums outside disposable output.
 
-## Decision and revival
+## Author ruling, 2026-10-02
+
+Zero wall penetration remains mandatory. CALFIT uses three aperture widths from
+`2r + .05` through `.966` m. The original 0.9 shoulder-width case is recorded as
+"not reproducible with rigid discs (shoulder rotation)", a model limitation,
+not a failed gate. No rotating or compressible body is implemented.
+
+Every numeric check records its estimate, target, signed residual, tolerance
+range, distance outside that range, source and
+"author-delegated engineering tolerance, 2026-10-02". V1 uses 1.29 ± .19 m/s;
+V3/V4 use ±20% flow; V2 uses the positive sign and ±50% of the source drop.
+For intermediate V2 widths below ratio 1.3, the face-validity reference linearly
+interpolates the .9/.40 and 1.3/.12–.16 source anchors, explicitly labelled as
+an engineering interpolation. Physical violations are hard failures.
+V5 and V6 use reported mean ±1 SD or a reported band; missing source spread
+remains unspecified, with no invented SD. Huber Table 1 supplies head-on means
+only, and the supplied approximate V5 mean supplies no verified spread.
+
+`robot_sf/research/pedestrian_acceptance.py` contains the uniform numeric policy.
+The suite now has exit 0 for PASS, 1 for numeric failure, 2 for censoring, 3 for
+physical violations, 4 for invalid/empty acquisition, 5 for unspecified tolerance.
+Population estimates require every attempted measurement; censored episodes
+are retained. Full-bank admission additionally checks the exact seed/variant grid.
+
+`python -m scripts.validation.calfit_search_10074 grid --out GRID.json` records
+all 114 settings. `run --grid GRID.json --index INDEX --out ROOT` requires Slurm,
+explicit dev seeds and a maximum of two workers. `summarize --root ROOT --out
+SUMMARY.json` verifies raw hashes before computing the measured Pareto front;
+`refine` emits the single bounded round. Desired speed and execution cap are
+separate, and all settings remain opt-in.
+
+The new ruling regressions failed on the previous head: target-valued V1
+returned 5 instead of 0; missing measurement masked a physical violation (2
+instead of 3); V2 contained seven infeasible protocol widths rather than three
+feasible widths. The additional synthetic full-bank control demonstrates that
+each gate can pass when test-only spreads are supplied; those spreads are not
+literature evidence. Search controls prevent censored flow entering the Pareto
+front and ensure the frozen 114 settings are distinct. No production test seam.
+
+## Historical decision packet
 
 Owner: author/domain reviewer. Define V1–V6 numeric tolerances, aggregation
 (per seed or population), and approved handling of documented equivalents.

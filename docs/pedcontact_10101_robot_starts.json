@@ -1,0 +1,253 @@
+{
+  "decision": "All five configured arms share the same wall-overlapping pre-first-contact state. Classify as invalid-start constraint rejections; no accepted episode or numerical gate value imputed. Valid-start CALFIT wall nonpenetration is separate.",
+  "original_artifact_sha256": "f9293a86782f6d1e5cffc8ab71a93458740601a73b05f03db72d9744e74f93ba",
+  "records": [
+    {
+      "arm": "orca",
+      "capture": "evidence/robot_failure_trace/rejection.json",
+      "capture_sha256": "a9aa36b45a914761ed2eaeadec86ca1ceea8553dab01ce70355c3c5e2e118265",
+      "first_contact_call": 1,
+      "previous_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "previous_wall_overlap": [
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.04841656688808821,
+          "segment": 18,
+          "surface_segment": [
+            21.0,
+            28.0,
+            19.0,
+            28.0,
+            -1.8369701987210297e-16,
+            -1.0
+          ]
+        },
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.1325718904488632,
+          "segment": 19,
+          "surface_segment": [
+            19.0,
+            28.0,
+            19.0,
+            12.0,
+            1.0,
+            0.0
+          ]
+        }
+      ],
+      "solver_passes": 4096
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "capture": "evidence/robot_failure_trace/by_arm/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4/rejection.json",
+      "capture_sha256": "a023fb9bdd9eb152b506c5091d37ce3343a6856479f59889d75688cbafe0a431",
+      "first_contact_call": 1,
+      "previous_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "previous_wall_overlap": [
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.04841656688808821,
+          "segment": 18,
+          "surface_segment": [
+            21.0,
+            28.0,
+            19.0,
+            28.0,
+            -1.8369701987210297e-16,
+            -1.0
+          ]
+        },
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.1325718904488632,
+          "segment": 19,
+          "surface_segment": [
+            19.0,
+            28.0,
+            19.0,
+            12.0,
+            1.0,
+            0.0
+          ]
+        }
+      ],
+      "solver_passes": 4096
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape",
+      "capture": "evidence/robot_failure_trace/by_arm/hybrid_rule_v4_fast_progress_static_escape/rejection.json",
+      "capture_sha256": "d9638948518311464e7e9b1202e36a7bcbffb5dad25fe4a2248a5def46af3bfa",
+      "first_contact_call": 1,
+      "previous_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "previous_wall_overlap": [
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.04841656688808821,
+          "segment": 18,
+          "surface_segment": [
+            21.0,
+            28.0,
+            19.0,
+            28.0,
+            -1.8369701987210297e-16,
+            -1.0
+          ]
+        },
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.1325718904488632,
+          "segment": 19,
+          "surface_segment": [
+            19.0,
+            28.0,
+            19.0,
+            12.0,
+            1.0,
+            0.0
+          ]
+        }
+      ],
+      "solver_passes": 4096
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "capture": "evidence/robot_failure_trace/by_arm/hybrid_rule_v4_fast_progress_static_escape_continuous/rejection.json",
+      "capture_sha256": "70f7c7ef067f6b8038902f7a265ed6f161d770ddc4bbcda45fa0846b74598068",
+      "first_contact_call": 1,
+      "previous_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "previous_wall_overlap": [
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.04841656688808821,
+          "segment": 18,
+          "surface_segment": [
+            21.0,
+            28.0,
+            19.0,
+            28.0,
+            -1.8369701987210297e-16,
+            -1.0
+          ]
+        },
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.1325718904488632,
+          "segment": 19,
+          "surface_segment": [
+            19.0,
+            28.0,
+            19.0,
+            12.0,
+            1.0,
+            0.0
+          ]
+        }
+      ],
+      "solver_passes": 4096
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "capture": "evidence/robot_failure_trace/by_arm/scenario_adaptive_hybrid_orca_v2_collision_guard_v4/rejection.json",
+      "capture_sha256": "2e70d36d24ae96926487066aa2736e3984f88cbc7f50cf5e2730346c3a834c3d",
+      "first_contact_call": 1,
+      "previous_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "previous_wall_overlap": [
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.04841656688808821,
+          "segment": 18,
+          "surface_segment": [
+            21.0,
+            28.0,
+            19.0,
+            28.0,
+            -1.8369701987210297e-16,
+            -1.0
+          ]
+        },
+        {
+          "body": 2,
+          "body_wall_overlap_m": 0.1325718904488632,
+          "segment": 19,
+          "surface_segment": [
+            19.0,
+            28.0,
+            19.0,
+            12.0,
+            1.0,
+            0.0
+          ]
+        }
+      ],
+      "solver_passes": 4096
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "pedcontact.invalid_start_diagnosis.v1"
+}

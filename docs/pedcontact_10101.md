@@ -157,3 +157,55 @@ The robot gate roster is 48 main scenarios, three doorway widths, six nominal
 probes, ORCA and all four release hybrid arms, dev1001–1010 off/on: 2850 pairs.
 The release width campaign “90-cell” label means three widths × 30 seeds,
 not ninety distinct geometries. Fit admission requires the full dev roster.
+
+## Robot behaviour gate and bounded fit
+
+The [robot record](pedcontact_10101_robot_gate.json) verifies 2850 paired attempts,
+2845 complete episode pairs and five explicit runtime rejections (5695 episode
+records from 5700 attempts). All 2550 empty-world pairs retain identical
+behavioural metrics. Their law/reference metadata changes intentionally: legacy
+force radius .35m versus effective opt-in physical radius .4m. This metadata is
+reported separately, not mistaken for a trajectory change. The six nominal probe
+roster and all five configured planner arms are verified from their bank identities.
+
+Every new failure is retained with paired outcomes and raw/log hashes:
+- ORCA, crossing dev1001/1008: valid starts, changed pedestrian motion, collisions
+  at step104/123; surface clearance −.000881/−.020177m. Contact excludes pedestrian
+  pairs, not robots; these are planner failures under changed pedestrian motion.
+- Bottleneck-yield and collision-guard hybrids, crossing dev1009: previously
+  successful, now deadlock at600 steps. Zero displacement over final2s, >.55m
+  pedestrian surface clearance, moving candidates rejected by the static gate.
+  Final nearest static distance1.0000m is below the1.05m hard margin. Classify as
+  a static-clearance protective-stop trap after changed pedestrian motion.
+- All five arms, crossing dev1005: first contact call rejects the same invalid
+  pedestrian start inside an obstacle corner. Body3 penetrates wall clearances
+  by .132572/.048417m before contact; solver reaches4096 passes. The original
+  two fast hybrid arms had successful off episodes; ORCA already collided and
+  the other two hybrids already failed. All five new runtime failures are recorded.
+  [Captured-state diagnosis](pedcontact_10101_robot_starts.json) verifies every
+  arm. This is a limitation for invalid initial geometry, not a successful repair
+  or an imputed episode. No protected benchmark map/start config is edited.
+
+The [frozen bounded grid](pedcontact_10101_fit_grid.json) has108 settings:
+radius .25/.28/.30m × cap2/3m/s × wall amplitude3/6/9m/s² × decay .04/.08/.16m
+× range .2/.5m. It was frozen after the complete robot attempt roster and physical
+step4 qualification. The deadline remains2026-10-07 18:32 UTC.
+[Fit result](pedcontact_10101_fit_result.json): all108 rejected, zero survivors,
+zero accepted settings. Six radius/cap equivalence classes each measured all
+three V6 speeds on dev1001–1003 (54 cases plus five free baselines per case).
+V6 has no walls; the actual empty-wall force is independently zero, so changing
+wall parameters cannot rescue a failed V6 class. This is necessary-condition
+pruning, not a full-grid fitness ranking or global-optimum claim.
+
+The closest screened radius .30m gives V6 means2.935701/2.894636/2.841321m;
+slow/normal still fail, fast passes, and cap2/3 yields identical values. No feasible
+best setting exists in this bounded grid. The fully measured reference remains
+radius .28m, cap2, amplitude3, decay.04, range.2, positive desired N(1.29,.19),
+with V1, both V4 slopes and fast V6 passing (4/15). Its remaining values/intervals
+are in the full-dev table. Moving social-force/estimator assumptions is outside
+this wall/contact grid; targets are retained.
+
+[Archived acquisition sources](pedcontact_10101_drivers.json) complement the
+committed comparison/fit modules and raw member hashes. Raw trajectories and
+logs remain in the lane, mirrored on imech192. Producer commits are recorded;
+final documentation commits do not change those frozen physics bytes.

@@ -129,6 +129,9 @@ def test_overtaking_retains_a_faster_pedestrian_behind_the_full_robot_spawn():
     )
     if HORIZON_SCHEDULE.exists():
         schedule = yaml.safe_load(HORIZON_SCHEDULE.read_text())
+        assert scenario["name"] in schedule.get("scenarios", {}), (
+            "the authored horizon schedule must contain francis2023_pedestrian_overtaking"
+        )
         scheduled_steps = schedule["scenarios"][scenario["name"]]["recommended_horizon_steps"]
         required_steps = max(
             ceil(required_time / config.sim_config.time_per_step_in_secs),

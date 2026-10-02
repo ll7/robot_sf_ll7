@@ -24,7 +24,7 @@ How to read the fields:
   the current branch heads when this file was written (2026-09-30, 12:30 UTC).
 
 The findings that led to these decisions are listed in
-[findings.md](https://github.com/ll7/robot_sf_ll7/blob/9f83429a0a8e891ef73cd6ab5303ce193f56bd94/docs/release/0.0.8/findings.md). The full lane and review reports are kept in the
+[findings.md](findings.md). The full lane and review reports are kept in the
 private review archive (`docs/reviews/0.0.8/` in the private operations
 repository).
 
@@ -968,8 +968,7 @@ lines, not the whole tree or the seeds actually passed at runtime (#10010).
   developed and checked on outcomes from the 0.0.7 evaluation band?
 - **Choice:** Use the fresh sealed `EVAL_SEEDS_0_0_8` tuple in
   `robot_sf/benchmark/seed_bands.py`, transported by
-  the planned benchmark transport `seed_sets_0_0_8.yaml` (absent from this
-  stacked checkout; delivery tracked by #10085). Development seeds remain 1001..1030.
+  `configs/benchmarks/seed_sets_0_0_8.yaml`. Development seeds remain 1001..1030.
   No planner or environment step on either held-out band is permitted **anywhere,
   except the sealed campaign (including its own spawn preflight) at the freeze commit**.
   The sealed campaign includes the main 0.0.8 evaluation and the three-width

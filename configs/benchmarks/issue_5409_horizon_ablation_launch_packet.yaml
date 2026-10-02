@@ -49,6 +49,7 @@ matrix:
   varying_field: horizon
   kinematics: differential_drive
   scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  # Historical preregistration pin, not the current authored-input identity (OVTFIX2/D-085).
   expected_scenario_matrix_hash: c10df617a87c
 
 # --- Pair identity. The existing fail-closed pair validator is the authority on

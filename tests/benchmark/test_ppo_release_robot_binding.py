@@ -23,6 +23,9 @@ TEMPLATE = ROOT / (
 DOORWAY_TEMPLATE = ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
 )
+AUTHORED_TEMPLATE = ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+)
 RELEASE_PPO_PROFILE = ROOT / "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml"
 
 
@@ -53,7 +56,11 @@ def test_release_robot_model_id_decodes_signed_delta_without_override():
     assert planner.get_metadata()["action_semantics"] == "velocity_delta"
 
 
-@pytest.mark.parametrize("campaign_path", [TEMPLATE, DOORWAY_TEMPLATE], ids=["main", "doorway"])
+@pytest.mark.parametrize(
+    "campaign_path",
+    [TEMPLATE, DOORWAY_TEMPLATE, AUTHORED_TEMPLATE],
+    ids=["main", "doorway", "authored"],
+)
 def test_release_campaign_resolver_binds_plain_ppo_to_release_robot(campaign_path):
     """Both freeze inputs resolve the PPO profile, model and comparability key."""
     campaign = load_campaign_config(campaign_path, repository_root=ROOT)

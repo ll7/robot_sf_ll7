@@ -3,7 +3,9 @@
 AI-GENERATED / NEEDS-REVIEW
 
 Issue #10101; stacked on CALFIT #10094. This is diagnostic opt-in physics,
-not release or empirical-model admission. The full-dev comparison is pending.
+not release or empirical-model admission. The full 30-dev-seed comparison is complete;
+[all values, intervals and gates](pedcontact_10101_step4.md) are versioned alongside
+[the verified acquisition summary](pedcontact_10101_step4.json).
 
 Select `pedestrian_contact_rule: projection_v1` and
 `pedestrian_wall_rule: bounded_edge_v1` in simulation settings. Missing selectors
@@ -71,7 +73,7 @@ Tests use actual Simulator/PedState arrays and existing force-factory/manual-ste
 interfaces. There is no production test-only seam; the wrapper fixture supplies
 only its pedestrian-velocity view.
 
-Six original witnesses fail on base: overlap/dt assertions, wall crossing and
+Nine original witnesses fail on base: overlap/dt assertions, wall crossing and
 `physically feasible aperture stalled upstream` at x7.578752. The separated
 negative control passes on base, as expected. New manifest/configuration controls
 are feature coverage, not claimed pre-existing bug witnesses.
@@ -87,3 +89,62 @@ wall-penetration counts, and real integration time per step. Censoring stays nul
 Effective contact/wall/integration values come from live simulator/force objects,
 are included in acquisition records and opt-in benchmark episode metadata, and
 are checked by an independent declared-versus-live mismatch test.
+
+## Full-dev results and remaining target misses
+
+At CALFIT defaults (radius .28m, cap 2m/s), dev1001–1030 off/on banks contain
+1080 protocol cases. Post-step overlap pair-steps are 91,665,539/0; wall
+penetration pedestrian-steps are 0/0. V2 traversal is 0/90 versus 90/90.
+The maximum projection iteration count is 988, below the explicit 4096 limit.
+Accepted numerical checks are 3/15 off and 4/15 on. MISSING is a failed gate,
+not an imputed observation: V3 remains censored at most narrow widths.
+The JSON and Markdown retain every value, observed n and Student 95% interval;
+intervals are conditional on observed dev trials and are undefined for n=1.
+
+V2 is physically fixed, but slowdown .0230/.000254/0 remains below .06–.24.
+Finite-range wall strength/range can move slowdown without restoring the legacy
+barrier; human anticipatory narrowing responses are also a model limitation.
+The source-derived engineering band is not demonstrated to be erroneous.
+V5 clearance changes .867806 to .386567m (95% interval .385275–.387858),
+just below .4–.6. Wall strength/decay can move clearance. Gerin-Lajoie et al.
+2008 describe a roughly .5m lateral and 2m longitudinal personal-space ellipse;
+the suite cylinder-edge scalar is a proxy, not that complete human measurement.
+Its ±20% tolerance is an engineering decision, not a paper confidence interval.
+See https://doi.org/10.1016/j.gaitpost.2007.05.008 .
+
+V6 slow/normal onset is 2.938506/2.928810m, unchanged by contact; fast changes
+2.930136 to 2.904414m and passes. V6 is wall-free, so wall tuning cannot move
+it. Huber et al. 2014 Table 1 gives 180° slow/normal/fast turn-onset means
+2.1/2.4/2.7m. The onset rows give no standard deviations. The paper's threshold
+uses five no-interferer trials per person and speed; deterministic straight-line
+model baselines contain no sway and have zero maximum angular speed. This is
+an estimator/reference comparability and model limitation, not evidence to
+silently widen the bands or add noise. Radius and speed cap are screened as
+possible fitting parameters. See https://doi.org/10.1371/journal.pone.0089589 .
+
+Weighted timed integration costs 10.1419/218.4304 ms per step (21.54×).
+Timers include cold JIT startup but exclude diagnostic counting/copying and V6's
+five free-baseline integrations; host variation prevents treating this ratio as
+a warm microbenchmark. All 1080 saved speed arrays are finite. Projection can
+raise displacement-derived velocity above the pre-projection cap: on max 2.772594
+m/s, 2075 samples >2+1e-9. This is an explicit limitation of hard correction.
+Uncongested dev controls are byte-identical, including measured free speed and
+flux-density slope; dense fundamental-diagram behavior can change materially.
+
+## Compatibility and validation
+
+Release/ecosystem identity checks: 94 passed. All 1513 tracked config/schema/golden
+files match the CALFIT base byte for byte. New selectors are absent from default
+serialization, and default simulator and benchmark metadata retain their identity.
+The full slow suite has 40,821 passes, 67 skips, 7 existing xfails, 16 failures
+and 3 setup errors. All 19 residual nodes reproduce on CALFIT base. Targeted
+coverage also exercises actual public construction and effective law/radius
+forwarding, rather than only a manually assembled wrapper.
+
+The optimized-mode algorithm_metadata pin failure is inherited: source SHA256
+bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7 matches
+base and current main; the old contract still pins 8b4bb11d… from before #9996's
+GuardedPPO identity correction. Current main repairs that pin. This stack leaves
+protected contract bytes unchanged. Strict Sphinx also fails on base's unchanged
+131730-byte exclusions argument exceeding Linux's per-argument limit; current
+main has a file-transport repair. Neither inherited failure is called green.

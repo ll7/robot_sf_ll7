@@ -193,3 +193,24 @@ def test_optional_rules_survive_configuration_roundtrip():
     restored = SimulationSettings(**settings.to_dict())
     assert restored.pedestrian_contact_rule == "projection_v1"
     assert replace(settings).pedestrian_wall_rule == "bounded_edge_v1"
+
+
+def test_public_simulator_construction_uses_requested_physical_laws():
+    """Real construction must forward both selectors and report the effective radius."""
+    from tests.sim.test_pedestrian_desired_speed import _build_simulator
+
+    np.random.seed(1001)
+    settings = SimulationSettings(
+        difficulty=0,
+        ped_density_by_difficulty=[0.04],
+        population_size=8,
+        pedestrian_radius_m=0.28,
+        pedestrian_contact_rule="projection_v1",
+        pedestrian_wall_rule="bounded_edge_v1",
+    )
+    sim = _build_simulator(settings)
+    live = sim.pedestrian_physics_metadata()
+    assert live["pedestrian_contact"]["law"] == "projection_v1"
+    assert live["wall"]["law"] == "bounded_edge_v1"
+    assert sim.pysf_sim.peds.agent_radius == 0.28
+    assert sim.pysf_sim.obstacle_force_law_metadata()["parameters"]["agent_radius"] == 0.28

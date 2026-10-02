@@ -1,0 +1,5622 @@
+{
+  "arms": {
+    "off": {
+      "gate": {
+        "checks": [
+          {
+            "attempted_n": 30,
+            "case": "V1",
+            "difference": -0.034892080063060105,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 1.25510791993694,
+            "observed_n": 30,
+            "quantity": "fitted_desired_speed_m_s",
+            "rule": "literature mean \u00b1 1 SD (.19 m/s)",
+            "source": "Moussaid et al. 2009, section 4(a), Fig. 1b; https://doi.org/10.1098/rspb.2009.0405",
+            "status": "PASS",
+            "target": 1.29,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.1,
+              1.48
+            ],
+            "variant": "native"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V2",
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
+            "quantity": "speed_drop_m_s",
+            "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
+            "source": "Wilmut et al. 2015, Fig. 3; https://doi.org/10.1371/journal.pone.0124695",
+            "status": "MISSING",
+            "target": 0.14,
+            "target_band": [
+              0.12,
+              0.16
+            ],
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.06,
+              0.24
+            ],
+            "variant": "0.61"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V2",
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
+            "quantity": "speed_drop_m_s",
+            "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
+            "source": "Wilmut et al. 2015, Fig. 3; https://doi.org/10.1371/journal.pone.0124695",
+            "status": "MISSING",
+            "target": 0.14,
+            "target_band": [
+              0.12,
+              0.16
+            ],
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.06,
+              0.24
+            ],
+            "variant": "0.788"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V2",
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
+            "quantity": "speed_drop_m_s",
+            "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
+            "source": "Wilmut et al. 2015, Fig. 3; https://doi.org/10.1371/journal.pone.0124695",
+            "status": "MISSING",
+            "target": 0.14,
+            "target_band": [
+              0.12,
+              0.16
+            ],
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.06,
+              0.24
+            ],
+            "variant": "0.966"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.61,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.2880000000000003,
+              1.932
+            ],
+            "variant": "0.8"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.86,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.4880000000000002,
+              2.232
+            ],
+            "variant": "0.9"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.9,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.52,
+              2.28
+            ],
+            "variant": "1.0"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -1.0813647860338726,
+            "distance_outside_tolerance": 0.6953647860338728,
+            "estimate": 0.8486352139661273,
+            "observed_n": 1,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.93,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.544,
+              2.316
+            ],
+            "variant": "1.1"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -1.148136350191564,
+            "distance_outside_tolerance": 0.7541363501915641,
+            "estimate": 0.821863649808436,
+            "observed_n": 1,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.97,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.576,
+              2.364
+            ],
+            "variant": "1.2"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V5",
+            "difference": 0.3678063631088293,
+            "distance_outside_tolerance": 0.2678063631088293,
+            "estimate": 0.8678063631088293,
+            "observed_n": 30,
+            "quantity": "lateral_cm_to_edge_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Gerin-Lajoie et al. 2008 pp.239-240, citing 2005; https://doi.org/10.1016/j.gaitpost.2007.03.015",
+            "status": "FAIL",
+            "target": 0.5,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.4,
+              0.6
+            ],
+            "variant": "diagnostic"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V6",
+            "difference": 0.8385057596275751,
+            "distance_outside_tolerance": 0.4185057596275752,
+            "estimate": 2.938505759627575,
+            "observed_n": 30,
+            "quantity": "onset_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+            "status": "FAIL",
+            "target": 2.1,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.6800000000000002,
+              2.52
+            ],
+            "variant": "1.15"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V6",
+            "difference": 0.5288097972922476,
+            "distance_outside_tolerance": 0.04880979729224766,
+            "estimate": 2.9288097972922476,
+            "observed_n": 30,
+            "quantity": "onset_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+            "status": "FAIL",
+            "target": 2.4,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.92,
+              2.88
+            ],
+            "variant": "1.42"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V6",
+            "difference": 0.23013649833148087,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 2.930136498331481,
+            "observed_n": 30,
+            "quantity": "onset_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+            "status": "PASS",
+            "target": 2.7,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              2.16,
+              3.24
+            ],
+            "variant": "1.78"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V4",
+            "difference": -0.5676329088249985,
+            "distance_outside_tolerance": 0.10763290882499854,
+            "estimate": 1.7323670911750013,
+            "observed_n": 30,
+            "quantity": "persons/(m s)",
+            "rule": "\u00b120% of literature through-origin flow slope",
+            "source": "Liao et al. 2014, section 4; https://doi.org/10.1016/j.trpro.2014.09.005",
+            "status": "FAIL",
+            "target": 2.3,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.8399999999999999,
+              2.76
+            ],
+            "variant": "all_data_flow_persons_s width slope"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V4",
+            "difference": 0.14482665091175084,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 2.644826650911751,
+            "observed_n": 30,
+            "quantity": "persons/(m s)",
+            "rule": "\u00b120% of literature through-origin flow slope",
+            "source": "Liao et al. 2014, section 4; https://doi.org/10.1016/j.trpro.2014.09.005",
+            "status": "PASS",
+            "target": 2.5,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              2.0,
+              3.0
+            ],
+            "variant": "steady_flow_persons_s width slope"
+          }
+        ],
+        "excluded_measurements": [],
+        "exit_code": 3,
+        "measurement_missing": [
+          "V3/0.8/1001",
+          "V3/0.9/1001",
+          "V3/1.0/1001",
+          "V3/1.1/1001",
+          "V3/1.2/1001",
+          "V2/0.61/1001",
+          "V2/0.788/1001",
+          "V2/0.966/1001",
+          "V3/0.8/1002",
+          "V3/0.9/1002",
+          "V3/1.0/1002",
+          "V3/1.1/1002",
+          "V2/0.61/1002",
+          "V2/0.788/1002",
+          "V2/0.966/1002",
+          "V3/0.8/1003",
+          "V3/0.9/1003",
+          "V3/1.0/1003",
+          "V3/1.1/1003",
+          "V3/1.2/1003",
+          "V2/0.61/1003",
+          "V2/0.788/1003",
+          "V2/0.966/1003",
+          "V3/0.8/1004",
+          "V3/0.9/1004",
+          "V3/1.0/1004",
+          "V3/1.1/1004",
+          "V3/1.2/1004",
+          "V2/0.61/1004",
+          "V2/0.788/1004",
+          "V2/0.966/1004",
+          "V3/0.8/1005",
+          "V3/0.9/1005",
+          "V3/1.0/1005",
+          "V3/1.1/1005",
+          "V3/1.2/1005",
+          "V2/0.61/1005",
+          "V2/0.788/1005",
+          "V2/0.966/1005",
+          "V3/0.8/1006",
+          "V3/0.9/1006",
+          "V3/1.0/1006",
+          "V3/1.1/1006",
+          "V3/1.2/1006",
+          "V2/0.61/1006",
+          "V2/0.788/1006",
+          "V2/0.966/1006",
+          "V3/0.8/1007",
+          "V3/0.9/1007",
+          "V3/1.0/1007",
+          "V3/1.1/1007",
+          "V3/1.2/1007",
+          "V2/0.61/1007",
+          "V2/0.788/1007",
+          "V2/0.966/1007",
+          "V3/0.8/1008",
+          "V3/0.9/1008",
+          "V3/1.0/1008",
+          "V3/1.1/1008",
+          "V3/1.2/1008",
+          "V2/0.61/1008",
+          "V2/0.788/1008",
+          "V2/0.966/1008",
+          "V3/0.8/1009",
+          "V3/0.9/1009",
+          "V3/1.0/1009",
+          "V3/1.1/1009",
+          "V3/1.2/1009",
+          "V2/0.61/1009",
+          "V2/0.788/1009",
+          "V2/0.966/1009",
+          "V3/0.8/1010",
+          "V3/0.9/1010",
+          "V3/1.0/1010",
+          "V3/1.1/1010",
+          "V3/1.2/1010",
+          "V2/0.61/1010",
+          "V2/0.788/1010",
+          "V2/0.966/1010",
+          "V3/0.8/1011",
+          "V3/0.9/1011",
+          "V3/1.0/1011",
+          "V3/1.1/1011",
+          "V3/1.2/1011",
+          "V2/0.61/1011",
+          "V2/0.788/1011",
+          "V2/0.966/1011",
+          "V3/0.8/1012",
+          "V3/0.9/1012",
+          "V3/1.0/1012",
+          "V3/1.1/1012",
+          "V3/1.2/1012",
+          "V2/0.61/1012",
+          "V2/0.788/1012",
+          "V2/0.966/1012",
+          "V3/0.8/1013",
+          "V3/0.9/1013",
+          "V3/1.0/1013",
+          "V3/1.1/1013",
+          "V3/1.2/1013",
+          "V2/0.61/1013",
+          "V2/0.788/1013",
+          "V2/0.966/1013",
+          "V3/0.8/1014",
+          "V3/0.9/1014",
+          "V3/1.0/1014",
+          "V3/1.2/1014",
+          "V2/0.61/1014",
+          "V2/0.788/1014",
+          "V2/0.966/1014",
+          "V3/0.8/1015",
+          "V3/0.9/1015",
+          "V3/1.0/1015",
+          "V3/1.1/1015",
+          "V3/1.2/1015",
+          "V2/0.61/1015",
+          "V2/0.788/1015",
+          "V2/0.966/1015",
+          "V3/0.8/1016",
+          "V3/0.9/1016",
+          "V3/1.0/1016",
+          "V3/1.1/1016",
+          "V3/1.2/1016",
+          "V2/0.61/1016",
+          "V2/0.788/1016",
+          "V2/0.966/1016",
+          "V3/0.8/1017",
+          "V3/0.9/1017",
+          "V3/1.0/1017",
+          "V3/1.1/1017",
+          "V3/1.2/1017",
+          "V2/0.61/1017",
+          "V2/0.788/1017",
+          "V2/0.966/1017",
+          "V3/0.8/1018",
+          "V3/0.9/1018",
+          "V3/1.0/1018",
+          "V3/1.1/1018",
+          "V3/1.2/1018",
+          "V2/0.61/1018",
+          "V2/0.788/1018",
+          "V2/0.966/1018",
+          "V3/0.8/1019",
+          "V3/0.9/1019",
+          "V3/1.0/1019",
+          "V3/1.1/1019",
+          "V3/1.2/1019",
+          "V2/0.61/1019",
+          "V2/0.788/1019",
+          "V2/0.966/1019",
+          "V3/0.8/1020",
+          "V3/0.9/1020",
+          "V3/1.0/1020",
+          "V3/1.1/1020",
+          "V3/1.2/1020",
+          "V2/0.61/1020",
+          "V2/0.788/1020",
+          "V2/0.966/1020",
+          "V3/0.8/1021",
+          "V3/0.9/1021",
+          "V3/1.0/1021",
+          "V3/1.1/1021",
+          "V3/1.2/1021",
+          "V2/0.61/1021",
+          "V2/0.788/1021",
+          "V2/0.966/1021",
+          "V3/0.8/1022",
+          "V3/0.9/1022",
+          "V3/1.0/1022",
+          "V3/1.1/1022",
+          "V3/1.2/1022",
+          "V2/0.61/1022",
+          "V2/0.788/1022",
+          "V2/0.966/1022",
+          "V3/0.8/1023",
+          "V3/0.9/1023",
+          "V3/1.0/1023",
+          "V3/1.1/1023",
+          "V3/1.2/1023",
+          "V2/0.61/1023",
+          "V2/0.788/1023",
+          "V2/0.966/1023",
+          "V3/0.8/1024",
+          "V3/0.9/1024",
+          "V3/1.0/1024",
+          "V3/1.1/1024",
+          "V3/1.2/1024",
+          "V2/0.61/1024",
+          "V2/0.788/1024",
+          "V2/0.966/1024",
+          "V3/0.8/1025",
+          "V3/0.9/1025",
+          "V3/1.0/1025",
+          "V3/1.1/1025",
+          "V3/1.2/1025",
+          "V2/0.61/1025",
+          "V2/0.788/1025",
+          "V2/0.966/1025",
+          "V3/0.8/1026",
+          "V3/0.9/1026",
+          "V3/1.0/1026",
+          "V3/1.1/1026",
+          "V3/1.2/1026",
+          "V2/0.61/1026",
+          "V2/0.788/1026",
+          "V2/0.966/1026",
+          "V3/0.8/1027",
+          "V3/0.9/1027",
+          "V3/1.0/1027",
+          "V3/1.1/1027",
+          "V3/1.2/1027",
+          "V2/0.61/1027",
+          "V2/0.788/1027",
+          "V2/0.966/1027",
+          "V3/0.8/1028",
+          "V3/0.9/1028",
+          "V3/1.0/1028",
+          "V3/1.1/1028",
+          "V3/1.2/1028",
+          "V2/0.61/1028",
+          "V2/0.788/1028",
+          "V2/0.966/1028",
+          "V3/0.8/1029",
+          "V3/0.9/1029",
+          "V3/1.0/1029",
+          "V3/1.1/1029",
+          "V3/1.2/1029",
+          "V2/0.61/1029",
+          "V2/0.788/1029",
+          "V2/0.966/1029",
+          "V3/0.8/1030",
+          "V3/0.9/1030",
+          "V3/1.0/1030",
+          "V3/1.1/1030",
+          "V3/1.2/1030",
+          "V2/0.61/1030",
+          "V2/0.788/1030",
+          "V2/0.966/1030"
+        ],
+        "model_limitations": [
+          {
+            "case": "V2",
+            "gate": "not applicable",
+            "shoulder_ratio": 0.9,
+            "status": "not reproducible with rigid discs (shoulder rotation)"
+          }
+        ],
+        "numeric_failures": [
+          "V5/diagnostic",
+          "V6/1.15",
+          "V6/1.42",
+          "V4/all_data_flow_persons_s width slope"
+        ],
+        "physical_violations": [
+          "V3/0.8/1001",
+          "V3/0.9/1001",
+          "V3/1.0/1001",
+          "V3/1.1/1001",
+          "V3/1.2/1001",
+          "V4/2.4/1001",
+          "V4/3.0/1001",
+          "V4/3.6/1001",
+          "V4/4.4/1001",
+          "V4/5.0/1001",
+          "V6/1.78/1001",
+          "V3/0.8/1002",
+          "V3/0.9/1002",
+          "V3/1.0/1002",
+          "V3/1.1/1002",
+          "V3/1.2/1002",
+          "V4/2.4/1002",
+          "V4/3.0/1002",
+          "V4/3.6/1002",
+          "V4/4.4/1002",
+          "V4/5.0/1002",
+          "V6/1.78/1002",
+          "V3/0.8/1003",
+          "V3/0.9/1003",
+          "V3/1.0/1003",
+          "V3/1.1/1003",
+          "V3/1.2/1003",
+          "V4/2.4/1003",
+          "V4/3.0/1003",
+          "V4/3.6/1003",
+          "V4/4.4/1003",
+          "V4/5.0/1003",
+          "V6/1.78/1003",
+          "V3/0.8/1004",
+          "V3/0.9/1004",
+          "V3/1.0/1004",
+          "V3/1.1/1004",
+          "V3/1.2/1004",
+          "V4/2.4/1004",
+          "V4/3.0/1004",
+          "V4/3.6/1004",
+          "V4/4.4/1004",
+          "V4/5.0/1004",
+          "V6/1.78/1004",
+          "V3/0.8/1005",
+          "V3/0.9/1005",
+          "V3/1.0/1005",
+          "V3/1.1/1005",
+          "V3/1.2/1005",
+          "V4/2.4/1005",
+          "V4/3.0/1005",
+          "V4/3.6/1005",
+          "V4/4.4/1005",
+          "V4/5.0/1005",
+          "V6/1.78/1005",
+          "V3/0.8/1006",
+          "V3/0.9/1006",
+          "V3/1.0/1006",
+          "V3/1.1/1006",
+          "V3/1.2/1006",
+          "V4/2.4/1006",
+          "V4/3.0/1006",
+          "V4/3.6/1006",
+          "V4/4.4/1006",
+          "V4/5.0/1006",
+          "V6/1.78/1006",
+          "V3/0.8/1007",
+          "V3/0.9/1007",
+          "V3/1.0/1007",
+          "V3/1.1/1007",
+          "V3/1.2/1007",
+          "V4/2.4/1007",
+          "V4/3.0/1007",
+          "V4/3.6/1007",
+          "V4/4.4/1007",
+          "V4/5.0/1007",
+          "V6/1.78/1007",
+          "V3/0.8/1008",
+          "V3/0.9/1008",
+          "V3/1.0/1008",
+          "V3/1.1/1008",
+          "V3/1.2/1008",
+          "V4/2.4/1008",
+          "V4/3.0/1008",
+          "V4/3.6/1008",
+          "V4/4.4/1008",
+          "V4/5.0/1008",
+          "V6/1.78/1008",
+          "V3/0.8/1009",
+          "V3/0.9/1009",
+          "V3/1.0/1009",
+          "V3/1.1/1009",
+          "V3/1.2/1009",
+          "V4/2.4/1009",
+          "V4/3.0/1009",
+          "V4/3.6/1009",
+          "V4/4.4/1009",
+          "V4/5.0/1009",
+          "V6/1.78/1009",
+          "V3/0.8/1010",
+          "V3/0.9/1010",
+          "V3/1.0/1010",
+          "V3/1.1/1010",
+          "V3/1.2/1010",
+          "V4/2.4/1010",
+          "V4/3.0/1010",
+          "V4/3.6/1010",
+          "V4/4.4/1010",
+          "V4/5.0/1010",
+          "V6/1.78/1010",
+          "V3/0.8/1011",
+          "V3/0.9/1011",
+          "V3/1.0/1011",
+          "V3/1.1/1011",
+          "V3/1.2/1011",
+          "V4/2.4/1011",
+          "V4/3.0/1011",
+          "V4/3.6/1011",
+          "V4/4.4/1011",
+          "V4/5.0/1011",
+          "V6/1.78/1011",
+          "V3/0.8/1012",
+          "V3/0.9/1012",
+          "V3/1.0/1012",
+          "V3/1.1/1012",
+          "V3/1.2/1012",
+          "V4/2.4/1012",
+          "V4/3.0/1012",
+          "V4/3.6/1012",
+          "V4/4.4/1012",
+          "V4/5.0/1012",
+          "V6/1.78/1012",
+          "V3/0.8/1013",
+          "V3/0.9/1013",
+          "V3/1.0/1013",
+          "V3/1.1/1013",
+          "V3/1.2/1013",
+          "V4/2.4/1013",
+          "V4/3.0/1013",
+          "V4/3.6/1013",
+          "V4/4.4/1013",
+          "V4/5.0/1013",
+          "V6/1.78/1013",
+          "V3/0.8/1014",
+          "V3/0.9/1014",
+          "V3/1.0/1014",
+          "V3/1.1/1014",
+          "V3/1.2/1014",
+          "V4/2.4/1014",
+          "V4/3.0/1014",
+          "V4/3.6/1014",
+          "V4/4.4/1014",
+          "V4/5.0/1014",
+          "V6/1.78/1014",
+          "V3/0.8/1015",
+          "V3/0.9/1015",
+          "V3/1.0/1015",
+          "V3/1.1/1015",
+          "V3/1.2/1015",
+          "V4/2.4/1015",
+          "V4/3.0/1015",
+          "V4/3.6/1015",
+          "V4/4.4/1015",
+          "V4/5.0/1015",
+          "V6/1.78/1015",
+          "V3/0.8/1016",
+          "V3/0.9/1016",
+          "V3/1.0/1016",
+          "V3/1.1/1016",
+          "V3/1.2/1016",
+          "V4/2.4/1016",
+          "V4/3.0/1016",
+          "V4/3.6/1016",
+          "V4/4.4/1016",
+          "V4/5.0/1016",
+          "V6/1.78/1016",
+          "V3/0.8/1017",
+          "V3/0.9/1017",
+          "V3/1.0/1017",
+          "V3/1.1/1017",
+          "V3/1.2/1017",
+          "V4/2.4/1017",
+          "V4/3.0/1017",
+          "V4/3.6/1017",
+          "V4/4.4/1017",
+          "V4/5.0/1017",
+          "V6/1.78/1017",
+          "V3/0.8/1018",
+          "V3/0.9/1018",
+          "V3/1.0/1018",
+          "V3/1.1/1018",
+          "V3/1.2/1018",
+          "V4/2.4/1018",
+          "V4/3.0/1018",
+          "V4/3.6/1018",
+          "V4/4.4/1018",
+          "V4/5.0/1018",
+          "V6/1.78/1018",
+          "V3/0.8/1019",
+          "V3/0.9/1019",
+          "V3/1.0/1019",
+          "V3/1.1/1019",
+          "V3/1.2/1019",
+          "V4/2.4/1019",
+          "V4/3.0/1019",
+          "V4/3.6/1019",
+          "V4/4.4/1019",
+          "V4/5.0/1019",
+          "V6/1.78/1019",
+          "V3/0.8/1020",
+          "V3/0.9/1020",
+          "V3/1.0/1020",
+          "V3/1.1/1020",
+          "V3/1.2/1020",
+          "V4/2.4/1020",
+          "V4/3.0/1020",
+          "V4/3.6/1020",
+          "V4/4.4/1020",
+          "V4/5.0/1020",
+          "V6/1.78/1020",
+          "V3/0.8/1021",
+          "V3/0.9/1021",
+          "V3/1.0/1021",
+          "V3/1.1/1021",
+          "V3/1.2/1021",
+          "V4/2.4/1021",
+          "V4/3.0/1021",
+          "V4/3.6/1021",
+          "V4/4.4/1021",
+          "V4/5.0/1021",
+          "V6/1.78/1021",
+          "V3/0.8/1022",
+          "V3/0.9/1022",
+          "V3/1.0/1022",
+          "V3/1.1/1022",
+          "V3/1.2/1022",
+          "V4/2.4/1022",
+          "V4/3.0/1022",
+          "V4/3.6/1022",
+          "V4/4.4/1022",
+          "V4/5.0/1022",
+          "V6/1.78/1022",
+          "V3/0.8/1023",
+          "V3/0.9/1023",
+          "V3/1.0/1023",
+          "V3/1.1/1023",
+          "V3/1.2/1023",
+          "V4/2.4/1023",
+          "V4/3.0/1023",
+          "V4/3.6/1023",
+          "V4/4.4/1023",
+          "V4/5.0/1023",
+          "V6/1.78/1023",
+          "V3/0.8/1024",
+          "V3/0.9/1024",
+          "V3/1.0/1024",
+          "V3/1.1/1024",
+          "V3/1.2/1024",
+          "V4/2.4/1024",
+          "V4/3.0/1024",
+          "V4/3.6/1024",
+          "V4/4.4/1024",
+          "V4/5.0/1024",
+          "V6/1.78/1024",
+          "V3/0.8/1025",
+          "V3/0.9/1025",
+          "V3/1.0/1025",
+          "V3/1.1/1025",
+          "V3/1.2/1025",
+          "V4/2.4/1025",
+          "V4/3.0/1025",
+          "V4/3.6/1025",
+          "V4/4.4/1025",
+          "V4/5.0/1025",
+          "V6/1.78/1025",
+          "V3/0.8/1026",
+          "V3/0.9/1026",
+          "V3/1.0/1026",
+          "V3/1.1/1026",
+          "V3/1.2/1026",
+          "V4/2.4/1026",
+          "V4/3.0/1026",
+          "V4/3.6/1026",
+          "V4/4.4/1026",
+          "V4/5.0/1026",
+          "V6/1.78/1026",
+          "V3/0.8/1027",
+          "V3/0.9/1027",
+          "V3/1.0/1027",
+          "V3/1.1/1027",
+          "V3/1.2/1027",
+          "V4/2.4/1027",
+          "V4/3.0/1027",
+          "V4/3.6/1027",
+          "V4/4.4/1027",
+          "V4/5.0/1027",
+          "V6/1.78/1027",
+          "V3/0.8/1028",
+          "V3/0.9/1028",
+          "V3/1.0/1028",
+          "V3/1.1/1028",
+          "V3/1.2/1028",
+          "V4/2.4/1028",
+          "V4/3.0/1028",
+          "V4/3.6/1028",
+          "V4/4.4/1028",
+          "V4/5.0/1028",
+          "V6/1.78/1028",
+          "V3/0.8/1029",
+          "V3/0.9/1029",
+          "V3/1.0/1029",
+          "V3/1.1/1029",
+          "V3/1.2/1029",
+          "V4/2.4/1029",
+          "V4/3.0/1029",
+          "V4/3.6/1029",
+          "V4/4.4/1029",
+          "V4/5.0/1029",
+          "V6/1.78/1029",
+          "V3/0.8/1030",
+          "V3/0.9/1030",
+          "V3/1.0/1030",
+          "V3/1.1/1030",
+          "V3/1.2/1030",
+          "V4/2.4/1030",
+          "V4/3.0/1030",
+          "V4/3.6/1030",
+          "V4/4.4/1030",
+          "V4/5.0/1030",
+          "V6/1.78/1030"
+        ],
+        "release_admission": "engineering dev validation only; no release or paper admission",
+        "schema": "valsuite.gate.v2",
+        "scope": "complete dev suite",
+        "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+        "unspecified_tolerances": []
+      },
+      "overlap_pair_steps": 91665539,
+      "per_case": {
+        "V1/native": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              1.1825575631024041,
+              1.3276582767714757
+            ],
+            "mean": 1.25510791993694,
+            "n": 30,
+            "sd": 0.19429342394963187
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              34.50048902113999,
+              35.56525344538115
+            ],
+            "mean": 35.03287123326057,
+            "n": 30,
+            "sd": 1.4257457489657328
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V2/0.61": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.09576088116163373,
+              0.09921962931782644
+            ],
+            "mean": 0.09749025523973008,
+            "n": 30,
+            "sd": 0.004631348839391678
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V2/0.788": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.09577450600187415,
+              0.09850988013935155
+            ],
+            "mean": 0.09714219307061285,
+            "n": 30,
+            "sd": 0.0036627332389684675
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V2/0.966": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.09600156673715421,
+              0.0988161683158238
+            ],
+            "mean": 0.097408867526489,
+            "n": 30,
+            "sd": 0.0037688207311024234
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/0.8": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
+          },
+          "overlap_pair_steps": 5433802,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              2.024498034831089,
+              2.0538407677670176
+            ],
+            "mean": 2.0391694012990533,
+            "n": 30,
+            "sd": 0.03929064100376288
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/0.9": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
+          },
+          "overlap_pair_steps": 5553529,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.9862543604934219,
+              0.9911452111500995
+            ],
+            "mean": 0.9886997858217607,
+            "n": 30,
+            "sd": 0.006548969306101678
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/1.0": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
+          },
+          "overlap_pair_steps": 19993292,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.9585799941268243,
+              0.9639528493863572
+            ],
+            "mean": 0.9612664217565907,
+            "n": 30,
+            "sd": 0.007194385322881887
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/1.1": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": 0.8486352139661273,
+            "n": 1,
+            "sd": null
+          },
+          "overlap_pair_steps": 1456959,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.8956446122079174,
+              0.9069187881879182
+            ],
+            "mean": 0.9012817001979178,
+            "n": 30,
+            "sd": 0.015096398894087334
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/1.2": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": null,
+            "mean": 0.821863649808436,
+            "n": 1,
+            "sd": null
+          },
+          "overlap_pair_steps": 1443779,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.9058931232891895,
+              0.9169772247865257
+            ],
+            "mean": 0.9114351740378576,
+            "n": 30,
+            "sd": 0.014841884487448472
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/2.4": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              1.9553746591270995,
+              1.9891106008870958
+            ],
+            "mean": 1.9722426300070977,
+            "n": 30,
+            "sd": 0.04517325565788859
+          },
+          "overlap_pair_steps": 12050605,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              23.13098353799213,
+              23.252868753151915
+            ],
+            "mean": 23.191926145572022,
+            "n": 30,
+            "sd": 0.16320730052536422
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/3.0": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              1.885169704392187,
+              1.9233261260512726
+            ],
+            "mean": 1.9042479152217298,
+            "n": 30,
+            "sd": 0.051092386952124806
+          },
+          "overlap_pair_steps": 11720767,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              23.606755114381997,
+              23.72835561305368
+            ],
+            "mean": 23.667555363717838,
+            "n": 30,
+            "sd": 0.16282605814598183
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/3.6": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              1.798956582153975,
+              1.8320880880102093
+            ],
+            "mean": 1.8155223350820922,
+            "n": 30,
+            "sd": 0.04436390111833878
+          },
+          "overlap_pair_steps": 11549155,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              23.78091793376332,
+              23.890121096134337
+            ],
+            "mean": 23.835519514948828,
+            "n": 30,
+            "sd": 0.14622571996153233
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/4.4": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              1.678071090908476,
+              1.7232649242589675
+            ],
+            "mean": 1.7006680075837217,
+            "n": 30,
+            "sd": 0.06051565427240017
+          },
+          "overlap_pair_steps": 11334089,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              23.920355318235007,
+              24.051138705249404
+            ],
+            "mean": 23.985747011742205,
+            "n": 30,
+            "sd": 0.17512217146436468
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/5.0": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              1.5750176334101362,
+              1.618307891115693
+            ],
+            "mean": 1.5966627622629146,
+            "n": 30,
+            "sd": 0.057966719670706886
+          },
+          "overlap_pair_steps": 11129532,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              23.986603604743213,
+              24.111012554613918
+            ],
+            "mean": 24.048808079678565,
+            "n": 30,
+            "sd": 0.16658664336748757
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/all_data_flow_persons_s width slope": {
+          "measurement": {
+            "ci95": [
+              1.7155175391295447,
+              1.749216643220458
+            ],
+            "mean": 1.7323670911750013,
+            "n": 30,
+            "sd": 0.04512392911306688
+          }
+        },
+        "V4/steady_flow_persons_s width slope": {
+          "measurement": {
+            "ci95": [
+              2.6193680867840223,
+              2.6702852150394794
+            ],
+            "mean": 2.644826650911751,
+            "n": 30,
+            "sd": 0.06817928689860096
+          }
+        },
+        "V5/diagnostic": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              0.8634744250734203,
+              0.8721383011442383
+            ],
+            "mean": 0.8678063631088293,
+            "n": 30,
+            "sd": 0.01160114312265644
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 30,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.8964407271695234,
+              0.909645991199131
+            ],
+            "mean": 0.9030433591843272,
+            "n": 30,
+            "sd": 0.017682173282227247
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V6/1.15": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              2.9381996566837216,
+              2.938811862571429
+            ],
+            "mean": 2.938505759627575,
+            "n": 30,
+            "sd": 0.000819758739133175
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.11701862893593015,
+              0.12343913031763226
+            ],
+            "mean": 0.12022887962678121,
+            "n": 30,
+            "sd": 0.008597209244396317
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V6/1.42": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              2.9285202860535824,
+              2.9290993085309127
+            ],
+            "mean": 2.9288097972922476,
+            "n": 30,
+            "sd": 0.0007753253365855276
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.11791657808006886,
+              0.12218166958971446
+            ],
+            "mean": 0.12004912383489166,
+            "n": 30,
+            "sd": 0.005711062419427537
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V6/1.78": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 0,
+          "measurement": {
+            "ci95": [
+              2.929870841958002,
+              2.93040215470496
+            ],
+            "mean": 2.930136498331481,
+            "n": 30,
+            "sd": 0.0007114408343297864
+          },
+          "overlap_pair_steps": 30,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.12170243242524018,
+              0.12706929497031424
+            ],
+            "mean": 0.12438586369777721,
+            "n": 30,
+            "sd": 0.007186360930847306
+          },
+          "wall_penetration_ped_steps": 0
+        }
+      },
+      "runtime_ms_per_step": 10.141910212451252,
+      "runtime_scope": "Integration only; V6 no-interferer baseline timing excluded",
+      "source_sha": "56d73a4cad05fec11fa77be80a99f0da0c32cc48",
+      "table": [
+        {
+          "attempted_n": 30,
+          "case": "V1",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.034892080063060105,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Equation 4.1 desired speed fitted from first 3 s of acceleration after a .35 s clock shift; simulator velocities replace supplementary marker preprocessing; tau is fitted, not imposed.; documented_equivalent",
+          "location": "Moussaid 2009 Fig. 1b and section 4(a); Huber 2014 Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "published_value": {
+            "mean_m_s": 1.29,
+            "sd_m_s": 0.19,
+            "slow_normal_fast_m_s": [
+              1.15,
+              1.42,
+              1.78
+            ]
+          },
+          "quantity": "fitted_desired_speed_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.25510791993694,
+            "n": 30,
+            "spread_sd": 0.19429342394963187
+          },
+          "source": "Moussaid et al. 2009; Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "native",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V2",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+          "location": "Fig. 3, typically developing group, graphical reading",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "passed_n": 0,
+          "published_value": "graphical value not extracted",
+          "quantity": "speed_drop_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "source": "Wilmut et al. 2015",
+          "unavailable_reasons": [
+            "no complete capture-to-passage interval longer than approach phase"
+          ],
+          "variant": "0.61",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V2",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+          "location": "Fig. 3, typically developing group, graphical reading",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "passed_n": 0,
+          "published_value": "graphical value not extracted",
+          "quantity": "speed_drop_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "source": "Wilmut et al. 2015",
+          "unavailable_reasons": [
+            "no complete capture-to-passage interval longer than approach phase"
+          ],
+          "variant": "0.788",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V2",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+          "location": "Fig. 3, typically developing group, graphical reading",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "passed_n": 0,
+          "published_value": "graphical value not extracted",
+          "quantity": "speed_drop_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "source": "Wilmut et al. 2015",
+          "unavailable_reasons": [
+            "no complete capture-to-passage interval longer than approach phase"
+          ],
+          "variant": "0.966",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "crossed": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.00011736101817595894,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.04725203625235405,
+              "share_below_2r": 0.06395717984934086
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.00011736101817595894,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.04725203625235405,
+              "share_below_2r": 0.06395717984934086
+            }
+          },
+          "published_value": 1.61,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "0.8",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "crossed": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 9.718845747783086e-05,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.049291819679849344,
+              "share_below_2r": 0.06536639595103579
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 9.718845747783086e-05,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.049291819679849344,
+              "share_below_2r": 0.06536639595103579
+            }
+          },
+          "published_value": 1.86,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "0.9",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 0.16495665843859583,
+            "n": 30,
+            "spread_sd": 0.01512730287118088
+          },
+          "crossed": {
+            "mean": 19.833333333333332,
+            "n": 30,
+            "spread_sd": 1.7827397228816744
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.00016937325066888399,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.1886513418079096,
+              "share_below_2r": 0.2353259416195857
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.00016937325066888399,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.1886513418079096,
+              "share_below_2r": 0.2353259416195857
+            }
+          },
+          "published_value": 1.9,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "1.0",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.1971047021197194,
+            "n": 30,
+            "spread_sd": 0.07932660216659618
+          },
+          "crossed": {
+            "mean": 58.06666666666667,
+            "n": 30,
+            "spread_sd": 0.36514837167011066
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -1.0813647860338726,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.0007494237400726976,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.006801718455743879,
+              "share_below_2r": 0.017148764124293784
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.0007494237400726976,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.006801718455743879,
+              "share_below_2r": 0.017148764124293784
+            }
+          },
+          "published_value": 1.93,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.8486352139661273,
+            "n": 1,
+            "spread_sd": 0.0
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "1.1",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.2510993765595548,
+            "n": 30,
+            "spread_sd": 0.08834384160051928
+          },
+          "crossed": {
+            "mean": 58.06666666666667,
+            "n": 30,
+            "spread_sd": 0.36514837167011066
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -1.148136350191564,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.0008823915737325937,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.006555508474576271,
+              "share_below_2r": 0.01699363229755179
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.0008823915737325937,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.006555508474576271,
+              "share_below_2r": 0.01699363229755179
+            }
+          },
+          "published_value": 1.97,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.821863649808436,
+            "n": 1,
+            "spread_sd": 0.0
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "1.2",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.9722426300070977,
+            "n": 30,
+            "spread_sd": 0.04517325565788861
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.0006124363152227238,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0015454628871605948,
+              "share_below_2r": 0.0041105897803247375
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.0006124363152227238,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0015454628871605948,
+              "share_below_2r": 0.0041105897803247375
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.9722426300070977,
+            "n": 30,
+            "spread_sd": 0.04517325565788859
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.735855278826688,
+            "n": 30,
+            "spread_sd": 0.1657928548207295
+          },
+          "unavailable_reasons": [],
+          "variant": "2.4",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.90424791522173,
+            "n": 30,
+            "spread_sd": 0.05109238695212479
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.001127086311061844,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0014468993041342611,
+              "share_below_2r": 0.003998078523673079
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.001127086311061844,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0014468993041342611,
+              "share_below_2r": 0.003998078523673079
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.9042479152217298,
+            "n": 30,
+            "spread_sd": 0.051092386952124806
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.674140906072519,
+            "n": 30,
+            "spread_sd": 0.18864333979408285
+          },
+          "unavailable_reasons": [],
+          "variant": "3.0",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.8155223350820924,
+            "n": 30,
+            "spread_sd": 0.0443639011183388
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.0003137188280003035,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0013811645517805976,
+              "share_below_2r": 0.003939539841724656
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.0003137188280003035,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0013811645517805976,
+              "share_below_2r": 0.003939539841724656
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.8155223350820922,
+            "n": 30,
+            "spread_sd": 0.04436390111833878
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.6561002199387453,
+            "n": 30,
+            "spread_sd": 0.13320600305940136
+          },
+          "unavailable_reasons": [],
+          "variant": "3.6",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.7006680075837217,
+            "n": 30,
+            "spread_sd": 0.060515654272400174
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.0009915556565265394,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0013216820166462,
+              "share_below_2r": 0.0038661785373175057
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.0009915556565265394,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0013216820166462,
+              "share_below_2r": 0.0038661785373175057
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.7006680075837217,
+            "n": 30,
+            "spread_sd": 0.06051565427240017
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.6285093636674097,
+            "n": 30,
+            "spread_sd": 0.09219734216012355
+          },
+          "unavailable_reasons": [],
+          "variant": "4.4",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.5966627622629146,
+            "n": 30,
+            "spread_sd": 0.0579667196707069
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.0008860486714508526,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0012763279437849639,
+              "share_below_2r": 0.0037964019647973805
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.0008860486714508526,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0012763279437849639,
+              "share_below_2r": 0.0037964019647973805
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.5966627622629146,
+            "n": 30,
+            "spread_sd": 0.057966719670706886
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.6200924122406954,
+            "n": 30,
+            "spread_sd": 0.11078810503555014
+          },
+          "unavailable_reasons": [],
+          "variant": "5.0",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V5",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 30,
+          "difference": 0.3678063631088293,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "CM-to-cylinder edge; abeam lateral clearance, .25 m radius 32-edge cylinder; exact source geometry/ellipse reconstruction unavailable; no longitudinal ellipse radius inferred.; documented_equivalent",
+          "location": "2008 p.240",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "published_value": {
+            "lateral_m": 0.5,
+            "longitudinal_m": "2 m ellipse radius; not measured by lateral clearance"
+          },
+          "quantity": "lateral_cm_to_edge_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.8678063631088293,
+            "n": 30,
+            "spread_sd": 0.01160114312265644
+          },
+          "source": "Gerin-Lajoie et al. 2005, cited in 2008",
+          "unavailable_reasons": [],
+          "variant": "diagnostic",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V6",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": 0.8385057596275751,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+          "location": "Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5921285006823784,
+              "pair_steps": 3150,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5921285006823784,
+              "pair_steps": 3150,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 2.1,
+          "quantity": "onset_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.938505759627575,
+            "n": 30,
+            "spread_sd": 0.000819758739133175
+          },
+          "source": "Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "1.15",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V6",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": 0.5288097972922476,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+          "location": "Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5697845397425434,
+              "pair_steps": 2550,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5697845397425434,
+              "pair_steps": 2550,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 2.4,
+          "quantity": "onset_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.9288097972922476,
+            "n": 30,
+            "spread_sd": 0.0007753253365855276
+          },
+          "source": "Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "1.42",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V6",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": 0.23013649833148087,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+          "location": "Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.540192042950747,
+              "pair_steps": 2040,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.014705882352941176
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.540192042950747,
+              "pair_steps": 2040,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.014705882352941176
+            }
+          },
+          "published_value": 2.7,
+          "quantity": "onset_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.930136498331481,
+            "n": 30,
+            "spread_sd": 0.0007114408343297864
+          },
+          "source": "Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "1.78",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "difference": -0.5676329088249985,
+          "estimator_status": "documented_equivalent",
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "published_value": 2.3,
+          "quantity": "persons/(m s)",
+          "simulated": {
+            "mean": 1.7323670911750013,
+            "n": 30,
+            "spread_sd": 0.04512392911306688
+          },
+          "source": "Liao et al. 2014",
+          "variant": "all_data_flow_persons_s width slope"
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "difference": 0.14482665091175084,
+          "estimator_status": "documented_equivalent",
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "published_value": 2.5,
+          "quantity": "persons/(m s)",
+          "simulated": {
+            "mean": 2.644826650911751,
+            "n": 30,
+            "spread_sd": 0.06817928689860096
+          },
+          "source": "Liao et al. 2014",
+          "variant": "steady_flow_persons_s width slope"
+        }
+      ],
+      "wall_penetration_ped_steps": 0
+    },
+    "on": {
+      "gate": {
+        "checks": [
+          {
+            "attempted_n": 30,
+            "case": "V1",
+            "difference": -0.034892080063060105,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 1.25510791993694,
+            "observed_n": 30,
+            "quantity": "fitted_desired_speed_m_s",
+            "rule": "literature mean \u00b1 1 SD (.19 m/s)",
+            "source": "Moussaid et al. 2009, section 4(a), Fig. 1b; https://doi.org/10.1098/rspb.2009.0405",
+            "status": "PASS",
+            "target": 1.29,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.1,
+              1.48
+            ],
+            "variant": "native"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V2",
+            "difference": -0.11699240600684607,
+            "distance_outside_tolerance": 0.03699240600684606,
+            "estimate": 0.023007593993153937,
+            "observed_n": 30,
+            "quantity": "speed_drop_m_s",
+            "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
+            "source": "Wilmut et al. 2015, Fig. 3; https://doi.org/10.1371/journal.pone.0124695",
+            "status": "FAIL",
+            "target": 0.14,
+            "target_band": [
+              0.12,
+              0.16
+            ],
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.06,
+              0.24
+            ],
+            "variant": "0.61"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V2",
+            "difference": -0.1397457682783385,
+            "distance_outside_tolerance": 0.05974576827833848,
+            "estimate": 0.0002542317216615131,
+            "observed_n": 30,
+            "quantity": "speed_drop_m_s",
+            "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
+            "source": "Wilmut et al. 2015, Fig. 3; https://doi.org/10.1371/journal.pone.0124695",
+            "status": "FAIL",
+            "target": 0.14,
+            "target_band": [
+              0.12,
+              0.16
+            ],
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.06,
+              0.24
+            ],
+            "variant": "0.788"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V2",
+            "difference": -0.14,
+            "distance_outside_tolerance": 0.06,
+            "estimate": 0.0,
+            "observed_n": 30,
+            "quantity": "speed_drop_m_s",
+            "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
+            "source": "Wilmut et al. 2015, Fig. 3; https://doi.org/10.1371/journal.pone.0124695",
+            "status": "FAIL",
+            "target": 0.14,
+            "target_band": [
+              0.12,
+              0.16
+            ],
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.06,
+              0.24
+            ],
+            "variant": "0.966"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -0.6584866587642946,
+            "distance_outside_tolerance": 0.33648665876429473,
+            "estimate": 0.9515133412357055,
+            "observed_n": 1,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.61,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.2880000000000003,
+              1.932
+            ],
+            "variant": "0.8"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -0.9312344895327748,
+            "distance_outside_tolerance": 0.5592344895327749,
+            "estimate": 0.9287655104672253,
+            "observed_n": 9,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.86,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.4880000000000002,
+              2.232
+            ],
+            "variant": "0.9"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -0.9484785668378428,
+            "distance_outside_tolerance": 0.5684785668378429,
+            "estimate": 0.9515214331621571,
+            "observed_n": 8,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.9,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.52,
+              2.28
+            ],
+            "variant": "1.0"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -0.9516894927197705,
+            "distance_outside_tolerance": 0.5656894927197706,
+            "estimate": 0.9783105072802294,
+            "observed_n": 19,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.93,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.544,
+              2.316
+            ],
+            "variant": "1.1"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V3",
+            "difference": -0.918464387085768,
+            "distance_outside_tolerance": 0.5244643870857681,
+            "estimate": 1.051535612914232,
+            "observed_n": 29,
+            "quantity": "specific_flow_persons_m_s",
+            "rule": "\u00b120% of literature flow",
+            "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
+            "status": "MISSING",
+            "target": 1.97,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.576,
+              2.364
+            ],
+            "variant": "1.2"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V5",
+            "difference": -0.11343341843170296,
+            "distance_outside_tolerance": 0.013433418431702981,
+            "estimate": 0.38656658156829704,
+            "observed_n": 30,
+            "quantity": "lateral_cm_to_edge_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Gerin-Lajoie et al. 2008 pp.239-240, citing 2005; https://doi.org/10.1016/j.gaitpost.2007.03.015",
+            "status": "FAIL",
+            "target": 0.5,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              0.4,
+              0.6
+            ],
+            "variant": "diagnostic"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V6",
+            "difference": 0.8385057596275751,
+            "distance_outside_tolerance": 0.4185057596275752,
+            "estimate": 2.938505759627575,
+            "observed_n": 30,
+            "quantity": "onset_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+            "status": "FAIL",
+            "target": 2.1,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.6800000000000002,
+              2.52
+            ],
+            "variant": "1.15"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V6",
+            "difference": 0.5288097972922476,
+            "distance_outside_tolerance": 0.04880979729224766,
+            "estimate": 2.9288097972922476,
+            "observed_n": 30,
+            "quantity": "onset_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+            "status": "FAIL",
+            "target": 2.4,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.92,
+              2.88
+            ],
+            "variant": "1.42"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V6",
+            "difference": 0.20441449300016368,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 2.904414493000164,
+            "observed_n": 30,
+            "quantity": "onset_m",
+            "rule": "no reported SD; author fallback \u00b120% of literature mean",
+            "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+            "status": "PASS",
+            "target": 2.7,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              2.16,
+              3.24
+            ],
+            "variant": "1.78"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V4",
+            "difference": -0.32652106222578614,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 1.9734789377742137,
+            "observed_n": 30,
+            "quantity": "persons/(m s)",
+            "rule": "\u00b120% of literature through-origin flow slope",
+            "source": "Liao et al. 2014, section 4; https://doi.org/10.1016/j.trpro.2014.09.005",
+            "status": "PASS",
+            "target": 2.3,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              1.8399999999999999,
+              2.76
+            ],
+            "variant": "all_data_flow_persons_s width slope"
+          },
+          {
+            "attempted_n": 30,
+            "case": "V4",
+            "difference": 0.17304361977699356,
+            "distance_outside_tolerance": 0.0,
+            "estimate": 2.6730436197769936,
+            "observed_n": 30,
+            "quantity": "persons/(m s)",
+            "rule": "\u00b120% of literature through-origin flow slope",
+            "source": "Liao et al. 2014, section 4; https://doi.org/10.1016/j.trpro.2014.09.005",
+            "status": "PASS",
+            "target": 2.5,
+            "target_band": null,
+            "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+            "tolerance_range": [
+              2.0,
+              3.0
+            ],
+            "variant": "steady_flow_persons_s width slope"
+          }
+        ],
+        "excluded_measurements": [],
+        "exit_code": 2,
+        "measurement_missing": [
+          "V3/0.8/1001",
+          "V3/1.0/1001",
+          "V3/0.8/1002",
+          "V3/0.9/1002",
+          "V3/1.0/1002",
+          "V3/1.1/1002",
+          "V3/0.8/1003",
+          "V3/0.9/1003",
+          "V3/1.0/1003",
+          "V3/1.1/1003",
+          "V3/0.8/1004",
+          "V3/0.9/1004",
+          "V3/1.0/1004",
+          "V3/0.8/1005",
+          "V3/1.0/1005",
+          "V3/0.8/1006",
+          "V3/0.9/1006",
+          "V3/1.0/1006",
+          "V3/1.1/1006",
+          "V3/0.8/1007",
+          "V3/1.0/1007",
+          "V3/0.8/1008",
+          "V3/0.9/1008",
+          "V3/1.0/1008",
+          "V3/1.1/1008",
+          "V3/0.8/1009",
+          "V3/0.9/1009",
+          "V3/1.0/1009",
+          "V3/1.1/1009",
+          "V3/0.8/1010",
+          "V3/1.0/1010",
+          "V3/1.1/1010",
+          "V3/0.9/1011",
+          "V3/1.1/1011",
+          "V3/0.8/1012",
+          "V3/0.9/1012",
+          "V3/1.0/1012",
+          "V3/0.8/1013",
+          "V3/0.9/1013",
+          "V3/0.8/1014",
+          "V3/0.9/1014",
+          "V3/0.8/1015",
+          "V3/0.9/1015",
+          "V3/1.0/1015",
+          "V3/1.1/1015",
+          "V3/0.8/1016",
+          "V3/1.0/1016",
+          "V3/0.8/1017",
+          "V3/0.9/1017",
+          "V3/0.8/1018",
+          "V3/0.9/1018",
+          "V3/0.8/1019",
+          "V3/0.9/1019",
+          "V3/1.0/1019",
+          "V3/0.8/1020",
+          "V3/0.9/1020",
+          "V3/0.8/1021",
+          "V3/1.0/1021",
+          "V3/1.1/1021",
+          "V3/0.8/1022",
+          "V3/1.0/1022",
+          "V3/1.1/1022",
+          "V3/0.8/1023",
+          "V3/0.9/1023",
+          "V3/1.0/1023",
+          "V3/1.1/1023",
+          "V3/1.2/1023",
+          "V3/0.8/1024",
+          "V3/0.9/1024",
+          "V3/1.0/1024",
+          "V3/0.8/1025",
+          "V3/0.9/1025",
+          "V3/1.0/1025",
+          "V3/0.8/1026",
+          "V3/0.9/1026",
+          "V3/0.8/1027",
+          "V3/0.9/1027",
+          "V3/1.0/1027",
+          "V3/0.8/1028",
+          "V3/0.9/1028",
+          "V3/1.0/1028",
+          "V3/0.8/1029",
+          "V3/1.0/1029",
+          "V3/0.8/1030"
+        ],
+        "model_limitations": [
+          {
+            "case": "V2",
+            "gate": "not applicable",
+            "shoulder_ratio": 0.9,
+            "status": "not reproducible with rigid discs (shoulder rotation)"
+          }
+        ],
+        "numeric_failures": [
+          "V2/0.61",
+          "V2/0.788",
+          "V2/0.966",
+          "V5/diagnostic",
+          "V6/1.15",
+          "V6/1.42"
+        ],
+        "physical_violations": [],
+        "release_admission": "engineering dev validation only; no release or paper admission",
+        "schema": "valsuite.gate.v2",
+        "scope": "complete dev suite",
+        "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+        "unspecified_tolerances": []
+      },
+      "overlap_pair_steps": 0,
+      "per_case": {
+        "V1/native": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 1,
+          "measurement": {
+            "ci95": [
+              1.1825575631024041,
+              1.3276582767714757
+            ],
+            "mean": 1.25510791993694,
+            "n": 30,
+            "sd": 0.19429342394963187
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              53.70759144678875,
+              56.082437128475796
+            ],
+            "mean": 54.89501428763227,
+            "n": 30,
+            "sd": 3.1799767704748723
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V2/0.61": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 1,
+          "measurement": {
+            "ci95": [
+              0.017880118595906352,
+              0.028135069390401522
+            ],
+            "mean": 0.023007593993153937,
+            "n": 30,
+            "sd": 0.01373163130569883
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 30,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.18582477598746464,
+              0.1982361787069626
+            ],
+            "mean": 0.19203047734721362,
+            "n": 30,
+            "sd": 0.01661917346518913
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V2/0.788": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 1,
+          "measurement": {
+            "ci95": [
+              -3.580067161143704e-05,
+              0.0005442641149344632
+            ],
+            "mean": 0.0002542317216615131,
+            "n": 30,
+            "sd": 0.0007767210142580999
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 30,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.18688073064853905,
+              0.19805962696132834
+            ],
+            "mean": 0.1924701788049337,
+            "n": 30,
+            "sd": 0.01496881707655383
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V2/0.966": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 1,
+          "measurement": {
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "mean": 0.0,
+            "n": 30,
+            "sd": 0.0
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 30,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.18610868673453485,
+              0.19777826985197222
+            ],
+            "mean": 0.19194347829325353,
+            "n": 30,
+            "sd": 0.015625858775048965
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/0.8": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 973,
+          "measurement": {
+            "ci95": null,
+            "mean": 0.9515133412357055,
+            "n": 1,
+            "sd": null
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              27.893824087017133,
+              29.963309598982104
+            ],
+            "mean": 28.92856684299962,
+            "n": 30,
+            "sd": 2.771091993736602
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/0.9": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 973,
+          "measurement": {
+            "ci95": [
+              0.8631735774661844,
+              0.9943574434682663
+            ],
+            "mean": 0.9287655104672253,
+            "n": 9,
+            "sd": 0.08533193674680943
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              22.30198692942787,
+              24.138436981631173
+            ],
+            "mean": 23.22021195552952,
+            "n": 30,
+            "sd": 2.45905178225953
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/1.0": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 988,
+          "measurement": {
+            "ci95": [
+              0.8851844357807118,
+              1.0178584305436023
+            ],
+            "mean": 0.9515214331621571,
+            "n": 8,
+            "sd": 0.0793484895714453
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              19.06155992174181,
+              20.390470645157528
+            ],
+            "mean": 19.72601528344967,
+            "n": 30,
+            "sd": 1.7794441395008607
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/1.1": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 918,
+          "measurement": {
+            "ci95": [
+              0.9549171705024919,
+              1.0017038440579669
+            ],
+            "mean": 0.9783105072802294,
+            "n": 19,
+            "sd": 0.04853544730040148
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              17.420189008944735,
+              18.379373538255937
+            ],
+            "mean": 17.899781273600336,
+            "n": 30,
+            "sd": 1.2843716732119257
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V3/1.2": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 592,
+          "measurement": {
+            "ci95": [
+              1.029389281860981,
+              1.0736819439674827
+            ],
+            "mean": 1.051535612914232,
+            "n": 29,
+            "sd": 0.0582216494766732
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              15.892640133553341,
+              16.60353822475485
+            ],
+            "mean": 16.248089179154096,
+            "n": 30,
+            "sd": 0.9519100266716334
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/2.4": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 838,
+          "measurement": {
+            "ci95": [
+              2.2660296582507726,
+              2.3047293218199654
+            ],
+            "mean": 2.285379490035369,
+            "n": 30,
+            "sd": 0.05181980122927572
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              411.4435010475396,
+              421.68652424655556
+            ],
+            "mean": 416.5650126470476,
+            "n": 30,
+            "sd": 13.715659962026331
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/3.0": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 584,
+          "measurement": {
+            "ci95": [
+              2.165513538051899,
+              2.1997367675363666
+            ],
+            "mean": 2.1826251527941327,
+            "n": 30,
+            "sd": 0.045825745904436166
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              404.3898332941502,
+              424.70236340578015
+            ],
+            "mean": 414.5460983499652,
+            "n": 30,
+            "sd": 27.198977349411958
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/3.6": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 544,
+          "measurement": {
+            "ci95": [
+              2.049559993898757,
+              2.092520360804753
+            ],
+            "mean": 2.071040177351755,
+            "n": 30,
+            "sd": 0.05752498777735287
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              423.26112498810113,
+              445.8310175054599
+            ],
+            "mean": 434.5460712467805,
+            "n": 30,
+            "sd": 30.221641124205714
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/4.4": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 592,
+          "measurement": {
+            "ci95": [
+              1.8958059867733406,
+              1.940568498538842
+            ],
+            "mean": 1.9181872426560913,
+            "n": 30,
+            "sd": 0.059938104062948847
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              474.3602097602832,
+              507.6615857604018
+            ],
+            "mean": 491.0108977603425,
+            "n": 30,
+            "sd": 44.591361418481256
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/5.0": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 611,
+          "measurement": {
+            "ci95": [
+              1.8005542502399496,
+              1.836578860217148
+            ],
+            "mean": 1.8185665552285488,
+            "n": 30,
+            "sd": 0.04823783868412391
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              521.4871400088123,
+              556.1837457882441
+            ],
+            "mean": 538.8354428985282,
+            "n": 30,
+            "sd": 46.45960840476073
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V4/all_data_flow_persons_s width slope": {
+          "measurement": {
+            "ci95": [
+              1.9577124593456616,
+              1.9892454162027657
+            ],
+            "mean": 1.9734789377742137,
+            "n": 30,
+            "sd": 0.04222340469665557
+          }
+        },
+        "V4/steady_flow_persons_s width slope": {
+          "measurement": {
+            "ci95": [
+              2.6481802150300147,
+              2.6979070245239725
+            ],
+            "mean": 2.6730436197769936,
+            "n": 30,
+            "sd": 0.06658542080438803
+          }
+        },
+        "V5/diagnostic": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 2,
+          "measurement": {
+            "ci95": [
+              0.38527516361330205,
+              0.38785799952329203
+            ],
+            "mean": 0.38656658156829704,
+            "n": 30,
+            "sd": 0.0034584808011112475
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 30,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.2562538654044297,
+              0.27227952547395956
+            ],
+            "mean": 0.2642666954391946,
+            "n": 30,
+            "sd": 0.021458752939445727
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V6/1.15": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 1,
+          "measurement": {
+            "ci95": [
+              2.9381996566837216,
+              2.938811862571429
+            ],
+            "mean": 2.938505759627575,
+            "n": 30,
+            "sd": 0.000819758739133175
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.17791974671631675,
+              0.18875932983252644
+            ],
+            "mean": 0.1833395382744216,
+            "n": 30,
+            "sd": 0.014514468361873471
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V6/1.42": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 1,
+          "measurement": {
+            "ci95": [
+              2.9285202860535824,
+              2.9290993085309127
+            ],
+            "mean": 2.9288097972922476,
+            "n": 30,
+            "sd": 0.0007753253365855276
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.17882843674882481,
+              0.18966216256613128
+            ],
+            "mean": 0.18424529965747805,
+            "n": 30,
+            "sd": 0.014506625294598131
+          },
+          "wall_penetration_ped_steps": 0
+        },
+        "V6/1.78": {
+          "attempted_n": 30,
+          "maximum_projection_passes": 2,
+          "measurement": {
+            "ci95": [
+              2.9038083735905933,
+              2.9050206124097344
+            ],
+            "mean": 2.904414493000164,
+            "n": 30,
+            "sd": 0.0016232175904579873
+          },
+          "overlap_pair_steps": 0,
+          "passed_n": 0,
+          "runtime_ms_per_step": {
+            "ci95": [
+              0.1802430426766279,
+              0.19149349808377877
+            ],
+            "mean": 0.18586827038020334,
+            "n": 30,
+            "sd": 0.015064636463699993
+          },
+          "wall_penetration_ped_steps": 0
+        }
+      },
+      "runtime_ms_per_step": 218.43044386668197,
+      "runtime_scope": "Integration only; V6 no-interferer baseline timing excluded",
+      "source_sha": "56d73a4cad05fec11fa77be80a99f0da0c32cc48",
+      "table": [
+        {
+          "attempted_n": 30,
+          "case": "V1",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.034892080063060105,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Equation 4.1 desired speed fitted from first 3 s of acceleration after a .35 s clock shift; simulator velocities replace supplementary marker preprocessing; tau is fitted, not imposed.; documented_equivalent",
+          "location": "Moussaid 2009 Fig. 1b and section 4(a); Huber 2014 Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "published_value": {
+            "mean_m_s": 1.29,
+            "sd_m_s": 0.19,
+            "slow_normal_fast_m_s": [
+              1.15,
+              1.42,
+              1.78
+            ]
+          },
+          "quantity": "fitted_desired_speed_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.25510791993694,
+            "n": 30,
+            "spread_sd": 0.19429342394963187
+          },
+          "source": "Moussaid et al. 2009; Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "native",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V2",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 30,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent",
+          "location": "Fig. 3, typically developing group, graphical reading",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "passed_n": 30,
+          "published_value": "graphical value not extracted",
+          "quantity": "speed_drop_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.023007593993153937,
+            "n": 30,
+            "spread_sd": 0.01373163130569883
+          },
+          "source": "Wilmut et al. 2015",
+          "unavailable_reasons": [],
+          "variant": "0.61",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V2",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 30,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent",
+          "location": "Fig. 3, typically developing group, graphical reading",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "passed_n": 30,
+          "published_value": "graphical value not extracted",
+          "quantity": "speed_drop_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.0002542317216615131,
+            "n": 30,
+            "spread_sd": 0.0007767210142580999
+          },
+          "source": "Wilmut et al. 2015",
+          "unavailable_reasons": [],
+          "variant": "0.788",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V2",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 30,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent",
+          "location": "Fig. 3, typically developing group, graphical reading",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "passed_n": 30,
+          "published_value": "graphical value not extracted",
+          "quantity": "speed_drop_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "source": "Wilmut et al. 2015",
+          "unavailable_reasons": [],
+          "variant": "0.966",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.0802284198749865,
+            "n": 30,
+            "spread_sd": 0.08493863417476262
+          },
+          "crossed": {
+            "mean": 58.06666666666667,
+            "n": 30,
+            "spread_sd": 0.36514837167011066
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.6584866587642946,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000001604966,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000001604966,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 1.61,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.9515133412357055,
+            "n": 1,
+            "spread_sd": 0.0
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "0.8",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.0418156135918353,
+            "n": 30,
+            "spread_sd": 0.10460805789706148
+          },
+          "crossed": {
+            "mean": 58.6,
+            "n": 30,
+            "spread_sd": 0.9321831993987982
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.9312344895327748,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000001772983,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000001772983,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 1.86,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.9287655104672253,
+            "n": 9,
+            "spread_sd": 0.08533193674680943
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "0.9",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.0883568204006135,
+            "n": 30,
+            "spread_sd": 0.10696478100810272
+          },
+          "crossed": {
+            "mean": 58.53333333333333,
+            "n": 30,
+            "spread_sd": 0.8995528902176073
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.9484785668378428,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000002900335,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000002900335,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 1.9,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.9515214331621571,
+            "n": 8,
+            "spread_sd": 0.0793484895714453
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "1.0",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.0592795639347388,
+            "n": 30,
+            "spread_sd": 0.12165394147201425
+          },
+          "crossed": {
+            "mean": 59.266666666666666,
+            "n": 30,
+            "spread_sd": 0.9802650357071221
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.9516894927197705,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000006221661,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000006221661,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 1.93,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.9783105072802294,
+            "n": 19,
+            "spread_sd": 0.04853544730040148
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "1.1",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V3",
+          "censored_specific_flow": {
+            "mean": 1.059312281137638,
+            "n": 30,
+            "spread_sd": 0.0713243943928035
+          },
+          "crossed": {
+            "mean": 59.93333333333333,
+            "n": 30,
+            "spread_sd": 0.36514837167011066
+          },
+          "diagnostic_passed_n": 0,
+          "difference": -0.918464387085768,
+          "estimator_status": "source_equivalent_estimator",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+          "location": "Table 2, N=60; Fig. 2",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000051169074,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000051169074,
+              "pair_steps": 84960000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 1.97,
+          "quantity": "specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.051535612914232,
+            "n": 29,
+            "spread_sd": 0.0582216494766732
+          },
+          "source": "Seyfried et al. 2009",
+          "unavailable_reasons": [],
+          "variant": "1.2",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 2.2853794900353694,
+            "n": 30,
+            "spread_sd": 0.05181980122927578
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000000613518,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000000613518,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.285379490035369,
+            "n": 30,
+            "spread_sd": 0.05181980122927572
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.9255435040382927,
+            "n": 30,
+            "spread_sd": 0.15787843122789666
+          },
+          "unavailable_reasons": [],
+          "variant": "2.4",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 2.1826251527941327,
+            "n": 30,
+            "spread_sd": 0.045825745904436145
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000000020892,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000000020892,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.1826251527941327,
+            "n": 30,
+            "spread_sd": 0.045825745904436166
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.825124803900005,
+            "n": 30,
+            "spread_sd": 0.09769408137207301
+          },
+          "unavailable_reasons": [],
+          "variant": "3.0",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 2.071040177351755,
+            "n": 30,
+            "spread_sd": 0.057524987777352814
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.560000000274672,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.560000000274672,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.071040177351755,
+            "n": 30,
+            "spread_sd": 0.05752498777735287
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.6954602689368468,
+            "n": 30,
+            "spread_sd": 0.11018393353122283
+          },
+          "unavailable_reasons": [],
+          "variant": "3.6",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.9181872426560913,
+            "n": 30,
+            "spread_sd": 0.05993810406294879
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000001632384,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000001632384,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.9181872426560913,
+            "n": 30,
+            "spread_sd": 0.059938104062948847
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.631682169725875,
+            "n": 30,
+            "spread_sd": 0.12065676425643829
+          },
+          "unavailable_reasons": [],
+          "variant": "4.4",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "censored_specific_flow": {
+            "mean": 1.8185665552285488,
+            "n": 30,
+            "spread_sd": 0.048237838684123915
+          },
+          "crossed": {
+            "mean": 350.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "diagnostic_passed_n": 0,
+          "difference": null,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": 0.0,
+            "n": 30,
+            "spread_sd": 0.0
+          },
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5600000001451907,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5600000001451907,
+              "pair_steps": 2931600000,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": {
+            "all_data": 2.3,
+            "steady_state": 2.5
+          },
+          "quantity": "all_data_specific_flow_persons_m_s",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 1.8185665552285488,
+            "n": 30,
+            "spread_sd": 0.04823783868412391
+          },
+          "source": "Liao et al. 2014",
+          "steady_specific_flow": {
+            "mean": 2.580527936154023,
+            "n": 30,
+            "spread_sd": 0.12055576814995249
+          },
+          "unavailable_reasons": [],
+          "variant": "5.0",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V5",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 30,
+          "difference": -0.11343341843170296,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "CM-to-cylinder edge; abeam lateral clearance, .25 m radius 32-edge cylinder; exact source geometry/ellipse reconstruction unavailable; no longitudinal ellipse radius inferred.; documented_equivalent",
+          "location": "2008 p.240",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            }
+          },
+          "published_value": {
+            "lateral_m": 0.5,
+            "longitudinal_m": "2 m ellipse radius; not measured by lateral clearance"
+          },
+          "quantity": "lateral_cm_to_edge_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 0.38656658156829704,
+            "n": 30,
+            "spread_sd": 0.0034584808011112475
+          },
+          "source": "Gerin-Lajoie et al. 2005, cited in 2008",
+          "unavailable_reasons": [],
+          "variant": "diagnostic",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V6",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": 0.8385057596275751,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+          "location": "Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5921285006823784,
+              "pair_steps": 3150,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5921285006823784,
+              "pair_steps": 3150,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 2.1,
+          "quantity": "onset_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.938505759627575,
+            "n": 30,
+            "spread_sd": 0.000819758739133175
+          },
+          "source": "Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "1.15",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V6",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": 0.5288097972922476,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+          "location": "Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.5697845397425434,
+              "pair_steps": 2550,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.5697845397425434,
+              "pair_steps": 2550,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 2.4,
+          "quantity": "onset_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.9288097972922476,
+            "n": 30,
+            "spread_sd": 0.0007753253365855276
+          },
+          "source": "Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "1.42",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V6",
+          "censored_specific_flow": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "crossed": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "diagnostic_passed_n": 0,
+          "difference": 0.20441449300016368,
+          "estimator_status": "documented_equivalent",
+          "initial_pair_overlaps": {
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
+          },
+          "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+          "location": "Table 1",
+          "pair_overlap": {
+            "all": {
+              "minimum_centre_distance_m": 0.6015419338850228,
+              "pair_steps": 2040,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            },
+            "group": {
+              "minimum_centre_distance_m": null,
+              "pair_steps": 0,
+              "share_below_0_45": null,
+              "share_below_2r": null
+            },
+            "non_group": {
+              "minimum_centre_distance_m": 0.6015419338850228,
+              "pair_steps": 2040,
+              "share_below_0_45": 0.0,
+              "share_below_2r": 0.0
+            }
+          },
+          "published_value": 2.7,
+          "quantity": "onset_m",
+          "seeds": [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+            1006,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1013,
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023,
+            1024,
+            1025,
+            1026,
+            1027,
+            1028,
+            1029,
+            1030
+          ],
+          "simulated": {
+            "mean": 2.904414493000164,
+            "n": 30,
+            "spread_sd": 0.0016232175904579873
+          },
+          "source": "Huber et al. 2014",
+          "unavailable_reasons": [],
+          "variant": "1.78",
+          "wall_penetration_max_m": 0.0
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "difference": -0.32652106222578614,
+          "estimator_status": "documented_equivalent",
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "published_value": 2.3,
+          "quantity": "persons/(m s)",
+          "simulated": {
+            "mean": 1.9734789377742137,
+            "n": 30,
+            "spread_sd": 0.04222340469665557
+          },
+          "source": "Liao et al. 2014",
+          "variant": "all_data_flow_persons_s width slope"
+        },
+        {
+          "attempted_n": 30,
+          "case": "V4",
+          "difference": 0.17304361977699356,
+          "estimator_status": "documented_equivalent",
+          "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
+          "location": "Section 4; Fig. 9a caption reverses labels",
+          "published_value": 2.5,
+          "quantity": "persons/(m s)",
+          "simulated": {
+            "mean": 2.6730436197769936,
+            "n": 30,
+            "spread_sd": 0.06658542080438803
+          },
+          "source": "Liao et al. 2014",
+          "variant": "steady_flow_persons_s width slope"
+        }
+      ],
+      "wall_penetration_ped_steps": 0
+    }
+  },
+  "fit_admitted": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_on_off_ratio": 21.53740659215404,
+  "schema": "pedcontact.comparison.v1",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ]
+}

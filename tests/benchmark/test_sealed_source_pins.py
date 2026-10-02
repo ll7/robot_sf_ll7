@@ -151,7 +151,9 @@ def test_rebuild_materialized_slice_uses_bound_h400_config(sealed_repository, mo
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0, payload["manifest_validation"]
     assert payload["manifest_validation"]["status"] == "valid"
-    assert horizons == [400]
+    assert horizons == [None]
+    cfg = protocol.load_release_campaign_config(manifest)
+    assert set(protocol.resolve_release_horizon_budgets(manifest, cfg).values()) == {400}
     assert manifest.canonical_campaign_config_path.read_bytes() == before
 
 
@@ -261,7 +263,11 @@ def plain_payload(repo, kind):
         "route_certification_sha256",
     ):
         result["scenario"][key] = values["scenario"][key]
-    result["matrix"] = {"expected_episode_cells": 1260, "horizon_steps": 600}
+    result["matrix"] = yaml.safe_load((repo / RELEASES / SLICE_TEMPLATE).read_text())["matrix"]
+    result["matrix"]["expected_episode_cells"] = 1260
+    result["matrix"]["scenario_horizons"] = str(
+        (historical.parent / result["matrix"]["scenario_horizons"]).resolve()
+    )
     result["metrics"]["snqi_claim_policy"] = "advisory_no_ranking"
     # v0.2 requires DOI agreement; the config's DOI is filled in the forged copy below.
     result["provenance"]["doi"] = values["provenance"]["doi"]
@@ -398,8 +404,10 @@ def test_real_materialized_identity_passes_frozen_guard(
     assert manifest.expected_episode_cells == cells
     if kind == "slice":
         assert manifest.release_kind == protocol.DOORWAY_RELEASE_KIND
-        assert manifest.expected_horizon_steps == 400
-        assert protocol.load_release_campaign_config(manifest).horizon == 400
+        assert manifest.expected_horizon_steps is None
+        cfg = protocol.load_release_campaign_config(manifest)
+        assert cfg.horizon is None
+        assert set(protocol.resolve_release_horizon_budgets(manifest, cfg).values()) == {400}
     spawn.guard_manifest_execution(
         manifest, source_commit=git(repo, "rev-parse", "HEAD"), repository_root=repo
     )

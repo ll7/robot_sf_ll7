@@ -76,5 +76,52 @@ Pre-fix: the seven physical checks fail six and pass the zero/zero control;
 the added unit boundaries fail six and pass two unchanged-speed/stop controls.
 The real runner-limit witness separately fails on base: expected (1.34,.4),
 obtained (2,1). Config-load checks prove new integration, not an existing bug.
-Post-fix targeted physical/config, release-identity and ecosystem checks passed
-162 tests. Full-suite and campaign receipts are separate evidence gates.
+Post-fix focused physical/config, release-identity and ecosystem checks passed
+162 tests; expanded importing areas passed 1,401 with one existing skip, and
+identity/ecosystem/golden checks passed 145. Full-suite receipts are retained
+with the task report.
+
+## Measured development outcome
+
+This is diagnostic-only evidence, with no publication, release-admission, or
+trained-bicycle support claim. The complete 4,620-cell matrix ran on 32 Slurm
+CPUs. Producer `702448208ded78dd267f5906c58bd147a08ef9c8` and the final
+implementation have identical SHA-256 hashes for all four runtime modules.
+All matched resets agree; learned checkpoint loads succeeded without fallback.
+
+Legacy empty-world success changes from **215/350 to 305/350**, equal to the
+contemporaneous DD control. Stuck steps change from **54,360 to zero**. The
+previous KINPROBE reported 220/310 on a different source/runtime; the pinned
+rerun reproduces the +90 effect, not those absolute counts.
+
+Matched DD / T60 30° / T60 45° successes are **305 / 290 / 300 of 350** in the
+empty world and **479 / 466 / 452 of 840** across the six scenarios. T60 has zero
+stuck steps in both probes. Wider steering does not guarantee better planner
+outcomes. See the [full per-planner comparison](bicycle_probe_comparison.csv)
+for success, collision and timeout counts with 95% Wilson intervals. These are
+descriptive episode proportions, not independent-seed ranking tests.
+The [per-scenario/bearing table](bicycle_probe_per_scenario.csv) reports the
+same intervals for each planner, arm and scenario (n=5/10 per planner);
+its wide intervals show the limited precision of this development sample.
+
+Every [paired T60-only failure](bicycle_probe_failures.csv) is classified:
+20 planner/controller errors and 107 unclear obstacle/crowd cases. No case
+establishes an adapter artefact or a genuine kinematic limit. Ten deterministic
+trajectories through the same physical bicycle and adapter reach all five empty
+goals in 4.0–8.2 seconds without reverse, supporting the empty-case classification.
+An unclear case needs a reverse/space or feasible obstacle-path counterfactual.
+The ledger's trace/record paths refer to retained raw lane evidence, not files
+committed here. The [summary](bicycle_probe_summary.json) binds source hashes,
+roster, seeds, controls, configurations and claim boundaries.
+
+After the episode run, reproduce analysis with:
+`BIKEFIX_OUTPUT=<lane-evidence> python scripts/validation/bicycle_empty_reachability.py`
+and `python scripts/validation/summarize_bicycle_probe.py --input <probe-output> --reachability <lane-evidence>/empty-physical-reachability.json`.
+
+The four test-value questions are answered above. Nearest prior coverage is
+`tests/test_classic_planner_adapter.py` (the named conversion/model tests),
+`tests/benchmark/test_map_runner_actions.py` (cap extraction/command payloads),
+and existing differential-drive episode-context tests. The additional actual
+T60-context witness fails on base with `None == 1.34`, proving the plant-limit
+injection is required. Existing tests lacked an executed bicycle yaw assertion
+or a configured T60 plant bound into the real runner context.

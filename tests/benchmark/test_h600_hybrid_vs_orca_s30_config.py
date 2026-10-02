@@ -142,4 +142,12 @@ def test_h600_hybrid_vs_orca_s30_loader_preserves_s30_expansion_hash() -> None:
             row["simulation_config"]["max_episode_steps"] == binding["authored_max_episode_steps"]
         )
         row["metadata"].pop("campaign_horizon")
+    # D-084 (author 2026-10-02): the shared overtaking source now declares H600.
+    assert _hash_payload(authored_inputs) == "655aff73b8a6"
+    overtaking = next(
+        row for row in authored_inputs if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    assert overtaking["simulation_config"]["max_episode_steps"] == 600
+    # Keep the historical preregistration bytes and prove this is the sole change.
+    overtaking["simulation_config"]["max_episode_steps"] = 400
     assert _hash_payload(authored_inputs) == EXPECTED_S30_SCENARIO_SEED_HASH

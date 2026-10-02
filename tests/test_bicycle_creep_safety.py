@@ -147,6 +147,22 @@ def test_robot_config_controls_creep_speed():
     assert robot.state.velocity == pytest.approx(0.07)
 
 
+@pytest.mark.parametrize("creep_speed", [-0.1, math.nan])
+def test_mutable_robot_settings_reject_invalid_creep(creep_speed):
+    """Revalidating mutable settings must reject negative or nonfinite creep."""
+    settings = BicycleDriveSettings()
+    settings.creep_speed = creep_speed
+    with pytest.raises(ValueError, match="creep_speed"):
+        settings.__post_init__()
+
+
+@pytest.mark.parametrize("creep_speed", [-0.1, math.nan])
+def test_model_rejects_invalid_creep(creep_speed):
+    """Invalid configured creep cannot silently corrupt physical projection."""
+    with pytest.raises(ValueError, match="creep_speed"):
+        model(creep_speed=creep_speed)
+
+
 def test_meaningful_opt_in_turn_is_projected():
     """One degree/second is an intentional turn, with forward speed bounded at .1."""
     assert model(creep_speed=0.1).project((0.0, math.radians(1))) == pytest.approx(

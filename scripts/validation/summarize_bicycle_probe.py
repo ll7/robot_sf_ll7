@@ -56,10 +56,14 @@ FAILURE_FIELDS = [
     "terminal_safety_interventions",
     "creep_steps_last_2s",
     "safety_creep_steps",
+    "noise_creep_steps",
+    "reverse_creep_steps",
     "stuck",
     "yaw_law_max_error",
     "empty_witness_steps",
     "alternative_success",
+    "bicycle_path_witness_cell",
+    "bicycle_path_witness_min_clearance_m",
     "classification",
     "reason",
 ]
@@ -117,11 +121,24 @@ def measure_rows(directory, rows, *, instrumented):
             assert all("min_clearance_m" in t and "native_action" in t for t in trace)
             assert row["zero_turn"] == sum(t["creeping"] for t in trace)
             assert row["was_creeping_at_termination"] == bool(trace and trace[-1]["creeping"])
+            row["safety_creep_steps"] = sum(
+                bool(t["safety_interventions"]) and t["creeping"] for t in trace
+            )
+            row["path_min_clearance_m"] = min(
+                t["min_clearance_m"] for t in trace if t["min_clearance_m"] is not None
+            )
 
 
 def row_key(row, arm=None):
     """Identify a paired planner, plant, scenario, and seed cell."""
     return row["planner"], arm or row["arm"], row["probe"], row["scenario"], row["seed"]
+
+
+def safe_route(row):
+    """Require route completion, no contact flag and no sampled disc penetration."""
+    return bool(
+        row and row["success"] and not row["collision"] and row["path_min_clearance_m"] >= -1e-6
+    )
 
 
 def validate_matrix(rows, roster):
@@ -201,12 +218,16 @@ def failure_evidence(directory, row):
         "terminal_safety_interventions": "+".join(terminal["safety_interventions"]) or "none",
         "creep_steps_last_2s": sum(t["creeping"] for t in tail),
         "safety_creep_steps": sum(bool(t["safety_interventions"]) and t["creeping"] for t in trace),
+        "noise_creep_steps": sum(
+            t["creeping"] and abs(t["cmd"][1]) < math.radians(1) for t in trace
+        ),
+        "reverse_creep_steps": sum(t["creeping"] and t["cmd"][0] < 0 for t in trace),
         "stuck": row["stuck"],
         "yaw_law_max_error": law_error,
     }
 
 
-def classify(row, evidence, cohort, alternative, witness):
+def classify(row, evidence, cohort, alternative, corrected_on, witness, path_witness):
     """Attribute only witnessed adapter defects or demonstrated physical reachability."""
     details = (
         f"{row['cell']}: {evidence['outcome']} at {row['steps'] * 0.1:.1f}s; "
@@ -223,17 +244,30 @@ def classify(row, evidence, cohort, alternative, witness):
             details
             + f"creep overrode a recorded safety intervention on {evidence['safety_creep_steps']} steps.",
         )
-    if (
-        cohort == "review-44"
-        and evidence["zero_turn"]
-        and alternative
-        and alternative["success"]
-        and not alternative["collision"]
-    ):
+    if cohort == "review-44" and evidence["zero_turn"] and safe_route(alternative):
         return (
             "adapter artefact",
             details
             + "the same matched plant/reset succeeds after disabling implicit creep; the intervening change is adapter creep policy, not increased steering or reverse.",
+        )
+    if evidence["noise_creep_steps"] or evidence["reverse_creep_steps"]:
+        defect = (
+            f"{evidence['noise_creep_steps']} sub-degree creep steps and "
+            f"{evidence['reverse_creep_steps']} reverse-to-forward creep steps; "
+        )
+        if safe_route(corrected_on):
+            return "adapter artefact", details + defect + (
+                "the matched controller/reset succeeds with corrected opt-in creep intent/sign gates."
+            )
+        return "unclear", details + defect + (
+            f"the corrected opt-in controller outcome is {corrected_on['success'] if corrected_on else 'unavailable'} "
+            "for success. The adapter defect is observed, but its contribution to failure cannot "
+            "be separated from controller strategy by this counterfactual. "
+            + (
+                f"Matched path {path_witness['cell']} certifies initial reachability only."
+                if path_witness
+                else "No matched safe bicycle path witness is available."
+            )
         )
     if evidence["yaw_law_max_error"] < 1e-5 and witness:
         return (
@@ -241,20 +275,31 @@ def classify(row, evidence, cohort, alternative, witness):
             details
             + f"the forward-only physical controller reaches this empty-world bearing in {witness['steps']} steps; the planner's strategy fails on a demonstrably reachable plant.",
         )
-    if (
-        evidence["yaw_law_max_error"] < 1e-5
-        and alternative
-        and alternative["success"]
-        and not alternative["collision"]
-    ):
+    if evidence["yaw_law_max_error"] < 1e-5 and safe_route(alternative):
         return (
             "planner/controller error",
             details
             + f"the same bicycle/reset reaches the goal without contact under the alternative creep policy ({alternative['arm']}); this is a feasible controller strategy, so a fundamental kinematic impossibility is not established.",
         )
+    if evidence["yaw_law_max_error"] < 1e-5 and path_witness:
+        return (
+            "planner/controller error",
+            details
+            + f"matched bicycle trajectory {path_witness['cell']} reaches the goal without contact "
+            "from identical robot/pedestrian reset states and the same plant limits. This certifies "
+            "initial reachability; robot-dependent pedestrian reactions may diverge, so it does "
+            "not certify an escape from this failed run's terminal state.",
+        )
+    if path_witness:
+        return "unclear", details + (
+            f"matched bicycle trajectory {path_witness['cell']} certifies initial reachability, "
+            f"but this failed trace has yaw-law residual {evidence['yaw_law_max_error']:.9g}rad/s. "
+            "Collision-time pose/velocity correction versus an adapter/controller defect remains "
+            "unresolved; a safe initial path alone cannot attribute this motion discrepancy."
+        )
     return "unclear", details + (
         f"yaw-law residual {evidence['yaw_law_max_error']:.9g}rad/s; "
-        "DD succeeds, but neither creep setting supplies a collision-free bicycle path witness. "
+        "DD succeeds, but no matched planner/creep setting supplies a collision-free bicycle path witness. "
         "The observed constrained turn/crowd interaction cannot distinguish a controller defect "
         "from a space/reverse limit; no geometric impossibility certificate is available."
     )
@@ -278,8 +323,34 @@ def failures(rows, directory, cohort, dd_by, current_by, reachability):
             else row["arm"] + "-on"
         )
         alternative = current_by.get(row_key(row, alt_arm))
+        corrected_on = current_by.get(row_key(row, row["arm"].removesuffix("-on") + "-on"))
         if alternative:
             assert row["reset"] == alternative["reset"]
+        path_witness = next(
+            (
+                candidate
+                for candidate in sorted(current_by.values(), key=lambda r: r["cell"])
+                if candidate["arm"].startswith(row["arm"].removesuffix("-on"))
+                and candidate["probe"] == row["probe"]
+                and candidate["scenario"] == row["scenario"]
+                and candidate["seed"] == row["seed"]
+                and candidate["reset"] == row["reset"]
+                and safe_route(candidate)
+                and all(
+                    candidate["robot_config"][key] == row["robot_config"][key]
+                    for key in [
+                        "radius",
+                        "wheelbase",
+                        "max_steer",
+                        "max_velocity",
+                        "max_accel",
+                        "max_decel",
+                        "allow_backwards",
+                    ]
+                )
+            ),
+            None,
+        )
         witness = (
             next(
                 (
@@ -293,7 +364,9 @@ def failures(rows, directory, cohort, dd_by, current_by, reachability):
             if row["probe"] == 1
             else None
         )
-        label, reason = classify(row, evidence, cohort, alternative, witness)
+        label, reason = classify(
+            row, evidence, cohort, alternative, corrected_on, witness, path_witness
+        )
         result.append(
             {
                 "cohort": cohort,
@@ -303,8 +376,10 @@ def failures(rows, directory, cohort, dd_by, current_by, reachability):
                 },
                 **evidence,
                 "empty_witness_steps": witness["steps"] if witness else None,
-                "alternative_success": bool(
-                    alternative and alternative["success"] and not alternative["collision"]
+                "alternative_success": safe_route(alternative),
+                "bicycle_path_witness_cell": path_witness["cell"] if path_witness else None,
+                "bicycle_path_witness_min_clearance_m": (
+                    path_witness["path_min_clearance_m"] if path_witness else None
                 ),
                 "classification": label,
                 "reason": reason,
@@ -317,7 +392,8 @@ def raw_identity(directory):
     """Hash sorted relative names and bytes of raw records/traces without local paths."""
     digest = hashlib.sha256()
     files = sorted(
-        p for subdir in ["results", "traces", "records"] for p in (directory / subdir).glob("*")
+        [directory / "manifest.json"]
+        + [p for subdir in ["results", "traces", "records"] for p in (directory / subdir).glob("*")]
     )
     for path in files:
         digest.update(
@@ -364,6 +440,7 @@ def main():
         (args.review_input, review, True),
     ]:
         measure_rows(directory, rows, instrumented=instrumented)
+    assert all(r["safety_creep_steps"] == 0 for r in current), "creep overrode a safety veto"
     reach = json.loads(args.reachability.read_text())
     assert len(reach) == 10 and all(w["reached"] and w["steps"] < 600 for w in reach)
     comparisons = []
@@ -443,6 +520,7 @@ def main():
             collections.Counter(f"{r['cohort']}/{r['arm']}/P{r['probe']}" for r in classified)
         ),
         "paired_reset_mismatches": [],
+        "fixed_safety_creep_steps": sum(r["safety_creep_steps"] for r in current),
         "t_intersection": {
             "fixed": [
                 r
@@ -519,7 +597,7 @@ def main():
         "clearance_definition": "post-step minimum disc surface clearance to pedestrians and static map walls/bounds, using reset_spawn_clearance collision geometry; last20 available .1s samples",
         "zero_turn_definition": "count of steps on which creep was actually selected after projection and safety, not every zero-speed yaw request",
         "was_creeping_at_termination_definition": "creep was selected at the final executed step; actual terminal speed is reported separately",
-        "classification_rule": "safety-violating or implicit-creep counterfactual artefact; empty or alternative collision-free bicycle trajectory certifies controller error; otherwise case-specific uncertainty, with no unproved geometric limit attribution",
+        "classification_rule": "observed safety/noise/reverse creep defect with a resolving matched counterfactual is an adapter artefact; unresolved observed mapping defects retain case-specific uncertainty; otherwise a matched collision-free bicycle trajectory certifies initial controller reachability, with no unproved geometric limit attribution",
     }
     write_json(output / "bicycle_probe_provenance.json", provenance)
     print(

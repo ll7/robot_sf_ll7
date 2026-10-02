@@ -88,7 +88,7 @@ def freeze(root):
             for p in (comparison_path, robot_path)
         },
     }
-    write_json(root / "grid.json", blob, issue_ref="#10101")
+    write_json(root / "grid.json", blob)
     print("FROZEN", len(ps), "points", blob["groups"], flush=True)
 
 
@@ -146,7 +146,7 @@ def acquire(root, index):  # noqa: C901
         driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         scope="V6 necessary condition only",
     )
-    write_json(out / "identity.json", live, issue_ref="#10101")
+    write_json(out / "identity.json", live)
     print("RESOLVED SEEDS", SEEDS, "GROUP", key, "TASKS", len(tasks), flush=True)
     rows = []
     for i, task in enumerate(tasks):
@@ -173,11 +173,11 @@ def acquire(root, index):  # noqa: C901
         sim = Simulator(np.array([[0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5]]), obstacles=[], config=sc)
         if not np.array_equal(sim.forces[2](), np.zeros((1, 2))):
             raise RuntimeError("empty-wall invariance failed")
-        write_json(out / f"case_{i:04}.json", row, issue_ref="#10101")
+        write_json(out / f"case_{i:04}.json", row)
         rows.append(row)
         print("DONE", i + 1, "/", len(tasks), row["variant"], row["seed"], flush=True)
     gate = suite.acceptance_gate(rows, config=cfg, require_complete=False)
-    write_json(out / "gate.json", gate, issue_ref="#10101")
+    write_json(out / "gate.json", gate)
     members = {
         f.name: hashlib.sha256(f.read_bytes()).hexdigest()
         for f in sorted(out.iterdir())
@@ -192,7 +192,6 @@ def acquire(root, index):  # noqa: C901
             "v6_all_pass": all(c["status"] == "PASS" for c in gate["checks"]),
             "physical_violations": gate["physical_violations"],
         },
-        issue_ref="#10101",
     )
 
 
@@ -243,7 +242,7 @@ def collect(root):
         "claim": "necessary-condition pruning, not full-grid fitness or global optimum",
         "deadline_utc": grid["deadline_utc"],
     }
-    write_json(root / "screen_result.json", result, issue_ref="#10101")
+    write_json(root / "screen_result.json", result)
     print("REJECTED", len(rejected), "SURVIVORS", len(survivors), flush=True)
 
 

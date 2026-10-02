@@ -156,7 +156,7 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
     result["runtime_on_off_ratio"] = (
         on["runtime_ms_per_step"] / result["arms"]["off"]["runtime_ms_per_step"]
     )
-    write_json(out, result, issue_ref="#10101")
+    write_json(out, result)
     text = "AI-GENERATED / NEEDS-REVIEW\n\nPEDCONTACT full-dev CALFIT comparison.\n\n"
     text += "Intervals cover observed dev-seed measurements, not censored episodes. V6 baseline integration is excluded from runtime timing.\n\n"
     for arm, bank in result["arms"].items():

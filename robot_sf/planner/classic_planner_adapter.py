@@ -97,6 +97,7 @@ class PlannerActionAdapter:
                 max_velocity=cfg.max_velocity,
                 max_angular_speed=max_angular_speed,
                 allow_backwards=cfg.allow_backwards,
+                max_curvature=math.tan(cfg.max_steer) / cfg.wheelbase,
             )
         if isinstance(self.robot, DifferentialDriveRobot):
             cfg = self.robot.config
@@ -118,15 +119,28 @@ class PlannerActionAdapter:
         current_speed, _ = self.robot.current_speed
 
         target_speed = float(np.clip(linear_target, config.min_velocity, config.max_velocity))
-        accel = (target_speed - current_speed) / max(self.time_step, 1e-6)
-        accel = float(np.clip(accel, -config.max_accel, config.max_accel))
-
-        if abs(target_speed) < 1e-6:
+        dt = max(float(self.time_step), 1e-6)
+        if abs(target_speed) < 1e-3 and abs(angular_target) > 1e-6:
+            target_speed = min(0.1, config.max_velocity)
+        accel = (target_speed - current_speed) / dt
+        accel = float(np.clip(accel, -config.max_decel, config.max_accel))
+        accel = float(np.clip(accel, self.action_space.low[0], self.action_space.high[0]))
+        achievable_speed = float(
+            np.clip(current_speed + dt * accel, config.min_velocity, config.max_velocity)
+        )
+        yaw_limit = abs(achievable_speed) * math.tan(config.max_steer) / config.wheelbase
+        achievable_yaw = float(np.clip(angular_target, -yaw_limit, yaw_limit))
+        if abs(achievable_speed) < 1e-6:
             steer = 0.0
         else:
-            steer = math.atan(
-                angular_target * config.wheelbase / max(abs(target_speed), 1e-6)
-            ) * np.sign(target_speed)
+            steer = math.atan(achievable_yaw * config.wheelbase / achievable_speed)
+        if self.last_kinematics_diagnostics is not None:
+            self.last_kinematics_diagnostics.update(
+                speed_achievable=achievable_speed,
+                yaw_achievable=achievable_yaw,
+                acceleration_limited=not math.isclose(achievable_speed, target_speed),
+                yaw_limited=not math.isclose(achievable_yaw, angular_target),
+            )
         steer = float(np.clip(steer, -config.max_steer, config.max_steer))
 
         action = np.array([accel, steer], dtype=np.float32)

@@ -97,6 +97,15 @@ class BicycleDriveKinematicsModel:
     max_angular_speed: float
     allow_backwards: bool = False
     name: str = "bicycle_drive"
+    max_curvature: float | None = None
+    creep_speed: float = 0.1
+
+    @property
+    def curvature_limit(self) -> float:
+        """Return tan(max_steer)/wheelbase, or the legacy implied curvature."""
+        if self.max_curvature is not None:
+            return self.max_curvature
+        return self.max_angular_speed / max(self.max_velocity, 1e-6)
 
     @property
     def min_velocity(self) -> float:
@@ -116,20 +125,25 @@ class BicycleDriveKinematicsModel:
         v, omega = command
         return bool(
             self.min_velocity <= v <= self.max_velocity
-            and -self.max_angular_speed <= omega <= self.max_angular_speed
+            and abs(omega) <= min(self.max_angular_speed, abs(v) * self.curvature_limit)
         )
 
     def project(self, command: Command2D) -> Command2D:
-        """Clip command to bicycle velocity and angular limits.
+        """Preserve bounded speed and clip yaw to the bicycle-feasible cone.
+
+        A near-zero-speed turn explicitly requests 0.1 m/s forward creep;
+        a zero/zero stop stays stopped. This is a speed-priority projection,
+        not a Euclidean nearest-point projection.
 
         Returns:
             Command2D: Projected command in feasible set.
         """
         v, omega = command
-        return (
-            float(np.clip(v, self.min_velocity, self.max_velocity)),
-            float(np.clip(omega, -self.max_angular_speed, self.max_angular_speed)),
-        )
+        if abs(v) < 1e-3 and abs(omega) > 1e-6:
+            v = min(self.creep_speed, self.max_velocity)
+        v = float(np.clip(v, self.min_velocity, self.max_velocity))
+        yaw_limit = min(self.max_angular_speed, abs(v) * self.curvature_limit)
+        return v, float(np.clip(omega, -yaw_limit, yaw_limit))
 
     def diagnostics(self, command: Command2D, projected: Command2D) -> dict[str, Any]:
         """Build projection diagnostics payload for metadata and debugging.
@@ -188,9 +202,10 @@ def resolve_benchmark_kinematics_model(
         max_velocity = float(limits.get("max_velocity", limits.get("v_max", 2.0)))
         max_angular = float(limits.get("max_angular_speed", limits.get("omega_max", 1.0)))
         return BicycleDriveKinematicsModel(
-            max_velocity=max_velocity,
-            max_angular_speed=max_angular,
+            max_velocity=float(limits.get("bicycle_max_velocity", max_velocity)),
+            max_angular_speed=float(limits.get("bicycle_max_angular_speed", max_angular)),
             allow_backwards=bool(limits.get("allow_backwards", False)),
+            max_curvature=limits.get("bicycle_max_curvature"),
         )
     if kinematics in {"holonomic", "omni", "omnidirectional"}:
         return HolonomicPassthroughKinematicsModel()

@@ -1512,6 +1512,15 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         scenario=scenario,
         seed=int(seed),
     )
+    if robot_kinematics == "bicycle_drive":
+        robot_cfg = config.robot_config
+        curvature = math.tan(robot_cfg.max_steer) / robot_cfg.wheelbase
+        policy_cfg = dict(policy_cfg)
+        policy_cfg.update(
+            bicycle_max_velocity=robot_cfg.max_velocity,
+            bicycle_max_angular_speed=robot_cfg.max_velocity * curvature,
+            bicycle_max_curvature=curvature,
+        )
     return _EpisodeRunContext(
         scenario=scenario,
         scenario_id=scenario_id,

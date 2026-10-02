@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_bicycle_planner_physics.py",
     "test_check_docs_evidence_integrity.py",
     # D-083 source-bound release admission records workers without reset or step.
     "test_release_campaign_authority.py",

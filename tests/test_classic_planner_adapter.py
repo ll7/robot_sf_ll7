@@ -63,7 +63,8 @@ def test_planner_action_adapter_bicycle_conversion(tmp_path):
     # Accel should saturate at max_accel and steer within max_steer
     assert action.shape == (2,)
     assert action[0] == pytest.approx(robot.config.max_accel)
-    expected_steer = np.clip(np.arctan(0.4 * robot.config.wheelbase / 1.0), -0.5, 0.5)
+    # Only .1m/s is achievable; .4rad/s requires saturated steering.
+    expected_steer = 0.5
     assert action[1] == pytest.approx(expected_steer)
     assert np.all(action <= robot.action_space.high)
     assert np.all(action >= robot.action_space.low)
@@ -116,7 +117,7 @@ def test_bicycle_kinematics_model_projection_and_feasibility() -> None:
     assert model.is_feasible((1.0, 0.2)) is True
     assert model.is_feasible((-0.5, 0.2)) is False
     projected = model.project((-0.5, 1.0))
-    assert projected == pytest.approx((0.0, 0.4))
+    assert projected == pytest.approx((0.0, 0.0))
     diag = model.diagnostics((-0.5, 1.0), projected)
     assert diag["projection_applied"] is True
 
@@ -129,7 +130,9 @@ def test_bicycle_kinematics_model_allows_backwards_when_enabled() -> None:
         allow_backwards=True,
     )
     assert model.min_velocity == pytest.approx(-2.0)
-    assert model.is_feasible((-0.5, 0.2)) is True
+    assert model.is_feasible((-0.5, 0.2)) is False
+    assert model.is_feasible((-0.5, 0.1)) is True
+    assert model.project((-0.5, 0.2)) == pytest.approx((-0.5, 0.1))
 
 
 def test_holonomic_passthrough_kinematics_model() -> None:

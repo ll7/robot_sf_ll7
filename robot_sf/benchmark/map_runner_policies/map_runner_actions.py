@@ -9,6 +9,7 @@ import numpy as np
 
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot
 
 if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -147,10 +148,12 @@ def policy_command_to_env_action(  # noqa: C901
             [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
             dtype=float,
         )
-        max_linear_speed = float(
-            getattr(robot_cfg, "max_linear_speed", getattr(robot_cfg, "max_speed", 0.0)) or 0.0
-        )
+        max_linear_speed = float(robot_max_speed(config) or 0.0)
         max_angular_speed = float(getattr(robot_cfg, "max_angular_speed", 0.0) or 0.0)
+        if isinstance(robot, BicycleDriveRobot):
+            max_angular_speed = (
+                robot_cfg.max_velocity * math.tan(robot_cfg.max_steer) / robot_cfg.wheelbase
+            )
 
     cls_name = robot_cfg.__class__.__name__.lower()
     if isinstance(command, dict):

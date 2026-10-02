@@ -195,9 +195,9 @@ repository). State checked on 2026-10-01 against main and the current open PR he
 
 | ID | Source | Finding | Severity | Verified | Disposition | Link |
 |---|---|---|---|---|---|---|
-| CHAIN-1 | post-freeze chain | Release acceptance refuses the 1,260-cell doorway slice. | P1 (freeze blocker) | confirmed | fix pending in #10081 (open; its review returned FIX) | #10078 |
-| CHAIN-2 | release-notes lane | The authored release template uses seeds 111–140 and is outside the sealed allowlist, so the real run would be refused. | P1 (release day) | confirmed | open; [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085); D-074 | [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) |
-| CHAIN-3 | intake prep | Rehearsal 1 never ran the release packaging tool. | P2 | confirmed | process (D-070) | diss#3026 |
+| CHAIN-1 | post-freeze chain | Release acceptance refused the 1,260-cell doorway slice. | P1 (freeze blocker) | confirmed; fixed | **closed**: [#10081](https://github.com/ll7/robot_sf_ll7/pull/10081) merged in train 2 (`879f75b69eb93ca16006f2019ee5c85c7aa724dd`); `tests/benchmark/test_doorway_release_acceptance.py::test_bound_doorway_slice_accepted` admits all 1,260 unique cells (lines 83–89); the static acceptance witnesses passed on main `f52de283e3b60ec85910fd761e432d07ab748158` on 2026-10-02 | #10078 |
+| CHAIN-2 | release-notes lane | The authored release template used seeds 111–140 and was outside the sealed allowlist. | P1 (release day) | confirmed; fixed | **closed**: train 2 / [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999), D-083; [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) closed after accepted CHAIN-2 verification on 2026-10-02. Both `tests/benchmark/test_release_campaign_authority.py` witnesses passed on main `f52de283e3b60ec85910fd761e432d07ab748158`: real sealed-file resolution, source-bound recording-stub admission, retired-band and retired-template refusal, without reset or step. Packaging remains a separate CHAIN-3 requirement | [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) |
+| CHAIN-3 | intake prep | Rehearsal 1 never ran the release packaging tool. | P2 | confirmed; still open | **blocked before execution** in the 2026-10-02 CHAIN-3 probe: a source-bound D-083 development projection (14 arms × 48 scenarios × seeds 1001–1003, budgets 400/500/600/650/700) was refused by `scripts/tools/resolve_benchmark_release_identity.py generate`, exit 2: `0.0.8 requires the exact sealed evaluation seeds (D-049)`. Construction/reset/step were blocked in the probe. No campaign or publication bundle was produced; D-070 and dissertation intake remain unproven. See [D-070's rehearsal status](decisions.md#d-070-the-freeze-commit-is-the-train-2-head-on-main-after-rehearsal-2-passes-on-it) | diss#3026; [#10013](https://github.com/ll7/robot_sf_ll7/issues/10013) |
 | CHAIN-4 | runbook | The post-freeze chain has 12 gaps (G01–G12). | P1 | confirmed | G05, G07, G08-mint and G11 fixed in private-ops #421; G09 partly fixed; the rest open | runbook_report.md, private-ops review archive |
 | CHAIN-5 | release-notes lane | The former SNQI calibration file name said dev101_102 but held 1001/1002 data. | P3 | confirmed; fixed | **closed**: #10045 renamed it to `calibration.dev1001_1002_scheduled_acquisition.yaml`; enforced by `test_development_calibration_matches_candidate_and_preserves_frozen_007` (`tests/unit/benchmark/test_snqi_v2.py:79–94`) | [#10045](https://github.com/ll7/robot_sf_ll7/pull/10045) |
 | SCN-A1 | obstacle-force investigation | Scenario authoring defects: the double bottleneck, a station platform waypoint, a stale slice manifest. | P2 | confirmed | **0.1.0** | #10062 |
@@ -236,10 +236,10 @@ Each finding is counted once under its main disposition (the first one in its ro
 | 0.1.0 issue only | 17 |
 | disclosure or retained method | 29 |
 | explained by another finding | 1 |
-| fix pending in an open pull request | 4 |
-| fixed in a merged pull request | 50 |
+| fix pending in an open pull request | 3 |
+| fixed in a merged pull request | 52 |
 | not exposed in the 0.0.8 release | 18 |
-| open release-chain follow-up | 2 |
+| open release-chain follow-up | 1 |
 | partly fixed release-chain follow-up | 1 |
 | process or seed policy | 4 |
 | refuted | 1 |

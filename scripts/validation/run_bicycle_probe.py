@@ -133,6 +133,20 @@ ORIG_MAKE = episode.make_robot_env
 ORIG_ACTION = episode._policy_command_to_env_action
 ORIG_PROJECT = BicycleDriveKinematicsModel.project
 ORIG_SAFETY = episode._step_safety_filters
+ORIG_CONVERT = episode._step_convert_and_execute
+
+
+def conversion_capture(state, slc, *, policy_command, step_is_native, env):
+    """Capture native commands too; they bypass absolute-velocity conversion."""
+    ACTIVE["native_action"] = bool(step_is_native)
+    if step_is_native:
+        ACTIVE["pending"] = list(map(float, policy_command[:2]))
+    return ORIG_CONVERT(
+        state, slc, policy_command=policy_command, step_is_native=step_is_native, env=env
+    )
+
+
+episode._step_convert_and_execute = conversion_capture
 
 
 def safety_capture(state, slc, **kwargs):
@@ -233,6 +247,7 @@ def make_capture(*args, **kwargs):
             "step": len(ACTIVE["trace"]),
             "cmd": command,
             "final_command": final_command,
+            "native_action": ACTIVE.pop("native_action", False),
             "pre_pose": pre_pose,
             "yaw": yaw,
             "v": v,

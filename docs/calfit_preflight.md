@@ -128,3 +128,19 @@ this diagnostic kernel. A test replaces trajectory generation only, invokes
 the real configured force, and uses no production test seam. Nonempty-wall
 force equations are unchanged. Failed exponential acquisition attempts are
 preserved and retried only after this verified cause is fixed.
+
+The real dev1001 speed probe protects positive normal assignment independently
+of the integration cap. The previous runner has no distribution override and
+fails on that actual API argument; after the change the first desired draw is
+1.467141 m/s versus the previous 1.486464 m/s. With a deliberately lower .2 m/s
+integration cap, the desired draw is retained and measured speed is capped at
+.2 m/s. Existing cap coverage replaced PedState with a stub and never exercised
+normal assignment. This probe uses actual Simulator/PedState, no test seam;
+it steps briefly and is intentionally outside the static fast-file registry.
+
+The search custody test writes a full synthetic bank through the real marked
+acquisition writer, reopens NumPy raw arrays, validates the complete manifest,
+and rejects deliberately corrupted bytes. The nearest suite acquisition test
+covers the old runner, not the new candidate writer. The one-round control
+protects unique bounded refinement settings and forbids ranking censored flow
+as zero. These are new feature controls, not pre-existing bug claims.

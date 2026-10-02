@@ -226,6 +226,9 @@ def test_historical_runner_cap_matches_main_oracle(  # noqa: PLR0913
     config_name, name, algo, seed, steps, reason, avg_speed, failure_to_progress, monkeypatch
 ):
     """Native dev-seed oracle; changed planner values bisected through main 3a7a46a9."""
+    import numpy as np
+
+    import robot_sf.benchmark.map_runner.map_runner_episode as episode
     from robot_sf.benchmark.map_runner.map_runner import _build_policy
     from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 

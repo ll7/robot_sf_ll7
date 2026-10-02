@@ -18,13 +18,13 @@ def test_known_trajectories_make_every_primary_estimator_observable():
     )
 
 
-def test_target_records_expose_policy_block_before_model_search():
+def test_target_records_pass_author_policy_before_model_search():
     result = preflight.audit()
     assert result["ideal_gate"]["measurement_missing"] == []
     assert result["ideal_gate"]["physical_violations"] == []
-    assert result["ideal_gate"]["exit_code"] == 5
-    assert {g["exit_code"] for g in result["per_case_gate"].values()} == {0, 5}
-    assert result["search_admissible"] is False
+    assert result["ideal_gate"]["exit_code"] == 0
+    assert {g["exit_code"] for g in result["per_case_gate"].values()} == {0}
+    assert result["search_admissible"] is True
     assert result["experiment_episodes"] == 0
 
 
@@ -49,12 +49,17 @@ def test_actual_gate_keeps_missingness_and_physics_separate_from_policy():
     assert gate["physical_violations"] == ["V2/0.61/1001"]
 
 
-def test_cli_persists_blocked_receipt_with_source_identity(tmp_path):
+def test_cli_persists_admissible_receipt_with_source_identity(tmp_path):
     out = tmp_path / "preflight.json"
-    assert preflight.main(["--out", str(out)]) == 2
+    assert preflight.main(["--out", str(out)]) == 0
     receipt = json.loads(out.read_text())
     assert receipt["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert receipt["all_estimators_known_answer_pass"] is True
-    assert len(receipt["source_sha256"]) == 6
+    assert len(receipt["source_sha256"]) == 7
     assert "robot_sf/research/pedestrian_acceptance.py" in receipt["source_sha256"]
     assert all(len(digest) == 64 for digest in receipt["source_sha256"].values())
+
+
+def test_feasible_geometry_roundoff_does_not_block_preflight(monkeypatch):
+    monkeypatch.setattr(suite, "acceptance_gate", lambda *args, **kwargs: {"exit_code": 0})
+    assert preflight.audit()["search_admissible"] is True

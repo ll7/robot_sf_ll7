@@ -94,6 +94,7 @@ def _identity(point, seeds, config):
                 Path(suite.__file__),
                 Path(suite.estimators.__file__),
                 suite.ROOT / "robot_sf/research/pedestrian_acceptance.py",
+                suite.ROOT / "robot_sf/research/pedestrian_initial_state.py",
             ]
         },
     }

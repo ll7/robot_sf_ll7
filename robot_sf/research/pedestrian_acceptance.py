@@ -82,6 +82,19 @@ REQUIRED = {
 }
 
 
+def _distribution_tolerance(target, band, sd):
+    """Keep a reported band/SD distinct from the author fallback.
+
+    Returns:
+        Acceptance range and its explicit provenance rule.
+    """
+    if band is not None:
+        return band, "literature reported band"
+    if sd is not None:
+        return [target - sd, target + sd], "literature mean ± 1 reported SD"
+    return [0.8 * target, 1.2 * target], "no reported SD; author fallback ±20% of literature mean"
+
+
 def _case_checks(case, variant, bank, config):
     """Build source-bound checks for one measurement bank.
 
@@ -140,42 +153,18 @@ def _case_checks(case, variant, bank, config):
                 "±20% of literature flow",
             )
         )
-    elif case == "V5":
-        target = config["V5"]["published_lateral_m"]
-        bounds = config["V5"].get("acceptance_range_m")
-        if bounds is None and config["V5"].get("published_sd_m") is not None:
-            sd = config["V5"]["published_sd_m"]
-            bounds = [target - sd, target + sd]
-        checks.append(
-            _check(
-                case,
-                variant,
-                required[case][0],
-                values,
-                target,
-                bounds,
-                "literature mean ± 1 reported SD; no SD verified in supplied target",
-            )
-        )
-    elif case == "V6":
-        i = config["V6"]["speeds_m_s"].index(float(variant))
-        target = config["V6"]["published_onset_m"][i]
-        ranges = config["V6"].get("acceptance_ranges_m")
-        bounds = ranges[i] if ranges else None
-        spread = config["V6"].get("published_onset_sd_m")
-        if bounds is None and spread and spread[i] is not None:
-            bounds = [target - spread[i], target + spread[i]]
-        checks.append(
-            _check(
-                case,
-                variant,
-                required[case][0],
-                values,
-                target,
-                bounds,
-                "literature mean ± 1 reported SD; Table 1 reports means only",
-            )
-        )
+    elif case in {"V5", "V6"}:
+        source = config[case]
+        if case == "V5":
+            target = source["published_lateral_m"]
+            band, sd = source.get("acceptance_range_m"), source.get("published_sd_m")
+        else:
+            i = source["speeds_m_s"].index(float(variant))
+            target = source["published_onset_m"][i]
+            band = (source.get("acceptance_ranges_m") or [None] * 3)[i]
+            sd = (source.get("published_onset_sd_m") or [None] * 3)[i]
+        bounds, rule = _distribution_tolerance(target, band, sd)
+        checks.append(_check(case, variant, required[case][0], values, target, bounds, rule))
     return checks
 
 
@@ -232,7 +221,7 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
 
     Full acquisition admission additionally requires the complete declared grid;
     callers evaluating a single case receive an explicitly observed-cases scope.
-    V5/V6 without reported spread stay unspecified until the author supplies it.
+    V5/V6 without reported spread use the author-approved ±20% fallback.
 
     Returns:
         Gate table with residuals, ranges, provenance and independent hard failures.

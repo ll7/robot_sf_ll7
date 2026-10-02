@@ -23,6 +23,12 @@ from robot_sf.evidence.writers import write_json, write_text
 from robot_sf.research import emergent_phenomena as ep
 from robot_sf.research import pedestrian_validation as estimators
 from robot_sf.research.pedestrian_acceptance import engineering_gate, feasible_apertures
+from robot_sf.research.pedestrian_initial_state import (
+    attach_initial_receipts,
+    holding_state,
+    initial_admissibility,
+    require_initial_admissibility,
+)
 from robot_sf.sim.obstacle_force_profile import apply_obstacle_force_profile
 from robot_sf.sim.sim_config import SimulationSettings
 from scripts.validation import compare_obstacle_laws_10061 as reused
@@ -347,6 +353,7 @@ def protocol_simulate(  # noqa: PLR0913
     Returns:
         Measurement values with explicit missingness and units.
     """
+    require_initial_admissibility(state, segments, config.scene_config.agent_radius)
     walls = [(a, c, b, d) for a, b, c, d in segments]
     sim = pysocialforce.Simulator(state=state.copy(), obstacles=walls, config=config)
     positions, speeds = [sim.peds.pos().copy()], []
@@ -415,6 +422,9 @@ def run_task(task):  # noqa: C901, PLR0915
         reused.RADIUS,
     )
     traces = []
+    input_audits = []
+    trace_segments = []
+    holding_receipts = []
     original_force = reused.ObstacleForce.__call__
 
     def configured(candidate, speed):
@@ -438,6 +448,20 @@ def run_task(task):  # noqa: C901, PLR0915
         return cfg
 
     def captured(state, segments, config, steps, **kwargs):
+        if case in {"V3", "V4"}:
+            state, segments, holding = holding_state(
+                state,
+                segments,
+                wide=case == "V4",
+                radius_m=radius,
+                seed=seed,
+                aperture_width_m=float(variant),
+            )
+            holding_receipts.append(holding)
+        input_audits.append(
+            initial_admissibility(state, segments, config.scene_config.agent_radius)
+        )
+        trace_segments.append(segments)
         extra = (
             {"desired_distribution": (1.29, 0.19), "desired_seed": seed}
             if options.get("calfit")
@@ -490,6 +514,15 @@ def run_task(task):  # noqa: C901, PLR0915
             p = traces[-1][0]
             row["legacy_spatial_speed_drop_m_s"] = row.pop("speed_drop_m_s")
             row.update(estimators.aperture_drop(p[:, 0], np.arange(len(p)) * 0.1, plane_m=8.0))
+            row["passage_diagnostic"] = {
+                "passage_plane_m": 8.0,
+                "maximum_x_m": float(p[:, 0, 0].max()),
+                "final_x_m": float(p[-1, 0, 0]),
+                "terminal_speed_m_s": float(traces[-1][1][-1, 0]),
+                "last_10s_displacement_m": float(
+                    np.linalg.norm(p[-1, 0] - p[max(0, len(p) - 101), 0])
+                ),
+            }
             row.update(
                 aperture_shoulder_ratio=ratio,
                 shoulder_width_m=shoulder,
@@ -506,6 +539,7 @@ def run_task(task):  # noqa: C901, PLR0915
                 )
             )
             p = traces[-1][0]
+            row.update(reused.wall_metrics(p, trace_segments[-1]))
             if case == "V4":
                 row.update(
                     estimators.bottleneck_flow(
@@ -550,6 +584,7 @@ def run_task(task):  # noqa: C901, PLR0915
             # Source speed conditions are controlled, even in the literature tier.
             cfg.scene_config.desired_speed_mean, cfg.scene_config.desired_speed_std = speed, 0.0
             steps = int(np.ceil(12 / speed / 0.1))
+            input_audits.append(initial_admissibility(state, [], cfg.scene_config.agent_radius))
             p, v, desired = protocol_simulate(
                 state,
                 [],
@@ -586,6 +621,7 @@ def run_task(task):  # noqa: C901, PLR0915
         else:
             raise ValueError(f"unknown case {case}")
         p, v, desired = traces[-1]
+        attach_initial_receipts(row, input_audits, holding_receipts)
         row["pair_overlap"] = estimators.pair_overlap(p, radius, row["groups"])
         row["desired_speeds_m_s"] = desired.tolist()
         row["execution_cap_m_s"] = (

@@ -108,3 +108,21 @@ def test_original_shoulder_rotation_case_is_a_limitation_not_a_failed_gate():
         == "not reproducible with rigid discs (shoulder rotation)"
     )
     assert len(result["checks"]) == 1
+
+
+@pytest.mark.parametrize(
+    "case,variant,field,target,bounds",
+    [
+        ("V5", "diagnostic", "lateral_cm_to_edge_m", 0.5, [0.4, 0.6]),
+        ("V6", "1.15", "onset_m", 2.1, [1.68, 2.52]),
+    ],
+)
+def test_unreported_distribution_sd_uses_author_twenty_percent_fallback(
+    case, variant, field, target, bounds
+):
+    gate = suite.acceptance_gate([row(case, variant, **{field: target})])
+    check = gate["checks"][0]
+    assert gate["exit_code"] == 0
+    assert check["tolerance_range"] == pytest.approx(bounds)
+    assert "no reported SD" in check["rule"]
+    assert "20%" in check["rule"]

@@ -414,6 +414,7 @@ _FAST_FILE_PREFIXES = (
 )
 _FAST_FILES = {
     "test_calfit_author_ruling.py",
+    "test_calfit_initial_admission.py",
     "test_calfit_exponential_empty_walls.py",
     "test_calfit_preflight.py",
     "test_calfit_search.py",

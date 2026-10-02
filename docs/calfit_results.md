@@ -1,5 +1,7 @@
 <!-- AI-GENERATED NEEDS-REVIEW -->
-# CALFIT bounded search — 2026-10-02
+# CALFIT historical input-defect screen — 2026-10-02
+
+**Superseded by the author protocol-repair ruling.** The V3 starts were inadmissible; this preserved screen is suite-defect evidence, not an accepted model safety/flow result. See [the repaired-protocol continuation](./calfit_protocol_repair.md).
 
 NO-PASS; AUTHOR_DECISION_REQUIRED. Draft [#10094](https://github.com/ll7/robot_sf_ll7/pull/10094), stacked on draft [#10075](https://github.com/ll7/robot_sf_ll7/pull/10075). The author ruling on feasible V2 and uniform tolerances is implemented; those decisions remain settled.
 

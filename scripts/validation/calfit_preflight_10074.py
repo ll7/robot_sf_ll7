@@ -173,7 +173,7 @@ def audit() -> dict[str, object]:
         "rigid_disc_aperture_geometry": geometry,
         "search_admissible": gate["exit_code"] == 0
         and all(c["known_answer_pass"] for c in controls)
-        and all(width >= 2 * 0.28 + 0.05 for width in feasible_apertures(0.28)),
+        and all(width + 1e-12 >= 2 * 0.28 + 0.05 for width in feasible_apertures(0.28)),
         "source_sha256": {
             str(path.relative_to(suite.ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (
@@ -181,6 +181,7 @@ def audit() -> dict[str, object]:
                 Path(suite.__file__),
                 Path(m.__file__),
                 suite.ROOT / "robot_sf/research/pedestrian_acceptance.py",
+                suite.ROOT / "robot_sf/research/pedestrian_initial_state.py",
                 Path(suite.reused.__file__),
                 suite.DEFAULT_CONFIG,
             )

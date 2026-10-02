@@ -301,7 +301,7 @@ def test_literature_cap_preserves_normal_simulator_step_and_desired_force(monkey
             self.t += 1
 
     monkeypatch.setattr(suite.pysocialforce, "Simulator", Sim)
-    config = SimpleNamespace(scene_config=SimpleNamespace(dt_secs=0.1))
+    config = SimpleNamespace(scene_config=SimpleNamespace(dt_secs=0.1, agent_radius=0.25))
     p, _, desired = suite.protocol_simulate(np.zeros((1, 7)), [], config, 2, speed_cap_m_s=3)
     assert observed["callbacks"] == [0, 1], "literature tier bypasses normal simulator stepping"
     assert observed["force_desired"] == [1.3, 1.3]

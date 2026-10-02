@@ -34,7 +34,11 @@ evidence_tree_refresh_addenda:
         locators. The original 8b16cb1b matrix SHA-256, producer commits and
         scientific outcomes remain unchanged. Both findings disappear instead
         of being baselined; 450 previously reviewed findings remain. Current
-        artifact/custody digests are regenerated. Diagnostic custody repair
+        artifact/custody digests are regenerated. The current root provenance record
+        also normalizes its three historical home-path strings, carries an
+        explicit sidecar with its original producer digest/commit, and loses
+        its verbatim-source exemption. No numeric measurement is rewritten.
+        Diagnostic custody repair
         only; no scientific admission or maintainer sign-off is claimed.
   - issue: 10007
     reviewed_date: 2026-10-01

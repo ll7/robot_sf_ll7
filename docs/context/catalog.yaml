@@ -8077,3 +8077,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

@@ -71,7 +71,7 @@
     ],
     "submit_host": "imech192"
   },
-  "location": "Local validation artifacts /home/luttkule/admfix_evidence; Slurm source artifacts imech192:/home/luttkule/admfix; compact evidence tracked in this bundle; raw artifacts have no durable shared archive.",
+  "location": "Local validation artifacts producer-home/luttkule/admfix_evidence; Slurm source artifacts imech192:producer-home/luttkule/admfix; compact evidence tracked in this bundle; raw artifacts have no durable shared archive.",
   "manually_inspected_trace_pairs": 17,
   "paired_analysis_artifact_sha256": {
     "changed_outcome_classifications.json": "534d2efbe38ef06b558be3e781e2d2cfa5fef0accc59f508bff1007ac6eb840c",
@@ -175,7 +175,7 @@
   "tested_files_identical_on_evidence_parent": true,
   "unexplained_first_finite_divergences": 0,
   "unit_probe_base": {
-    "module_path": "/home/luttkule/admfix-base/robot_sf/planner/risk_dwa.py",
+    "module_path": "producer-home/luttkule/admfix-base/robot_sf/planner/risk_dwa.py",
     "rows": [
       {
         "brake_min_surface_clearance": -1.2591987215967126,
@@ -205,7 +205,7 @@
     "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
   },
   "unit_probe_pr": {
-    "module_path": "/home/luttkule/admfix/robot_sf/planner/risk_dwa.py",
+    "module_path": "producer-home/luttkule/admfix/robot_sf/planner/risk_dwa.py",
     "rows": [
       {
         "brake_min_surface_clearance": -1.2591987215967126,

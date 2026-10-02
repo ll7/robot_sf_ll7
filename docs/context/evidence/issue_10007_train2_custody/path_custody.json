@@ -1,5 +1,5 @@
 {
-  "claim_boundary": "Path normalization and exact producer-byte custody only; no scientific admission or outcome edits. producer-home/<user>/ denotes the original producer home and producer-root/ the original root. Normalized files are inspection copies; use the pinned sources for checksums.",
+  "claim_boundary": "Path normalization and exact producer-byte custody only; no scientific admission or outcome edits. producer-home/<user>/ denotes the original producer home and producer-root/ the original root. Normalized files are inspection copies; use the pinned sources for checksums. Exception: issue_10064 provenance.json now normalizes home-prefix and historical matrix locators in its root inspection record; its original producer bytes/digest remain in reviewed Git ancestry and its review sidecar. Numeric measurements and producer commits are unchanged.",
   "evidence_status": "diagnostic-only",
   "records": [
     {
@@ -58,14 +58,14 @@
       }
     },
     {
-      "normalization": "Only home/root prefixes and historical matrix resolved_path locators change; numeric observations, source commits and measurement digests unchanged.",
+      "normalization": "Home/root prefixes and historical matrix resolved_path locators normalized in the current record; original producer bytes/digest remain in reviewed Git ancestry; numeric observations, producer commits and measurement digests unchanged.",
       "portable": {
         "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json",
         "sha256": "f628b79ea0ad1ce0e0378e60c382787e353edfb24f2828d905b54f1d28a7bf79"
       },
       "source": {
         "path": "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json",
-        "sha256": "eba63874eb0148198b9761b57897599766906eaab7a4daa3a274b283be3af0e0"
+        "sha256": "f628b79ea0ad1ce0e0378e60c382787e353edfb24f2828d905b54f1d28a7bf79"
       }
     },
     {

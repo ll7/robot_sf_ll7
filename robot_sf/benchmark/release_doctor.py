@@ -496,6 +496,14 @@ def _manifest_check(
     """
     try:
         manifest = load_release_manifest(manifest_path, repository_root=repository_root)
+        if getattr(manifest, "release_kind", None) == "development_rehearsal":
+            return (
+                ReleaseDoctorCheck(
+                    "manifest", "fail", "development rehearsal cannot be minted as a release"
+                ),
+                manifest,
+                None,
+            )
         if getattr(manifest, "resolved_identity_path", None) is not None:
             cfg = load_release_campaign_config(
                 manifest,

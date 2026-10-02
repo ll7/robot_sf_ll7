@@ -1441,7 +1441,7 @@ For details on verification, see [release_artifact_badging.md](docs/release_arti
     return computed_badging, achieved_level
 
 
-def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
+def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
     run_dir: Path,
     out_dir: Path,
     *,
@@ -1604,6 +1604,15 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
                 "snqi_claim_policy": "advisory_no_ranking",
             },
         }
+    release_result_path = run_root / "release/release_result.json"
+    if release_result_path.is_file():
+        release_result = _read_json_file(release_result_path)
+        if (
+            release_result.get("benchmark_release", {}).get("release_kind")
+            == "development_rehearsal"
+        ):
+            manifest_payload["release_kind"] = "development_rehearsal"
+            manifest_payload["release_eligible"] = False
 
     # Dynamically compute badging block and emit README
     if artifact_badging is not None:
@@ -2604,6 +2613,23 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
             violations.append("release metadata cold-verification credential policy is invalid")
 
 
+def _preflight_check_development_marker(
+    payload_dir: Path, manifest: dict[str, Any], violations: list[str]
+) -> None:
+    """Require the non-release marker to agree across signed payload and bundle."""
+    path = payload_dir / "release/release_result.json"
+    result = _read_json_file(path) if path.is_file() else {}
+    diagnostic = result.get("benchmark_release", {}).get("release_kind") == "development_rehearsal"
+    if diagnostic != (manifest.get("release_kind") == "development_rehearsal"):
+        violations.append("development rehearsal marker differs between payload and bundle")
+    if diagnostic and (
+        manifest.get("release_eligible") is not False
+        or result.get("release_eligible") is not False
+        or result.get("release_benchmark_success") is not False
+    ):
+        violations.append("development rehearsal must remain non-releasable in payload and bundle")
+
+
 def _preflight_check_release_reconciliation(
     payload_dir: Path,
     require_release_reconciliation: bool,
@@ -2805,6 +2831,7 @@ def verify_publication_bundle_preflight(
         violations.append(f"checksums.sha256 cannot be validated: {exc}")
         checksums = {}
     _preflight_check_channels(manifest, violations=violations, warnings=warnings)
+    _preflight_check_development_marker(payload_dir, manifest, violations)
     _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
     try:
         _preflight_check_release_reconciliation(
@@ -2846,4 +2873,6 @@ def verify_publication_bundle_preflight(
     }
     if status == "fail":
         raise PublicationPreflightError("Publication preflight failed: " + "; ".join(violations))
+    if manifest.get("release_kind") == "development_rehearsal":
+        report["release_eligible"] = False
     return report

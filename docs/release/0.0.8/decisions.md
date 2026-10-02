@@ -1565,25 +1565,15 @@ Historical measurements below are attributed to the named review report; they we
   for 93ba0d75 and each constituent.
 - **Reopen:** New material evidence or an explicit author ruling.
 
-**Rehearsal status, 2026-10-02 (CHAIN-3):** The current main source
-`f52de283e3b60ec85910fd761e432d07ab748158` has no development-seed override
-in `scripts/tools/resolve_benchmark_release_identity.py generate`. A diagnostic
-source checkout copied the real D-083 campaign, matrix, planner inputs and
-identity template, generated a fixed-list projection with seeds 1001–1003,
-and regenerated its campaign checksum and matrix cardinality (2,016 cells).
-The public resolver rejected that committed projection with exit 2:
-`resolved release template validation failed: 0.0.8 requires the exact sealed evaluation seeds (D-049)`.
-`robot_sf/benchmark/release_protocol.py::_validate_release_seed_policy`
-requires sealed equality for the selected 0.0.8 inputs; the full acceptance
-gate separately requires 30 seeds and 20,160 cells. Environment construction,
-reset and step were blocked throughout the probe. This is an admission refusal,
-not a sealed-seed execution or a completed rehearsal. No Slurm campaign,
-publication bundle, bundle validation, comparator result or dissertation
-intake bundle was produced. The defined full pipeline still needs a diagnostic
-development identity that cannot grant sealed release acceptance. The named
-runner `--mode rehearsal` only checks admissions and creates neither episodes
-nor a publication bundle, as documented in [RELEASE.md](../../RELEASE.md#preflight).
-No freeze SHA or release-readiness claim follows from this probe.
+**Rehearsal status, 2026-10-02 (CHAIN-3):** The original development projection
+was refused before execution on `f52de283e3b60ec85910fd761e432d07ab748158`.
+The orchestrator authorised a separate, permanently non-releasable development
+identity in D-086. Its public opt-in retains the D-083 source inputs and shared
+runner/exporter/validators. The prescribed campaign remains 14 arms × 48
+scenarios × seeds 1001–1003 (2,016 cells). The exact-source preparatory smoke
+uses all 14 arms and 48 scenarios on seed 1001 (672 cells). No release acceptance,
+freeze SHA or completed packaging/intake claim follows from identity admission.
+Execution and bundle evidence will be recorded here after the end-to-end run.
 
 ### D-071: Public merge trains land with merge commits after a full suite on the exact train head
 - **Date:** 2026-09-30 (trains); 2026-10-01 (full-suite rule)
@@ -1883,6 +1873,17 @@ No freeze SHA or release-readiness claim follows from this probe.
 - **Enforced by:** tests/validation/test_release_spawn_goal_overlap.py::test_guarded_ppo_overtaking_cell_preserves_speed_envelope_caveat;
   tests/validation/test_release_spawn_goal_overlap.py::test_overtaking_budget_is_authored_and_release_inherits_it.
 - **Reopen:** changed policy training envelope, scenario speed cap or explicit author ruling.
+### D-086: Development packaging identities are permanently non-releasable
+- **Date:** 2026-10-02
+- **Question:** How can D-070 rehearse the full release path without running held-out seeds?
+- **Choice:** Add the explicit public resolver opt-in `generate --development-rehearsal --development-seeds 1001,1002,1003`. Only unique development seeds 1001–1030 are admitted; retired 111–140 and the sealed tuple are refused before execution. Materialize the same D-083 template, matrix, planners, budgets and source closure with a digest-covered `release_kind: development_rehearsal` marker and diagnostic coordinates. The common runner, Slurm wrapper, exporter, bundle validators and D-062 comparator remain in use. The preparatory smoke uses the same 14 × 48 matrix on seed 1001; the campaign uses seeds 1001–1003. Results and bundles retain `release_eligible: false`; the comparator requires diagnostic mode.
+- **Decided by:** orchestrator, explicit CHAIN-3 decision, 2026-10-02, following merged records PR [#10102](https://github.com/ll7/robot_sf_ll7/pull/10102).
+- **Reason:** The sealed-only resolver prevented the development full-pipeline rehearsal. A distinct diagnostic identity provides executable packaging evidence while preserving sealed admission.
+- **Alternatives:** Relax the sealed gate or run held-out seeds. Neither is authorised.
+- **Evidence:** CHAIN-3's original exit-2 refusal recorded under D-070; the public CLI round-trip and recording-worker witnesses use real source-bound D-083 inputs without construction/reset/step.
+- **Enforced by:** `tests/benchmark/test_release_development_rehearsal.py::test_public_development_identity_round_trip`, `test_public_rehearsal_refuses_non_development_inventory`, `test_rehearsal_marker_cannot_be_stripped`, `test_rehearsal_cannot_acquire_release_status`, `test_rehearsal_publication_contract_refuses_release`, `test_shared_exporter_preserves_non_release_marker`, `test_development_smoke_keeps_shared_admission_and_digest_checks` and `test_development_comparator_uses_same_pinned_runtime`. The parameterized release-boundary witness covers sealed/full acceptance, mint preflight, DOI metadata/binding, tag tooling, comparator release mode and release runtime-smoke admission.
+- **Reopen:** Changed diagnostic scope or explicit author/orchestrator ruling. Rehearsal output can never become release evidence by removing a marker.
+
 ## Private working labels
 
 These private labels were never public ledger IDs. Read each citation in its PR context; a collision does not supersede the public entry of the same number. Bodies of the 100 most recently updated PRs were scanned, including every PR citing the labels named in this catch-up request.

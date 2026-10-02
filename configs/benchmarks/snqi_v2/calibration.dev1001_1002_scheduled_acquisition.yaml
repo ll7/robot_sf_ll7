@@ -2,6 +2,7 @@
 # The four v4 slots fail closed until #9748 freezes their parameters.
 # No SNQI-v2 scoring until calibration anchors are reviewed and merged.
 name: snqi_v2_calibration_dev1001_1002
+protocol_version: 0.0.8
 paper_facing: false
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml

@@ -39,7 +39,9 @@ SMOKE_MANIFEST_PATH = REPO_ROOT / (
 CAMPAIGN_TEMPLATE_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
-CALIBRATION_CONFIG_PATH = REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+CALIBRATION_CONFIG_PATH = (
+    REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+)
 RUNTIME_SMOKE_V03_CONFIG_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
 )
@@ -543,7 +545,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     ]
     calibration, smoke, template = raw
     assert template["protocol_version"] == smoke["protocol_version"] == "0.0.8"
-    assert calibration.get("protocol_version") is None
+    assert calibration["protocol_version"] == "0.0.8"
     assert calibration["planners"] == smoke["planners"] == template["planners"]
     _assert_versioned_kernel_and_v4_freeze(raw, scenarios)
     allowed_calibration_differences = {

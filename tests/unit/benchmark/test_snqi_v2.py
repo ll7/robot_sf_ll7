@@ -75,7 +75,9 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     frozen_bytes = FROZEN_007_CAMPAIGN.read_bytes()
     assert hashlib.sha256(frozen_bytes).hexdigest() == FROZEN_007_CAMPAIGN_SHA256
     frozen = yaml.safe_load(frozen_bytes)
-    calibration = yaml.safe_load((ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml").read_bytes())
+    calibration = yaml.safe_load(
+        (ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml").read_bytes()
+    )
     template = yaml.safe_load(
         (
             ROOT
@@ -96,7 +98,7 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["arm_isolation"] == "subprocess"
     assert calibration["planners"] == template["planners"]
     assert template["protocol_version"] == "0.0.8"
-    assert calibration.get("protocol_version") is None
+    assert calibration["protocol_version"] == "0.0.8"
 
     # D-057 keeps release and calibration rows untraced; rehearsal 2 carries diagnostics.
     assert template.get("record_simulation_step_trace", False) is False
@@ -689,7 +691,7 @@ def records():
             "metrics": metrics(success=success),
         }
         for key, success in (("a", 1), ("b", 0))
-        for seed in (1001, 1002)
+        for seed in (201, 202)
     ]
 
 
@@ -1741,6 +1743,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
         ),
         seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001, 1002) if scheduled else (101, 102)),
         horizon=None if scheduled else 600,
+        protocol_version="0.0.8" if scheduled else None,
         dt=0.1,
         **options,
     )
@@ -2842,7 +2845,7 @@ def test_snqifix_candidate_drops_legacy_snqi():
 @pytest.mark.parametrize(
     "budget,scenario",
     [
-        (400, "francis2023_pedestrian_overtaking"),
+        (600, "francis2023_pedestrian_overtaking"),
         (650, "classic_station_platform_medium"),
         (700, "classic_realworld_double_bottleneck_high"),
     ],
@@ -3088,6 +3091,7 @@ def test_snqifix2_force_clipping_does_not_hide_raw_redundancy():
     assert result["per_arm_clipped_at_one_fraction"]["witness"]["N"] == 0.76
 
 
+@pytest.mark.heldout_seed_ok(reason="Static seed-list commitment equality; no episode execution")
 def test_snqifix2_sealed_seed_companion_equality():
     """The temporary static companion must agree with the seed authority when available."""
     import importlib.util

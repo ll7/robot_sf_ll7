@@ -258,7 +258,10 @@ class SnqiV2Spec:
         if any(type(seed) is not int for seed in seeds):
             raise ValueError("SNQI-v2 evaluation seeds must be integers")
         if set(seeds) & (
-            set(self.calibration_seeds) | {101, 102} | set(range(111, 141)) | set(range(1001, 1031))
+            set(self.calibration_seeds)  # seed-holdout: setup-only (admission exclusion metadata)
+            | {101, 102}
+            | set(range(111, 141))  # seed-holdout: setup-only (retired-band admission exclusion)
+            | set(range(1001, 1031))
         ):
             raise ValueError("SNQI-v2 evaluation seeds overlap calibration/development split")
 

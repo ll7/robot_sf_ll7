@@ -627,6 +627,8 @@ _FAST_FILES = {
     "test_example_prerequisites.py",
     # Deterministic resolved-config drift contracts for the compute-sunset
     # configuration example (issue #8904).
+    # Read-only distribution oracles; all 15 calls together are below 2 seconds.
+    "test_compare_release_distributions.py",
     "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",

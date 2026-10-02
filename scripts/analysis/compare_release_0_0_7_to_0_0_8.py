@@ -111,7 +111,7 @@ def _slot(row: Mapping[str, Any], run_name: str) -> tuple[str, str, str, int, st
     return planner, kinematics, scenario, seed, track or ""
 
 
-def _insert_rows(
+def _insert_rows(  # noqa: C901 - independent row admission and compaction guards
     rows: dict[tuple[str, str, str, int, str], dict[str, Any]],
     raw_lines: Any,
     run_name: str,
@@ -130,6 +130,12 @@ def _insert_rows(
         key = _slot(row, run_name)
         if not isinstance(row.get("outcome"), dict) or not isinstance(row.get("metrics"), dict):
             raise ValueError(f"{source}:{line_number}: outcome and metrics must be objects")
+        schema = metric_schema_version(row)
+        # Discard bulky evidence before retaining a row (one JSON line at a time).
+        for container in (row, row.get("algorithm_metadata", {})):
+            for name in ("simulation_step_trace", "planner_decision_trace"):
+                container.pop(name, None)
+        row["metrics"].pop("robot_force_samples", None)
         # The published bundle is hundreds of MB uncompressed. Keep only the
         # compared values and a checked source identity for each slot.
         compact = {
@@ -140,8 +146,14 @@ def _insert_rows(
             },
             "termination_reason": row.get("termination_reason"),
             "integrity": row.get("integrity"),
-            "metric_schema_version": metric_schema_version(row),
+            "metric_schema_version": schema,
             "_source_commit": _row_source_commit(row),
+            "_definition": {
+                "scenario": row.get("scenario_params", {}),
+                "algo_config_hash": row.get("scenario_params", {}).get("algo_config_hash"),
+                "steps": row.get("steps"),
+                "horizon": row.get("horizon"),
+            },
         }
         if retain_provenance:
             compact["_provenance"] = {

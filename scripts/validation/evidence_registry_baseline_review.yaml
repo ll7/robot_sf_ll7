@@ -19,6 +19,28 @@ latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
   - issue: 10007
+    reviewed_date: 2026-10-02
+    finding_delta: none
+    remediated_findings:
+      paths:
+        - docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json
+        - docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json
+      code: artifact_hash_mismatch
+      count: 2
+      disposition: remediate
+      resolution: >-
+        TRAIN2C restores exact release-matrix bytes from base 93ba0d75 under
+        source_release_matrix.yaml and rebinds only historical resolved_path
+        locators. The original 8b16cb1b matrix SHA-256, producer commits and
+        scientific outcomes remain unchanged. Both findings disappear instead
+        of being baselined; 450 previously reviewed findings remain. Current
+        artifact/custody digests are regenerated. The current root provenance record
+        also normalizes its three historical home-path strings, carries an
+        explicit sidecar with its original producer digest/commit, and loses
+        its verbatim-source exemption. No numeric measurement is rewritten.
+        Diagnostic custody repair
+        only; no scientific admission or maintainer sign-off is claimed.
+  - issue: 10007
     reviewed_date: 2026-10-01
     finding_delta: none
     remediated_findings:

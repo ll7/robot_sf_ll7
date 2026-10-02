@@ -435,7 +435,7 @@ def build_result_provenance_manifest(  # noqa: PLR0913
                 raw_artifact_path=str(raw_artifact_path),
                 jsonl_line=line_idx,
                 dt=dt,
-                horizon=horizon,
+                horizon=rec.get("horizon") if horizon is None else horizon,
                 record_forces=record_forces,
                 active_observation_mode=active_observation_mode,
                 active_observation_level=active_observation_level,

@@ -1,9 +1,10 @@
 # Candidate runtime smoke for the current 0.0.8 benchmark-data template.
 # The #9748 frozen v4 slots resolve; runtime and SNQI claims require separate runs.
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
+protocol_version: 0.0.8
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: e7a9471ef04df8928157e5c2affd730a01398d1c3d5ad9fcd1946861a1e7964b
+  config_sha256: f955fe56d6ec0963f53555ceda043d469810cbab41c7475eca7c95292f962ce1
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml
@@ -40,7 +41,8 @@ snqi_contract:
   calibration_trials: 600
 
 workers: 32
-horizon: 600
+scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
@@ -99,7 +101,7 @@ planners:
   - key: ppo
     algo: ppo
     planner_group: experimental
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
   - key: socnav_sampling

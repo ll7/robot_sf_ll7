@@ -72,7 +72,6 @@ PINNED_VERBATIM_EVIDENCE_SHA256 = {
     "docs/context/evidence/issue_10064_no_admissible_recovery/empty_world.json": "c85204242a7ab45cfa594019e942ccfa84aa420d8ff959c200ae6f93cba07d03",
     "docs/context/evidence/issue_10064_no_admissible_recovery/inner_checkpoints.json": "83e1dd9cd0cc56b6c6c8c94b2c7897a1509187af96481d1f637d10dc24ddecd2",
     "docs/context/evidence/issue_10064_no_admissible_recovery/paired_analysis.json": "e260334d0e073cc59e41ebd379ec8609877781e5ec739b11996763611c9b4b5e",
-    "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json": "d7d9e825f0e739a4485bd6ee5df457a6f6adc5609c8a063e3da9bb2bc52b2037",
     "docs/context/evidence/issue_10064_no_admissible_recovery/reproduce.txt": "32418fb811b79c23d375faba6866ea0a97ef3dcd63a43bed1968d121a43d2e51",
     "docs/context/evidence/issue_10064_no_admissible_recovery/trace_samples.json": "ed825c26c993548d8027d64e6206d0c60e4918e0647e58cc7afe76e32948ca06",
     "docs/context/evidence/issue_10064_no_admissible_recovery/validation.json": "3122a83a4304ac39f083be560150d0ea32d80652484ddb904011f121238c10c8",

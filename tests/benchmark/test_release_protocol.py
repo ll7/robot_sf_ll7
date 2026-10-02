@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,27 @@ from robot_sf.benchmark.release_protocol import (
 STRESS_MANIFEST = Path(
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
 )
+
+
+@pytest.mark.parametrize(
+    "manifest_path",
+    [
+        path
+        for path in sorted(Path("configs/benchmarks/releases").glob("*.yaml"))
+        if str(yaml.safe_load(path.read_text()).get("schema_version", "")).startswith(
+            "benchmark-release-manifest."
+        )
+    ],
+    ids=lambda path: path.name,
+)
+def test_every_release_manifest_campaign_digest_matches_disk(manifest_path: Path) -> None:
+    """Concrete and template release manifests must pin their actual campaign bytes."""
+    payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    campaign_path = manifest_path.parent / payload["canonical_campaign_config"]
+    actual = sha256(campaign_path.read_bytes()).hexdigest()
+    assert actual == payload["campaign_config_sha256"], (
+        f"{manifest_path}: campaign_config_sha256 does not match {campaign_path}: {actual}"
+    )
 
 
 def _stress_manifest_payload() -> dict[str, object]:
@@ -65,7 +87,7 @@ def test_release_campaign_config_runs_single_worker() -> None:
 def test_diagnostic_trace_pin_validates_against_non_paper_config() -> None:
     """The #7086 trace pin validates without admitting a paper-facing release."""
     manifest = load_release_manifest(
-        Path("configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml")
+        Path("tests/fixtures/trace_dossier_retained_release/release.yaml")
     )
 
     validation = validate_release_manifest(manifest)

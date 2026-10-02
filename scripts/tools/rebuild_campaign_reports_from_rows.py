@@ -80,6 +80,8 @@ from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
+    is_doorway_width_slice,
+    load_release_campaign_config,
     load_release_manifest,
     parse_release_args,
     resolve_campaign_artifact_path,
@@ -556,7 +558,15 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
 
     manifest = load_release_manifest(args.manifest)
-    cfg = load_campaign_config(manifest.canonical_campaign_config_path)
+    cfg = (
+        load_release_campaign_config(manifest)
+        if getattr(manifest, "resolved_identity_path", None) is not None
+        or (
+            getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+            and is_doorway_width_slice(manifest)
+        )
+        else load_campaign_config(manifest.canonical_campaign_config_path)
+    )
     try:
         check_orca_rvo2_preflight(cfg)
     except OrcaRvo2PreflightError as exc:

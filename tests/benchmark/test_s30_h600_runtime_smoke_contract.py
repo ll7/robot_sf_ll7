@@ -63,7 +63,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "e7a9471ef04df8928157e5c2affd730a01398d1c3d5ad9fcd1946861a1e7964b"
+CAMPAIGN_TEMPLATE_SHA256 = "f955fe56d6ec0963f53555ceda043d469810cbab41c7475eca7c95292f962ce1"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -393,12 +393,16 @@ def test_runtime_smoke_manifest_validates_against_config_and_assets() -> None:
     assert manifest.expected_kinematics_matrix == ("differential_drive",)
 
 
-def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
+def test_runtime_smoke_v0_4_preserves_main_runner_cap_and_v0_3() -> None:
     """The predecessor keeps its original source pin and v4 fail-closed roster."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     smoke = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     cfg = load_campaign_config(RUNTIME_SMOKE_V04_CONFIG_PATH)
-    scenarios = _load_campaign_scenarios(cfg)
+    assert cfg.horizon_policy is None
+    assert cfg.protocol_version is None
+    ordinary = _load_campaign_scenarios(cfg)
+    assert {s["simulation_config"]["max_episode_steps"] for s in ordinary} == {400}
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
 
     assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
@@ -442,7 +446,11 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     )
 
     expected_config_differences = {
+        "protocol_version",
         "artifact_provenance",
+        "horizon",
+        "scenario_horizons",
+        "scenario_horizons_sha256",
         "bootstrap_samples",
         "claim_boundary",
         "comparability_mapping",
@@ -475,15 +483,21 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     assert smoke["export_publication_bundle"] is False
     assert smoke["overwrite_publication_bundle"] is False
 
+    assert template.get("horizon") is None
+    assert template["scenario_horizons_sha256"] == _sha256(
+        REPO_ROOT / template["scenario_horizons"]
+    )
     assert cfg.horizon == 600
     assert cfg.dt == 0.1
     assert cfg.workers == 32
     assert cfg.kinematics_matrix == ("differential_drive",)
     assert cfg.resume is False
     assert cfg.stop_on_failure is True
-    assert len(scenarios) == 1
-    assert scenarios[0]["name"] == "francis2023_blind_corner"
-    assert list(scenarios[0]["seeds"]) == [111]
+    assert (
+        smoke["scenario_matrix"]
+        == "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml"
+    )
+    assert smoke["seed_policy"]["seeds"] == [111]
 
     assert _sha256(RUNTIME_SMOKE_V03_CONFIG_PATH) == PINNED_V03_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256
@@ -516,7 +530,7 @@ def _assert_versioned_kernel_and_v4_freeze(
 
 
 def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> None:
-    """Runnable inputs and all four frozen v4 slots resolve identically (#9850)."""
+    """Runnable inputs match, with protocol-scoped admission provenance (#9850)."""
     assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
     paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V05_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
     raw = [_load_yaml(path) for path in paths]
@@ -525,9 +539,12 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         {row["name"]: row for row in _load_campaign_scenarios(config)} for config in configs
     ]
     calibration, smoke, template = raw
+    assert template["protocol_version"] == smoke["protocol_version"] == "0.0.8"
+    assert calibration.get("protocol_version") is None
     assert calibration["planners"] == smoke["planners"] == template["planners"]
     _assert_versioned_kernel_and_v4_freeze(raw, scenarios)
     allowed_calibration_differences = {
+        "protocol_version",  # fixed-budget admission declaration; calibration is scheduled
         "arm_isolation",  # execution resource policy
         "export_publication_bundle",  # publication identity
         "name",  # publication identity
@@ -572,6 +589,14 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
     assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
     assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(EVAL_SEEDS_0_0_8)
+    assert configs[2].horizon is None
+    assert {row["simulation_config"]["max_episode_steps"] for row in scenarios[2].values()} == {
+        400,
+        500,
+        600,
+        650,
+        700,
+    }
 
     mismatches: list[str] = []
     for index, label in ((0, "calibration"), (1, "smoke")):
@@ -587,9 +612,29 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
             right_scenario = dict(reference)
             left_scenario.pop("seeds", None)
             right_scenario.pop("seeds", None)
-            if left_scenario != right_scenario:
+            expected_scenario_differences = (
+                {
+                    "metadata.scenario_horizon.sha256",
+                    "metadata.scenario_horizon.authored_max_episode_steps",
+                }
+                if index == 0
+                else set()
+            )
+            actual_scenario_differences = _diff_paths(left_scenario, right_scenario)
+            if actual_scenario_differences != expected_scenario_differences:
                 mismatches.append(
-                    f"{label}.{name}.scenario: {_diff_paths(left_scenario, right_scenario)}"
+                    f"{label}.{name}.scenario: {actual_scenario_differences} "
+                    f"!= {expected_scenario_differences}"
+                )
+            if index == 0:
+                historical_schedule = scenario["metadata"]["scenario_horizon"]
+                current_schedule = reference["metadata"]["scenario_horizon"]
+                assert "sha256" not in historical_schedule
+                assert "authored_max_episode_steps" not in historical_schedule
+                assert current_schedule["sha256"] == configs[2].scenario_horizons_sha256
+                assert (
+                    current_schedule["authored_max_episode_steps"]
+                    == (reference["simulation_config"]["max_episode_steps"])
                 )
             map_file = scenario.get("map_file")
             if map_file:
@@ -666,6 +711,10 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
     assert _diff_paths(predecessor, successor) == {
+        "protocol_version",
+        "horizon",
+        "scenario_horizons",
+        "scenario_horizons_sha256",
         "comparability_mapping",
         "derived_from.config_sha256",
         "name",

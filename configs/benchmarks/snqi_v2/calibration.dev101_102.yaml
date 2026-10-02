@@ -45,7 +45,9 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 workers: 16
-horizon: 600
+# Match the candidate's authored per-scenario budgets, including H650/H700.
+scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
@@ -87,7 +89,7 @@ planners:
 - key: ppo
   algo: ppo
   planner_group: experimental
-  algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+  algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
   benchmark_profile: experimental
   adapter_impact_eval: true
 - key: socnav_sampling

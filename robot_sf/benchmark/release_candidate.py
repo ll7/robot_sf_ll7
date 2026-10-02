@@ -12,6 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.camera_ready._config import (
+    _apply_fixed_campaign_horizon,
+    _apply_scenario_horizon_schedule,
+)
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.policy_search_manifest import (
     is_candidate_manifest,
@@ -132,7 +136,7 @@ class PrepublicationCandidate:
     resolved_seeds: tuple[int, ...]
     planner_keys: tuple[str, ...]
     expected_episode_cells: int
-    expected_horizon_steps: int
+    expected_horizon_steps: int | None
     pinned_files: tuple[tuple[Path, str], ...]
 
 
@@ -304,6 +308,7 @@ def _expected_input_paths(
         "route_clearance_certifications",
         "snqi_weights",
         "snqi_baseline",
+        "scenario_horizons",
     ):
         if field in config:
             paths.add(_root_file(root, config[field], f"campaign.{field}"))
@@ -481,6 +486,49 @@ def _candidate_pins(
     return pinned
 
 
+def _candidate_horizon_contract(
+    root: Path, config: dict[str, Any], scenarios: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Declare fixed or hash-pinned authored budgets without admitting a hidden minimum.
+
+    Returns:
+        Exact candidate matrix declaration for the campaign's budget mode.
+    """
+
+    if config.get("scenario_horizons") is None:
+        if config.get("horizon") != 600:
+            raise ValueError("campaign horizon differs from candidate H600 contract")
+        _apply_fixed_campaign_horizon(
+            scenarios, horizon=600, protocol_version=config.get("protocol_version")
+        )
+        return {"expected_episode_cells": 20160, "horizon_steps": 600}
+    if config.get("horizon") is not None or any(
+        p.get("horizon") is not None for p in config["planners"] if p.get("enabled", True)
+    ):
+        raise ValueError("scenario_horizons cannot be combined with fixed horizon")
+    path = _root_file(root, config["scenario_horizons"], "scenario_horizons")
+    digest = config.get("scenario_horizons_sha256")
+    if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+        raise ValueError("candidate requires scenario_horizons_sha256")
+    patched = _apply_scenario_horizon_schedule(
+        scenarios,
+        schedule_path=path,
+        expected_sha256=digest,
+        protocol_version=config.get("protocol_version"),
+    )
+    for authored, effective in zip(scenarios, patched, strict=True):
+        if effective["simulation_config"]["max_episode_steps"] != authored.get(
+            "simulation_config", {}
+        ).get("max_episode_steps"):
+            raise ValueError("candidate scenario_horizons must preserve authored limits")
+    return {
+        "expected_episode_cells": 20160,
+        "horizon_mode": "scenario_horizons",
+        "scenario_horizons": config["scenario_horizons"],
+        "scenario_horizons_sha256": digest,
+    }
+
+
 def load_prepublication_candidate(
     path: str | Path, *, repository_root: Path | None = None
 ) -> PrepublicationCandidate:
@@ -526,10 +574,8 @@ def load_prepublication_candidate(
     seed_policy = _candidate_seed_policy(root, payload, config)
 
     matrix = _require_mapping(payload.get("matrix"), "matrix")
-    if matrix.get("expected_episode_cells") != 20160 or matrix.get("horizon_steps") != 600:
-        raise ValueError("candidate matrix must declare 20160 H600 episode cells")
-    if config.get("horizon") != 600:
-        raise ValueError("campaign horizon differs from candidate H600 contract")
+    if matrix != _candidate_horizon_contract(root, config, scenarios):
+        raise ValueError("candidate matrix differs from declared campaign budget contract")
     inputs = _require_mapping(payload.get("inputs"), "inputs")
     expected_paths = _expected_input_paths(
         root, config_path, config, matrix_path, scenarios, {**seed_policy, **inputs}, enabled
@@ -551,7 +597,7 @@ def load_prepublication_candidate(
         resolved_seeds=_EXPECTED_SEEDS,
         planner_keys=observed_keys,
         expected_episode_cells=20160,
-        expected_horizon_steps=600,
+        expected_horizon_steps=matrix.get("horizon_steps"),
         pinned_files=tuple(sorted(pinned.items(), key=lambda item: str(item[0]))),
     )
 
@@ -626,7 +672,7 @@ def create_prepublication_candidate(
         },
         "planners": {"keys": [str(row.get("key") or "") for row in enabled]},
         "seed_policy": seed_policy,
-        "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
+        "matrix": _candidate_horizon_contract(root, config, scenarios),
         "inputs": inputs,
         "sha256_files": {
             path.relative_to(root).as_posix(): sha256_file(path) for path in sorted(paths)

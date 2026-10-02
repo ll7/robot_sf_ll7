@@ -366,6 +366,7 @@ class PedestrianEnv(SingleAgentEnv):
             sensors=sensors[0],
             d_t=self.config.sim_config.time_per_step_in_secs,
             sim_time_limit=self.config.sim_config.sim_time_in_secs,
+            episode_step_limit=self.config.sim_config.episode_step_limit,
         )
 
         # Setup pedestrian state

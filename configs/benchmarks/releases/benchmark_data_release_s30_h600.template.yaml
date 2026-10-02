@@ -1,4 +1,4 @@
-# Reusable benchmark-data v0.2 identity template for the 14-arm S30/H600
+# Reusable benchmark-data v0.2 identity template for the 14-arm S30 authored-budget
 # contract. Historical concrete manifests remain immutable reference inputs.
 #
 # The source SHA and publication coordinates are supplied only after a clean
@@ -17,8 +17,8 @@ identity_resolution:
 latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
-canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "e7a9471ef04df8928157e5c2affd730a01398d1c3d5ad9fcd1946861a1e7964b"
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml
+campaign_config_sha256: "42d61b49c92d112db62618e837770f11d9a0d50cfddff94c595b5c5849cbcf86"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -27,7 +27,9 @@ matrix:
   scenarios: 48
   seeds: 30
   expected_episode_cells: 20160
-  horizon_steps: 600
+  horizon_steps: null
+  scenario_horizons: ../horizon_schedules/release_0_0_8_authored_v1.yaml
+  scenario_horizons_sha256: "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
   dt: 0.1
 
 publication:
@@ -36,7 +38,7 @@ publication:
   version_doi: "{{version_doi}}"
   reservation_status: reserved_unpublished
   metadata_path: benchmark_data_release_s30_h600_zenodo_metadata.template.json
-  metadata_sha256: "17b6835a84ed01bc1f5fdfdd58899930976b8d07cb3752502683be18c0668dac"
+  metadata_sha256: "cbef0c0ca80ac3b8b25337edecad04456d65c0bd24f5f41744dfa74133cf175f"
   github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
 
 claim_boundary:
@@ -48,7 +50,7 @@ claim_boundary:
 
 scenario:
   matrix_path: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
-  matrix_sha256: "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8"
+  matrix_sha256: "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
   suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
   suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
   route_certification_path: ../route_clearance_certifications_v1.yaml

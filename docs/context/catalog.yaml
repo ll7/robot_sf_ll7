@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-29
+updated_at: 2026-09-30
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -7935,6 +7935,34 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_9668_campaign_horizon_authority.md
+  status: current
+  freshness: maintained
+  area: benchmark
+- path: docs/context/evidence/issue_9668_campaign_horizon/source_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/source_manifest.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/release_0_0_7_cells.csv
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/release_0_0_7_cells.csv.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/template_0_0_8_limits_on_main.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/template_0_0_8_limits_on_main.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_10007_fxb
   status: evidence
   freshness: evidence
@@ -8034,6 +8062,22 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_10007_train2_custody
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10063_endpoint_audit
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/source_release_matrix.yaml
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/source_release_matrix.yaml.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

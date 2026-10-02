@@ -388,3 +388,19 @@ The campaign summary now carries benchmark-release provenance:
 Historical 0.0.7 manifests retain `paper_eval_s30` (111..140). Both that retired
 band and the fresh 0.0.8 list remain sealed for development and calibration.
 See the [0.0.8 runbook](release/0.0.8/runbook.md).
+
+## Bound doorway width slice
+
+The v0.2 strict runner also accepts `benchmark-doorway-width-slice.v1`. The unchanged
+`benchmark-width-slice` template spelling requires the same explicit v1 width contract.
+This gate binds the main campaign's exact 14-arm roster and sealed 30-seed inventory to
+the authored 2.2, 2.8 and 3.6 m doorway scenarios: 1,260 unique cells. The tracked
+width-slice contract requests 400 steps. The matrix declares a null fixed horizon,
+`scenario_horizons` and its digest, binding
+`configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml`.
+The schedule supplies 400 steps for each width; acceptance checks the effective
+episode budgets and their provenance. A 0.0.8 main release refuses a fixed horizon
+and takes its 400–700 step budgets from the authored schedule. The main gate still
+requires 20,160 cells and 48 scenarios. Runtime smoke, checkpoint identity, resume,
+manifest and result privacy admissions remain mandatory; a development projection cannot be
+admitted as the sealed release.

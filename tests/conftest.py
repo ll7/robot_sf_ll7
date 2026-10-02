@@ -413,11 +413,21 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_check_docs_evidence_integrity.py",
+    # D-083 source-bound release admission records workers without reset or step.
+    "test_release_campaign_authority.py",
+    # Exact-repeat resolution verifies retained data and identities without simulation.
+    "test_exact_repeat_campaign.py",
+    # Historical schedule bytes are static; its native episodes are explicitly slow.
+    "test_scheduled_campaign_compatibility.py",
+    # Authored-budget and historical-identity contracts resolve inputs without stepping.
+    "test_campaign_horizon_contracts.py",
     "test_release_decision_ledgers.py",
     # Main CI repair guards: filesystem/Sphinx and stubbed diagnostic contracts.
     # The full real-site build keeps its explicit slow marker.
     "test_sphinx_strict_build.py",
     "test_check_broad_exceptions.py",
+    "test_doorway_release_acceptance.py",
     # Train coverage repair: deterministic SA-CADRL checkpoint capacity (#10008).
     "test_socnav_sacadrl_module.py",
     # Train coverage repair: deterministic physical PPO drive contracts (#9995).
@@ -432,6 +442,8 @@ _FAST_FILES = {
     "test_camera_ready_campaign_characterization.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).
     "test_ppo_action_semantics.py",
+    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): registry and release-resolver checks with stub inference and no episodes.
+    "test_ppo_release_robot_binding.py",
     # TRAIN1 deterministic benchmark contracts from PR #10019.
     "test_multi_amv.py",
     "test_rank_metrics.py",
@@ -458,6 +470,10 @@ _FAST_FILES = {
     # and offline files; keep their real campaign branches covered in PR CI.
     "test_pipefix_pipeline.py",
     "test_scan_release_audit.py",
+    # #10063 static full-rectangle audit; no planner/environment steps.
+    "test_release_spawn_goal_overlap.py",
+    "test_check_scenario_archetype_geometry.py",
+    "test_scenario_validation_waivers.py",
     # Scenario/map sampling and reserved-polygon regressions use dev seeds and
     # authored geometry without environment steps; include them in PR coverage.
     "test_scenario_map_review_fixes.py",

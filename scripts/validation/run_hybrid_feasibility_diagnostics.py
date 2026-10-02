@@ -76,6 +76,7 @@ def hybrid_config(scenario, enabled=False, platform=False):
     cfg["debug_candidate_evaluator"] = True
     if enabled:
         cfg["physical_static_exclusion_enabled"] = True
+        cfg["goal_next_validity_enabled"] = True
     if platform:
         cfg["platform_speed_candidates_enabled"] = True
     return cfg
@@ -207,6 +208,7 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     hcfg = hybrid_config(
         scenario, enabled=arm in {"on", "static", "both"}, platform=arm in {"platform", "both"}
     )
+    cfg.include_goal_next_valid = bool(hcfg.get("goal_next_validity_enabled", False))
     algo = "orca" if arm == "orca" else "hybrid_rule_local_planner"
     pcfg = (
         yaml.safe_load((ROOT / "configs/algos/orca_release_v0_0_8.yaml").read_text())
@@ -372,6 +374,9 @@ def main():
     files = [
         Path(__file__),
         ROOT / "robot_sf/planner/hybrid_rule_local_planner.py",
+        ROOT / "robot_sf/planner/grid_route.py",
+        ROOT / "robot_sf/sensor/socnav_observation.py",
+        ROOT / "robot_sf/gym_env/unified_config.py",
         MAIN_MATRIX,
         WIDTH_MATRIX,
     ]
@@ -381,6 +386,16 @@ def main():
         "seeds": seeds,
         "scenarios": args.scenarios,
         "arms": args.arms,
+        "arm_flags": {
+            a: {
+                "physical_static_exclusion_enabled": a in {"static", "both"},
+                "platform_speed_candidates_enabled": a in {"platform", "both"},
+                "goal_next_validity_enabled": a in {"static", "both"},
+                "include_goal_next_valid": a in {"static", "both"},
+            }
+            for a in args.arms
+            if a != "orca"
+        },
         "workers": args.workers,
         "horizon": args.horizon,
         "empty": args.empty,

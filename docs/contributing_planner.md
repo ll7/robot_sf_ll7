@@ -176,19 +176,34 @@ the observed body radius; clearance preference uses the occupancy-grid estimate
 of surface gap divided by `desired_static_clearance`, clamped to [0, 1]. The
 coarse estimate affects preference, while exact geometry determines wall contact.
 Every rollout interval uses the observed plant timestep, trapezoidal velocity,
-and midpoint heading. Exact swept-disc clearance covers each complete interval,
-including the first committed step. This flag also keeps the terminal goal when
-SocNav reports its absent successor as `[0, 0]`, preventing origin-target orbits.
-Unbound geometry and older variants retain the existing exclusion policy.
+and midpoint heading. The swept segment is expanded by an arc bound:
+`arc_length * abs(turn_angle) / 8`, which is at least the circular-arc sagitta.
+This also covers the first committed step. Unbound geometry and older variants
+retain the existing exclusion policy.
+
+`goal_next_validity_enabled: true` is a separate, default-false planner flag.
+Use it with the default-false environment option `include_goal_next_valid: true`.
+The sensor then emits `goal.next_valid` (float32 array of shape1, 0 for absent,
+1 for present). The hybrid and its grid route guide use that bit; a legitimate
+successor at world origin remains valid. Without the field, they retain legacy
+selection. Physical exclusion alone does not change goal selection. Default
+observations, observation spaces and frozen0.0.8 policy remain unchanged.
 
 Independently, `platform_speed_candidates_enabled: true` (default: false) adds
-the drive-reachable speeds omitted by scalar pedestrian proximity/braking caps,
-at the existing candidates' angular rates. It keeps every legacy candidate and
-score term. All commands pass the existing trajectory collision and braking
-checks, including the hard pedestrian comfort margin; the extension requires
-`v4_braking_check_enabled`. No pedestrian exclusion or preference is relaxed.
-These experimental flags require paired collision, pedestrian-separation, and
-empty-world validation before acceptance; neither changes the release config.
+reachable speeds above the comfort band, **never above the nearest-pedestrian
+braking cap**. It keeps every legacy candidate and requires
+`v4_braking_check_enabled`. Speed preference is normalized by the drive's
+effective maximum speed, rather than saturating at the comfort cap. The existing
+pedestrian prediction check remains; an added physical wall check covers the
+complete committed-step-plus-braking tail with swept-disc/arc exclusion.
+
+The1.60m threshold in these scenarios is a **candidate rejection radius applied
+to constant-velocity predicted pedestrian positions at rollout endpoints**.
+It is not a hard limit on executed separation. Plant/pedestrian evolution can
+differ from prediction; report actual minimum separation and near misses rather
+than inferring them from this threshold. The physical radius sum here is1.40m.
+These experimental flags require paired collision, pedestrian-separation and
+empty-world validation; none changes the release config.
 
 The development-only driver uses the benchmark environment and action adapter:
 
@@ -206,7 +221,8 @@ Summary JSON and compressed per-step JSONL retain forced/preferred decisions,
 actual-plant stopped-time fraction (speed <= 0.05 m/s), time without a feasible
 moving command, longest stationary interval, and diagnostic freezing (stationary
 for >10 s, or net displacement <0.5 m across a window longer than 10 s).
-The four arms toggle neither flag, the static flag, the platform flag, or both;
+The four arms toggle neither physical/platform flag, static, platform, or both;
+the static and both arms also explicitly enable successor validity and its sensor field;
 `on` remains an alias for `static`. Native pedestrian minimum center separation
 and near-miss steps/events are retained. A near miss has a surface gap in
 `[0, 0.50)` m; an event starts when the per-step near-miss indicator turns on.

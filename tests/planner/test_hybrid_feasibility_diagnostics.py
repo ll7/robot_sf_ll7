@@ -238,14 +238,16 @@ def test_physical_exclusion_checks_committed_plant_step_and_whole_sweep(wall_x):
 
 def test_physical_flag_keeps_terminal_goal_when_successor_is_absent():
     """The native sensor's absent successor must not target the world origin."""
-    planner = _planner(physical_static_exclusion_enabled=True)
+    planner = _planner(goal_next_validity_enabled=True)
     obs = _obs(robot=(25.6, 3), goal=(26.4, 3.1))
     obs["goal"]["next"] = np.zeros(2)  # SocNavObservation: None -> zero world position
+    obs["goal"]["next_valid"] = np.array([0])
     assert planner._extract_state(obs)["goal"] == pytest.approx((26.4, 3.1)), (
         "terminal waypoint replaced by the absent [0, 0] successor"
     )
     # An ordinary successor remains selectable; the fix does not suppress route lookahead.
     obs["goal"]["next"] = np.array([28, 3])
+    obs["goal"]["next_valid"] = np.array([1])
     assert planner._extract_state(obs)["goal"] == pytest.approx((28, 3))
 
 
@@ -261,8 +263,10 @@ def test_admissible_speed_flag_samples_above_comfort_band_without_relaxing_safet
     assert planner._last_v4_speed_safety["braking_cap"] == pytest.approx(0.8)
     assert cap == 0.6
     candidates = planner._generate_candidates(state, cap)
-    assert max(c.linear for c in candidates) > 0.8, "scalar caps still prune admissible candidates"
-    assert max(c.linear for c in candidates) == pytest.approx(1.2)
+    assert max(c.linear for c in candidates) > 0.6, (
+        "comfort band still prunes admissible candidates"
+    )
+    assert max(c.linear for c in candidates) == pytest.approx(0.8)
     planner.config.platform_speed_candidates_enabled = False
     legacy = planner._generate_candidates(state, cap)
     assert {(c.linear, c.angular) for c in legacy} <= {(c.linear, c.angular) for c in candidates}, (
@@ -283,3 +287,201 @@ def test_admissible_speed_flag_samples_above_comfort_band_without_relaxing_safet
     )
     assert not evaluation["accepted"]
     assert evaluation["collision_radius"] == 0.7
+
+
+def test_platform_speed_preference_does_not_saturate_at_comfort_cap():
+    """At exactly 0.50 m surface gap, reachable speeds keep distinct preferences."""
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+
+    planner = _planner(platform_speed_candidates_enabled=True)
+    obs = _obs(robot=(4, 15), goal=(4.85, 15), speed=0.6, ped_positions=[(4, 16)])
+    state = planner._extract_state(obs)
+    cap = planner._v4_human_speed_cap(state)
+    assert cap == 0.6
+    results = []
+    for speed in (0.6, 0.8):
+        r = planner._evaluate_candidate(
+            candidate=HybridRuleCandidate(speed, 0, "witness"),
+            observation=obs,
+            state=state,
+            speed_cap=cap,
+            nearest_ped=1,
+        )
+        assert r["accepted"]
+        results.append(r)
+    assert [r["terms"]["speed_preference"] for r in results] == pytest.approx([0.3, 0.4]), (
+        "comfort-cap normalization saturates added speeds"
+    )
+    assert results[0]["score"] > results[1]["score"], "slower feasible near-goal move should win"
+
+
+def test_platform_injected_speeds_preserve_nearest_pedestrian_braking_bound():
+    planner = _planner(platform_speed_candidates_enabled=True)
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16)])
+    state = planner._extract_state(obs)
+    cap = planner._v4_human_speed_cap(state)
+    extras = [c for c in planner._generate_candidates(state, cap) if c.source == "admissible_speed"]
+    assert extras
+    # Available 0.40 m = reaction 0.8*0.1 + braking 0.8²/(2*1).
+    assert max(c.linear for c in extras) <= 0.8 + 1e-9, (
+        "injected speed exceeds physical braking cap"
+    )
+
+
+@pytest.mark.parametrize("physical_enabled", [False, True])
+def test_platform_checks_wall_stopping_distance_beyond_rollout_horizon(physical_enabled):
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+
+    planner = _planner(
+        platform_speed_candidates_enabled=True,
+        physical_static_exclusion_enabled=physical_enabled,
+        rollout_horizon=0.2,
+        hard_collision_horizon=0.2,
+    )
+    planner.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                map_def=SimpleNamespace(width=30, height=30),
+                get_obstacle_lines=lambda: np.array([[6, 14, 6, 16]]),
+            )
+        )
+    )
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=2)
+    state = planner._extract_state(obs)
+    r = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(2, 0, "forward"),
+        observation=obs,
+        state=state,
+        speed_cap=2,
+        nearest_ped=float("inf"),
+    )
+    # First0.2s is clear; reaction+braking travels2.2m toward wall2m away.
+    assert not r["accepted"], "finite horizon misses wall inside full stopping distance"
+    assert r["reason"] == "wall_braking_infeasible"
+    assert r["time"] > 0.2
+    assert r["hard_static_clearance"] == 0.25
+
+
+def test_successor_validity_is_independent_and_preserves_legitimate_origin():
+    from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
+
+    planner = _planner(goal_next_validity_enabled=True)
+    obs = _obs(robot=(25.6, 3), goal=(26.4, 3.1))
+    obs["goal"]["next"] = np.zeros(2)
+    obs["goal"]["next_valid"] = np.array([0], dtype=np.float32)
+    assert planner._extract_state(obs)["goal"] == pytest.approx((26.4, 3.1)), (
+        "absent successor selected"
+    )
+    assert not planner.config.physical_static_exclusion_enabled
+    obs["goal"]["next_valid"][0] = 1
+    assert planner._extract_state(obs)["goal"] == pytest.approx((0, 0)), "valid origin discarded"
+    cfg = GridRoutePlannerConfig()
+    cfg.goal_next_validity_enabled = True
+    route = GridRoutePlannerAdapter(cfg)
+    obs["robot"]["position"] = np.array([26.3, 3.1])
+    obs["goal"]["next_valid"][0] = 0
+    assert route._extract_state(obs)[2] == pytest.approx((26.4, 3.1)), (
+        "route guide targets absent successor"
+    )
+    obs["goal"]["next_valid"][0] = 1
+    assert route._extract_state(obs)[2] == pytest.approx((0, 0))
+    hybrid_cfg = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "hybrid_rule_v4_clearance_braking",
+            "route_guide_enabled": True,
+            "goal_next_validity_enabled": True,
+        }
+    )
+    guide = HybridRuleLocalPlannerAdapter(hybrid_cfg)._route_guide
+    assert guide.config.goal_next_validity_enabled, "hybrid route guide loses validity opt-in"
+
+
+def test_sensor_emits_explicit_validity_only_when_opted_in():
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.sensor.socnav_observation import SocNavObservationFusion, socnav_observation_space
+    from tests.test_socnav_observation import _build_map_def, _build_socnav_simulator
+
+    cfg = RobotSimulationConfig()
+    sim = _build_socnav_simulator([])
+    default = SocNavObservationFusion(sim, cfg, 4).next_obs()
+    assert "next_valid" not in default["goal"]
+    assert (
+        "next_valid" not in socnav_observation_space(_build_map_def(10, 10), cfg, 4)["goal"].spaces
+    )
+    cfg.include_goal_next_valid = True
+    fusion = SocNavObservationFusion(sim, cfg, 4)
+    absent = fusion.next_obs()
+    assert "next_valid" in absent["goal"], "opt-in validity bit missing at sensor"
+    assert absent["goal"]["next_valid"].tolist() == [0]
+    sim.next_goal_pos[0] = np.zeros(2)
+    valid = fusion.next_obs()
+    assert valid["goal"]["next_valid"].tolist() == [1]
+    assert valid["goal"]["next"].tolist() == [0, 0]
+    assert socnav_observation_space(_build_map_def(10, 10), cfg, 4)["goal"]["next_valid"].contains(
+        valid["goal"]["next_valid"]
+    )
+
+
+def test_debug_unknown_rejection_reason_is_observable_without_crashing():
+    planner = _planner()
+    assert planner._debug_rejection_constraint({"reason": "future_physical_rule"}) == (
+        "unknown:future_physical_rule",
+        None,
+        None,
+    )
+
+
+def test_physical_sweep_conservatively_covers_grazing_turn_arc():
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+
+    planner = _planner(physical_static_exclusion_enabled=True, rollout_horizon=0.1)
+    # Independent circular arc: v1, omega0.8, dt0.1 => R1.25, half-angle0.04.
+    middle = np.array([4 + 1.25 * np.sin(0.04), 15 + 1.25 * (1 - np.cos(0.04))])
+    wall_y = middle[1] - 0.0099  # 0.10mm inside the 0.01m swept disc.
+    planner.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                map_def=SimpleNamespace(width=30, height=30),
+                get_obstacle_lines=lambda: np.array(
+                    [[middle[0] - 0.00001, wall_y, middle[0] + 0.00001, wall_y]]
+                ),
+            )
+        )
+    )
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=1)
+    obs["robot"]["radius"] = np.array([0.01])
+    obs["robot"]["angular_velocity"] = np.array([0.8])
+    r = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(1, 0.8, "grazing"),
+        observation=obs,
+        state=planner._extract_state(obs),
+        speed_cap=2,
+        nearest_ped=float("inf"),
+    )
+    assert not r["accepted"], "midpoint chord misses grazing arc contact"
+    assert r["reason"] == "static_collision"
+    assert r["arc_padding_m"] >= 1.25 * (1 - np.cos(0.04))
+
+
+def test_grid_route_successor_validity_survives_config_builder():
+    from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
+
+    cfg = build_grid_route_config({"goal_next_validity_enabled": True})
+    obs = _obs(robot=(26.3, 3.1), goal=(26.4, 3.1))
+    obs["goal"]["next"] = np.zeros(2)
+    obs["goal"]["next_valid"] = np.array([0], dtype=np.float32)
+    assert GridRoutePlannerAdapter(cfg)._extract_state(obs)[2] == pytest.approx((26.4, 3.1)), (
+        "route guide selects absent successor"
+    )
+    obs["goal"]["next_valid"][0] = 1
+    assert GridRoutePlannerAdapter(cfg)._extract_state(obs)[2] == pytest.approx((0, 0))
+
+
+def test_physical_flag_keeps_explicitly_valid_origin_waypoint():
+    planner = _planner(physical_static_exclusion_enabled=True, goal_next_validity_enabled=True)
+    obs = _obs(robot=(25.6, 3), goal=(26.4, 3.1))
+    obs["goal"]["next"] = np.zeros(2)
+    obs["goal"]["next_valid"] = np.array([1], dtype=np.float32)
+    assert planner._extract_state(obs)["goal"] == pytest.approx((0, 0)), (
+        "world-origin guard discards legitimate successor"
+    )

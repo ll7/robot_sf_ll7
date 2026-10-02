@@ -45,7 +45,9 @@ HISTORICAL_CAMPAIGN_REGISTRY = MappingProxyType(
             "legacy_runner_cap",
         ),
         # configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml
-        "1201cc1c5d374659e045071d035e87cb0a3684d8dcfd172f149e127d9102d455": (
+        # Old digest: 1201cc1c5d374659e045071d035e87cb0a3684d8dcfd172f149e127d9102d455
+        # retired seed 116 -> dev 1001, #10080 commit 4d9dd1ec0
+        "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184": (
             "0.0.7",
             "legacy_runner_cap",
         ),

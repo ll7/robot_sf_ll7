@@ -15,7 +15,7 @@ def test_freeze_writes_replayable_grid_only_after_physical_admission(tmp_path, a
     comparison = tmp_path / "step4_comparison.json"
     robot = tmp_path / "robot_gate_summary.json"
     write_json(comparison, {"fit_admitted": admitted})
-    write_json(robot, {"pairs": 7200})
+    write_json(robot, {"pairs": 2850})
     root = tmp_path / "fit"
     root.mkdir()
     if not admitted:

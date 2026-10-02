@@ -152,3 +152,8 @@ main has a file-transport repair. Neither inherited failure is called green.
 Acquisition summaries for diagnosis, HFV comparison, uncongested controls and
 source-table verification are in [the diagnostic record](pedcontact_10101_diagnosis.json).
 That record also retains seed-refusal attribution and fail-on-base assertions.
+
+The robot gate roster is 48 main scenarios, three doorway widths, six nominal
+probes, ORCA and all four release hybrid arms, dev1001–1010 off/on: 2850 pairs.
+The release width campaign “90-cell” label means three widths × 30 seeds,
+not ninety distinct geometries. Fit admission requires the full dev roster.

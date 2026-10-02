@@ -18,6 +18,8 @@ from scripts.validation import pedestrian_validation_10074 as suite
 ROOT = Path(__file__).resolve().parents[2]
 DEADLINE = datetime(2026, 10, 7, 18, 32, tzinfo=UTC)
 SEEDS = [1001, 1002, 1003]
+# 48 main scenarios + 3 doorway widths + 6 probes, five arms, ten dev seeds.
+ROBOT_GATE_PAIRS = (48 + 3 + 6) * 5 * 10
 
 
 def identity(point):
@@ -68,7 +70,7 @@ def freeze(root):
     robot_path = root.parent / "robot_gate_summary.json"
     comparison = json.loads(comparison_path.read_text())
     robot = json.loads(robot_path.read_text())
-    if not comparison["fit_admitted"] or robot["pairs"] != 7200:
+    if not comparison["fit_admitted"] or robot["pairs"] != ROBOT_GATE_PAIRS:
         raise ValueError("complete step-4 qualification and robot gate required")
     ps = points()
     blob = {

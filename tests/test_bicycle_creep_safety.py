@@ -134,7 +134,8 @@ def test_one_step_opt_in_turn_does_not_persist(creep_speed):
     for _ in range(40):
         robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.0))), 0.1)
     assert robot.state.velocity == 0.0
-    assert math.hypot(*robot.pos) <= 0.01
+    # The float32 steering action makes the norm exceed .01 by ~2e-18m.
+    assert math.hypot(*robot.pos) <= 0.01 + 1e-9
 
 
 def test_robot_config_controls_creep_speed():

@@ -308,6 +308,7 @@ class HybridRuleLocalPlannerConfig:
     pedestrian_radius_default: float = 0.3
     hard_safety_margin: float = 0.05
     static_hard_safety_margin: float = -1.0
+    debug_candidate_evaluator: bool = False
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9
     obstacle_threshold: float = 0.5
@@ -592,6 +593,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._fallback_count = 0
         self._protective_stop_count = 0
         self._last_decision: dict[str, Any] | None = None
+        self._candidate_evaluator_debug: dict[str, Any] | None = None
         self._clearance_context: _ObstacleClearanceContext | None = None
         # v4 only: the drive integrates angular acceleration, so v4 tracks the
         # angular speed it expects the robot to have from its own commands.
@@ -3468,6 +3470,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         moving_rejection_counts: Counter[str] = Counter()
         rejection_counts_by_source: dict[str, Counter[str]] = {}
         rejected_examples: list[dict[str, Any]] = []
+        debug_constraints: Counter[tuple[str, str, float]] = Counter()
 
         for candidate in candidates:
             evaluation = self._evaluate_candidate(
@@ -3486,6 +3489,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 continue
 
             reason = str(evaluation.get("reason", "unknown"))
+            if self.config.debug_candidate_evaluator:
+                name, threshold_name, threshold = self._debug_rejection_constraint(evaluation)
+                debug_constraints[(name, threshold_name, threshold)] += 1
             rejection_counts[reason] += 1
             source_counts = rejection_counts_by_source.setdefault(candidate.source, Counter())
             source_counts[reason] += 1
@@ -3493,6 +3499,27 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 moving_rejection_counts[reason] += 1
             if len(rejected_examples) < max(int(self.config.top_k_diagnostics), 1):
                 rejected_examples.append(self._rejection_diagnostic(evaluation))
+
+        if self.config.debug_candidate_evaluator:
+            moving = [item for item in accepted if abs(item["candidate"].linear) > _EPS]
+            best_moving = max(moving, key=lambda item: float(item["score"]), default=None)
+            self._candidate_evaluator_debug = {
+                "constraints": [
+                    {
+                        "constraint": name,
+                        "threshold_name": key,
+                        "threshold": value,
+                        "rejected": count,
+                    }
+                    for (name, key, value), count in sorted(debug_constraints.items())
+                ],
+                "candidate_count": len(candidates),
+                "feasible_moving_count": len(moving),
+                "best_feasible_moving": self._candidate_diagnostic(best_moving)
+                if best_moving is not None
+                else None,
+                "moving_epsilon_m_s": _EPS,
+            }
 
         return (
             accepted,
@@ -3505,10 +3532,48 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             rejected_examples,
         )
 
+    def _debug_rejection_constraint(self, evaluation: dict[str, Any]) -> tuple[str, str, float]:
+        """Name the first hard predicate and its actual threshold for a rejected candidate.
+
+        Returns:
+            Constraint name, threshold name, and threshold value in the named units.
+        """
+        reason = str(evaluation["reason"])
+        if reason == "static_collision":
+            if evaluation.get("continuous_static_collision"):
+                return (
+                    "exact_body_wall_overlap",
+                    "exclusion_radius_m",
+                    float(evaluation["hard_static_clearance"]),
+                )
+            return (
+                "occupied_center_cell",
+                "obstacle_threshold",
+                float(self.config.obstacle_threshold),
+            )
+        if reason == "static_clearance":
+            return (
+                reason,
+                "required_clearance_m",
+                float(
+                    evaluation.get("required_static_clearance", evaluation["hard_static_clearance"])
+                ),
+            )
+        if reason in {"dynamic_collision", "braking_infeasible"}:
+            return reason, "collision_radius_m", float(evaluation["collision_radius"])
+        if reason == "excessive_angular_near_human":
+            return (
+                reason,
+                "max_angular_speed_rad_s",
+                float(self.config.near_human_max_angular_speed),
+            )
+        raise ValueError(f"Unmapped evaluator constraint: {reason}")
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the selected ``(linear, angular)`` command."""
         if self._v4_clearance_braking:
             self._last_v4_speed_safety = None
+        self._candidate_evaluator_debug = None
         state = self._extract_state(observation)
         if self._v4_clearance_braking:
             self._v4_last_dt = float(state["dt"])
@@ -3762,6 +3827,26 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "selected_actuation_diagnostics": actuation_diagnostics,
             "selected_static_safety_gate": static_safety_gate,
         }
+        if self.config.debug_candidate_evaluator:
+            debug = copy.deepcopy(self._candidate_evaluator_debug) or {
+                "constraints": [],
+                "candidate_count": 0,
+                "feasible_moving_count": 0,
+                "best_feasible_moving": None,
+                "moving_epsilon_m_s": _EPS,
+            }
+            stopped = abs(command[0]) <= _EPS
+            debug["chosen_stop"] = stopped
+            debug["stop_kind"] = (
+                (
+                    "GOAL"
+                    if mode == "GOAL_STOP"
+                    else ("PREFERRED" if debug["feasible_moving_count"] else "FORCED")
+                )
+                if stopped
+                else None
+            )
+            self._last_decision["candidate_evaluator_debug"] = debug
         if self._v4_clearance_braking:
             # v4-only keys; v3 decision payloads stay byte-identical.
             self._v4_angular_estimate = self._v4_step_angular(

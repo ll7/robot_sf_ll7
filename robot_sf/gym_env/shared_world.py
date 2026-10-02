@@ -321,7 +321,14 @@ class SharedWorldRunner:
         d_t = float(env_config.sim_config.time_per_step_in_secs)
         max_ep_time = float(env_config.sim_config.sim_time_in_secs)
         states = [
-            RobotState(nav, occ, sen, d_t, max_ep_time)
+            RobotState(
+                nav,
+                occ,
+                sen,
+                d_t,
+                max_ep_time,
+                episode_step_limit=env_config.sim_config.episode_step_limit,
+            )
             for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors, strict=False)
         ]
         if len(states) != admission.admitted_robots:

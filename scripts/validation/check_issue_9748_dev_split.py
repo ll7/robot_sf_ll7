@@ -28,13 +28,10 @@ from robot_sf.benchmark.seed_bands import DEV_SEEDS, HELD_OUT_SEEDS
 from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml"
-RELEASE_CONFIG_RELATIVE_PATH = (
-    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
-)
+DEFAULT_CONFIG = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml"
+RELEASE_CONFIG_RELATIVE_PATH = "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
 DEFAULT_RELEASE_MATRIX = (
-    ROOT
-    / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml"
+    ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 )
 RELEASE_PARITY_SIMULATION_OVERRIDES = {
     "goal_completion_policy": "goal_zone_entry_v1",
@@ -55,7 +52,6 @@ SIMULATOR_CAMPAIGN_FIELDS = (
     "record_simulation_step_trace",
     "safety_wrapper",
     "scenario_candidates",
-    "scenario_horizons_path",
     "radius_sweep",
 )
 EXPECTED_DEV_SEEDS = DEV_SEEDS
@@ -169,6 +165,7 @@ _TUNING_FILE_REFERENCE_KEYS = frozenset(
         "map_file",
         "map_svg",
         "scenario_matrix",
+        "scenario_horizons",
         "scenario_config",
         "scenario_config_path",
     }
@@ -247,6 +244,8 @@ def _release_parity_input_paths() -> set[Path]:
         raise ValidationError("0.0.8 candidate campaign must select a scenario matrix")
     pending = [_repo_path(matrix_raw, relative_to=campaign_path.parent)]
     found = {campaign_path}
+    if campaign.get("scenario_horizons") is not None:
+        found.add(_repo_path(campaign["scenario_horizons"], relative_to=campaign_path.parent))
     while pending:
         path = pending.pop()
         if path in found:
@@ -419,7 +418,9 @@ def _require_exact_dev_seed_list(raw: Any, *, label: str) -> None:
 
 
 def _source_scenario_row(spec: Mapping[str, Any]) -> Mapping[str, Any]:
-    source_path = ROOT / spec["source_file"]
+    # D-083: compare dev variants with the selected release matrix's current
+    # geometry and goal policy, preserving only the approved dev overrides.
+    source_path = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     source_id = spec["source_id"]
     source_rows = _load_scenario_rows(source_path, label=f"source scenario {source_id}")
     matches = [
@@ -458,6 +459,13 @@ def _validate_variant_source(
         "source_scenario": source_id,
         "development_variant": spec["development_variant"],
     }
+    # The release and dev manifests sit at different directory depths. Compare
+    # resolved map paths so spelling differences do not hide or invent drift.
+    actual = dict(actual)
+    expected["map_file"] = _repo_path(
+        expected["map_file"], relative_to=DEFAULT_RELEASE_MATRIX.parent
+    )
+    actual["map_file"] = _repo_path(actual["map_file"], relative_to=ROOT / "configs/scenarios/sets")
     differences = sorted(
         key
         for key in expected.keys() | actual.keys()
@@ -629,6 +637,17 @@ def _effective_arm_action_observation(campaign: Any, planner: Any) -> dict[str, 
     }
 
 
+def _validate_authored_horizon_parity(
+    development_id: str, release_metadata: Mapping[str, Any], actual: Mapping[str, Any]
+) -> None:
+    """Require each dev schedule to preserve the same authored budget as its source."""
+    expected_horizon = release_metadata.get("scenario_horizon", {})
+    actual_horizon = actual.get("metadata", {}).get("scenario_horizon", {})
+    for field in ("authored_max_episode_steps", "recommended_horizon_steps"):
+        if actual_horizon.get(field) != expected_horizon.get(field):
+            raise ValidationError(f"{development_id} authored horizon differs from source")
+
+
 def _validate_release_parity(
     *,
     development_campaign: Any,
@@ -716,7 +735,11 @@ def _validate_release_parity(
             "source_scenario": source_id,
             "development_variant": spec["development_variant"],
         }
+        # Each schedule has its own path, digest and development identity. Require
+        # equal authored/applied source budgets before substituting those bindings.
         actual = development_by_id[development_id]
+        _validate_authored_horizon_parity(development_id, release_metadata, actual)
+        expected["metadata"]["scenario_horizon"] = actual["metadata"]["scenario_horizon"]
         differences = sorted(
             key
             for key in expected.keys() | actual.keys()

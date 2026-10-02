@@ -269,3 +269,32 @@ def test_desired_speed_validation_rejects_invalid_values():
 
     with pytest.raises(ValueError, match="desired_speed_std"):
         SimulationSettings(desired_speed_mean=1.3, desired_speed_std=-0.2)
+
+
+def test_explicit_episode_step_limit_survives_config_serialization():
+    """Explicit integer budgets affect identity and survive reconstruction; defaults stay legacy.
+
+    This is a new-API serialization control, not an isolated fail-on-base bug test.
+    The existing kernel-selector test pins the unchanged historical default hash.
+    """
+    legacy = SimulationSettings(sim_time_in_secs=20.8, time_per_step_in_secs=0.052)
+    explicit = replace(legacy, episode_step_limit=400)
+    assert legacy.max_sim_steps == 401
+    assert explicit.max_sim_steps == 400
+    assert "episode_step_limit" not in legacy.to_dict()
+    assert explicit.to_dict()["episode_step_limit"] == 400
+    restored = SimulationSettings(**explicit.to_dict())
+    assert restored == explicit and restored.max_sim_steps == 400
+    assert replace(explicit).max_sim_steps == 400
+    assert (
+        get_resolved_config_dict(EnvSettings(sim_config=explicit))["sim_config"][
+            "episode_step_limit"
+        ]
+        == 400
+    )
+    assert _stable_config_hash(EnvSettings(sim_config=legacy)) != _stable_config_hash(
+        EnvSettings(sim_config=explicit)
+    )
+    for invalid in (True, 0, -1, 400.5):
+        with pytest.raises(ValueError, match="positive integer"):
+            SimulationSettings(episode_step_limit=invalid)

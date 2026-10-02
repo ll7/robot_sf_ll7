@@ -1075,3 +1075,60 @@ models:
       Legacy pre-registry pedestrian-scenario PPO checkpoint retained for
       traceability and local debugging; not benchmark evidence and not promoted
       to any benchmark track.
+- model_id: ppo_release_robot_b1002_last_20261001
+  display_name: PPO retrained on the release robot; collision-prone learned reference
+  local_path: output/model_cache/ppo_release_robot_b1002_last_20261001/ppo_release_robot_b1002_last_20261001-model.zip
+  sha256: 764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc
+  config_path: configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml
+  commit: 07bd2b8037053f8e979bd97db32d096fe58e5257
+  action_semantics: velocity_delta
+  action_adapter_version: ppo-target-velocity.v2
+  predictive_foresight_enabled: false
+  public_artifact_source: github_release
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: models-ppo-release-robot-2026-10-01
+    asset_name: ppo_release_robot_b1002_last_20261001-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/models-ppo-release-robot-2026-10-01/ppo_release_robot_b1002_last_20261001-model.zip
+    sha256: 764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc
+    size_bytes: 169480179
+  wandb_complete_artifact: ll7/robot_sf/ppotrain-b-seed1002-20260930-complete:v0
+  tags:
+  - ppo
+  - release-robot
+  - collision-prone-learned-reference
+  benchmark_promotion:
+    claim_boundary: benchmark_candidate
+    benchmark_track: grid_socnav_v1
+    track_schema_version: observation-track.v1
+    observation_level: tracked_agents_no_noise
+    observation_mode: dict
+    allowed_observation_keys:
+    - occupancy_grid
+    - occupancy_grid_meta_origin
+    - occupancy_grid_meta_resolution
+    - occupancy_grid_meta_width
+    - occupancy_grid_meta_height
+    - robot_position
+    - robot_heading
+    - robot_velocity_xy
+    - robot_speed
+    - robot_angular_velocity
+    - robot_radius
+    - goal_current
+    - goal_next
+    - pedestrians_positions
+    goal_encoding: polar
+    sensor_geometry: differential_drive
+    privileged_input_status: none
+  notes:
+  - 'author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): replaces only the 0.0.8 plain ppo arm; guarded_ppo is unchanged.'
+  - 'Training plant: differential drive, 2.0 m/s, no reverse, +/-1 m/s^2 linear acceleration/deceleration,
+    +/-1 rad/s^2 angular acceleration, dt 0.1 s.'
+  - 'Pre-registered selection on 48 scenarios x dev seeds 1001-1005 only: most successes; within 5 episodes
+    choose fewer collisions.'
+  - Collision-prone learned reference, not a competitive baseline; dev diagnostics do not prove sealed-seed
+    release performance.
+  - Training selected best checkpoints on dev seed 1003; training source predates the release scenario/physics
+    changes.
+  - 'Model card: model/cards/ppo_release_robot_0_0_8.md.'

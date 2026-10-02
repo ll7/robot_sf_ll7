@@ -18,7 +18,10 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _load_scenario_horizon_schedule,
+)
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
@@ -31,6 +34,7 @@ from robot_sf.benchmark.release_tag_identity import (
 from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8, RETIRED_EVAL_SEEDS_0_0_7
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.training.scenario_loader import load_scenarios
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
@@ -451,6 +455,8 @@ class BenchmarkReleaseManifest:
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
     expected_horizon_steps: int | None = None
+    scenario_horizons_path: Path | None = None
+    scenario_horizons_sha256: str | None = None
     publication_channel: str | None = None
     suite_policy_path: Path | None = None
     suite_policy_sha256: str | None = None
@@ -462,6 +468,7 @@ class BenchmarkReleaseManifest:
     concept_doi: str | None = None
     version_doi: str | None = None
     release_kind: str | None = None
+    width_slice_contract: dict[str, Any] | None = None
     source_sha: str | None = None
     planning_base_sha: str | None = None
     metadata_path: Path | None = None
@@ -1224,7 +1231,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     }
 
 
-def _load_v02_contract(  # noqa: C901, PLR0912
+def _load_v02_contract(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path,
     payload: dict[str, Any],
     *,
@@ -1241,6 +1248,8 @@ def _load_v02_contract(  # noqa: C901, PLR0912
         "planning_base_sha": None,
         "expected_episode_cells": None,
         "expected_horizon_steps": None,
+        "scenario_horizons_path": None,
+        "scenario_horizons_sha256": None,
         "publication_channel": None,
         "suite_policy_path": None,
         "suite_policy_sha256": None,
@@ -1282,7 +1291,26 @@ def _load_v02_contract(  # noqa: C901, PLR0912
     if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
         raise ValueError("matrix.expected_episode_cells must be an integer")
     horizon_steps = matrix.get("horizon_steps")
-    if not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0:
+    schedule_path = None
+    schedule_sha256 = matrix.get("scenario_horizons_sha256")
+    if matrix.get("scenario_horizons") is not None:
+        if horizon_steps is not None:
+            raise ValueError("matrix.scenario_horizons cannot be combined with horizon_steps")
+        schedule_path = _resolve_required_file(
+            manifest_path,
+            matrix["scenario_horizons"],
+            "matrix.scenario_horizons",
+            repository_root=repository_root,
+        )
+        if not isinstance(schedule_sha256, str) or _SHA256_RE.fullmatch(schedule_sha256) is None:
+            raise ValueError("matrix.scenario_horizons_sha256 must be an exact SHA-256")
+        if _sha256_file(schedule_path) != schedule_sha256:
+            raise ValueError("matrix.scenario_horizons_sha256 differs from schedule bytes")
+    elif schedule_sha256 is not None:
+        raise ValueError("matrix.scenario_horizons_sha256 requires scenario_horizons")
+    elif (
+        not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0
+    ):
         raise ValueError("matrix.horizon_steps must be a positive integer")
     publication = payload.get("publication")
     if not isinstance(publication, dict):
@@ -1344,6 +1372,8 @@ def _load_v02_contract(  # noqa: C901, PLR0912
         "planning_base_sha": planning_base_sha,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
         "expected_horizon_steps": horizon_steps,
+        "scenario_horizons_path": schedule_path,
+        "scenario_horizons_sha256": schedule_sha256,
         "publication_channel": str(publication["channel"]),
         "suite_policy_path": _resolve_required_file(
             manifest_path,
@@ -1504,9 +1534,176 @@ def load_release_manifest(
         citation_path=path_section["citation_path"],
         release_checklist_path=path_section["release_checklist_path"],
         release_kind=release_metadata["release_kind"],
+        width_slice_contract=payload.get("width_slice_contract"),
         **v02_contract,
         **stress_contract,
     )
+
+
+DOORWAY_RELEASE_KIND = "benchmark-doorway-width-slice.v1"
+DOORWAY_RELEASE_KINDS = frozenset({DOORWAY_RELEASE_KIND, "benchmark-width-slice"})
+DOORWAY_RELEASE_CELLS = 1_260
+DOORWAY_RELEASE_HORIZON = 400
+DOORWAY_RELEASE_PLANNERS = (
+    "prediction_planner",
+    "goal",
+    "social_force",
+    "orca",
+    "ppo",
+    "socnav_sampling",
+    "sacadrl",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "hybrid_rule_v4_fast_progress_static_escape",
+    "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "guarded_ppo",
+    "predictive_mppi",
+    "risk_dwa",
+)
+DOORWAY_RELEASE_SCENARIOS = {
+    "francis2023_narrow_doorway_width_2p20": (
+        2.2,
+        "issue_9348_francis2023_narrow_doorway_2p20_v1.svg",
+    ),
+    "francis2023_narrow_doorway_width_2p80": (
+        2.8,
+        "issue_9348_francis2023_narrow_doorway_2p80_v1.svg",
+    ),
+    "francis2023_narrow_doorway_width_3p60": (
+        3.6,
+        "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg",
+    ),
+}
+
+
+def is_doorway_width_slice(manifest: Any) -> bool:
+    """Identify the slice lane; its name alone never grants admission.
+
+    Returns:
+        Whether the manifest names a doorway slice release kind.
+    """
+    return getattr(manifest, "release_kind", None) in DOORWAY_RELEASE_KINDS
+
+
+def _doorway_declared_budget_blockers(manifest: Any) -> list[str]:
+    """Require every declared doorway budget to resolve to H400 without execution.
+
+    Returns:
+        Scenario-named blockers for a missing or differing declared budget.
+    """
+    blockers: list[str] = []
+    schedule_path = getattr(manifest, "scenario_horizons_path", None)
+    fixed_horizon = getattr(manifest, "expected_horizon_steps", None)
+    schedule = {}
+    if schedule_path is not None:
+        try:
+            schedule = _load_scenario_horizon_schedule(Path(schedule_path))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            blockers.append(f"doorway slice schedule cannot be resolved: {exc}")
+    else:
+        # Legacy width-slice declarations request H600 and apply the authored H400 cap.
+        declared_horizon = (
+            DOORWAY_RELEASE_HORIZON if manifest.release_kind == DOORWAY_RELEASE_KIND else 600
+        )
+        if fixed_horizon != declared_horizon:
+            blockers.append(f"doorway slice must declare H{declared_horizon}")
+    for name in DOORWAY_RELEASE_SCENARIOS:
+        budget = (
+            schedule.get(name, {}).get("recommended_horizon_steps")
+            if schedule_path is not None
+            else (
+                min(fixed_horizon, DOORWAY_RELEASE_HORIZON)
+                if manifest.release_kind != DOORWAY_RELEASE_KIND
+                and isinstance(fixed_horizon, int)
+                and not isinstance(fixed_horizon, bool)
+                else fixed_horizon
+            )
+        )
+        if budget != DOORWAY_RELEASE_HORIZON:
+            blockers.append(f"doorway scenario {name} budget is {budget}; must be 400")
+    return blockers
+
+
+def doorway_width_slice_blockers(
+    manifest: Any,
+    scenarios: list[dict[str, Any]],
+    seeds: tuple[int, ...],
+) -> list[str]:
+    """Bind the slice to the authored widths, roster, sealed inventory and H400.
+
+    Returns:
+        Public blockers; this function performs no simulator execution.
+    """
+    blockers: list[str] = []
+    contract = getattr(manifest, "width_slice_contract", None)
+    expected_contract = {
+        "schema_version": DOORWAY_RELEASE_KIND,
+        "widths_m": [2.2, 2.8, 3.6],
+        "planner_arms": 14,
+        "evaluation_seeds": 30,
+        "expected_episode_rows": 1260,
+        "requested_horizon_steps": 600,
+        "scenario_horizon_cap_steps": 400,
+        "dt": 0.1,
+    }
+    if not isinstance(contract, Mapping) or any(
+        (
+            contract.get(key) not in {400, 600}
+            if key == "requested_horizon_steps"
+            else contract.get(key) != value
+        )
+        for key, value in expected_contract.items()
+    ):
+        blockers.append("doorway slice requires the exact benchmark-doorway-width-slice.v1 binding")
+    if tuple(getattr(manifest, "planner_keys", ())) != DOORWAY_RELEASE_PLANNERS:
+        blockers.append("doorway slice requires the exact main-campaign 14-arm roster")
+    if (
+        seeds != EVAL_SEEDS_0_0_8
+        or tuple(getattr(manifest, "resolved_seeds", ())) != EVAL_SEEDS_0_0_8
+    ):
+        blockers.append("doorway slice requires the exact sealed 30-seed inventory")
+    if getattr(manifest, "expected_episode_cells", None) != DOORWAY_RELEASE_CELLS:
+        blockers.append("doorway slice requires exactly 1260 cells")
+    blockers.extend(_doorway_declared_budget_blockers(manifest))
+    names = [str(item.get("name", item.get("id", ""))) for item in scenarios]
+    if len(names) != 3 or set(names) != set(DOORWAY_RELEASE_SCENARIOS):
+        blockers.append("doorway slice requires exactly the authored 2.2/2.8/3.6 m scenarios")
+    for scenario in scenarios:
+        name = str(scenario.get("name", scenario.get("id", "")))
+        expected = DOORWAY_RELEASE_SCENARIOS.get(name)
+        metadata = scenario.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        simulation = scenario.get("simulation_config")
+        simulation = simulation if isinstance(simulation, Mapping) else {}
+        if expected is None or (
+            metadata.get("width_slice_m") != expected[0]
+            or str(scenario.get("map_file", "")) != f"maps/successor_svg_maps/{expected[1]}"
+            or simulation.get("max_episode_steps") != DOORWAY_RELEASE_HORIZON
+        ):
+            blockers.append(
+                "doorway slice scenario width, map or H400 cap differs from its binding"
+            )
+    return blockers
+
+
+def _release_campaign_horizon(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Apply the bound slice's authored cap without modifying tracked config bytes.
+
+    Returns:
+        The effective H400 slice config, or the original configuration.
+    """
+    if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 and is_doorway_width_slice(
+        manifest
+    ):
+        if cfg.scenario_horizons_path is not None:
+            resolve_release_horizon_budgets(manifest, cfg)
+            return cfg
+        if cfg.horizon != 600:
+            raise ValueError(
+                "doorway slice canonical config must request H600 with the authored H400 cap"
+            )
+        return replace(cfg, horizon=DOORWAY_RELEASE_HORIZON)
+    return cfg
 
 
 def load_release_campaign_config(
@@ -1524,9 +1721,12 @@ def load_release_campaign_config(
         Validated campaign configuration for this release identity.
     """
     if getattr(manifest, "resolved_identity_path", None) is None:
-        return load_campaign_config(
-            manifest.canonical_campaign_config_path,
-            repository_root=repository_root,
+        return _release_campaign_horizon(
+            manifest,
+            load_campaign_config(
+                manifest.canonical_campaign_config_path,
+                repository_root=repository_root,
+            ),
         )
     root = (repository_root or get_repository_root()).resolve()
     resolved_payload = manifest.resolved_manifest_payload
@@ -1543,7 +1743,9 @@ def load_release_campaign_config(
     if _sha256_file(config_path) != manifest.campaign_config_sha256:
         raise ValueError("canonical campaign config hash does not match resolved identity")
     cfg = load_campaign_config(config_path, repository_root=root)
-    return replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+    return _release_campaign_horizon(
+        manifest, replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+    )
 
 
 def validate_release_manifest(
@@ -1590,6 +1792,17 @@ def validate_release_manifest(
     _validate_release_planners(manifest, cfg, problems)
     _validate_v02_contract(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_metadata_contract(manifest, problems)
+    if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 and is_doorway_width_slice(
+        manifest
+    ):
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
+        problems.extend(
+            doorway_width_slice_blockers(
+                manifest,
+                scenarios,
+                tuple(_resolved_seed_inventory(scenarios)),
+            )
+        )
 
     return {
         "manifest_path": _repo_relative(manifest.path, repository_root),
@@ -2119,16 +2332,14 @@ def sealed_seed_execution_problem(
         return f"sealed evaluation input is not at its canonical repository path: {exc}"
     main_campaign = (
         manifest.release_kind == "benchmark-data"
+        # D-083 selects one authored-budget release campaign; archives are not admitted.
         and config_name
-        in {
-            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
-        }
+        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
         and matrix_name
         == "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     )
     doorway_slice = (
-        manifest.release_kind == "benchmark-width-slice"
+        is_doorway_width_slice(manifest)
         and manifest.release_id == "three_width_doorway_0_0_8_v1"
         and config_name
         == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
@@ -2367,9 +2578,19 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
     cells = len(scenarios) * len(resolved_seeds) * enabled_planners
     if cells != manifest.expected_episode_cells:
         problems.append("matrix.expected_episode_cells does not match resolved matrix")
-    if manifest.expected_horizon_steps is None:
+    effective_horizon = (
+        DOORWAY_RELEASE_HORIZON
+        if is_doorway_width_slice(manifest)
+        else manifest.expected_horizon_steps
+    )
+    if manifest.scenario_horizons_path is not None or cfg.scenario_horizons_path is not None:
+        try:
+            resolve_release_horizon_budgets(manifest, cfg)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            problems.append(f"matrix scenario horizon contract invalid: {exc}")
+    elif manifest.expected_horizon_steps is None:
         problems.append("matrix.horizon_steps is missing")
-    elif cfg.horizon != manifest.expected_horizon_steps:
+    elif cfg.horizon != effective_horizon:
         problems.append("matrix.horizon_steps does not match campaign config")
     else:
         overridden_horizons = {
@@ -2377,7 +2598,7 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
             for planner in cfg.planners
             if planner.enabled
             and planner.horizon_override is not None
-            and planner.horizon_override != manifest.expected_horizon_steps
+            and planner.horizon_override != effective_horizon
         }
         if overridden_horizons:
             problems.append(
@@ -2392,6 +2613,65 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
         problems.append("publication.version_doi must name a fresh Zenodo version")
     if manifest.concept_doi == manifest.version_doi:
         problems.append("publication concept and version DOI must be distinct")
+
+
+def resolve_release_horizon_budgets(manifest: Any, cfg: Any) -> dict[str, int]:
+    """Validate independent manifest/campaign pins against authored scenario budgets.
+
+    Returns:
+        Per producer scenario identifier budget; no environment is constructed.
+    """
+    schedule_path = getattr(manifest, "scenario_horizons_path", None)
+    digest = getattr(manifest, "scenario_horizons_sha256", None)
+    config_path = getattr(cfg, "scenario_horizons_path", None)
+    if schedule_path is None or config_path is None or not digest:
+        raise ValueError("independent manifest scenario horizon schedule and digest required")
+    if (
+        getattr(manifest, "expected_horizon_steps", None) is not None
+        or getattr(cfg, "horizon", None) is not None
+    ):
+        raise ValueError("scheduled release cannot carry a fixed horizon")
+    if getattr(cfg, "horizon_policy", None) is not None:
+        raise ValueError("scheduled release cannot carry legacy horizon policy")
+    if getattr(cfg, "scenario_horizons_sha256", None) != digest:
+        raise ValueError("manifest and campaign scenario horizon digests differ")
+    if _sha256_file(Path(schedule_path)) != digest or _sha256_file(Path(config_path)) != digest:
+        raise ValueError("scenario horizon digest differs from independently bound bytes")
+    if any(
+        getattr(p, "horizon_override", None) is not None
+        for p in cfg.planners
+        if getattr(p, "enabled", True)
+    ):
+        raise ValueError("scheduled release cannot carry planner horizon overrides")
+    schedule = _load_scenario_horizon_schedule(Path(schedule_path))
+    authored = load_scenarios(cfg.scenario_matrix_path, base_dir=cfg.scenario_matrix_path.parent)
+    return _validate_authored_release_budgets(authored, schedule)
+
+
+def _validate_authored_release_budgets(
+    authored: list[Mapping[str, Any]], schedule: dict[str, dict[str, Any]]
+) -> dict[str, int]:
+    """Compare independently loaded source budgets with the bound schedule.
+
+    Returns:
+        Exact scenario-to-budget map after authored parity checks.
+    """
+    budgets = {}
+    for scenario in authored:
+        sid = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
+        budget = scenario.get("simulation_config", {}).get("max_episode_steps")
+        if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+            raise ValueError(f"missing positive authored budget for {sid}")
+        if (
+            sid in budgets
+            or sid not in schedule
+            or schedule[sid]["recommended_horizon_steps"] != budget
+        ):
+            raise ValueError(f"schedule does not match unique authored budget for {sid}")
+        budgets[sid] = budget
+    if set(budgets) != set(schedule):
+        raise ValueError("scenario horizon schedule must match authored matrix exactly")
+    return budgets
 
 
 def _validate_release_metadata_contract(
@@ -2773,6 +3053,10 @@ def build_resolved_release_manifest(
             if manifest.expected_horizon_steps is not None
             else cfg.horizon,
             "dt": cfg.dt,
+            "scenario_horizons": _repo_relative(manifest.scenario_horizons_path)
+            if manifest.scenario_horizons_path
+            else None,
+            "scenario_horizons_sha256": manifest.scenario_horizons_sha256,
         },
         "release_contract": {
             "suite_policy_path": (
@@ -2895,9 +3179,9 @@ def _identity_template_payload(  # noqa: C901, PLR0912
     if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         raise ValueError("release identity template must describe a v0.2 release manifest")
     kind = payload.get("release_kind")
-    if kind not in {"benchmark-data", "benchmark-width-slice"}:
+    if kind not in {"benchmark-data", *DOORWAY_RELEASE_KINDS}:
         raise ValueError("release identity template must describe benchmark-data or a width slice")
-    slice_template = kind == "benchmark-width-slice"
+    slice_template = kind in DOORWAY_RELEASE_KINDS
     if payload.get("source_sha") != ("{{source_sha}}" if slice_template else None):
         raise ValueError(
             "width slice template must use {{source_sha}}; benchmark-data template must omit it"
@@ -2980,6 +3264,26 @@ def _absolute_template_file(
     )
 
 
+def _bind_doorway_template_horizon(payload: dict[str, Any]) -> None:
+    """Validate the declaration before emitting the versioned H400 slice identity."""
+    if payload.get("release_kind") in DOORWAY_RELEASE_KINDS:
+        matrix = payload.get("matrix")
+        template_horizon = (
+            DOORWAY_RELEASE_HORIZON if payload["release_kind"] == DOORWAY_RELEASE_KIND else 600
+        )
+        if isinstance(matrix, dict) and matrix.get("scenario_horizons") is not None:
+            if matrix.get("horizon_steps") is not None:
+                raise ValueError(
+                    "doorway slice template horizon cannot combine schedule and fixed form"
+                )
+            payload["release_kind"] = DOORWAY_RELEASE_KIND
+            return
+        if not isinstance(matrix, dict) or matrix.get("horizon_steps") != template_horizon:
+            raise ValueError(f"doorway slice template horizon must be H{template_horizon}")
+        payload["release_kind"] = DOORWAY_RELEASE_KIND
+        matrix["horizon_steps"] = DOORWAY_RELEASE_HORIZON
+
+
 def _materialize_release_template_payload(  # noqa: PLR0913
     template_payload: Mapping[str, Any],
     *,
@@ -3006,6 +3310,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "version_doi": version_doi,
     }
     payload = _replace_identity_tokens(copy.deepcopy(dict(template_payload)), replacements)
+    _bind_doorway_template_horizon(payload)
     payload.pop("identity_resolution", None)
     payload["release_tag"] = release_tag
     payload["source_sha"] = source_commit
@@ -3030,6 +3335,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "scenario": ("matrix_path", "suite_policy_path", "route_certification_path"),
         "seed_policy": ("seed_sets_path",),
         "metrics": ("snqi_weights_path", "snqi_baseline_path"),
+        "matrix": ("scenario_horizons",),
     }
     for section_name, fields in path_fields.items():
         raw_section = template_payload.get(section_name)
@@ -3157,7 +3463,9 @@ def _build_resolved_release_identity(
             manifest.canonical_campaign_config_path,
             repository_root=repository_root,
         )
-        cfg = replace(cfg, release_tag=release_tag, doi=version_doi)
+        cfg = _release_campaign_horizon(
+            manifest, replace(cfg, release_tag=release_tag, doi=version_doi)
+        )
         validation = validate_release_manifest(
             manifest,
             campaign_config=cfg,

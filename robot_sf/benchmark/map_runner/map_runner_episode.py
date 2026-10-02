@@ -52,6 +52,7 @@ from robot_sf.benchmark.map_runner.map_runner_env import (
 )
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
+    _has_authored_horizon_schedule,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
     selected_map_identity_from_runtime_inputs,
@@ -1358,6 +1359,42 @@ def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
     )
 
 
+def _bind_episode_horizon(
+    scenario: dict[str, Any],
+    config: RobotSimulationConfig,
+    horizon: int | None,
+    horizon_val: int,
+    max_steps: int,
+) -> int:
+    """Enforce the admitted runner budget and preserve historical simulator limits.
+
+    Returns:
+        Runner horizon after enforcing the scenario binding.
+    """
+    horizon_binding = scenario.get("metadata", {}).get("scenario_horizon", {})
+    legacy = horizon_binding.get("policy") == "legacy_runner_cap"
+    bound = (
+        scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed"
+        or legacy
+        or _has_authored_horizon_schedule(scenario)
+    )
+    if bound:
+        expected_runner_horizon = (
+            horizon_binding.get("runner_horizon", max_steps) if legacy else max_steps
+        )
+        if horizon is not None and horizon > 0 and int(horizon) != expected_runner_horizon:
+            raise ValueError("passed horizon differs from bound scenario budget")
+        if legacy:
+            horizon_val = int(expected_runner_horizon)
+    if bound and not legacy:
+        # Carry the integer campaign budget directly to RobotState. The duration
+        # remains useful metadata, but ceil((budget * dt) / dt) can add one step.
+        config.sim_config.episode_step_limit = horizon_val
+        config.sim_config.sim_time_in_secs = horizon_val * config.sim_config.time_per_step_in_secs
+
+    return horizon_val
+
+
 def _resolve_episode_run_context(  # noqa: PLR0913
     *,
     scenario: dict[str, Any],
@@ -1444,6 +1481,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         horizon_val = 200
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
+    horizon_val = _bind_episode_horizon(scenario, config, horizon, horizon_val, max_steps)
 
     robot_kinematics = _robot_kinematics_label(config)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
@@ -3430,6 +3468,7 @@ def _step_collision_and_termination(
     *,
     step_idx: int,
     sim: _StepSimResult,
+    reached_max_steps: bool = False,
 ) -> bool:
     """Update collision/termination state and return whether the loop should break.
 
@@ -3488,6 +3527,8 @@ def _step_collision_and_termination(
             truncated=bool(sim.truncated),
             success=step_success,
             collision=step_collision,
+            timeout=step_timeout,
+            reached_max_steps=reached_max_steps,
         )
         return True
     return False
@@ -3648,6 +3689,7 @@ def _execute_step_loop(
     env: Any,
     planner_stats: Any,
     horizon_val: int,
+    normalize_budget_timeout: bool = True,
 ) -> None:
     """Run the per-step episode loop, mutating ``state`` in place."""
     for step_idx in range(horizon_val):
@@ -3725,7 +3767,13 @@ def _execute_step_loop(
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)
         _step_build_planner_decision_entry(state, slc, step_idx=step_idx, sim=sim)
-        if _step_collision_and_termination(state, slc, step_idx=step_idx, sim=sim):
+        if _step_collision_and_termination(
+            state,
+            slc,
+            step_idx=step_idx,
+            sim=sim,
+            reached_max_steps=normalize_budget_timeout and step_idx + 1 >= horizon_val,
+        ):
             break
 
 
@@ -3793,6 +3841,13 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             env=env,
             planner_stats=args.planner_runtime.planner_stats,
             horizon_val=args.horizon_val,
+            normalize_budget_timeout=(
+                _has_authored_horizon_schedule(args.scenario or {})
+                or (args.scenario or {}).get("metadata", {}).get("campaign_horizon", {}).get("mode")
+                == "fixed"
+            )
+            and (args.scenario or {}).get("metadata", {}).get("scenario_horizon", {}).get("policy")
+            != "legacy_runner_cap",
         )
         state.planner_obstacle_force_law_metadata = _read_policy_obstacle_force_law_metadata(
             args.planner_runtime.policy_fn
@@ -4963,6 +5018,21 @@ def _finalize_record_provenance(  # noqa: PLR0913
     track_schema_version: str | None,
 ) -> None:
     """Attach provenance, evidence, event ledger, and track fields to the record."""
+    horizon_metadata = scenario.get("metadata", {}).get("scenario_horizon", {})
+    authored_schedule = _has_authored_horizon_schedule(scenario)
+    if (
+        not horizon_metadata
+        or authored_schedule
+        or horizon_metadata.get("policy") == "legacy_runner_cap"
+    ):
+        record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
+    if horizon_metadata.get("policy") == "legacy_runner_cap":
+        record.setdefault("metadata", {})["scenario_horizon"] = {
+            **horizon_metadata,
+            "applied_max_episode_steps": record["effective_budget_steps"],
+        }
+    if authored_schedule:
+        scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,
         policy_cfg=policy_cfg,

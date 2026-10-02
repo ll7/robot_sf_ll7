@@ -643,6 +643,7 @@ class RobotEnv(BaseEnv):
             sensor_adapter,
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
+            episode_step_limit=env_config.sim_config.episode_step_limit,
         )
 
         # Store last action executed by the robot
@@ -746,8 +747,7 @@ class RobotEnv(BaseEnv):
                 f"with key '{self._critic_privileged_state_key}'."
             )
         sim_time_limit = float(getattr(env_config.sim_config, "sim_time_in_secs", 0.0) or 0.0)
-        dt = float(getattr(env_config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
-        max_sim_steps = int(np.ceil(sim_time_limit / dt)) if dt > 0.0 else 0
+        max_sim_steps = env_config.sim_config.max_sim_steps
         critic_obs_space = spaces.Dict(dict(self.observation_space.spaces))
         low, high = _asymmetric_critic_state_spec(
             critic_obs_space,

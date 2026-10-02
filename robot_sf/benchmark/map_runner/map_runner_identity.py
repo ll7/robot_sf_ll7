@@ -100,6 +100,40 @@ def _select_seeds(
     return [0]
 
 
+def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:
+    """Recognize reserved schedule provenance minted only for explicit 0.0.8+ configs.
+
+    Returns:
+        Whether the runner should enforce the admitted authored schedule.
+    """
+    binding = scenario.get("metadata", {}).get("scenario_horizon", {})
+    return bool(binding.get("sha256")) and "authored_max_episode_steps" in binding
+
+
+def _historical_authored_identity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep legacy accounting annotations out of the published input identity.
+
+    Returns:
+        Authored scenario payload used by the historical episode identity contract.
+    """
+    horizon_metadata = payload.get("metadata", {}).get("scenario_horizon", {})
+    if horizon_metadata.get("policy") == "legacy_runner_cap":
+        # Historical IDs describe the authored input plus run_horizon. Keep the
+        # new accounting annotation in row provenance without changing that ID.
+        metadata = dict(payload.get("metadata", {}))
+        metadata.pop("scenario_horizon", None)
+        metadata.pop("campaign_horizon", None)
+        payload["metadata"] = metadata
+        simulation = dict(payload.get("simulation_config", {}))
+        authored = horizon_metadata.get("authored_max_episode_steps")
+        if authored is None:
+            simulation.pop("max_episode_steps", None)
+        else:
+            simulation["max_episode_steps"] = authored
+        payload["simulation_config"] = simulation
+    return payload
+
+
 def _scenario_identity_payload(  # noqa: C901,PLR0913
     scenario: dict[str, Any],
     *,
@@ -130,6 +164,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
         dict[str, Any]: Identity payload consumed by ``compute_map_episode_id``.
     """
     payload = {key: value for key, value in scenario.items() if key not in {"seed", "seeds"}}
+    payload = _historical_authored_identity(payload)
     scenario_id = (
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
@@ -169,6 +204,10 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
+    elif _has_authored_horizon_schedule(scenario):
+        # Scheduled callers have no fixed horizon. Use the resolved integer budget
+        # at both write-time and resume-time so existing consumers see the same field.
+        payload["run_horizon"] = int(scenario["simulation_config"]["max_episode_steps"])
     if dt is not None and float(dt) > 0.0:
         payload["run_dt"] = float(dt)
     return payload

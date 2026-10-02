@@ -6,7 +6,7 @@ release_id: three_width_doorway_0_0_8_v1
 release_tag: '{{release_tag}}'
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml
-campaign_config_sha256: c5f99c5542c410fff0cd4c5cd3b3d19641377b3063b4533dafa7fc5e793a6200
+campaign_config_sha256: 9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: doorway-width-slice
 scenario:
@@ -120,7 +120,7 @@ width_slice_contract:
   planner_arms: 14
   evaluation_seeds: 30
   expected_episode_rows: 1260
-  requested_horizon_steps: 600
+  requested_horizon_steps: 400
   scenario_horizon_cap_steps: 400
   dt: 0.1
   pairing: same_seed_across_widths_requires_initial_actor_and_external_rng_identity_receipts
@@ -143,6 +143,8 @@ matrix:
   scenarios: 3
   seeds: 30
   expected_episode_cells: 1260
-  horizon_steps: 600
+  horizon_steps: null
+  scenario_horizons: ../horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml
+  scenario_horizons_sha256: e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9
   dt: 0.1
 # seed-holdout: release-evaluation end

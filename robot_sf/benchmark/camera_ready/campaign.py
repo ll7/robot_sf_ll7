@@ -43,7 +43,11 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_statistical_sufficiency_artifact,
     _write_table_artifacts,
 )
-from robot_sf.benchmark.camera_ready._config import _sanitize_name, _scenario_with_kinematics
+from robot_sf.benchmark.camera_ready._config import (
+    _apply_fixed_campaign_horizon,
+    _sanitize_name,
+    _scenario_with_kinematics,
+)
 from robot_sf.benchmark.camera_ready._crosswalk_producer import (
     write_crosswalk_sidecar,
 )
@@ -682,7 +686,12 @@ def _prepare_campaign_planner_variant_run(
         effective_workers=effective_workers,
         effective_horizon=effective_horizon,
         effective_dt=effective_dt,
-        scoped_scenarios=scoped_scenarios,
+        scoped_scenarios=_apply_fixed_campaign_horizon(
+            scoped_scenarios,
+            horizon=effective_horizon,
+            horizon_policy=cfg.horizon_policy,
+            protocol_version=cfg.protocol_version,
+        ),
     )
 
 

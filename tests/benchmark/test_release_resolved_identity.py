@@ -26,6 +26,7 @@ from robot_sf.benchmark.release_protocol import (
 from robot_sf.benchmark.release_tag_identity import derive_sha_tag
 from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.zenodo_publisher import build_release_binding
+from robot_sf.evidence.writers import write_text
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release
@@ -54,7 +55,7 @@ def _git(repo: Path, *args: str) -> str:
 
 def _write_yaml(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    write_text(path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(payload, sort_keys=False))
 
 
 def _write_canonical_json(path: Path, payload: object) -> None:
@@ -77,7 +78,7 @@ PUBLIC_RELEASE_TEMPLATE = REPO_ROOT / (
     "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
 )
 CAMPAIGN_TEMPLATE = REPO_ROOT / (
-    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
 )
 ZENODO_METADATA_TEMPLATE = REPO_ROOT / (
     "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json"
@@ -117,7 +118,15 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     assert campaign["release_tag"] == "{{release_tag}}"
     assert campaign["doi"] == "{{version_doi}}"
     assert len(campaign["planners"]) == 14
-    assert campaign["horizon"] == 600
+    # 0.0.8 binds authored budgets through a pinned schedule, including H650/H700.
+    assert "horizon" not in campaign
+    assert {key: campaign[key] for key in ("scenario_horizons", "scenario_horizons_sha256")} == {
+        "scenario_horizons": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+        "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
+    }
+    assert (
+        _sha256(REPO_ROOT / campaign["scenario_horizons"]) == campaign["scenario_horizons_sha256"]
+    )
     assert campaign["dt"] == 0.1
     assert campaign["kinematics_matrix"] == ["differential_drive"]
     assert metadata["metadata"]["upload_type"] == "dataset"
@@ -137,7 +146,9 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "scenarios": 48,
         "seeds": 30,
         "expected_episode_cells": 20160,
-        "horizon_steps": 600,
+        "horizon_steps": None,
+        "scenario_horizons": "../horizon_schedules/release_0_0_8_authored_v1.yaml",
+        "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
         "dt": 0.1,
     }
     scenario_matrix = (
@@ -167,7 +178,9 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "unresolved_rows": "fail_admission",
     }
     assert "issue_9856_" in by_name["francis2023_entering_room"]["map_file"]
-    assert "issue_9762_" in by_name["classic_station_platform_medium"]["map_file"]
+    assert by_name["classic_station_platform_medium"]["map_file"].endswith(
+        "issue_10063_classic_station_platform_safe_spawn_v1.svg"
+    )
     assert manifest["seed_policy"]["resolved_seeds"] == list(EVAL_SEEDS_0_0_8)
     loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
         PUBLIC_RELEASE_TEMPLATE,
@@ -223,7 +236,8 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
 
     planner_keys = [f"planner_{index:02d}" for index in range(14)]
     campaign = (
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     _write_yaml(
         campaign,
@@ -312,7 +326,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "release_kind": "benchmark-data",
             "latest_main_base_commit": "{{latest_main_base_commit}}",
             "planning_base_sha": "{{latest_main_base_commit}}",
-            "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+            "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
             "campaign_config_sha256": _sha256(campaign),
             "expected_paper_profile_version": "paper-matrix-v1",
             "expected_paper_interpretation_profile": "baseline-ready-core",
@@ -420,7 +434,8 @@ def test_clean_candidate_generates_and_verifies_byte_identical_resolved_identity
         "output/release/zenodo_metadata.resolved.json"
     )
     assert second_identity["resolved_manifest"]["canonical_campaign_config_sha256"] == _sha256(
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     assert second_identity["resolved_manifest"]["identity_resolution"] == {
         "schema_version": "benchmark-release-resolved-identity.v1",
@@ -726,7 +741,8 @@ def test_generation_rejects_invalid_resolved_zenodo_metadata(tmp_path: Path) -> 
 def test_generation_requires_campaign_publication_identity_slots(tmp_path: Path) -> None:
     repo, template, _ = _release_template_repository(tmp_path)
     campaign_path = (
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     campaign = yaml.safe_load(campaign_path.read_text(encoding="utf-8"))
     campaign["release_tag"] = "stale-semantic-tag"
@@ -1001,3 +1017,86 @@ def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
     assert legacy_scenario_ids == scenario_ids
     assert legacy_seeds == seeds
     assert len(release_acceptance._full_release_planner_items(legacy_planners)) == 14
+
+
+@pytest.mark.parametrize("mutation", [None, "missing_manifest_pin", "fixed_horizon"])
+def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path, mutation):
+    """Real manifest bytes resolve mixed budgets; held-out seeds are identity data only."""
+    from collections import Counter
+
+    repo, template, _source = _release_template_repository(tmp_path)
+    payload = yaml.safe_load(template.read_text())
+    campaign_path = (template.parent / payload["canonical_campaign_config"]).resolve()
+    matrix_path = (template.parent / payload["scenario"]["matrix_path"]).resolve()
+    budgets = [400] * 25 + [500] * 13 + [600] * 8 + [650, 700]
+    scenarios = [
+        {"name": f"scenario_{index:02d}", "simulation_config": {"max_episode_steps": budget}}
+        for index, budget in enumerate(budgets)
+    ]
+    _write_yaml(matrix_path, {"scenarios": scenarios})
+    schedule = repo / "horizons.yaml"
+    _write_yaml(
+        schedule,
+        {
+            "schema_version": 1,
+            "scenarios": {
+                row["name"]: {
+                    "recommended_horizon_steps": row["simulation_config"]["max_episode_steps"]
+                }
+                for row in scenarios
+            },
+        },
+    )
+    campaign = yaml.safe_load(campaign_path.read_text())
+    campaign.update(
+        protocol_version="0.0.8",
+        horizon=None,
+        scenario_horizons=schedule.relative_to(repo).as_posix(),
+        scenario_horizons_sha256=_sha256(schedule),
+    )
+    _write_yaml(campaign_path, campaign)
+    payload["campaign_config_sha256"] = _sha256(campaign_path)
+    payload["scenario"]["matrix_sha256"] = _sha256(matrix_path)
+    payload["matrix"].update(
+        horizon_steps=None,
+        scenario_horizons=schedule.name,
+        scenario_horizons_sha256=_sha256(schedule),
+    )
+    if mutation == "missing_manifest_pin":
+        payload["matrix"].pop("scenario_horizons_sha256")
+    elif mutation == "fixed_horizon":
+        payload["matrix"]["horizon_steps"] = 600
+    _write_yaml(template, payload)
+    _git(
+        repo,
+        "add",
+        matrix_path.relative_to(repo).as_posix(),
+        "horizons.yaml",
+        campaign_path.relative_to(repo).as_posix(),
+        template.relative_to(repo).as_posix(),
+    )
+    _git(repo, "commit", "-qm", "fixture: freeze independent authored schedule")
+    source = _git(repo, "rev-parse", "HEAD")
+    output = repo / "output/mixed/release_identity.resolved.json"
+    if mutation is not None:
+        expected = (
+            "scenario_horizons_sha256"
+            if mutation == "missing_manifest_pin"
+            else "cannot be combined"
+        )
+        with pytest.raises(ValueError, match=expected):
+            write_resolved_release_identity(
+                output_path=output, **_identity_inputs(repo, template, source)
+            )
+        return
+    write_resolved_release_identity(output_path=output, **_identity_inputs(repo, template, source))
+    manifest = load_release_manifest(output, repository_root=repo)
+    cfg = load_release_campaign_config(manifest, repository_root=repo)
+    report = release_protocol.validate_release_manifest(
+        manifest, campaign_config=cfg, repository_root=repo
+    )
+    assert report["status"] == "valid", report["problems"]
+    resolved = release_protocol.resolve_release_horizon_budgets(manifest, cfg)
+    assert Counter(resolved.values()) == {400: 25, 500: 13, 600: 8, 650: 1, 700: 1}
+    assert manifest.expected_horizon_steps is None
+    assert manifest.scenario_horizons_sha256 == _sha256(schedule)

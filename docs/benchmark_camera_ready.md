@@ -25,6 +25,52 @@ Canonical benchmark fallback policy:
 * [Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)
 * [Francis Guideline Mapping For Robot SF](./context/issue_759_francis_guideline_mapping.md)
 
+## Effective Episode Horizon
+
+The 0.0.8 release template explicitly declares the authored per-scenario budgets
+through `scenario_horizons` and pins the schedule with `scenario_horizons_sha256`.
+The schedule replaces the fixed campaign horizon, preserving all 48 authored
+limits: 25 H400, 13 H500, eight H600, one H650 and one H700. The historical
+`h600` filename is retained for existing references; it is not the budget contract.
+
+A fixed campaign or planner horizon is refused when any selected authored limit
+would end an episode earlier. To use different budgets, declare a schedule;
+schedules cannot coexist with fixed campaign or planner horizons. Admitted fixed
+budgets may shorten longer authored limits and record `metadata.campaign_horizon`.
+Both execution modes receive the same prepared scenarios. After timestep overrides,
+the runner passes the integer budget through `SimulationSettings.episode_step_limit`
+to `RobotState`; duration is recorded in seconds without rounding the step limit.
+Duration-only simulator configurations retain ceiling semantics. Unset step limits
+stay out of legacy configuration hashes; explicit limits enter serialized identity.
+
+Schedule provenance records the source path, SHA-256, authored limit and effective
+limit in `metadata.scenario_horizon`. Every episode records `effective_budget_steps`
+as well as `horizon`. Scheduled rows also expose that budget as
+`scenario_params.run_horizon` for existing consumers and resume identity.
+Successful or collided episodes retain their declared budget,
+independent of observed episode length. Rates should report the budget distribution;
+time-to-goal normalization uses the effective episode horizon in scheduled mode.
+A pure simulator timeout at that budget is `max_steps`, with collision and success
+precedence. Early and intentional terminal events retain their existing labels.
+The pinned successor comparator reconstructs each arm's simulator binding and hash.
+
+Regenerate and verify the release schedule from the authored scenario closure:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/generate_authored_horizon_schedule.py \
+  --template configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml \
+  --output configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml --check
+```
+
+Omit `--check` to regenerate, then explicitly update the template's SHA-256 and
+review the budgets. Candidate manifests pin the schedule and declare its mode.
+Publication-manifest admission independently binds the authored schedule.
+Full publication still requires complete evidence; diagnostic candidate
+acceptance alone does not authorize it.
+Published 0.0.7 rows remain immutable and require their old source for reproduction.
+See the [HZN audit](context/issue_9668_campaign_horizon_authority.md) for recorded
+budget exposure and the 2026-09-30 author ruling. No recovered-success claim follows.
+
 ## Entry Point
 
 Run the campaign CLI:

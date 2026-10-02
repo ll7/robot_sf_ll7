@@ -95,11 +95,14 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["export_publication_bundle"] is False
     assert calibration["arm_isolation"] == "subprocess"
     assert calibration["planners"] == template["planners"]
+    assert template["protocol_version"] == "0.0.8"
+    assert calibration.get("protocol_version") is None
 
     # D-057 keeps release and calibration rows untraced; rehearsal 2 carries diagnostics.
     assert template.get("record_simulation_step_trace", False) is False
     assert calibration.get("record_simulation_step_trace", False) is False
     allowed_deviations = {
+        "protocol_version",  # calibration has no fixed horizon; its schedule binds the budget
         "name",
         "paper_facing",
         "seed_policy",
@@ -2051,7 +2054,13 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
     source = ASSETS / "calibration.dev101_102.yaml"
     assert config.source_config_path == source
     assert config.source_config_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
-    assert config.horizon == 600
+    assert config.horizon is None
+    assert config.scenario_horizons_path == (
+        ROOT / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
+    )
+    assert config.scenario_horizons_sha256 == (
+        "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+    )
     assert config.seed_policy.seeds == (101, 102)
     path = tmp_path / "changed.yaml"
     path.write_bytes(source.read_bytes() + b"\n# bytes changed after canonical load\n")

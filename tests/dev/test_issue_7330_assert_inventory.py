@@ -20,12 +20,19 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
 
     assert payload["schema"] == "production-assert-inventory.v1"
     assert isinstance(payload["source"]["clean"], bool)
-    assert payload["counts"]["assertion_count"] == 51
-    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 51}
+    assert payload["counts"]["assertion_count"] == 52
+    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 52}
     assert payload["counts"]["ownership"] == {
         "completed_historical_review": 14,
-        "unowned_residual": 37,
+        "unowned_residual": 38,
     }
+    bicycle = next(
+        row
+        for row in payload["assertions"]
+        if row["scope"] == "BicycleDriveKinematicsModel.curvature_limit"
+    )
+    assert bicycle["expression"] == "self.max_curvature is not None"
+    assert bicycle["ownership"]["references"] == ["#10093", "PR #10100"]
     assert {
         (row["path"], row["scope"], row["expression"])
         for row in payload["assertions"]
@@ -113,7 +120,7 @@ def test_cli_writes_both_issue_outputs(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["counts"]["assertion_count"] == 51
+    assert payload["counts"]["assertion_count"] == 52
     assert "# Production assert inventory (issue #7330)" in markdown_path.read_text(
         encoding="utf-8"
     )

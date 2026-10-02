@@ -77,6 +77,9 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._adapter_trace.clear()
         self._adapter_trace_step = 0
         self._clear_rvo2_simulator()
+        self._reverse_mode = False
+        self._reverse_blocked_steps = 0
+        self._reverse_clear_steps = 0
 
     def _clear_rvo2_simulator(self) -> None:
         """Discard cached rvo2 state at an explicit lifecycle boundary."""
@@ -974,8 +977,58 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         super().bind_env(env)
         drive = bound_drive_settings(env)
         self._reverse_drive = drive if getattr(drive, "limited_reverse", False) else None
+        self._reverse_mode = False
+        self._reverse_blocked_steps = 0
+        self._reverse_clear_steps = 0
         if self._reverse_drive is not None:
             self._bind_static_obstacles(env)
+
+    def _use_reverse_escape(self, heading_error, robot_pos, robot_heading, observation) -> bool:
+        """Latch reverse after three stationary, occupancy-blocked forward steps.
+
+        Grid occupancy, bound static geometry and observed pedestrians can
+        establish the obstruction. A 110-degree entry / 70-degree exit band prevents heading-boundary
+        chatter. Three consecutive clear forward probes also leave escape mode.
+        Heading slowdown alone never counts as an obstruction.
+
+        Returns:
+            Whether the opt-in adapter should attempt a rear-checked escape.
+        """
+        robot, _, _ = self._socnav_fields(observation)
+        radius = float(self._as_1d_float(robot.get("radius", [self._reverse_drive.radius]))[0])
+        forward = np.array([cos(robot_heading), sin(robot_heading)])
+        obstacle, pedestrian = self._path_penalty(
+            robot_pos + radius * forward,
+            forward,
+            observation,
+            min(0.3, self.config.occupancy_lookahead),
+            2,
+        )
+        occupied = obstacle + 0.5 * pedestrian >= 0.95
+        probe = robot_pos + min(0.3, self.config.occupancy_lookahead) * forward
+        geometry = getattr(self, "_static_clearance", None)
+        if geometry is not None:
+            occupied |= geometry.clearance(probe, radius, robot_pos) <= 0.0
+        _, _, pedestrians = self._socnav_fields(observation)
+        count = int(self._as_1d_float(pedestrians.get("count", [0]))[0])
+        positions = np.asarray(pedestrians.get("positions", []), dtype=float).reshape(-1, 2)[:count]
+        ped_radius = float(self._as_1d_float(pedestrians.get("radius", [0.4]))[0])
+        if positions.size:
+            occupied |= bool(
+                np.any(np.linalg.norm(positions - probe, axis=1) <= radius + ped_radius)
+            )
+        stationary = abs(float(self._as_1d_float(robot.get("speed", [0.0]))[0])) < 0.05
+        self._reverse_blocked_steps = (
+            self._reverse_blocked_steps + 1 if occupied and stationary else 0
+        )
+        self._reverse_clear_steps = 0 if occupied else self._reverse_clear_steps + 1
+        if self._reverse_mode:
+            if abs(heading_error) <= np.deg2rad(70.0) + self._EPS or self._reverse_clear_steps >= 3:
+                self._reverse_mode = False
+                self._reverse_blocked_steps = 0
+        elif abs(heading_error) >= np.deg2rad(110.0) and self._reverse_blocked_steps >= 3:
+            self._reverse_mode = True
+        return self._reverse_mode
 
     def _reverse_command_clear(
         self,
@@ -1092,11 +1145,9 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         world_dir, occ_penalty = self._get_safe_heading(robot_pos, world_dir, observation)
         desired_heading = atan2(world_dir[1], world_dir[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
-        reverse = getattr(self, "_reverse_drive", None) is not None and cos(heading_error) < 0.0
-        turn_error = self._wrap_angle(heading_error + pi) if reverse else heading_error
         angular = float(
             np.clip(
-                1.5 * self.config.angular_gain * turn_error,
+                1.5 * self.config.angular_gain * heading_error,
                 -self.config.max_angular_speed,
                 self.config.max_angular_speed,
             )
@@ -1108,13 +1159,28 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         linear = float(
             min(speed, self.config.max_linear_speed) * max(0.0, 1.0 - occ_penalty) * heading_scale
         )
-        if reverse:
-            linear = -min(speed * abs(cos(heading_error)), self._reverse_drive.max_reverse_speed)
-            linear *= max(0.0, 1.0 - occ_penalty)
-            if not self._reverse_command_clear(
-                linear, angular, robot_pos, robot_heading, observation
+        if getattr(self, "_reverse_drive", None) is not None and self._use_reverse_escape(
+            heading_error, robot_pos, robot_heading, observation
+        ):
+            reverse_angular = float(
+                np.clip(
+                    1.5 * self.config.angular_gain * self._wrap_angle(heading_error + pi),
+                    -self.config.max_angular_speed,
+                    self.config.max_angular_speed,
+                )
+            )
+            reverse_linear = -min(
+                speed * max(0.0, -cos(heading_error)), self._reverse_drive.max_reverse_speed
+            ) * max(0.0, 1.0 - occ_penalty)
+            if self._reverse_command_clear(
+                reverse_linear, reverse_angular, robot_pos, robot_heading, observation
             ):
-                linear = 0.0
+                linear, angular = reverse_linear, reverse_angular
+            else:
+                # Keep the complete forward command, including the turn toward
+                # the goal, when rear sensing or clearance refuses the escape.
+                self._reverse_mode = False
+                self._reverse_blocked_steps = 0
         self._record_adapter_trace(
             velocity_world=velocity_world,
             robot_heading=robot_heading,

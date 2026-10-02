@@ -2162,7 +2162,7 @@ def _build_common_adapter_policy(  # noqa: C901
             """Keep SocNav projection limits in sync with the opt-in bound plant."""
             nonlocal adapter_kinematics_model
             original_bind_env(env)
-            drive = bound_drive_settings(env)
+            drive = bound_drive_settings(env, adapter=adapter)
             limits = dict(algo_config)
             if getattr(drive, "limited_reverse", False):
                 limits.update(limited_reverse=True, max_reverse_speed=drive.max_reverse_speed)

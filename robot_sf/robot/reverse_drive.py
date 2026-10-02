@@ -4,6 +4,32 @@ from math import isfinite
 from numbers import Real
 from typing import Any
 
+from loguru import logger
+
+
+def warn_unsupported_reverse(adapter: Any, drive: Any) -> None:
+    """Warn once per adapter when the live plant enables unsupported reverse.
+
+    ORCA subclasses and hybrid v4 implement guarded reverse commands. Other
+    adapters retain their existing samples; the signed plant can still accept
+    negative commands from external or learned policies.
+    """
+    if not getattr(drive, "limited_reverse", False):
+        return
+    families = {cls.__name__ for cls in type(adapter).__mro__}
+    aware = "ORCAPlannerAdapter" in families or (
+        "HybridRuleLocalPlannerAdapter" in families
+        and getattr(adapter, "_v4_clearance_braking", False)
+    )
+    if aware or getattr(adapter, "_limited_reverse_warning_emitted", False):
+        return
+    logger.warning(
+        "limited_reverse enabled for {}; this adapter is not reverse-aware. "
+        "Its existing sampling is unchanged, while the plant accepts negative commands.",
+        type(adapter).__name__,
+    )
+    adapter._limited_reverse_warning_emitted = True
+
 
 def validate_reverse_settings(limited_reverse: bool, max_reverse_speed: float) -> None:
     """Reject invalid reverse settings before constructing a plant or adapter."""
@@ -30,7 +56,7 @@ def reverse_identity(settings: Any) -> dict[str, Any]:
     }
 
 
-def bound_drive_settings(env: Any) -> Any:
+def bound_drive_settings(env: Any, *, adapter: Any = None) -> Any:
     """Read the live plant settings without consulting future simulator state.
 
     Returns:
@@ -38,7 +64,9 @@ def bound_drive_settings(env: Any) -> Any:
     """
     config = getattr(env, "env_config", None) or getattr(env, "config", None)
     drive = getattr(config, "robot_config", None)
-    if drive is not None:
-        return drive
-    robots = getattr(getattr(env, "simulator", None), "robots", None)
-    return getattr(robots[0], "config", None) if robots else None
+    if drive is None:
+        robots = getattr(getattr(env, "simulator", None), "robots", None)
+        drive = getattr(robots[0], "config", None) if robots else None
+    if adapter is not None:
+        warn_unsupported_reverse(adapter, drive)
+    return drive

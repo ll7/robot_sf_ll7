@@ -132,7 +132,7 @@ def build_adapter_policy(  # noqa: C901
             """Bind the adapter and opt-in projection to the same live plant."""
             nonlocal adapter_kinematics_model
             adapter.bind_env(env)
-            drive = bound_drive_settings(env)
+            drive = bound_drive_settings(env, adapter=adapter)
             if getattr(drive, "limited_reverse", False):
                 adapter_kinematics_model = resolve_benchmark_kinematics_model(
                     robot_kinematics=robot_kinematics,

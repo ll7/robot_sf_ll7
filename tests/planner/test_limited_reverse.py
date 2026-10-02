@@ -13,7 +13,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerConfig,
 )
 from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
-from robot_sf.planner.socnav_orca import ORCAPlannerAdapter, SocNavPlannerConfig
+from robot_sf.planner.socnav_orca import HRVOPlannerAdapter, ORCAPlannerAdapter, SocNavPlannerConfig
 from robot_sf.robot.actuation_envelope import actuation_envelope_from_drive_config
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings, BicycleDriveState, BicycleMotion
 from robot_sf.robot.differential_drive import (
@@ -75,22 +75,138 @@ def test_unicycle_command_projection_accepts_and_caps_reverse(kinematics):
     assert not model.is_feasible((-0.31, 0.0))
 
 
-def test_orca_reverse_projection_and_rear_pedestrian_clearance():
-    adapter = ORCAPlannerAdapter(
-        SocNavPlannerConfig(occupancy_heading_sweep=0.0, occupancy_lookahead=1.0)
-    )
+def _reverse_adapter(adapter_cls=ORCAPlannerAdapter):
+    adapter = adapter_cls(SocNavPlannerConfig(occupancy_heading_sweep=0.0, occupancy_lookahead=1.0))
     adapter.bind_env(_env(_drive()))
-    obs = _with_occupancy_grid(_observation())
-    kwargs = {
-        "velocity_world": np.array([-2.0, 0.0]),
-        "robot_pos": np.zeros(2),
-        "robot_heading": 0.0,
-    }
-    assert adapter._velocity_world_to_command(**kwargs, observation=obs) == (-0.5, 0.0)
-    blocked = _with_occupancy_grid(_observation(pedestrians=[[-0.95, 0.0]]))
-    assert adapter._velocity_world_to_command(**kwargs, observation=blocked)[0] == 0.0
-    adapter.bind_env(_env(DifferentialDriveSettings()))
-    assert adapter._velocity_world_to_command(**kwargs, observation=obs)[0] == 0.0
+    return adapter
+
+
+def _escape_observation(*, front_blocked=True, pedestrians=None):
+    obs = _with_occupancy_grid(_observation(goal=(-5.0, 0.0), pedestrians=pedestrians))
+    obs["occupancy_grid"] = np.zeros((4, 80, 80), dtype=np.float32)
+    obs["occupancy_grid_meta_origin"] = np.array([-4.0, -4.0], dtype=np.float32)
+    obs["occupancy_grid_meta_resolution"] = np.array([0.1], dtype=np.float32)
+    obs["occupancy_grid_meta_size"] = np.array([80.0, 80.0], dtype=np.float32)
+    if front_blocked:
+        # A wall 0.6 m ahead: outside the 0.5 m robot footprint, inside both
+        # forward occupancy probes. Rear swept geometry remains clear.
+        obs["occupancy_grid"][[0, 3], 30:50, 46:53] = 1.0
+    return obs
+
+
+def _project_heading(adapter, obs, degrees=180.0):
+    radians = np.deg2rad(degrees)
+    return adapter._velocity_world_to_command(
+        velocity_world=2.0 * np.array([np.cos(radians), np.sin(radians)]),
+        robot_pos=np.zeros(2),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+
+@pytest.mark.parametrize("adapter_cls", [ORCAPlannerAdapter, HRVOPlannerAdapter])
+@pytest.mark.parametrize("degrees", [100.0, 180.0])
+def test_orca_free_forward_turns_toward_goal_without_reverse(adapter_cls, degrees):
+    adapter = _reverse_adapter(adapter_cls)
+    obs = _escape_observation(front_blocked=False)
+    for _ in range(6):
+        assert _project_heading(adapter, obs, degrees) == pytest.approx((0.0, 1.0))
+
+
+@pytest.mark.parametrize("source", ["grid", "static_geometry", "pedestrian"])
+def test_orca_blocked_forward_requires_three_steps_then_reverses(source):
+    adapter = _reverse_adapter()
+    obs = _escape_observation()
+    if source == "static_geometry":
+        env = _env(_drive())
+        env._get_static_grid_obstacles = lambda: (np.array([[[0.6, -1.0], [0.6, 1.0]]]), [])
+        adapter.bind_env(env)
+        obs = _observation(goal=(-5.0, 0.0))
+    elif source == "pedestrian":
+        # No grid-based forward obstruction: canonical tracked agents provide
+        # a person just beyond the nose. The empty grid supplies rear coverage.
+        obs = _escape_observation(front_blocked=False, pedestrians=[[1.0, 0.0]])
+    assert _project_heading(adapter, obs) == pytest.approx((0.0, 1.0))
+    assert _project_heading(adapter, obs) == pytest.approx((0.0, 1.0))
+    assert _project_heading(adapter, obs) == pytest.approx((-0.5, 0.0))
+    adapter.reset(seed=1001)
+    assert _project_heading(adapter, obs) == pytest.approx((0.0, 1.0))
+
+
+@pytest.mark.parametrize("refusal", ["pedestrian", "missing_geometry"])
+def test_orca_reverse_projection_and_rear_pedestrian_clearance(refusal):
+    adapter = _reverse_adapter()
+    obs = _escape_observation()
+    for _ in range(3):
+        _project_heading(adapter, obs)
+    assert _project_heading(adapter, obs) == pytest.approx((-0.5, 0.0))
+    blocked = (
+        _escape_observation(pedestrians=[[-0.95, 0.0]])
+        if refusal == "pedestrian"
+        else _observation(goal=(-5.0, 0.0))
+    )
+    assert _project_heading(adapter, blocked) == pytest.approx((0.0, 1.0))
+
+
+def test_orca_reverse_hysteresis_does_not_chatter_at_ninety_degrees():
+    adapter = _reverse_adapter()
+    obs = _escape_observation()
+    for _ in range(3):
+        _project_heading(adapter, obs)
+    commands = [_project_heading(adapter, obs, angle) for angle in [89.0, 91.0] * 3]
+    assert [command[1] for command in commands] == [-1.0] * 6
+    assert all(command[0] <= 0.0 for command in commands)
+    assert _project_heading(adapter, obs, 70.0)[1] == 1.0
+    assert _project_heading(adapter, obs, 100.0) == pytest.approx((0.0, 1.0))
+    for _ in range(3):
+        _project_heading(adapter, obs)
+    clear = _escape_observation(front_blocked=False)
+    assert _project_heading(adapter, clear) == pytest.approx((-0.5, 0.0))
+    assert _project_heading(adapter, clear) == pytest.approx((-0.5, 0.0))
+    assert _project_heading(adapter, clear) == pytest.approx((0.0, 1.0))
+
+
+@pytest.mark.parametrize("kind", ["risk_dwa", "predictive_mppi", "hybrid_v3", "sampling"])
+def test_non_reverse_aware_adapter_warns_once_with_its_name(kind):
+    from loguru import logger
+
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import build_adapter_policy
+    from robot_sf.planner.predictive_mppi import PredictiveMPPIAdapter, PredictiveMPPIConfig
+    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
+    from robot_sf.planner.socnav import SamplingPlannerAdapter
+
+    adapter = {
+        "risk_dwa": RiskDWAPlannerAdapter,
+        "predictive_mppi": lambda: PredictiveMPPIAdapter(
+            PredictiveMPPIConfig(socnav=SocNavPlannerConfig(), random_seed=1001),
+            allow_fallback=True,
+        ),
+        "hybrid_v3": lambda: HybridRuleLocalPlannerAdapter(
+            HybridRuleLocalPlannerConfig(planner_variant="hybrid_rule_v3_teb_like_rollout")
+        ),
+        "sampling": SamplingPlannerAdapter,
+    }[kind]()
+    policy, _ = build_adapter_policy(
+        algo_key="hybrid_rule_local_planner" if kind == "hybrid_v3" else kind,
+        algo_config={},
+        meta={},
+        adapter=adapter,
+        adapter_name=type(adapter).__name__,
+        robot_kinematics="differential_drive",
+        normalized_robot_command_mode=None,
+    )
+    messages = []
+    sink = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        policy._planner_bind_env(_env(DifferentialDriveSettings()))
+        assert not messages
+        policy._planner_bind_env(_env(_drive()))
+        policy._planner_bind_env(_env(_drive()))
+    finally:
+        logger.remove(sink)
+    warnings = [message for message in messages if "not reverse-aware" in message]
+    assert len(warnings) == 1
+    assert type(adapter).__name__ in warnings[0]
 
 
 def test_hybrid_reverse_rollout_and_rear_braking_contact():
@@ -203,8 +319,12 @@ def test_socnav_runner_binding_keeps_reverse_in_the_executed_policy():
 
     policy, _ = _build_policy("orca", {"occupancy_heading_sweep": 0.0, "occupancy_lookahead": 1.0})
     policy._planner_bind_env(_env(_drive(cap=0.3)))
-    obs = _with_occupancy_grid(_observation(goal=(-5.0, 0.0)))
-    assert policy(obs)[0] == pytest.approx(-0.3)
+    obs = _escape_observation()
+    assert policy(obs) == pytest.approx((0.0, 1.0))
+    assert policy(obs) == pytest.approx((0.0, 1.0))
+    linear, angular = policy(obs)
+    assert linear == pytest.approx(-0.3)
+    assert abs(angular) <= 1.0
     policy._planner_bind_env(_env(DifferentialDriveSettings()))
     assert policy(obs)[0] == 0.0
 

@@ -26,10 +26,20 @@ not activate reverse. Both differential and bicycle drive settings support it;
 unicycle `(v, omega)` command projection and the velocity-to-acceleration adapter
 use the same cap. This does not change the pedestrian unicycle model.
 
-The ORCA world-velocity adapter uses signed heading projection when the live plant
-opts in. Backward travel turns toward the reverse travel axis and checks the rear
+The ORCA world-velocity adapter uses reverse as an opt-in escape, not whenever a
+goal is behind it. It enters after three consecutive stationary steps (speed
+below 0.05 m/s) with mean combined occupancy penalty at least 0.95 over two forward probes
+just beyond the robot radius (0.15 and 0.30 m, shortened with lookahead), and a
+heading error of at least 110 degrees. It exits at 70 degrees or after three
+consecutive clear forward probes. This hysteresis prevents switching at every
+90-degree crossing; free space retains the forward turn toward the goal.
+Bound static geometry intersecting a 0.30 m forward footprint sweep, or an
+observed pedestrian overlapping that projected footprint, also establishes
+obstruction without a grid; this supports canonical tracked-agent observations.
+Backward travel turns toward the reverse travel axis and checks the rear
 footprint and constant-velocity pedestrian prediction through a braking horizon.
-Absent rear geometry/grid data refuses reverse. HRVO inherits this adapter.
+Absent rear geometry/grid data or an obstructed rear sweep restores the complete
+forward command, including its turn. HRVO inherits this adapter.
 This projection is an adapter heuristic; it does not preserve ORCA's holonomic
 feasibility guarantee. Hybrid v4 adds negative dynamic-window/static-escape
 candidates, predicts signed drive-limited rollouts, and checks braking toward
@@ -42,7 +52,10 @@ The unchanged goal/grid, social-force, risk-DWA, predictive-MPPI,
 SocNav sampling/prediction, SACADRL, guarded-PPO guard, and learned/external planner
 adapters do not add reverse candidates or read the new selector. A learned/native
 negative command can only reverse if every upstream projection permits it;
-retraining or lattice changes for those planners are separate work.
+retraining or lattice changes for those planners are separate work. Canonical
+map-runner binding warns once, naming any adapter that is not reverse-aware,
+when its live plant enables limited reverse. Hybrid v3 also gets this warning;
+hybrid v4 and ORCA/HRVO do not.
 
 The default LiDAR angle portion is 1.0 (a full 360-degree scan). Reverse guards
 use observed pedestrian state and static map/grid geometry rather than assuming

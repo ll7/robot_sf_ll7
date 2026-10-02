@@ -63,6 +63,7 @@ yaw law and hand-calculated step acceleration, never the function under test.
 | speed_priority_coupled_projection | Preserve bounded speed and constrain signed yaw including creep; box projection returns | Existing two model tests lacked curvature/boundary cases |
 | creep_respects_low_speed_cap | Creep at .04 cap; unconditional .1 default returns | No previous cap below creep speed |
 | runner_model_uses_actual_bicycle_caps | Use plant caps ahead of planner defaults; runtime limit wiring disappears | Existing standalone adapter test never resolved planner policy caps |
+| episode_policy_receives_t60_limits | Bind real T60 plant into policy config; limits injected from planner defaults | Previous context tests used differential drive only |
 | opt_in_t60_config_reaches_real_robot | Both tracked variants reach actual settings; loader/config integration drifts | No existing T60 configs or physical config-load assertion |
 
 Three old assertions in `test_classic_planner_adapter.py` change deliberately:

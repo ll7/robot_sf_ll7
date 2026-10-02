@@ -161,3 +161,43 @@ def test_opt_in_t60_config_reaches_real_robot(variant, steer):
     assert robot.config.max_velocity == 1.34
     assert robot.config.max_accel == robot.config.max_decel == 1.0
     assert robot.config.min_velocity == 0.0
+
+
+def test_episode_policy_receives_t60_limits():
+    """The real episode context must bind the plant before building its planner."""
+    from pathlib import Path
+
+    import yaml
+
+    from robot_sf.benchmark.map_runner.map_runner_episode import _resolve_episode_run_context
+
+    root = Path(__file__).resolve().parents[1]
+    path = root / "configs/robots/t60_bicycle_30deg_v1.yaml"
+    scenario = yaml.safe_load(path.read_text())
+    scenario.update(name="t60_policy_limits", seeds=[1001])
+    ctx = _resolve_episode_run_context(
+        scenario=scenario,
+        seed=1001,
+        horizon=600,
+        dt=0.1,
+        algo="goal",
+        scenario_path=path,
+        algo_config={"v_max": 2.0, "omega_max": 1.0},
+        algo_config_path=None,
+        experimental_ped_impact=False,
+        ped_impact_radius_m=2.0,
+        ped_impact_window_steps=5,
+        observation_mode=None,
+        observation_level=None,
+        benchmark_track=None,
+        track_schema_version=None,
+        observation_noise=None,
+        tracking_precision=None,
+        synthetic_actuation_profile=None,
+        latency_stress_profile=None,
+        safety_wrapper=None,
+        cbf_safety_filter=None,
+    )
+    assert ctx.policy_cfg.get("bicycle_max_velocity") == 1.34
+    assert ctx.policy_cfg.get("bicycle_max_curvature") == pytest.approx(0.636179811391)
+    assert ctx.policy_cfg.get("bicycle_max_angular_speed") == pytest.approx(0.852480947264)

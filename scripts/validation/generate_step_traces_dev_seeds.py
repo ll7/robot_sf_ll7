@@ -1,6 +1,6 @@
 """Generate simulation-step-trace rows on development seeds only (#9979).
 
-Refuses evaluation-holdout seeds 111-140. Rows include per-step goal and collision
+Allows only DEV_SEEDS (1001-1030), excluding both evaluation bands. Rows include per-step goal and collision
 fields for check_step_trace_invariants.py.
 
 Usage:
@@ -19,18 +19,17 @@ from pathlib import Path
 
 from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+from robot_sf.benchmark.seed_bands import DEV_SEEDS
 from robot_sf.scenario_certification.feasibility_diagnostics import make_actor_free_scenario
 from robot_sf.scenario_certification.v1 import scenario_actor_source_census
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
-
-HOLDOUT = range(111, 141)
 
 
 def main() -> int:
     """CLI entry point.
 
     Returns:
-        0 on success, 2 when a holdout seed is requested.
+        0 on success, 2 when any non-development seed is requested.
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("--matrix", default="configs/scenarios/classic_interactions_francis2023.yaml")
@@ -45,8 +44,8 @@ def main() -> int:
     ap.add_argument("--shard", default="0/1", help="i/n: run scenarios where index %% n == i")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    if any(s in HOLDOUT for s in a.seeds):
-        print("refusing holdout seed", file=sys.stderr)
+    if any(s not in DEV_SEEDS for s in a.seeds):
+        print("refusing non-development seed; only DEV_SEEDS 1001-1030 allowed", file=sys.stderr)
         return 2
     scen = load_classic_matrix(a.matrix)
     if a.scenario_ids:

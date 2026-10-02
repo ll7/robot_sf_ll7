@@ -78,6 +78,7 @@ from robot_sf.benchmark.map_runner.map_runner_trace import (
     _fast_bicycle_actor_summary,
     _intent_conditioned_behavior_summary,
     _observation_heading,
+    _optional_trace_float,
     _single_pedestrian_intent_metadata,
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,
@@ -1548,7 +1549,6 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
     ped_positions: list[np.ndarray],
     ped_forces: list[np.ndarray],
     robot_force_samples: list[dict[str, Any]] | None = None,
-    persist_robot_force_samples: bool = False,
     visibility_trace: list[np.ndarray | None],
     track_confidence_trace: list[np.ndarray | None],
     visibility_evidence_statuses: list[str],
@@ -1706,8 +1706,6 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
         )
-    if persist_robot_force_samples and robot_force_samples:
-        metrics_raw["robot_force_samples"] = robot_force_samples
     _floor_collision_metrics_from_flags(
         metrics_raw,
         collision_seen=collision_seen,
@@ -1891,6 +1889,7 @@ class _EpisodeStepLoopResult:
     initial_robot_heading: float
     initial_ped_positions: np.ndarray
     initial_robot_velocity: np.ndarray | None
+    initial_robot_angular_velocity: float | None
     initial_ped_velocities: np.ndarray | None
     initial_ped_headings: np.ndarray | None
     trace_actor_ids: list[str] | None
@@ -1981,6 +1980,7 @@ class _StepLoopState:
     initial_robot_heading: float = 0.0
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
     initial_robot_velocity: np.ndarray | None = None
+    initial_robot_angular_velocity: float | None = None
     initial_ped_velocities: np.ndarray | None = None
     initial_ped_headings: np.ndarray | None = None
     trace_actor_ids: list[str] | None = field(default_factory=list)
@@ -2336,6 +2336,7 @@ def _init_step_loop_state(
         state.completion_policy = getattr(navigators[0], "completion_policy", "waypoint_radius_v1")
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
+    state.initial_robot_angular_velocity = _initial_robot_angular_velocity(env.simulator)
     state.initial_ped_velocities = initial_ped_velocities
     state.initial_ped_headings = initial_ped_headings
     state.trace_actor_ids = trace_actor_ids
@@ -2365,6 +2366,27 @@ def _reset_robot_heading(simulator: Any, obs: Any) -> float:
         if numeric is not None and np.isfinite(numeric):
             return numeric
     return _observation_heading(obs)
+
+
+def _initial_robot_angular_velocity(simulator: Any) -> float | None:
+    """Read the differential-drive reset yaw rate from measured robot state.
+
+    Returns:
+        A finite rad/s value, or None for unavailable/unsupported state.
+    """
+    from robot_sf.robot.differential_drive import DifferentialDriveState  # noqa: PLC0415
+
+    robots = getattr(simulator, "robots", None)
+    if not isinstance(robots, (list, tuple)) or not robots:
+        return None
+    state = getattr(robots[0], "state", None)
+    if not isinstance(state, DifferentialDriveState):
+        return None
+    try:
+        value = float(state.velocity[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:  # noqa: C901
@@ -3518,6 +3540,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
+        initial_robot_angular_velocity=state.initial_robot_angular_velocity,
         initial_ped_velocities=state.initial_ped_velocities,
         initial_ped_headings=state.initial_ped_headings,
         trace_actor_ids=(
@@ -4150,6 +4173,7 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
     ped_radius: float,
     scenario: dict[str, Any] | None,
     sampler_capture: dict[str, Any] | None = None,
+    initial_robot_angular_velocity: float | None = None,
 ) -> dict[str, Any]:
     """Build the reset-time provenance block for the simulation step trace.
 
@@ -4216,6 +4240,7 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
             "position": [float(origin[0]), float(origin[1])] if origin_ok else None,
             "heading": robot_heading,
             "velocity": robot_velocity,
+            "angular_velocity": _optional_trace_float(initial_robot_angular_velocity),
         },
         "pedestrians": pedestrians,
         "min_surface_clearance_m": min_clearance,
@@ -4256,6 +4281,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     termination_reason: str,
     safety_events: list[dict[str, Any]],
     sampler_capture: dict[str, Any] | None = None,
+    initial_robot_angular_velocity: float | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -4280,6 +4306,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 initial_robot_pos=initial_robot_pos,
                 initial_robot_heading=initial_robot_heading,
                 initial_robot_velocity=initial_robot_velocity,
+                initial_robot_angular_velocity=initial_robot_angular_velocity,
                 initial_ped_positions=initial_ped_positions,
                 initial_ped_velocities=initial_ped_velocities,
                 initial_ped_headings=initial_ped_headings,
@@ -4712,6 +4739,7 @@ def _finalize_metadata_outputs(
         initial_robot_heading=loop_result.initial_robot_heading,
         initial_ped_positions=loop_result.initial_ped_positions,
         initial_robot_velocity=loop_result.initial_robot_velocity,
+        initial_robot_angular_velocity=loop_result.initial_robot_angular_velocity,
         initial_ped_velocities=loop_result.initial_ped_velocities,
         initial_ped_headings=loop_result.initial_ped_headings,
         trace_actor_ids=loop_result.trace_actor_ids,
@@ -5632,7 +5660,6 @@ def run_map_episode(  # noqa: PLR0913
         ped_positions=loop_result.ped_positions,
         ped_forces=loop_result.ped_forces,
         robot_force_samples=loop_result.robot_force_samples,
-        persist_robot_force_samples=record_simulation_step_trace,
         visibility_trace=loop_result.visibility_trace,
         track_confidence_trace=loop_result.track_confidence_trace,
         visibility_evidence_statuses=loop_result.visibility_evidence_statuses,
@@ -5674,6 +5701,10 @@ def run_map_episode(  # noqa: PLR0913
         record_simulation_step_trace=record_simulation_step_trace,
         paired_wrapper_off_record=paired_wrapper_off_record,
     )
+    if record_simulation_step_trace and loop_result.robot_force_samples:
+        episode_record["algorithm_metadata"]["robot_force_samples"] = (
+            loop_result.robot_force_samples
+        )
     realized_map_id = (
         resolve_map_id(ctx.config, loop_result.map_def) if loop_result.map_def is not None else None
     )

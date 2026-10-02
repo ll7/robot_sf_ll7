@@ -1,6 +1,7 @@
 # Robot SF Documentation
 
-* [CALFIT bounded search results](./calfit_results.md) — 114 coarse settings plus one refinement, full diagnostic gates and the new-evidence author packet.
+* [CALFIT repaired protocol and one rerun](./calfit_protocol_repair.md) — Author-approved nonoverlapping starts, V2 passage diagnosis, all 11 settings and the best gate table; NO-PASS.
+* [CALFIT historical bounded search results](./calfit_results.md) — 114 coarse settings plus one refinement with inadmissible starts; retained diagnostic history, superseded by the repaired rerun.
 * [CALFIT preflight and bounded search contract](./calfit_preflight.md) — Synthetic V1–V6 estimator controls, admission-policy blockers, and the proposed dev-seed search grid.
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.

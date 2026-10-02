@@ -689,9 +689,9 @@ def _assert_reference_and_learned_arm_configs(
     ppo = resolved["ppo"][1]
     assert ppo["v_max"] == pytest.approx(DRIVE.max_linear_speed)
     assert ppo["omega_max"] == pytest.approx(DRIVE.max_angular_speed)
-    # This feature cadence is part of the checkpoint input contract; it is
-    # separate from the 0.1 s environment action step.
-    assert ppo["predictive_foresight_rollout_dt"] == pytest.approx(0.2)
+    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain) selects variant B, which has no predictive foresight features.
+    assert ppo["model_id"] == "ppo_release_robot_b1002_last_20261001"
+    assert ppo["predictive_foresight_enabled"] is False
 
 
 def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, Any]]]) -> None:

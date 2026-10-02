@@ -440,6 +440,8 @@ _FAST_FILES = {
     "test_camera_ready_campaign_characterization.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).
     "test_ppo_action_semantics.py",
+    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): registry and release-resolver checks with stub inference and no episodes.
+    "test_ppo_release_robot_binding.py",
     # TRAIN1 deterministic benchmark contracts from PR #10019.
     "test_multi_amv.py",
     "test_rank_metrics.py",

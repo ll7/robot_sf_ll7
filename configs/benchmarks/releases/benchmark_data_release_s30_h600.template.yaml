@@ -18,7 +18,7 @@ latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml
-campaign_config_sha256: "42d61b49c92d112db62618e837770f11d9a0d50cfddff94c595b5c5849cbcf86"
+campaign_config_sha256: "abc410028a7779e4577c083362ee2d668afc28121e64f8cfd523fdfa45794c63"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -95,10 +95,6 @@ seed_policy:
     - 59019
 
 metrics:
-  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
-  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
-  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
-  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
   snqi_claim_policy: advisory_no_ranking
 
 planners:
@@ -147,7 +143,6 @@ artifacts:
     - reports/campaign_report.md
     - reports/matrix_summary.json
     - reports/campaign_table.md
-    - reports/snqi_diagnostics.json
 
 artifact_provenance:
   raw_campaign_output: durable-required

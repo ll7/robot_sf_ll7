@@ -1208,6 +1208,26 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
     return 0
 
 
+def _snqi_v2_evaluation_seed_receipt(cfg: Any) -> dict[str, str]:
+    """Bind release evaluation seeds before any episode can execute.
+
+    Returns:
+        The checked commitment for the release receipt, or no fields without v2.
+    """
+    spec = getattr(cfg, "snqi_v2_spec", None)
+    if spec is None:
+        return {}
+    from robot_sf.benchmark.camera_ready._config import (
+        _load_campaign_scenarios,
+        _resolved_seed_inventory,
+    )
+    from robot_sf.benchmark.snqi.evaluation_seeds import evaluation_seeds_sha256
+
+    seeds = _resolved_seed_inventory(_load_campaign_scenarios(cfg))
+    spec.validate_evaluation_commitment(seeds)
+    return {"snqi_v2_evaluation_seeds_sha256": evaluation_seeds_sha256(seeds)}
+
+
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -1537,6 +1557,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "manifest_validation": validation,
         "resolved_manifest": resolved_manifest,
     }
+    result.update(_snqi_v2_evaluation_seed_receipt(cfg))
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"

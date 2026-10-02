@@ -1507,16 +1507,20 @@ Historical measurements below are attributed to the named review report; they we
 - **Choice:** Dev seeds 1001 and 1002, with 1003 held apart for the N2
   diagnostic. The calibration receipt carries the sealed-seed digest, and
   `validate_evaluation_seeds` rejects 1001-1030 and 101/102 as evaluation
-  seeds. The file `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml`
-  already holds 1001/1002 content and must be renamed in the #10045 refresh.
+  seeds. The file
+  `configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml`
+  now names both the actual seeds and scheduled acquisition purpose. #10045
+  renamed it from `calibration.dev101_102.yaml`.
 - **Reason:** One development band (1001-1030) for all development work.
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** 101/102.
 - **Amends:** D-048 ("seeds 101-102").
 - **Evidence:** private orchestration notes; #10045; rr10045b_report.md, private-ops review archive.
-- **Implemented in:** #10045 (open; refresh pending).
-- **Enforced by:** none yet: a test that the calibration config resolves
-  to 1001/1002 and that its file name matches.
+- **Implemented in:** #10045 (refresh implemented; PR open).
+- **Enforced by:**
+  `tests/unit/benchmark/test_snqi_v2.py::test_development_calibration_matches_candidate_and_preserves_frozen_007`
+  (lines 79–94), which loads the new filename and asserts development seeds
+  1001/1002 and parity with the authored candidate.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-069: 0.0.8 release rows are untraced; traces come from rehearsal 2
@@ -1726,7 +1730,7 @@ Historical measurements below are attributed to the named review report; they we
 |---|---|---|
 | D-004 | D-070 | The old freeze commit is superseded by the train-2 head after rehearsal 2, packaging and intake pass. No final freeze SHA is asserted here. |
 | D-017 | D-053 | The author replaces the plain PPO arm; the older supplementary-only choice remains historical. #10077 is still open. |
-| D-048 | D-068 | Calibration now uses 1001/1002, not 101/102. The stale filename is still present on #10045. |
+| D-048 | D-068 | Calibration uses 1001/1002. #10045 renamed the file to `calibration.dev1001_1002_scheduled_acquisition.yaml`; `test_development_calibration_matches_candidate_and_preserves_frozen_007` in `tests/unit/benchmark/test_snqi_v2.py:79–94` enforces the filename and seed policy. |
 | D-049 | D-051, D-052 | Existing tests may execute retired seeds; refusal witnesses must stop before reset/step. Sealed seeds remain forbidden outside the sealed campaign. |
 | D-039 | D-057 | Scripted input speed and crowd-derived desired speed are distinct paths; crowd target and cap are both 0.65 m/s. |
 | D-038, D-040 | 0.1.0 D-001 | Historical references to the planned 0.0.9 release now mean 0.1.0. |

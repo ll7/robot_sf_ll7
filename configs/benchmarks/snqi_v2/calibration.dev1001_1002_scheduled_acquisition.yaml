@@ -1,7 +1,8 @@
 # Development-only calibration candidate; 14 arms x48 scenarios x2 seeds.
 # The four v4 slots fail closed until #9748 freezes their parameters.
 # No SNQI-v2 scoring until calibration anchors are reviewed and merged.
-name: snqi_v2_calibration_dev101_102
+name: snqi_v2_calibration_dev1001_1002
+protocol_version: 0.0.8
 paper_facing: false
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
@@ -28,13 +29,14 @@ amv_profile:
 seed_policy:
   mode: fixed-list
   seeds:
-  - 101
-  - 102
+  - 1001
+  - 1002
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
-snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
-snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+# Legacy SNQI is excluded: calibrate and pin schema-matched SNQI-v2 anchors first.
+snqi_weights: null
+snqi_baseline: null
 snqi_contract:
-  enabled: true
+  enabled: false
   enforcement: warn
   rank_alignment_warn_threshold: 0.5
   rank_alignment_fail_threshold: 0.3

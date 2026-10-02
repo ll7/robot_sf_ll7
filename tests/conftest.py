@@ -948,6 +948,8 @@ _FAST_FILES = {
     # The direct source/test pairs are required by the changed-coverage router
     # when the release lane is evaluated against current main.
     "test_artifact_publication.py",
+    # Static SNQI exclusion guards run in coverage shards; episode probes stay explicitly slow.
+    "test_snqi_legacy_exclusion.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
     # Stale remote branch prune tests are fast deterministic tooling contracts;

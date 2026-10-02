@@ -153,3 +153,15 @@ therefore an input-admissibility confound for rigid-disc calibration, which
 must be distinguished from a wall-law safety/flow trade-off. Acquisition
 receipts remain immutable; final reanalysis records its acceptance-policy head
 separately from the producer head. No start-layout or physics default is changed.
+
+The original .9-shoulder record is excluded explicitly from both numeric and
+physical admission, as the author-scoped model limitation; physical violations
+in every feasible calibration case remain hard failures. Before this correction,
+a appended excluded record incorrectly changed PASS to physical FAIL. The
+regression retains the excluded measurement and its reason without gating it.
+The preflight source fingerprint now includes the separate acceptance-policy
+module: its previous five-file receipt omitted the bytes deciding admission;
+the six-file receipt binds those bytes. Both regression failures were reproduced
+on the preceding head. These controls need no simulation or production seam;
+existing feasible-width tests did not cover appended excluded records or the
+new external policy dependency.

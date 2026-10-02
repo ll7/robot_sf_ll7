@@ -55,5 +55,6 @@ def test_cli_persists_blocked_receipt_with_source_identity(tmp_path):
     receipt = json.loads(out.read_text())
     assert receipt["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert receipt["all_estimators_known_answer_pass"] is True
-    assert len(receipt["source_sha256"]) == 5
+    assert len(receipt["source_sha256"]) == 6
+    assert "robot_sf/research/pedestrian_acceptance.py" in receipt["source_sha256"]
     assert all(len(digest) == 64 for digest in receipt["source_sha256"].values())

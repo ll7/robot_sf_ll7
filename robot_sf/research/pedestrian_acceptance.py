@@ -216,6 +216,17 @@ def _wide_checks(rows, config):
     return checks
 
 
+def _original_shoulder_case(row):
+    """Identify the explicitly excluded empirical shoulder-rotation condition.
+
+    Returns:
+        Whether this record belongs to the author-excluded empirical case.
+    """
+    return row["case"] == "V2" and np.isclose(
+        float(row.get("aperture_shoulder_ratio", row["variant"])), 0.9, rtol=0, atol=1e-12
+    )
+
+
 def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, object]:
     """Evaluate population means, preserving every physical/censoring failure.
 
@@ -227,15 +238,17 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         Gate table with residuals, ranges, provenance and independent hard failures.
     """
     config = config or json.loads(DEFAULT_CONFIG.read_text())
+    excluded = [r for r in rows if _original_shoulder_case(r)]
+    active = [r for r in rows if not _original_shoulder_case(r)]
     required = REQUIRED
     missing = [
         f"{r['case']}/{r['variant']}/{r['seed']}"
-        for r in rows
+        for r in active
         if any(r.get(key) is None or not np.isfinite(r[key]) for key in required.get(r["case"], ()))
     ]
     physical = [
         f"{r['case']}/{r['variant']}/{r['seed']}"
-        for r in rows
+        for r in active
         if (
             r.get("wall_penetration_m", 0.0) > 0.0
             or r["pair_overlap"]["all"]["below_2r_count"] > 0
@@ -243,8 +256,10 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         )
     ]
     checks = []
-    for case, variant in sorted({(r["case"], r["variant"]) for r in rows if r["case"] in required}):
-        bank = [r for r in rows if (r["case"], r["variant"]) == (case, variant)]
+    for case, variant in sorted(
+        {(r["case"], r["variant"]) for r in active if r["case"] in required}
+    ):
+        bank = [r for r in active if (r["case"], r["variant"]) == (case, variant)]
         checks.extend(_case_checks(case, variant, bank, config))
     checks.extend(_wide_checks(rows, config))
     if require_complete and rows:
@@ -261,7 +276,7 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
             for variant in variants
             for seed in config["seeds"]
         }
-        observed = [(r["case"], r["seed"], r["variant"]) for r in rows if r["case"] in required]
+        observed = [(r["case"], r["seed"], r["variant"]) for r in active if r["case"] in required]
         if len(observed) != len(expected) or set(observed) != expected:
             missing.append("complete declared V1-V6 dev grid")
     numerical = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "FAIL"]
@@ -287,6 +302,17 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         "numeric_failures": numerical,
         "unspecified_tolerances": unspecified,
         "checks": checks,
+        "excluded_measurements": [
+            {
+                "case": r["case"],
+                "variant": r["variant"],
+                "seed": r["seed"],
+                "reason": LIMITATION,
+                "case_gated": False,
+                "source": SOURCES["V2"],
+            }
+            for r in excluded
+        ],
         "exit_code": code,
         "tolerance_note": NOTE,
         "model_limitations": [

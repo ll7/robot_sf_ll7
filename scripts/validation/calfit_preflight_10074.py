@@ -180,6 +180,7 @@ def audit() -> dict[str, object]:
                 Path(__file__),
                 Path(suite.__file__),
                 Path(m.__file__),
+                suite.ROOT / "robot_sf/research/pedestrian_acceptance.py",
                 Path(suite.reused.__file__),
                 suite.DEFAULT_CONFIG,
             )

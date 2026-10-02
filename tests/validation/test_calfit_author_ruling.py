@@ -87,3 +87,24 @@ def test_initial_overlap_is_hard_failure_even_if_later_samples_are_clear():
         ]
     )
     assert result["exit_code"] == 3
+
+
+def test_original_shoulder_rotation_case_is_a_limitation_not_a_failed_gate():
+    original = {
+        "case": "V2",
+        "variant": "0.9",
+        "seed": 1001,
+        "radius_m": 0.28,
+        "aperture_shoulder_ratio": 0.9,
+        "speed_drop_m_s": None,
+        "passed": False,
+        "wall_penetration_m": 0.2,
+        "pair_overlap": {"all": {"below_2r_count": 0}},
+    }
+    result = suite.acceptance_gate([row(), original])
+    assert result["exit_code"] == 0
+    assert (
+        result["excluded_measurements"][0]["reason"]
+        == "not reproducible with rigid discs (shoulder rotation)"
+    )
+    assert len(result["checks"]) == 1

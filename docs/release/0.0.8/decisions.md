@@ -968,7 +968,8 @@ lines, not the whole tree or the seeds actually passed at runtime (#10010).
   developed and checked on outcomes from the 0.0.7 evaluation band?
 - **Choice:** Use the fresh sealed `EVAL_SEEDS_0_0_8` tuple in
   `robot_sf/benchmark/seed_bands.py`, transported by
-  `configs/benchmarks/seed_sets_0_0_8.yaml`. Development seeds remain 1001..1030.
+  the planned benchmark transport `seed_sets_0_0_8.yaml` (absent from this
+  stacked checkout; delivery tracked by #10085). Development seeds remain 1001..1030.
   No planner or environment step on either held-out band is permitted **anywhere,
   except the sealed campaign (including its own spawn preflight) at the freeze commit**.
   The sealed campaign includes the main 0.0.8 evaluation and the three-width

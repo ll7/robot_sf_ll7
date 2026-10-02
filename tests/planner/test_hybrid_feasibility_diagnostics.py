@@ -263,6 +263,15 @@ def test_admissible_speed_flag_samples_above_comfort_band_without_relaxing_safet
     candidates = planner._generate_candidates(state, cap)
     assert max(c.linear for c in candidates) > 0.8, "scalar caps still prune admissible candidates"
     assert max(c.linear for c in candidates) == pytest.approx(1.2)
+    planner.config.platform_speed_candidates_enabled = False
+    legacy = planner._generate_candidates(state, cap)
+    assert {(c.linear, c.angular) for c in legacy} <= {(c.linear, c.angular) for c in candidates}, (
+        "candidate extension removed a legacy command"
+    )
+    planner.config.platform_speed_candidates_enabled = True
+    planner.config.v4_braking_check_enabled = False
+    assert max(c.linear for c in planner._generate_candidates(state, cap)) <= cap
+    planner.config.v4_braking_check_enabled = True
     # The original pedestrian comfort exclusion and braking rejection remain hard.
     obs = _obs(robot=(4, 15), goal=(20, 15), speed=1.9, ped_positions=[(5, 15)])
     evaluation = planner._evaluate_candidate(

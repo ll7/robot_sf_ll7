@@ -2,11 +2,13 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from hashlib import sha256
 from types import SimpleNamespace
 
 import pytest
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
+from robot_sf.benchmark.camera_ready._historical_horizons import HISTORICAL_CAMPAIGN_REGISTRY
 from robot_sf.benchmark.camera_ready.campaign import _prepare_campaign_planner_variant_run
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from tests.benchmark.campaign_horizon_support import (
@@ -15,6 +17,41 @@ from tests.benchmark.campaign_horizon_support import (
     TEMPLATE,
     _scheduled_context,
 )
+
+
+@pytest.mark.parametrize("digest", sorted(HISTORICAL_CAMPAIGN_REGISTRY))
+def test_every_registered_historical_campaign_digest_matches_disk(digest):
+    """Every admitted historical byte identity must still have a tracked campaign."""
+    campaigns = {
+        sha256(path.read_bytes()).hexdigest(): path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "configs/benchmarks").glob("*.yaml")
+    }
+    assert digest in campaigns, f"registered historical campaign digest missing on disk: {digest}"
+
+
+def test_retained_trace_campaign_keeps_legacy_cap_and_horizon_provenance():
+    """The real retained trace input preserves all 48 historical runner-cap bindings."""
+    cfg = load_campaign_config(
+        ROOT / "configs/benchmarks/paper_experiment_matrix_v1_h600_trace_capable_rerun.yaml"
+    )
+    assert (cfg.protocol_version, cfg.horizon_policy) == ("0.0.2", "legacy_runner_cap")
+    scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    assert len(scenarios) == 48
+    for scenario in scenarios:
+        binding = scenario["metadata"]["scenario_horizon"]
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert binding["applied_max_episode_steps"] == min(
+            scenario["simulation_config"]["max_episode_steps"], 600
+        )
+    for name, authored in (
+        ("classic_station_platform_medium", 650),
+        ("classic_realworld_double_bottleneck_high", 700),
+    ):
+        scenario = next(s for s in scenarios if s["name"] == name)
+        binding = scenario["metadata"]["scenario_horizon"]
+        assert binding["authored_max_episode_steps"] == authored
+        assert binding["applied_max_episode_steps"] == 600
 
 
 @pytest.mark.parametrize("protocol", ["0.0.8", "0.0.9"])

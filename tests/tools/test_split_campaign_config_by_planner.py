@@ -16,6 +16,24 @@ from scripts.tools import split_campaign_config_by_planner as splitter
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize(
+    "manifest_path",
+    sorted((REPOSITORY_ROOT / "configs").rglob("split_manifest.json")),
+    ids=lambda path: path.parent.name,
+)
+def test_every_tracked_split_manifest_child_digest_matches_disk(manifest_path: Path) -> None:
+    """Submitted split children must match their retained launch manifest's byte pins."""
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["children"], f"empty split manifest: {manifest_path}"
+    mismatches = []
+    for child in manifest["children"]:
+        path = manifest_path.parent / child["filename"]
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != child["sha256"]:
+            mismatches.append(f"{child['filename']}: expected {child['sha256']}, got {actual}")
+    assert not mismatches, "split child digest mismatch:\n" + "\n".join(mismatches)
+
+
 def _fixture_parent() -> dict[str, object]:
     return {
         "name": "fixture_campaign",

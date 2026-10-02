@@ -158,3 +158,46 @@ BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 Add a smoke command, such as the `reference_adapter` or policy-search candidate smoke above, before
 claiming the planner runs in this repository. For docs-only guide updates, `git diff --check`, path
 existence checks, and docs proof consistency are enough unless the guide changes a command contract.
+
+## Hybrid feasibility diagnostics
+
+The hybrid evaluator supports `debug_candidate_evaluator: true` (default: false).
+Each decision then includes `candidate_evaluator_debug`: rejection counts grouped
+by constraint and actual threshold, the highest-scoring feasible moving command,
+and `FORCED` versus `PREFERRED` translation stops. A translation command with
+absolute speed at most 1e-9 m/s is a stop; turning in place is included. Goal stops
+are labeled `GOAL`. The proximity speed cap and conditional constraint thresholds
+are also recorded. These diagnostic fields are absent when the flag is absent.
+
+For hybrid v4 with bound exact-map geometry and continuous static checking,
+`physical_static_exclusion_enabled: true` (default: false) separates physical
+body exclusion from the soft static clearance preference. Hard exclusion uses
+the observed body radius; clearance preference uses the occupancy-grid estimate
+of surface gap divided by `desired_static_clearance`, clamped to [0, 1]. The
+coarse estimate affects preference, while exact geometry determines wall contact.
+Unbound geometry and older variants retain the existing exclusion policy.
+Pedestrian exclusion and braking checks retain their existing thresholds.
+
+The development-only driver uses the benchmark environment and action adapter:
+
+```bash
+uv run python -m scripts.validation.run_hybrid_feasibility_diagnostics \
+  --scenarios francis2023_narrow_doorway_width_2p20 --seeds 1001 \
+  --arms off on orca --workers 1 --output output/hybrid_feasibility
+```
+
+It validates resolved seeds before environment creation and permits only
+1001-1030. Local runs permit at most two workers; Slurm runs permit at most 32.
+The default comparison budget is 600 steps at 0.1 s, explicitly independent of
+release authored budgets. `--empty` uses the existing actor-removal hook.
+Summary JSON and compressed per-step JSONL retain forced/preferred decisions,
+actual-plant stopped-time fraction (speed <= 0.05 m/s), time without a feasible
+moving command, longest stationary interval, and diagnostic freezing (stationary
+for >10 s, or net displacement <0.5 m across a window longer than 10 s).
+
+ORCA output separately reports the first rejected *executed* endpoint segment
+and the first rejected hypothetical constant-command horizon. The latter is not
+an executed-path counterexample. Dynamic segment replay uses the hybrid's
+constant-velocity pedestrian prediction. Feasible unsampled forward probes
+explain candidate omissions without entering the action-selection set. Outputs
+are diagnostic-only development evidence and do not alter release inputs.

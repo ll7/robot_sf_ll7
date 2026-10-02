@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 import pysocialforce
 import yaml
+from bicycle_probe_metrics import displacement_stuck_steps
 from loguru import logger
 
 import robot_sf
@@ -102,6 +103,12 @@ def prepare():
                 ROOT / "robot_sf/planner/classic_planner_adapter.py",
                 ROOT / "robot_sf/benchmark/map_runner_policies/map_runner_actions.py",
                 ROOT / "robot_sf/benchmark/map_runner/map_runner_episode.py",
+                ROOT / "robot_sf/robot/bicycle_drive.py",
+                ROOT / "robot_sf/training/scenario_loader.py",
+                ROOT / "configs/robots/t60_bicycle_30deg_v1.yaml",
+                ROOT / "configs/robots/t60_bicycle_45deg_v1.yaml",
+                Path(__file__).resolve(),
+                ROOT / "scripts/validation/bicycle_probe_metrics.py",
             ]
         },
         "robot_sf": robot_sf.__file__,
@@ -489,23 +496,6 @@ def run_cell(p, arm, probe, name, seed):
         flush=True,
     )
     return result
-
-
-def displacement_stuck_steps(trace, reset_pose):
-    """Count full overlapping 2s windows with <.05m net motion and a requested command.
-
-    At least one raw (pre-projection) linear or yaw component must exceed 1e-6
-    during the window. Count its ending step; windows overlap at the .1s stride.
-    Neither creep nor the commanded/achieved yaw law appears in the motion test.
-    """
-    count = 0
-    for end in range(19, len(trace)):
-        start = end - 19
-        initial = trace[start - 1]["pose"][:2] if start else reset_pose[0]
-        moved = math.dist(initial, trace[end]["pose"][:2])
-        issued = any(max(map(abs, t["cmd"])) > 1e-6 for t in trace[start : end + 1])
-        count += moved < 0.05 and issued
-    return count
 
 
 if __name__ == "__main__":

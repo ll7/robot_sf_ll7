@@ -9,6 +9,8 @@ The coarse grid is 3 radii (.25/.28/.30) × 2 independent caps (2/3 m/s) × 19 l
 
 Numeric dense-wall/narrow-flow Pareto front: **empty**, because no setting has all 15 complete finite-N narrow-flow estimates. This does not mean a zero-flow front. Individual observations and conditional censor bounds remain diagnostics.
 
+The two empirical targets conflict on **every tested setting under this suite protocol**: dense-wall penetration0 m versus 1.2 m narrow specific flow within [1.576,2.364] persons/(m·s). 126/140 settings have positive dense-wall penetration; all remaining14 zero-wall settings have eventual finite-N cohort flow bounded above by .316733–.328129 persons/(m·s) at1.2 m, even if the censored people eventually exit. Thus every tested law fails at least one of these two targets without substituting partial flow for the estimator. This is a finite-grid result on the inherited starts, not impossibility outside the tested settings or a clean attribution to force law. Relaxing the numeric flow lower bound enough would require more than83.34% below the source mean1.97 and would still leave independent physical failures; recommend repairing the protocol equivalent instead, keeping safety and empirical flow targets.
+
 | Law | settings | minimum dense-wall penetration m | zero-wall settings | complete narrow settings | largest observed narrow bank /15 |
 |---|---:|---:|---:|---:|---:|
 | calibrated_v2 | 44 | 0.000000 | 14 | 0 | 4 |

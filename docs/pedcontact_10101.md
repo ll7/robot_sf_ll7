@@ -148,3 +148,7 @@ GuardedPPO identity correction. Current main repairs that pin. This stack leaves
 protected contract bytes unchanged. Strict Sphinx also fails on base's unchanged
 131730-byte exclusions argument exceeding Linux's per-argument limit; current
 main has a file-transport repair. Neither inherited failure is called green.
+
+Acquisition summaries for diagnosis, HFV comparison, uncongested controls and
+source-table verification are in [the diagnostic record](pedcontact_10101_diagnosis.json).
+That record also retains seed-refusal attribution and fail-on-base assertions.

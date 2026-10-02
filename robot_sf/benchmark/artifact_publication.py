@@ -2618,7 +2618,11 @@ def _preflight_check_development_marker(
 ) -> None:
     """Require the non-release marker to agree across signed payload and bundle."""
     path = payload_dir / "release/release_result.json"
-    result = _read_json_file(path) if path.is_file() else {}
+    try:
+        result = _read_json_file(path) if path.is_file() else {}
+    except ValueError as exc:
+        violations.append(str(exc))
+        return
     diagnostic = result.get("benchmark_release", {}).get("release_kind") == "development_rehearsal"
     if diagnostic != (manifest.get("release_kind") == "development_rehearsal"):
         violations.append("development rehearsal marker differs between payload and bundle")

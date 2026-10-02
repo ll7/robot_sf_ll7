@@ -598,7 +598,7 @@ def _record_release_acceptance(campaign_root: Path, acceptance: dict[str, Any]) 
     summary = _read_json(summary_path)
     key = (
         "development_rehearsal_acceptance"
-        if acceptance["schema_version"] == "benchmark-development-rehearsal-acceptance.v1"
+        if acceptance.get("schema_version") == "benchmark-development-rehearsal-acceptance.v1"
         else "full_release_acceptance"
     )
     summary[key] = acceptance

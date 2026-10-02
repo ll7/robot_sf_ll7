@@ -645,6 +645,10 @@ _FAST_FILES = {
     # configuration example (issue #8904).
     # Read-only distribution oracles; all 15 calls together are below 2 seconds.
     "test_compare_release_distributions.py",
+    # Real matrix projection without environment construction (under 5 seconds).
+    "test_development_pinned_runtime.py",
+    # One public-identity smoke admission witness; recording runtime only.
+    "test_development_rehearsal_smoke_admission.py",
     "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",

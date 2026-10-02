@@ -53,7 +53,7 @@ Print the resolved inventory before submission.
 
 Stage checkpoints with `scripts/benchmark/preflight_campaign_checkpoints.py
 --config <D-083 authored campaign> --stage --json --report-path <receipt>`.
-From imech192, check `squeue -u "$USER"`, then submit both executions through
+From the cluster submit node, check `squeue -u "$USER"`, then submit both executions through
 `SLURM/submit_release_single_node.sbatch` with an explicit
 `sbatch --cpus-per-task=32` override and fixed fresh campaign IDs. The smoke
 uses all 14 arms × 48 scenarios × seed 1001, the environment variable

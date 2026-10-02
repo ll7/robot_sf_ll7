@@ -451,10 +451,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
         pysf_config.scene_config.agent_radius = config.pedestrian_radius_m
     if config.pedestrian_contact_rule is not None:
         pysf_config.pedestrian_contact_rule = config.pedestrian_contact_rule
-        pysf_config.scene_config.agent_radius = config.ped_radius
     if config.pedestrian_wall_rule is not None:
         pysf_config.obstacle_force_config.wall_contact_rule = config.pedestrian_wall_rule
-        pysf_config.scene_config.agent_radius = config.ped_radius
     pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
     pysf_config.obstacle_force_config._obstacle_force_law_resolution_mode = getattr(
         config,

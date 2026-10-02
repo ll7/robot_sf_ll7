@@ -443,6 +443,7 @@ class ObstacleForce:
                 ),
                 "decay_m": float(getattr(config, "wall_contact_decay_m", WALL_DECAY_M)),
                 "range_m": float(getattr(config, "wall_contact_range_m", WALL_RANGE_M)),
+                "normal_blend_m": float(getattr(config, "wall_contact_normal_blend_m", 0.04)),
             }
             if any(not np.isfinite(v) or v <= 0 for v in self.contact_wall_parameters.values()):
                 raise ValueError("wall contact parameters must be finite and positive")
@@ -470,6 +471,7 @@ class ObstacleForce:
                 self.contact_wall_parameters["amplitude_m_s2"],
                 self.contact_wall_parameters["decay_m"],
                 self.contact_wall_parameters["range_m"],
+                self.contact_wall_parameters["normal_blend_m"],
             )
 
         factor = float(self.config.factor)

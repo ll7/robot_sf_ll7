@@ -381,6 +381,10 @@ def protocol_simulate(  # noqa: C901, PLR0913
             # Forces see desired speeds; only velocity integration sees the cap.
             desired_speeds = sim.peds.max_speeds.copy()
             sim.peds.max_speeds = np.full(sim.peds.size(), speed_cap_m_s)
+            if getattr(sim.config, "pedestrian_contact_rule", None) or getattr(
+                sim.config.obstacle_force_config, "wall_contact_rule", None
+            ):
+                sim.peds.contact_step_speed_caps = sim.peds.max_speeds.copy()
             try:
                 return integrate(force, *args, **kwargs)
             finally:
@@ -414,6 +418,14 @@ def protocol_simulate(  # noqa: C901, PLR0913
                 "steps": len(speeds),
                 "step_time_s": step_time_s,
                 "maximum_projection_passes": max(projection_passes, default=0),
+                "fallback_count": getattr(sim, "contact_projection_fallback_count", 0),
+                "unresolved_count": getattr(sim, "contact_projection_unresolved_count", 0),
+                "maximum_speed_m_s": float(np.max(speeds)) if speeds else 0.0,
+                "over_cap_samples": int(
+                    np.count_nonzero(np.asarray(speeds) > speed_cap_m_s + 1e-10)
+                )
+                if speed_cap_m_s is not None
+                else None,
             }
         )
     return np.asarray(positions), np.asarray(speeds), desired
@@ -618,13 +630,15 @@ def run_task(task):  # noqa: C901, PLR0912, PLR0915
             state = np.array(
                 [
                     [0.0, y, speed, 0.0, 100.0, y, 0.5],
-                    [12.0, 0.0, -speed, 0.0, -100.0, 0.0, 0.5],
+                    [60.0, 0.0, -speed, 0.0, -100.0, 0.0, 0.5],
                 ]
             )
             cfg = configured(CANDIDATE, speed)
             # Source speed conditions are controlled, even in the literature tier.
             cfg.scene_config.desired_speed_mean, cfg.scene_config.desired_speed_std = speed, 0.0
-            steps = int(np.ceil(12 / speed / 0.1))
+            # Extended deterministic capture, beyond the force range. Human
+            # protocol used 12m; this explicit extension prevents window clipping.
+            steps = int(np.ceil(60 / speed / 0.1))
             input_audits.append(initial_admissibility(state, [], cfg.scene_config.agent_radius))
             p, v, desired = protocol_simulate(
                 state,
@@ -651,6 +665,11 @@ def run_task(task):  # noqa: C901, PLR0912, PLR0915
                     [],
                     cfg,
                     steps,
+                    **(
+                        {"physics_receipts": physics_receipts, "step_receipts": step_receipts}
+                        if options.get("pedcontact_measurement")
+                        else {}
+                    ),
                     speed_cap_m_s=options.get("execution_cap_m_s")
                     if options.get("calfit")
                     else None,
@@ -661,6 +680,7 @@ def run_task(task):  # noqa: C901, PLR0912, PLR0915
             )
             row["interferer_nonreactive"] = True
             row["baseline_trial_n"] = 5
+            row["initial_pair_separation_m"] = 60.0
             row["baseline_identical_reason"] = "deterministic CM model; no trunk sway/noise"
             row["min_pair_centre_m"] = float(np.linalg.norm(p[:, 0] - p[:, 1], axis=-1).min())
             row["_baselines"] = np.asarray(baselines)

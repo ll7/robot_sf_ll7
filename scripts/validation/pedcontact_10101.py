@@ -141,7 +141,19 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
             "runtime_ms_per_step": 1000
             * sum(r["step_time_s"] for row in rows for r in row["step_runtime"])
             / sum(r["steps"] for row in rows for r in row["step_runtime"]),
-            "runtime_scope": "Integration only; V6 no-interferer baseline timing excluded",
+            "fallback_count": sum(
+                r.get("fallback_count", 0) for row in rows for r in row["step_runtime"]
+            ),
+            "unresolved_count": sum(
+                r.get("unresolved_count", 0) for row in rows for r in row["step_runtime"]
+            ),
+            "over_cap_samples": sum(
+                r.get("over_cap_samples", 0) or 0 for row in rows for r in row["step_runtime"]
+            ),
+            "maximum_speed_m_s": max(
+                r.get("maximum_speed_m_s", 0) for row in rows for r in row["step_runtime"]
+            ),
+            "runtime_scope": "All integration calls including five V6 no-interferer baselines; cold JIT included; use separate warmed probe for cost",
         }
     on = result["arms"]["on"]
     result["fit_admitted"] = (
@@ -158,7 +170,7 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
     )
     write_json(out, result)
     text = "AI-GENERATED / NEEDS-REVIEW\n\nPEDCONTACT full-dev CALFIT comparison.\n\n"
-    text += "Intervals cover observed dev-seed measurements, not censored episodes. V6 baseline integration is excluded from runtime timing.\n\n"
+    text += "Intervals cover observed dev-seed measurements, not censored episodes. V6 baselines are included in integration timing; cold JIT is included. Warmed cost is measured separately.\n\n"
     for arm, bank in result["arms"].items():
         text += f"{arm}: overlaps {bank['overlap_pair_steps']}; wall penetration ped-steps {bank['wall_penetration_ped_steps']}; gate {bank['gate']['exit_code']}.\n\n"
         text += "| Item | Value | 95% interval | Observed n | Status | Accepted interval |\n|---|---|---|---|---|---|\n"

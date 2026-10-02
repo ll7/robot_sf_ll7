@@ -250,8 +250,25 @@ def huber_filtered(positions, times) -> np.ndarray:
     return median_filter(filtered, size=(5, 1), mode="nearest")[pad:-pad]
 
 
-def turning_onset(positions, interferer, times, baselines) -> dict[str, object]:
-    """Mean-max baseline turning threshold; own X distance to synchronized PoMD.
+def turning_onset(
+    positions,
+    interferer,
+    times,
+    baselines,
+    *,
+    yaw_threshold_rad_s=0.05,
+    analysis_window_m=25.0,
+    persistence_s=0.3,
+) -> dict[str, object]:
+    """Physical yaw onset; own X distance to synchronized PoMD.
+
+    Huber et al. 2014 sections 4.2/4.4 define filtered yaw and a human baseline
+    threshold (https://doi.org/10.1371/journal.pone.0089589). Deterministic CM
+    baselines contain no sway: their near-zero maxima cannot define onset.
+    The explicit engineering equivalent is 0.05 rad/s sustained for 0.3 s,
+    about 0.86 degrees of heading change. This is not a published Huber number.
+    The 25 m own-X window exceeds the configured 20 m social-force range.
+    Baseline maxima remain diagnostics, never the physical threshold.
 
     Returns:
         Measurement values with explicit missingness and units.
@@ -269,26 +286,35 @@ def turning_onset(positions, interferer, times, baselines) -> dict[str, object]:
     maxima = []
     for base in baselines:
         bp = huber_filtered(base, t)
-        mask = np.abs(bp[:, 0] - p[closest, 0]) <= 3.0
+        mask = np.abs(bp[:, 0] - p[closest, 0]) <= analysis_window_m
         if not mask.any():
             raise ValueError("no baseline samples in captured region")
         maxima.append(float(angular(bp)[mask].max()))
     if len(maxima) != 5:
         raise ValueError("Huber onset requires five no-interferer baseline trials")
-    threshold = float(np.mean(maxima))
+    if yaw_threshold_rad_s <= 0 or analysis_window_m <= 0 or persistence_s <= 0:
+        raise ValueError("onset criterion must be positive")
+    threshold = float(yaw_threshold_rad_s)
     omega = angular(p)
-    valid = (p[:, 0] >= p[closest, 0] - 3 - 1e-9) & (np.arange(len(t)) < closest)
-    excess = np.flatnonzero(valid & (omega > threshold + 1e-12))
+    valid = (p[:, 0] >= p[closest, 0] - analysis_window_m - 1e-9) & (np.arange(len(t)) < closest)
+    required = max(1, int(np.ceil(persistence_s / float(np.mean(np.diff(t))) - 1e-9)))
+    above = valid & (omega > threshold)
+    runs = np.convolve(above.astype(int), np.ones(required, dtype=int), mode="valid")
+    excess = np.flatnonzero(runs == required)
     onset = int(excess[0]) if len(excess) else None
     return {
         "onset_m": None if onset is None else float(abs(p[closest, 0] - p[onset, 0])),
         "onset_time_s": None if onset is None else float(t[onset]),
-        "baseline_turning_rad_s": threshold,
+        "baseline_turning_rad_s": float(np.mean(maxima)),
+        "onset_threshold_rad_s": threshold,
+        "onset_persistence_s": persistence_s,
+        "analysis_window_m": analysis_window_m,
+        "onset_definition": "fixed_physical_yaw_engineering_equivalent_v2",
         "baseline_maxima_rad_s": maxima,
         "pomd_time_s": float(t[closest]),
         "pomd_own_x_m": float(p[closest, 0]),
         "wrong_side": bool(p[closest, 1] < p[0, 1]),
-        "reason": None if onset is not None else "no baseline-exceeding turning before PoMD",
+        "reason": None if onset is not None else "no sustained physical yaw before PoMD",
     }
 
 

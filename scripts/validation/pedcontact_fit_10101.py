@@ -1,4 +1,4 @@
-"""Bounded PEDCONTACT successor: full V6 necessary-condition screening before costly full banks."""
+"""Bounded PEDCONTACT successor: complete banks and ranking, with no item pruning."""
 
 import argparse
 import hashlib
@@ -74,13 +74,13 @@ def freeze(root):
         raise ValueError("complete step-4 qualification and robot gate required")
     ps = points()
     blob = {
-        "schema": "pedcontact.bounded_fit.v1",
+        "schema": "pedcontact.bounded_fit.v2",
         "seeds": SEEDS,
         "deadline_utc": DEADLINE.isoformat(),
         "points": ps,
         "groups": sorted({group(p) for p in ps}),
-        "screen": "V6 all three controlled speeds; necessary-condition pruning only",
-        "invariance": "V6 has no obstacles, wall force is exactly zero for all wall parameters; other parameters fixed within each radius/cap group",
+        "screen": "V2 and V5 evaluated for every wall setting; all 18 cases measured, no pruning",
+        "invariance": "V6 has no walls; its physical threshold is independent of deterministic baseline noise. No invariance is used to prune candidates.",
         "source_sha": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
@@ -94,171 +94,140 @@ def freeze(root):
     print("FROZEN", len(ps), "points", blob["groups"], flush=True)
 
 
-def acquire(root, index):  # noqa: C901
-    """Measure all V6 cases for one frozen equivalence class on Slurm."""
+def acquire(root, index):
+    """Measure a complete 18-item bank for one point and dev seed, without pruning."""
     if not os.environ.get("SLURM_JOB_ID") or int(os.environ.get("SLURM_CPUS_PER_TASK", "0")) != 1:
         raise ValueError("one-CPU Slurm acquisition required")
     if datetime.now(UTC) >= DEADLINE:
         raise RuntimeError("original five-day deadline reached")
-    pending = subprocess.check_output(
-        ["squeue", "--states=PENDING", "--noheader", "--format=%j"], text=True
-    )
-    if any("0.0.8" in s or "008" in s or "sealed" in s.lower() for s in pending.splitlines()):
-        raise RuntimeError("priority 0.0.8 campaign pending")
     grid = json.loads((root / "grid.json").read_text())
-    if index is None or not 0 <= index < len(grid["groups"]):
-        raise ValueError("explicit bounded screen index required")
+    if index is None or not 0 <= index < len(grid["points"]) * len(SEEDS):
+        raise ValueError("explicit complete-bank index required")
     if (
         grid["source_sha"]
         != subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-        or grid["driver_sha256"] != hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     ):
-        raise ValueError("frozen producer or driver changed")
-    key = grid["groups"][index]
-    p = next(
-        p
-        for p in grid["points"]
-        if group(p) == key
-        and p["wall_contact_parameters"] == {"amplitude_m_s2": 3.0, "decay_m": 0.04, "range_m": 0.2}
-    )
-    cfg = suite.load_config(suite.DEFAULT_CONFIG)
-    cfg["seeds"] = SEEDS
-    options = {
-        "calfit": True,
-        "speed_tier": "literature",
-        "wall_candidate": p,
-        "wall_profile": "legacy_v1",
-        "execution_cap_m_s": p["cap_m_s"],
-        "shoulder_width_m": cfg["V2"]["shoulder_proxy_m"],
-        "equivalence": {f"V{i}": cfg[f"V{i}"]["equivalence"] for i in range(1, 7)},
-    }
-    for name in [
-        "pedestrian_contact_rule",
-        "pedestrian_wall_rule",
-        "wall_contact_parameters",
-        "pedcontact_measurement",
-    ]:
-        options[name] = p[name]
-    tasks = [t for t in suite.protocol_tasks(cfg, p["radius_m"], "radius", options) if t[0] == "V6"]
-    out = root / "screens" / key
-    out.mkdir(parents=True, exist_ok=False)
-    live = search._identity(p, SEEDS, cfg)
-    live.update(
-        grid_sha256=hashlib.sha256((root / "grid.json").read_bytes()).hexdigest(),
-        driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        scope="V6 necessary condition only",
-    )
-    write_json(out / "identity.json", live)
-    print("RESOLVED SEEDS", SEEDS, "GROUP", key, "TASKS", len(tasks), flush=True)
-    rows = []
-    for i, task in enumerate(tasks):
-        if datetime.now(UTC) >= DEADLINE:
-            raise RuntimeError("five-day deadline reached")
-        row = suite.run_task(task)
-        arrays = {k[1:]: row.pop(k) for k in list(row) if k.startswith("_")}
-        raw = out / f"trajectory_{i:04}.npz"
-        np.savez_compressed(raw, **arrays)
-        row.update(
-            raw_trajectory=raw.name,
-            raw_trajectory_sha256=hashlib.sha256(raw.read_bytes()).hexdigest(),
-        )
-        if row.get("wall_penetration_ped_steps") != 0:
-            raise RuntimeError("unexpected V6 wall geometry")
-        # Independent empty-wall negative control using the effective force object.
-        from pysocialforce import Simulator
-        from pysocialforce.config import SimulatorConfig
-
-        sc = SimulatorConfig()
-        sc.obstacle_force_config.wall_contact_rule = "bounded_edge_v1"
-        for name, value in p["wall_contact_parameters"].items():
-            setattr(sc.obstacle_force_config, "wall_contact_" + name, value)
-        sim = Simulator(np.array([[0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5]]), obstacles=[], config=sc)
-        if not np.array_equal(sim.forces[2](), np.zeros((1, 2))):
-            raise RuntimeError("empty-wall invariance failed")
-        write_json(out / f"case_{i:04}.json", row)
-        rows.append(row)
-        print("DONE", i + 1, "/", len(tasks), row["variant"], row["seed"], flush=True)
-    gate = suite.acceptance_gate(rows, config=cfg, require_complete=False)
-    write_json(out / "gate.json", gate)
-    members = {
-        f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-        for f in sorted(out.iterdir())
-        if f.is_file()
-    }
-    write_json(
-        out / "completed.json",
-        {
-            "group": key,
-            "members_sha256": members,
-            "v6_checks": gate["checks"],
-            "v6_all_pass": all(c["status"] == "PASS" for c in gate["checks"]),
-            "physical_violations": gate["physical_violations"],
-        },
-    )
+        raise ValueError("frozen producer changed")
+    if grid["driver_sha256"] != hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+        raise ValueError("frozen driver changed")
+    point = grid["points"][index // len(SEEDS)]
+    seed = SEEDS[index % len(SEEDS)]
+    search.run_candidate(point, [seed], root / "banks" / point["id"] / str(seed), workers=1)
 
 
 def collect(root):
-    """Verify complete raw banks before pruning a necessary-condition failure."""
+    """Rank every completely measured setting by passed items and range residual.
+
+    Returns:
+        Full per-item values, intervals, physical counters and declared grid ranking.
+    """
+    from scripts.validation.pedcontact_10101 import interval
+
     grid = json.loads((root / "grid.json").read_text())
-    screens = {}
-    for key in grid["groups"]:
-        directory = root / "screens" / key
-        d = json.loads((directory / "completed.json").read_text())
-        for name, digest in d["members_sha256"].items():
-            if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
-                raise ValueError("screen member changed")
-        identity = json.loads((directory / "identity.json").read_text())
-        if identity["grid_sha256"] != hashlib.sha256((root / "grid.json").read_bytes()).hexdigest():
-            raise ValueError("grid identity drift")
-        if (
-            identity["source_sha"] != grid["source_sha"]
-            or identity["driver_sha256"] != grid["driver_sha256"]
-        ):
-            raise ValueError("screen producer differs from frozen grid")
-        rows = [json.loads(p.read_text()) for p in sorted(directory.glob("case_*.json"))]
-        cfg = suite.load_config(suite.DEFAULT_CONFIG)
-        cfg["seeds"] = SEEDS
-        expected = {
-            (t[0], t[1], t[2])
-            for t in suite.protocol_tasks(cfg, identity["candidate"]["radius_m"], "radius", {})
-            if t[0] == "V6"
+    cfg = suite.load_config(suite.DEFAULT_CONFIG)
+    cfg["seeds"] = SEEDS
+    ranked = []
+    for point in grid["points"]:
+        rows = []
+        for seed in SEEDS:
+            directory = root / "banks" / point["id"] / str(seed)
+            search.verify_run(directory)
+            live = search.read_json(directory / "identity.json")
+            if (
+                live["source_sha"] != grid["source_sha"]
+                or live["candidate"] != point
+                or live["seeds"] != [seed]
+            ):
+                raise ValueError("bank differs from frozen fit grid")
+            rows.extend(search.read_json(path) for path in sorted(directory.glob("case_*.json")))
+        gate = suite.acceptance_gate(rows, config=cfg, require_complete=True)
+        checks = gate["checks"]
+        values = []
+        fields = {
+            "V1": "fitted_desired_speed_m_s",
+            "V2": "speed_drop_m_s",
+            "V3": "specific_flow_persons_m_s",
+            "V4": "all_data_specific_flow_persons_m_s",
+            "V5": "lateral_cm_to_edge_m",
+            "V6": "onset_m",
         }
-        observed = [(r["case"], r["seed"], r["variant"]) for r in rows]
-        if len(observed) != len(expected) or set(observed) != expected:
-            raise ValueError("incomplete or duplicate V6 screen")
-        gate = suite.acceptance_gate(rows, config=cfg, require_complete=False)
-        if gate["checks"] != d["v6_checks"]:
-            raise ValueError("screen gate disagrees with raw case measurements")
-        screens[key] = d
-    rejected = [p["id"] for p in grid["points"] if not screens[group(p)]["v6_all_pass"]]
-    survivors = [p for p in grid["points"] if screens[group(p)]["v6_all_pass"]]
+        for check in checks:
+            bank = [
+                r for r in rows if r["case"] == check["case"] and r["variant"] == check["variant"]
+            ]
+            value = interval([r.get(fields[check["case"]]) for r in bank])
+            if check["case"] == "V4" and "width slope" in check["variant"]:
+                slopes = []
+                for seed in SEEDS:
+                    wide = sorted(
+                        [r for r in rows if r["case"] == "V4" and r["seed"] == seed],
+                        key=lambda r: float(r["variant"]),
+                    )
+                    quantity = check["variant"].removesuffix(" width slope")
+                    if all(r.get(quantity) is not None for r in wide):
+                        widths = np.asarray([float(r["variant"]) for r in wide])
+                        flows = np.asarray([r[quantity] for r in wide])
+                        slopes.append(float(widths @ flows / (widths @ widths)))
+                value = interval(slopes)
+            values.append(dict(check, observed_interval=value))
+        # Missing/censored estimates rank behind measured range misses.
+        residual = sum(
+            float(c.get("distance_outside_tolerance") or 0)
+            if c.get("estimate") is not None
+            else 1e6
+            for c in checks
+        )
+        passed = sum(c["status"] == "PASS" for c in checks)
+        ranked.append(
+            {
+                "point": point,
+                "passed_items": passed,
+                "total_items": len(checks),
+                "range_residual": residual,
+                "gate_exit": gate["exit_code"],
+                "values": values,
+                "overlap_pair_steps": sum(r["pair_overlap"]["all"]["below_2r_count"] for r in rows),
+                "wall_penetration_ped_steps": sum(r["wall_penetration_ped_steps"] for r in rows),
+                "screen_V2_V5": [c for c in checks if c["case"] in {"V2", "V5"}],
+                "physical_violations": gate["physical_violations"],
+            }
+        )
+    ranked.sort(key=lambda r: (-r["passed_items"], r["range_residual"], r["point"]["id"]))
     result = {
-        "schema": "pedcontact.fit_screen_result.v1",
+        "schema": "pedcontact.bounded_fit_result.v2",
         "source_sha": grid["source_sha"],
-        "points": len(grid["points"]),
-        "screen_groups": screens,
-        "rejected_necessary_condition_n": len(rejected),
-        "rejected_ids": rejected,
-        "survivors_for_full_banks": survivors,
-        "accepted_full_settings": [],
-        "claim": "necessary-condition pruning, not full-grid fitness or global optimum",
+        "seeds": SEEDS,
+        "points": len(ranked),
+        "ranking": ranked,
+        "pruned_points": 0,
+        "claim": "complete declared bounded grid; engineering-equivalent V6; no global optimum or empirical validation claim",
         "deadline_utc": grid["deadline_utc"],
+        "accepted_full_settings": [r["point"] for r in ranked if r["gate_exit"] == 0],
     }
-    write_json(root / "screen_result.json", result)
-    print("REJECTED", len(rejected), "SURVIVORS", len(survivors), flush=True)
+    write_json(root / "fit_result.json", result)
+    print(
+        "COMPLETE",
+        len(ranked),
+        "BEST",
+        ranked[0]["passed_items"],
+        "/",
+        ranked[0]["total_items"],
+        flush=True,
+    )
+    return result
 
 
 def main():
-    """Acquire or audit the bounded dev-only necessary-condition screen."""
+    """Acquire or audit complete bounded dev-only banks."""
     p = argparse.ArgumentParser()
-    p.add_argument("mode", choices=["freeze", "screen", "collect"])
+    p.add_argument("mode", choices=["freeze", "run", "collect"])
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--index", type=int)
     a = p.parse_args()
     if a.mode == "freeze":
         a.root.mkdir(parents=True, exist_ok=True)
         freeze(a.root)
-    elif a.mode == "screen":
+    elif a.mode == "run":
         acquire(a.root, a.index)
     else:
         collect(a.root)

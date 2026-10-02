@@ -186,9 +186,11 @@ def _build_stress_fixture(
         )
         manifest = replace(manifest, resolved_seeds=(seed,))
     scenarios = _load_campaign_scenarios(campaign_config)
-    # Main's dev-seed edit changed the config digest; it is ordinary runner-cap
-    # input, rather than an immutable historical registry entry.
-    assert campaign_config.horizon_policy is None
+    # The approved diagnostic re-pin retains the historical runner-cap policy.
+    assert (campaign_config.protocol_version, campaign_config.horizon_policy) == (
+        "0.0.7",
+        "legacy_runner_cap",
+    )
     assert [row["simulation_config"]["max_episode_steps"] for row in scenarios] == [
         600,
         600,
@@ -196,7 +198,11 @@ def _build_stress_fixture(
         400,
         400,
     ]
-    assert all("scenario_horizon" not in row.get("metadata", {}) for row in scenarios)
+    for row in scenarios:
+        binding = row["metadata"]["scenario_horizon"]
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert binding["applied_max_episode_steps"] == row["simulation_config"]["max_episode_steps"]
     effective_scenarios = [
         _scenario_with_kinematics(
             scenario,

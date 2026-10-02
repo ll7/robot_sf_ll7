@@ -83,7 +83,7 @@ def _resolve_manifest_path(value: str) -> Path:
     return path if path.is_absolute() else (MANIFEST_PATH.parent / path).resolve()
 
 
-def test_dev_stress_h600_ordinary_runner_cap_preserves_authored_budgets() -> None:
+def test_dev_stress_h600_legacy_runner_cap_preserves_authored_budgets() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     report = validate_release_manifest(manifest, campaign_config=campaign_config)
@@ -91,7 +91,10 @@ def test_dev_stress_h600_ordinary_runner_cap_preserves_authored_budgets() -> Non
     assert report["status"] == "valid", report["problems"]
     resolved = _load_campaign_scenarios(campaign_config)
     assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {400, 500, 600}
-    assert campaign_config.horizon_policy is None
+    assert (campaign_config.protocol_version, campaign_config.horizon_policy) == (
+        "0.0.7",
+        "legacy_runner_cap",
+    )
     assert [s["simulation_config"]["max_episode_steps"] for s in resolved] == [
         600,
         600,
@@ -99,7 +102,14 @@ def test_dev_stress_h600_ordinary_runner_cap_preserves_authored_budgets() -> Non
         400,
         400,
     ]
-    assert all("scenario_horizon" not in s.get("metadata", {}) for s in resolved)
+    for scenario in resolved:
+        binding = scenario["metadata"]["scenario_horizon"]
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert (
+            binding["applied_max_episode_steps"]
+            == scenario["simulation_config"]["max_episode_steps"]
+        )
     from dataclasses import replace
 
     ordinary = _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))

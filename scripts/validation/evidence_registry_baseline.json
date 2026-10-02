@@ -1,8 +1,8 @@
 {
   "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths. The payload also carries an evidence_tree manifest (issue #6839): adding or removing any file under docs/context/evidence/ without refreshing this baseline fails the ratchet on the causing PR, so a stale baseline can never redden main after merge.",
   "evidence_tree": {
-    "count": 2942,
-    "sha256": "5a42baf0691238d63959e749435c77215dd5f8436a95060a442736342b99a50c"
+    "count": 2944,
+    "sha256": "8e30dd08daf36660498674a85271b9fefa629a97f13e035163764b3bdb0f30ba"
   },
   "findings_by_path": {
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
@@ -12,12 +12,6 @@
     },
     "docs/context/evidence/issue_10007_fxs2_summary.json": {
       "hash_without_artifact_path": 4
-    },
-    "docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json": {
-      "artifact_hash_mismatch": 1
-    },
-    "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json": {
-      "artifact_hash_mismatch": 1
     },
     "docs/context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/campaign/campaign_manifest.json": {
       "missing_config_path": 1,
@@ -388,12 +382,12 @@
       "artifact_hash_mismatch": 4
     }
   },
-  "generated_at": "2026-10-02T07:52:12Z",
+  "generated_at": "2026-10-02T08:45:06Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 25,
+      "artifact_hash_mismatch": 23,
       "config_missing_at_commit": 7,
       "dangling_commit": 23,
       "duplicate_campaign_id": 7,
@@ -404,7 +398,7 @@
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 103,
-    "total_findings": 452
+    "files_with_findings": 101,
+    "total_findings": 450
   }
 }

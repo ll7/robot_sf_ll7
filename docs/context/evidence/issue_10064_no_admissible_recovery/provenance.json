@@ -130,7 +130,7 @@
     {
       "identical_on_base": true,
       "path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
-      "resolved_path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "resolved_path": "docs/context/evidence/issue_10064_no_admissible_recovery/source_release_matrix.yaml",
       "sha256": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8"
     },
     {

@@ -58,14 +58,14 @@
       }
     },
     {
-      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "normalization": "Only home/root prefixes and historical matrix resolved_path locators change; numeric observations, source commits and measurement digests unchanged.",
       "portable": {
         "path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json",
-        "sha256": "0bc30f50b1469e4b7c148b4807dc70406d2b22956248f474477d83d98c712e69"
+        "sha256": "f628b79ea0ad1ce0e0378e60c382787e353edfb24f2828d905b54f1d28a7bf79"
       },
       "source": {
         "path": "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json",
-        "sha256": "d7d9e825f0e739a4485bd6ee5df457a6f6adc5609c8a063e3da9bb2bc52b2037"
+        "sha256": "eba63874eb0148198b9761b57897599766906eaab7a4daa3a274b283be3af0e0"
       }
     },
     {

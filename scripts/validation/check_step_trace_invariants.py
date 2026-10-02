@@ -60,6 +60,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     tol = Tolerances(**tol_kwargs)
     overrides = json.loads(args.limits_json) if args.limits_json else None
     holdout = set(range(111, 141))
+    trace_versions: set[str] = set()
     results = []
     coverage = []
     seen_holdout = 0
@@ -90,6 +91,17 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                     viols, has_trace = [], False
                 if isinstance(row.get("seed"), int) and row["seed"] in holdout:
                     seen_holdout += 1  # existing published rows may be read; only counted
+                metadata = row.get("algorithm_metadata")
+                trace = (
+                    metadata.get("simulation_step_trace") if isinstance(metadata, dict) else None
+                )
+                if isinstance(trace, dict):
+                    version = trace.get("schema_version")
+                    trace_versions.add(str(version))
+                    if len(trace_versions) > 1:
+                        raise ValueError(
+                            "mixed trace schema versions: " + ", ".join(sorted(trace_versions))
+                        )
                 coverage.append(
                     {"episode_id": str(row.get("episode_id", "?")), "invariants": eligibility}
                 )
@@ -111,6 +123,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     )
     summary["meta"] = {
         "coverage_complete": coverage_complete,
+        "trace_schema_versions": sorted(trace_versions),
         "files": [str(f) for f in files],
         "episodes": len(results),
         "episodes_with_trace": sum(1 for r in results if r[4]),

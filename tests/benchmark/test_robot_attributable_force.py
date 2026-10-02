@@ -297,10 +297,7 @@ def test_disabled_robot_force_capture_is_zero():
     assert not sim.last_robot_ped_forces.any()
 
 
-@pytest.mark.parametrize("persist", [False, True])
-def test_runner_persists_force_series_only_for_explicit_trace(persist):
-    import json
-
+def test_runner_force_reductions_exclude_sample_series():
     from robot_sf.benchmark.map_runner.map_runner_episode import _compute_post_loop_metrics
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
@@ -320,7 +317,6 @@ def test_runner_persists_force_series_only_for_explicit_trace(persist):
         ped_positions=[np.array([[2.0, 0.0]])] * 2,
         ped_forces=[np.array([[1.25, 0.0]])] * 2,
         robot_force_samples=samples,
-        persist_robot_force_samples=persist,
         visibility_trace=[None, None],
         track_confidence_trace=[None, None],
         visibility_evidence_statuses=[],
@@ -342,6 +338,36 @@ def test_runner_persists_force_series_only_for_explicit_trace(persist):
     )
     assert result.metrics_raw["robot_force_peak"] == 1.25
     assert "robot_force_metadata" in result.metrics_raw
-    assert ("robot_force_samples" in result.metrics_raw) is persist
-    if persist:
-        assert json.loads(json.dumps(result.metrics_raw["robot_force_samples"])) == samples
+    assert "robot_force_samples" not in result.metrics_raw
+
+
+@pytest.mark.parametrize("record_trace", [False, True])
+def test_dev_force_samples_live_outside_metrics(record_trace):
+    """Dev1001 serialization keeps reductions scalar and samples diagnostic."""
+    from pathlib import Path
+
+    from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    path = Path("configs/scenarios/canary_corridor.yaml")
+    row = _run_map_episode(
+        load_scenarios(path)[0],
+        1001,
+        horizon=4,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=path,
+        record_simulation_step_trace=record_trace,
+    )
+    import json
+
+    from jsonschema import validate
+
+    validate(row, json.loads(Path("robot_sf/benchmark/schemas/episode.schema.v1.json").read_text()))
+    assert "robot_force_samples" not in row["metrics"]
+    assert ("robot_force_samples" in row["algorithm_metadata"]) is record_trace
+    if record_trace:
+        assert len(row["algorithm_metadata"]["robot_force_samples"]) == row["steps"]

@@ -48,6 +48,9 @@ scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v
 scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
 dt: 0.1
 record_forces: true
+# D-057: 0.0.8 release rows stay untraced (record_simulation_step_trace defaults
+# to false). Diagnostic/illustration traces come from rehearsal 2, a separate
+# DEV-seed 1001 run at the freeze commit. No sealed-seed trace run exists.
 checkpoint_provenance_enforcement: error
 resume: true
 # Release execution stops at the first broken arm. Same-ID resume is admitted only

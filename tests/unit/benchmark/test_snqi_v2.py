@@ -98,6 +98,9 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert template["protocol_version"] == "0.0.8"
     assert calibration.get("protocol_version") is None
 
+    # D-057 keeps release and calibration rows untraced; rehearsal 2 carries diagnostics.
+    assert template.get("record_simulation_step_trace", False) is False
+    assert calibration.get("record_simulation_step_trace", False) is False
     allowed_deviations = {
         "protocol_version",  # calibration has no fixed horizon; its schedule binds the budget
         "name",

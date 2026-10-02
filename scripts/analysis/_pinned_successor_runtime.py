@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,8 @@ def _assert_pinned_modules(checkout: Path) -> None:
         "robot_sf.benchmark.camera_ready._config",
         "robot_sf.benchmark.camera_ready._preflight",
         "robot_sf.benchmark.runner",
+        "robot_sf.baselines.ppo",
+        "robot_sf.benchmark.map_runner.map_runner",
         "robot_sf.benchmark.map_runner.map_runner_identity",
         "robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution",
         "robot_sf.benchmark.utils",
@@ -42,6 +45,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
 
     import pysocialforce  # noqa: F401 - assert its origin with the project modules below
 
+    from robot_sf.baselines.ppo import PPOPlanner
     from robot_sf.benchmark.algorithm_metadata import (
         enrich_algorithm_metadata,
         resolve_learned_checkpoint_observation_contract,
@@ -54,6 +58,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         load_campaign_config,
     )
     from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash
+    from robot_sf.benchmark.map_runner.map_runner import _ppo_planner_config
     from robot_sf.benchmark.map_runner.map_runner_identity import (
         _resolve_seed_list,
         _scenario_identity_payload,
@@ -87,6 +92,21 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
     request = json.load(sys.stdin)
     with patch.object(_util, "get_repository_root", return_value=checkout):
         cfg = load_campaign_config(checkout / request["config_path"], repository_root=checkout)
+        publication = request.get("publication_identity")
+        if publication is not None:
+            if (
+                not isinstance(publication, dict)
+                or set(publication) != {"release_tag", "doi"}
+                or any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in publication.values()
+                )
+            ):
+                raise ValueError(
+                    "publication_identity requires only release_tag and doi as nonempty strings"
+                )
+            # Match load_release_campaign_config: scientific inputs stay source-bound.
+            cfg = replace(cfg, **publication)
         for path in (cfg.source_config_path, cfg.scenario_matrix_path):
             if path is None or not path.resolve().is_relative_to(checkout):
                 raise ValueError("successor config source escapes pinned checkout")
@@ -366,13 +386,23 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             "benchmark_track",
             "track_schema_version",
         )
+        metadata_config = effective
+        if algo in {"ppo", "guarded_ppo"}:
+            # Reproduce the producer's typed PPO metadata without loading a model
+            # or stepping a policy/environment. The full guard/adapter config
+            # remains bound separately by scenario.algo_config_hash.
+            deferred = PPOPlanner(_ppo_planner_config(effective), defer_model_loading=True)
+            metadata_config = deferred.get_metadata()["config"]
         runtime_rows.append(
             {
                 "slot": slot,
                 "algo": algo,
                 "config": effective,
                 "config_hash": _config_hash(effective),
-                "scenario_config_hash": _config_hash(scenario),
+                "metadata_algorithm": metadata["algorithm"],
+                "metadata_config": metadata_config,
+                "metadata_config_hash": _config_hash(metadata_config),
+                "scenario_config_hash": _config_hash(controls),
                 "scenario": seeded_scenario,
                 "path": planner["path"],
                 "controls": {key: controls[key] for key in control_fields if key in controls},

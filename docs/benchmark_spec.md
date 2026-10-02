@@ -515,7 +515,8 @@ the full pedestrian-pair force magnitude at contact
 3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
 lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
 
-`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+`record_simulation_step_trace: true` explicitly enables persistence of
+`algorithm_metadata.robot_force_samples` (outside scalar `metrics`),
 including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
 reductions and metadata; samples remain in memory for all force reductions. Existing
 post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
@@ -568,3 +569,26 @@ Development episodes use 1001..1030. Historical `paper_eval_s30` remains unchang
 0.0.7 artifacts only; seeds 111..140 must never be stepped again (D-049). The release grid has 48 x 30 = 1,440 identities per arm
 and 14 x 1,440 = 20,160 total; these counts are computed without running episodes.
 See [D-049](release/0.0.8/decisions.md) and the [runbook](release/0.0.8/runbook.md).
+
+
+### Development trace slice and resolved comparator identity
+
+D-057 diagnostics use a separate checkout at the named freeze commit and dev seed
+1001. For a small producer trace slice, run
+`uv run python scripts/validation/generate_step_traces_dev_seeds.py --matrix configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml --algo goal --seeds 1001 --horizon 400 --dt 0.1 --out output/dev-traces/episodes.jsonl`,
+then `uv run python scripts/validation/check_step_trace_invariants.py output/dev-traces --fail-on-violation`.
+Record the exact source SHA with the output. Campaign-derived slices must override
+`scenario_overrides.seeds` at matrix level as well as the campaign seed policy,
+and print the resolved per-scenario seed lists before execution; a campaign seed
+policy alone can retain authored scenario seeds. Keep diagnostic traces separate
+from release rows and never acquire traces on sealed seeds.
+
+A `slot-paired-successor.v1` comparator manifest may bind the release loader's
+resolved publication fields through `campaign_config.publication_identity`:
+`{"release_tag": "<resolved tag>", "doi": "<resolved version DOI>"}`. The manifest
+digest covers both fields. The detached source resolver applies exactly these
+two fields, matching `load_release_campaign_config`, before reconstructing the
+campaign runtime hash. All scientific inputs still come from the pinned source;
+additional fields and mismatching runtime hashes are refused. This binding is
+not release-identity verification or scientific admission. Partial development
+comparisons remain diagnostics.

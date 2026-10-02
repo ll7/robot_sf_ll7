@@ -617,14 +617,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
             right_scenario = dict(reference)
             left_scenario.pop("seeds", None)
             right_scenario.pop("seeds", None)
-            expected_scenario_differences = (
-                {
-                    "metadata.scenario_horizon.sha256",
-                    "metadata.scenario_horizon.authored_max_episode_steps",
-                }
-                if index == 0
-                else set()
-            )
+            expected_scenario_differences = set()
             actual_scenario_differences = _diff_paths(left_scenario, right_scenario)
             if actual_scenario_differences != expected_scenario_differences:
                 mismatches.append(
@@ -634,8 +627,11 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
             if index == 0:
                 historical_schedule = scenario["metadata"]["scenario_horizon"]
                 current_schedule = reference["metadata"]["scenario_horizon"]
-                assert "sha256" not in historical_schedule
-                assert "authored_max_episode_steps" not in historical_schedule
+                assert historical_schedule["sha256"] == configs[0].scenario_horizons_sha256
+                assert (
+                    historical_schedule["authored_max_episode_steps"]
+                    == reference["simulation_config"]["max_episode_steps"]
+                )
                 assert current_schedule["sha256"] == configs[2].scenario_horizons_sha256
                 assert (
                     current_schedule["authored_max_episode_steps"]

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import io
 import itertools
@@ -65,6 +66,8 @@ def aggregate(rows: list[dict]) -> dict:
 
 def validate(payload: dict) -> None:
     """Refuse partial grids, duplicate episodes and non-dev experimental seeds."""
+    if any(row["world"] not in {"crowd", "empty"} for row in payload["episodes"]):
+        raise ValueError("Unknown episode world")
     for world in ("crowd", "empty"):
         manifest = payload["manifests"][world]
         seeds = list(range(1001, 1031)) if world == "crowd" else [1001, 1002]
@@ -99,6 +102,10 @@ def import_runs(round_number: int, crowd: Path, empty: Path) -> dict:
             key: manifest[key]
             for key in ("head", "seeds", "scenarios", "arms", "horizon", "sha256")
         }
+        if "reused_episode_sources" in manifest:
+            payload["manifests"][world]["reused_episode_sources"] = manifest[
+                "reused_episode_sources"
+            ]
         payload["manifests"][world]["arm_flags"] = manifest.get(
             "arm_flags",
             {
@@ -111,7 +118,7 @@ def import_runs(round_number: int, crowd: Path, empty: Path) -> dict:
             },
         )
         for path in sorted(directory.glob("*.json")):
-            if path.name == "manifest.json":
+            if path.name in {"manifest.json", "reuse-provenance.json"}:
                 continue
             row = json.loads(path.read_text())
             compact = {
@@ -125,7 +132,22 @@ def import_runs(round_number: int, crowd: Path, empty: Path) -> dict:
                     "final_goal_distance_m",
                 )
             }
-            compact.update(world=world, **row["metrics"])
+            compact.update(
+                world=world,
+                execution_head=row.get("execution_head", manifest["head"]),
+                **row["metrics"],
+            )
+            compact["next_valid_field_observed"] = row.get("next_valid_field_observed")
+            decision = row["runtime"]["last_decision"]
+            debug = decision["candidate_evaluator_debug"]
+            compact["final_diagnostics"] = {
+                "command": decision["selected_command"],
+                "feasible_moving_count": debug["feasible_moving_count"],
+                "stop_kind": debug["stop_kind"],
+                "constraints": debug["constraints"],
+                "progress_windows": decision["progress_windows"],
+                "speed_safety": decision["speed_safety"],
+            }
             payload["episodes"].append(compact)
     validate(payload)
     return payload
@@ -210,6 +232,59 @@ def csv_text(rows: list[dict]) -> str:
     return stream.getvalue()
 
 
+def audit_braking_bound(directory: Path, native: Path) -> None:
+    """Summarize cap bypasses in the 45 successful Round-2 station trajectories."""
+    payload = json.loads((directory / "round2-episodes.json").read_text())
+    validate(payload)
+    selected = [
+        row
+        for row in payload["episodes"]
+        if row["world"] == "crowd"
+        and row["scenario"] == "classic_station_platform_medium"
+        and row["arm"] in {"platform", "both"}
+        and row["outcome"] == "success"
+    ]
+    results = []
+    for episode in selected:
+        filename = f"{episode['scenario']}__{episode['seed']}__{episode['arm']}__crowd.jsonl.gz"
+        breaches = []
+        with gzip.open(native / filename, "rt") as stream:
+            for line in stream:
+                row = json.loads(line)
+                decision = row["decision"]
+                safety = decision.get("speed_safety", {})
+                cap = safety.get("braking_cap")
+                if (
+                    decision.get("selected_source") == "admissible_speed"
+                    and cap is not None
+                    and row["command"][0] > cap + 1e-6
+                ):
+                    breaches.append(
+                        {
+                            "step": row["step"],
+                            "command_m_s": row["command"][0],
+                            "braking_cap_m_s": cap,
+                            "pre_action_surface_gap_m": safety["min_surface_clearance"],
+                        }
+                    )
+        results.append(
+            {
+                "scenario": episode["scenario"],
+                "seed": episode["seed"],
+                "arm": episode["arm"],
+                "injected_bound_exceedance_steps": len(breaches),
+                "first_bound_exceedance": breaches[0] if breaches else None,
+            }
+        )
+    result = {
+        "status": "AI-GENERATED/NEEDS-REVIEW; dev-only",
+        "head": payload["manifests"]["crowd"]["head"],
+        "meaning": "Requested injected commands above current-position braking cap; not actual plant-speed or contact claims",
+        "episodes": results,
+    }
+    (directory / "round2-braking-bound-audit.json").write_text(json.dumps(result, indent=2) + "\n")
+
+
 def outputs(directory: Path) -> dict[str, str]:
     """Derive reproducible tables from the committed compact input summaries."""
     results, summaries = {}, []
@@ -224,6 +299,48 @@ def outputs(directory: Path) -> dict[str, str]:
             cell for summary in summaries for cell in summary["cells"] if cell["scenario"] == "ALL"
         ]
         results["round2-vs-round3.csv"] = csv_text(pooled)
+        earlier = json.loads((directory / "round2-episodes.json").read_text())
+        later = json.loads((directory / "round3-episodes.json").read_text())
+        lookup = {
+            (row["world"], row["scenario"], row["seed"], row["arm"]): row
+            for row in earlier["episodes"]
+        }
+        transitions = []
+        for row in later["episodes"]:
+            key = (row["world"], row["scenario"], row["seed"], row["arm"])
+            if lookup[key]["outcome"] == "success" and row["outcome"] != "success":
+                transitions.append(
+                    {
+                        k: row[k]
+                        for k in (
+                            "world",
+                            "scenario",
+                            "seed",
+                            "arm",
+                            "outcome",
+                            "final_goal_distance_m",
+                            "final_diagnostics",
+                        )
+                    }
+                )
+        results["round3-new-failures-vs-round2.json"] = json.dumps(transitions, indent=2) + "\n"
+    audit_path = directory / "round2-braking-bound-audit.json"
+    if audit_path.exists():
+        audited = []
+        for row in json.loads(audit_path.read_text())["episodes"]:
+            first = row["first_bound_exceedance"]
+            audited.append(
+                {
+                    "scenario": row["scenario"],
+                    "seed": row["seed"],
+                    "arm": row["arm"],
+                    "injected_bound_exceedance_steps": row["injected_bound_exceedance_steps"],
+                    "first_step": first["step"] if first else None,
+                    "first_command_m_s": first["command_m_s"] if first else None,
+                    "first_braking_cap_m_s": first["braking_cap_m_s"] if first else None,
+                }
+            )
+        results["round2-braking-bound-audit.csv"] = csv_text(audited)
     return results
 
 
@@ -235,6 +352,11 @@ def main() -> None:
     parser.add_argument("--crowd", type=Path)
     parser.add_argument("--empty", type=Path)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--audit-braking-bound",
+        type=Path,
+        help="Native Round-2 crowd folder; publish compact injected-cap audit, without raw traces",
+    )
     args = parser.parse_args()
     if args.import_round is not None:
         if args.check or args.crowd is None or args.empty is None:
@@ -244,6 +366,10 @@ def main() -> None:
         (args.output / f"round{args.import_round}-episodes.json").write_text(
             json.dumps(payload, indent=2) + "\n"
         )
+    if args.audit_braking_bound is not None:
+        if args.check:
+            parser.error("Audit import cannot use --check")
+        audit_braking_bound(args.output, args.audit_braking_bound)
     generated = outputs(args.output)
     if not generated:
         parser.error("No committed episode summaries found")

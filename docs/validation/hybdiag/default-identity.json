@@ -1,0 +1,27 @@
+{
+  "method": "default observations for absent, valid-origin, real successor; ndarray dtype/shape/raw bytes and ordered default Box/Dict spaces",
+  "witnesses": {
+    "base": {
+      "ref": "879f75b69eb93ca16006f2019ee5c85c7aa724dd",
+      "sha256": "acf07cb0419d68748607ffde4de985a974d6ea5b19274869eba0a22410b011f6",
+      "bytes": 5234
+    },
+    "main": {
+      "ref": "origin/main",
+      "sha256": "acf07cb0419d68748607ffde4de985a974d6ea5b19274869eba0a22410b011f6",
+      "bytes": 5234
+    },
+    "round2": {
+      "ref": "14c1adf46436fc7b9e051b44981900acf525b9b2",
+      "sha256": "acf07cb0419d68748607ffde4de985a974d6ea5b19274869eba0a22410b011f6",
+      "bytes": 5234
+    },
+    "round3": {
+      "ref": "current",
+      "sha256": "acf07cb0419d68748607ffde4de985a974d6ea5b19274869eba0a22410b011f6",
+      "bytes": 5234
+    }
+  },
+  "action_witness_sha256": "7fe03833f0ceac1c7fcd818d157fc76b1438d2987a5747313088fbbf38ed04fe",
+  "status": "AI-GENERATED/NEEDS-REVIEW"
+}

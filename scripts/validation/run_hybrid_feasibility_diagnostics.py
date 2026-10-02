@@ -225,6 +225,9 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         obs, _ = env.reset(seed=seed)
         policy._planner_bind_env(env)
         policy._planner_reset(seed=seed)
+        next_valid_observed = "next_valid" in planner._socnav_fields(obs)[1]
+        if hcfg.get("goal_next_validity_enabled", False) and not next_valid_observed:
+            raise RuntimeError("Enabled successor validity did not reach the planner")
         if arm == "orca":
             shadow_policy, _ = _build_policy(
                 "hybrid_rule_local_planner", hcfg, robot_kinematics="differential_drive"
@@ -301,6 +304,10 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         if runtime.get("fallback_count", 0) or runtime.get("degraded_count", 0):
             raise RuntimeError(f"Fallback/degraded execution: {runtime}")
         result = {
+            "execution_head": subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+            ).strip(),
+            "next_valid_field_observed": next_valid_observed,
             "scenario": name,
             "seed": seed,
             "arm": arm,
@@ -375,6 +382,8 @@ def main():
         Path(__file__),
         ROOT / "robot_sf/planner/hybrid_rule_local_planner.py",
         ROOT / "robot_sf/planner/grid_route.py",
+        ROOT / "robot_sf/planner/socnav_occupancy.py",
+        ROOT / "robot_sf/benchmark/map_runner/map_runner_observations.py",
         ROOT / "robot_sf/sensor/socnav_observation.py",
         ROOT / "robot_sf/gym_env/unified_config.py",
         MAIN_MATRIX,
@@ -404,6 +413,9 @@ def main():
             str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files
         },
     }
+    reuse = args.output / "reuse-provenance.json"
+    if reuse.exists():
+        manifest["reused_episode_sources"] = json.loads(reuse.read_text())
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     pending = [
         t

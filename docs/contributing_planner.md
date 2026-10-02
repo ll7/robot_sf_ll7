@@ -183,11 +183,12 @@ retain the existing exclusion policy.
 
 `goal_next_validity_enabled: true` is a separate, default-false planner flag.
 Use it with the default-false environment option `include_goal_next_valid: true`.
-The sensor then emits `goal.next_valid` (float32 array of shape1, 0 for absent,
+The sensor then emits `goal.next_valid` (float32 array of shape (1,), 0 for absent,
 1 for present). The hybrid and its grid route guide use that bit; a legitimate
-successor at world origin remains valid. Without the field, they retain legacy
+successor at world origin remains valid. The production flattened reader and
+map observation bridge preserve the optional bit. Without the field, they retain legacy
 selection. Physical exclusion alone does not change goal selection. Default
-observations, observation spaces and frozen0.0.8 policy remain unchanged.
+observations, observation spaces and frozen 0.0.8 policy remain unchanged.
 
 Independently, `platform_speed_candidates_enabled: true` (default: false) adds
 reachable speeds above the comfort band, **never above the nearest-pedestrian
@@ -197,11 +198,11 @@ effective maximum speed, rather than saturating at the comfort cap. The existing
 pedestrian prediction check remains; an added physical wall check covers the
 complete committed-step-plus-braking tail with swept-disc/arc exclusion.
 
-The1.60m threshold in these scenarios is a **candidate rejection radius applied
+The 1.60 m threshold in these scenarios is a **candidate rejection radius applied
 to constant-velocity predicted pedestrian positions at rollout endpoints**.
 It is not a hard limit on executed separation. Plant/pedestrian evolution can
 differ from prediction; report actual minimum separation and near misses rather
-than inferring them from this threshold. The physical radius sum here is1.40m.
+than inferring them from this threshold. The physical radius sum here is 1.40 m.
 These experimental flags require paired collision, pedestrian-separation and
 empty-world validation; none changes the release config.
 

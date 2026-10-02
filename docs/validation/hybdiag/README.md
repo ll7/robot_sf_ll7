@@ -15,7 +15,7 @@ python -m scripts.validation.summarize_hybdiag --check
 CSV files begin with a normal header. Success, collisions, timeouts and freezing
 have two-sided 95% Wilson intervals over episodes. Stopped time and time without a
 feasible moving candidate are weighted by robot exposure. A near-miss event starts
-on entry into the plant's `near_misses` predicate (surface gap below 0.5 m); consecutive
+on entry into the plant's `near_misses` predicate (surface gap in [0, 0.5) m); consecutive
 near-miss steps count as one event. Event rates use actual robot-seconds; minimum
 pedestrian separation is the executed center-to-center minimum. Robot radius is
 1.0 m, pedestrian radius 0.4 m. No inference of independence between repeated
@@ -38,3 +38,14 @@ The empty-world gate compares each enabled arm to paired off episodes. Acceptanc
 requires no new empty-world failure and collision Wilson bounds not above off
 (per scenario and pooled). This does not certify identical collision risk or
 improved proximity; assess near misses and exposure separately.
+
+The compact `round2-braking-bound-audit.json` records the first injected-command
+bound exceedance and total exceedance steps for each of the 45 successful
+platform/both station episodes. Every one requested commands above the scalar
+braking cap. This is a command-bound violation, not an executed-speed/contact
+claim. Its CSV is regenerated from that committed summary; the optional native
+import command is:
+
+```sh
+python -m scripts.validation.summarize_hybdiag --audit-braking-bound <round2-native-crowd-folder>
+```

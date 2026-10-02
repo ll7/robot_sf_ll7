@@ -236,7 +236,7 @@ def test_physical_exclusion_checks_committed_plant_step_and_whole_sweep(wall_x):
     assert evaluation["hard_static_clearance"] == 0.01
 
 
-def test_physical_flag_keeps_terminal_goal_when_successor_is_absent():
+def test_goal_validity_flag_keeps_terminal_goal_when_successor_is_absent():
     """The native sensor's absent successor must not target the world origin."""
     planner = _planner(goal_next_validity_enabled=True)
     obs = _obs(robot=(25.6, 3), goal=(26.4, 3.1))
@@ -256,7 +256,9 @@ def test_admissible_speed_flag_samples_above_comfort_band_without_relaxing_safet
     from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
 
     planner = _planner(platform_speed_candidates_enabled=True)
-    obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16)])
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16.9)])
+    obs["robot"]["radius"] = np.array([1.0])
+    obs["pedestrians"]["radius"] = 0.4
     state = planner._extract_state(obs)  # radius sum 0.50, gap 0.50 m
     cap = planner._v4_human_speed_cap(state)
     # The default drive brakes at 1 m/s²: 0.8*0.1 + 0.8²/2 = 0.50 - 0.10.
@@ -294,30 +296,38 @@ def test_platform_speed_preference_does_not_saturate_at_comfort_cap():
     from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
 
     planner = _planner(platform_speed_candidates_enabled=True)
-    obs = _obs(robot=(4, 15), goal=(4.85, 15), speed=0.6, ped_positions=[(4, 16)])
+    obs = _obs(robot=(4, 15), goal=(4.85, 15), speed=0.6, ped_positions=[(4, 16.9)])
+    obs["robot"]["radius"] = np.array([1.0])
+    obs["pedestrians"]["radius"] = 0.4
     state = planner._extract_state(obs)
     cap = planner._v4_human_speed_cap(state)
     assert cap == 0.6
     results = []
-    for speed in (0.6, 0.8):
+    for speed in (0.6, 0.8, 1.2):
         r = planner._evaluate_candidate(
             candidate=HybridRuleCandidate(speed, 0, "witness"),
             observation=obs,
             state=state,
             speed_cap=cap,
-            nearest_ped=1,
+            nearest_ped=1.9,
         )
         assert r["accepted"]
         results.append(r)
-    assert [r["terms"]["speed_preference"] for r in results] == pytest.approx([0.3, 0.4]), (
+    # 1.20 command ramps through 0.80/1.00, then six 1.20 samples:
+    # mean 1.125 / drive maximum 2.00 = 0.5625.
+    assert [r["terms"]["speed_preference"] for r in results] == pytest.approx([0.3, 0.4, 0.5625]), (
         "comfort-cap normalization saturates added speeds"
     )
-    assert results[0]["score"] > results[1]["score"], "slower feasible near-goal move should win"
+    assert all(results[0]["score"] > r["score"] for r in results[1:]), (
+        "slower feasible near-goal move should beat the old 1.20 m/s command"
+    )
 
 
 def test_platform_injected_speeds_preserve_nearest_pedestrian_braking_bound():
     planner = _planner(platform_speed_candidates_enabled=True)
-    obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16)])
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16.9)])
+    obs["robot"]["radius"] = np.array([1.0])
+    obs["pedestrians"]["radius"] = 0.4
     state = planner._extract_state(obs)
     cap = planner._v4_human_speed_cap(state)
     extras = [c for c in planner._generate_candidates(state, cap) if c.source == "admissible_speed"]
@@ -485,3 +495,51 @@ def test_physical_flag_keeps_explicitly_valid_origin_waypoint():
     assert planner._extract_state(obs)["goal"] == pytest.approx((0, 0)), (
         "world-origin guard discards legitimate successor"
     )
+
+
+@pytest.mark.parametrize("consumer", ["hybrid", "grid"])
+def test_goal_validity_survives_real_observation_flattening(consumer):
+    from robot_sf.gym_env.robot_env import _flatten_nested_dict_obs
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
+    from robot_sf.sensor.socnav_observation import SocNavObservationFusion
+    from tests.test_socnav_observation import _build_socnav_simulator
+
+    cfg = RobotSimulationConfig()
+    cfg.include_goal_next_valid = True
+    sim = _build_socnav_simulator([])
+    sim.robots[0].pose = ((1.0, 1.0), 0.0)
+    nested = SocNavObservationFusion(sim, cfg, 4).next_obs()
+    # Independent interface fixture also isolates old consumers when the old
+    # sensor predates the optional field. Current sensor already emits this bit.
+    nested["goal"].setdefault("next_valid", np.array([0], dtype=np.float32))
+    flat = _flatten_nested_dict_obs(nested)
+    current = nested["goal"]["current"]
+    if consumer == "hybrid":
+        reader = _planner(goal_next_validity_enabled=True, waypoint_switch_distance=15)
+        selected = reader._extract_state(flat)["goal"]
+    else:
+        reader = GridRoutePlannerAdapter(
+            build_grid_route_config({"goal_next_validity_enabled": True, "goal_tolerance": 15})
+        )
+        selected = reader._extract_state(flat)[2]
+    assert selected == pytest.approx(current), "flattened observation loses successor validity"
+    flat["goal_next_valid"] = np.array([1], dtype=np.float32)
+    if consumer == "hybrid":
+        assert reader._extract_state(flat)["goal"] == pytest.approx((0, 0))
+    else:
+        assert reader._extract_state(flat)[2] == pytest.approx((0, 0))
+
+
+def test_map_observation_bridge_preserves_optional_successor_validity():
+    from robot_sf.benchmark.map_runner.map_runner_observations import normalize_map_observation
+    from robot_sf.gym_env.robot_env import _flatten_nested_dict_obs
+
+    default = _flatten_nested_dict_obs(_obs())
+    assert "next_valid" not in normalize_map_observation(default)["goal"]
+    default["goal_next_valid"] = np.array([0], dtype=np.float32)
+    normalized = normalize_map_observation(default)
+    assert "next_valid" in normalized["goal"], (
+        "map observation bridge drops opt-in successor validity"
+    )
+    assert normalized["goal"]["next_valid"] is default["goal_next_valid"]

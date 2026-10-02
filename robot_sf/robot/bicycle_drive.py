@@ -35,6 +35,9 @@ class BicycleDriveSettings:
     # acceleration; set explicitly to decouple braking from forward acceleration
     # (issue #4976).
     max_decel: float | None = None
+    # Planner adaptation only; explicitly opt in to motion for yaw-only requests.
+    # Every safety intervention suppresses this downstream.
+    creep_speed: float = 0.0
 
     def __post_init__(self) -> None:
         """Resolve the braking-authority default for backward compatibility.
@@ -45,6 +48,13 @@ class BicycleDriveSettings:
         """
         if self.max_decel is None:
             self.max_decel = self.max_accel
+        if (
+            isinstance(self.creep_speed, bool)
+            or not isinstance(self.creep_speed, Real)
+            or not isfinite(self.creep_speed)
+            or self.creep_speed < 0.0
+        ):
+            raise ValueError("creep_speed must be finite and nonnegative")
         if (
             isinstance(self.max_decel, bool)
             or not isinstance(self.max_decel, Real)

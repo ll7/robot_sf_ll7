@@ -35,6 +35,7 @@ from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.benchmark.planner_command_contract import planner_kinematics_compatibility
 from robot_sf.planner.kinematics_model import BicycleDriveKinematicsModel
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.sim.spawn_validation import reset_spawn_clearance
 from robot_sf.training.scenario_loader import load_scenarios
 
 logger.remove()
@@ -124,13 +125,42 @@ ACTIVE = {}
 ORIG_MAKE = episode.make_robot_env
 ORIG_ACTION = episode._policy_command_to_env_action
 ORIG_PROJECT = BicycleDriveKinematicsModel.project
+ORIG_SAFETY = episode._step_safety_filters
+
+
+def safety_capture(state, slc, **kwargs):
+    """Retain actual interventions without changing the safety transform."""
+    result = ORIG_SAFETY(state, slc, **kwargs)
+    labels = []
+    if state.safety_wrapper_trace:
+        record = state.safety_wrapper_trace[-1]
+        if record.get("intervened"):
+            labels.append(record["intervention"])
+        if record.get("deadlock_recovery", {}).get("recovery_active"):
+            labels.append("deadlock_recovery")
+    if state.cbf_filter_trace and state.cbf_filter_trace[-1].get("intervened"):
+        labels.append("cbf")
+    ACTIVE["safety_interventions"] = labels
+    return result
+
+
+episode._step_safety_filters = safety_capture
 
 
 def project_capture(self, command):
     """Capture requested commands before the real projection."""
     result = ORIG_PROJECT(self, command)
     ACTIVE.setdefault("projections", []).append(
-        [list(map(float, command)), list(map(float, result)), bool(self.is_feasible(command))]
+        [
+            list(map(float, command)),
+            list(map(float, result)),
+            bool(self.is_feasible(command)),
+            bool(
+                abs(command[0]) < 1e-3
+                and result[0] > max(command[0], 0.0)
+                and abs(command[1]) > 1e-6
+            ),
+        ]
     )
     return result
 
@@ -174,9 +204,11 @@ def make_capture(*args, **kwargs):
     def step(action):
         robot = env.simulator.robots[0]
         before = float(robot.pose[1])
+        pre_pose = list(map(float, robot.pos))
         pre_speed = float(robot.current_speed[0])
         projections = ACTIVE.pop("projections", [])
-        command = ACTIVE.pop("pending", [0.0, 0.0])
+        final_command = ACTIVE.pop("pending", [0.0, 0.0])
+        command = final_command
         if projections:
             command = projections[0][0]
         result = orig_step(action)
@@ -184,9 +216,17 @@ def make_capture(*args, **kwargs):
         yaw = math.atan2(math.sin(theta - before), math.cos(theta - before)) / 0.1
         v = float(robot.current_speed[0])
         x, y = map(float, robot.pos)
+        clearances = reset_spawn_clearance(env.simulator)
+        finite_clearance = [
+            value
+            for key, value in clearances.items()
+            if key.endswith("_surface_clearance_m") and value is not None and math.isfinite(value)
+        ]
         row = {
             "step": len(ACTIVE["trace"]),
             "cmd": command,
+            "final_command": final_command,
+            "pre_pose": pre_pose,
             "yaw": yaw,
             "v": v,
             "pre_v": pre_speed,
@@ -194,6 +234,11 @@ def make_capture(*args, **kwargs):
             "action": list(map(float, action)),
             "proj": projections,
             "world": ACTIVE.pop("world", None),
+            "creeping": bool(any(p[3] for p in projections) and projections[-1][1][0] > 0.0),
+            "safety_interventions": ACTIVE.pop("safety_interventions", []),
+            "min_clearance_m": min(finite_clearance) if finite_clearance else None,
+            "ped_clearance_m": clearances["robot_pedestrian_min_surface_clearance_m"],
+            "obstacle_clearance_m": clearances["robot_obstacle_min_surface_clearance_m"],
         }
         ACTIVE["trace"].append(row)
         return result
@@ -245,9 +290,21 @@ def reset_hook(bearing):
     return hook
 
 
+def t60_plant(arm):
+    """Load the explicit diagnostic plant and optional creep arm."""
+    variant = "30deg" if arm.startswith("T60-30") else "45deg"
+    plant = yaml.safe_load((ROOT / f"configs/robots/t60_bicycle_{variant}_v1.yaml").read_text())[
+        "robot_config"
+    ]
+    plant["creep_speed"] = 0.1 if arm.endswith("-on") else 0.0
+    if os.environ.get("BIKEFIX_REVIEW_BASE") == "1":
+        plant.pop("creep_speed")  # At44c386d6 creep was implicit, not a setting.
+    return plant
+
+
 def plant_and_policy(p, arm):
     """Resolve explicit diagnostic plant and policy copies without release edits."""
-    if arm in {"BI-base", "BI-fixed", "DD-legacy"}:
+    if arm in {"BI-base", "BI-fixed", "BI-off", "BI-on", "DD-legacy"}:
         plant = {
             "type": "bicycle_drive",
             "radius": 1.0,
@@ -265,6 +322,8 @@ def plant_and_policy(p, arm):
                 "max_linear_speed": 2.0,
                 "allow_backwards": False,
             }
+        elif arm in {"BI-off", "BI-on"}:
+            plant["creep_speed"] = 0.1 if arm == "BI-on" else 0.0
         policy_config = None
     else:
         if arm == "DD":
@@ -277,10 +336,7 @@ def plant_and_policy(p, arm):
                 "allow_backwards": False,
             }
         else:
-            variant = "30deg" if arm == "T60-30" else "45deg"
-            plant = yaml.safe_load(
-                (ROOT / f"configs/robots/t60_bicycle_{variant}_v1.yaml").read_text()
-            )["robot_config"]
+            plant = t60_plant(arm)
         # Diagnostic copies: never rewrite frozen release policy files.
         policy_config = (
             yaml.safe_load((ROOT / p["algo_config"]).read_text()) if p.get("algo_config") else {}
@@ -392,8 +448,13 @@ def run_cell(p, arm, probe, name, seed):
         wall_s=time.monotonic() - start,
         reset=ACTIVE.get("reset"),
         robot_config=ACTIVE.get("robot_config"),
-        stuck=sum(abs(t["cmd"][1]) > 1e-5 and abs(t["yaw"]) < 1e-5 for t in trace),
-        zero_turn=sum(abs(t["cmd"][0]) < 1e-3 and abs(t["cmd"][1]) > 1e-5 for t in trace),
+        stuck=displacement_stuck_steps(trace, ACTIVE.get("reset", {}).get("pose")),
+        zero_turn=sum(t["creeping"] for t in trace),
+        was_creeping_at_termination=bool(trace and trace[-1]["creeping"]),
+        min_clearance_last_2s_m=min(
+            (t["min_clearance_m"] for t in trace[-20:] if t["min_clearance_m"] is not None),
+            default=None,
+        ),
         true_infeasible=sum(
             abs(t["cmd"][1])
             > abs(t["cmd"][0])
@@ -430,6 +491,23 @@ def run_cell(p, arm, probe, name, seed):
     return result
 
 
+def displacement_stuck_steps(trace, reset_pose):
+    """Count full overlapping 2s windows with <.05m net motion and a requested command.
+
+    At least one raw (pre-projection) linear or yaw component must exceed 1e-6
+    during the window. Count its ending step; windows overlap at the .1s stride.
+    Neither creep nor the commanded/achieved yaw law appears in the motion test.
+    """
+    count = 0
+    for end in range(19, len(trace)):
+        start = end - 19
+        initial = trace[start - 1]["pose"][:2] if start else reset_pose[0]
+        moved = math.dist(initial, trace[end]["pose"][:2])
+        issued = any(max(map(abs, t["cmd"])) > 1e-6 for t in trace[start : end + 1])
+        count += moved < 0.05 and issued
+    return count
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--prepare", action="store_true")
@@ -439,8 +517,20 @@ if __name__ == "__main__":
     ap.add_argument("--arms", default="DD,T60-30,T60-45")
     ap.add_argument("--planners", default="")
     ap.add_argument("--probe", type=int, default=0)
+    ap.add_argument("--cells-json", type=Path, help="Explicit dev cells for an instrumented replay")
     a = ap.parse_args()
-    assert set(a.arms.split(",")) <= {"DD", "T60-30", "T60-45", "DD-legacy", "BI-base", "BI-fixed"}
+    assert set(a.arms.split(",")) <= {
+        "DD",
+        "T60-30",
+        "T60-45",
+        "T60-30-on",
+        "T60-45-on",
+        "DD-legacy",
+        "BI-base",
+        "BI-fixed",
+        "BI-off",
+        "BI-on",
+    }
     for directory in ["results", "traces", "records"]:
         (OUT / directory).mkdir(parents=True, exist_ok=True)
     if a.prepare:
@@ -453,7 +543,17 @@ if __name__ == "__main__":
                 run_cell(p, arm, 1, 90, 1001)
     else:
         cells = []
+        if a.cells_json:
+            for cell in json.loads(a.cells_json.read_text()):
+                p = next(p for p in ROSTER if p["key"] == cell["planner"])
+                assert 1001 <= int(cell["seed"]) <= 1010, "STOP: non-dev replay seed"
+                assert cell["scenario"] in NAMES or int(cell["probe"]) == 1
+                cells.append(
+                    (p, cell["arm"], int(cell["probe"]), cell["scenario"], int(cell["seed"]))
+                )
         for p in ROSTER:
+            if a.cells_json:
+                break
             if a.planners and p["key"] not in a.planners.split(","):
                 continue
             for probe, names, seeds in [

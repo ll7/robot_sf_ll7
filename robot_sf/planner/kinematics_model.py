@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -98,14 +99,24 @@ class BicycleDriveKinematicsModel:
     allow_backwards: bool = False
     name: str = "bicycle_drive"
     max_curvature: float | None = None
-    creep_speed: float = 0.1
+    creep_speed: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Require physical curvature and an explicit nonnegative creep speed."""
+        if (
+            self.max_curvature is None
+            or not math.isfinite(self.max_curvature)
+            or self.max_curvature <= 0
+        ):
+            raise ValueError("bicycle max_curvature must be positive: tan(max_steer)/wheelbase")
+        if not math.isfinite(self.creep_speed) or self.creep_speed < 0:
+            raise ValueError("bicycle creep_speed must be finite and nonnegative")
 
     @property
     def curvature_limit(self) -> float:
-        """Return tan(max_steer)/wheelbase, or the legacy implied curvature."""
-        if self.max_curvature is not None:
-            return self.max_curvature
-        return self.max_angular_speed / max(self.max_velocity, 1e-6)
+        """Return the explicitly supplied physical tan(max_steer)/wheelbase."""
+        assert self.max_curvature is not None  # validated at construction
+        return self.max_curvature
 
     @property
     def min_velocity(self) -> float:
@@ -131,15 +142,17 @@ class BicycleDriveKinematicsModel:
     def project(self, command: Command2D) -> Command2D:
         """Preserve bounded speed and clip yaw to the bicycle-feasible cone.
 
-        A near-zero-speed turn explicitly requests 0.1 m/s forward creep;
-        a zero/zero stop stays stopped. This is a speed-priority projection,
+        Creep is disabled by default. Explicit creep requires nonnegative
+        near-zero speed and at least one degree/second of yaw intent. Safety
+        interventions disable creep at the adapter boundary. A zero/zero stop
+        stays stopped. This is a speed-priority projection,
         not a Euclidean nearest-point projection.
 
         Returns:
             Command2D: Projected command in feasible set.
         """
         v, omega = command
-        if abs(v) < 1e-3 and abs(omega) > 1e-6:
+        if 0.0 <= v < 1e-3 and abs(omega) >= math.radians(1.0):
             v = min(self.creep_speed, self.max_velocity)
         v = float(np.clip(v, self.min_velocity, self.max_velocity))
         yaw_limit = min(self.max_angular_speed, abs(v) * self.curvature_limit)
@@ -206,6 +219,7 @@ def resolve_benchmark_kinematics_model(
             max_angular_speed=float(limits.get("bicycle_max_angular_speed", max_angular)),
             allow_backwards=bool(limits.get("allow_backwards", False)),
             max_curvature=limits.get("bicycle_max_curvature"),
+            creep_speed=float(limits.get("bicycle_creep_speed", 0.0)),
         )
     if kinematics in {"holonomic", "omni", "omnidirectional"}:
         return HolonomicPassthroughKinematicsModel()

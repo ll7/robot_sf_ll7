@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -57,7 +57,9 @@ class PlannerActionAdapter:
     kinematics_model: KinematicsModel | None = None
     last_kinematics_diagnostics: dict[str, Any] | None = None
 
-    def from_velocity_command(self, command: Iterable[float]) -> np.ndarray:
+    def from_velocity_command(
+        self, command: Iterable[float], *, safety_intervention: bool = False
+    ) -> np.ndarray:
         """Map a (v, w) command into the simulator action space and clip to limits.
 
         Returns:
@@ -68,6 +70,8 @@ class PlannerActionAdapter:
         kinematics_model = self.kinematics_model or self._default_kinematics_model()
         if self.kinematics_model is None:
             self.kinematics_model = kinematics_model
+        if safety_intervention and isinstance(kinematics_model, BicycleDriveKinematicsModel):
+            kinematics_model = replace(kinematics_model, creep_speed=0.0)
         projected = kinematics_model.project(float_cmd)
         self.last_kinematics_diagnostics = kinematics_model.diagnostics(
             float_cmd,
@@ -75,6 +79,14 @@ class PlannerActionAdapter:
         )
         linear_target, angular_target = projected
         if isinstance(self.robot, BicycleDriveRobot):
+            self.last_kinematics_diagnostics.update(
+                safety_intervention=safety_intervention,
+                creep_applied=(
+                    0.0 <= float_cmd[0] < 1e-3
+                    and abs(float_cmd[1]) >= math.radians(1.0)
+                    and projected[0] > float_cmd[0]
+                ),
+            )
             return self._bicycle_action(linear_target, angular_target)
         if isinstance(self.robot, DifferentialDriveRobot):
             return self._differential_action(linear_target, angular_target)
@@ -98,6 +110,7 @@ class PlannerActionAdapter:
                 max_angular_speed=max_angular_speed,
                 allow_backwards=cfg.allow_backwards,
                 max_curvature=math.tan(cfg.max_steer) / cfg.wheelbase,
+                creep_speed=cfg.creep_speed,
             )
         if isinstance(self.robot, DifferentialDriveRobot):
             cfg = self.robot.config
@@ -120,8 +133,6 @@ class PlannerActionAdapter:
 
         target_speed = float(np.clip(linear_target, config.min_velocity, config.max_velocity))
         dt = max(float(self.time_step), 1e-6)
-        if abs(target_speed) < 1e-3 and abs(angular_target) > 1e-6:
-            target_speed = min(0.1, config.max_velocity)
         accel = (target_speed - current_speed) / dt
         accel = float(np.clip(accel, -config.max_decel, config.max_accel))
         accel = float(np.clip(accel, self.action_space.low[0], self.action_space.high[0]))

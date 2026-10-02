@@ -12,6 +12,7 @@ def adapter():
     robot = BicycleDriveRobot(
         BicycleDriveSettings(radius=1.0, wheelbase=0.85, max_steer=0.6, max_velocity=2.0)
     )
+    robot.config.creep_speed = 0.1  # This physical witness explicitly opts in.
     return robot, PlannerActionAdapter(robot, robot.action_space, 0.1)
 
 
@@ -107,7 +108,9 @@ def test_speed_priority_coupled_projection(command, expected):
     """Preserve speed and enforce curvature .2, including turn-only creep."""
     from robot_sf.planner.kinematics_model import BicycleDriveKinematicsModel
 
-    model = BicycleDriveKinematicsModel(max_velocity=2.0, max_angular_speed=0.4)
+    model = BicycleDriveKinematicsModel(
+        max_velocity=2.0, max_angular_speed=0.4, max_curvature=0.2, creep_speed=0.1
+    )
     projected = model.project(command)
     assert projected == pytest.approx(expected)
     assert model.is_feasible(projected)
@@ -117,7 +120,9 @@ def test_creep_respects_low_speed_cap():
     """A .04m/s platform cannot be advanced by the .1m/s creep default."""
     from robot_sf.planner.kinematics_model import BicycleDriveKinematicsModel
 
-    model = BicycleDriveKinematicsModel(max_velocity=0.04, max_angular_speed=0.008)
+    model = BicycleDriveKinematicsModel(
+        max_velocity=0.04, max_angular_speed=0.008, max_curvature=0.2, creep_speed=0.1
+    )
     assert model.project((0.0, 0.1)) == pytest.approx((0.04, 0.008))
 
 

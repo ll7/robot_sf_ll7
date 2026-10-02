@@ -113,7 +113,7 @@ def test_differential_kinematics_model_projection_and_feasibility() -> None:
 
 def test_bicycle_kinematics_model_projection_and_feasibility() -> None:
     """Bicycle kinematics should enforce configured velocity and angular limits."""
-    model = BicycleDriveKinematicsModel(max_velocity=2.0, max_angular_speed=0.4)
+    model = BicycleDriveKinematicsModel(max_velocity=2.0, max_angular_speed=0.4, max_curvature=0.2)
     assert model.is_feasible((1.0, 0.2)) is True
     assert model.is_feasible((-0.5, 0.2)) is False
     projected = model.project((-0.5, 1.0))
@@ -128,6 +128,7 @@ def test_bicycle_kinematics_model_allows_backwards_when_enabled() -> None:
         max_velocity=2.0,
         max_angular_speed=0.4,
         allow_backwards=True,
+        max_curvature=0.2,
     )
     assert model.min_velocity == pytest.approx(-2.0)
     assert model.is_feasible((-0.5, 0.2)) is False

@@ -212,6 +212,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
+from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 from robot_sf.sim.spawn_validation import reset_spawn_clearance
 
@@ -1520,6 +1521,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             bicycle_max_velocity=robot_cfg.max_velocity,
             bicycle_max_angular_speed=robot_cfg.max_velocity * curvature,
             bicycle_max_curvature=curvature,
+            bicycle_creep_speed=robot_cfg.creep_speed,
         )
     return _EpisodeRunContext(
         scenario=scenario,
@@ -2013,6 +2015,7 @@ class _StepLoopState:
     tracking_precision_records: list[dict[str, Any]] = field(default_factory=list)
     min_separation_corrupted_values: list[float] = field(default_factory=list)
     safety_wrapper_trace: list[dict[str, Any]] = field(default_factory=list)
+    bicycle_safety_intervention: bool = False
     cbf_filter_trace: list[dict[str, Any]] = field(default_factory=list)
     ammv_command_actions: list[dict[str, Any]] = field(default_factory=list)
     synthetic_actuation_trace: list[dict[str, Any]] = field(default_factory=list)
@@ -2791,6 +2794,7 @@ def _step_safety_filters(
         The (possibly corrected) policy command.
     """
     wrapper_record: dict[str, Any] | None = None
+    state.bicycle_safety_intervention = False
     if slc.safety_wrapper_runtime.enabled or slc.safety_wrapper_runtime.record_step_trace:
         policy_command, wrapper_record = _apply_safety_wrapper_step(
             policy_command,
@@ -2803,6 +2807,10 @@ def _step_safety_filters(
             deadlock_monitor=slc.safety_wrapper_deadlock_monitor,
         )
         state.safety_wrapper_trace.append(wrapper_record)
+        state.bicycle_safety_intervention = bool(
+            wrapper_record.get("intervened", False)
+            or wrapper_record.get("deadlock_recovery", {}).get("recovery_active", False)
+        )
     if slc.cbf_runtime.enabled:
         policy_command, cbf_record = _apply_cbf_safety_filter_step(
             policy_command,
@@ -2814,6 +2822,7 @@ def _step_safety_filters(
             previous_ped_positions=state.previous_trace_ped_pos,
         )
         state.cbf_filter_trace.append(cbf_record)
+        state.bicycle_safety_intervention |= bool(cbf_record.get("intervened", False))
     if wrapper_record is not None:
         _annotate_native_safety_wrapper_command(
             wrapper_record,
@@ -2842,6 +2851,11 @@ def _step_convert_and_execute(
     state.ammv_command_actions.append(selected_action_payload)
     action_conversion_payload: dict[str, Any] = {}
     action_conversion_start = time.perf_counter() if slc.active_harness is not None else None
+    bicycle_conversion = (
+        {"safety_intervention": state.bicycle_safety_intervention}
+        if isinstance(getattr(slc.config, "robot_config", None), BicycleDriveSettings)
+        else {}
+    )
     if step_is_native:
         # Policy already outputs native env actions (e.g. delta velocities);
         # skip the absolute->delta conversion done by _policy_command_to_env_action.
@@ -2858,12 +2872,14 @@ def _step_convert_and_execute(
             config=slc.config,
             command=policy_command,
             conversion_trace=action_conversion_payload,
+            **bicycle_conversion,
         )
     else:
         action = _policy_command_to_env_action(
             env=env,
             config=slc.config,
             command=policy_command,
+            **bicycle_conversion,
         )
     applied_environment_action_payload = _command_action_payload(action)
     if slc.active_harness is not None and action_conversion_start is not None:

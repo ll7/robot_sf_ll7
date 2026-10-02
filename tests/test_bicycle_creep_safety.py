@@ -1,0 +1,136 @@
+"""Safety and intent regressions through the actual bicycle command path."""
+
+import math
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from robot_sf.benchmark.map_runner.map_runner_episode import (
+    _step_convert_and_execute,
+    _step_safety_filters,
+)
+from robot_sf.benchmark.safety.safety_wrapper_runtime import (
+    SafetyWrapperRuntimeConfig,
+    make_deadlock_recovery_monitor,
+)
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.kinematics_model import BicycleDriveKinematicsModel
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
+
+
+def model(**kwargs):
+    """A physical cone with independently specified curvature 0.2 /m."""
+    return BicycleDriveKinematicsModel(
+        max_velocity=2.0, max_angular_speed=0.4, max_curvature=0.2, **kwargs
+    )
+
+
+def test_creep_is_disabled_by_default():
+    """A yaw-only request cannot silently request forward motion."""
+    assert model().project((0.0, 0.5)) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("omega", [1.1e-6, -1.1e-6, 0.016, -0.016])
+def test_opt_in_creep_rejects_noise(omega):
+    """Even explicitly enabled creep must ignore sub-degree-per-second yaw."""
+    assert model(creep_speed=0.1).project((0.0, omega)) == (0.0, 0.0)
+
+
+def test_small_reverse_request_never_becomes_forward():
+    """Speed priority preserves a negative request, including near standstill."""
+    assert model(creep_speed=0.1, allow_backwards=True).project((-0.0005, 0.2)) == (
+        -0.0005,
+        0.0001,
+    )
+
+
+def test_bicycle_requires_physical_curvature():
+    """Separate scalar caps cannot substitute for wheelbase and steering physics."""
+    with pytest.raises(ValueError, match="max_curvature"):
+        BicycleDriveKinematicsModel(max_velocity=2.0, max_angular_speed=0.4)
+
+
+@pytest.mark.parametrize("recovery,hard_stop", [(False, True), (True, True), (True, False)])
+def test_hard_stop_remains_stopped_through_bicycle_conversion(recovery, hard_stop):
+    """The real safety stage and final conversion preserve a veto with creep opted in."""
+    robot = BicycleDriveRobot(BicycleDriveSettings(radius=0.64, wheelbase=0.90, max_steer=0.52))
+    # Also works on the pre-fix settings, which have no constructor field for creep.
+    robot.config.creep_speed = 0.1
+    config = SimpleNamespace(
+        robot_config=robot.config,
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+    )
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(
+            robots=[robot],
+            robot_pos=[np.array([0.0, 0.0])],
+            ped_pos=np.array([[1.24 if hard_stop else 1.44, 0.0]]),
+        ),
+        action_space=robot.action_space,
+    )
+
+    def step(action):
+        robot.apply_action(tuple(action), 0.1)
+        return {}, 0.0, False, False, {}
+
+    env.step = step
+    runtime = SafetyWrapperRuntimeConfig(enabled=True, deadlock_recovery_enabled=recovery)
+    slc = SimpleNamespace(
+        config=config,
+        safety_wrapper_runtime=runtime,
+        safety_wrapper_deadlock_monitor=make_deadlock_recovery_monitor(runtime),
+        cbf_runtime=SimpleNamespace(enabled=False),
+        active_harness=None,
+        record_simulation_step_trace=False,
+    )
+    state = SimpleNamespace(
+        previous_trace_ped_pos=None,
+        safety_wrapper_trace=[],
+        ammv_command_actions=[],
+    )
+    for index in range(40):
+        command = _step_safety_filters(
+            state,
+            slc,
+            policy_command=(1.0, 0.5) if hard_stop else (0.0, 0.0),
+            step_is_native=False,
+            env=env,
+            step_idx=index,
+        )
+        assert state.safety_wrapper_trace[-1]["intervention"] == (
+            "hard_stop" if hard_stop else "none"
+        )
+        _step_convert_and_execute(state, slc, policy_command=command, step_is_native=False, env=env)
+        assert robot.state.velocity == 0.0, "creep overrode a hard-stop/yield veto"
+    assert robot.pos == (0.0, 0.0)
+    if recovery:
+        assert any(r["deadlock_recovery"]["recovery_active"] for r in state.safety_wrapper_trace)
+
+
+def test_one_step_opt_in_turn_does_not_persist():
+    """A meaningful isolated turn moves at most one centimetre then stops immediately."""
+    robot = BicycleDriveRobot(BicycleDriveSettings(wheelbase=1.0, max_steer=math.pi / 4))
+    adapter = PlannerActionAdapter(robot, robot.action_space, 0.1, model(creep_speed=0.05))
+    robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.5))), 0.1)
+    assert robot.state.velocity == pytest.approx(0.05)
+    for _ in range(40):
+        robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.0))), 0.1)
+    assert robot.state.velocity == 0.0
+    assert math.hypot(*robot.pos) <= 0.01
+
+
+def test_robot_config_controls_creep_speed():
+    """The opt-in speed comes from the plant, rather than an adapter constant."""
+    robot = BicycleDriveRobot(BicycleDriveSettings(wheelbase=1.0, max_steer=math.pi / 4))
+    robot.config.creep_speed = 0.07
+    adapter = PlannerActionAdapter(robot, robot.action_space, 0.1)
+    robot.apply_action(tuple(adapter.from_velocity_command((0.0, 0.5))), 0.1)
+    assert robot.state.velocity == pytest.approx(0.07)
+
+
+def test_meaningful_opt_in_turn_is_projected():
+    """One degree/second is an intentional turn, with forward speed bounded at .1."""
+    assert model(creep_speed=0.1).project((0.0, math.radians(1))) == pytest.approx(
+        (0.1, math.radians(1))
+    )

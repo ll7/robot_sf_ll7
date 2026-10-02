@@ -1565,6 +1565,26 @@ Historical measurements below are attributed to the named review report; they we
   for 93ba0d75 and each constituent.
 - **Reopen:** New material evidence or an explicit author ruling.
 
+**Rehearsal status, 2026-10-02 (CHAIN-3):** The current main source
+`f52de283e3b60ec85910fd761e432d07ab748158` has no development-seed override
+in `scripts/tools/resolve_benchmark_release_identity.py generate`. A diagnostic
+source checkout copied the real D-083 campaign, matrix, planner inputs and
+identity template, generated a fixed-list projection with seeds 1001–1003,
+and regenerated its campaign checksum and matrix cardinality (2,016 cells).
+The public resolver rejected that committed projection with exit 2:
+`resolved release template validation failed: 0.0.8 requires the exact sealed evaluation seeds (D-049)`.
+`robot_sf/benchmark/release_protocol.py::_validate_release_seed_policy`
+requires sealed equality for the selected 0.0.8 inputs; the full acceptance
+gate separately requires 30 seeds and 20,160 cells. Environment construction,
+reset and step were blocked throughout the probe. This is an admission refusal,
+not a sealed-seed execution or a completed rehearsal. No Slurm campaign,
+publication bundle, bundle validation, comparator result or dissertation
+intake bundle was produced. The defined full pipeline still needs a diagnostic
+development identity that cannot grant sealed release acceptance. The named
+runner `--mode rehearsal` only checks admissions and creates neither episodes
+nor a publication bundle, as documented in [RELEASE.md](../../RELEASE.md#preflight).
+No freeze SHA or release-readiness claim follows from this probe.
+
 ### D-071: Public merge trains land with merge commits after a full suite on the exact train head
 - **Date:** 2026-09-30 (trains); 2026-10-01 (full-suite rule)
 - **Question:** GitHub's merge queue is unavailable for a user-owned repo, and
@@ -1632,8 +1652,8 @@ Historical measurements below are attributed to the named review report; they we
 - **Decided by:** orchestrator (delegated), from the release-notes lane.
 - **Alternatives:** none recorded.
 - **Evidence:** #10085; relnotes_report.md, private-ops review archive; statically verified candidate seed policy at the #9999 head and canonical-path allowlist in `robot_sf/benchmark/release_protocol.py` on main.
-- **Implemented in:** Not yet; tracked by #10085.
-- **Enforced by:** none yet: selected release template resolves to the sealed tuple and passes the guard with non-stepping recording stubs.
+- **Implemented in:** Train 2 / [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999), under D-083, merged at `879f75b69eb93ca16006f2019ee5c85c7aa724dd`. [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) was closed on 2026-10-02 after the orchestrator accepted CHAIN-2 verification against main `f52de283e3b60ec85910fd761e432d07ab748158`. The development packaging rehearsal remains a separate D-070 / CHAIN-3 process requirement.
+- **Enforced by:** `tests/benchmark/test_release_campaign_authority.py::test_d083_authored_template_resolves_exact_sealed_seed_file` and `tests/benchmark/test_release_campaign_authority.py::test_d083_materialized_selected_template_passes_guard_without_execution` passed on that main SHA: exact sealed-file transport, public identity materialization and guard admission with recording stubs, retired-band and retired-template refusal. Environment construction, reset and step are blocked by the witness fixture.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-075: Release acceptance admits the doorway slice as its own bound release kind
@@ -1651,8 +1671,8 @@ Historical measurements below are attributed to the named review report; they we
   strict runner.
 - **Evidence:** #10078; #10081; review rr10081 (FIX: a wrong-seed witness
   survives a mutant; retarget onto the train head); rr10081_report.md, private-ops review archive.
-- **Implemented in:** #10081 (open).
-- **Enforced by:** (open PR #10081) `tests/benchmark/test_doorway_release_acceptance.py::test_bound_doorway_slice_accepted`, `tests/benchmark/test_doorway_release_acceptance.py::test_main_refuses_slice_denominator`, `tests/benchmark/test_doorway_release_acceptance.py::test_slice_refuses_consistent_wrong_seed_inventory`; the rr10081 review still requests a stronger wrong-seed mutant witness.
+- **Implemented in:** [#10081](https://github.com/ll7/robot_sf_ll7/pull/10081), merged in train 2 at `879f75b69eb93ca16006f2019ee5c85c7aa724dd`.
+- **Enforced by:** `tests/benchmark/test_doorway_release_acceptance.py::test_bound_doorway_slice_accepted` (lines 83–89), `tests/benchmark/test_doorway_release_acceptance.py::test_main_refuses_slice_denominator` and `tests/benchmark/test_doorway_release_acceptance.py::test_slice_refuses_consistent_wrong_seed_inventory`. The complete static doorway witness file passed on main `f52de283e3b60ec85910fd761e432d07ab748158` on 2026-10-02, including the consistent wrong-seed refusal. No sealed environment was reset or stepped.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-076: Release notes live in the repository and cite decisions by content
@@ -1826,7 +1846,7 @@ Historical measurements below are attributed to the named review report; they we
 - **Decided by:** orchestrator, delegated direction for #9999, 2026-10-02.
 - **Reason:** D-074 identified the seam: the authored candidate resolved the retired seed band while the sealed allowlist selected another template. One source-bound authority closes that seam without changing authored-budget policy or historical artifacts.
 - **Alternatives:** Keep two executable candidates; return to the retired seed band; select the fixed-H600 candidate. None is adopted.
-- **Evidence:** [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085), implemented in [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999). The packaging rehearsal item remains open for the later train; this decision and its static tests do not claim it has run.
+- **Evidence:** [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085), implemented in [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999); the issue was closed after accepted CHAIN-2 verification on 2026-10-02. The packaging rehearsal remains open under D-070 / CHAIN-3: the development materialization probe was refused before execution (see D-070's rehearsal status); this decision and its static tests do not claim packaging has run.
 - **Enforced by:** `tests/benchmark/test_release_campaign_authority.py::test_d083_authored_template_resolves_exact_sealed_seed_file` and `tests/benchmark/test_release_campaign_authority.py::test_d083_materialized_selected_template_passes_guard_without_execution`: real seed transport, public identity materialization, source-bound guard admission with recording workers, and retired-band/canonical-path refusal without reset or step.
 - **Reopen:** New material evidence about release input binding or an explicit author/orchestrator ruling.
 

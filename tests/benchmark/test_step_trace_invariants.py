@@ -14,6 +14,7 @@ from robot_sf.benchmark.step_trace_invariants import (
     INVARIANTS,
     Tolerances,
     check_episode,
+    invariant_coverage,
     resolve_limits,
     summarize,
     to_markdown,
@@ -311,3 +312,35 @@ def test_summarize_and_markdown_handle_empty() -> None:
 def test_rows_with_missing_trace_do_not_crash(bad: Any) -> None:
     row = {"episode_id": "x", "algorithm_metadata": {"simulation_step_trace": bad}}
     assert check_episode(row, tol=Tolerances())[1] is False
+
+
+def test_unknown_trace_schema_makes_every_invariant_ineligible() -> None:
+    """An uninterpretable trace supplies no checked numeric evidence to any family."""
+    row = _row(_line(30, 3.0, (0.0, 0.0), (1.0, 0.0)))
+    row["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = (
+        "simulation-step-trace.v99"
+    )
+
+    coverage = invariant_coverage(row)
+
+    assert set(coverage) == set(INVARIANTS)
+    for family in INVARIANTS:
+        assert coverage[family] == {
+            "eligible": False,
+            "checked_steps": 0,
+            "issues": ["unsupported_trace_schema"],
+        }
+
+
+def test_unknown_trace_schema_cannot_produce_numeric_trace_violations() -> None:
+    """Even a visibly speeding trace is uninterpretable under an unknown schema."""
+    row = _row(_line(30, 3.0, (0.0, 0.0), (1.0, 0.0)))
+    assert "speed" in _kinds(row, "b_drive_limits")
+    row["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = (
+        "simulation-step-trace.v99"
+    )
+
+    violations, has_trace = check_episode(row)
+
+    assert violations == []
+    assert has_trace is False

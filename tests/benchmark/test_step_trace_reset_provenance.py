@@ -588,3 +588,25 @@ def test_reset_yaw_rate_is_measured_and_missing_state_is_not_zero_imputed():
     simulator.robots[0].state.velocity = (1.0, float("nan"))
     assert _initial_robot_angular_velocity(simulator) is None
     assert _build_reset_provenance(**_reset_kwargs())["robot"]["angular_velocity"] is None
+
+
+@pytest.mark.parametrize("velocity", [(1.0,), (1.0, "unknown"), (1.0, None)])
+def test_reset_yaw_rate_malformed_velocity_stays_unavailable(velocity) -> None:
+    """Missing or nonnumeric measured yaw rates must stay null rather than crash."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import _initial_robot_angular_velocity
+    from robot_sf.robot.differential_drive import DifferentialDriveState
+
+    simulator = SimpleNamespace(
+        robots=[SimpleNamespace(state=DifferentialDriveState(velocity=velocity))]
+    )
+    assert _initial_robot_angular_velocity(simulator) is None
+
+
+def test_reset_yaw_rate_unsupported_state_stays_unavailable() -> None:
+    """A lookalike state cannot establish differential-drive reset provenance."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import _initial_robot_angular_velocity
+
+    simulator = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(velocity=(1.0, 0.7)))]
+    )
+    assert _initial_robot_angular_velocity(simulator) is None

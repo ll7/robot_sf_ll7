@@ -69,3 +69,9 @@ python -m scripts.validation.summarize_hybdiag --audit-native-controls <prior-ar
 The parent contains `round2-measure` and `round2-empty`. The audit requires all
 402 off episodes to match command/position/end-position/contact bytes and refuses
 any selected added command above the reported current-position braking cap.
+
+The first full suite caught two config-reference parity regressions: the new
+`include_goal_next_valid` field lacked seven inherited reference anchors. The
+canonical environment-config generator refreshes those default-False rows; the
+existing byte-parity and exact-field tests reproduce the defect and pass after
+regeneration. No test or planner behavior was changed to repair this drift.

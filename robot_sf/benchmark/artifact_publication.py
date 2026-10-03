@@ -28,6 +28,7 @@ import numpy as np
 from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.metrics import snqi as _curvature_aware_snqi
+from robot_sf.benchmark.release_notes import NOTES_PATH, RECEIPT_NAME, is_release_0_0_8, notes_gate
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping as _load_snqi_baseline_mapping,
 )
@@ -80,6 +81,8 @@ _RELEASE_METADATA_PAYLOAD_PATHS = {
     "rights_provenance": "payload/release_metadata/rights_provenance.md",
     "snqi_weights": "payload/release_metadata/snqi/snqi_weights_camera_ready_v3.json",
     "snqi_baseline": "payload/release_metadata/snqi/snqi_baseline_camera_ready_v3.json",
+    "release_notes": "payload/release_metadata/release_notes.md",
+    "release_notes_gate": "payload/release_metadata/" + RECEIPT_NAME,
 }
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
@@ -772,6 +775,7 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
         "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
     }
+    files.update(_release_notes_files(run_root, repo_root, resolved_manifest))
     if not legacy_declared:
         files.pop("snqi_weights")
         files.pop("snqi_baseline")
@@ -2514,7 +2518,16 @@ def _release_metadata_roles(payload_dir: Path) -> tuple[str, ...]:
     legacy = not release_path.is_file() or _legacy_snqi_declared(
         _read_json_file(release_path).get("metrics") or {}
     )
-    return _REQUIRED_RELEASE_METADATA_ROLES + (("snqi_weights", "snqi_baseline") if legacy else ())
+    notes_roles = (
+        ("release_notes", "release_notes_gate")
+        if release_path.is_file() and _requires_release_notes(_read_json_file(release_path))
+        else ()
+    )
+    return (
+        _REQUIRED_RELEASE_METADATA_ROLES
+        + (("snqi_weights", "snqi_baseline") if legacy else ())
+        + notes_roles
+    )
 
 
 def _preflight_check_release_metadata(  # noqa: C901, PLR0912
@@ -2776,6 +2789,73 @@ def _publication_snqi_evidence(payload_dir: Path) -> dict[str, Any]:
     return {"checked": False, "reason": "legacy_snqi_excluded", "violations": violations}
 
 
+def _release_notes_files(run_root: Path, repo_root: Path, resolved: Mapping[str, Any]) -> dict:
+    """Stage mint-bound disclosures for cold publication validation.
+
+    Returns:
+        Export roles and source/destination file pairs.
+    """
+    _check_notes_development_marker(run_root, resolved)
+    if not _requires_release_notes(resolved):
+        return {}
+    receipt = resolved.get("release_notes_gate")
+    notes_gate(
+        repo_root, source_commit=resolved.get("source_sha"), phase="publication", receipt=receipt
+    )
+    receipt_path = run_root / "release" / RECEIPT_NAME
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "release_notes": (repo_root / NOTES_PATH, Path("release_metadata/release_notes.md")),
+        "release_notes_gate": (receipt_path, Path("release_metadata") / RECEIPT_NAME),
+    }
+
+
+def _requires_release_notes(resolved: Mapping[str, Any]) -> bool:
+    """Identify the 0.0.8 production contract, including its independent slice.
+
+    Returns:
+        Whether this production release requires bound disclosures.
+    """
+    return resolved.get("release_kind") != "development_rehearsal" and is_release_0_0_8(resolved)
+
+
+def _check_notes_development_marker(artifact_root: Path, resolved: Mapping[str, Any]) -> None:
+    """Require the diagnostic exemption to agree with the completed run's markers."""
+    if resolved.get("release_kind") != "development_rehearsal" or not is_release_0_0_8(resolved):
+        return
+    result = _read_json_file(artifact_root / "release/release_result.json")
+    if (
+        (result.get("benchmark_release") or {}).get("release_kind") != "development_rehearsal"
+        or result.get("release_eligible") is not False
+        or result.get("release_benchmark_success") is not False
+    ):
+        raise ValueError("release notes diagnostic exemption disagrees with release result")
+
+
+def _preflight_release_notes(payload_dir: Path, violations: list[str]) -> None:
+    """Repeat disclosure admission on exported bytes against the mint digest."""
+    resolved_path = payload_dir / "release/release_manifest.resolved.json"
+    if not resolved_path.is_file():
+        return
+    try:
+        resolved = _read_json_file(resolved_path)
+        _check_notes_development_marker(payload_dir, resolved)
+        if not _requires_release_notes(resolved):
+            return
+        receipt = _read_json_file(payload_dir / "release_metadata" / RECEIPT_NAME)
+        if receipt != resolved.get("release_notes_gate"):
+            raise ValueError("release notes bundle receipt differs from mint receipt")
+        notes_gate(
+            get_repository_root(),
+            source_commit=resolved.get("source_sha"),
+            phase="publication",
+            receipt=receipt,
+            notes_path=payload_dir / "release_metadata/release_notes.md",
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        violations.append("release notes admission failed: " + str(exc))
+
+
 def verify_publication_bundle_preflight(
     bundle_dir: Path,
     *,
@@ -2842,6 +2922,7 @@ def verify_publication_bundle_preflight(
         violations.append(f"checksums.sha256 cannot be validated: {exc}")
         checksums = {}
     _preflight_check_channels(manifest, violations=violations, warnings=warnings)
+    _preflight_release_notes(payload_dir, violations)
     _preflight_check_development_marker(payload_dir, manifest, violations)
     _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
     try:

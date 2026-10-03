@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_release_notes_gate.py",
+    "test_release_notes_mint.py",
     "test_bicycle_planner_physics.py",
     "test_bicycle_creep_safety.py",
     "test_limited_reverse.py",

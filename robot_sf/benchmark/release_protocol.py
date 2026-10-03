@@ -26,7 +26,7 @@ from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
-from robot_sf.benchmark.release_notes import RECEIPT_NAME, is_release_0_0_8, notes_gate
+from robot_sf.benchmark.release_notes import RECEIPT_NAME, notes_gate
 from robot_sf.benchmark.release_parameter_freeze import unfrozen_planner_config_blockers
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
@@ -2485,7 +2485,11 @@ def _validate_release_seed_policy(
             problems.append(str(exc))
     elif (
         manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
-        and is_release_0_0_8(manifest)
+        and (
+            "0.0.8" in manifest.release_tag
+            or "0_0_8" in manifest.scenario_matrix_path.name
+            or "0_0_8" in manifest.canonical_campaign_config_path.name
+        )
         and resolved != EVAL_SEEDS_0_0_8
     ):
         problems.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")

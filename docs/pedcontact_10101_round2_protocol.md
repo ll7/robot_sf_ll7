@@ -1,4 +1,5 @@
 <!-- AI-GENERATED / NEEDS-REVIEW: PEDCONTACT Round 2, issue #10101 -->
+Historical Round 2 evidence. Superseded by [Round 3 corrections and current results](pedcontact_10101.md); the old two-sided V6 ranking and whole-crowd-fallback results are withdrawn.
 # PEDCONTACT Round 2 corrections
 
 Round 1's V6 necessary-condition pruning and zero-survivor conclusion are withdrawn.

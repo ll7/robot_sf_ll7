@@ -32,6 +32,17 @@ def display(value):
     return f"{mean:.4g}"
 
 
+def portable_paths(payload):
+    """Make exported receipt paths relative while preserving numerical evidence."""
+    if isinstance(payload, dict):
+        return {portable_paths(key): portable_paths(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [portable_paths(value) for value in payload]
+    if isinstance(payload, str):
+        return payload.replace("/home/luttkule/lanes/pedcontact/", "")
+    return payload
+
+
 def publish_optional_receipts(root, output):
     """Copy completed robot and fit receipts without requiring unfinished ones."""
     for source, destination in (
@@ -43,15 +54,17 @@ def publish_optional_receipts(root, output):
             payload = read(root, source)
             if isinstance(payload, list):
                 payload = {"rows": payload}
-            write_json(output / f"pedcontact_10101_round3_{destination}.json", payload)
+            write_json(
+                output / f"pedcontact_10101_round3_{destination}.json", portable_paths(payload)
+            )
 
 
 def render(root, output):
     """Write versioned numerical receipts and a compact measurement table."""
     comparison = read(root, "step4_comparison.json")
     warm = read(root, "warm_congested.json")
-    write_json(output / "pedcontact_10101_round3_step4.json", comparison)
-    write_json(output / "pedcontact_10101_round3_warm.json", warm)
+    write_json(output / "pedcontact_10101_round3_step4.json", portable_paths(comparison))
+    write_json(output / "pedcontact_10101_round3_warm.json", portable_paths(warm))
     lines = [
         "<!-- AI-GENERATED (#10101) - NEEDS-REVIEW -->",
         "# PEDCONTACT Round 3 measurements",
@@ -60,7 +73,10 @@ def render(root, output):
         "Four arms; dev1001–1030; physical radius .28m; CALFIT default parameters. "
         "Seed-mean 95% Student intervals describe sampling uncertainty. V3 values "
         "from incomplete trials are completion-flow upper bounds, not point flows. "
-        "V6 boundary onsets are right-censored lower bounds ≥3m, not exact onsets.",
+        "V6 boundary onsets are right-censored lower bounds ≥3m, not exact onsets. "
+        "Intervals printed for censored values describe the reported bounds: "
+        "V6 [3,3] is a bound-estimator interval while true onset lies in [3,∞); "
+        "incomplete V3 true completion flow lies in [0, its upper bound].",
         "",
         "| Item | Off | Contact only | Wall only | Both |",
         "|---|---|---|---|---|",

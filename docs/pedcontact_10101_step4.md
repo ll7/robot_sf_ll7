@@ -1,4 +1,5 @@
 <!-- AI-GENERATED (#10101) - NEEDS-REVIEW -->
+Historical Round 2 evidence. Superseded by [Round 3 corrections and current results](pedcontact_10101.md); the old two-sided V6 ranking and whole-crowd-fallback results are withdrawn.
 AI-GENERATED / NEEDS-REVIEW
 
 # Full dev CALFIT comparison — Round 2

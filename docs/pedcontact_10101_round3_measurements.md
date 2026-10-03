@@ -2,7 +2,7 @@
 # PEDCONTACT Round 3 measurements
 AI-GENERATED / NEEDS-REVIEW
 
-Four arms; dev1001–1030; physical radius .28m; CALFIT default parameters. Seed-mean 95% Student intervals describe sampling uncertainty. V3 values from incomplete trials are completion-flow upper bounds, not point flows. V6 boundary onsets are right-censored lower bounds ≥3m, not exact onsets.
+Four arms; dev1001–1030; physical radius .28m; CALFIT default parameters. Seed-mean 95% Student intervals describe sampling uncertainty. V3 values from incomplete trials are completion-flow upper bounds, not point flows. V6 boundary onsets are right-censored lower bounds ≥3m, not exact onsets. Intervals printed for censored values describe the reported bounds: V6 [3,3] is a bound-estimator interval while true onset lies in [3,∞); incomplete V3 true completion flow lies in [0, its upper bound].
 
 | Item | Off | Contact only | Wall only | Both |
 |---|---|---|---|---|

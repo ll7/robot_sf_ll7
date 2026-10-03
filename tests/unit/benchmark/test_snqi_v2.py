@@ -3317,3 +3317,86 @@ def test_snqirefresh_enrichment_refuses_wrong_split_before_replacing_bytes(tmp_p
         )
     assert all(path.read_bytes() == original for path, original in before.items())
     assert not list(tmp_path.glob("*.snqi-v2.*"))
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    ],
+)
+@pytest.mark.parametrize("defect", [None, "wrong_cell", "missing_declaration"])
+def test_d083_snqi_enrichment_retains_declared_scenario_algorithm_routes(tmp_path, arm, defect):
+    """Score the reviewed ORCA branch without accepting undeclared algorithm swaps."""
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    authored = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ).read_bytes()
+    )
+    configured = next(p for p in authored["planners"] if p["key"] == arm)
+    source = yaml.safe_load((ROOT / configured["algo_config"]).read_bytes())
+    assert source["scenario_algo_overrides"]["francis2023_leave_group"]["algo"] == "orca"
+    rows = [
+        {
+            "algo": "orca" if scenario == "francis2023_leave_group" else configured["algo"],
+            "scenario_id": scenario,
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(),
+        }
+        for scenario in ("classic_bottleneck_low", "francis2023_leave_group")
+        for seed in (1001, 1002)
+    ]
+    if defect == "wrong_cell":
+        rows[0]["algo"] = "orca"
+    path = tmp_path / "episodes.jsonl"
+    written = write_campaign_arm(path, rows)
+    write_review_sidecar(path, repo_root=tmp_path)
+    entry = {
+        "status": "ok",
+        "planner": {
+            "key": arm,
+            "algo": configured["algo"],
+            "kinematics": "differential_drive",
+            **(
+                {"algo_config_path": configured["algo_config"]}
+                if defect != "missing_declaration"
+                else {}
+            ),
+        },
+        "episodes_path": str(path),
+    }
+    original = path.read_bytes()
+    if defect:
+        with pytest.raises(ValueError, match="algorithm"):
+            enrich_campaign_v2(
+                [entry],
+                replace(fixture_spec(), diagnostic=True),
+                tmp_path / "reports",
+                repo_root=ROOT,
+                bootstrap_samples=2,
+            )
+        assert path.read_bytes() == original
+        assert not list(tmp_path.glob(".*.snqi-v2.tmp"))
+        return
+    artifacts = enrich_campaign_v2(
+        [entry],
+        replace(fixture_spec(), diagnostic=True),
+        tmp_path / "reports",
+        repo_root=ROOT,
+        bootstrap_samples=2,
+    )
+    enriched = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(enriched) == 4
+    assert [row["algo"] for row in enriched] == [row["algo"] for row in written]
+    assert all(row["planner_key"] == arm for row in enriched)
+    assert all(
+        row["metrics"]["snqi_v2"] == score_episode(row, fixture_spec())["metrics"]["snqi_v2"]
+        for row in enriched
+    )
+    family = json.loads(Path(artifacts["snqi_v2_family_json"]).read_bytes())
+    assert [row["planner"] for row in family["declared_ranking"]] == [f"{arm}::differential_drive"]

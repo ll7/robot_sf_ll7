@@ -470,3 +470,10 @@ both as explicit runner inputs. The runner revalidates acquisition custody,
 computes `snqi_v2`/terms and exports the shared diagnostic bundle. Inspect the
 actual 2,016 scored rows and bundle, retaining `release_eligible: false`.
 Development anchors/receipts never admit a later source or a sealed campaign.
+
+SNQI v2 enrichment retains the actual per-episode algorithm. The two reviewed
+scenario-adaptive hybrid arms use their frozen ORCA branch on
+`francis2023_leave_group`; they remain single configured arms in the paired
+reports. Enrichment reads these declarations from the source planner config and
+rejects an algorithm swap outside its declared scenario. It does not infer
+permitted routing from observed rows or relax fallback/degraded checks.

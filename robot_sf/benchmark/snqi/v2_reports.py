@@ -42,6 +42,7 @@ from robot_sf.benchmark.snqi.v2_spec import (
     WEIGHTS,
     SnqiV2Spec,
     parse_v2_json,
+    parse_v2_yaml,
 )
 from robot_sf.benchmark.spawn_validity import (
     RESPAWN_COLLISION_WINDOW_S,
@@ -52,6 +53,59 @@ CLAIM_BOUNDARY = (
     "SNQI-v2 is a declared benchmark aggregate over simulator quantities. It is not a validated "
     "measure of human comfort or safety and admits no deployment ranking on its own."
 )
+
+AlgorithmBindings = Mapping[str | tuple[str, str], str]
+
+
+def _expected_algorithm(
+    episode: Mapping[str, Any], bindings: AlgorithmBindings | None
+) -> str | None:
+    """Select the independently declared scenario route, retaining arm defaults.
+
+    Returns:
+        Source-declared algorithm, or None when no execution context was supplied.
+    """
+    if bindings is None:
+        return None
+    arm = _planner(episode)
+    return bindings.get((arm, episode["scenario_id"]), bindings.get(arm))
+
+
+def _source_scenario_algorithms(planner: Mapping[str, Any], repo_root: Path) -> dict[str, str]:
+    """Read routes from the actual planner source; observations cannot declare routes.
+
+    Returns:
+        Explicit source scenario routes; never a declaration inferred from observed rows.
+    """
+    from robot_sf.benchmark.effective_algorithm_branches import (  # noqa: PLC0415
+        enumerate_effective_branches,
+    )
+    from robot_sf.benchmark.release_parameter_freeze import (  # noqa: PLC0415
+        assert_release_parameters_frozen,
+    )
+
+    raw_path = planner.get("algo_config_path")
+    if raw_path is None:
+        return {}
+    payload = parse_v2_yaml((repo_root / raw_path).read_bytes())
+    if not isinstance(payload, dict):
+        raise ValueError("SNQI-v2 planner configuration must be a mapping")
+    if payload.get("algo") is not None and payload["algo"] != planner.get("algo"):
+        raise ValueError("SNQI-v2 planner source declares a different default algorithm")
+    assert_release_parameters_frozen(payload, label="SNQI-v2 planner configuration")
+    overrides = payload.get("scenario_algo_overrides", {})
+    if not isinstance(overrides, Mapping) or any(
+        not isinstance(key, str)
+        or not key
+        or not isinstance(value, Mapping)
+        or not isinstance(value.get("algo"), str)
+        or not value["algo"].strip()
+        for key, value in overrides.items()
+    ):
+        raise ValueError("SNQI-v2 source scenario algorithm declarations are invalid")
+    return {
+        branch["scenario"]: branch["algorithm"] for branch in enumerate_effective_branches(payload)
+    }
 
 
 def family_vectors() -> list[dict[str, Any]]:
@@ -200,7 +254,7 @@ def build_family_report(
     spec: SnqiV2Spec,
     *,
     bootstrap_samples: int = 2000,
-    expected_algorithms: Mapping[str, str] | None = None,
+    expected_algorithms: AlgorithmBindings | None = None,
 ) -> dict[str, Any]:
     """Compute family sensitivity and paired seed-bootstrap intervals from raw records.
 
@@ -211,7 +265,7 @@ def build_family_report(
         raise ValueError("SNQI-v2 family needs episodes and positive bootstrap samples")
     scored = [
         score_episode(
-            episode, spec, expected_algorithm=(expected_algorithms or {}).get(_planner(episode))
+            episode, spec, expected_algorithm=_expected_algorithm(episode, expected_algorithms)
         )
         for episode in episodes
     ]
@@ -369,7 +423,7 @@ def write_v2_reports(
     reports_dir: Path,
     *,
     bootstrap_samples: int = 2000,
-    expected_algorithms: Mapping[str, str] | None = None,
+    expected_algorithms: AlgorithmBindings | None = None,
 ) -> dict[str, str]:
     """Emit the inseparable diagnostics/family pair, returning their artifact paths.
 
@@ -381,7 +435,7 @@ def write_v2_reports(
     )
     scored = [
         score_episode(
-            episode, spec, expected_algorithm=(expected_algorithms or {}).get(_planner(episode))
+            episode, spec, expected_algorithm=_expected_algorithm(episode, expected_algorithms)
         )
         for episode in episodes
     ]
@@ -527,14 +581,21 @@ def _stage_v2_file(
             scored_episode = {**episode, "planner_key": planner["key"]}
             if kinematics is not None:
                 scored_episode["kinematics"] = kinematics
+            expected_algorithm = planner.get("_scenario_algorithms", {}).get(
+                episode["scenario_id"], planner.get("algo")
+            )
             enriched = score_episode(
                 scored_episode,
                 spec,
-                expected_algorithm=planner.get("algo"),
+                expected_algorithm=expected_algorithm,
             )
+            if expected_algorithm is not None and episode.get("algo") != expected_algorithm:
+                raise ValueError(
+                    "SNQI-v2 declared scenario algorithm does not match episode algorithm"
+                )
             output.write(json.dumps(enriched, separators=(",", ":")) + "\n")
             records.append(
-                compact_report_episode(enriched, spec, expected_algorithm=planner.get("algo"))
+                compact_report_episode(enriched, spec, expected_algorithm=expected_algorithm)
             )
     return records
 
@@ -640,7 +701,7 @@ def _validated_v2_record_algorithms(
     records: Sequence[Mapping[str, Any]],
     planner: Mapping[str, Any],
     planner_identities: set[str],
-) -> dict[str, str]:
+) -> dict[str | tuple[str, str], str]:
     """Validate one staged run's identities and return its algorithm bindings.
 
     Returns:
@@ -651,7 +712,7 @@ def _validated_v2_record_algorithms(
     if (
         len(identities) != 1
         or any(not isinstance(algo, str) or not algo for algo in algorithms)
-        or len(set(algorithms)) != 1
+        or (planner.get("algo") is None and len(set(algorithms)) != 1)
     ):
         raise ValueError("SNQI-v2 run must have one planner/kinematics identity and one algorithm")
     identity = next(iter(identities))
@@ -660,10 +721,15 @@ def _validated_v2_record_algorithms(
     planner_identities.add(identity)
     algorithm = algorithms[0]
     declared_algorithm = planner.get("algo")
-    if declared_algorithm is not None and declared_algorithm != algorithm:
-        raise ValueError("SNQI-v2 declared planner algorithm does not match episode algorithm")
     bound_algorithm = declared_algorithm if declared_algorithm is not None else algorithm
-    return {_planner(record): bound_algorithm for record in records}
+    bindings: dict[str | tuple[str, str], str] = {identity: bound_algorithm}
+    for record in records:
+        scenario = record["scenario_id"]
+        expected = planner.get("_scenario_algorithms", {}).get(scenario, bound_algorithm)
+        if record["algo"] != expected:
+            raise ValueError("SNQI-v2 declared scenario algorithm does not match episode algorithm")
+        bindings[(identity, scenario)] = expected
+    return bindings
 
 
 def enrich_campaign_v2(
@@ -693,6 +759,10 @@ def enrich_campaign_v2(
     try:
         for entry in run_entries:
             path, planner = _validated_run_input(entry, repo_root)
+            planner = {
+                **planner,
+                "_scenario_algorithms": _source_scenario_algorithms(planner, repo_root),
+            }
             if path in staged:
                 raise ValueError("SNQI-v2 duplicate campaign episode path")
             sidecar = manifest_path_for_result_jsonl(path)

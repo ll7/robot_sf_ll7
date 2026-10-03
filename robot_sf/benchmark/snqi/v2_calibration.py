@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,7 +24,10 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
+from robot_sf.benchmark.metric_definitions import (
+    metric_schema_version,
+    require_uniform_metric_schema,
+)
 from robot_sf.benchmark.result_provenance import (
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
@@ -33,6 +37,7 @@ from robot_sf.benchmark.robot_force_contract import (
     declared_force_source_contract,
     validate_robot_force_provenance,
 )
+from robot_sf.benchmark.snqi.evaluation_seeds import SEALED_EVALUATION_SEEDS_SHA256
 from robot_sf.benchmark.snqi.v2_reports import read_episode_files, validate_episode_execution
 from robot_sf.benchmark.snqi.v2_spec import (
     PP_EQUIV_FORCE,
@@ -45,6 +50,47 @@ from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 
 
+@dataclass(frozen=True)
+class CalibrationGrid:
+    """Independently declared budgets and split; diagnostics cannot become frozen assets."""
+
+    scenario_horizons: Mapping[str, int]
+    seeds: tuple[int, ...] = (101, 102)
+    diagnostic: bool = False
+
+
+def _validate_calibration_grid(
+    scenarios: Sequence[str], grid: CalibrationGrid | None
+) -> CalibrationGrid:
+    """Validate independent budgets and the restricted diagnostic split.
+
+    Returns:
+        A complete development-grid contract.
+    """
+    if grid is None:
+        candidate = _candidate_calibration_horizons()
+        missing = set(scenarios) - set(candidate)
+        if missing:
+            raise ValueError(f"SNQI-v2 scenarios missing from budget schedule: {sorted(missing)}")
+        grid = CalibrationGrid({scenario: candidate[scenario] for scenario in scenarios})
+    if grid.diagnostic:
+        if (
+            not grid.seeds
+            or len(set(grid.seeds)) != len(grid.seeds)
+            or any(type(seed) is not int or not 1001 <= seed <= 1030 for seed in grid.seeds)
+        ):
+            raise ValueError(
+                "SNQI-v2 diagnostic calibration requires distinct dev seeds 1001..1030"
+            )
+    elif grid.seeds not in ((101, 102), (1001, 1002)):
+        raise ValueError("SNQI-v2 frozen calibration requires the declared development split")
+    if set(grid.scenario_horizons) != set(scenarios) or any(
+        type(h) is not int or h < 1 for h in grid.scenario_horizons.values()
+    ):
+        raise ValueError("SNQI-v2 calibration requires an independent budget for every scenario")
+    return grid
+
+
 def derive_calibration_anchors(
     episodes: Sequence[Mapping[str, Any]],
     *,
@@ -54,6 +100,7 @@ def derive_calibration_anchors(
     source_commit: str,
     episodes_sha256: str,
     expected_algorithms: Mapping[str, str] | None = None,
+    grid: CalibrationGrid | None = None,
 ) -> dict[str, Any]:
     """Derive the frozen asset only after complete source and split validation.
 
@@ -62,13 +109,16 @@ def derive_calibration_anchors(
     """
     metric_version = require_uniform_metric_schema(episodes)
     _validate_provenance(run_id, source_commit, episodes_sha256)
-    expected = set(product(arms, scenarios, (101, 102)))
+    grid = _validate_calibration_grid(scenarios, grid)
+    seeds = grid.seeds
+    horizons = dict(grid.scenario_horizons)
+    expected = set(product(arms, scenarios, seeds))
     if (
         len(arms) != 14
         or len(set(arms)) != 14
         or len(scenarios) != 48
         or len(set(scenarios)) != 48
-        or len(episodes) != 1344
+        or len(episodes) != 14 * 48 * len(seeds)
     ):
         raise ValueError("SNQI-v2 calibration requires 14 arms x48 scenarios x2 seeds =1344")
     observed = set()
@@ -80,7 +130,9 @@ def derive_calibration_anchors(
             raise ValueError(f"SNQI-v2 calibration duplicate or out-of-split identity: {identity}")
         observed.add(identity)
         _validate_calibration_episode(
-            episode, expected_algorithm=(expected_algorithms or {}).get(identity[0])
+            episode,
+            expected_algorithm=(expected_algorithms or {}).get(identity[0]),
+            expected_horizon=horizons[identity[1]],
         )
         mode = _resolve_calibration_execution_mode(episode["algorithm_metadata"])
         counts = command_modes[identity[0]]
@@ -115,8 +167,9 @@ def derive_calibration_anchors(
     ).hexdigest()
     return {
         "version": "SNQI-v2.0",
+        "evaluation_seeds_sha256": SEALED_EVALUATION_SEEDS_SHA256,
         "metric_schema_version": metric_version,
-        "status": "derived_pending_custody",
+        "status": "diagnostic_only" if grid.diagnostic else "derived_pending_custody",
         "anchors": anchors,
         "force_decision": {
             "source": source,
@@ -128,13 +181,18 @@ def derive_calibration_anchors(
             "selected_source_contract": selected_source_contract,
         },
         "calibration": {
-            "split_id": f"snqi-v2-dev101-102-{grid_hash[:12]}",
+            "split_id": (
+                f"snqi-v2-diagnostic-{grid_hash[:12]}"
+                if grid.diagnostic
+                else f"snqi-v2-dev{'-'.join(map(str, seeds))}-{grid_hash[:12]}"
+            ),
             "run_id": run_id,
             "source_commit": source_commit,
             "episodes_sha256": episodes_sha256,
             "grid_sha256": grid_hash,
-            "seeds": [101, 102],
-            "episode_count": 1344,
+            "seeds": list(seeds),
+            "episode_count": len(episodes),
+            "scenario_horizons": horizons,
             "arms": sorted(arms),
             "scenarios": sorted(scenarios),
             "benchmark_execution": "nonfallback",
@@ -222,10 +280,24 @@ def freeze_campaign_anchors(
         source_commit=manifest["git"]["commit"],
         episodes_sha256=digest,
         expected_algorithms=expected_algorithms,
+        grid=CalibrationGrid(
+            {
+                key: config.horizon or scenario["simulation_config"]["max_episode_steps"]
+                for key, scenario in canonical_scenarios.items()
+            },
+            tuple(config.seed_policy.seeds),
+        ),
     )
     document["calibration"]["episode_files_sha256"] = hashes
     document["calibration"]["producer_sidecars_sha256"] = sidecar_hashes
-    document["calibration"]["campaign_config_hash"] = manifest["config_hash"]
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload  # noqa: PLC0415
+
+    # The manifest's config identity is truncated to 16 characters. Custody assets
+    # require the full digest, not a truncated identity relabelled as SHA-256.
+    document["calibration"]["campaign_config_identity"] = manifest["config_hash"]
+    document["calibration"]["campaign_config_hash"] = hashlib.sha256(
+        json.dumps(_config_hash_payload(config), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     document["calibration"]["episodes_hash_rule"] = (
         "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
     )
@@ -259,6 +331,8 @@ def _snapshot_calibration_inputs(config: Any, planners: Mapping[str, Any]) -> di
         for planner in planners.values()
         if planner.algo_config_path is not None
     )
+    if getattr(config, "scenario_horizons_path", None) is not None:
+        input_paths.add(Path(config.scenario_horizons_path))
     snapshots = {str(path): sha256_file(path) for path in input_paths}
     if (
         config.source_config_path is not None
@@ -277,7 +351,8 @@ def _validated_calibration_config(config: Any | None) -> Any:
     from robot_sf.benchmark.camera_ready_campaign import load_campaign_config  # noqa: PLC0415
 
     path = (
-        get_repository_root() / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
+        get_repository_root()
+        / "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
         if config is None
         else config.source_config_path
     )
@@ -341,9 +416,9 @@ def _bind_calibration_config(
         or manifest.get("scenario_matrix_hash") != _scenario_matrix_hash(resolved)
         or list(config.kinematics_matrix) != ["differential_drive"]
         or manifest.get("kinematics_matrix") != ["differential_drive"]
-        or tuple(config.seed_policy.seeds) != (101, 102)
-        or manifest["seed_policy"]["resolved_seeds"] != [101, 102]
-        or config.horizon != 600
+        or tuple(config.seed_policy.seeds) not in ((101, 102), (1001, 1002))
+        or manifest["seed_policy"]["resolved_seeds"] != list(config.seed_policy.seeds)
+        or (config.horizon is None and config.scenario_horizons_path is None)
         or config.dt != 0.1
         or any(declared[key].get("algo") != planner.algo for key, planner in planners.items())
     ):
@@ -442,13 +517,26 @@ def _read_calibration_arm(
     records = []
     for index, record in enumerate(read_episode_files([path])):
         _validate_calibration_row_custody(
-            record, custody, index, planner, scenarios, source, identity_context=context
+            record,
+            custody,
+            index,
+            planner,
+            scenarios,
+            source,
+            identity_context=context,
+            expected_seeds=tuple(config.seed_policy.seeds),
         )
         if record["episode_id"] in episode_ids:
             raise ValueError("SNQI-v2 calibration duplicate producer episode identity within arm")
         episode_ids.add(record["episode_id"])
         records.append(
-            _compact_calibration_record(record, planner.key, expected_algorithm=planner.algo)
+            _compact_calibration_record(
+                record,
+                planner.key,
+                expected_algorithm=planner.algo,
+                expected_horizon=config.horizon
+                or scenarios[record["scenario_id"]]["simulation_config"]["max_episode_steps"],
+            )
         )
         del record
     if len(records) != 96:
@@ -527,6 +615,7 @@ def _validate_calibration_row_custody(
     source: str,
     *,
     identity_context: Any,
+    expected_seeds: tuple[int, ...] = (101, 102),
 ) -> None:
     """Reject a mismatched raw identity before assigning its verified containing arm."""
     from robot_sf.benchmark.map_runner.map_runner import (  # noqa: PLC0415
@@ -563,7 +652,7 @@ def _validate_calibration_row_custody(
     ):
         raise ValueError("SNQI-v2 calibration raw row source/config/arm mismatch")
     seed = record.get("seed")
-    if type(seed) is not int or seed not in {101, 102}:
+    if type(seed) is not int or seed not in expected_seeds:
         raise ValueError("SNQI-v2 calibration row seed is outside canonical development split")
     expected_params = _compute_resume_identity_payload(identity_context, dict(scenario), seed)
     # Exact JSON identity rejects extra run-shaping keys and bool/numeric substitutions.
@@ -602,14 +691,22 @@ def _validate_calibration_row_custody(
         or any(
             bound.get("simulator_settings", {}).get(key) != value
             or provenance.get("simulator_settings", {}).get(key) != value
-            for key, value in (("horizon", 600), ("dt", 0.1), ("record_forces", True))
+            for key, value in (
+                ("horizon", expected_params["run_horizon"]),
+                ("dt", 0.1),
+                ("record_forces", True),
+            )
         )
     ):
         raise ValueError("SNQI-v2 calibration producer sidecar row binding mismatch")
 
 
 def _compact_calibration_record(
-    record: Mapping[str, Any], arm: str, *, expected_algorithm: str | None = None
+    record: Mapping[str, Any],
+    arm: str,
+    *,
+    expected_algorithm: str | None = None,
+    expected_horizon: int | None = None,
 ) -> dict[str, Any]:
     """Validate raw execution before retaining only scalar calibration inputs.
 
@@ -619,10 +716,13 @@ def _compact_calibration_record(
     Returns:
         Validated scalar inputs with the arm identity and actual command mode.
     """
-    _validate_calibration_episode(record, expected_algorithm=expected_algorithm)
+    _validate_calibration_episode(
+        record, expected_algorithm=expected_algorithm, expected_horizon=expected_horizon
+    )
     metrics = record["metrics"]
     return {
         **{key: record.get(key) for key in ("scenario_id", "seed", "status", "horizon", "steps")},
+        "metric_schema_version": metric_schema_version(record),
         "outcome": record["outcome"],
         "spawn_validity": record["spawn_validity"],
         "planner_key": arm,
@@ -634,6 +734,7 @@ def _compact_calibration_record(
             "execution_mode": resolve_execution_mode(record["algorithm_metadata"])
         },
         "metrics": {
+            "metric_schema_version": metric_schema_version(record),
             **{
                 key: metrics.get(key)
                 for key in (
@@ -689,8 +790,25 @@ def _selected_force_source_contract(
     return declared_force_source_contract(source)
 
 
+def _candidate_calibration_horizons() -> dict[str, int]:
+    """Read authored candidate budgets independently of episode claims.
+
+    Returns:
+        Per-scenario budgets from the checked-in #9999 schedule.
+    """
+    path = (
+        get_repository_root()
+        / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
+    )
+    document = parse_v2_yaml(path.read_bytes())
+    return {key: entry["recommended_horizon_steps"] for key, entry in document["scenarios"].items()}
+
+
 def _validate_calibration_episode(
-    episode: Mapping[str, Any], *, expected_algorithm: str | None = None
+    episode: Mapping[str, Any],
+    *,
+    expected_algorithm: str | None = None,
+    expected_horizon: int | None = None,
 ) -> None:
     """Require frozen acquisition settings and declared, nonfallback planner execution."""
     validate_episode_execution(
@@ -704,13 +822,25 @@ def _validate_calibration_episode(
             "SNQI-v2 calibration requires explicit native, adapter or mixed command mode"
         )
     params = episode.get("scenario_params", {})
+    if expected_horizon is None:
+        schedule = _candidate_calibration_horizons()
+        scenario = episode.get("scenario_id")
+        if scenario not in schedule:
+            raise ValueError(f"SNQI-v2 scenario missing from budget schedule: {scenario}")
+        expected_horizon = schedule[scenario]
     if (
-        episode.get("horizon") != 600
-        or params.get("run_horizon") != 600
+        type(expected_horizon) is not int
+        or expected_horizon < 1
+        or type(episode.get("horizon")) is not int
+        or type(params.get("run_horizon")) is not int
+        or episode.get("horizon") != expected_horizon
+        or params.get("run_horizon") != expected_horizon
         or params.get("run_dt") != 0.1
         or params.get("record_forces") is not True
     ):
-        raise ValueError("SNQI-v2 calibration requires H600/dt0.1 with recorded forces")
+        raise ValueError(
+            "SNQI-v2 calibration requires the scheduled budget/dt0.1 with recorded forces"
+        )
     _validate_calibration_score_inputs(episode)
     metrics = episode["metrics"]
     validate_robot_force_provenance(metrics, SIMULATED_FORCE)

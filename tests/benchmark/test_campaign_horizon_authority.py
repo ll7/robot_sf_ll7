@@ -222,13 +222,30 @@ def test_rounding_sensitive_real_simulator_timeout(monkeypatch, name, dt, budget
         ),
     ],
 )
-def test_historical_runner_cap_matches_main_oracle(
-    config_name, name, algo, seed, steps, reason, avg_speed, failure_to_progress
+def test_historical_runner_cap_matches_main_oracle(  # noqa: PLR0913
+    config_name, name, algo, seed, steps, reason, avg_speed, failure_to_progress, monkeypatch
 ):
     """Native dev-seed oracle; changed planner values bisected through main 3a7a46a9."""
+    import numpy as np
+
+    import robot_sf.benchmark.map_runner.map_runner_episode as episode
     from robot_sf.benchmark.map_runner.map_runner import _build_policy
     from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 
+    captured = {}
+    teardown = episode._teardown_step_loop
+    compute_metrics = episode._compute_post_loop_metrics
+
+    def capture_targets(env, *args, **kwargs):
+        captured["legacy_goal"] = np.array(env.simulator.goal_pos[0], copy=True)
+        return teardown(env, *args, **kwargs)
+
+    def capture_trajectory(**kwargs):
+        captured.update(kwargs)
+        return compute_metrics(**kwargs)
+
+    monkeypatch.setattr(episode, "_teardown_step_loop", capture_targets)
+    monkeypatch.setattr(episode, "_compute_post_loop_metrics", capture_trajectory)
     cfg = load_campaign_config(
         ROOT / "configs/benchmarks" / f"paper_experiment_matrix_v2_h600_s30_{config_name}.yaml"
     )
@@ -265,7 +282,27 @@ def test_historical_runner_cap_matches_main_oracle(
     assert row["steps"] == steps
     assert row["termination_reason"] == reason
     assert row["metrics"]["avg_speed"] == pytest.approx(avg_speed, rel=1e-12)
-    assert row["metrics"]["failure_to_progress"] == failure_to_progress
+    if (
+        row["metric_schema_version"] == "robot-sf-metrics.v2"
+        and name == "classic_realworld_double_bottleneck_high"
+    ):
+        # #10014 freezes the final target; v1 used the current intermediate waypoint.
+        # The same recorded trajectory must still reproduce the literal v1 oracle.
+        positions = np.asarray(captured["robot_positions"])
+        window = int(np.ceil(5.0 / 0.1))
+
+        def count_for_goal(goal):
+            distances = np.linalg.norm(positions - goal, axis=1)
+            return sum(
+                distances[i] - distances[i + window - 1] < 0.1
+                for i in range(len(positions) - window + 1)
+            )
+
+        assert count_for_goal(captured["legacy_goal"]) == failure_to_progress
+        assert not np.array_equal(captured["goal_vec"], captured["legacy_goal"])
+        assert row["metrics"]["failure_to_progress"] == count_for_goal(captured["goal_vec"])
+    else:
+        assert row["metrics"]["failure_to_progress"] == failure_to_progress
     assert row["horizon"] == row["scenario_params"]["run_horizon"] == 600
     authored = scenario["simulation_config"]["max_episode_steps"]
     assert row["effective_budget_steps"] == min(authored, 600)

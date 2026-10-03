@@ -8019,6 +8019,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/snqifix_0_0_8_diagnostic.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/snqifix_0_0_8_diagnostic.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/curvfix/measurement.json
   status: evidence
   freshness: evidence

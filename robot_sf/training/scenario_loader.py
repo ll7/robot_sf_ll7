@@ -1998,6 +1998,26 @@ def _robot_type_alias(raw: str) -> str:
     return robot_type
 
 
+def _reverse_robot_settings(overrides: Mapping[str, Any]) -> dict[str, Any]:
+    """Parse the opt-in reverse fields shared by both drive models.
+
+    Returns:
+        Explicit reverse overrides, with missing fields omitted.
+    """
+    kwargs: dict[str, Any] = {}
+    if "limited_reverse" in overrides:
+        kwargs["limited_reverse"] = _coerce_bool(
+            overrides["limited_reverse"], field_name="limited_reverse"
+        )
+    if "max_reverse_speed" in overrides:
+        if isinstance(overrides["max_reverse_speed"], bool):
+            raise ValueError("robot_config.max_reverse_speed must be finite and positive")
+        kwargs["max_reverse_speed"] = _coerce_finite_float(
+            overrides["max_reverse_speed"], field_name="max_reverse_speed"
+        )
+    return kwargs
+
+
 def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDriveSettings:
     """Build differential-drive settings from scenario overrides.
 
@@ -2042,6 +2062,7 @@ def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDr
             overrides["allow_backwards"],
             field_name="allow_backwards",
         )
+    kwargs.update(_reverse_robot_settings(overrides))
     return DifferentialDriveSettings(**kwargs)
 
 
@@ -2073,6 +2094,7 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
             overrides["allow_backwards"],
             field_name="allow_backwards",
         )
+    kwargs.update(_reverse_robot_settings(overrides))
     return BicycleDriveSettings(**kwargs)
 
 

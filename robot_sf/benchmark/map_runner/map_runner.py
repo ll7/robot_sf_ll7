@@ -321,6 +321,7 @@ from robot_sf.planner.socnav import (  # noqa: F401 - registry re-export.
 )
 from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter  # noqa: F401
+from robot_sf.robot.reverse_drive import bound_drive_settings
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
@@ -2155,7 +2156,24 @@ def _build_common_adapter_policy(  # noqa: C901
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
     if planner_bind_env is not None:
-        _policy._planner_bind_env = planner_bind_env
+        original_bind_env = planner_bind_env
+
+        def _bind_live_env(env: Any) -> None:
+            """Keep SocNav projection limits in sync with the opt-in bound plant."""
+            nonlocal adapter_kinematics_model
+            original_bind_env(env)
+            drive = bound_drive_settings(env, adapter=adapter)
+            limits = dict(algo_config)
+            if getattr(drive, "limited_reverse", False):
+                limits.update(limited_reverse=True, max_reverse_speed=drive.max_reverse_speed)
+                if algo_key in {"hrvo", "socnav_hrvo"}:
+                    adapter.bind_env(env)
+            adapter_kinematics_model = resolve_benchmark_kinematics_model(
+                robot_kinematics=robot_kinematics, command_limits=limits
+            )
+            _policy._kinematics_model = adapter_kinematics_model
+
+        _policy._planner_bind_env = _bind_live_env
     adapter_diagnostics = getattr(adapter, "diagnostics", None)
     foresight_diagnostics = getattr(adapter, "foresight_diagnostics", None)
     if callable(adapter_diagnostics) or callable(foresight_diagnostics):

@@ -41,6 +41,7 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
 from robot_sf.benchmark.release_acceptance import (
+    validate_development_rehearsal_acceptance,
     validate_diagnostic_stress_smoke_acceptance,
     validate_full_benchmark_release_acceptance,
 )
@@ -48,6 +49,7 @@ from robot_sf.benchmark.release_protocol import (
     HISTORICAL_ZENODO_CONCEPT_DOIS,
     build_release_provenance,
     build_resolved_release_manifest,
+    is_development_rehearsal,
     is_diagnostic_stress_smoke,
     is_doorway_width_slice,
     load_release_campaign_config,
@@ -152,6 +154,8 @@ _PUBLIC_RELEASE_ACCEPTANCE_FIELDS = frozenset(
         "source_commits",
         "forbidden_status_counts",
         "blockers",
+        "episodes_excluded",
+        "exclusion_reasons",
     }
 )
 
@@ -592,7 +596,12 @@ def _record_release_acceptance(campaign_root: Path, acceptance: dict[str, Any]) 
     """Persist the full-release gate beside the campaign summary and report."""
     summary_path = _campaign_summary_path(campaign_root)
     summary = _read_json(summary_path)
-    summary["full_release_acceptance"] = acceptance
+    key = (
+        "development_rehearsal_acceptance"
+        if acceptance.get("schema_version") == "benchmark-development-rehearsal-acceptance.v1"
+        else "full_release_acceptance"
+    )
+    summary[key] = acceptance
     _write_json(summary_path, summary)
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
@@ -1208,6 +1217,27 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
     return 0
 
 
+def _snqi_v2_evaluation_seed_receipt(cfg: Any, *, manifest: Any = None) -> dict[str, str]:
+    """Bind release evaluation seeds before any episode can execute.
+
+    Returns:
+        The checked commitment for the release receipt, or no fields without v2.
+    """
+    spec = getattr(cfg, "snqi_v2_spec", None)
+    if spec is None:
+        return {}
+    from robot_sf.benchmark.camera_ready._config import (
+        _load_campaign_scenarios,
+        _resolved_seed_inventory,
+    )
+    from robot_sf.benchmark.snqi.evaluation_seeds import evaluation_seeds_sha256
+
+    seeds = _resolved_seed_inventory(_load_campaign_scenarios(cfg))
+    if not (spec.diagnostic and is_development_rehearsal(manifest)):
+        spec.validate_evaluation_commitment(seeds)
+    return {"snqi_v2_evaluation_seeds_sha256": evaluation_seeds_sha256(seeds)}
+
+
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -1274,6 +1304,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         else load_campaign_config(manifest.canonical_campaign_config_path)
     )
     stress_smoke = is_diagnostic_stress_smoke(manifest)
+    development_rehearsal = is_development_rehearsal(manifest)
+    development_smoke = bool(getattr(args, "development_runtime_smoke", False))
+    if development_smoke and (not development_rehearsal or manifest.resolved_seeds != (1001,)):
+        raise ValueError(
+            "development runtime smoke requires a rehearsal identity on dev seed 1001 only"
+        )
     runtime_source_commit: str | None = None
     runtime_source_admission: dict[str, Any] = {
         "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
@@ -1537,6 +1573,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "manifest_validation": validation,
         "resolved_manifest": resolved_manifest,
     }
+    result.update(_snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest))
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"
@@ -1604,7 +1641,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "submit_safe": True,
     }
 
-    if getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2":
+    if (
+        getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+        and not development_smoke
+    ):
         smoke_result_path = getattr(args, "runtime_smoke_receipt", None)
         if smoke_result_path is None:
             result.update(
@@ -1626,6 +1666,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 expected_source_commit=_current_source_commit(),
                 expected_planner_keys=tuple(manifest.planner_keys),
                 max_age_hours=getattr(args, "runtime_smoke_receipt_max_age_hours", 24.0),
+                **({"development_rehearsal": True} if development_rehearsal else {}),
             )
         except (RuntimeSmokeAdmissionError, ValueError) as exc:
             result.update(
@@ -1910,7 +1951,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         return int(result["release_exit_code"])
 
     release_acceptance = _public_release_acceptance(
-        validate_full_benchmark_release_acceptance(
+        (
+            validate_development_rehearsal_acceptance
+            if development_rehearsal
+            else validate_full_benchmark_release_acceptance
+        )(
             campaign_root,
             manifest=manifest,
             campaign_config=cfg,
@@ -1941,6 +1986,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         and not full_release_acceptance_failed
     )
     result["release_benchmark_success"] = release_benchmark_success
+    if development_rehearsal:
+        result["release_kind"] = "development_rehearsal"
+        result["release_eligible"] = False
+        result["diagnostic_success"] = release_benchmark_success
+        result["development_runtime_smoke"] = development_smoke
+        result["release_benchmark_success"] = False
+        result["benchmark_success"] = False
     publication_requested = bool(getattr(cfg, "export_publication_bundle", True))
     result["publication_requested"] = publication_requested
     if release_benchmark_success and publication_requested:
@@ -1988,6 +2040,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             2 if missing or full_release_acceptance_failed else int(run_payload.get("exit_code", 2))
         )
     )
+    if development_rehearsal and release_benchmark_success:
+        result["release_status"] = "development_rehearsal_passed"
+        result["release_status_reason"] = "diagnostic pipeline passed; never releasable"
 
     if release_benchmark_success and publication_requested:
         try:

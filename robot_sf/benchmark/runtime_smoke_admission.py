@@ -23,9 +23,17 @@ from robot_sf.benchmark.release_acceptance import (
     _append_exclusion_blocker,
     _evidence_exclusion_counts,
     _status_markers,
+    validate_development_rehearsal_acceptance,
 )
-from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION
+from robot_sf.benchmark.release_protocol import (
+    BENCHMARK_PROTOCOL_VERSION,
+    DEVELOPMENT_REHEARSAL_KIND,
+    is_development_rehearsal,
+    load_release_campaign_config,
+    load_release_manifest,
+)
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
+from robot_sf.benchmark.spawn_preflight import guard_manifest_execution
 from robot_sf.benchmark.utils import _config_hash
 
 RUNTIME_SMOKE_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2"
@@ -1138,6 +1146,84 @@ def _validate_loaded_checkpoint_provenance(
             )
 
 
+def _validate_development_runtime_smoke(
+    result_path, result, repo_root, expected_source_commit, expected_planner_keys, *, max_age_hours
+):
+    """Verify a complete D-083 dev-seed smoke using the shared campaign validator.
+
+    Returns:
+        Diagnostic receipt that cannot admit a sealed release.
+    """
+    root = result_path.parent.parent
+    release = result.get("benchmark_release", {})
+    identity_path = _canonical_repo_artifact(
+        repo_root / release.get("manifest_path", ""),
+        repo_root=repo_root,
+        label="development identity",
+    )
+    manifest = load_release_manifest(identity_path, repository_root=repo_root)
+    if (
+        not is_development_rehearsal(manifest)
+        or manifest.resolved_seeds != (1001,)
+        or manifest.source_sha != expected_source_commit
+        or tuple(manifest.planner_keys) != expected_planner_keys
+    ):
+        raise RuntimeSmokeAdmissionError(
+            "development runtime smoke identity/source/roster mismatch"
+        )
+    guard_manifest_execution(
+        manifest, source_commit=expected_source_commit, repository_root=repo_root
+    )
+    cfg = load_release_campaign_config(manifest, repository_root=repo_root)
+    acceptance = validate_development_rehearsal_acceptance(
+        root, manifest=manifest, campaign_config=cfg, source_repository_root=repo_root
+    )
+    if (
+        acceptance["status"] != "valid"
+        or result.get("development_runtime_smoke") is not True
+        or result.get("diagnostic_success") is not True
+        or result.get("release_eligible") is not False
+        or result.get("release_benchmark_success") is not False
+        or result.get("release_exit_code") != 0
+    ):
+        raise RuntimeSmokeAdmissionError(
+            "development runtime smoke admission failed: " + "; ".join(acceptance["blockers"])
+        )
+    staging = result.get("checkpoint_staging_receipt", {})
+    staging_path = _canonical_repo_artifact(
+        repo_root / staging.get("path", ""),
+        repo_root=repo_root,
+        label="development checkpoint receipt",
+    )
+    validate_checkpoint_staging_receipt(
+        cfg,
+        staging_path,
+        campaign_config_path=manifest.canonical_campaign_config_path,
+        repo_root=repo_root,
+    )
+    if staging.get("sha256") != sha256_file(staging_path):
+        raise RuntimeSmokeAdmissionError("development checkpoint receipt digest mismatch")
+    finished = _validate_age(
+        _read_campaign_object(
+            root / "run_meta.json", campaign_root=root, label="development run metadata"
+        ),
+        max_age_hours=max_age_hours,
+    )
+    return {
+        "schema_version": "benchmark-runtime-smoke-admission.v1",
+        "status": "admitted_diagnostic",
+        "release_eligible": False,
+        "result_sha256": sha256_file(result_path),
+        "checkpoint_receipt_sha256": sha256_file(staging_path),
+        "source_commit": expected_source_commit,
+        "campaign_id": result["campaign_id"],
+        "finished_at_utc": finished,
+        "planner_arms": 14,
+        "episode_cells": 672,
+        "fallback_or_degraded_rows": 0,
+    }
+
+
 def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     result_path: Path,
     *,
@@ -1145,6 +1231,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     expected_source_commit: str,
     expected_planner_keys: tuple[str, ...],
     max_age_hours: float = 24.0,
+    development_rehearsal: bool = False,
 ) -> dict[str, Any]:
     """Validate a byte-addressable smoke result before a full v0.2 campaign.
 
@@ -1170,6 +1257,19 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             "runtime smoke result is not the canonical release receipt"
         )
     result = _read_object(resolved_result, "runtime smoke result")
+    if result.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND:
+        if not development_rehearsal:
+            raise RuntimeSmokeAdmissionError(
+                "development rehearsal cannot satisfy release runtime smoke"
+            )
+        return _validate_development_runtime_smoke(
+            resolved_result,
+            result,
+            resolved_repo,
+            expected_source_commit,
+            expected_planner_keys,
+            max_age_hours=max_age_hours,
+        )
     campaign_root = resolved_result.parent.parent
     run_meta = _read_campaign_object(
         campaign_root / "run_meta.json",

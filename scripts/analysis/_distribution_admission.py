@@ -1,6 +1,7 @@
 """Distribution admission built from the paired comparator's pinned validators."""
 
 import hashlib
+import json
 from pathlib import Path
 
 from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
@@ -17,6 +18,10 @@ def admit(  # noqa: C901, PLR0912 - independent source, schema and coverage gate
     diagnostic_partial: bool = False,
 ) -> tuple[dict, dict, dict]:
     """Read verified release rows; diagnostics relax coverage only, never binding."""
+    successor_payload = json.loads(successor_manifest.read_text())
+    rehearsal = successor_payload.get("development_rehearsal") is not None
+    if rehearsal and not diagnostic_partial:
+        raise ValueError("development rehearsal cannot enter comparator release mode")
     digest = admission._verify_sha256(
         baseline_bundle, admission.BASELINE_SHA256, label="0.0.7 bundle SHA-256"
     )
@@ -33,9 +38,18 @@ def admit(  # noqa: C901, PLR0912 - independent source, schema and coverage gate
         raise ValueError("0.0.7 scenario identity mismatch")
     old = admission._bundle_rows(baseline_bundle)
     new, duplicates, duplicate_rows = admission._root_rows(successor_root)
-    verified = admission._verified_successor_manifest(
-        successor_manifest, successor_manifest_sha256, successor_source_root, new
-    )
+    if rehearsal:
+        verified = _verified_development_successor(
+            successor_manifest,
+            successor_manifest_sha256,
+            successor_source_root,
+            successor_root,
+            new,
+        )
+    else:
+        verified = admission._verified_successor_manifest(
+            successor_manifest, successor_manifest_sha256, successor_source_root, new
+        )
     identity = admission._root_identity(successor_root, verified)
     expected = verified["expected_slots"]
     if duplicates or duplicate_rows or set(new) - expected:
@@ -114,5 +128,52 @@ def admit(  # noqa: C901, PLR0912 - independent source, schema and coverage gate
             },
             "metric_schema_versions": schemas,
             "probe": {"coverage_admitted": not diagnostic_partial, "summary": probe},
+            "release_eligible": not rehearsal,
         },
     )
+
+
+def _verified_development_successor(path, digest, source_root, campaign_root, rows):
+    """Bind a rehearsal to its verified public identity and the same pinned runtime."""
+    from robot_sf.benchmark.release_protocol import is_development_rehearsal, load_release_manifest
+
+    source_root = source_root.resolve()
+    admission._verify_sha256(
+        path,
+        admission._hex_digest(digest, "successor manifest digest"),
+        label="successor manifest SHA-256",
+    )
+    manifest = load_release_manifest(path, repository_root=source_root)
+    if not is_development_rehearsal(manifest):
+        raise ValueError("development comparator requires a verified rehearsal identity")
+    campaign = json.loads((campaign_root / "campaign_manifest.json").read_text())
+    config_path = manifest.canonical_campaign_config_path.relative_to(source_root).as_posix()
+    config_hash, scenario_hash, runtime_rows, scoped_hashes, expected_slots = (
+        admission._runtime_successor_identity(
+            source_root,
+            manifest.source_sha,
+            config_path,
+            rows,
+            publication_identity={"release_tag": manifest.release_tag, "doi": manifest.doi},
+            development_rehearsal_seeds=manifest.resolved_seeds,
+        )
+    )
+    return {
+        "source_commit": manifest.source_sha,
+        "campaign_id": campaign["campaign_id"],
+        "campaign_config": {
+            "path": config_path,
+            "sha256": manifest.campaign_config_sha256,
+            "runtime_hash": config_hash,
+        },
+        "scenario_matrix": {
+            "path": manifest.scenario_matrix_path.relative_to(source_root).as_posix(),
+            "sha256": manifest.scenario_matrix_sha256,
+            "runtime_hash": scenario_hash,
+        },
+        "runtime_rows": runtime_rows,
+        "scoped_hashes": scoped_hashes,
+        "expected_slots": expected_slots,
+        "planner_keys": sorted(manifest.planner_keys),
+        "manifest_sha256": digest,
+    }

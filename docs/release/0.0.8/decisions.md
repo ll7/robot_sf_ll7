@@ -1507,16 +1507,20 @@ Historical measurements below are attributed to the named review report; they we
 - **Choice:** Dev seeds 1001 and 1002, with 1003 held apart for the N2
   diagnostic. The calibration receipt carries the sealed-seed digest, and
   `validate_evaluation_seeds` rejects 1001-1030 and 101/102 as evaluation
-  seeds. The file `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml`
-  already holds 1001/1002 content and must be renamed in the #10045 refresh.
+  seeds. The file
+  `configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml`
+  now names both the actual seeds and scheduled acquisition purpose. #10045
+  renamed it from `calibration.dev101_102.yaml`.
 - **Reason:** One development band (1001-1030) for all development work.
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** 101/102.
 - **Amends:** D-048 ("seeds 101-102").
 - **Evidence:** private orchestration notes; #10045; rr10045b_report.md, private-ops review archive.
-- **Implemented in:** #10045 (open; refresh pending).
-- **Enforced by:** none yet: a test that the calibration config resolves
-  to 1001/1002 and that its file name matches.
+- **Implemented in:** #10045 (refresh implemented; PR open).
+- **Enforced by:**
+  `tests/unit/benchmark/test_snqi_v2.py::test_development_calibration_matches_candidate_and_preserves_frozen_007`
+  (lines 79–94), which loads the new filename and asserts development seeds
+  1001/1002 and parity with the authored candidate.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-069: 0.0.8 release rows are untraced; traces come from rehearsal 2
@@ -1560,6 +1564,34 @@ Historical measurements below are attributed to the named review report; they we
 - **Enforced by:** none yet in this repository: a mint-side ancestry check
   for 93ba0d75 and each constituent.
 - **Reopen:** New material evidence or an explicit author ruling.
+
+**Rehearsal status, 2026-10-03 (CHAIN-3):** The original development projection
+was refused before execution on `f52de283e3b60ec85910fd761e432d07ab748158`.
+D-086 then authorised the distinct, permanently non-releasable identity.
+The complete shared pipeline passed on tooling source `b8d5e970ab2428285aeb532b0d8e73b4601a33a6`
+in [#10103](https://github.com/ll7/robot_sf_ll7/pull/10103): public generation
+and verification, checkpoint staging, exact-source smoke (672 cells, Slurm
+job 16798), and the prescribed 14 arms × 48 scenarios × seeds
+1001–1003 campaign (2,016 cells, Slurm job 16800, 32 CPUs). Both jobs
+exited 0. All 14 native arms completed without missing/unexpected identities,
+exclusions or forbidden runtime statuses. The common runner's publication
+export, `publication_preflight.py`, checksums, manifest/metadata roles and
+commit/SNQI reconciliation passed. Development calibration diagnostics used
+1,344 fit rows (1001/1002) and 672 held-apart rows (1003), covering all five
+authored budget classes. D-062's `compare_release_distributions.py` passed in
+diagnostic mode against the pinned published 0.0.7 archive; release mode
+refused this identity with exit 2. No held-out reset or step occurred.
+
+The dissertation intake archive is
+`chain3_final_campaign_b8d5e970ab24_dev1001_1003_publication_bundle.tar.gz`
+(8,206,322 bytes; SHA-256
+`a280b1b7e3b60076b6b8d251bd30d5e7fca8ed74ddc490e40bf6092917007611`). Its copy's digest matches the exporter output.
+All commands, exit codes and output paths are retained in the CHAIN3 lane
+report and command journal for orchestrator handoff. The artifact remains
+`release_kind: development_rehearsal` with `release_eligible: false`.
+Packaging is verified; dissertation intake is pending the orchestrator's
+copy and dry run (diss#3026). The main-head rehearsal/freeze decision remains
+open; this branch evidence does not name a freeze SHA or grant release status.
 
 ### D-071: Public merge trains land with merge commits after a full suite on the exact train head
 - **Date:** 2026-09-30 (trains); 2026-10-01 (full-suite rule)
@@ -1628,8 +1660,8 @@ Historical measurements below are attributed to the named review report; they we
 - **Decided by:** orchestrator (delegated), from the release-notes lane.
 - **Alternatives:** none recorded.
 - **Evidence:** #10085; relnotes_report.md, private-ops review archive; statically verified candidate seed policy at the #9999 head and canonical-path allowlist in `robot_sf/benchmark/release_protocol.py` on main.
-- **Implemented in:** Not yet; tracked by #10085.
-- **Enforced by:** none yet: selected release template resolves to the sealed tuple and passes the guard with non-stepping recording stubs.
+- **Implemented in:** Train 2 / [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999), under D-083, merged at `879f75b69eb93ca16006f2019ee5c85c7aa724dd`. [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) was closed on 2026-10-02 after the orchestrator accepted CHAIN-2 verification against main `f52de283e3b60ec85910fd761e432d07ab748158`. The development packaging rehearsal remains a separate D-070 / CHAIN-3 process requirement.
+- **Enforced by:** `tests/benchmark/test_release_campaign_authority.py::test_d083_authored_template_resolves_exact_sealed_seed_file` and `tests/benchmark/test_release_campaign_authority.py::test_d083_materialized_selected_template_passes_guard_without_execution` passed on that main SHA: exact sealed-file transport, public identity materialization and guard admission with recording stubs, retired-band and retired-template refusal. Environment construction, reset and step are blocked by the witness fixture.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-075: Release acceptance admits the doorway slice as its own bound release kind
@@ -1647,8 +1679,8 @@ Historical measurements below are attributed to the named review report; they we
   strict runner.
 - **Evidence:** #10078; #10081; review rr10081 (FIX: a wrong-seed witness
   survives a mutant; retarget onto the train head); rr10081_report.md, private-ops review archive.
-- **Implemented in:** #10081 (open).
-- **Enforced by:** (open PR #10081) `tests/benchmark/test_doorway_release_acceptance.py::test_bound_doorway_slice_accepted`, `tests/benchmark/test_doorway_release_acceptance.py::test_main_refuses_slice_denominator`, `tests/benchmark/test_doorway_release_acceptance.py::test_slice_refuses_consistent_wrong_seed_inventory`; the rr10081 review still requests a stronger wrong-seed mutant witness.
+- **Implemented in:** [#10081](https://github.com/ll7/robot_sf_ll7/pull/10081), merged in train 2 at `879f75b69eb93ca16006f2019ee5c85c7aa724dd`.
+- **Enforced by:** `tests/benchmark/test_doorway_release_acceptance.py::test_bound_doorway_slice_accepted` (lines 83–89), `tests/benchmark/test_doorway_release_acceptance.py::test_main_refuses_slice_denominator` and `tests/benchmark/test_doorway_release_acceptance.py::test_slice_refuses_consistent_wrong_seed_inventory`. The complete static doorway witness file passed on main `f52de283e3b60ec85910fd761e432d07ab748158` on 2026-10-02, including the consistent wrong-seed refusal. No sealed environment was reset or stepped.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-076: Release notes live in the repository and cite decisions by content
@@ -1726,7 +1758,7 @@ Historical measurements below are attributed to the named review report; they we
 |---|---|---|
 | D-004 | D-070 | The old freeze commit is superseded by the train-2 head after rehearsal 2, packaging and intake pass. No final freeze SHA is asserted here. |
 | D-017 | D-053 | The author replaces the plain PPO arm; the older supplementary-only choice remains historical. #10077 is still open. |
-| D-048 | D-068 | Calibration now uses 1001/1002, not 101/102. The stale filename is still present on #10045. |
+| D-048 | D-068 | Calibration uses 1001/1002. #10045 renamed the file to `calibration.dev1001_1002_scheduled_acquisition.yaml`; `test_development_calibration_matches_candidate_and_preserves_frozen_007` in `tests/unit/benchmark/test_snqi_v2.py:79–94` enforces the filename and seed policy. |
 | D-049 | D-051, D-052 | Existing tests may execute retired seeds; refusal witnesses must stop before reset/step. Sealed seeds remain forbidden outside the sealed campaign. |
 | D-039 | D-057 | Scripted input speed and crowd-derived desired speed are distinct paths; crowd target and cap are both 0.65 m/s. |
 | D-038, D-040 | 0.1.0 D-001 | Historical references to the planned 0.0.9 release now mean 0.1.0. |
@@ -1822,7 +1854,7 @@ Historical measurements below are attributed to the named review report; they we
 - **Decided by:** orchestrator, delegated direction for #9999, 2026-10-02.
 - **Reason:** D-074 identified the seam: the authored candidate resolved the retired seed band while the sealed allowlist selected another template. One source-bound authority closes that seam without changing authored-budget policy or historical artifacts.
 - **Alternatives:** Keep two executable candidates; return to the retired seed band; select the fixed-H600 candidate. None is adopted.
-- **Evidence:** [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085), implemented in [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999). The packaging rehearsal item remains open for the later train; this decision and its static tests do not claim it has run.
+- **Evidence:** [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085), implemented in [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999); the issue was closed after accepted CHAIN-2 verification on 2026-10-02. The D-086 development pipeline completed in [#10103](https://github.com/ll7/robot_sf_ll7/pull/10103), with full 2,016-cell packaging and diagnostic comparison recorded under D-070. Dissertation intake and the main freeze decision remain open; the diagnostic bundle cannot grant release status.
 - **Enforced by:** `tests/benchmark/test_release_campaign_authority.py::test_d083_authored_template_resolves_exact_sealed_seed_file` and `tests/benchmark/test_release_campaign_authority.py::test_d083_materialized_selected_template_passes_guard_without_execution`: real seed transport, public identity materialization, source-bound guard admission with recording workers, and retired-band/canonical-path refusal without reset or step.
 - **Reopen:** New material evidence about release input binding or an explicit author/orchestrator ruling.
 
@@ -1859,6 +1891,17 @@ Historical measurements below are attributed to the named review report; they we
 - **Enforced by:** tests/validation/test_release_spawn_goal_overlap.py::test_guarded_ppo_overtaking_cell_preserves_speed_envelope_caveat;
   tests/validation/test_release_spawn_goal_overlap.py::test_overtaking_budget_is_authored_and_release_inherits_it.
 - **Reopen:** changed policy training envelope, scenario speed cap or explicit author ruling.
+### D-086: Development packaging identities are permanently non-releasable
+- **Date:** 2026-10-02
+- **Question:** How can D-070 rehearse the full release path without running held-out seeds?
+- **Choice:** Add the explicit public resolver opt-in `generate --development-rehearsal --development-seeds 1001,1002,1003`. Only unique development seeds 1001–1030 are admitted; retired 111–140 and the sealed tuple are refused before execution. Materialize the same D-083 template, matrix, planners, budgets and source closure with a digest-covered `release_kind: development_rehearsal` marker and diagnostic coordinates. The common runner, Slurm wrapper, exporter, bundle validators and D-062 comparator remain in use. The preparatory smoke uses the same 14 × 48 matrix on seed 1001; the campaign uses seeds 1001–1003. Results and bundles retain `release_eligible: false`; the comparator requires diagnostic mode.
+- **Decided by:** orchestrator, explicit CHAIN-3 decision, 2026-10-02, following merged records PR [#10102](https://github.com/ll7/robot_sf_ll7/pull/10102).
+- **Reason:** The sealed-only resolver prevented the development full-pipeline rehearsal. A distinct diagnostic identity provides executable packaging evidence while preserving sealed admission.
+- **Alternatives:** Relax the sealed gate or run held-out seeds. Neither is authorised.
+- **Evidence:** CHAIN-3's original exit-2 refusal and subsequent complete shared pipeline are recorded under D-070 and [#10103](https://github.com/ll7/robot_sf_ll7/pull/10103), source `b8d5e970ab2428285aeb532b0d8e73b4601a33a6`. Public CLI/recording-worker witnesses use real source-bound D-083 inputs without construction/reset/step. The real relative-root comparator invocation exposed a path-normalization defect; the same source-bound witness fails before the correction and passes with absolute and relative roots afterward.
+- **Enforced by:** `tests/benchmark/test_release_development_rehearsal.py::test_public_development_identity_round_trip`, `test_public_rehearsal_refuses_non_development_inventory`, `test_rehearsal_marker_cannot_be_stripped`, `test_rehearsal_cannot_acquire_release_status`, `test_rehearsal_publication_contract_refuses_release`, `test_shared_exporter_preserves_non_release_marker`, `test_development_smoke_keeps_shared_admission_and_digest_checks` and `test_development_comparator_uses_same_pinned_runtime`. The parameterized release-boundary witness covers sealed/full acceptance, mint preflight, DOI metadata/binding, tag tooling, comparator release mode and release runtime-smoke admission. Fast release-boundary/export coverage is enforced by `tests/benchmark/test_development_rehearsal_release_boundaries.py::test_development_release_boundaries_and_publication_bytes` (real public identity and exporter, no steps). Shared orchestration is additionally enforced by `tests/tools/test_run_benchmark_release.py::test_development_identity_uses_shared_runner_without_release_success`, the detached-source and full development-grid witnesses in `tests/analysis/test_development_pinned_runtime.py`, and the positive receipt witness in `tests/benchmark/test_development_rehearsal_smoke_admission.py`.
+- **Reopen:** Changed diagnostic scope or explicit author/orchestrator ruling. Rehearsal output can never become release evidence by removing a marker.
+
 ## Private working labels
 
 These private labels were never public ledger IDs. Read each citation in its PR context; a collision does not supersede the public entry of the same number. Bodies of the 100 most recently updated PRs were scanned, including every PR citing the labels named in this catch-up request.

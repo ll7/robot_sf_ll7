@@ -314,6 +314,15 @@ def build_family_report(
         "claim_boundary": CLAIM_BOUNDARY,
         "provenance": spec.provenance(),
         "force_producer_provenance": force_producer_provenance,
+        "per_arm_clipped_at_one_fraction": {
+            arm: {
+                term: float(
+                    np.mean([ep["metrics"]["snqi_v2_terms"][term] >= 1 for ep in grouped[arm]])
+                )
+                for term in QUALITY_TERMS
+            }
+            for arm in groups
+        },
         "episode_count": len(scored),
         "stratified_count": len(stratified),
         "tie_policy": "average ranks for rho; split top-1 credit; lexical top-3 boundary",
@@ -384,6 +393,21 @@ def write_v2_reports(
         "episode_count": len(scored),
         "family_report": "snqi_v2_family.json",
         "sources": spec.sources,
+        "per_arm_clipped_at_one_fraction": {
+            arm: {
+                term: float(
+                    np.mean(
+                        [
+                            ep["metrics"]["snqi_v2_terms"][term] >= 1
+                            for ep in scored
+                            if _planner(ep) == arm
+                        ]
+                    )
+                )
+                for term in QUALITY_TERMS
+            }
+            for arm in sorted({_planner(ep) for ep in scored})
+        },
         "normalized_term_means": {key: float(np.mean(values)) for key, values in terms.items()},
         "clipped_at_one_fraction": {
             key: float(np.mean(np.array(values) >= 1)) for key, values in terms.items()
@@ -486,7 +510,11 @@ def _stage_v2_file(
     records = []
     with temporary.open("w", encoding="utf-8") as output:
         for episode in read_episode_files([path]):
-            spec.validate_evaluation_seeds([episode["seed"]])
+            if spec.diagnostic:
+                if not 1001 <= episode["seed"] <= 1030:
+                    raise ValueError("SNQI-v2 diagnostics require development seeds")
+            else:
+                spec.validate_evaluation_seeds([episode["seed"]])
             declared_kinematics = planner.get("kinematics")
             row_kinematics = episode.get("kinematics")
             if (
@@ -688,6 +716,8 @@ def enrich_campaign_v2(
                 next(iter(run_algorithms.values())),
             )
             all_records.extend(records)
+        if spec.hashes and not spec.diagnostic:
+            spec.validate_evaluation_commitment(sorted({row["seed"] for row in all_records}))
         artifacts = write_v2_reports(
             all_records,
             spec,

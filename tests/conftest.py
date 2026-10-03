@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_limited_reverse.py",
     "test_check_docs_evidence_integrity.py",
     # D-083 source-bound release admission records workers without reset or step.
     "test_release_campaign_authority.py",
@@ -620,6 +621,7 @@ _FAST_FILES = {
     # Differential-drive kinematics tests are deterministic unit coverage for
     # the changed robot motion module; keep them in the exact-head fast lane.
     "differential_drive_test.py",
+    "test_bicycle_drive.py",
     # Shared-world contract tests are deterministic simulator-backed coverage
     # for the changed multi-robot modules (issue #9344).
     "test_shared_world.py",
@@ -645,6 +647,12 @@ _FAST_FILES = {
     # configuration example (issue #8904).
     # Read-only distribution oracles; all 15 calls together are below 2 seconds.
     "test_compare_release_distributions.py",
+    # Real matrix projection without environment construction (under 5 seconds).
+    "test_development_pinned_runtime.py",
+    # One public-identity smoke admission witness; recording runtime only.
+    "test_development_rehearsal_smoke_admission.py",
+    # Shared real-byte release refusals and export marker; one source fixture, no steps.
+    "test_development_rehearsal_release_boundaries.py",
     "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
@@ -948,6 +956,8 @@ _FAST_FILES = {
     # The direct source/test pairs are required by the changed-coverage router
     # when the release lane is evaluated against current main.
     "test_artifact_publication.py",
+    # Static SNQI exclusion guards run in coverage shards; episode probes stay explicitly slow.
+    "test_snqi_legacy_exclusion.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
     # Stale remote branch prune tests are fast deterministic tooling contracts;
@@ -984,6 +994,7 @@ _FAST_FILES = {
     "test_release_erratum.py",
     "test_revalidate_benchmark_release.py",
     "test_release_protocol.py",
+    "test_release_rehearsal_hardening.py",
     "test_release_protocol_edge_cases.py",
     # Resolved release-identity tests are deterministic contract coverage for
     # the source-freeze implementation; keep them in the changed-coverage lane.

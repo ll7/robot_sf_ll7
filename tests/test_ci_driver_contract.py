@@ -402,7 +402,7 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
 
 
 def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
-    """Keep main fast by combining complete coverage from four full-suite shards."""
+    """Keep main fast by combining complete coverage from six full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
     coverage_gate = workflow["jobs"]["coverage-gate"]
@@ -423,8 +423,8 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
         step for step in coverage_steps if step.get("name") == "Combine coverage shards"
     )
 
-    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
-    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 4
+    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 6
     assert (
         "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
     )
@@ -1319,7 +1319,8 @@ def test_fast_feedback_redistributes_heavy_tail_without_reducing_coverage() -> N
     workflow = yaml.safe_load(_workflow_text())
     fast = workflow["jobs"]["fast-feedback"]
     assert fast["env"]["PYTEST_XDIST_DIST"] == "worksteal"
-    assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert fast["env"]["PYTEST_SHARD_COUNT"] == 6
     assert fast["timeout-minutes"] == 45
     assert fast["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert (

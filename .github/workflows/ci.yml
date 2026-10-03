@@ -158,17 +158,17 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 45
-    # Split every event across four runners. Pull requests retain their fast-only
+    # Split every event across six runners. Pull requests retain their fast-only
     # shards; all events publish unique coverage data so the exact-head changed-
     # coverage gate can prove the final PR head before merge admission.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
       # Redistribute queued release-validation checks instead of stranding a tail.
       PYTEST_XDIST_DIST: worksteal
-      PYTEST_SHARD_COUNT: 4
+      PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
       ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
       ROBOT_SF_PYTEST_COVERAGE: "1"
@@ -239,7 +239,7 @@ jobs:
             test-durations-v2-${{ runner.os }}-${{ runner.arch }}-
 
       # Lint and typecheck are shard-independent; run them once (shard 1 only)
-      # to avoid quadruplicated annotations on pull-request shard matrices.
+      # to avoid duplicated annotations on pull-request shard matrices.
       - name: Lint
         if: ${{ matrix.shard == 1 }}
         run: scripts/dev/ci_driver.sh lint
@@ -1062,7 +1062,7 @@ jobs:
         run: |
           python scripts/dev/merge_test_durations.py \
             --artifact-dir .duration-artifacts --output .test_durations \
-            --allow-partial --metadata-output .pytest_cache/test_durations_metadata.json
+            --allow-partial --shard-count 6 --metadata-output .pytest_cache/test_durations_metadata.json
 
       - name: Save merged test durations
         if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}

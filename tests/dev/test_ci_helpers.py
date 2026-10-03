@@ -415,3 +415,48 @@ def test_all_duration_artifacts_do_not_imply_successful_matrix(
     assert receipt["measurement_completeness"] == (
         "complete" if complete else "partial_or_unverified"
     )
+
+
+@pytest.mark.parametrize("missing", [False, True])
+@pytest.mark.parametrize("shard_count", [5, 6])
+def test_duration_merge_supports_explicit_matrix_size(
+    tmp_path: Path, missing: bool, shard_count: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every configured shard contributes timings and missing shards stay explicit in provenance."""
+    monkeypatch.setenv("FAST_FEEDBACK_RESULT", "success")
+    for index in range(1, shard_count if missing else shard_count + 1):
+        _write_shard(tmp_path / "artifacts", f"pytest-durations-{index}", {f"node{index}": 1.0})
+    output, metadata = tmp_path / "merged.json", tmp_path / "metadata.json"
+    args = [
+        "--artifact-dir",
+        str(tmp_path / "artifacts"),
+        "--output",
+        str(output),
+        "--metadata-output",
+        str(metadata),
+        "--shard-count",
+        str(shard_count),
+    ]
+    if missing:
+        assert merge_test_durations.main(args) == 1
+        args.append("--allow-partial")
+    assert merge_test_durations.main(args) == 0
+    assert len(json.loads(output.read_text())) == (shard_count - 1 if missing else shard_count)
+    receipt = json.loads(metadata.read_text())
+    assert receipt["missing_shards"] == ([f"pytest-durations-{shard_count}"] if missing else [])
+    assert receipt["complete_matrix"] is (not missing)
+
+
+@pytest.mark.parametrize("shard_count", [0, -1])
+def test_duration_merge_rejects_nonpositive_matrix_size(
+    tmp_path: Path, shard_count: int, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Invalid matrix sizes must fail before publishing duration hints."""
+    with pytest.raises(SystemExit, match="positive"):
+        merge_test_durations.merge_duration_stores(tmp_path, shard_count=shard_count)
+    with pytest.raises(SystemExit) as error:
+        merge_test_durations.main(
+            ["--artifact-dir", str(tmp_path), "--shard-count", str(shard_count)]
+        )
+    assert error.value.code == 2
+    assert "--shard-count must be positive" in capsys.readouterr().err

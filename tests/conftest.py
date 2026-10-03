@@ -419,6 +419,7 @@ _FAST_FILES = {
     "test_ci_uv_sync_retry.py",
     # Static CI bootstrap contracts: <4 s combined, no environment episodes (#10116).
     "test_ci_helpers.py",
+    "test_ci_shard_balance.py",
     "test_ci_driver_contract.py",
     "test_release_notes_gate.py",
     "test_release_notes_mint.py",

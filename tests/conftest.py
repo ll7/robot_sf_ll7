@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Static CI bootstrap contracts: <4 s combined, no environment episodes (#10116).
+    "test_ci_helpers.py",
+    "test_ci_driver_contract.py",
     "test_bicycle_planner_physics.py",
     "test_bicycle_creep_safety.py",
     "test_limited_reverse.py",

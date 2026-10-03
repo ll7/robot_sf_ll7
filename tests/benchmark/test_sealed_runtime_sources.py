@@ -24,7 +24,7 @@ def runtime_freeze(tmp_path, monkeypatch):
     copy_runtime_sources(repo)
     bind_runtime_sources(repo, monkeypatch)
     config = (
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml"
     )
     matrix = repo / "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
     for target in (config, matrix):

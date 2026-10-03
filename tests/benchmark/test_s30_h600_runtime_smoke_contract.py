@@ -241,7 +241,7 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
 
     assert list(smoke_planners) == EXPECTED_PLANNER_KEYS
     assert list(source_planners) == EXPECTED_PLANNER_KEYS
-    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
+    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_0_0_8_PLANNER_KEYS
     assert len(smoke_planners) == 14
     for key in EXPECTED_PLANNER_KEYS:
         source_row = dict(source_planners[key])
@@ -414,9 +414,8 @@ def test_runtime_smoke_v0_4_preserves_main_runner_cap_and_v0_3() -> None:
         "config_sha256": HISTORICAL_V04_TEMPLATE_SHA256,
     }
     assert [row["key"] for row in smoke["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
-    # The canonical runtime-smoke admission roster stays the 0.0.7 (v0_2) roster;
-    # the 0.0.8 keys are its slot-for-slot successors.
-    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
+    # The historical manifests keep their pins; current admission selects the v4 successor.
+    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_0_0_8_PLANNER_KEYS
     assert [slot.key_0_0_7 for slot in ARM_SLOTS_0_0_7_TO_0_0_8] == EXPECTED_PLANNER_KEYS
     assert len(smoke["planners"]) == 14
     for row in smoke["planners"]:

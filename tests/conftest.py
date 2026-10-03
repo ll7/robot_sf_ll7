@@ -463,6 +463,8 @@ _FAST_FILES = {
     "test_coverage_paths_remap.py",
     # Static runtime-copy admission: small Git fixtures, no environment or episode.
     "test_sealed_runtime_sources.py",
+    "test_mintorder_contract.py",
+    "test_mintorder_binding.py",
     "test_heldout_seed_guard.py",
     "test_emergent_wall_geometry.py",
     # Generator contracts construct scenes without stepping an environment.

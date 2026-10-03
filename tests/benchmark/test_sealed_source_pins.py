@@ -225,10 +225,10 @@ def sha(path):
 
 
 def plain_payload(repo, kind):
-    """Materialize main; make the reviewer's handwritten v0.2 slice on the base too."""
+    """Use current source-bound templates, then discard the resolved envelope marker."""
     main = materialize(repo, "main")
     envelope = json.loads(main.path.read_text())
-    template = repo / RELEASES / MAIN_TEMPLATE
+    template = repo / RELEASES / (MAIN_TEMPLATE if kind == "main" else SLICE_TEMPLATE)
     payload, *_ = protocol._identity_template_payload(template, repository_root=repo)
     values = protocol._materialize_release_template_payload(
         payload,
@@ -242,36 +242,7 @@ def plain_payload(repo, kind):
         version_doi=envelope["publication"]["version_doi"],
         repository_root=repo,
     )
-    if kind == "main":
-        return values
-    historical = repo / RELEASES / "three_width_doorway_release_0_0_8_v1.yaml"
-    result = yaml.safe_load(historical.read_text())
-    for key in ("canonical_campaign_config", "citation_path", "release_checklist_path"):
-        result[key] = str((historical.parent / result[key]).resolve())
-    result["scenario"]["matrix_path"] = str(
-        (historical.parent / result["scenario"]["matrix_path"]).resolve()
-    )
-    result["seed_policy"]["seed_sets_path"] = str(repo / "configs/benchmarks/seed_sets_0_0_8.yaml")
-    for key in ("snqi_weights_path", "snqi_baseline_path"):
-        result["metrics"][key] = str((historical.parent / result["metrics"][key]).resolve())
-    for key in ("schema_version", "source_sha", "latest_main_base_commit", "publication"):
-        result[key] = values[key]
-    for key in (
-        "suite_policy_path",
-        "suite_policy_sha256",
-        "route_certification_path",
-        "route_certification_sha256",
-    ):
-        result["scenario"][key] = values["scenario"][key]
-    result["matrix"] = yaml.safe_load((repo / RELEASES / SLICE_TEMPLATE).read_text())["matrix"]
-    result["matrix"]["expected_episode_cells"] = 1260
-    result["matrix"]["scenario_horizons"] = str(
-        (historical.parent / result["matrix"]["scenario_horizons"]).resolve()
-    )
-    result["metrics"]["snqi_claim_policy"] = "advisory_no_ranking"
-    # v0.2 requires DOI agreement; the config's DOI is filled in the forged copy below.
-    result["provenance"]["doi"] = values["provenance"]["doi"]
-    return result
+    return values
 
 
 def forge(repo, case):

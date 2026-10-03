@@ -354,6 +354,7 @@ def run_campaign(  # noqa: PLR0913
     compute_aggregates_with_ci: Callable[..., dict[str, Any]] | None = None,
     export_publication_bundle: Callable[..., Any] | None = None,
     arm_isolation: str | None = None,
+    allow_pending_snqi_v2: bool = False,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign and emit campaign artifacts.
 
@@ -373,6 +374,7 @@ def run_campaign(  # noqa: PLR0913
         run_batch: Optional batch run collaborator override.
         compute_aggregates_with_ci: Optional aggregates collaborator override.
         export_publication_bundle: Optional publication bundle collaborator override.
+        allow_pending_snqi_v2: Permit unscored, permanently diagnostic preparation smoke only.
         arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
             If None, uses cfg.arm_isolation (issue #4826).
 
@@ -386,6 +388,8 @@ def run_campaign(  # noqa: PLR0913
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
+    if cfg.snqi_v2_binding and cfg.snqi_v2_spec is None and not allow_pending_snqi_v2:
+        raise ValueError("SNQI-v2 acquisition and anchors are required before campaign execution")
     dependencies = _resolve_campaign_runtime_dependencies(
         prepare_campaign_preflight=prepare_campaign_preflight,
         run_batch=run_batch,

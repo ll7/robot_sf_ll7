@@ -2313,6 +2313,20 @@ def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_
         assert "/home/private" not in json.dumps(payload)
 
 
+def _record_acquired_scoring(monkeypatch):
+    """Stub scoring custody only; retain the real source/manifest admission witnesses."""
+    from dataclasses import replace
+
+    from robot_sf.benchmark.snqi import v2_binding
+    from tests.unit.benchmark.test_snqi_v2 import fixture_spec
+
+    monkeypatch.setattr(
+        v2_binding,
+        "bind_acquired_anchors",
+        lambda cfg, **kw: replace(cfg, snqi_v2_spec=replace(fixture_spec(), diagnostic=True)),
+    )
+
+
 @pytest.mark.parametrize("smoke_run,accepted", [(True, True), (False, True), (False, False)])
 def test_development_identity_uses_shared_runner_without_release_success(
     sealed_repository, monkeypatch, smoke_run, accepted
@@ -2333,6 +2347,7 @@ def test_development_identity_uses_shared_runner_without_release_success(
         write_json(path, payload)
 
     monkeypatch.setattr(sys.modules[__name__], "_write_json", marked_json)
+    _record_acquired_scoring(monkeypatch)
     code, identity = generate(repo, "1001" if smoke_run else "1001,1002,1003")
     assert code == 0
     manifest = release_protocol.load_release_manifest(identity, repository_root=repo)
@@ -2417,6 +2432,15 @@ def test_development_identity_uses_shared_runner_without_release_success(
         "--runtime-smoke-receipt",
         "-" if smoke_run else str(smoke_path),
     ]
+    if not smoke_run:
+        args.extend(
+            [
+                "--snqi-v2-calibration-root",
+                str(repo / "output/calibration"),
+                "--snqi-v2-anchors",
+                str(repo / "output/anchors.json"),
+            ]
+        )
     if smoke_run:
         args.append("--development-runtime-smoke")
     status = run_benchmark_release.main(args)

@@ -111,6 +111,7 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
         "workers",
         "export_publication_bundle",
         "arm_isolation",
+        "snqi_v2_spec",  # scoring binds post-freeze acquisition; acquisition does not score
     }
     assert {key: value for key, value in calibration.items() if key not in allowed_deviations} == {
         key: value for key, value in template.items() if key not in allowed_deviations

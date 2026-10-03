@@ -36,14 +36,14 @@ from robot_sf.benchmark.result_provenance import validate_result_provenance_mani
 from robot_sf.benchmark.spawn_preflight import guard_manifest_execution
 from robot_sf.benchmark.utils import _config_hash
 
-RUNTIME_SMOKE_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2"
+RUNTIME_SMOKE_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6"
 RUNTIME_SMOKE_MANIFEST = Path(
-    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml"
 )
 RUNTIME_SMOKE_CONFIG = Path(
-    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml"
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml"
 )
-RUNTIME_SMOKE_HORIZON = 600
+RUNTIME_SMOKE_HORIZON = 400
 RUNTIME_SMOKE_KINEMATICS = "differential_drive"
 RUNTIME_SMOKE_MAX_AGE_HOURS = 24.0
 RUNTIME_SMOKE_SUITE_KEY = "francis2023"
@@ -56,10 +56,10 @@ RUNTIME_SMOKE_PLANNER_KEYS = (
     "ppo",
     "socnav_sampling",
     "sacadrl",
-    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
-    "scenario_adaptive_hybrid_orca_v2_collision_guard",
-    "hybrid_rule_v3_fast_progress_static_escape",
-    "hybrid_rule_v3_fast_progress_static_escape_continuous",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "hybrid_rule_v4_fast_progress_static_escape",
+    "hybrid_rule_v4_fast_progress_static_escape_continuous",
     "guarded_ppo",
     "predictive_mppi",
     "risk_dwa",
@@ -613,6 +613,20 @@ def _canonical_repo_artifact(path: Path, *, repo_root: Path, label: str) -> Path
     )
 
 
+def _smoke_scenarios(scenario_path: Path, *, repo_root: Path) -> list[dict[str, Any]]:
+    """Resolve include/select smoke through the producer's authored scenario pipeline.
+
+    Returns:
+        One normalized smoke scenario with producer defaults and authored budget."""
+    payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
+    if "includes" in payload:
+        from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415
+
+        cfg = load_campaign_config(repo_root / RUNTIME_SMOKE_CONFIG, repository_root=repo_root)
+        return _load_campaign_scenarios(cfg, repository_root=repo_root)
+    return payload.get("scenarios", [])
+
+
 def _canonical_scenario_matrix_hash(
     scenario_path: Path, *, repo_root: Path, scenario_id: str, seed: int
 ) -> str:
@@ -622,11 +636,13 @@ def _canonical_scenario_matrix_hash(
         Stable structural digest after map, seed, and kinematics normalization.
     """
     payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
-    scenarios = payload.get("scenarios")
+    scenarios = _smoke_scenarios(scenario_path, repo_root=repo_root)
     if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
         raise RuntimeSmokeAdmissionError(
             "canonical runtime smoke must resolve exactly one scenario"
         )
+    if "includes" in payload:
+        return _config_hash(scenarios)
     scenario = dict(scenarios[0])
     observed_id = str(scenario.get("name") or scenario.get("id") or "").strip()
     if observed_id != scenario_id:
@@ -924,8 +940,15 @@ def _canonical_smoke_contract(  # noqa: C901
     manifest_keys = tuple(str(key).strip() for key in manifest_planners.get("keys", []))
     if manifest_keys != RUNTIME_SMOKE_PLANNER_KEYS or config_keys != RUNTIME_SMOKE_PLANNER_KEYS:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke planner roster mismatch")
-    if _strict_int(config.get("horizon")) != RUNTIME_SMOKE_HORIZON:
-        raise RuntimeSmokeAdmissionError("canonical runtime smoke horizon mismatch")
+    schedule_path = _canonical_repo_artifact(
+        repo_root / str(config.get("scenario_horizons", "")),
+        repo_root=repo_root,
+        label="canonical runtime smoke authored schedule",
+    )
+    if config.get("horizon") is not None or config.get("scenario_horizons_sha256") != sha256_file(
+        schedule_path
+    ):
+        raise RuntimeSmokeAdmissionError("canonical runtime smoke authored schedule mismatch")
     if tuple(config.get("kinematics_matrix") or ()) != (RUNTIME_SMOKE_KINEMATICS,):
         raise RuntimeSmokeAdmissionError("canonical runtime smoke kinematics mismatch")
     manifest_kinematics = manifest.get("kinematics")
@@ -935,7 +958,7 @@ def _canonical_smoke_contract(  # noqa: C901
     seed_policy = config.get("seed_policy")
     seed_policy = seed_policy if isinstance(seed_policy, dict) else {}
     seeds = seed_policy.get("seeds")
-    if not isinstance(seeds, list) or len(seeds) != 1 or _strict_int(seeds[0]) is None:
+    if seeds != [1003]:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke seed contract mismatch")
     scenario = manifest.get("scenario")
     scenario = scenario if isinstance(scenario, dict) else {}
@@ -949,8 +972,7 @@ def _canonical_smoke_contract(  # noqa: C901
     )
     if scenario.get("matrix_sha256") != sha256_file(scenario_path):
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario pin mismatch")
-    scenario_payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
-    scenarios = scenario_payload.get("scenarios")
+    scenarios = _smoke_scenarios(scenario_path, repo_root=repo_root)
     if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
         raise RuntimeSmokeAdmissionError(
             "canonical runtime smoke must resolve exactly one scenario"
@@ -958,6 +980,12 @@ def _canonical_smoke_contract(  # noqa: C901
     scenario_id = str(scenarios[0].get("name") or scenarios[0].get("id") or "").strip()
     if not scenario_id:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario identifier is missing")
+    schedule = _read_yaml_object(schedule_path, "canonical runtime smoke authored schedule")
+    if (
+        schedule.get("scenarios", {}).get(scenario_id, {}).get("recommended_horizon_steps")
+        != RUNTIME_SMOKE_HORIZON
+    ):
+        raise RuntimeSmokeAdmissionError("canonical runtime smoke authored horizon mismatch")
     expected_scenario_matrix_hash = _canonical_scenario_matrix_hash(
         scenario_path,
         repo_root=repo_root,

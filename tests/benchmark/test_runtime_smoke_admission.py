@@ -71,7 +71,7 @@ def _fixture(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
-    seed: int = 111,  # seed-holdout: synthetic-fixture
+    seed: int = 1003,
 ) -> tuple[Path, tuple[str, ...]]:
     planners = RUNTIME_SMOKE_PLANNER_KEYS
     manifest = tmp_path / RUNTIME_SMOKE_MANIFEST
@@ -85,8 +85,13 @@ def _fixture(
         config_rel = f"configs/algos/runtime-smoke-{index}.yaml"
         _write_yaml(tmp_path / config_rel, {"planner_key": planner})
         planner_configs[planner] = config_rel
+    schedule = tmp_path / "configs/benchmarks/horizon_schedules/smoke.yaml"
+    _write_yaml(
+        schedule, {"scenarios": {"runtime-smoke-scenario": {"recommended_horizon_steps": 400}}}
+    )
     config_payload = {
-        "horizon": 600,
+        "scenario_horizons": "configs/benchmarks/horizon_schedules/smoke.yaml",
+        "scenario_horizons_sha256": sha256_file(schedule),
         "kinematics_matrix": ["differential_drive"],
         "seed_policy": {"mode": "fixed-list", "seeds": [seed]},
         "planners": [
@@ -128,10 +133,10 @@ def _fixture(
         episode_row = {
             "scenario_params": scenario_params,
             "algo": f"algo-{index}",
-            "episode_id": f"runtime-smoke-scenario--111--{index}",
+            "episode_id": f"runtime-smoke-scenario--1003--{index}",
             "scenario_id": "runtime-smoke-scenario",
             "seed": seed,
-            "horizon": 600,
+            "horizon": 400,
             "config_hash": config_hash,
             "git_hash": "a" * 40,
             "result_provenance": {
@@ -166,7 +171,7 @@ def _fixture(
             suite_key="francis2023",
             total_jobs=1,
             written=1,
-            horizon=600,
+            horizon=400,
             dt=0.1,
             record_forces=True,
             active_observation_mode="socnav_state",
@@ -193,7 +198,7 @@ def _fixture(
                     "algo": f"algo-{index}",
                     "algo_config_path": planner_configs[planner],
                     "kinematics": "differential_drive",
-                    "horizon": 600,
+                    "horizon": 400,
                 },
                 "status": "ok",
                 "episodes_path": str(episodes),
@@ -1266,7 +1271,7 @@ def test_runtime_smoke_rejects_checkpoint_receipt_hash_mismatch(
 @pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
 def test_runtime_planned_counts_and_exclusions(tmp_path, monkeypatch, case):
     """Runtime admission keeps planned counts distinct from eligible evidence N."""
-    result, planners = _fixture(tmp_path, monkeypatch, seed=1001)
+    result, planners = _fixture(tmp_path, monkeypatch)
     planner = "guarded_ppo"
     path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
     row = json.loads(path.read_text())

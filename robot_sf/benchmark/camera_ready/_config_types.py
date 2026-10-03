@@ -207,6 +207,7 @@ class CampaignConfig:
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     snqi_v2_spec: SnqiV2Spec | None = None
+    snqi_v2_binding: dict[str, Any] | None = None
     stop_on_failure: bool = False
     export_publication_bundle: bool = True
     include_videos_in_publication: bool = False

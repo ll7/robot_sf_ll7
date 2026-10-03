@@ -1,7 +1,8 @@
 <!-- AI-GENERATED/NEEDS-REVIEW -->
 Recommend the physical wall fix on its demonstrated merits: wall exclusion alone
-recovers 35 crowded successes (235 to 270/300), without contacts or a lower pooled
-pedestrian minimum. However, do not deploy the wall-only configuration: it adds
+recovers 35 crowded successes (235 to 270/300), with zero contacts and a pooled
+pedestrian minimum of 1.593 m at the displayed precision. Raw CSV minima differ
+from off by about 0.000012 m; no separation noninferiority is claimed. However, do not deploy the wall-only configuration: it adds
 one empty-world failure, narrow hallway seed 1002, and fails the adoption gate.
 
 Recommend exactly these three opt-in settings together:

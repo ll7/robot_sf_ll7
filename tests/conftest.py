@@ -415,6 +415,8 @@ _FAST_FILE_PREFIXES = (
 _FAST_FILES = {
     "test_release_notes_gate.py",
     "test_release_notes_mint.py",
+    "test_bicycle_planner_physics.py",
+    "test_bicycle_creep_safety.py",
     "test_limited_reverse.py",
     "test_check_docs_evidence_integrity.py",
     # D-083 source-bound release admission records workers without reset or step.
@@ -1632,8 +1634,7 @@ def sample_baseline_data():
 
 
 # =====================================================================# Occupancy Grid Fixtures
-# ==============================================================
-
+# =======================================================
 
 @pytest.fixture
 def simple_grid_config():
@@ -1780,8 +1781,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 
 # =====================================================================# Shared Subprocess Mock Fixture
-# ==============================================================
-
+# =======================================================
 
 def _build_matcher_predicate(
     matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],

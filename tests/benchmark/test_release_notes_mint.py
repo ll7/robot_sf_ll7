@@ -16,6 +16,92 @@ sealed_repository = _sealed_repository
 write_text = partial(write_text, issue_ref="robot_sf#10110")
 
 
+@pytest.mark.parametrize(
+    "kind,expected", [("main", True), ("slice", True), ("runtime-smoke", False), ("0.0.7", False)]
+)
+def test_shared_release_detector_handles_real_native_and_archived_manifests(
+    sealed_repository, kind, expected
+):
+    """Release identifiers, rather than borrowed scenario names, select notes admission."""
+    import hashlib
+
+    from robot_sf.benchmark.release_notes import is_release_0_0_8
+    from tests.benchmark.test_sealed_source_pins import materialize
+
+    repo = sealed_repository
+    if kind in {"main", "slice"}:
+        manifest = materialize(repo, kind)
+    else:
+        filename = (
+            "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
+            if kind == "runtime-smoke"
+            else "benchmark_data_release_s30_h600.yaml"
+        )
+        path = repo / "configs/benchmarks/releases" / filename
+        if kind == "0.0.7":
+            # Exact manifest bytes retained at the published 0.0.7 Git tag.
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+                "6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182"
+            )
+        manifest = protocol.load_release_manifest(path)
+    archived = protocol.build_resolved_release_manifest(manifest, repository_root=repo)
+    assert "matrix_path" in archived["scenario"]
+    assert "scenario_matrix" not in archived
+    assert "scenario_matrix_path" not in archived
+    assert is_release_0_0_8(manifest) is expected
+    assert is_release_0_0_8(archived) is expected
+
+
+def test_documented_runtime_smoke_preflight_is_not_notes_gated(monkeypatch, capsys, tmp_path):
+    """The real v0_5 smoke can reach preflight without a production notes receipt."""
+    import json
+
+    from scripts.tools import run_benchmark_release as runner
+
+    root = Path(__file__).resolve().parents[2]
+    manifest_path = (
+        "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
+    )
+    # Admission and resolution use real files; only the ORCA availability check
+    # and downstream preflight workers are replaced. No reset or step is needed.
+    monkeypatch.setattr(runner, "check_orca_rvo2_preflight", lambda *_a: None)
+    monkeypatch.setattr(
+        runner, "_run_spawn_matrix_preflight", lambda **_kw: ({}, {"status": "valid"})
+    )
+    reached = []
+
+    def prepare(cfg, **kwargs):
+        reached.append(cfg)
+        return {
+            "campaign_id": kwargs["campaign_id"],
+            **{
+                key: tmp_path / key
+                for key in (
+                    "campaign_root",
+                    "validate_config_path",
+                    "preview_scenarios_path",
+                    "matrix_summary_json_path",
+                    "matrix_summary_csv_path",
+                )
+            },
+        }
+
+    def refuse_execution(*_a, **_kw):
+        pytest.fail("runtime-smoke preflight attempted campaign execution")
+
+    monkeypatch.setattr(runner, "prepare_campaign_preflight", prepare)
+    monkeypatch.setattr(runner, "run_campaign", refuse_execution)
+    monkeypatch.chdir(root)
+    # The manifest and mode match docs/RELEASE.md's documented preflight command.
+    exit_code = runner.main(["--manifest", manifest_path, "--mode", "preflight"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload.get("status") != "release_notes_refused", payload
+    assert exit_code == 0, payload
+    assert len(reached) == 1
+    assert payload["manifest_validation"]["status"] == "valid"
+    assert "release_notes_gate" not in payload["resolved_manifest"]
+
+
 def test_production_mint_refuses_missing_disclosure(sealed_repository):
     repo = sealed_repository
     notes = repo / "docs/release/0.0.8/release_notes.md"

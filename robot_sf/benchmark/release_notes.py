@@ -298,7 +298,7 @@ def is_release_0_0_8(manifest: Any) -> bool:
     """Recognize the main release and width slice from live or archived metadata.
 
     Returns:
-        Whether any retained release identifier names the 0.0.8 contract.
+        Whether the release kind, tag or campaign filename names the 0.0.8 contract.
     """
     from robot_sf.benchmark.release_protocol import DOORWAY_RELEASE_KINDS  # noqa: PLC0415
 
@@ -313,8 +313,6 @@ def is_release_0_0_8(manifest: Any) -> bool:
         or any(
             "0_0_8" in Path(str(field(name))).name
             for name in (
-                "scenario_matrix_path",
-                "scenario_matrix",
                 "canonical_campaign_config_path",
                 "canonical_campaign_config",
             )

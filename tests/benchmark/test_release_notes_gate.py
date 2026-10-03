@@ -349,24 +349,3 @@ def test_diagnostic_notes_exemption_requires_consistent_run_markers(notes_repo, 
         assert len(violations) == 1 and "diagnostic exemption disagrees" in violations[0]
         with pytest.raises(ValueError, match="diagnostic exemption disagrees"):
             publication._release_notes_files(payload, notes_repo, resolved)
-
-
-@pytest.mark.parametrize(
-    "fields,expected",
-    [
-        ({"release_kind": "benchmark-doorway-width-slice.v1"}, True),
-        ({"release_kind": "benchmark-width-slice"}, True),
-        ({"release_tag": "release-0.0.8-final"}, True),
-        ({"scenario_matrix": "scenarios_0_0_8.yaml"}, True),
-        ({"scenario_matrix_path": Path("scenarios_0_0_8.yaml")}, True),
-        ({"canonical_campaign_config": "campaign_0_0_8.yaml"}, True),
-        ({"canonical_campaign_config_path": Path("campaign_0_0_8.yaml")}, True),
-        ({"canonical_campaign_config": "paper_experiment_matrix_v2_h600_s30.yaml"}, False),
-        ({}, False),
-    ],
-)
-def test_shared_release_detector_handles_native_and_archived_fields(fields, expected):
-    from robot_sf.benchmark.release_notes import is_release_0_0_8
-
-    assert is_release_0_0_8(fields) is expected
-    assert is_release_0_0_8(SimpleNamespace(**fields)) is expected

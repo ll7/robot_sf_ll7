@@ -51,12 +51,15 @@ three-wheel platform without those physical specifications. #10068 was open
 at the pinned base. #10093 had two comments when initially retrieved; no
 separate literature-notes comment was present, so explicit task parameters govern.
 
-With no bicycle selection, differential and holonomic source paths and the
-release identity inputs, golden oracles and ecosystem contracts keep their
-bytes. The acceptance receipt compares 207 files to original base
-`879f75b69eb93ca16006f2019ee5c85c7aa724dd`, repeats 240 differential/holonomic
-command/action/motion samples against reviewed head `44c386d6`, and runs the
-release identity/ecosystem/golden tests. No release episodes or sealed seeds run.
+With no bicycle selection, default DD/holonomic paths are byte-identical to
+current main. Round 2 compares all 207 release/config/schema/golden files against
+merged main `007299e2a`; all match. Three upstream changes since round 1 are
+inherited (release template, runtime-smoke template and release-tag identity).
+The historical round-1 receipt compares those 207 files to original base
+`879f75b6`. The 240 DD/holonomic command/action/motion samples match reviewed
+head `9ac03d75`, current main and round 2 byte-for-byte. Release identity,
+ecosystem contract and golden tests supplement this proof. No release episodes
+or sealed seeds run.
 
 ## Test value and red-to-green proof
 
@@ -195,7 +198,9 @@ Wilson intervals are descriptive episode proportions; shared seeds/planners
 are correlated, so these are not independent-seed ranking intervals.
 No publication, release-admission or trained-bicycle-support claim follows.
 
-Run `run_bicycle_probe.py --prepare`, then partition `--worker I --workers N`
+For the historical matrix, use its recorded producer `b81d5823`; current
+policy projection intentionally removes its upstream creep. Run
+`run_bicycle_probe.py --prepare`, then partition `--worker I --workers N`
 with `--arms DD,T60-30,T60-45,T60-30-on,T60-45-on`; use `--arms BI-off,BI-on
 --probe 1` for the same-geometry legacy controls. Set `BIKEFIX_OUTPUT` for each
 corpus and `PYTHONPATH=.:fast-pysf` with the project Python. Physical reachability

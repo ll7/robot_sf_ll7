@@ -413,7 +413,6 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
-    "test_bicycle_drive.py",  # Closed-form motion/clipping; no environment or campaign.
     "test_bicycle_planner_physics.py",
     "test_bicycle_creep_safety.py",
     "test_limited_reverse.py",

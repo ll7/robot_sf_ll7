@@ -1,0 +1,1695 @@
+{
+  "mode": "full",
+  "summary": {
+    "name": "pytest",
+    "errors": "3",
+    "failures": "276",
+    "skipped": "73",
+    "tests": "40949",
+    "time": "2370.017",
+    "timestamp": "2026-10-03T07:58:51.229795+02:00",
+    "hostname": "auxme-imech036"
+  },
+  "failures": [
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_s20_preflight_stays_no_claim_but_allows_table_review",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_s20_preflight_stays_no_claim_but_allows_table_review",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_verified_completed_s20_never_renders_blocked_until_run",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_verified_completed_s20_never_renders_blocked_until_run",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_expected_headline_grid_missing_cell_blocks_packet",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_expected_headline_grid_missing_cell_blocks_packet",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_expected_headline_planner_rows_block_missing_planner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_expected_headline_planner_rows_block_missing_planner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_expected_headline_scenario_rows_block_missing_scenario",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_expected_headline_scenario_rows_block_missing_scenario",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_underpowered_missing_grid_remains_blocked_not_reviewable",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_underpowered_missing_grid_remains_blocked_not_reviewable",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_adjacent_ci_overlap_downgrades_strict_rank_claim",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_adjacent_ci_overlap_downgrades_strict_rank_claim",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_underpowered_adjacent_rank_statement_is_diagnostic_only",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_underpowered_adjacent_rank_statement_is_diagnostic_only",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_invalid_rank_metric_blocks_metric_claims",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_invalid_rank_metric_blocks_metric_claims",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_fail_closed_row_status_exclusion_blocks_packet",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_fail_closed_row_status_exclusion_blocks_packet",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_cli_dry_run_writes_decision_packet_and_can_fail_on_blocker",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_cli_dry_run_writes_decision_packet_and_can_fail_on_blocker",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_cli_expected_planners_from_config_blocks_missing_planner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_headline_ci_rank_stability_report_issue_3216.py::test_cli_expected_planners_from_config_blocks_missing_planner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_campaign_wrapper_preflight_only_never_launches_campaign",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1823, in <module>\n      raise SystemExit(main())\n                       ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1791, in main\n      report = build_report(\n               ^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1281, in build_report\n      cells = build_cell_results(\n              ^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 632, in build_cell_results\n      stats = _stats_for_vals(\n              ^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/seed_variance.py\", line 302, in _stats_for_vals\n      ci_low, ci_high = _bootstrap_mean_ci(\n                        ^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/seed_variance.py\", line 254, in _bootstrap_mean_ci\n      rng = np.random.default_rng(bootstrap_seed)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['bash', 'scripts/benchmark/run_issue3216_headline_campaign.sh', '--preflight-only'], returncode...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_campaign_wrapper_preflight_honors_config_env_override",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1823, in <module>\n      raise SystemExit(main())\n                       ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1791, in main\n      report = build_report(\n               ^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1281, in build_report\n      cells = build_cell_results(\n              ^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 632, in build_cell_results\n      stats = _stats_for_vals(\n              ^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/seed_variance.py\", line 302, in _stats_for_vals\n      ci_low, ci_high = _bootstrap_mean_ci(\n                        ^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/seed_variance.py\", line 254, in _bootstrap_mean_ci\n      rng = np.random.default_rng(bootstrap_seed)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['bash', 'scripts/benchmark/run_issue3216_headline_campaign.sh', '--preflight-only'], returncode...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_build_social_compliance_cross_planner_report_issue_6474::test_self_test_recovers_the_known_answer_protocol",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_build_social_compliance_cross_planner_report_issue_6474.py::test_self_test_recovers_the_known_answer_protocol",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_preflight_passes_on_frozen_powered_contract",
+      "kind": "failure",
+      "message": "AssertionError: blockers:\n    input provenance SHA-256 mismatch for 'algorithm_metadata' (contract='8b4bb11ddf651b079f3e0ad4a2975aa982cadaf00ff7f82ef620ae193970f908', recomputed='bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7')\nassert False\n +  where False = Issue5303PoweredPreflightResult(contract_path='configs/adversarial/issue_5303_search_promotion_contract_v2.yaml', read...issue5305_classic_group_crossing_medium_fc6bf8300e51']}, 'receipt_eligible_total': 8, 'scheduled_identity_count': 768}).ready",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_per_cell_ci_reuses_canonical_seed_variance",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_per_cell_ci_reuses_canonical_seed_variance",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_classification_diagnostic_on_small_seed_budget",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_classification_diagnostic_on_small_seed_budget",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_classification_blocked_until_run_when_no_counted_cells",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_classification_blocked_until_run_when_no_counted_cells",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_paper_grade_seed_budget_still_blocked_until_slurm_run",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_paper_grade_seed_budget_still_blocked_until_slurm_run",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_report_records_canonical_owners_and_git_head",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_report_records_canonical_owners_and_git_head",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_report_can_use_stable_generation_timestamp",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_report_can_use_stable_generation_timestamp",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_markdown_renders_without_error",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_markdown_renders_without_error",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_adjacent_rank_claims_downgrade_overlapping_ci",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_adjacent_rank_claims_downgrade_overlapping_ci",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_adjacent_rank_claims_mark_ci_separable",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_adjacent_rank_claims_mark_ci_separable",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_decision_packet_blocks_small_seed_manifest_table_update",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_decision_packet_blocks_small_seed_manifest_table_update",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_decision_packet_keeps_s30_review_open_for_adjacent_overlap",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_decision_packet_keeps_s30_review_open_for_adjacent_overlap",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_decision_packet_can_clear_s30_by_local_preflight_only",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_decision_packet_can_clear_s30_by_local_preflight_only",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_invalid_rank_metric_blocks_adjacent_claims_and_table_review",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_invalid_rank_metric_blocks_adjacent_claims_and_table_review",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_dry_run_fixture_stays_diagnostic_and_fail_closed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_dry_run_fixture_stays_diagnostic_and_fail_closed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_dry_run_cli_writes_report_without_rows_file",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_dry_run_cli_writes_report_without_rows_file",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_dry_run_cli_can_fail_closed_invalid_rank_metric",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_dry_run_cli_can_fail_closed_invalid_rank_metric",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_cli_decision_blocker_gate_fails_after_writing_report",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_cli_decision_blocker_gate_fails_after_writing_report",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_cli_decision_blocker_gate_passes_clear_local_preflight",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_cli_decision_blocker_gate_passes_clear_local_preflight",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_decision_packet_blocks_only_s30_overlap_without_manuscript_blocker",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_decision_packet_blocks_only_s30_overlap_without_manuscript_blocker",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_cli_fail_on_blocker_triggers_when_only_s30_needs_review",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_cli_fail_on_blocker_triggers_when_only_s30_needs_review",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_job_13198_packet_auto_blocks_snqi_rank_claims",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_job_13198_packet_auto_blocks_snqi_rank_claims",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_constraints_first_profile_keeps_snqi_warning_diagnostic_only",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_constraints_first_profile_keeps_snqi_warning_diagnostic_only",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_constraints_first_profile_blocks_missing_required_metrics",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_constraints_first_profile_blocks_missing_required_metrics",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_constraints_first_profile_flags_partial_metric_coverage",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_constraints_first_profile_flags_partial_metric_coverage",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_headline_ci_rank_stability_report_issue_3216::test_decision_packet_s20_high_overlap_clears_s30_local_preflight",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_headline_ci_rank_stability_report_issue_3216.py::test_decision_packet_s20_high_overlap_clears_s30_local_preflight",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_cli_check_and_identity_emission",
+      "kind": "failure",
+      "message": "AssertionError: assert 1 == 0\n +  where 1 = <function main at 0x7b7b11eae020>(['--repo-root', '/home/luttkule/lanes/pedcontact/repo'])",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_dump_preflight_payload",
+      "kind": "failure",
+      "message": "assert False is True",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.benchmark.test_heterogeneous_rank_sensitivity_characterization::test_same_seed_is_bit_for_bit_deterministic",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_heterogeneous_rank_sensitivity_characterization.py::test_same_seed_is_bit_for_bit_deterministic",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_hybrid_rule_v4_doorway_regression::test_v4_avoids_the_v3_doorway_pedestrian_collision[classic_doorway_high-111]",
+      "kind": "failure",
+      "message": "IndexError: list index out of range",
+      "disposition": "guard refusal before reset; verified wrapped/empty-row witness, recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_hybrid_rule_v4_doorway_regression::test_v4_avoids_the_v3_doorway_pedestrian_collision[classic_doorway_low-120]",
+      "kind": "failure",
+      "message": "IndexError: list index out of range",
+      "disposition": "guard refusal before reset; verified wrapped/empty-row witness, recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_issue_5409_paired_horizon_report::test_valid_pair_emits_deltas_and_seed_uncertainty",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_issue_5409_paired_horizon_report.py::test_valid_pair_emits_deltas_and_seed_uncertainty",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_issue_5409_paired_horizon_report::test_reviewed_rerun_ids_and_enforced_staging_receipts_are_supported",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_issue_5409_paired_horizon_report.py::test_reviewed_rerun_ids_and_enforced_staging_receipts_are_supported",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_issue_5498_native_ppo_slice::test_ppo_only_manifest_slice_verifies_against_subset",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_issue_5498_native_ppo_slice.py::test_ppo_only_manifest_slice_verifies_against_subset",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_map_runner_native_command::test_native_command_smoke_produces_schema_valid_row",
+      "kind": "failure",
+      "message": "assert 0 >= 1",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.benchmark.test_pre_specified_rank_reversal_test::test_same_seed_is_deterministic",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_pre_specified_rank_reversal_test.py::test_same_seed_is_deterministic",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_distributions::test_save_distributions_writes_pngs",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_distributions.py::test_save_distributions_writes_pngs",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_exact_repeat_executor::test_native_ppo_target_runs_deterministically_with_real_runner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_target_runs_deterministically_with_real_runner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_exact_repeat_executor::test_native_ppo_runs_offline_after_model_preflight",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ci.test_self_hosted_routing::test_container_setup_keeps_ephemeral_and_no_host_mounts",
+      "kind": "failure",
+      "message": "assert '--cpus 4 --memory 8g' in '#!/usr/bin/env bash\\n# Build and supervise disposable, repository-scoped GitHub Actions runners.\\nset -euo pipefail\\n...  container) [[ $# -eq 2 ]] || exit 2; run_container \"$2\" ;;\\n  -h|--help) usage ;;\\n  *) usage >&2; exit 2 ;;\\nesac\\n'",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.classic_interactions.test_headless_safety::test_headless_dummy_driver_runs",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_headless_safety.py::test_headless_dummy_driver_runs",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_logging_toggle::test_logging_toggle_reduces_output",
+      "kind": "failure",
+      "message": "AssertionError: Expected logging-disabled output to be shorter (TDD failing until logging toggle implemented).\nassert 0 < 0\n +  where 0 = len('')\n +  and   0 = len('')",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.classic_interactions.test_performance_smoke::test_demo_runtime_under_threshold",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_performance_smoke.py::test_demo_runtime_under_threshold",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_recording_skip_graceful::test_recording_skip_graceful",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_recording_skip_graceful.py::test_recording_skip_graceful",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_recording_success::test_recording_creates_mp4_when_enabled",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_recording_success.py::test_recording_creates_mp4_when_enabled",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_reward_integration::test_reward_integration_episode_present",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_reward_integration.py::test_reward_integration_episode_present",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_scenario_selection::test_valid_scenario_selection",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_scenario_selection.py::test_valid_scenario_selection",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_seed_determinism::test_seed_order_reproducible",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_seed_determinism.py::test_seed_order_reproducible",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_smoke_demo::test_smoke_run_demo_produces_episode_summaries",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_smoke_demo.py::test_smoke_run_demo_produces_episode_summaries",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.classic_interactions.test_summary_schema::test_episode_summary_schema",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/classic_interactions/test_summary_schema.py::test_episode_summary_schema",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.baselines.test_random_policy::test_random_planner_seed_reproducibility_velocity_mode",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/baselines/test_random_policy.py::test_random_planner_seed_reproducibility_velocity_mode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.baselines.test_random_policy::test_random_planner_accepts_dict_observation_without_obstacles",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/baselines/test_random_policy.py::test_random_planner_accepts_dict_observation_without_obstacles",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.dev.test_issue_7330_assert_inventory::test_current_main_residuals_are_complete_and_internal",
+      "kind": "failure",
+      "message": "scripts.dev.audit_production_asserts.InventoryError: unreviewed production assertion(s): robot_sf/planner/predictive_mppi.py | PredictiveMPPIAdapter._batch_sequence_rollout | isinstance(clearance, np.ndarray); robot_sf/planner/predictive_mppi.py | PredictiveMPPIAdapter._sequence_rollout | isinstance(clearance, np.ndarray); robot_sf/planner/risk_dwa.py | RiskDWAPlannerAdapter._rollout_min_clearance | isinstance(ped_dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._collision_cost | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._collision_cost | isinstance(distances, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_clearance | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_clearance | isinstance(distances, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_predicted_distance | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._score_action_sequence | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._ttc_penalty | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._ttc_penalty | isinstance(valid_slice, np.ndarray)",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7330_assert_inventory::test_json_and_markdown_rendering_is_deterministic",
+      "kind": "failure",
+      "message": "scripts.dev.audit_production_asserts.InventoryError: unreviewed production assertion(s): robot_sf/planner/predictive_mppi.py | PredictiveMPPIAdapter._batch_sequence_rollout | isinstance(clearance, np.ndarray); robot_sf/planner/predictive_mppi.py | PredictiveMPPIAdapter._sequence_rollout | isinstance(clearance, np.ndarray); robot_sf/planner/risk_dwa.py | RiskDWAPlannerAdapter._rollout_min_clearance | isinstance(ped_dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._collision_cost | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._collision_cost | isinstance(distances, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_clearance | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_clearance | isinstance(distances, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_predicted_distance | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._score_action_sequence | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._ttc_penalty | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._ttc_penalty | isinstance(valid_slice, np.ndarray)",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7330_assert_inventory::test_detached_source_reports_detached_ref",
+      "kind": "failure",
+      "message": "scripts.dev.audit_production_asserts.InventoryError: unreviewed production assertion(s): robot_sf/planner/predictive_mppi.py | PredictiveMPPIAdapter._batch_sequence_rollout | isinstance(clearance, np.ndarray); robot_sf/planner/predictive_mppi.py | PredictiveMPPIAdapter._sequence_rollout | isinstance(clearance, np.ndarray); robot_sf/planner/risk_dwa.py | RiskDWAPlannerAdapter._rollout_min_clearance | isinstance(ped_dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._collision_cost | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._collision_cost | isinstance(distances, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_clearance | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_clearance | isinstance(distances, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._min_predicted_distance | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._score_action_sequence | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._ttc_penalty | isinstance(dist, np.ndarray); robot_sf/planner/socnav_prediction.py | PredictionPlannerAdapter._ttc_penalty | isinstance(valid_slice, np.ndarray)",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7330_assert_inventory::test_cli_writes_both_issue_outputs",
+      "kind": "failure",
+      "message": "assert 2 == 0",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_current_namespace_is_complete_and_routes_fail_closed",
+      "kind": "error",
+      "message": "failed on setup with \"scripts.dev.audit_benchmark_namespace.InventoryError: benchmark namespace classification manifest drift; missing classification rows for direct children: infeasible_probe_safe_failure.py\"",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_known_facades_and_clusters_are_classified",
+      "kind": "error",
+      "message": "failed on setup with \"scripts.dev.audit_benchmark_namespace.InventoryError: benchmark namespace classification manifest drift; missing classification rows for direct children: infeasible_probe_safe_failure.py\"",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_serialized_outputs_are_deterministic",
+      "kind": "error",
+      "message": "failed on setup with \"scripts.dev.audit_benchmark_namespace.InventoryError: benchmark namespace classification manifest drift; missing classification rows for direct children: infeasible_probe_safe_failure.py\"",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_detached_worktree_uses_explicit_reference",
+      "kind": "failure",
+      "message": "FileNotFoundError: [Errno 2] No such file or directory: '/home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_detached_worktree_uses_ex0/detached_namespace_inventory.json'",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_cli_writes_json_and_markdown",
+      "kind": "failure",
+      "message": "assert 2 == 0",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.dev.test_software_candidate_materialization::test_real_materialized_candidate_build_has_only_supported_extras",
+      "kind": "failure",
+      "message": "AssertionError: candidate helper failed with exit code 1: /home/luttkule/lanes/pedcontact/repo/.venv/bin/python /home/luttkule/lanes/pedcontact/repo/scripts/dev/software_candidate_manifest.py materialize-source --repo-root /home/luttkule/lanes/pedcontact/repo --candidate-root /home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_real_materialized_candida0/candidate --source-sha b4aafc536a6b9c7b940d171815ed3ac1e3983263 --policy /home/luttkule/lanes/pedcontact/repo/scripts/validation/software_candidate_policy.v1.json --report /home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_real_materialized_candida0/materialization.json\nstdout:\n\nstderr:\nFAIL: source checkout has tracked changes; materialization requires the reviewed clean tree",
+      "disposition": "requires investigation"
+    },
+    {
+      "node": "tests.dev.test_software_candidate_materialization::test_materialized_candidate_entrypoints_resist_hostile_regular_scripts_package",
+      "kind": "failure",
+      "message": "AssertionError: candidate helper failed with exit code 1: /home/luttkule/lanes/pedcontact/repo/.venv/bin/python /home/luttkule/lanes/pedcontact/repo/scripts/dev/software_candidate_manifest.py materialize-source --repo-root /home/luttkule/lanes/pedcontact/repo --candidate-root /home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_materialized_candidate_en0/candidate --source-sha b4aafc536a6b9c7b940d171815ed3ac1e3983263 --policy /home/luttkule/lanes/pedcontact/repo/scripts/validation/software_candidate_policy.v1.json --report /home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_materialized_candidate_en0/materialization.json\nstdout:\n\nstderr:\nFAIL: source checkout has tracked changes; materialization requires the reviewed clean tree",
+      "disposition": "requires investigation"
+    },
+    {
+      "node": "tests.docs.test_sphinx_strict_build::test_real_curated_strict_build_passes",
+      "kind": "failure",
+      "message": "OSError: [Errno 7] Argument list too long: '/home/luttkule/lanes/pedcontact/repo/.venv/bin/python'",
+      "disposition": "requires investigation"
+    },
+    {
+      "node": "tests.examples.test_examples_run::test_example_runs_without_error[benchmarks/demo_aggregate.py]",
+      "kind": "failure",
+      "message": "Failed: benchmarks/demo_aggregate.py exited with code 1 after 8.41s.\nstdout tail:\nRunning a tiny batch to produce episodes.jsonl ...\nComputing grouped aggregates with bootstrap CIs ...\n---\nstderr tail:\nTraceback (most recent call last):\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/benchmarks/demo_aggregate.py\", line 122, in <module>\n    main()\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/benchmarks/demo_aggregate.py\", line 95, in main\n    summary = compute_aggregates_with_ci(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/aggregate.py\", line 1517, in compute_aggregates_with_ci\n    _attach_ci_for_group(\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/aggregate.py\", line 1243, in _attach_ci_for_group\n    lo_hi_mean = _bootstrap_ci(\n                 ^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/aggregate.py\", line 1175, in _bootstrap_ci\n    rng = np.random.default_rng(seed)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n    return _original(fence.checked(value),*args,**kwargs)\n                     ^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n    raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_aggregate_characterization::test_compute_aggregates_with_ci_pins_pairwise_bootstrap_shape",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_aggregate_characterization.py::test_compute_aggregates_with_ci_pins_pairwise_bootstrap_shape",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.examples.test_examples_run::test_example_runs_without_error[advanced/01_backend_selection.py]",
+      "kind": "failure",
+      "message": "Failed: advanced/01_backend_selection.py exited with code 1 after 6.61s.\nstdout tail:\n\n============================================================\nBackend Selection Demo\n============================================================\n\nDemonstrates swapping simulation backends via config\nwithout changing environment code.\n\n\n=== Demo: fast-pysf backend ===\n---\nstderr tail:\nTraceback (most recent call last):\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/advanced/01_backend_selection.py\", line 75, in <module>\n    demo_fast_pysf_backend()\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/advanced/01_backend_selection.py\", line 31, in demo_fast_pysf_backend\n    obs, _info = env.reset(seed=123)\n                 ^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/robot_env.py\", line 1240, in reset\n    with global_reset_seed(seed):\n         ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/env_util.py\", line 76, in global_reset_seed\n    random.seed(int(seed))\n  File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n    return _original(fence.checked(value),*args,**kwargs)\n                     ^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n    raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.dev.test_check_figure_render_recurrence::test_real_registry_recurrence_passes",
+      "kind": "failure",
+      "message": "AssertionError: {'schema': 'issue_6770_figure_render_recurrence_report.v1', 'generated_at': '2026-10-03T06:21:26+00:00', 'source_commit': 'b4aafc536a6b9c7b940d171815ed3ac1e3983263', 'registry_source_commit': '4bb3a5f9a429a63a64411f8374062be5128bf5a8', ...}\nassert 1 == 0",
+      "disposition": "requires investigation"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_both_arm_traces_validate_against_schema[static_recenter_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 113 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[static_recenter_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_both_arm_traces_validate_against_schema[topology_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[topology_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_activation_diagnostic_reported_per_arm[static_recenter_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 113 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[static_recenter_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_activation_diagnostic_reported_per_arm[topology_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[topology_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.examples.test_examples_run::test_example_runs_without_error[occupancy_reward_shaping.py]",
+      "kind": "failure",
+      "message": "Failed: occupancy_reward_shaping.py exited with code 1 after 7.48s.\nstdout tail:\n\n---\nstderr tail:\nTraceback (most recent call last):\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/occupancy_reward_shaping.py\", line 66, in <module>\n    main()\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/occupancy_reward_shaping.py\", line 39, in main\n    obs, _info = env.reset(seed=123)\n                 ^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/robot_env.py\", line 1240, in reset\n    with global_reset_seed(seed):\n         ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/env_util.py\", line 76, in global_reset_seed\n    random.seed(int(seed))\n  File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n    return _original(fence.checked(value),*args,**kwargs)\n                     ^^^^^^^^^^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n    raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_panels_png_and_pdf_produced[static_recenter_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 113 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[static_recenter_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_panels_png_and_pdf_produced[topology_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[topology_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_static_recenter_determinism",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 113 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_static_recenter_determinism",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_classification_matches_observed_delta[static_recenter_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 113 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[static_recenter_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_recenter_topology_panels_issue_2227::test_classification_matches_observed_delta[topology_result]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[topology_result]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.analysis.test_run_issue3216_rank_stability::test_verified_harvest_runner_writes_reproducible_provenance",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1823, in <module>\n      raise SystemExit(main())\n                       ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1791, in main\n      report = build_report(\n               ^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 1281, in build_report\n      cells = build_cell_results(\n              ^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py\", line 632, in build_cell_results\n      stats = _stats_for_vals(\n              ^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/seed_variance.py\", line 302, in _stats_for_vals\n      ci_low, ci_high = _bootstrap_mean_ci(\n                        ^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/seed_variance.py\", line 254, in _bootstrap_mean_ci\n      rng = np.random.default_rng(bootstrap_seed)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/lanes/pedcontact/repo/.venv/bin/python', '/home/luttkule/lanes/pedcontact/repo/...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.examples.test_examples_run::test_example_runs_without_error[advanced/41_artifact_preservation.py]",
+      "kind": "failure",
+      "message": "Failed: advanced/41_artifact_preservation.py exited with code 2 after 0.10s.\nstdout tail:\n\n---\nstderr tail:\nartifact-preservation: not_fresh: walkthrough output must be empty",
+      "disposition": "requires investigation"
+    },
+    {
+      "node": "tests.examples.test_public_api_quickstart::test_public_api_quickstart_cli_main",
+      "kind": "failure",
+      "message": "assert 1 == 0",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.benchmark.test_robot_speed_band_campaign::test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path[baseline-2.0-1.0-2.0]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_robot_speed_band_campaign.py::test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path[baseline-2.0-1.0-2.0]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_robot_speed_band_campaign::test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path[robot_speed_band__bicycle_3_0_mps_nominal-3.0-1.5-3.0]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_robot_speed_band_campaign.py::test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path[robot_speed_band__bicycle_3_0_mps_nominal-3.0-1.5-3.0]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_robot_speed_band_campaign::test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path[robot_speed_band__bicycle_4_0_mps_micromobility-4.0-2.0-4.0]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_robot_speed_band_campaign.py::test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path[robot_speed_band__bicycle_4_0_mps_micromobility-4.0-2.0-4.0]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_robot_speed_band_campaign::test_run_episode_records_speed_band_metadata_with_actuation_envelope",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_robot_speed_band_campaign.py::test_run_episode_records_speed_band_metadata_with_actuation_envelope",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.factories.test_edge_cases_recording::test_pedestrian_explicit_opt_out_respected",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/factories/test_edge_cases_recording.py::test_pedestrian_explicit_opt_out_respected",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.gym_env.test_multi_robot_gymnasium_contract::test_multi_robot_observation_space_contains_reset_and_step_observations",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/gym_env/test_multi_robot_gymnasium_contract.py::test_multi_robot_observation_space_contains_reset_and_step_observations",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.gym_env.test_multi_robot_gymnasium_contract::test_public_robot_envs_pass_gymnasium_checker_with_deterministic_lidar",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/gym_env/test_multi_robot_gymnasium_contract.py::test_public_robot_envs_pass_gymnasium_checker_with_deterministic_lidar",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_runner_native_command_arm::test_native_command_per_episode_runs_and_validates",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_runner_native_command_arm.py::test_native_command_per_episode_runs_and_validates",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_runner_native_command_arm::test_native_row_accepted_by_issue_5416_analyzer_diagnostics",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_runner_native_command_arm.py::test_native_row_accepted_by_issue_5416_analyzer_diagnostics",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_replay_noop_fidelity_issue_8568::test_nominated_case_snapshot_restore_preserves_noop_continuation",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 115 refused; node=tests/benchmark/test_replay_noop_fidelity_issue_8568.py::test_nominated_case_snapshot_restore_preserves_noop_continuation",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_s20_s30_seed_budget_bundle_issue_1554::test_ok_bundle_shape_and_bootstrap_wiring",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_s20_s30_seed_budget_bundle_issue_1554.py::test_ok_bundle_shape_and_bootstrap_wiring",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_s20_s30_seed_budget_bundle_issue_1554::test_seed_resampling_rank_flip_present",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_s20_s30_seed_budget_bundle_issue_1554.py::test_seed_resampling_rank_flip_present",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_s20_s30_seed_budget_bundle_issue_1554::test_snqi_ranking_stability_uses_canonical_bootstrap",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_s20_s30_seed_budget_bundle_issue_1554.py::test_snqi_ranking_stability_uses_canonical_bootstrap",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_s20_s30_seed_budget_bundle_issue_1554::test_s30_tier_detection",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_s20_s30_seed_budget_bundle_issue_1554.py::test_s30_tier_detection",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_check_config_abs_paths.TestCheckConfigAbsPaths::test_repo_baseline_is_clean",
+      "kind": "failure",
+      "message": "assert 1 == 0\n +  where 1 = SystemExit(1).code\n +    where SystemExit(1) = <ExceptionInfo SystemExit(1) tblen=2>.value",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.integration.test_ppo_pretraining_pipeline::test_collect_trajectories_filters_to_policy_observation_space",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/integration/test_ppo_pretraining_pipeline.py::test_collect_trajectories_filters_to_policy_observation_space",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_random_baseline_smoke::test_random_velocity_mode_step",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/integration/test_random_baseline_smoke.py::test_random_velocity_mode_step",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_sf_smoke.TestSocialForceIntegration::test_metadata_for_episode_output",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/integration/test_sf_smoke.py::TestSocialForceIntegration::test_metadata_for_episode_output",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_single_episode_run::test_single_episode_with_metrics",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/integration/test_single_episode_run.py::test_single_episode_with_metrics",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_train_expert_ppo::test_expert_training_dry_run",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/integration/test_train_expert_ppo.py::test_expert_training_dry_run",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_train_expert_ppo::test_issue_857_horizon100_surface_truncates_empty_map_at_step_100",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/integration/test_train_expert_ppo.py::test_issue_857_horizon100_surface_truncates_empty_map_at_step_100",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.integration.test_train_expert_ppo::test_issue_708_predictive_foresight_override_enables_predictive_observation",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/integration/test_train_expert_ppo.py::test_issue_708_predictive_foresight_override_enables_predictive_observation",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.sim.test_dummy_backend::test_dummy_factory_exposes_robot_env_contract",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/sim/test_dummy_backend.py::test_dummy_factory_exposes_robot_env_contract",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.sim.test_pedestrian_desired_speed::test_typical_tier_decouples_desired_speed_from_spawn",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/sim/test_pedestrian_desired_speed.py::test_typical_tier_decouples_desired_speed_from_spawn",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.nav.test_free_space_sampling::test_points_reject_obstacles",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/nav/test_free_space_sampling.py::test_points_reject_obstacles",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.nav.test_spawn_clearance_issue_9725::test_robot_start_exclusions_keep_footprint_off_walls",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 116 refused; node=tests/nav/test_spawn_clearance_issue_9725.py::test_robot_start_exclusions_keep_footprint_off_walls",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.nav.test_spawn_clearance_issue_9725::test_respawn_excludes_robot_footprint",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 115 refused; node=tests/nav/test_spawn_clearance_issue_9725.py::test_respawn_excludes_robot_footprint",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_aggregate::test_compute_aggregates_with_ci_shape_and_determinism",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_aggregate.py::test_compute_aggregates_with_ci_shape_and_determinism",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_aggregate::test_compute_aggregates_with_ci_emits_pairwise_contrasts_for_planted_effect",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_aggregate.py::test_compute_aggregates_with_ci_emits_pairwise_contrasts_for_planted_effect",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_aggregate::test_compute_aggregates_with_ci_diagnostic_cross_track_namespaces_groups",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_aggregate.py::test_compute_aggregates_with_ci_diagnostic_cross_track_namespaces_groups",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_ped_archetypes::test_populate_homogeneous_default_unchanged",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/ped_npc/test_ped_archetypes.py::test_populate_homogeneous_default_unchanged",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_ped_archetypes::test_populate_with_archetypes_scales_per_pedestrian_speed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/ped_npc/test_ped_archetypes.py::test_populate_with_archetypes_scales_per_pedestrian_speed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_ped_archetypes::test_populate_with_archetypes_is_seed_deterministic",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/ped_npc/test_ped_archetypes.py::test_populate_with_archetypes_is_seed_deterministic",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_spawn_footprint_validation::test_route_sampling_places_peds_without_robot_check",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/ped_npc/test_spawn_footprint_validation.py::test_route_sampling_places_peds_without_robot_check",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_spawn_sampler_capture::test_capture_records_assignments_and_decisions_on_fixed_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/ped_npc/test_spawn_sampler_capture.py::test_capture_records_assignments_and_decisions_on_fixed_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_spawn_sampler_capture::test_capture_is_deterministic_for_fixed_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/ped_npc/test_spawn_sampler_capture.py::test_capture_is_deterministic_for_fixed_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.ped_npc.test_spawn_sampler_capture::test_capture_disabled_by_default_leaves_population_unchanged",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/ped_npc/test_spawn_sampler_capture.py::test_capture_disabled_by_default_leaves_population_unchanged",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_baseline_ppo_smoke::test_ppo_baseline_smoke_runs_or_skips",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_baseline_ppo_smoke.py::test_ppo_baseline_smoke_runs_or_skips",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_baseline_stats::test_run_and_compute_baseline",
+      "kind": "failure",
+      "message": "robot_sf.benchmark.errors.EpisodeRecordInputError: Episode JSONL input is not suitable for benchmark aggregation; missing_paths=1; malformed_lines=0; missing=[/home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw0/test_run_and_compute_baseline0/episodes.jsonl]",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_benchmark_repro_check::test_minimal_simple_policy_run_matches_current_aggregate_contract",
+      "kind": "failure",
+      "message": "AssertionError: assert 'failed' == 'passed'\n  \n  - passed\n  + failed",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.planner.test_diagnostics_conformance::test_protocol_member_diagnostics_payload[robot_sf.planner.guarded_ppo-GuardedPPOAdapter]",
+      "kind": "failure",
+      "message": "AttributeError: 'GuardedPPOAdapter' object has no attribute 'fallback_adapter'",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.planner.test_diagnostics_conformance::test_protocol_member_diagnostics_payload[robot_sf.planner.predictive_mppi-PredictiveMPPIAdapter]",
+      "kind": "failure",
+      "message": "AttributeError: 'PredictiveMPPIAdapter' object has no attribute '_no_admissible_command'",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.planner.test_diagnostics_conformance::test_protocol_member_diagnostics_payload[robot_sf.planner.risk_dwa-RiskDWAPlannerAdapter]",
+      "kind": "failure",
+      "message": "AttributeError: 'RiskDWAPlannerAdapter' object has no attribute '_recovery_command'",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.research.test_aggregation::test_aggregate_metrics_seed_reproducibility",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/research/test_aggregation.py::test_aggregate_metrics_seed_reproducibility",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_issue_9724_social_force_resolution_independent::test_bottleneck_low_without_pedestrians_reaches_goal",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/test_issue_9724_social_force_resolution_independent.py::test_bottleneck_low_without_pedestrians_reaches_goal",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_issue_9724_social_force_resolution_independent::test_release_matrix_bottleneck_low_seed_112_enters_goal_zone",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 112 refused; node=tests/test_issue_9724_social_force_resolution_independent.py::test_release_matrix_bottleneck_low_seed_112_enters_goal_zone",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_issue_9724_social_force_resolution_independent::test_narrow_doorway_seed_111_does_not_spin_in_place",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/test_issue_9724_social_force_resolution_independent.py::test_narrow_doorway_seed_111_does_not_spin_in_place",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_lazy_pygame_init::test_debug_robot_env_materializes_pygame_on_first_render",
+      "kind": "failure",
+      "message": "subprocess.CalledProcessError: Command '['/home/luttkule/lanes/pedcontact/repo/.venv/bin/python', '-c', '\\nimport sys\\nfrom robot_sf.gym_env.environment_factory import make_robot_env\\n\\nenv = make_robot_env(debug=True)\\ntry:\\n    print(\"pygame_after_create\", \"pygame\" in sys.modules)\\n    print(\"sim_ui_present\", getattr(env, \"sim_ui\", None) is not None)\\n    env.reset(seed=123)\\n    env.render()\\n    print(\"pygame_after_render\", \"pygame\" in sys.modules)\\nfinally:\\n    env.close()\\n']' returned non-zero exit status 1.",
+      "disposition": "guard refusal before reset; verified wrapped/empty-row witness, recorded and continued"
+    },
+    {
+      "node": "tests.test_cli_aggregate::test_cli_aggregate_with_ci_and_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_cli_aggregate.py::test_cli_aggregate_with_ci_and_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_cli_aggregate::test_cli_aggregate_with_ci_writes_pairwise_contrasts",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_cli_aggregate.py::test_cli_aggregate_with_ci_writes_pairwise_contrasts",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_cli_plot_distributions_ci::test_cli_plot_distributions_ci",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_cli_plot_distributions_ci.py::test_cli_plot_distributions_ci",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_manifest_resume::test_manifest_created_and_used_for_resume",
+      "kind": "failure",
+      "message": "assert 0 == 2",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_manifest_resume::test_manifest_stale_fallbacks_to_scan",
+      "kind": "failure",
+      "message": "FileNotFoundError: [Errno 2] No such file or directory: '/home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_manifest_stale_fallbacks_0/episodes.jsonl.manifest.json'",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_manifest_resume::test_manifest_identity_hash_mismatch_forces_scan",
+      "kind": "failure",
+      "message": "FileNotFoundError: [Errno 2] No such file or directory: '/home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_manifest_identity_hash_mi0/episodes.jsonl.manifest.json'",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_metrics::test_compute_all_metrics_reuses_single_robot_ped_distance_matrix",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_metrics.py::test_compute_all_metrics_reuses_single_robot_ped_distance_matrix",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_metrics::test_compute_all_metrics_distance_summary_numeric_equivalence",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_metrics.py::test_compute_all_metrics_distance_summary_numeric_equivalence",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_near_miss_determinism::test_exact_repeat_near_miss_is_deterministic_on_smoke_scenario",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_near_miss_determinism.py::test_exact_repeat_near_miss_is_deterministic_on_smoke_scenario",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_occupancy_gymnasium.TestEnvironmentResetWithGrid::test_reset_with_different_seeds",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_occupancy_gymnasium.py::TestEnvironmentResetWithGrid::test_reset_with_different_seeds",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_occupancy_gymnasium.TestEnvironmentStepWithGridUpdate::test_step_reuses_cached_static_obstacle_grid_inputs",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_occupancy_gymnasium.py::TestEnvironmentStepWithGridUpdate::test_step_reuses_cached_static_obstacle_grid_inputs",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_optimized_assert_guards::test_converted_guards_survive_python_optimized_mode",
+      "kind": "failure",
+      "message": "AssertionError: PASS issue_5303_v1_preflight: blocked on runner provenance mismatch\n  \n  WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n  I0000 00:00:1791008897.076169 1517416 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.\n  WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n  I0000 00:00:1791008898.160302 1517416 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.\n  I0000 00:00:1791008898.160813 1517416 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.\n  2026-10-03 08:28:19.948 | DEBUG    | robot_sf.sensor.registry:register_sensor:98 - Registered sensor 'dummy_constant' in registry\n  2026-10-03 08:28:20.165 | INFO     | robot_sf.sim.registry:register_backend:59 - Registered simulator backend: fast-pysf\n  2026-10-03 08:28:20.166 | INFO     | robot_sf.sim.registry:register_backend:59 - Registered simulator backend: dummy\n  Traceback (most recent call last):\n    File \"<string>\", line 93, in <module>\n  RuntimeError: issue_5303_v2_preflight: preflight blocked: (\"input provenance SHA-256 mismatch for 'algorithm_metadata' (contract='8b4bb11ddf651b079f3e0ad4a2975aa982cadaf00ff7f82ef620ae193970f908', recomputed='bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7')\",)\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/lanes/pedcontact/repo/.venv/bin/python', '-O', '-c', '\\nfrom dataclasses import...daf00ff7f82ef620ae193970f908\\', recomputed=\\'bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7\\')\",)\\n').returncode",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.benchmark.test_scenario_criticality_optimization::test_cma_es_seed_fallback",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/benchmark/test_scenario_criticality_optimization.py::test_cma_es_seed_fallback",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_planner.test_poi_sampler::test_random_sampling_reproducible",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_planner/test_poi_sampler.py::test_random_sampling_reproducible",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_planner_tradeoff_plot::test_bootstrap_seed_mean_ci_is_deterministic",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_planner_tradeoff_plot.py::test_bootstrap_seed_mean_ci_is_deterministic",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_make_env_and_run_episode_roundtrip",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/test_public_api.py::test_make_env_and_run_episode_roundtrip",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_make_env_with_mapping_and_planner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_make_env_with_mapping_and_planner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_make_env_preserves_caller_scenario_name",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_make_env_preserves_caller_scenario_name",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_converts_protocol_action[planner_action0]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_converts_protocol_action[planner_action0]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_converts_protocol_action[planner_action1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_converts_protocol_action[planner_action1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_rejects_invalid_planner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_rejects_invalid_planner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_rejects_non_positive_max_steps[0]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_rejects_non_positive_max_steps[0]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_rejects_non_positive_max_steps[-1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_rejects_non_positive_max_steps[-1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_uses_stable_episode_identity",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_uses_stable_episode_identity",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_adapts_builtin_planner_observations",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_adapts_builtin_planner_observations",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_keeps_raw_observation_for_custom_step_planner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_keeps_raw_observation_for_custom_step_planner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_run_episode_keeps_raw_observation_for_callable_planner",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_public_api.py::test_run_episode_keeps_raw_observation_for_callable_planner",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_public_api::test_social_force_receives_classic_bottleneck_obstacles",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/test_public_api.py::test_social_force_receives_classic_bottleneck_obstacles",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-francis2023_circular_crossing-111-1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-francis2023_circular_crossing-111-1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-classic_cross_trap_high-111-1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-classic_cross_trap_high-111-1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-classic_head_on_corridor_low-116-1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 116 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-classic_head_on_corridor_low-116-1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-115-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 115 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-115-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-118-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 118 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-118-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-112-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 112 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-112-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-131-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v2-classic_station_platform_medium-131-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v1-classic_head_on_corridor_low-116-1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 116 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v1-classic_head_on_corridor_low-116-1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-115-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 115 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-115-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-118-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 118 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-118-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-112-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 112 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-112-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_overlap_regression_issue_9725::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-131-20]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/benchmark/test_spawn_overlap_regression_issue_9725.py::test_formerly_defective_cell_starts_clear[v1-classic_station_platform_medium-131-20]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_preflight::test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds",
+      "kind": "failure",
+      "message": "AssertionError: {'scenario': 'classic_t_intersection_low', 'seed': 111, 'clearance_margin_m': 0.1, 'respawn_window_steps': 20, ...}\nassert 'invalid' == 'fail'\n  \n  - fail\n  + invalid",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_preflight::test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds",
+      "kind": "failure",
+      "message": "AssertionError: {'scenario': 'francis2023_narrow_doorway', 'seed': 111, 'clearance_margin_m': 0.1, 'respawn_window_steps': 20, ...}\nassert 'cell_initial..._check_failed' == 'infeasibilit...rate_manifest'\n  \n  - infeasibility_probe_requires_separate_manifest\n  + cell_initialization_or_check_failed",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_preflight::test_main_grid_doorway_probe_requires_pinned_map_and_oracle",
+      "kind": "failure",
+      "message": "AssertionError: assert ['blocked', 'blocked'] == ['infeasibili...bility_probe']\n  \n  At index 0 diff: 'blocked' != 'infeasibility_probe'\n  Use -v to get more diff",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_preflight::test_station_platform_117_respawn_defect_is_removed_by_successor_map",
+      "kind": "failure",
+      "message": "AssertionError: assert 'blocked' == 'valid'\n  \n  - valid\n  + blocked",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.benchmark.test_spawn_preflight_issue_9725::test_reset_only_diagnostic_reports_clear_cell_and_map_warnings",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/benchmark/test_spawn_preflight_issue_9725.py::test_reset_only_diagnostic_reports_clear_cell_and_map_warnings",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_crowd_sim_env_contract::test_make_crowd_sim_env_exposes_factory",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_crowd_sim_env_contract.py::test_make_crowd_sim_env_exposes_factory",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_crowd_sim_env_contract::test_make_crowd_sim_env_seed_controls_constructor_map_selection",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_crowd_sim_env_contract.py::test_make_crowd_sim_env_seed_controls_constructor_map_selection",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_emergent_phenomena::test_builders_realize_target_desired_speed_via_substrate",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_emergent_phenomena.py::test_builders_realize_target_desired_speed_via_substrate",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_emergent_phenomena::test_run_scenario_records_full_trajectory_shape",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_emergent_phenomena.py::test_run_scenario_records_full_trajectory_shape",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_emergent_phenomena::test_run_scenario_computes_finite_order_parameters",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_emergent_phenomena.py::test_run_scenario_computes_finite_order_parameters",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_emergent_phenomena::test_run_scenario_is_deterministic_given_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_emergent_phenomena.py::test_run_scenario_is_deterministic_given_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_emergent_phenomena::test_literature_calibration_runs_faster_than_released",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_emergent_phenomena.py::test_literature_calibration_runs_faster_than_released",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_env::test_direct_construction_same_reset_seed_gives_identical_crowd",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_env.py::test_direct_construction_same_reset_seed_gives_identical_crowd",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_env::test_direct_construction_changed_reset_seed_repopulates_crowd",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_env.py::test_direct_construction_changed_reset_seed_repopulates_crowd",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_socnav_env_integration::test_robot_env_delays_actions_and_resets_the_queue_between_episodes",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_socnav_env_integration.py::test_robot_env_delays_actions_and_resets_the_queue_between_episodes",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path0]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path0]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path1]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path1]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path2]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path2]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path3]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path3]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path4]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path4]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path5]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path5]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path6]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path6]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path7]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path7]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path8]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path8]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path9]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path9]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path10]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path10]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path11]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path11]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_svg_classic_maps_format::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path12]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_svg_classic_maps_format.py::test_classic_svg_ped_routes_spawn_nonzero_population[svg_path12]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_training_scenario_sampling::test_scenario_switching_env_tracks_coverage",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_training_scenario_sampling.py::test_scenario_switching_env_tracks_coverage",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_training_scenario_sampling::test_scenario_switching_env_allows_obs_bounds_mismatch",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_training_scenario_sampling.py::test_scenario_switching_env_allows_obs_bounds_mismatch",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_training_scenario_sampling::test_scenario_switching_env_rejects_action_mismatch",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_training_scenario_sampling.py::test_scenario_switching_env_rejects_action_mismatch",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_basic::test_visuals_manifest_videos_disabled",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/test_full_classic_visuals_basic.py::test_visuals_manifest_videos_disabled",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_basic::test_visuals_manifest_smoke_mode",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 131 refused; node=tests/test_full_classic_visuals_basic.py::test_visuals_manifest_smoke_mode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_edge_cases::test_deterministic_video_selection",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_edge_cases.py::test_deterministic_video_selection",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_edge_cases::test_renderer_field_present",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_edge_cases.py::test_renderer_field_present",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_edge_cases::test_disable_vs_smoke_notes",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_edge_cases.py::test_disable_vs_smoke_notes",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_missing_matplotlib::test_plots_skipped_when_matplotlib_missing",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_missing_matplotlib.py::test_plots_skipped_when_matplotlib_missing",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_renderer_toggle::test_video_renderer_forced_synthetic",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_renderer_toggle.py::test_video_renderer_forced_synthetic",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_renderer_toggle::test_video_renderer_forced_sim_view_missing",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_renderer_toggle.py::test_video_renderer_forced_sim_view_missing",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_full_classic_visuals_simview_fallback::test_simulation_view_empty_list_triggers_fallback",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_full_classic_visuals_simview_fallback.py::test_simulation_view_empty_list_triggers_fallback",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_runner_batch::test_run_batch_to_tmp",
+      "kind": "failure",
+      "message": "assert 0 == 2",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_runner_resume::test_run_batch_resume_skips_existing",
+      "kind": "failure",
+      "message": "assert 0 == 3",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_runner_resume::test_run_batch_resume_identity_includes_benchmark_track",
+      "kind": "failure",
+      "message": "assert 0 == 1",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_runner_resume_parallel::test_run_batch_resume_parallel_skips_existing",
+      "kind": "failure",
+      "message": "assert 0 == 1",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_runner_smoke::test_runner_single_episode_tmp",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_runner_smoke.py::test_runner_single_episode_tmp",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_runner_smoke::test_runner_surfaces_child_planner_fallback_diagnostics",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_runner_smoke.py::test_runner_surfaces_child_planner_fallback_diagnostics",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_runner_smoke::test_run_batch_analysis_trace_telemetry_is_provenance_bound",
+      "kind": "failure",
+      "message": "assert 0 == 1",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_runner_smoke::test_run_episode_analysis_trace_reuses_episode_commit_lookup",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_runner_smoke.py::test_run_episode_analysis_trace_reuses_episode_commit_lookup",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_runner_smoke::test_run_batch_repeated_runs_produce_stable_metrics",
+      "kind": "failure",
+      "message": "FileNotFoundError: [Errno 2] No such file or directory: '/home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_run_batch_repeated_runs_p0/run1.jsonl'",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_runner_smoke::test_run_batch_provenance_fields_present",
+      "kind": "failure",
+      "message": "FileNotFoundError: [Errno 2] No such file or directory: '/home/luttkule/lanes/pedcontact/tmp/pytest_round3_full/popen-gw3/test_run_batch_provenance_fiel0/provenance_run.jsonl'",
+      "disposition": "guard refusal before reset; same node/guard failed on exact CALFIT base; matching current receipt"
+    },
+    {
+      "node": "tests.test_scenario_generator::test_determinism_same_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_scenario_generator.py::test_determinism_same_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_seed_utils::test_set_global_seed_determinism",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_seed_utils.py::test_set_global_seed_determinism",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_seed_utils::test_seed_changes_sequences",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 111 refused; node=tests/test_seed_utils.py::test_seed_changes_sequences",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_bootstrap_intervals::test_bootstrap_ci_interval_contains_mean[optimize]",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/.venv/bin/robot_sf_bench\", line 10, in <module>\n      sys.exit(main())\n               ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3628, in main\n      raise SystemExit(cli_main())\n                       ^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3581, in cli_main\n      return snqi_loader[\"invoke_optimize\"](args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3386, in _invoke_snqi_opt\n      return int(run_fn(args))  # type: ignore[no-any-return]\n                 ^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 817, in run\n      rng = np.random.default_rng(args.seed if args.seed is not None else 1337)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['uv', 'run', 'robot_sf_bench', 'snqi', 'optimize', '--episodes', '/home/luttkule/lanes/pedconta...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_bootstrap_intervals::test_bootstrap_ci_interval_contains_mean[recompute]",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/.venv/bin/robot_sf_bench\", line 10, in <module>\n      sys.exit(main())\n               ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3628, in main\n      raise SystemExit(cli_main())\n                       ^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3583, in cli_main\n      return snqi_loader[\"invoke_recompute\"](args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3407, in _invoke_snqi_recompute\n      return int(run_fn(args))  # type: ignore[no-any-return]\n                 ^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/recompute_snqi_weights.py\", line 937, in run\n      rng = np.random.default_rng(args.seed if args.seed is not None else 1337)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['uv', 'run', 'robot_sf_bench', 'snqi', 'recompute', '--episodes', '/home/luttkule/lanes/pedcont...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_bootstrap_stability::test_bootstrap_stability_computes_deterministic_non_placeholder_result",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi/test_bootstrap_stability.py::test_bootstrap_stability_computes_deterministic_non_placeholder_result",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_bootstrap_stability::test_bootstrap_stability_rejects_missing_snqi_metric",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi/test_bootstrap_stability.py::test_bootstrap_stability_rejects_missing_snqi_metric",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_bootstrap_stability::test_bootstrap_stability_accepts_mapping_episodes",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi/test_bootstrap_stability.py::test_bootstrap_stability_accepts_mapping_episodes",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_bootstrap_stability::test_bootstrap_stability_requires_multiple_groups",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi/test_bootstrap_stability.py::test_bootstrap_stability_requires_multiple_groups",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_jsonschema_validation::test_snqi_outputs_conform_to_jsonschema[optimize]",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/.venv/bin/robot_sf_bench\", line 10, in <module>\n      sys.exit(main())\n               ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3628, in main\n      raise SystemExit(cli_main())\n                       ^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3581, in cli_main\n      return snqi_loader[\"invoke_optimize\"](args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3386, in _invoke_snqi_opt\n      return int(run_fn(args))  # type: ignore[no-any-return]\n                 ^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 817, in run\n      rng = np.random.default_rng(args.seed if args.seed is not None else 1337)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['uv', 'run', 'robot_sf_bench', 'snqi', 'optimize', '--episodes', '/home/luttkule/lanes/pedconta...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_jsonschema_validation::test_snqi_outputs_conform_to_jsonschema[recompute]",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/.venv/bin/robot_sf_bench\", line 10, in <module>\n      sys.exit(main())\n               ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3628, in main\n      raise SystemExit(cli_main())\n                       ^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3583, in cli_main\n      return snqi_loader[\"invoke_recompute\"](args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/cli.py\", line 3407, in _invoke_snqi_recompute\n      return int(run_fn(args))  # type: ignore[no-any-return]\n                 ^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/recompute_snqi_weights.py\", line 937, in run\n      rng = np.random.default_rng(args.seed if args.seed is not None else 1337)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['uv', 'run', 'robot_sf_bench', 'snqi', 'recompute', '--episodes', '/home/luttkule/lanes/pedcont...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_small_dataset_warning::test_small_dataset_warning_emitted_and_exit_zero[recompute]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi/test_small_dataset_warning.py::test_small_dataset_warning_emitted_and_exit_zero[recompute]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi.test_small_dataset_warning::test_small_dataset_warning_emitted_and_exit_zero[optimize]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi/test_small_dataset_warning.py::test_small_dataset_warning_emitted_and_exit_zero[optimize]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_cli_optimization::test_snqi_weight_optimization_cli",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 1133, in <module>\n      raise SystemExit(main())\n                       ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 1129, in main\n      return run(args)\n             ^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 828, in run\n      np.random.seed(args.seed)\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/lanes/pedcontact/repo/.venv/bin/python', 'scripts/snqi_weight_optimization.py',...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_determinism::test_differential_evolution_deterministic_same_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_determinism.py::test_differential_evolution_deterministic_same_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_determinism::test_differential_evolution_differs_different_seed",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_determinism.py::test_differential_evolution_differs_different_seed",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_drift_detection::test_snqi_drift_minimal",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_drift_detection.py::test_snqi_drift_minimal",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_fixture_minimal::test_snqi_minimal_grid",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_fixture_minimal.py::test_snqi_minimal_grid",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_schema_snapshot::test_snqi_optimization_schema_snapshot",
+      "kind": "failure",
+      "message": "AssertionError: Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 1133, in <module>\n      raise SystemExit(main())\n                       ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 1129, in main\n      return run(args)\n             ^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/snqi_weight_optimization.py\", line 828, in run\n      np.random.seed(args.seed)\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/lanes/pedcontact/repo/.venv/bin/python', 'scripts/snqi_weight_optimization.py',...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_sensitivity_monotonic::test_collision_weight_monotonicity",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_sensitivity_monotonic.py::test_collision_weight_monotonicity",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_strategies::test_recompute_strategies_structure[default]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_strategies.py::test_recompute_strategies_structure[default]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_strategies::test_recompute_strategies_structure[balanced]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_strategies.py::test_recompute_strategies_structure[balanced]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_strategies::test_recompute_strategies_structure[safety_focused]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_strategies.py::test_recompute_strategies_structure[safety_focused]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_strategies::test_recompute_strategies_structure[efficiency_focused]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_strategies.py::test_recompute_strategies_structure[efficiency_focused]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.test_snqi_strategies::test_recompute_strategies_structure[pareto]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/test_snqi_strategies.py::test_recompute_strategies_structure[pareto]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_issue_7849_gpu_admission_packet::test_feed_forward_seed_override_isolated_and_declared",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_issue_7849_gpu_admission_packet.py::test_feed_forward_seed_override_isolated_and_declared",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_multi_map_protocol::test_domain_randomization_changes_only_declared_simulation_knobs",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_multi_map_protocol.py::test_domain_randomization_changes_only_declared_simulation_knobs",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_dreamerv3_rllib_runtime::test_periodic_eval_prefers_evaluation_scenario_matrix_selection",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_dreamerv3_rllib_runtime.py::test_periodic_eval_prefers_evaluation_scenario_matrix_selection",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_dreamerv3_rllib_runtime::test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_dreamerv3_rllib_runtime.py::test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_expert_ppo_contract::test_main_dry_run_manifest_records_config_sha256",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_expert_ppo_contract.py::test_main_dry_run_manifest_records_config_sha256",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_ppo_mamba_config_issue_4014::test_ppo_mamba_dry_run_emits_parameter_summary_placeholder",
+      "kind": "failure",
+      "message": "AssertionError: WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n  I0000 00:00:1791009151.554655 1585729 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.\n  WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n  I0000 00:00:1791009152.288131 1585729 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.\n  I0000 00:00:1791009152.288365 1585729 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.\n  2026-10-03 08:32:33.386 | DEBUG    | robot_sf.sensor.registry:register_sensor:98 - Registered sensor 'dummy_constant' in registry\n  2026-10-03 08:32:33.889 | INFO     | robot_sf.sim.registry:register_backend:59 - Registered simulator backend: fast-pysf\n  2026-10-03 08:32:33.890 | INFO     | robot_sf.sim.registry:register_backend:59 - Registered simulator backend: dummy\n  Traceback (most recent call last):\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/training/train_ppo.py\", line 3554, in <module>\n      raise SystemExit(main())\n                       ^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/training/train_ppo.py\", line 3532, in main\n      run_expert_training(\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/training/train_ppo.py\", line 3291, in run_expert_training\n      outputs = _execute_training(\n                ^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/training/train_ppo.py\", line 1921, in _execute_training\n      metrics_raw, episode_records = _simulate_dry_run_metrics(\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/repo/scripts/training/train_ppo.py\", line 2897, in _simulate_dry_run_metrics\n      rng = np.random.default_rng(None if use_random else 123)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n      return _original(fence.checked(value),*args,**kwargs)\n                       ^^^^^^^^^^^^^^^^^^^^\n    File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n      raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\n  lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/lanes/pedcontact/repo/.venv/bin/python', 'scripts/training/train_ppo.py', '--co...fused; node={CURRENT_NODE}\\')\\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None\\n').returncode",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_predictive_planner_amp::test_amp_off_cpu_training_path_is_unchanged",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_predictive_planner_amp.py::test_amp_off_cpu_training_path_is_unchanged",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_predictive_planner_amp::test_training_gradient_clipping_fails_closed_on_nonfinite_norm",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_predictive_planner_amp.py::test_training_gradient_clipping_fails_closed_on_nonfinite_norm",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_predictive_planner_amp::test_amp_off_eval_path_is_unchanged",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_predictive_planner_amp.py::test_amp_off_eval_path_is_unchanged",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_predictive_planner_amp::test_autocast_only_active_when_scaler_provided",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_predictive_planner_amp.py::test_autocast_only_active_when_scaler_provided",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.training.test_train_predictive_planner_loader_settings::test_prepare_loaders_positive_workers_are_deterministic",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/training/test_train_predictive_planner_loader_settings.py::test_prepare_loaders_positive_workers_are_deterministic",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.unit.test_planner_interface.TestPlannerInterfaceCompliance::test_reset_method_with_seed[social_force]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/unit/test_planner_interface.py::TestPlannerInterfaceCompliance::test_reset_method_with_seed[social_force]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.unit.test_planner_interface.TestPlannerInterfaceCompliance::test_reset_method_with_seed[random]",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/unit/test_planner_interface.py::TestPlannerInterfaceCompliance::test_reset_method_with_seed[random]",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.validation.test_calfit_search::test_real_acquisition_preserves_complete_raw_bank_and_rejects_corruption",
+      "kind": "failure",
+      "message": "KeyError: 'all_crossed'",
+      "disposition": "requires investigation"
+    },
+    {
+      "node": "tests.validation.test_evaluate_predictive_planner_smoke::test_evaluate_predictive_planner_smoke",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/validation/test_evaluate_predictive_planner_smoke.py::test_evaluate_predictive_planner_smoke",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.validation.test_evaluate_predictive_planner_smoke::test_evaluate_predictive_planner_fails_closed_without_collision_metric",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/validation/test_evaluate_predictive_planner_smoke.py::test_evaluate_predictive_planner_fails_closed_without_collision_metric",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.validation.test_evaluate_predictive_planner_smoke::test_uncertainty_helpers_validate_confidence_and_filter_non_finite",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/validation/test_evaluate_predictive_planner_smoke.py::test_uncertainty_helpers_validate_confidence_and_filter_non_finite",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.validation.test_pr_contract_check::test_regression_last_20_merged_prs",
+      "kind": "failure",
+      "message": "Failed: Cannot prove the live PR regression sweep: immutable diff evidence unavailable for PR #10081",
+      "disposition": "inherited; same node failed on exact CALFIT base in retained replay"
+    },
+    {
+      "node": "tests.validation.test_planner_portfolio_campaign::test_aggregate_rows_tolerates_missing_metrics_payloads",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/validation/test_planner_portfolio_campaign.py::test_aggregate_rows_tolerates_missing_metrics_payloads",
+      "disposition": "guard refusal before reset; recorded and continued"
+    },
+    {
+      "node": "tests.visuals.test_render_encode_split::test_performance_manifest_has_render_encode_keys",
+      "kind": "failure",
+      "message": "lane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=tests/visuals/test_render_encode_split.py::test_performance_manifest_has_render_encode_keys",
+      "disposition": "guard refusal before reset; recorded and continued"
+    }
+  ],
+  "refusals": 254,
+  "inherited": 19,
+  "unknown": 6,
+  "source_sha": "b4aafc536a6b9c7b940d171815ed3ac1e3983263",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "limitation": "Preliminary full slow suite on a dirty evidence/test tree. Final full suite will run on a clean committed head. Six pending investigations listed explicitly."
+}

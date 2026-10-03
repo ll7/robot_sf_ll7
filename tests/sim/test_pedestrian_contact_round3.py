@@ -13,6 +13,7 @@ from tests.sim.test_pedestrian_contact import config, free_forces
 @pytest.mark.parametrize("unresolved", [False, True])
 def test_capped_contact_retry_preserves_isolated_walker(monkeypatch, unresolved):
     """A successful jam repair must not stop a walker fifty metres away."""
+    np.random.seed(1001)
     monkeypatch.setattr(contact, "MAX_PASSES", 1)
     state = np.array(
         [[x, 0, 0, 0, 10, 0, 0.5] for x in [0, 0.1, 0.2]] + [[50, 50, 1.3, 0, 100, 50, 0.5]]
@@ -42,24 +43,26 @@ def test_turn_already_underway_at_source_window_is_right_censored():
     assert result["onset_threshold_rad_s"] == 0.05
 
 
-def test_v6_lower_bound_has_no_upper_acceptance_limit():
+@pytest.mark.parametrize("onset,expected", [(3.0, "PASS"), (2.5, "FAIL")])
+def test_v6_lower_bound_has_no_upper_acceptance_limit(onset, expected):
     """A source-comparable earlier onset satisfies the author-ruled lower bound."""
     row = {
         "case": "V6",
         "variant": "1.78",
         "seed": 1001,
-        "onset_m": 3.0,
-        "onset_right_censored": True,
+        "onset_m": onset,
+        "onset_right_censored": onset == 3.0,
         "pair_overlap": {"all": {"below_2r_count": 0}},
     }
     check = engineering_gate([row])["checks"][0]
-    assert check["status"] == "PASS"
+    assert check["status"] == expected
     assert check["comparison"] == "published_lower_bound"
-    assert check["right_censored_n"] == 1
+    assert check["right_censored_n"] == int(onset == 3.0)
 
 
 def test_optional_wall_correction_preserves_legacy_far_field():
     """At 1.38 m body clearance the optional wall law retains actual legacy forces."""
+    np.random.seed(1001)
     state = np.array([[0, 1.66, 0, 0, 10, 1.66, 0.5]])
     legacy = Simulator(state.copy(), obstacles=[(-10, 10, 0, 0)], config=config(contact=False))
     fixed = Simulator(
@@ -102,3 +105,21 @@ def test_suite_config_versions_the_effective_onset_and_keeps_history():
         suite.DEFAULT_CONFIG.with_name("pedestrian_validation_0_0_9_history_v1.json")
     )
     assert "five no-interferer trials" in old["V6"]["onset_definition"]
+
+
+def test_censored_flow_inside_range_cannot_establish_a_pass():
+    """58/60 crossings allow either an accepted or slower full completion flow."""
+    row = {
+        "case": "V3",
+        "variant": "1.0",
+        "seed": 1001,
+        "specific_flow_persons_m_s": 60 / (32 - 2),
+        "flow_right_censored": True,
+        "crossed": 58,
+        "pair_overlap": {"all": {"below_2r_count": 0}},
+    }
+    result = engineering_gate([row])
+    check = result["checks"][0]
+    assert check["status"] == "CENSORED"
+    assert check["identified_interval"] == [0.0, 2.0]
+    assert result["producible_items"] == 0

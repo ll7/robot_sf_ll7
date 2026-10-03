@@ -64,6 +64,9 @@ def test_real_acquisition_preserves_complete_raw_bank_and_rejects_corruption(tmp
     def synthetic(task):
         r = copy.deepcopy(ideal[task[0], task[2]])
         r["crossed"] = 60 if task[0] == "V3" else 350
+        if task[0] == "V3":
+            r["all_crossed"] = True
+            r["flow_right_censored"] = False
         r["_positions"] = np.array([[[0.0, 0.0]], [[0.1, 0.0]]])
         r["_speeds"] = np.array([[1.0]])
         return r

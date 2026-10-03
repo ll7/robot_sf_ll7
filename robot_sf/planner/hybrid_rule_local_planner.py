@@ -2037,6 +2037,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "candidate": candidate,
                 "continuous_static_collision": True,
                 "hard_static_clearance": float(hard_static_clearance),
+                "arc_padding_m": 0.0,
                 "time": float(t),
             }
         return None
@@ -3655,7 +3656,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         moving_rejection_counts: Counter[str] = Counter()
         rejection_counts_by_source: dict[str, Counter[str]] = {}
         rejected_examples: list[dict[str, Any]] = []
-        debug_constraints: Counter[tuple[str, str, float, float | None]] = Counter()
+        debug_constraints: Counter[tuple[str, str | None, float | None, float | None]] = Counter()
 
         for candidate in candidates:
             evaluation = self._evaluate_candidate(
@@ -3709,7 +3710,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                         "rejected": count,
                         **({"arc_padding_m": padding} if padding is not None else {}),
                     }
-                    for (name, key, value, padding), count in sorted(debug_constraints.items())
+                    for (name, key, value, padding), count in sorted(
+                        debug_constraints.items(),
+                        key=lambda item: (
+                            item[0][0],
+                            "" if item[0][1] is None else item[0][1],
+                            float("-inf") if item[0][2] is None else item[0][2],
+                            float("-inf") if item[0][3] is None else item[0][3],
+                        ),
+                    )
                 ],
                 "candidate_count": len(candidates),
                 "feasible_moving_count": len(moving),

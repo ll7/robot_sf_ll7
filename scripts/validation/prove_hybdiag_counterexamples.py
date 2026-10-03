@@ -1,4 +1,4 @@
-"""Prove HYBDIAG regression witnesses against exact pre-Round-3 source bytes.
+"""Prove HYBDIAG regression witnesses against exact pre-fix source bytes.
 
 Load the old selector/evaluator/sensor modules in a fresh interpreter while using
 current regression tests. No alternate checkout or production test seam is used.
@@ -66,7 +66,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-ref", default="14c1adf46436fc7b9e051b44981900acf525b9b2")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--group", choices=("all", "flattened", "round4"), default="all")
+    parser.add_argument("--group", choices=("all", "flattened", "round4", "round5"), default="all")
     parser.add_argument("--test-ref", default="f16a53f5a924e0d50a749ea8f74e30fa4ac2db4a")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
@@ -77,7 +77,16 @@ def main() -> None:
     expected_count = 13 if args.group == "all" else 3
     selected_reasons = REASONS if args.group == "all" else REASONS[-2:]
     test_data = (root / TEST_PATH).read_bytes()
-    if args.group == "round4":
+    if args.group == "round5":
+        selected = (
+            "test_plan_debug_wall_and_map_bounds_have_totally_ordered_constraints",
+            "test_debug_forced_stop_reports_the_actual_exclusion_radius",
+        )
+        selected_reasons = (
+            "TypeError: '<' not supported between instances of 'float' and 'NoneType'",
+        )
+        expected_count = 3
+    elif args.group == "round4":
         selected = (
             "test_physical_wall_stop_rejects_reverse_toward_wall_behind",
             "test_debug_wall_exclusion_reports_applied_arc_padding",

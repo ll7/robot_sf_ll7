@@ -11,8 +11,9 @@ Recommend exactly these three opt-in settings together:
 - Planner `goal_next_validity_enabled: true`.
 - Environment `include_goal_next_valid: true`.
 
-All three defaults remain false. The goal pair is a separate cause-level fix;
-it is not part of wall exclusion. This combined arm is accepted:270/300 crowded
+All three defaults remain false. Wall exclusion exposes the latent goal defect:
+off succeeds on hallway seed 1002, while wall-only fails. No arm isolates the
+goal-validity pair alone. This combined arm is accepted:270/300 crowded
 successes,100/102 empty successes, zero contacts, zero new empty failures and
 collision intervals no higher than off. Sealed 0.0.8 confirmation is still pending.
 

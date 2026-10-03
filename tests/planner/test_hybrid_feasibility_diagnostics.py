@@ -50,6 +50,7 @@ def test_debug_forced_stop_reports_the_actual_exclusion_radius():
             "constraint": "exact_body_wall_overlap",
             "threshold_name": "exclusion_radius_m",
             "threshold": 0.45,
+            "arc_padding_m": 0.0,
             "rejected": debug["candidate_count"],
         }
     ]
@@ -466,6 +467,51 @@ def test_debug_wall_exclusion_reports_applied_arc_padding():
         assert threshold_name == "exclusion_radius_m"
         assert threshold == pytest.approx(0.2513), "reported exclusion radius omits arc padding"
         assert planner._rejection_diagnostic(evaluation)["arc_padding_m"] == 0.0013
+
+
+@pytest.mark.parametrize("omit_padding", [False, True])
+def test_plan_debug_wall_and_map_bounds_have_totally_ordered_constraints(monkeypatch, omit_padding):
+    """Wall contact and map-bound rejections must coexist without a debug crash."""
+    planner = _planner(physical_static_exclusion_enabled=True)
+    planner.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                map_def=SimpleNamespace(width=30, height=30),
+                get_obstacle_lines=lambda: np.array([[0.05, 0.0, 0.05, 0.42]]),
+            )
+        )
+    )
+    if omit_padding:
+        evaluate = planner._evaluate_candidate
+        omitted = False
+
+        def missing_future_metadata(**kwargs):
+            nonlocal omitted
+            result = evaluate(**kwargs)
+            # Simulate a future rejection producer omitting this optional field.
+            if (
+                not omitted
+                and result.get("reason") == "static_collision"
+                and result.get("arc_padding_m") == 0.0
+            ):
+                result.pop("arc_padding_m", None)
+                omitted = True
+            return result
+
+        monkeypatch.setattr(planner, "_evaluate_candidate", missing_future_metadata)
+    command = planner.plan(_obs(robot=(0.30, 0.12), heading=np.pi, goal=(20, 15)))
+    assert np.all(np.isfinite(command))
+    debug = planner.last_decision()["candidate_evaluator_debug"]
+    overlaps = [
+        row for row in debug["constraints"] if row["constraint"] == "exact_body_wall_overlap"
+    ]
+    assert overlaps, "review witness no longer exercises physical wall rejection"
+    assert all(row["threshold"] >= 0.25 for row in overlaps)
+    if not omit_padding:
+        assert all("arc_padding_m" in row for row in overlaps), "producer omits arc padding"
+    else:
+        assert any("arc_padding_m" not in row for row in overlaps)
+        assert any(row.get("arc_padding_m") == 0.0 for row in overlaps)
 
 
 def test_physical_exclusion_checks_wall_stop_beyond_rollout_horizon():

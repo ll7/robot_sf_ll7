@@ -117,9 +117,21 @@ def test_run_tests_parallel_spreads_unknown_prefix_and_preserves_partition(
     assert [sum("00_unknown" in node for node in group) for group in groups] == [2] * 5
 
 
-def test_preregistration_source_path_node_ids_are_checkout_independent() -> None:
-    """Absolute source-path test values must not become checkout-dependent shard IDs."""
-    prefix = "tests/validation/test_issue_6969_stage_b_preregistration.py::test_non_relative_source_path_fails_closed"
+@pytest.mark.parametrize(
+    "prefix, ids",
+    [
+        (
+            "tests/validation/test_issue_6969_stage_b_preregistration.py::test_non_relative_source_path_fails_closed",
+            ["absolute", "parent"],
+        ),
+        (
+            "tests/tools/test_materialize_benchmark_hard_cases.py::test_checkout_mutation_during_replay_blocks_exact_match",
+            ["dirty", "head-changed"],
+        ),
+    ],
+)
+def test_dynamic_shard_node_ids_are_checkout_independent(prefix: str, ids: list[str]) -> None:
+    """Absolute paths and source revisions must not become checkout-dependent shard IDs."""
     env = {**os.environ, "PYTEST_ADDOPTS": ""}
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", prefix],
@@ -132,4 +144,4 @@ def test_preregistration_source_path_node_ids_are_checkout_independent() -> None
     )
     assert result.returncode == 0, result.stdout + result.stderr
     collected = [line for line in result.stdout.splitlines() if line.startswith(prefix)]
-    assert collected == [f"{prefix}[absolute]", f"{prefix}[parent]"]
+    assert collected == [f"{prefix}[{id}]" for id in ids]

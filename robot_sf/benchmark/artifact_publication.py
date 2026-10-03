@@ -2795,6 +2795,7 @@ def _release_notes_files(run_root: Path, repo_root: Path, resolved: Mapping[str,
     Returns:
         Export roles and source/destination file pairs.
     """
+    _check_notes_development_marker(run_root, resolved)
     if not _requires_release_notes(resolved):
         return {}
     receipt = resolved.get("release_notes_gate")
@@ -2820,6 +2821,21 @@ def _requires_release_notes(resolved: Mapping[str, Any]) -> bool:
     )
 
 
+def _check_notes_development_marker(artifact_root: Path, resolved: Mapping[str, Any]) -> None:
+    """Require the diagnostic exemption to agree with the completed run's markers."""
+    if resolved.get("release_kind") != "development_rehearsal" or "0_0_8" not in str(
+        resolved.get("canonical_campaign_config", "")
+    ):
+        return
+    result = _read_json_file(artifact_root / "release/release_result.json")
+    if (
+        (result.get("benchmark_release") or {}).get("release_kind") != "development_rehearsal"
+        or result.get("release_eligible") is not False
+        or result.get("release_benchmark_success") is not False
+    ):
+        raise ValueError("release notes diagnostic exemption disagrees with release result")
+
+
 def _preflight_release_notes(payload_dir: Path, violations: list[str]) -> None:
     """Repeat disclosure admission on exported bytes against the mint digest."""
     resolved_path = payload_dir / "release/release_manifest.resolved.json"
@@ -2827,6 +2843,7 @@ def _preflight_release_notes(payload_dir: Path, violations: list[str]) -> None:
         return
     try:
         resolved = _read_json_file(resolved_path)
+        _check_notes_development_marker(payload_dir, resolved)
         if not _requires_release_notes(resolved):
             return
         receipt = _read_json_file(payload_dir / "release_metadata" / RECEIPT_NAME)

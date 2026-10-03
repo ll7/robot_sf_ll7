@@ -295,3 +295,35 @@ def test_publication_preflight_route_refuses_resigned_stale_notes(notes_repo, mo
         publication.PublicationPreflightError, match="digest mismatch against mint receipt"
     ):
         publication.verify_publication_bundle_preflight(bundle)
+
+
+@pytest.mark.parametrize("consistent", [False, True])
+def test_diagnostic_notes_exemption_requires_consistent_run_markers(notes_repo, consistent):
+    from robot_sf.benchmark import artifact_publication as publication
+
+    resolved = {
+        "canonical_campaign_config": "campaign_0_0_8.yaml",
+        "release_kind": "development_rehearsal",
+    }
+    payload = notes_repo / "payload"
+    (payload / "release").mkdir(parents=True)
+    write_json(payload / "release/release_manifest.resolved.json", resolved)
+    write_json(
+        payload / "release/release_result.json",
+        {
+            "benchmark_release": {
+                "release_kind": "development_rehearsal" if consistent else "benchmark-data"
+            },
+            "release_eligible": not consistent,
+            "release_benchmark_success": not consistent,
+        },
+    )
+    violations = []
+    publication._preflight_release_notes(payload, violations)
+    if consistent:
+        assert violations == []
+        assert publication._release_notes_files(payload, notes_repo, resolved) == {}
+    else:
+        assert len(violations) == 1 and "diagnostic exemption disagrees" in violations[0]
+        with pytest.raises(ValueError, match="diagnostic exemption disagrees"):
+            publication._release_notes_files(payload, notes_repo, resolved)

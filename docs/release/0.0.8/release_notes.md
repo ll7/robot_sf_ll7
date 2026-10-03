@@ -104,4 +104,3 @@ The benchmark-doorway-width-slice.v1 dataset has widths 2.2 / 2.8 / 3.6 m, the s
 ## Versioned release notes
 
 The versioned 0.0.8 release notes live at docs/release/0.0.8/release_notes.md. The short GitHub release body must link to these versioned notes. Decisions are stated by content in these notes.
-

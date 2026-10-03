@@ -43,10 +43,10 @@ freeze. Labels alone do not establish release reachability or an outcome delta.
 | [#9933](https://github.com/ll7/robot_sf_ll7/pull/9933) | deps: bump the developer-tooling group with 2 updates | No numeric runtime | No: Ruff/Pylint developer dependency updates. | `pyproject/lock developer tools` |
 | [#9907](https://github.com/ll7/robot_sf_ll7/pull/9907) | feat(benchmark): add #8872 pedestrian-speed campaign executor | No selected runtime | No: issue-owned #8872 speed experiment executor, not D-083 campaign. Never execute its retired seeds here. | `scripts/validation run_issue_8872 family` |
 | [#9903](https://github.com/ll7/robot_sf_ll7/pull/9903) | docs(validation): preserve ten-fault VV-5 diagnostic matrix (#9735) | No | No: preserved VV-5 report and diagnostic scripts; effective runtime diff empty after excluding merged ancestry. | `main...PR runtime diff is empty` |
-| [#9897](https://github.com/ll7/robot_sf_ll7/pull/9897) | analysis: land narrow-doorway crash-vs-wait diagnostic replay on current main | No | No: narrow-doorway diagnostic producer/report only, no released policy, map or metric edits. | `scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py` |
+| [#9897](https://github.com/ll7/robot_sf_ll7/pull/9897) | analysis: land narrow-doorway crash-vs-wait diagnostic replay on current main | No | No: narrow-doorway diagnostic producer/report only, no released policy, map or metric edits. | `PR-only narrow_doorway_crash_vs_wait_issue_9545.py` |
 | [#9896](https://github.com/ll7/robot_sf_ll7/pull/9896) | feat(planner): add evaluate-once arbitration API (#9868) | No selected arm; optional module only | No: additive evaluate-once/reorder APIs; no registration or release caller. | `multimodal_trajectory_arbitrator.py; rg callers` |
 | [#9895](https://github.com/ll7/robot_sf_ll7/pull/9895) | feat(planner): add maneuver commitment manager (#8064) | No selected arm | No: new maneuver_commitment manager; additive until #8067 integration, outside roster. | `robot_sf/planner/maneuver_commitment.py` |
-| [#9894](https://github.com/ll7/robot_sf_ll7/pull/9894) | feat(benchmark): add Stage-3 0.0.7-to-0.0.8 comparison gate (#9668) | Yes, release tooling/config/report surfaces | No current numeric defect demonstrated: alternative Stage-3/paired-era path is not D-083/D-062 authority; its v2 binding proposal needs reconciliation before mint. | `scripts/analysis/compare_release_007_008.py; release template proposal; #10112` |
+| [#9894](https://github.com/ll7/robot_sf_ll7/pull/9894) | feat(benchmark): add Stage-3 0.0.7-to-0.0.8 comparison gate (#9668) | Yes, release tooling/config/report surfaces | No current numeric defect demonstrated: alternative Stage-3/paired-era path is not D-083/D-062 authority; its v2 binding proposal needs reconciliation before mint. | `PR-only compare_release_007_008.py; release template proposal; #10112` |
 | [#9866](https://github.com/ll7/robot_sf_ll7/pull/9866) | fix: consume full discrete CVaR tail mass (#9853) | No selected arm; optional CVaR code | No: only multimodal discrete_tail_metrics is changed. None of the 14 arms calls it; no conditional development A/B campaign is required. | `detailed CVaR reachability proof below` |
 | [#9857](https://github.com/ll7/robot_sf_ll7/pull/9857) | fix(socnav): complete frame crosswalk and Risk-DWA count handling (#9845) | No runtime | No: crosswalk/frame tests only; zero-count fix is already merged #9869. | `net diff excludes risk_dwa.py` |
 | [#9842](https://github.com/ll7/robot_sf_ll7/pull/9842) | docs: use path sources for focused coverage (#9516) | No | No: focused coverage documentation. | `docs coverage source references` |
@@ -207,3 +207,11 @@ Raw proof logs, GitHub inventories, per-PR runtime diffs, worker receipts,
 identity bytes and test XML are kept under the task lane's `evidence/` directory.
 The final lane report supplies their absolute location, SHA inventory and hosted
 CI outcome. These local artifacts are review inputs, not published benchmark data.
+
+PR-head gate corrections: the docs-integrity checker initially rejected two
+PR-only script paths as missing on main. Their audit citations now explicitly
+identify PR-only basenames; no nonexistent main tool is offered. The changed-
+coverage gate initially lacked its required coverage JSON; the existing static
+ledger suite was rerun with real coverage capture, then the exact-SHA gate
+correctly reported documentation-only coverage as not required. These are
+preparation/gate-input corrections, not candidate runtime failures.

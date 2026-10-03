@@ -66,6 +66,38 @@ identity binds. Complete and review both fixes before naming/moving the final
 freeze; then reprove its source and identity. This supersedes the earlier
 mint/publication-only classification; this documentation is not the fixes.
 
+## Freeze record — 2026-10-03
+
+The authorized `release/0.0.8-freeze` ref was fast-forwarded, without force,
+from `5c27a404beb51f8b0207f726dcef49b143364d99` to clean main
+`3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6`; remote readback matched.
+Private preparation source: `c857a30b77fbd82b73fe4f72b71c045aae9c4d10`.
+The fresh native-dependency/open-PR audit found no outstanding measured P1
+freeze correction. #10063/#10078 are implemented despite open issue state;
+#10112's source changes are in #10115 and private #423. Drafts #10104,
+#10094, #10075, #10073, #10003 and #9984 remain next-release/optional work,
+not required corrections for this freeze.
+
+The full including-slow suite ran once at that SHA with eight workers:
+42,701 passed, eight failed, 69 skipped and seven xfailed. All eight failures
+were existing temporary-path guards refusing a test `basetemp` outside
+`TMPDIR`; no release, identity, scoring or planner failure was observed.
+Moving the targeted rerun's `basetemp` below `TMPDIR` passed all eight nodes
+and nine related controls (17 passed). No source, skip, xfail or timeout changed.
+All 42,784 collected nodes have JUnit outcomes; one additional module-level
+docs dependency skip explains the 42,785 outcome census. Broad-exception,
+seed-diff and fast-routing checks passed; strict curated Sphinx passed after
+installing the repository's separate docs dependency group.
+
+**Preparation remains blocked:** authentic reserved-unpublished concept/version
+DOI coordinates and reservation custody have not been supplied, so resolved
+release identities and the concrete doorway successor have not been generated.
+Calibration dispatch also requires the independently reviewed preparatory row
+on canonical private main. Acquired rows and frozen acquired anchors: none.
+The tracked anchor file remains `pending_calibration`. No smoke, final mint,
+sealed execution or publication occurred, and the six scientific-review boxes
+and private Git-blob trust pins remain untouched.
+
 ## 1. Move the freeze branch — orchestrator only
 
 ```bash

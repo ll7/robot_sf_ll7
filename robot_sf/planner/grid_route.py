@@ -57,6 +57,7 @@ class GridRoutePlannerConfig:
     heading_weight: float = 1.0
     clearance_penalty_weight: float = 0.5
     mirror_equivariant_waypoint_snap_enabled: bool = False
+    goal_next_validity_enabled: bool = False
 
 
 class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
@@ -99,7 +100,10 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
         if np.linalg.norm(goal_current - robot_pos) > float(self.config.goal_tolerance):
             goal = goal_current
-        elif np.linalg.norm(goal_next - robot_pos) > 1e-6:
+        elif np.linalg.norm(goal_next - robot_pos) > 1e-6 and (
+            not self.config.goal_next_validity_enabled
+            or bool(self._as_1d_float(goal_state.get("next_valid", [1]), pad=1)[0])
+        ):
             goal = goal_next
         else:
             goal = goal_current
@@ -849,6 +853,7 @@ def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfi
         progress_weight=float(cfg.get("progress_weight", 1.0)),
         heading_weight=float(cfg.get("heading_weight", 1.0)),
         clearance_penalty_weight=float(cfg.get("clearance_penalty_weight", 0.5)),
+        goal_next_validity_enabled=bool(cfg.get("goal_next_validity_enabled", False)),
         mirror_equivariant_waypoint_snap_enabled=bool(
             cfg.get("mirror_equivariant_waypoint_snap_enabled", False)
         ),

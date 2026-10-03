@@ -407,7 +407,7 @@ def test_ci_uv_sync_diag_without_gnu_timeout_preserves_du_output(tmp_path: Path)
 
 
 def test_workflow_uv_cache_retains_wheels_under_single_setup_uv_owner() -> None:
-    """CI must use setup-uv's pruned cache without a second unbounded payload cache.
+    """CI must retain setup-uv's wheels without a second unbounded payload cache.
 
     perf-nightly and pr-promoted-planner-smoke delegate to the shared
     ``setup-ci-python`` composite action, which owns the uv cache contract.

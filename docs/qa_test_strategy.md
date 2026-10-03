@@ -119,6 +119,10 @@ Contributors must run validation commands matching their change class. The repos
 
 ---
 
+Fast-feedback shards use xdist `worksteal`, so idle workers can take queued release checks from a busy worker. Unsharded local runs retain `load`; `PYTEST_XDIST_DIST` remains an explicit override. No test or coverage selection changes with this scheduler.
+
+The aggregate job publishes nonempty, validated duration hints even when a sibling shard fails or is cancelled. The versioned cache includes source/run/key provenance and explicitly records incomplete matrices; these hints never establish a test or release verdict. OS/architecture-scoped restore fallbacks survive dependency-key changes. CI retains downloaded uv wheels rather than pruning them into a metadata-only cache; frozen dependency sync still verifies the lock.
+
 ## Failure Classification & Rerun Boundaries
 
 To preserve benchmark credibility and prevent wasted CI compute, test failures must be triaged according to their root cause. **Rerunning CI jobs is strictly governed by failure class.**

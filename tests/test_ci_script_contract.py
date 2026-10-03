@@ -129,7 +129,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
 
     script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
 
-    assert 'dist_mode="${PYTEST_XDIST_DIST:-load}"' in script_text
+    assert 'dist_mode="${PYTEST_XDIST_DIST:-$default_dist_mode}"' in script_text
     assert "Invalid PYTEST_XDIST_DIST value" in script_text
     assert "cmd=(uv run pytest)" in script_text
     assert 'if [[ "$pytest_execution_mode" == "xdist" ]]; then' in script_text
@@ -198,7 +198,9 @@ def test_run_tests_parallel_allows_only_empty_fast_only_shards() -> None:
     assert "fast-only shard collected no tests" in script_text
 
 
-def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_path: Path) -> None:
+def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(
+    tmp_path: Path,
+) -> None:
     """Exercise the exit-5 guard and prove rejected cases clean up their logs."""
 
     repo = tmp_path / "repo"
@@ -255,13 +257,14 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         "set -euo pipefail\n"
         'if [[ "$1" == run && "$2" == python ]]; then\n'
         '  case "$3" in\n'
-        "    *resolve_pytest_workers.py) printf '1\\n' ;;\n"
+        "    *resolve_pytest_workers.py) printf '%s\\n' \"$PYTEST_NUM_WORKERS\" ;;\n"
         "    *diagnose_xdist_crash.py) exit 0 ;;\n"
         '    *) echo "unexpected helper: $*" >&2; exit 99 ;;\n'
         "  esac\n"
         "  exit 0\n"
         "fi\n"
         'if [[ "$1" == run && "$2" == pytest ]]; then\n'
+        '  printf \'%s\\n\' "$@" >"$FIXTURE_ARGS"\n'
         '  cat "$FIXTURE_OUTPUT"\n'
         '  exit "$FIXTURE_EXIT"\n'
         "fi\n"
@@ -282,13 +285,21 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         ("full-suite-empty", 5, "no tests ran\n", 2, 1, 1),
         ("unsharded-empty", 5, "no tests ran\n", 1, 1, 0),
     )
-    for name, pytest_exit, pytest_output, shard_count, shard_index, include_slow in cases:
+    for (
+        name,
+        pytest_exit,
+        pytest_output,
+        shard_count,
+        shard_index,
+        include_slow,
+    ) in cases:
         output.write_text(pytest_output, encoding="utf-8")
         env = {
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
-            "PYTEST_NUM_WORKERS": "1",
+            "PYTEST_NUM_WORKERS": "4",
             "PYTEST_FAST_FAIL": "0",
+            "FIXTURE_ARGS": str(tmp_path / "args.txt"),
             "PYTEST_ORDER_MODE": "none",
             "PYTEST_SHARD_COUNT": str(shard_count),
             "PYTEST_SHARD_INDEX": str(shard_index),
@@ -300,6 +311,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             "FIXTURE_OUTPUT": str(output),
             "FIXTURE_EXIT": str(pytest_exit),
         }
+        env.pop("PYTEST_XDIST_DIST", None)
         result = subprocess.run(
             [str(script_dir / "run_tests_parallel.sh")],
             cwd=repo,
@@ -309,10 +321,31 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             timeout=30,
             check=False,
         )
+        argv = (tmp_path / "args.txt").read_text().splitlines()
+        assert argv[argv.index("--dist") + 1] == ("worksteal" if shard_count > 1 else "load")
         expected = 0 if name == "empty-fast-shard" else pytest_exit
         assert result.returncode == expected, (name, result.stdout, result.stderr)
         assert not list(temp_root.glob("pytest_run.*.log")), name
         assert not list(temp_root.glob("pytest_serial.*.log")), name
+
+    override_env = {
+        **env,
+        "PYTEST_SHARD_COUNT": "2",
+        "PYTEST_XDIST_DIST": "loadscope",
+        "FIXTURE_EXIT": "0",
+    }
+    overridden = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh")],
+        cwd=repo,
+        env=override_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert overridden.returncode == 0, overridden.stderr
+    argv = (tmp_path / "args.txt").read_text().splitlines()
+    assert argv[argv.index("--dist") + 1] == "loadscope"
 
     missing_coverage_env = {
         **os.environ,
@@ -368,10 +401,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
 
     assert duration_restore["uses"].startswith("actions/cache/restore@")
     assert duration_restore["continue-on-error"] is True
-    assert duration_restore["with"]["path"] == ".test_durations"
+    assert duration_restore["with"]["path"].splitlines() == [
+        ".test_durations",
+        ".pytest_cache/test_durations_metadata.json",
+    ]
     assert "${{ github.run_id }}" in duration_restore["with"]["key"]
     assert "${{ github.run_attempt }}" in duration_restore["with"]["key"]
-    assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
+    assert (
+        "test-durations-v2-${{ runner.os }}-${{ runner.arch }}-"
+        in duration_restore["with"]["restore-keys"]
+    )
     assert duration_upload["if"] == "always()"
     assert duration_upload["continue-on-error"] is True
     assert duration_upload["with"] == {
@@ -427,7 +466,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "always()" in duration_save["if"]
     assert "steps.checkout_ci_source.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
-    assert duration_save["with"]["path"] == ".test_durations"
+    assert duration_save["with"]["path"] == duration_restore["with"]["path"]
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
     assert "${{ github.run_attempt }}" in duration_save["with"]["key"]
 

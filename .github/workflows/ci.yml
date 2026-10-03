@@ -166,6 +166,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     env:
+      # Redistribute queued release-validation checks instead of stranding a tail.
+      PYTEST_XDIST_DIST: worksteal
       PYTEST_SHARD_COUNT: 4
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
       ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
@@ -228,10 +230,13 @@ jobs:
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .test_durations
-          key: test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .test_durations
+            .pytest_cache/test_durations_metadata.json
+          key: test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+            test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-
+            test-durations-v2-${{ runner.os }}-${{ runner.arch }}-
 
       # Lint and typecheck are shard-independent; run them once (shard 1 only)
       # to avoid quadruplicated annotations on pull-request shard matrices.
@@ -1037,25 +1042,34 @@ jobs:
         run: echo "Draft lint and small helper tests passed; full CI starts on ready_for_review."
 
       - name: Download test-duration shards
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: pytest-durations-*
           path: .duration-artifacts
 
+      # Duration hints survive failed/cancelled siblings; the CI verdict above
+      # remains mandatory. Empty, malformed and overlapping artifacts cannot save.
       - name: Merge test durations
         id: merge-test-durations
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
+        env:
+          FAST_FEEDBACK_RESULT: ${{ needs.fast-feedback.result }}
+          DURATION_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DURATION_CACHE_KEY: test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           python scripts/dev/merge_test_durations.py \
-            --artifact-dir .duration-artifacts --output .test_durations
+            --artifact-dir .duration-artifacts --output .test_durations \
+            --allow-partial --metadata-output .pytest_cache/test_durations_metadata.json
 
       - name: Save merged test durations
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .test_durations
-          key: test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .test_durations
+            .pytest_cache/test_durations_metadata.json
+          key: test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}

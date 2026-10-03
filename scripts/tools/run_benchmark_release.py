@@ -45,6 +45,7 @@ from robot_sf.benchmark.release_acceptance import (
     validate_diagnostic_stress_smoke_acceptance,
     validate_full_benchmark_release_acceptance,
 )
+from robot_sf.benchmark.release_notes import gate_manifest
 from robot_sf.benchmark.release_protocol import (
     HISTORICAL_ZENODO_CONCEPT_DOIS,
     build_release_provenance,
@@ -1456,10 +1457,31 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         )
         return 2
 
+    try:
+        notes_receipt = gate_manifest(manifest, get_repository_root())
+    except (OSError, TypeError, ValueError) as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "release_notes_refused",
+                    "status_reason": str(exc),
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
+
     resolved_manifest_kwargs: dict[str, Any] = {"campaign_config": cfg}
     if runtime_source_commit is not None:
         resolved_manifest_kwargs["source_commit"] = runtime_source_commit
     resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
+    if notes_receipt is not None:
+        resolved_manifest["release_notes_gate"] = notes_receipt
     if args.mode == "preflight":
         checkpoint_admission = _preflight_checkpoint_admission(args, cfg, manifest)
         if checkpoint_admission["status"] == "rejected":

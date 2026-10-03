@@ -219,6 +219,14 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     (repo / ".gitignore").write_text("output/\n", encoding="utf-8")
     _git(repo, "add", ".gitignore")
     _git(repo, "commit", "-qm", "fixture: initialize ignored output")
+    for relative in (
+        "docs/release/0.0.8/release_notes.md",
+        "docs/release/0.0.8/decisions.md",
+        "robot_sf/benchmark/release_notes.py",
+    ):
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / relative, target)
     copy_runtime_sources(repo)
 
     scenarios = repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
@@ -933,6 +941,8 @@ def test_public_runner_preflight_consumes_the_verified_resolved_identity(
     result = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert result["manifest_validation"]["status"] == "valid"
+    notes_receipt = result["resolved_manifest"].pop("release_notes_gate")
+    assert notes_receipt["notes_sha256"] == _sha256(repo / "docs/release/0.0.8/release_notes.md")
     assert result["resolved_manifest"] == identity["resolved_manifest"]
     assert result["resolved_manifest"]["provenance"]["source_sha"] == source_commit
     assert observed_preflight_manifests == [identity["resolved_manifest"]]

@@ -584,3 +584,30 @@ def test_lazy_doctor_dispatch_resolves_current_collector(module_name, function_n
         )
     assert getattr(release_cli, function_name)(**inputs) is expected
     assert observed == [inputs]
+
+
+@pytest.mark.parametrize("erratum", [False, True], ids=["ordinary-manifest", "historical-erratum"])
+def test_publish_only_erratum_contract_bypasses_notes_gate(monkeypatch, tmp_path, capsys, erratum):
+    """Only the validated erratum branch may return before notes admission."""
+    args = _args("publish", tmp_path)
+    args.manifest = ERRATUM_CONTRACT_PATH if erratum else RELEASE_MANIFEST_PATH
+    args.metadata = None
+    reached = []
+
+    def refuse(_manifest):
+        raise release_cli.zenodo_publisher.ZenodoPublisherError("notes gate reached")
+
+    monkeypatch.setattr(release_cli, "_publication_notes_gate", refuse)
+    publisher = release_cli.zenodo_publisher
+    monkeypatch.setattr(
+        publisher, "build_session", lambda _path: reached.append("session") or object()
+    )
+    monkeypatch.setattr(publisher, "load_state", lambda _path: {})
+    monkeypatch.setattr(publisher, "load_dataset_metadata", lambda *_a, **_kw: {})
+    monkeypatch.setattr(publisher, "publish", lambda *_a, **_kw: reached.append("publish") or {})
+    monkeypatch.setattr(publisher, "write_state", lambda *_a: None)
+    assert release_cli.handle(args) == (0 if erratum else 2)
+    assert reached == (["session", "publish"] if erratum else [])
+    result = json.loads(capsys.readouterr().out)
+    if not erratum:
+        assert result == {"status": "blocked", "reason": "notes gate reached"}

@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.release_notes import gate_manifest
 from robot_sf.benchmark.release_protocol import (
     RESOLVED_RELEASE_METADATA_FILENAME,
     verify_resolved_release_identity,
@@ -102,10 +103,12 @@ def main(argv: list[str] | None = None) -> int:
 
         identity = args.identity if args.identity.is_absolute() else repository_root / args.identity
         manifest = verify_resolved_release_identity(identity, repository_root=repository_root)
+        notes_receipt = gate_manifest(manifest, repository_root)
         _print(
             {
                 "schema_version": "benchmark-release-identity-command.v1",
                 "status": "verified",
+                "release_notes_gate": notes_receipt,
                 "source_commit": manifest.source_sha,
                 "latest_main_base_commit": manifest.latest_main_base_commit,
                 "release_tag": manifest.release_tag,

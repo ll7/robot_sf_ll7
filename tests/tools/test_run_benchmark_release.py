@@ -2228,6 +2228,28 @@ def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_
     """A slice kind cannot bypass any strict runner gate before accepting artifacts."""
     manifest, cfg, checkpoint, smoke = _rehearsal_fixture(tmp_path)
     manifest.release_kind = "benchmark-doorway-width-slice.v1"
+    # Supply real valid notes admission so each downstream gate remains reached.
+    import shutil
+
+    from robot_sf.benchmark.release_notes import (
+        CHECKER_PATH,
+        DECISIONS_PATH,
+        NOTES_PATH,
+        RECEIPT_NAME,
+        notes_gate,
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    for relative in (NOTES_PATH, CHECKER_PATH, DECISIONS_PATH):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / relative, target)
+    manifest.resolved_identity_path = tmp_path / "output/release_identity.resolved.json"
+    manifest.resolved_identity_path.parent.mkdir()
+    write_json(
+        manifest.resolved_identity_path.parent / RECEIPT_NAME,
+        notes_gate(tmp_path, source_commit=manifest.source_sha),
+    )
     cfg.name = "doorway-gate-fixture"
     cfg.export_publication_bundle = False
     cfg.resume = False

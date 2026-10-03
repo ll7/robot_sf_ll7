@@ -397,6 +397,47 @@ production receipts. Access succeeded; no inaccessible gap is guessed closed.
 | G11 DOI reservation order | Documented/fixed in private #421: reserve unpublished before identity/mint, publish last. Authentic reservation receipt remains operator input; none performed here. |
 | G12 full publication chain | Public doorway-runner seam fixed by #10081. Width scientific review, two-bundle/result/projection reconciliation, scanner/cold preservation, intake and final authorization remain open; not supplied by a diagnostic mint/rehearsal. |
 
+## Release-notes admission before mint and publication
+
+The versioned [release notes](release_notes.md) state the adopted limitations by
+content. `write_resolved_release_identity` (the production identity generator)
+checks complete required paragraphs in named sections, and atomically retains
+`release_notes_gate.v1.json` beside the identity and metadata. The receipt binds
+the notes digest, checker digest, decision-register digest and exact source commit;
+it is separate from the resolved sealed identity bytes. The production runner
+rechecks it before spawn preflight or execution. The existing private production mint calls the public resolver `verify`
+command, which now rechecks the same receipt and returns it in its verifier
+output. Retain the receipt with the release packet.
+
+Publication export retains `release_metadata/release_notes.md` and the mint
+receipt. Bundle preflight repeats the same gate on those bytes; the direct
+publication CLI repeats it against the source notes before creating an
+authenticated client. A missing receipt, missing statement, wrong section or
+changed digest refuses admission. This is disclosure admission, not release
+approval.
+
+These notes contain no sealed-campaign outcome numbers. If outcome numbers are
+added before mint, mark unavailable values as `PLACEHOLDER_SEALED_<FIELD_NAME>`.
+Mint allows placeholders; publication refuses them (also TODO, TBD and template
+markers). Fill them before the final production mint: editing notes after mint
+requires a new receipt and packet at the selected exact source. The short GitHub
+release body must link to the notes at that source commit.
+
+The issue's group-truncation and notes-location content maps to D-063 and D-076
+in the public register, in addition to its named D-065 and D-075. The public
+register has no adopted straight-force-forecast disclosure; this gate does not
+invent one.
+
+### Historical derived-metadata erratum exemption
+
+`release zenodo publish --manifest <erratum-contract>` is exempt from the 0.0.8
+release-notes gate only when the input validates as the derived-metadata erratum
+contract. Its immutable historical predecessor predates the notes receipt; the
+erratum validator binds the predecessor and forbids a new campaign or scientific
+claims. Ordinary release manifests, including the independent doorway-width slice,
+repeat the notes gate before publish. This exemption does not admit a new 0.0.8
+campaign or replace its mint receipt.
+
 ## Development packaging reference
 
 D-086 identities use resolver `generate --development-rehearsal

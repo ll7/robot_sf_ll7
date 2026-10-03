@@ -69,6 +69,14 @@ def sealed_repository(tmp_path, monkeypatch):
     shutil.copy2(ROOT / "robot_sf/nav/svg_map_parser.py", repo / "robot_sf/nav/svg_map_parser.py")
     shutil.copy2(ROOT / "docs/RELEASE.md", repo / "docs/RELEASE.md")
     shutil.copy2(ROOT / "CITATION.cff", repo / "CITATION.cff")
+    for relative in (
+        "docs/release/0.0.8/release_notes.md",
+        "docs/release/0.0.8/decisions.md",
+        "robot_sf/benchmark/release_notes.py",
+    ):
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, target)
     copy_runtime_sources(repo)
     bind_runtime_sources(repo, monkeypatch)
     (repo / ".gitignore").write_text("output/\n")
@@ -83,6 +91,8 @@ def sealed_repository(tmp_path, monkeypatch):
         "configs",
         "maps",
         "docs/RELEASE.md",
+        "docs/release/0.0.8",
+        "robot_sf/benchmark/release_notes.py",
         "CITATION.cff",
         "robot_sf/nav/svg_map_parser.py",
         "robot_sf/__init__.py",

@@ -65,6 +65,7 @@ def test_excluded_legacy_snqi_dev_campaign_writes_episodes_and_publication(tmp_p
                 (RELEASE.parent / manifest["metrics"][key]).resolve().relative_to(ROOT)
             )
     manifest["provenance"] = {"citation_path": "CITATION.cff"}
+    manifest["release_kind"] = "development_rehearsal"
     release = root / "release"
     release.mkdir()
     write_json(release / "release_manifest.resolved.json", manifest)
@@ -73,6 +74,11 @@ def test_excluded_legacy_snqi_dev_campaign_writes_episodes_and_publication(tmp_p
         {
             key: summary["campaign"][key]
             for key in ("status", "evidence_status", "total_episodes", "successful_runs")
+        }
+        | {
+            "benchmark_release": {"release_kind": "development_rehearsal"},
+            "release_eligible": False,
+            "release_benchmark_success": False,
         },
     )
     bundle = export_publication_bundle(
@@ -80,6 +86,7 @@ def test_excluded_legacy_snqi_dev_campaign_writes_episodes_and_publication(tmp_p
     )
     report = verify_publication_bundle_preflight(bundle.bundle_dir)
     assert report["violation_count"] == 0
+    assert report["release_eligible"] is False
     assert report["evidence"]["snqi_field_consistency"]["checked"] is False
     assert not (root / "reports/snqi_diagnostics.json").exists()
     assert not (bundle.bundle_dir / "payload/release_metadata/snqi").exists()

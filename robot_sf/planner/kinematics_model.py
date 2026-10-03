@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import InitVar, dataclass
 from typing import Any, Protocol
 
@@ -119,14 +120,30 @@ class BicycleDriveKinematicsModel:
     max_angular_speed: float
     allow_backwards: bool = False
     name: str = "bicycle_drive"
+    max_curvature: float | None = None
+    creep_speed: float = 0.0
     limited_reverse: InitVar[bool] = False
     max_reverse_speed: InitVar[float] = 0.5
 
     def __post_init__(self, limited_reverse: bool, max_reverse_speed: float) -> None:
-        """Validate the opt-in reverse bounds without changing legacy serialization."""
+        """Require physical curvature and an explicit nonnegative creep speed."""
         validate_reverse_settings(limited_reverse, max_reverse_speed)
         object.__setattr__(self, "limited_reverse", limited_reverse)
         object.__setattr__(self, "max_reverse_speed", float(max_reverse_speed))
+        if (
+            self.max_curvature is None
+            or not math.isfinite(self.max_curvature)
+            or self.max_curvature < 0
+        ):
+            raise ValueError("bicycle max_curvature must be nonnegative: tan(max_steer)/wheelbase")
+        if not math.isfinite(self.creep_speed) or self.creep_speed < 0:
+            raise ValueError("bicycle creep_speed must be finite and nonnegative")
+
+    @property
+    def curvature_limit(self) -> float:
+        """Return the explicitly supplied physical tan(max_steer)/wheelbase."""
+        assert self.max_curvature is not None  # validated at construction
+        return self.max_curvature
 
     @property
     def min_velocity(self) -> float:
@@ -148,20 +165,38 @@ class BicycleDriveKinematicsModel:
         v, omega = command
         return bool(
             self.min_velocity <= v <= self.max_velocity
-            and -self.max_angular_speed <= omega <= self.max_angular_speed
+            and abs(omega) <= min(self.max_angular_speed, abs(v) * self.curvature_limit)
         )
 
     def project(self, command: Command2D) -> Command2D:
-        """Clip command to bicycle velocity and angular limits.
+        """Project with speed priority onto the coupled bicycle cone.
 
         Returns:
-            Command2D: Projected command in feasible set.
+            Command2D: Physically feasible speed and yaw command.
+        """
+        return self.project_with_creep_info(command)[0]
+
+    def project_with_creep_info(self, command: Command2D) -> tuple[Command2D, bool]:
+        """Project with speed priority and report the optional creep branch.
+
+        This clips yaw at the bounded requested speed, rather than finding a
+        Euclidean nearest point. Creep is disabled by default; a zero/zero stop
+        stays stopped. Creep must never apply under a safety intervention:
+        callers carrying a veto must use a creep-disabled model, as the robot
+        adapter does when ``safety_intervention=True``.
+
+        Returns:
+            Projected command and whether the optional creep branch raised speed.
         """
         v, omega = command
-        return (
-            float(np.clip(v, self.min_velocity, self.max_velocity)),
-            float(np.clip(omega, -self.max_angular_speed, self.max_angular_speed)),
-        )
+        creep_applied = False
+        if self.creep_speed > v and 0.0 <= v < 1e-3 and abs(omega) >= math.radians(1.0):
+            creep_velocity = min(self.creep_speed, self.max_velocity)
+            creep_applied = creep_velocity > v
+            v = creep_velocity
+        v = float(np.clip(v, self.min_velocity, self.max_velocity))
+        yaw_limit = min(self.max_angular_speed, abs(v) * self.curvature_limit)
+        return (v, float(np.clip(omega, -yaw_limit, yaw_limit))), creep_applied
 
     def diagnostics(self, command: Command2D, projected: Command2D) -> dict[str, Any]:
         """Build projection diagnostics payload for metadata and debugging.
@@ -220,9 +255,10 @@ def resolve_benchmark_kinematics_model(
         max_velocity = float(limits.get("max_velocity", limits.get("v_max", 2.0)))
         max_angular = float(limits.get("max_angular_speed", limits.get("omega_max", 1.0)))
         return BicycleDriveKinematicsModel(
-            max_velocity=max_velocity,
-            max_angular_speed=max_angular,
+            max_velocity=float(limits.get("bicycle_max_velocity", max_velocity)),
+            max_angular_speed=float(limits.get("bicycle_max_angular_speed", max_angular)),
             allow_backwards=bool(limits.get("allow_backwards", False)),
+            max_curvature=limits.get("bicycle_max_curvature"),
             limited_reverse=limits.get("limited_reverse", False),
             max_reverse_speed=limits.get("max_reverse_speed", 0.5),
         )

@@ -26,6 +26,7 @@ from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.benchmark.release_notes import RECEIPT_NAME, notes_gate
 from robot_sf.benchmark.release_parameter_freeze import unfrozen_planner_config_blockers
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
@@ -3779,6 +3780,32 @@ def _rollback_materialized_outputs(
         )
 
 
+def _mint_notes_output(root: Path, output: Path, source: str, dev_seeds: Any) -> tuple:
+    """Bind disclosures independently of deterministic campaign identity bytes.
+
+    Returns:
+        Receipt output to materialize atomically with the identity, or no output.
+    """
+    if dev_seeds is not None:
+        return ()
+    for relative in (
+        "docs/release/0.0.8/release_notes.md",
+        "docs/release/0.0.8/decisions.md",
+        "robot_sf/benchmark/release_notes.py",
+    ):
+        _require_tracked_input_at_source(
+            root / relative,
+            repository_root=root,
+            source_commit=source,
+            label="release notes gate input",
+        )
+    receipt = notes_gate(root, source_commit=source)
+    receipt_path = _safe_identity_output(
+        output.parent / RECEIPT_NAME, root, field_name="release notes gate receipt"
+    )
+    return ((receipt_path, _canonical_json_bytes(receipt)),)
+
+
 def write_resolved_release_identity(
     *,
     template_path: Path,
@@ -3843,6 +3870,9 @@ def write_resolved_release_identity(
     )
     identity_bytes = _canonical_json_bytes(envelope)
     materialized_outputs = ((metadata_path, metadata_bytes), (output, identity_bytes))
+    materialized_outputs += _mint_notes_output(
+        root, output, normalized_source, development_rehearsal_seeds
+    )
     originals = {
         path: path.read_bytes() if path.is_file() else None for path, _ in materialized_outputs
     }

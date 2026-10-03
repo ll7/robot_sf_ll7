@@ -29,16 +29,19 @@ from robot_sf.benchmark.runtime_smoke_admission import (
     validate_runtime_smoke_result,
 )
 from robot_sf.benchmark.utils import _config_hash
+from robot_sf.evidence.writers import review_marker_comment, write_json
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    write_json(path, payload, indent=None)
 
 
 def _write_yaml(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    path.write_text(
+        review_marker_comment() + "\n" + yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
+    )
 
 
 def _fixture_checkpoint_provenance(planner: str, index: int) -> dict[str, object]:

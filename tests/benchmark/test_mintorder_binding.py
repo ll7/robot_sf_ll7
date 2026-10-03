@@ -18,7 +18,6 @@ import yaml
 from robot_sf.benchmark.camera_ready._util import _config_hash_payload
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
 from robot_sf.benchmark.snqi import v2_calibration
-from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors, load_acquisition_binding
 from robot_sf.evidence.writers import write_json
 from tests.unit.benchmark.test_snqi_v2 import spec_files as _spec_files
 
@@ -30,8 +29,22 @@ CONFIG = (
 )
 
 
+def _binding_api():
+    """Collect on main, then refuse its missing authored contract before importing new APIs.
+
+    Returns:
+        Production binding API after proving the authored source prerequisite.
+    """
+    raw = yaml.safe_load(CONFIG.read_bytes())
+    assert raw.get("snqi_v2_spec") is not None, "D-083 authored source has no SNQI-v2 binding"
+    from robot_sf.benchmark.snqi import v2_binding
+
+    return v2_binding
+
+
 def test_pending_campaign_cannot_execute():
     """No direct campaign route may silently publish an unscored SNQI-v2 campaign."""
+    _binding_api()
     cfg = load_campaign_config(CONFIG)
     assert cfg.snqi_v2_binding is not None
     assert cfg.snqi_v2_spec is None
@@ -42,6 +55,7 @@ def test_pending_campaign_cannot_execute():
 @pytest.mark.parametrize("mutation", ["missing", "digest", "rule", "status"])
 def test_binding_refuses_incomplete_or_changed_source_assets(tmp_path, mutation):
     """A typed pending contract rejects missing pins, changed bytes and fake frozen source."""
+    binding_api = _binding_api()
     raw = yaml.safe_load(CONFIG.read_bytes())["snqi_v2_spec"]
     if mutation == "missing":
         raw.pop("family_sha256")
@@ -55,12 +69,13 @@ def test_binding_refuses_incomplete_or_changed_source_assets(tmp_path, mutation)
         raw["anchors_path"] = str(path)
         raw["anchors_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     with pytest.raises(ValueError, match="SNQI-v2"):
-        load_acquisition_binding(raw, CONFIG)
+        binding_api.load_acquisition_binding(raw, CONFIG)
 
 
 @pytest.mark.parametrize("mutation", ["none", "source", "seeds", "anchors", "acquisition"])
 def test_acquired_anchors_are_bound_before_scoring(tmp_path, monkeypatch, spec_files, mutation):
     """Actual strict scoring loader plus a freeze spy verifies source/custody attachment."""
+    binding_api = _binding_api()
     cfg = load_campaign_config(CONFIG)
     _weights, anchors, _family = spec_files
     document = json.loads(anchors.read_bytes())
@@ -109,9 +124,9 @@ def test_acquired_anchors_are_bound_before_scoring(tmp_path, monkeypatch, spec_f
                 "acquisition": "configuration changed",
             }[mutation],
         ):
-            bind_acquired_anchors(cfg, **kwargs)
+            binding_api.bind_acquired_anchors(cfg, **kwargs)
     else:
-        scored = bind_acquired_anchors(cfg, **kwargs)
+        scored = binding_api.bind_acquired_anchors(cfg, **kwargs)
         assert scored.snqi_v2_spec.diagnostic
         assert scored.snqi_v2_spec.calibration_seeds == (1001, 1002)
         assert (
@@ -126,6 +141,7 @@ def test_reviewed_artifact_route_still_requires_exact_acquisition_identity(
     monkeypatch, spec_files, mutation
 ):
     """Without raw custody, strict anchors must still bind this source and acquisition config."""
+    binding_api = _binding_api()
     cfg = load_campaign_config(CONFIG)
     _weights, anchors, _family = spec_files
     document = json.loads(anchors.read_bytes())
@@ -157,9 +173,9 @@ def test_reviewed_artifact_route_still_requires_exact_acquisition_identity(
         "diagnostic": False,
     }
     if mutation == "none":
-        scored = bind_acquired_anchors(cfg, **kwargs)
+        scored = binding_api.bind_acquired_anchors(cfg, **kwargs)
         assert scored.snqi_v2_spec.calibration_seeds == (1001, 1002)
         assert not scored.snqi_v2_spec.diagnostic
     else:
         with pytest.raises(ValueError, match="source differs|acquisition configuration"):
-            bind_acquired_anchors(cfg, **kwargs)
+            binding_api.bind_acquired_anchors(cfg, **kwargs)

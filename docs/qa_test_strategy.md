@@ -160,3 +160,12 @@ When presenting test results, contributors and AI agents must adhere to the foll
 - **[Glossary](./glossary.md)** — Canonical definitions of repository terms (VRU, AMV, SNQI, ODD, etc.).
 - **[CI Reproducibility & Flaky Policy](./context/issue_1436_reproducibility_flaky_acceptance.md)** — Detailed CI lane mapping and flaky failure triage rules.
 - **[Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** — Fail-closed requirements for benchmark evaluation.
+
+
+CI setup contracts for uv install, cache diagnostics and sync retries are registered in
+`tests/conftest.py` so pull-request fast feedback executes them. A small `_FAST_NODE_IDS`
+allowlist also admits the serial-fallback shell contract and all its parameter cases; the
+rest of that large script-contract file retains its full-suite classification. Duration
+caches affect shard assignment and ordering, while `not slow` affects selection: a green
+PR fast suite does not establish a passing complete suite. Verify setup/driver changes
+with their explicit contracts and the complete suite before release-path handoff.

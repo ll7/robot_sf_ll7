@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # CI setup contracts use fake transports and must run on PRs (#10116).
+    "test_ci_uv_install_retry.py",
+    "test_ci_uv_sync_diag.py",
+    "test_ci_uv_sync_retry.py",
     # Static CI bootstrap contracts: <4 s combined, no environment episodes (#10116).
     "test_ci_helpers.py",
     "test_ci_driver_contract.py",
@@ -1449,12 +1453,21 @@ def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ign
     return not _should_collect_in_lane(path_obj.as_posix(), lane)
 
 
+# This shell-driver contract is cheap; the rest of its large file stays in the
+# full suite. Match the exact function and all of its parameter cases.
+_FAST_NODE_IDS = {
+    "tests/test_ci_script_contract.py::test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed",
+}
+
+
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
     """Auto-mark non-core tests as slow to keep fast unit runs small."""
     del config
     for item in items:
         path_str = str(item.fspath)
-        if _should_auto_mark_slow(path_str):
+        if item.nodeid.split("[", maxsplit=1)[0] not in _FAST_NODE_IDS and _should_auto_mark_slow(
+            path_str
+        ):
             item.add_marker(pytest.mark.slow)
 
 

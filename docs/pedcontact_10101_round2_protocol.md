@@ -27,7 +27,10 @@ text, superseded for these runs by the estimator identity and explicit row field
 ## Solver and radius
 
 Uniform-grid candidate cells have size 2r plus a micrometre margin. Their search radius
-expands conservatively for swept motion. Large motion falls back to all candidate pairs.
+expands conservatively for swept motion. A 0.10 m neighbour-list skin avoids rebuilding
+the grid on every small constraint pass. It is rebuilt after any endpoint moves more
+than 0.05 m from its reference; relative swept paths then differ by at most 0.10 m.
+Admission requires the skin bound to remain valid. Large motion falls back to all pairs.
 Alternating Gauss-Seidel with 1.6 over-relaxation handles contact chains; every admission
 also checks actual pair and wall geometry. Sequential corrections propagate local chain
 constraints within a pass. On the same congested probe, 1.6 reduced the maximum passes

@@ -19,6 +19,7 @@ WALL_AMPLITUDE_M_S2 = 3.0
 WALL_DECAY_M = 0.04
 WALL_RANGE_M = 0.20
 WALL_NORMAL_BLEND_M = 0.30
+PAIR_GRID_SKIN_M = 0.10
 
 
 def validate_contact_rules(config) -> None:
@@ -187,7 +188,7 @@ def wall_project(start, end, obstacles, radius):
 
 
 @njit(cache=True)
-def grid_pairs(p, previous, cell):
+def grid_pairs(p, previous, cell, skin=0.0):
     """Conservative uniform-grid candidates, expanded for relative swept motion.
 
     Returns:
@@ -208,7 +209,7 @@ def grid_pairs(p, previous, cell):
     reach = 1
     for i in range(n):
         motion = np.sqrt(np.sum((p[i] - previous[i]) ** 2))
-        reach = max(reach, int(np.ceil(1 + 2 * motion / cell)))
+        reach = max(reach, int(np.ceil(1 + (2 * motion + skin) / cell)))
     # Huge steps: the all-pair path remains conservative without huge cell scans.
     if (2 * reach + 1) ** 2 > n:
         result = np.empty((n * (n - 1) // 2, 2), dtype=np.int64)
@@ -237,6 +238,18 @@ def grid_pairs(p, previous, cell):
                         result[k, 0], result[k, 1] = i, j
                         k += 1
     return result[:k]
+
+
+@njit(cache=True)
+def refresh_grid(p, previous, reference, candidates, cell):
+    """Rebuild cached candidates after half-skin endpoint displacement.
+
+    Returns:
+        Conservative candidates and their endpoint reference positions.
+    """
+    if len(p) and np.max(np.sum((p - reference) ** 2, axis=1)) > (PAIR_GRID_SKIN_M / 2) ** 2:
+        return grid_pairs(p, previous, cell, PAIR_GRID_SKIN_M), p.copy()
+    return candidates, reference
 
 
 @njit(cache=True)
@@ -278,10 +291,19 @@ def project_step(previous, proposed, obstacles, radius, pairs, walls, max_passes
             old_positions[i] = push_out(previous[i], obstacles, wall_radius)
             p[i] += old_positions[i] - previous[i]
             p[i] = push_out(p[i], obstacles, wall_radius)
+    # A .10m Verlet skin is conservative while each endpoint stays within .05m
+    # of its reference. Relative swept paths then differ by at most .10m.
+    # Reuse the ordered candidates during small contact-chain corrections.
+    reference = p.copy()
+    candidates = (
+        grid_pairs(p, old_positions, target, PAIR_GRID_SKIN_M)
+        if pairs
+        else np.empty((0, 2), dtype=np.int64)
+    )
     for iteration in range(max_passes):
         maximum = 0.0
         if pairs:
-            candidates = grid_pairs(p, old_positions, target)
+            candidates, reference = refresh_grid(p, old_positions, reference, candidates, target)
             # Alternate order to avoid systematic queue-direction bias.
             for index in range(len(candidates)):
                 pair = candidates[index if iteration % 2 == 0 else len(candidates) - 1 - index]
@@ -328,7 +350,12 @@ def project_step(previous, proposed, obstacles, radius, pairs, walls, max_passes
                 corrected = wall_project(old_positions[i], p[i], obstacles, wall_radius)
                 maximum = max(maximum, np.sqrt(np.sum((corrected - p[i]) ** 2)))
                 p[i] = corrected
-        if maximum < 1e-6 and geometry_valid(p, obstacles, radius, pairs, walls):
+        skin_valid = (
+            not pairs
+            or not len(p)
+            or np.max(np.sum((p - reference) ** 2, axis=1)) <= (PAIR_GRID_SKIN_M / 2) ** 2
+        )
+        if maximum < 1e-6 and skin_valid and geometry_valid(p, obstacles, radius, pairs, walls):
             return p, iteration + 1, True
     return p, max_passes, False
 
@@ -473,6 +500,8 @@ def contact_law_metadata(sim) -> dict[str, object]:
             "separation_margin_m": SEPARATION_MARGIN_M,
             "sliding_friction": False,
             "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+            "broad_phase_skin_m": PAIR_GRID_SKIN_M,
+            "broad_phase_rebuild_displacement_m": PAIR_GRID_SKIN_M / 2,
             "velocity": "closing_normal_removal_then_speed_cap",
             "cap_fallback": "endpoint_push_out_then_admissible_previous",
             "swept_pair_guard": True,

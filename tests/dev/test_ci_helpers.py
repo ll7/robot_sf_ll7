@@ -460,3 +460,41 @@ def test_duration_merge_rejects_nonpositive_matrix_size(
         )
     assert error.value.code == 2
     assert "--shard-count must be positive" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_duration_snapshot_freezes_one_validated_input_for_every_shard(
+    tmp_path: Path, cached: bool
+) -> None:
+    """A cache miss becomes one shared cold input; later writes cannot alter its weights."""
+    source = tmp_path / "restored.json"
+    if cached:
+        source.write_text('{"measured": 7.0}', encoding="utf-8")
+    snapshot = tmp_path / "snapshot" / ".test_durations"
+    assert (
+        merge_test_durations.main(["--snapshot-input", str(source), "--output", str(snapshot)]) == 0
+    )
+    source.write_text('{"newer": 999.0}', encoding="utf-8")
+    assert json.loads(snapshot.read_text()) == ({"measured": 7.0} if cached else {})
+
+
+@pytest.mark.parametrize("bad", [{}, {"node": True}, {"node": float("nan")}, {"node": -1}])
+def test_duration_snapshot_rejects_corrupt_cache_without_replacing_output(
+    tmp_path: Path, bad: dict
+) -> None:
+    """Corrupt restored data must fail closed rather than diverge across shard restores."""
+    source, snapshot = tmp_path / "restored.json", tmp_path / "snapshot.json"
+    source.write_text(json.dumps(bad), encoding="utf-8")
+    snapshot.write_text('{"old": 3}', encoding="utf-8")
+    assert (
+        merge_test_durations.main(["--snapshot-input", str(source), "--output", str(snapshot)]) == 1
+    )
+    assert json.loads(snapshot.read_text()) == {"old": 3}
+
+
+def test_duration_snapshot_requires_file_output(capsys: pytest.CaptureFixture[str]) -> None:
+    """A snapshot without an artifact path must be an explicit usage error."""
+    with pytest.raises(SystemExit) as error:
+        merge_test_durations.main(["--snapshot-input", "missing-cache.json"])
+    assert error.value.code == 2
+    assert "--snapshot-input requires --output" in capsys.readouterr().err

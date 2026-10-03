@@ -119,7 +119,7 @@ Contributors must run validation commands matching their change class. The repos
 
 ---
 
-Fast-feedback uses six full-suite shards on main (fast-only on PRs), preserving runner worker limits. The shell driver selects pytest-split `least_duration`: greedy assignment spreads missing-duration nodes instead of preserving a contiguous unmeasured prefix. Cache hits change placement only; the shard union must equal the complete selected lane.
+Fast-feedback uses six full-suite shards on main (fast-only on PRs), preserving runner worker limits. The shell driver selects pytest-split `least_duration`: greedy assignment spreads missing-duration nodes instead of preserving a contiguous unmeasured prefix. The dispatch job freezes one validated cache (or one empty cold input) in an attempt-specific artifact shared by every shard, including retries. This prevents staggered jobs restoring different latest caches. Cache hits change placement only; the shard union must equal the complete selected lane.
 
 Fast-feedback shards use xdist `worksteal`, so idle workers can take queued release checks from a busy worker. Unsharded local runs retain `load`; `PYTEST_XDIST_DIST` remains an explicit override. No test or coverage selection changes with this scheduler.
 

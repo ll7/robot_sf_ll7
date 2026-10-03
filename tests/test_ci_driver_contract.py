@@ -1296,7 +1296,7 @@ def test_failed_matrix_publishes_nonempty_duration_bootstrap() -> None:
 def test_duration_dependency_key_miss_has_platform_scoped_fallback() -> None:
     """A lock change reuses scheduling hints without crossing OS/architecture/schema."""
     workflow = yaml.safe_load(_workflow_text())
-    steps = workflow["jobs"]["fast-feedback"]["steps"]
+    steps = workflow["jobs"]["dispatch-ownership"]["steps"]
     restore = next(
         step
         for step in steps
@@ -1350,3 +1350,42 @@ def test_ci_uv_cache_keeps_downloaded_wheels_and_keys_only_locked_environment() 
     assert "uv_sync_retry.sh" in sync["run"]
     assert "inputs.sync-args" in sync["run"]
     assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
+
+
+def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> None:
+    """Staggered restores and reruns must not select overlapping or missing tests."""
+    workflow = yaml.safe_load(_workflow_text())
+    dispatch = workflow["jobs"]["dispatch-ownership"]
+    assert (
+        dispatch["outputs"]["duration_snapshot"]
+        == "${{ steps.freeze-durations.outputs.artifact_name }}"
+    )
+    restores = [
+        job_name
+        for job_name, job in workflow["jobs"].items()
+        for step in job.get("steps", [])
+        if "actions/cache/restore@" in step.get("uses", "")
+        and ".test_durations" in step.get("with", {}).get("path", "")
+    ]
+    assert restores == ["dispatch-ownership"]
+    freeze = next(s for s in dispatch["steps"] if s.get("id") == "freeze-durations")
+    assert (
+        "--snapshot-input .test_durations --output .duration-snapshot/.test_durations"
+        in freeze["run"]
+    )
+    assert "test-duration-snapshot-${GITHUB_RUN_ATTEMPT}" in freeze["run"]
+    assert freeze["if"] == "steps.decision.outputs.run_full_ci == 'true'"
+    upload = next(s for s in dispatch["steps"] if s["name"] == "Upload frozen test durations")
+    assert upload["with"]["name"] == "${{ steps.freeze-durations.outputs.artifact_name }}"
+    assert upload["with"]["include-hidden-files"] is True
+    assert upload["with"]["if-no-files-found"] == "error"
+    fast = workflow["jobs"]["fast-feedback"]
+    assert fast["needs"] == "dispatch-ownership"
+    download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
+    # A failed-jobs-only rerun retains the original successful owner's output,
+    # rather than requesting a nonexistent new-attempt snapshot.
+    assert download["with"] == {
+        "name": "${{ needs.dispatch-ownership.outputs.duration_snapshot }}",
+        "path": ".",
+    }
+    assert "continue-on-error" not in download

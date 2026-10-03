@@ -75,7 +75,7 @@ def merge_duration_stores(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Merge shard stores and write the deterministic aggregate to stdout or a file."""
+    """Freeze a cache or merge stores while preserving scheduling-only boundaries."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--artifact-dir",
@@ -92,12 +92,31 @@ def main(argv: list[str] | None = None) -> int:
         help="Allow missing shards (scheduling hints only)",
     )
     parser.add_argument("--metadata-output", help="Write scheduling provenance alongside the cache")
+    parser.add_argument("--snapshot-input", help="Freeze one restored cache for all matrix jobs")
     parser.add_argument(
         "--shard-count", type=int, default=4, help="Expected matrix size (default: 4)"
     )
     args = parser.parse_args(argv)
     if args.shard_count < 1:
         parser.error("--shard-count must be positive")
+
+    if args.snapshot_input:
+        if not args.output:
+            parser.error("--snapshot-input requires --output")
+        source = Path(args.snapshot_input)
+        try:
+            durations = _validate_duration_store(source) if source.exists() else {}
+        except SystemExit as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output.with_name(output.name + ".tmp")
+        temporary.write_text(
+            json.dumps(durations, indent=4, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        temporary.replace(output)
+        return 0
 
     try:
         merged = merge_duration_stores(

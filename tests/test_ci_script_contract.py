@@ -392,7 +392,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     fast_feedback_steps = fast_feedback["steps"]
     duration_restore = next(
         step
-        for step in fast_feedback_steps
+        for step in workflow["jobs"]["dispatch-ownership"]["steps"]
         if step.get("name") == "Restore test durations for pytest-split balancing"
     )
     duration_upload = next(

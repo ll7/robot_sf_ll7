@@ -993,6 +993,7 @@ _FAST_FILES = {
     "test_release_erratum.py",
     "test_revalidate_benchmark_release.py",
     "test_release_protocol.py",
+    "test_release_rehearsal_hardening.py",
     "test_release_protocol_edge_cases.py",
     # Resolved release-identity tests are deterministic contract coverage for
     # the source-freeze implementation; keep them in the changed-coverage lane.

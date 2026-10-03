@@ -1217,7 +1217,7 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
     return 0
 
 
-def _snqi_v2_evaluation_seed_receipt(cfg: Any) -> dict[str, str]:
+def _snqi_v2_evaluation_seed_receipt(cfg: Any, *, manifest: Any = None) -> dict[str, str]:
     """Bind release evaluation seeds before any episode can execute.
 
     Returns:
@@ -1233,7 +1233,7 @@ def _snqi_v2_evaluation_seed_receipt(cfg: Any) -> dict[str, str]:
     from robot_sf.benchmark.snqi.evaluation_seeds import evaluation_seeds_sha256
 
     seeds = _resolved_seed_inventory(_load_campaign_scenarios(cfg))
-    if not spec.diagnostic:
+    if not (spec.diagnostic and is_development_rehearsal(manifest)):
         spec.validate_evaluation_commitment(seeds)
     return {"snqi_v2_evaluation_seeds_sha256": evaluation_seeds_sha256(seeds)}
 
@@ -1573,7 +1573,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "manifest_validation": validation,
         "resolved_manifest": resolved_manifest,
     }
-    result.update(_snqi_v2_evaluation_seed_receipt(cfg))
+    result.update(_snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest))
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"

@@ -1604,14 +1604,17 @@ def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "snqi_claim_policy": "advisory_no_ranking",
             },
         }
+    # Local import avoids the campaign facade / release protocol import cycle.
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
     release_result_path = run_root / "release/release_result.json"
     if release_result_path.is_file():
         release_result = _read_json_file(release_result_path)
         if (
             release_result.get("benchmark_release", {}).get("release_kind")
-            == "development_rehearsal"
+            == DEVELOPMENT_REHEARSAL_KIND
         ):
-            manifest_payload["release_kind"] = "development_rehearsal"
+            manifest_payload["release_kind"] = DEVELOPMENT_REHEARSAL_KIND
             manifest_payload["release_eligible"] = False
 
     # Dynamically compute badging block and emit README
@@ -2617,14 +2620,18 @@ def _preflight_check_development_marker(
     payload_dir: Path, manifest: dict[str, Any], violations: list[str]
 ) -> None:
     """Require the non-release marker to agree across signed payload and bundle."""
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
     path = payload_dir / "release/release_result.json"
     try:
         result = _read_json_file(path) if path.is_file() else {}
     except ValueError as exc:
         violations.append(str(exc))
         return
-    diagnostic = result.get("benchmark_release", {}).get("release_kind") == "development_rehearsal"
-    if diagnostic != (manifest.get("release_kind") == "development_rehearsal"):
+    diagnostic = (
+        result.get("benchmark_release", {}).get("release_kind") == DEVELOPMENT_REHEARSAL_KIND
+    )
+    if diagnostic != (manifest.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND):
         violations.append("development rehearsal marker differs between payload and bundle")
     if diagnostic and (
         manifest.get("release_eligible") is not False
@@ -2877,6 +2884,8 @@ def verify_publication_bundle_preflight(
     }
     if status == "fail":
         raise PublicationPreflightError("Publication preflight failed: " + "; ".join(violations))
-    if manifest.get("release_kind") == "development_rehearsal":
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
+    if manifest.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND:
         report["release_eligible"] = False
     return report

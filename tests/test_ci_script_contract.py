@@ -1007,11 +1007,14 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
     assert "tests/ped_npc" not in OPTIONAL_ALLOWLIST.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("shard_count", [1, 4])
+@pytest.mark.parametrize("serial_exit", [0, 1])
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shard_count: int, serial_exit: int
 ) -> None:
     """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
     monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_DIST", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -1049,7 +1052,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '    *resolve_pytest_workers.py) printf "2\\n" ;;',
                 "    *diagnose_xdist_crash.py)",
                 '      printf "%s\\n" "$*" >> "$UV_DIAGNOSTIC_ARGS"',
-                '      if [[ " $* " == *" --serialized-ok false "* ]]; then',
+                '      if [[ " $* " == *" --execution-mode no-xdist "* ]]; then',
                 '        echo "serial diagnostic observed" >&2',
                 "      else",
                 '        echo "parallel diagnostic observed" >&2',
@@ -1067,7 +1070,8 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '  printf "%s\\n" "$*" >> "$UV_CAPTURED_ARGS"',
                 '  echo "sqlite3.OperationalError: unable to open database file" >&2',
                 '  echo "Segmentation fault (core dumped)" >&2',
-                "  exit 1",
+                '  if [[ "$count" -eq 1 ]]; then exit 1; fi',
+                '  exit "$UV_SERIAL_EXIT"',
                 "fi",
                 'echo "unexpected uv invocation: $*" >&2',
                 "exit 99",
@@ -1089,6 +1093,11 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
             "PYTEST_NUM_WORKERS": "2",
             "PYTEST_FAST_FAIL": "0",
             "PYTEST_ORDER_MODE": "none",
+            "PYTEST_SHARD_COUNT": str(shard_count),
+            "PYTEST_SHARD_INDEX": "3" if shard_count > 1 else "1",
+            "ROBOT_SF_PYTEST_COVERAGE": "0",
+            "CI": "false",
+            "UV_SERIAL_EXIT": str(serial_exit),
             "UV_CAPTURED_ARGS": str(captured_args),
             "UV_DIAGNOSTIC_ARGS": str(captured_diagnostic_args),
             "UV_COUNT_FILE": str(invocation_count),
@@ -1103,7 +1112,8 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     calls = captured_args.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 2
     assert "-n 2" in calls[0]
-    assert "--dist load" in calls[0]
+    expected_dist = "worksteal" if shard_count > 1 else "load"
+    assert f"--dist {expected_dist}" in calls[0]
     padded_serial_call = f" {calls[1]} "
     assert " -n " not in padded_serial_call
     assert " --dist " not in padded_serial_call
@@ -1114,7 +1124,14 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     diagnostic_calls = captured_diagnostic_args.read_text(encoding="utf-8").splitlines()
     assert len(diagnostic_calls) == 2
     assert "--pytest-exit-code 1" in diagnostic_calls[0]
-    assert "--pytest-exit-code 1" in diagnostic_calls[1]
+    assert f"--pytest-exit-code {serial_exit}" in diagnostic_calls[1]
+    assert "--requested-workers 2" in diagnostic_calls[0]
+    assert "--requested-workers 1" in diagnostic_calls[1]
+    assert "--execution-mode no-xdist" in diagnostic_calls[1]
+    assert f"--serialized-ok {str(serial_exit == 0).lower()}" in diagnostic_calls[1]
+    if shard_count > 1:
+        assert "--splits 4 --group 3" in calls[0]
+        assert "--splits 4 --group 3" in calls[1]
 
 
 def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:

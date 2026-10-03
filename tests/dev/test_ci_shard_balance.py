@@ -145,3 +145,26 @@ def test_dynamic_shard_node_ids_are_checkout_independent(prefix: str, ids: list[
     assert result.returncode == 0, result.stdout + result.stderr
     collected = [line for line in result.stdout.splitlines() if line.startswith(prefix)]
     assert collected == [f"{prefix}[{id}]" for id in ids]
+
+
+def test_dry_run_example_preserves_headless_environment_for_following_tests() -> None:
+    """Changing shard order must not let a dry-run test erase the worker's SDL policy."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-n0",
+            "-q",
+            "tests/unit/benchmark/test_example_dry_run.py",
+            "tests/test_pygame_headless.py::TestPygameHeadless::test_pytest_session_forces_dummy_driver",
+        ],
+        cwd=ROOT,
+        env={**os.environ, "PYTEST_ADDOPTS": ""},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "2 passed" in result.stdout

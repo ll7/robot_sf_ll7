@@ -9,6 +9,7 @@ import numpy as np
 
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot
 
 if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -124,6 +125,7 @@ def policy_command_to_env_action(  # noqa: C901
     config: RobotSimulationConfig,
     command: tuple[float, float] | dict[str, Any],
     conversion_trace: dict[str, Any] | None = None,
+    safety_intervention: bool = False,
 ) -> np.ndarray:
     """Convert a policy command into the robot's native environment action space.
 
@@ -147,10 +149,12 @@ def policy_command_to_env_action(  # noqa: C901
             [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
             dtype=float,
         )
-        max_linear_speed = float(
-            getattr(robot_cfg, "max_linear_speed", getattr(robot_cfg, "max_speed", 0.0)) or 0.0
-        )
+        max_linear_speed = float(robot_max_speed(config) or 0.0)
         max_angular_speed = float(getattr(robot_cfg, "max_angular_speed", 0.0) or 0.0)
+        if isinstance(robot, BicycleDriveRobot):
+            max_angular_speed = (
+                robot_cfg.max_velocity * math.tan(robot_cfg.max_steer) / robot_cfg.wheelbase
+            )
 
     cls_name = robot_cfg.__class__.__name__.lower()
     if isinstance(command, dict):
@@ -179,7 +183,10 @@ def policy_command_to_env_action(  # noqa: C901
                 time_step=float(config.sim_config.time_per_step_in_secs),
             )
             return np.asarray(
-                adapter.from_velocity_command(tuple(command_vw.tolist())), dtype=float
+                adapter.from_velocity_command(
+                    tuple(command_vw.tolist()), safety_intervention=safety_intervention
+                ),
+                dtype=float,
             )
         current_linear, current_angular = robot.current_speed
         step_dt = max(float(config.sim_config.time_per_step_in_secs), 1e-6)
@@ -193,7 +200,10 @@ def policy_command_to_env_action(  # noqa: C901
             action_space=env.action_space,
             time_step=float(config.sim_config.time_per_step_in_secs),
         )
-        return np.asarray(adapter.from_velocity_command(command), dtype=float)
+        return np.asarray(
+            adapter.from_velocity_command(command, safety_intervention=safety_intervention),
+            dtype=float,
+        )
 
     if "holonomic" in cls_name:
         mode = str(getattr(robot_cfg, "command_mode", "vx_vy")).strip().lower()

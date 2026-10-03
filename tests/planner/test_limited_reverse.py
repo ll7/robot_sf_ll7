@@ -68,7 +68,11 @@ def test_drive_reverse_cap_and_acceleration(cls, motion_cls, state_cls, cap):
 def test_unicycle_command_projection_accepts_and_caps_reverse(kinematics):
     model = resolve_benchmark_kinematics_model(
         robot_kinematics=kinematics,
-        command_limits={"limited_reverse": True, "max_reverse_speed": 0.3},
+        command_limits={
+            "limited_reverse": True,
+            "max_reverse_speed": 0.3,
+            "bicycle_max_curvature": 0.2,
+        },
     )
     assert model.project((-2.0, 0.0)) == (-0.3, 0.0)
     assert model.is_feasible((-0.3, 0.0))

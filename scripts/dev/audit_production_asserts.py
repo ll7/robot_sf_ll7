@@ -88,6 +88,15 @@ _NEW_RESIDUAL_REFS = ("#6479", "#6516", "#6529")
 # numbers so harmless line movement cannot silently change a classification.
 REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
     (
+        "robot_sf/planner/kinematics_model.py",
+        "BicycleDriveKinematicsModel.curvature_limit",
+        "self.max_curvature is not None",
+    ): _review(
+        "The frozen bicycle model rejects missing, negative or nonfinite physical curvature in __post_init__ with ValueError. This private-state narrowing assertion only restates that constructor invariant; invalid caller geometry is rejected before this property is reachable. Constructor rejection and explicit zero-curvature execution are covered by test_bicycle_creep_safety.py.",
+        ownership_status="unowned_residual",
+        ownership_references=("#10093", "PR #10100"),
+    ),
+    (
         "robot_sf/planner/predictive_mppi.py",
         "PredictiveMPPIAdapter._sequence_rollout",
         "isinstance(clearance, np.ndarray)",

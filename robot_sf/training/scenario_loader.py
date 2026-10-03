@@ -2089,6 +2089,10 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
         kwargs["max_accel"] = _coerce_finite_float(overrides["max_accel"], field_name="max_accel")
     if "max_decel" in overrides:
         kwargs["max_decel"] = _coerce_finite_float(overrides["max_decel"], field_name="max_decel")
+    if "creep_speed" in overrides:
+        kwargs["creep_speed"] = _coerce_non_negative_float(
+            overrides["creep_speed"], field_name="creep_speed"
+        )
     if "allow_backwards" in overrides:
         kwargs["allow_backwards"] = _coerce_bool(
             overrides["allow_backwards"],

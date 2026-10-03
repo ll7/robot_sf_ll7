@@ -1,0 +1,79 @@
+{
+  "axes": {
+    "bearings": [
+      0,
+      45,
+      90,
+      135,
+      180
+    ],
+    "dt": 0.1,
+    "horizon": 600,
+    "probe1_seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005
+    ],
+    "probe2_seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010
+    ],
+    "template_sha256": "f955fe56d6ec0963f53555ceda043d469810cbab41c7475eca7c95292f962ce1"
+  },
+  "classification_rule": "observed safety/noise/reverse creep defect with a resolving matched counterfactual is an adapter artefact; unresolved observed mapping defects retain case-specific uncertainty; otherwise a matched collision-free bicycle trajectory certifies initial controller reachability, with no unproved geometric limit attribution",
+  "clearance_definition": "post-step minimum disc surface clearance to pedestrians and static map walls/bounds, using reset_spawn_clearance collision geometry; last20 available .1s samples",
+  "issue": 10093,
+  "measurement_source_sha": "b81d58234439e58a5d86d8c4e7b9063a8c4dbacc",
+  "metric_helper_sha256": "c381eef4475f002866b8972b556f8a6c4ef9304d31c00eda84c0a3d2f175569b",
+  "original_base_sha": "879f75b69eb93ca16006f2019ee5c85c7aa724dd",
+  "pr": 10100,
+  "public_artifact_sha256": {
+    "bicycle_probe_comparison.csv": "4dd5c5777aad9c9457a3230420aee69079518ab594fecebde5f1420fa94f32b7",
+    "bicycle_probe_failures.csv": "f0a4d161e3db4711cf11e2f69f5a9e131761638c4c1b203416113f9c13416fef",
+    "bicycle_probe_per_scenario.csv": "ed1a32011ce97e404bb0fc8ab1a4e638823d5242bc8fa4828eb6bd0255b8cec0",
+    "bicycle_probe_summary.json": "88c6157fda1686f450d7ca6d2ff2ee24823c8bc2953c072b07f01aee0f63b563"
+  },
+  "raw_corpora": {
+    "fixed": {
+      "files": 19951,
+      "sha256": "3fd4c6d28e73a4ba47f8ecba859614c3feef84c72d8fdc0c9ae21bf6ac6f0879"
+    },
+    "original": {
+      "files": 13861,
+      "sha256": "c5e28955c914b1cc32e9805d639caaa1e1e8ef3a85f0841dea25dc7be3028d17"
+    },
+    "review_replay": {
+      "files": 382,
+      "sha256": "e88e24d823e12df99f7e655b6a9d45376c85cb5678612e2d64230a3b063360ec"
+    }
+  },
+  "reachability_sha256": "28e9702135687cf4e3dec6791e667f4bd965d70badabac2e26ef991b37f2d4bc",
+  "review_head": "44c386d6d47cf1946cd27f51817794564d248e0e",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "bicycle-probe-provenance.v2",
+  "source_files_sha256": {
+    "configs/robots/t60_bicycle_30deg_v1.yaml": "fac175311bb840d6d8036d52264fab503797ad09a008672aca563b41dbd9a10e",
+    "configs/robots/t60_bicycle_45deg_v1.yaml": "d9729f2f1e586e1c916cc8fa20f938e00c63aa45918d5d21199fb3851a80e238",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "8ff2e3fccf87574c3d8a14bf279ae14fc46676683270f2e22c999c55cf1e06f8",
+    "robot_sf/benchmark/map_runner_policies/map_runner_actions.py": "a17b3ad094ab63fd79f9c7a48d7899cf33c6dbd76e5bbfa62703e06c64c9c89a",
+    "robot_sf/planner/classic_planner_adapter.py": "0db4225e60cbf5dafcc183e96bd7fd912530593e731f0d3416c397208a1eef18",
+    "robot_sf/planner/kinematics_model.py": "03749bdb10a26cf91c209498d7044c0ae61ba056ea829ba02f1fd22f2ee0af72",
+    "robot_sf/robot/bicycle_drive.py": "fb52a25c53017d9de354588429545c7d6ddf01388046c2f2f6bf6e5b57bcac6a",
+    "robot_sf/training/scenario_loader.py": "baf2d32d2a7a61f631148230763912b783b53139dae6bc5ac9a49eaf66e653b4",
+    "scripts/validation/bicycle_probe_metrics.py": "c381eef4475f002866b8972b556f8a6c4ef9304d31c00eda84c0a3d2f175569b",
+    "scripts/validation/run_bicycle_probe.py": "c33a4a70ae475782856ae44eafcac371a70f8ca7db284b1de361f59f7de952a4"
+  },
+  "summarizer_sha256": "f55a62d617d651b501c36540989c6a7d0859c40732e295682b8ae34f8c8841bb",
+  "was_creeping_at_termination_definition": "creep was selected at the final executed step; actual terminal speed is reported separately",
+  "zero_turn_definition": "count of steps on which creep was actually selected after projection and safety, not every zero-speed yaw request"
+}

@@ -263,6 +263,8 @@ class Simulator_v2:
         )
         previous = self.peds.state.copy() if contact else None
         forces = _sum_forces_explicitly(self.forces, self.peds)
+        if contact:
+            self.peds.contact_step_speed_caps = self.peds.max_speeds.copy()
         self.peds.step(forces)
         if previous is not None:
             apply_contact_step(self, previous)
@@ -424,7 +426,10 @@ class Simulator:
             or getattr(self.config.obstacle_force_config, "wall_contact_rule", None) is not None
         )
         previous = self.peds.state.copy() if contact else None
-        self.peds.step(self.compute_forces())
+        forces = self.compute_forces()
+        if contact:
+            self.peds.contact_step_speed_caps = self.peds.max_speeds.copy()
+        self.peds.step(forces)
         if previous is not None:
             apply_contact_step(self, previous)
 

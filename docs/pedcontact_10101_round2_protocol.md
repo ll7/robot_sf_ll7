@@ -67,6 +67,10 @@ The first ten new cases failed on ead48d9c at physical assertions, not imports o
   independent backend default; onset controls use analytic paths and tiny yaw perturbations.
 A further normal-impact witness fails with the exact reviewed contact module: closing
 velocity must be removed even when over-relaxation leaves a positive positional margin.
+An oblique velocity-transfer witness protects the final per-body cap: removing normal
+closing speed can increase one body's speed while reducing pair energy. Stationary
+repair and symmetric head-on controls miss this case. It uses a real simulator with
+zero driving forces, not a production-only test seam, and fails the reviewed kernel.
 The original CALFIT preflight saturated-onset oracle is replaced by numerical-yaw
 rejection and independently known five-metre manoeuvre-translation controls.
 The warmed congestion probe and complete robot JSON records verify runtime and spawn

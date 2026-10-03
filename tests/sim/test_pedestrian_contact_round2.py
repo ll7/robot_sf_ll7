@@ -69,6 +69,30 @@ def test_contact_removes_closing_velocity_after_overrelaxed_position_repair():
     np.testing.assert_allclose(sim.peds.vel(), np.zeros((2, 2)), atol=1e-12)
 
 
+@pytest.mark.parametrize("integration_path", ["native", "robot_benchmark"])
+def test_normal_velocity_transfer_reapplies_each_body_speed_cap(integration_path):
+    """A normal impulse can increase one body's speed despite dissipating pair energy."""
+    state = np.array([[-0.3, 0, 0, 2, 10, 0, 0.5], [0.3, 0, -2, 0, -10, 0, 0.5]], float)
+    np.random.seed(1001)
+    sim = Simulator(state, config=config(), make_forces=free_forces)
+    sim.peds.max_speeds[:] = 2.0
+    if integration_path == "native":
+        sim.step()
+    else:
+        from types import SimpleNamespace
+
+        from robot_sf.sim.simulator import Simulator as RobotSimulator
+
+        wrapper = RobotSimulator.__new__(RobotSimulator)
+        wrapper.config = SimulationSettings()
+        wrapper.pysf_sim = sim
+        wrapper.pedestrian_model = "social_force"
+        wrapper.pysf_state = SimpleNamespace(ped_velocities=sim.peds.vel())
+        wrapper._step_pedestrians(np.zeros((2, 2)), [])
+    assert np.max(np.linalg.norm(sim.peds.vel(), axis=1)) <= 2.0 + 1e-12
+    assert np.linalg.norm(sim.peds.pos()[0] - sim.peds.pos()[1]) >= 0.56
+
+
 @pytest.mark.parametrize("amplitude", [3.0, 6.0, 9.0])
 def test_gap_wall_response_damps_instead_of_entering_a_lateral_cycle(amplitude):
     """Actual goal/wall forces must damp an admissible near-wall disturbance."""

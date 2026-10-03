@@ -1463,6 +1463,8 @@ class Simulator:
             HSFM_ALIGNMENT_TORQUE_V1,
         }:
             previous = self.pysf_sim.peds.state.copy() if contact_enabled else None
+            if contact_enabled:
+                self.pysf_sim.peds.contact_step_speed_caps = self.pysf_sim.peds.max_speeds.copy()
             if capture_diagnostics:
                 self.pysf_sim.peds.step(
                     ped_forces,

@@ -1,253 +1,1579 @@
 {
-  "decision": "All five configured arms share the same wall-overlapping pre-first-contact state. Classify as invalid-start constraint rejections; no accepted episode or numerical gate value imputed. Valid-start CALFIT wall nonpenetration is separate.",
-  "original_artifact_sha256": "f9293a86782f6d1e5cffc8ab71a93458740601a73b05f03db72d9744e74f93ba",
-  "records": [
-    {
-      "arm": "orca",
-      "capture": "evidence/robot_failure_trace/rejection.json",
-      "capture_sha256": "a9aa36b45a914761ed2eaeadec86ca1ceea8553dab01ce70355c3c5e2e118265",
-      "first_contact_call": 1,
-      "previous_positions": [
-        [
-          13.175894929351,
-          23.787590933058098
-        ],
-        [
-          3.569635391313973,
-          5.749261347928733
-        ],
-        [
-          18.732571890448863,
-          27.77176083451637
-        ]
-      ],
-      "previous_wall_overlap": [
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.04841656688808821,
-          "segment": 18,
-          "surface_segment": [
-            21.0,
-            28.0,
-            19.0,
-            28.0,
-            -1.8369701987210297e-16,
-            -1.0
-          ]
-        },
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.1325718904488632,
-          "segment": 19,
-          "surface_segment": [
-            19.0,
-            28.0,
-            19.0,
-            12.0,
-            1.0,
-            0.0
-          ]
-        }
-      ],
-      "solver_passes": 4096
-    },
-    {
-      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
-      "capture": "evidence/robot_failure_trace/by_arm/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4/rejection.json",
-      "capture_sha256": "a023fb9bdd9eb152b506c5091d37ce3343a6856479f59889d75688cbafe0a431",
-      "first_contact_call": 1,
-      "previous_positions": [
-        [
-          13.175894929351,
-          23.787590933058098
-        ],
-        [
-          3.569635391313973,
-          5.749261347928733
-        ],
-        [
-          18.732571890448863,
-          27.77176083451637
-        ]
-      ],
-      "previous_wall_overlap": [
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.04841656688808821,
-          "segment": 18,
-          "surface_segment": [
-            21.0,
-            28.0,
-            19.0,
-            28.0,
-            -1.8369701987210297e-16,
-            -1.0
-          ]
-        },
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.1325718904488632,
-          "segment": 19,
-          "surface_segment": [
-            19.0,
-            28.0,
-            19.0,
-            12.0,
-            1.0,
-            0.0
-          ]
-        }
-      ],
-      "solver_passes": 4096
-    },
-    {
-      "arm": "hybrid_rule_v4_fast_progress_static_escape",
-      "capture": "evidence/robot_failure_trace/by_arm/hybrid_rule_v4_fast_progress_static_escape/rejection.json",
-      "capture_sha256": "d9638948518311464e7e9b1202e36a7bcbffb5dad25fe4a2248a5def46af3bfa",
-      "first_contact_call": 1,
-      "previous_positions": [
-        [
-          13.175894929351,
-          23.787590933058098
-        ],
-        [
-          3.569635391313973,
-          5.749261347928733
-        ],
-        [
-          18.732571890448863,
-          27.77176083451637
-        ]
-      ],
-      "previous_wall_overlap": [
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.04841656688808821,
-          "segment": 18,
-          "surface_segment": [
-            21.0,
-            28.0,
-            19.0,
-            28.0,
-            -1.8369701987210297e-16,
-            -1.0
-          ]
-        },
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.1325718904488632,
-          "segment": 19,
-          "surface_segment": [
-            19.0,
-            28.0,
-            19.0,
-            12.0,
-            1.0,
-            0.0
-          ]
-        }
-      ],
-      "solver_passes": 4096
-    },
-    {
-      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
-      "capture": "evidence/robot_failure_trace/by_arm/hybrid_rule_v4_fast_progress_static_escape_continuous/rejection.json",
-      "capture_sha256": "70f7c7ef067f6b8038902f7a265ed6f161d770ddc4bbcda45fa0846b74598068",
-      "first_contact_call": 1,
-      "previous_positions": [
-        [
-          13.175894929351,
-          23.787590933058098
-        ],
-        [
-          3.569635391313973,
-          5.749261347928733
-        ],
-        [
-          18.732571890448863,
-          27.77176083451637
-        ]
-      ],
-      "previous_wall_overlap": [
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.04841656688808821,
-          "segment": 18,
-          "surface_segment": [
-            21.0,
-            28.0,
-            19.0,
-            28.0,
-            -1.8369701987210297e-16,
-            -1.0
-          ]
-        },
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.1325718904488632,
-          "segment": 19,
-          "surface_segment": [
-            19.0,
-            28.0,
-            19.0,
-            12.0,
-            1.0,
-            0.0
-          ]
-        }
-      ],
-      "solver_passes": 4096
-    },
-    {
-      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
-      "capture": "evidence/robot_failure_trace/by_arm/scenario_adaptive_hybrid_orca_v2_collision_guard_v4/rejection.json",
-      "capture_sha256": "2e70d36d24ae96926487066aa2736e3984f88cbc7f50cf5e2730346c3a834c3d",
-      "first_contact_call": 1,
-      "previous_positions": [
-        [
-          13.175894929351,
-          23.787590933058098
-        ],
-        [
-          3.569635391313973,
-          5.749261347928733
-        ],
-        [
-          18.732571890448863,
-          27.77176083451637
-        ]
-      ],
-      "previous_wall_overlap": [
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.04841656688808821,
-          "segment": 18,
-          "surface_segment": [
-            21.0,
-            28.0,
-            19.0,
-            28.0,
-            -1.8369701987210297e-16,
-            -1.0
-          ]
-        },
-        {
-          "body": 2,
-          "body_wall_overlap_m": 0.1325718904488632,
-          "segment": 19,
-          "surface_segment": [
-            19.0,
-            28.0,
-            19.0,
-            12.0,
-            1.0,
-            0.0
-          ]
-        }
-      ],
-      "solver_passes": 4096
-    }
-  ],
+  "authority": "https://github.com/ll7/robot_sf_ll7/milestone/11",
+  "producer_sha": "ffdd8618b01c9bcba3272771aa97c4b8d8724a1d",
+  "radius_m": 0.28,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema": "pedcontact.invalid_start_diagnosis.v1"
+  "rows": {
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('off', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('off', 'probes', 'orca', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'orca', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'orca', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'orca', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'orca', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('off', 'probes', 'orca', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('off', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('on', 'probes', 'hybrid_rule_v4_fast_progress_static_escape_continuous', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('on', 'probes', 'orca', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'orca', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'orca', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'orca', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'orca', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('on', 'probes', 'orca', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_crossing_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          13.175894929351,
+          23.787590933058098
+        ],
+        [
+          3.569635391313973,
+          5.749261347928733
+        ],
+        [
+          18.732571890448863,
+          27.77176083451637
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": -0.012571890448863199,
+      "pedestrian_wall_overlap_rows": [
+        2
+      ],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.700325938724201,
+        "robot_pedestrian_min_surface_clearance_m": 0.7977228976512787
+      },
+      "scenario": "classic_crossing_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_doorway_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          11.356161498035188,
+          18.534486699574046
+        ],
+        [
+          21.900515915729876,
+          13.87803853584722
+        ],
+        [
+          32.057065453981835,
+          6.849976736468043
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.357867535847219,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 4.3941843334842385,
+        "robot_pedestrian_min_surface_clearance_m": 5.094539573119857
+      },
+      "scenario": "classic_doorway_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_head_on_corridor_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          16.22111242501733,
+          21.26189119279198
+        ],
+        [
+          13.758861712504205,
+          32.350055623355
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 5.369944376645003,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.5172753387242008,
+        "robot_pedestrian_min_surface_clearance_m": 16.644503650597002
+      },
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'classic_overtaking_low')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          27.6799658681438,
+          14.567861460700062
+        ],
+        [
+          11.843634843527145,
+          10.432385846448922
+        ],
+        [
+          33.76884069167638,
+          14.952133352994522
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 2.2267922317589033,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 2.2666893417183034,
+        "robot_pedestrian_min_surface_clearance_m": 6.016785580885809
+      },
+      "scenario": "classic_overtaking_low",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'francis2023_following_human')": {
+      "clearance_error": null,
+      "pedestrian_positions": [
+        [
+          8.0,
+          7.0
+        ]
+      ],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": 1.72,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 1.350162969362101,
+        "robot_pedestrian_min_surface_clearance_m": 3.65287750315618
+      },
+      "scenario": "francis2023_following_human",
+      "seed": 1005
+    },
+    "('on', 'probes', 'scenario_adaptive_hybrid_orca_v2_collision_guard_v4', 1005, 'planner_sanity_simple')": {
+      "clearance_error": null,
+      "pedestrian_positions": [],
+      "pedestrian_radius_m": 0.28,
+      "pedestrian_wall_min_surface_m": null,
+      "pedestrian_wall_overlap_rows": [],
+      "project_reset_clearance": {
+        "obstacle_overlap": false,
+        "overlap": false,
+        "overlapping_pedestrian_rows": [],
+        "pedestrian_overlap": false,
+        "robot_obstacle_min_surface_clearance_m": 0.6815711381847178,
+        "robot_pedestrian_min_surface_clearance_m": null
+      },
+      "scenario": "planner_sanity_simple",
+      "seed": 1005
+    }
+  },
+  "scope": "Every dev1005 probe/planner/mode reset; actual project checks, including pedestrian-wall clearances"
 }

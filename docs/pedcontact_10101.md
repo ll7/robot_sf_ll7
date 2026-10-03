@@ -1,211 +1,127 @@
-# Opt-in pedestrian contact and wall diagnostics
+<!-- AI-GENERATED (#10101) - NEEDS-REVIEW -->
+# Opt-in pedestrian contact and wall response — Round 2
 
 AI-GENERATED / NEEDS-REVIEW
 
-Issue #10101; stacked on CALFIT #10094. This is diagnostic opt-in physics,
-not release or empirical-model admission. The full 30-dev-seed comparison is complete;
-[all values, intervals and gates](pedcontact_10101_step4.md) are versioned alongside
-[the verified acquisition summary](pedcontact_10101_step4.json).
+Issue #10101; draft PR #10104 stacked on CALFIT #10094. Round 1's V6 pruning,
+zero-survivor conclusion, displacement-derived speeds, radius-.40 robot gate,
+startup timing claim and invalid-spawn explanation of the corner abort are withdrawn.
+The corner abort was a solver defect. The final robot gate explicitly uses the
+[milestone's .28m radius](https://github.com/ll7/robot_sf_ll7/milestone/11).
+
+## Usable for 0.1.0?
+
+The opt-in path fixes the measured overlap and wall traversal defects, with a bounded
+runtime on the declared warmed congested probe. It remains development physics,
+with numerical calibration misses and paired robot regressions to assess before adoption.
+Neither these dev results nor an engineering range PASS establish empirical validation
+or release admission. Default behavior and protected artifact bytes stay unchanged.
 
 Select `pedestrian_contact_rule: projection_v1` and
-`pedestrian_wall_rule: bounded_edge_v1` in simulation settings. Missing selectors
-do not enter dataclass serialization or environment/configuration hashes.
-The contact radius follows the effective physical pedestrian radius.
+`pedestrian_wall_rule: bounded_edge_v1`. An explicit pedestrian_radius_m is honoured;
+otherwise selectors preserve the backend radius. [Corrected estimator, solver and
+test-value protocol](pedcontact_10101_round2_protocol.md) documents all assumptions.
 
-## Diagnosis at the CALFIT base
+## Diagnosis retained from the CALFIT base
 
-Dev1001, calibrated profile factor .003, offset .375m, radius .28m, cap2m/s,
-positive desired N(1.29,.19). Three V2 walkers stop upstream of x=8m at
-x=7.486782/7.561681/7.690361. The terminal forward drive2.934283m/s² is
-balanced by wall force−2.934283; pedestrian force is zero and goal x=15m.
-This confirms an excessive shifted-distance wall barrier, not a route or
-pedestrian-pedestrian issue.
+Dev1001 V2 terminal drive +2.934283m/s² balances wall force −2.934283; pair force
+is zero and goal x=15m. This is the shifted-distance wall barrier, not routing.
+V4 width2.4m has402,824 overlap pair-steps:153,991 same-heading,115,359 head-on,
+133,474 crossing/stationary. Depth median/95th/max .079144/.313356/.558394m;
+local neighbour density median/95th2.864789/4.774648 persons/m² in a1m disc.
+[Original diagnostic evidence](pedcontact_10101_diagnosis.json) remains historical.
 
-V4 width2.4m has402,824 overlap pair-steps:153,991 same-heading,
-115,359 head-on and133,474 crossing/stationary. Median/95th/max overlap depth
-.079144/.313356/.558394m; local neighbour density median2.864789,
-95th4.774648 persons/m² in a1m disc. Heading classes use actual velocities;
-stationary pairs are kept separate from evidence of crossing.
+## Contact law and numerical checks
 
-V5 measures lateral centre-of-mass to cylinder-edge clearance, not body-edge
-clearance or a longitudinal ellipse. The legacy32-segment summed wall law gives
-.858480m at dev1001 versus accepted[.4,.6]. V6 measures filtered own-X turning
-onset relative to the closest-approach point and deterministic no-interferer
-baselines. Dev1001 gives2.939276/2.929539/2.930805m for controlled speeds
-1.15/1.42/1.78m/s. The first two fail their bands. V6 contains no walls;
-contact acts much later than turning onset. No tolerance or estimator is changed.
+[HFV2000](https://arxiv.org/abs/cond-mat/0009448), mass80kg, k120000N/m and
+sliding coefficient240000kg/(m s), has dt√(2k/m)=5.477 at dt=.1s, above the
+semi-implicit limit2; dt<.036515s for the normal mode. At .16m compression the
+explicit tangential bound is .002083s. The real .1s probe reaches25.626m/s;
+substepping removes the overshoot but retains compression. Projection meets the
+strict zero-overlap objective. Both candidates leave uncongested walking unchanged;
+projection avoids the stiffness/substep cost and is selected on the exclusion evidence.
 
-## Law choice and numerical limits
+Grid broad phase, AABB wall culling and alternating Gauss-Seidel over-relaxation1.6
+replace all-pair scans. All capsule constraints apply, including shared-vertex ties,
+with initial push-out. The256-pass cap records deterministic fallback and continues;
+an unresolved result remains a counted violation. Closing normal velocity is removed
+and the integration speed cap reapplied, without injecting displacement/dt velocity.
+The nearest surface's bounded shifted exponential uses A3m/s², decay.04m, range.20m;
+normals blend over .30m. Actual-force gap witnesses damp over the bounded parameter
+grid. The parallel-gap gradient bound345/s² is below360/s² at dt=.1s,tau=.5s.
+This scoped force check is not a universal geometry/solve-time bound. Swept projection
+provides independent body/wall exclusion. Live manifests record the effective laws,
+parameters, radius, integration, velocity treatment and fallback policy (#10084).
 
-Compare [HFV2000](https://arxiv.org/pdf/cond-mat/0009448), mass80kg,
-k120000N/m and sliding coefficient240000kg/(m s), with hard projection.
-For a two-body normal mode, dt√(2k/m)=5.477 at dt=.1s, exceeding the
-semi-implicit stability bound2; dt must be below.036515s. At compression.16m,
-the explicit tangential damping bound is.002083s. An uncapped real integration
-probe at.1s reaches25.626m/s. Substepping resolves that numerical overshoot but
-retains finite compression. The frictionless projection satisfies the strict
-zero-overlap objective and leaves separated trajectories exactly unchanged.
+## Validation and reference limitations
 
-Post-step equal-mass projection alternates swept pair and swept wall-capsule
-constraints. A1µm numerical margin protects strict distance comparisons.
-The4096-pass limit is explicit; nonconvergence restores the pre-step state and
-raises an error. This is not a silently accepted approximate contact solve.
-CALFIT's nonreactive V6 walker is prescribed; only the reactive subject yields.
+[All 30-seed off/on values, intervals and statuses](pedcontact_10101_step4.md)
+include constituent widths and integration cost. [Complete verified summary](pedcontact_10101_step4.json)
+keeps physical validity separate from the accepted numerical bands.
+V2 traversal is fixed; its remaining speed-drop miss is movable by wall parameters
+and limited by absent human anticipatory/shoulder response. No evidence establishes
+that its accepted band is wrong. [Wilmut2015 crossing-phase results](https://doi.org/10.1371/journal.pone.0124695)
+place the1.3–2.1 shoulder ratios in the same post-hoc reduction group, supporting
+the suite's plateau anchor. The original .9 shoulder-ratio case is impossible
+for rigid discs and remains explicitly excluded by the suite's declared policy.
+V5 is abeam CM-to-cylinder-edge clearance. The final baseline .867806m is above [.4,.6].
+[Gerin-Lajoie2008](https://doi.org/10.1016/j.gaitpost.2007.03.015) reports personal-space
+geometry citing2005; this scalar proxy and its engineering band are not a published
+confidence interval. Wall strength/decay/range can move it; protocol equivalence needs
+author review, without silently relaxing the band.
+V6 now uses .05rad/s sustained .3s, rejects numerical tails and observes25m with60m
+initial separation. [Huber2014](https://doi.org/10.1371/journal.pone.0089589) supplies
+filtering, angular velocity and own-X-to-PoMD definitions, but not that numerical
+threshold. Human sway baselines differ from deterministic CM baselines. A remaining
+range miss is chiefly a suite/reference-equivalence limitation for this criterion,
+not evidence that all force-model classes are unfit. Threshold sensitivity remains
+explicit; no target is changed and no single validation item prunes fit classes.
+[Saved-path threshold sensitivity](pedcontact_10101_v6_sensitivity.json) is large:
+.05rad/s gives onsets3.159/3.600/4.264m (all FAIL); .1rad/s gives2.515/2.803/2.931m
+(all PASS) for slow/normal/fast. The fit retains the primary .05 criterion frozen
+before results. Seed intervals do not cover this protocol uncertainty.
 
-The wall law uses the nearest finite surface, with tied normals averaged,
-instead of multiplying force by tessellation count. Its body-edge exponential
-has amplitude3m/s², decay.04m, range.20m, and reaches zero continuously at the
-range boundary. Swept capsule constraints provide nonpenetration independently
-of force stiffness and prevent tunnelling across thin walls. Both simulator
-wrappers and the robot benchmark's separate pedestrian integration apply it.
+## Complete bounded fit and robot gate
 
-## Test value
+[Frozen grid](pedcontact_10101_fit_grid.json) evaluates every108setting ×3devseeds,
+all18cases per bank, including V2/V5 at every wall setting. Rank by passed checks,
+then summed range residual, then candidate id; the residual mixes units and is only
+a diagnostic tie-break. [Full ranking and each item's value/interval](pedcontact_10101_fit_result.json)
+does not claim a global optimum or empirical calibration.
+[Paired robot gate](pedcontact_10101_robot_gate.json) includes all2850pairs, .28m radius,
+ORCA and four standard hybrids, dev1001–1010,48empty scenarios,3doorway widths,
+and6probes. Improvements are reported alongside every classified new failure. The prior
+radius-.40 gate had ORCA probe collision totals6 off and2 on, omitted from the
+original narrative; that historical improvement is now recorded and distinguished
+from the fresh shipped-radius totals. That old on bank has59 completed rows
+and one solver abort, so6→2 is a raw count reduction, not a clean complete
+paired success-rate comparison.
+[Measured dev1005 reset receipts](pedcontact_10101_robot_starts.json) replace missing
+spawn validity; the project's clearance check runs before each episode's step.
+[Acquisition and comparison sources](pedcontact_10101_drivers.json) preserve replay code.
+[Verified raw custody and member hashes](pedcontact_10101_custody.json) locate retained evidence.
 
-Protected behavior: actual body separation, separated-byte identity, dt stability,
-swept wall safety, feasible-gap passage, prescribed-interferer preservation,
-tessellation-independent force, live manifest consistency and benchmark wiring.
-Credible regressions: removing post-step handling, calling only one wrapper,
-allowing endpoint tunnelling, summing every wall segment, moving the prescribed
-walker, or declaring parameters that the live force did not use.
-Nearest existing wall-profile tests sample upstream force and configuration
-identity; they do not exercise body exclusion or the benchmark's manual step.
-Tests use actual Simulator/PedState arrays and existing force-factory/manual-step
-interfaces. There is no production test-only seam; the wrapper fixture supplies
-only its pedestrian-velocity view.
+Final producer ffdd8618b01c9bcba3272771aa97c4b8d8724a1d. Default numerical score off/on: 2/1 of15. Best bounded point c1547cf0fec2: 5/15; best shipped-radius point ac3ca720b117: 5/15. Full accepted settings: 0.
 
-Nine original witnesses fail on base: overlap/dt assertions, wall crossing and
-`physically feasible aperture stalled upstream` at x7.578752. The separated
-negative control passes on base, as expected. New manifest/configuration controls
-are feature coverage, not claimed pre-existing bug witnesses.
+Best overall measured whole-bank integration cost 38.377ms/step; N350 width5.0m cost 55.592ms/step. [Every fitted point's measured cost and repair counters](pedcontact_10101_fit_runtime.json) prevents extrapolating the default snapshot cost across the fit. These three-seed timings are not a paired off/on benchmark of the fitted parameters.
 
-## Acquisition
+Best shipped radius measured whole-bank integration cost 15.924ms/step; N350 width5.0m cost 44.784ms/step. [Every fitted point's measured cost and repair counters](pedcontact_10101_fit_runtime.json) prevents extrapolating the default snapshot cost across the fit. These three-seed timings are not a paired off/on benchmark of the fitted parameters.
 
-`scripts.validation.pedcontact_10101 run --arm off|on --seed 1001 --out DIR`
-uses CALFIT's Slurm-only acquisition/priority guard, source/installed byte checks,
-raw NPZ members and SHA256 manifest. Run each seed1001–1030 for both arms;
-`collect --root ROOT --out comparison.json` verifies every seed bank before
-constructing full-grid gates, Student95% intervals, post-step overlap and
-wall-penetration counts, and real integration time per step. Censoring stays null.
-Effective contact/wall/integration values come from live simulator/force objects,
-are included in acquisition records and opt-in benchmark episode metadata, and
-are checked by an independent declared-versus-live mismatch test.
+Warmed integration mean ms/step, after one warm-up and20timedsteps:
 
-## Full-dev results and remaining target misses
+| N | Off | Reviewed ead on | Final on | Final/off |
+|---|---|---|---|---|
+| 60 | 0.853 | 2.239 | 1.503 | 1.761 |
+| 150 | 4.349 | 18.883 | 6.227 | 1.432 |
+| 350 | 21.891 | 273.526 | 30.707 | 1.403 |
 
-At CALFIT defaults (radius .28m, cap 2m/s), dev1001–1030 off/on banks contain
-1080 protocol cases. Post-step overlap pair-steps are 91,665,539/0; wall
-penetration pedestrian-steps are 0/0. V2 traversal is 0/90 versus 90/90.
-The maximum projection iteration count is 988, below the explicit 4096 limit.
-Accepted numerical checks are 3/15 off and 4/15 on. MISSING is a failed gate,
-not an imputed observation: V3 remains censored at most narrow widths.
-The JSON and Markdown retain every value, observed n and Student 95% interval;
-intervals are conditional on observed dev trials and are undefined for n=1.
+The complete 30-seed V4 width5.0m banks (N350) cost 23.910ms off and 44.175ms on per integration step, including startup and later congestion. Default on records 3461 fallback repairs and 0 unresolved results.
 
-V2 is physically fixed, but slowdown .0230/.000254/0 remains below .06–.24.
-Finite-range wall strength/range can move slowdown without restoring the legacy
-barrier; human anticipatory narrowing responses are also a model limitation.
-The source-derived engineering band is not demonstrated to be erroneous.
-V5 clearance changes .867806 to .386567m (95% interval .385275–.387858),
-just below .4–.6. Wall strength/decay can move clearance. Gerin-Lajoie et al.
-2008 describe a roughly .5m lateral and 2m longitudinal personal-space ellipse;
-the suite cylinder-edge scalar is a proxy, not that complete human measurement.
-Its ±20% tolerance is an engineering decision, not a paper confidence interval.
-See https://doi.org/10.1016/j.gaitpost.2007.05.008 .
+The shipped-radius gate records ORCA collisions3 off and4 on: three prior
+collisions become successes, while crossing1001/1004/1008 add pedestrian collisions
+and doorway1001 adds a wall collision. All four hybrid probe arms have60/60
+successes in both modes. There are no runtime aborts or empty-world metric changes.
 
-V6 slow/normal onset is 2.938506/2.928810m, unchanged by contact; fast changes
-2.930136 to 2.904414m and passes. V6 is wall-free, so wall tuning cannot move
-it. Huber et al. 2014 Table 1 gives 180° slow/normal/fast turn-onset means
-2.1/2.4/2.7m. The onset rows give no standard deviations. The paper's threshold
-uses five no-interferer trials per person and speed; deterministic straight-line
-model baselines contain no sway and have zero maximum angular speed. This is
-an estimator/reference comparability and model limitation, not evidence to
-silently widen the bands or add noise. Radius and speed cap are screened as
-possible fitting parameters. See https://doi.org/10.1371/journal.pone.0089589 .
-
-Weighted timed integration costs 10.1419/218.4304 ms per step (21.54×).
-Timers include cold JIT startup but exclude diagnostic counting/copying and V6's
-five free-baseline integrations; host variation prevents treating this ratio as
-a warm microbenchmark. All 1080 saved speed arrays are finite. Projection can
-raise displacement-derived velocity above the pre-projection cap: on max 2.772594
-m/s, 2075 samples >2+1e-9. This is an explicit limitation of hard correction.
-Uncongested dev controls are byte-identical, including measured free speed and
-flux-density slope; dense fundamental-diagram behavior can change materially.
-
-## Compatibility and validation
-
-Release/ecosystem identity checks: 94 passed. All 1513 tracked config/schema/golden
-files match the CALFIT base byte for byte. New selectors are absent from default
-serialization, and default simulator and benchmark metadata retain their identity.
-The full slow suite has 40,821 passes, 67 skips, 7 existing xfails, 16 failures
-and 3 setup errors. All 19 residual nodes reproduce on CALFIT base. Targeted
-coverage also exercises actual public construction and effective law/radius
-forwarding, rather than only a manually assembled wrapper.
-
-The optimized-mode algorithm_metadata pin failure is inherited: source SHA256
-bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7 matches
-base and current main; the old contract still pins 8b4bb11d… from before #9996's
-GuardedPPO identity correction. Current main repairs that pin. This stack leaves
-protected contract bytes unchanged. Strict Sphinx also fails on base's unchanged
-131730-byte exclusions argument exceeding Linux's per-argument limit; current
-main has a file-transport repair. Neither inherited failure is called green.
-
-Acquisition summaries for diagnosis, HFV comparison, uncongested controls and
-source-table verification are in [the diagnostic record](pedcontact_10101_diagnosis.json).
-That record also retains seed-refusal attribution and fail-on-base assertions.
-
-The robot gate roster is 48 main scenarios, three doorway widths, six nominal
-probes, ORCA and all four release hybrid arms, dev1001–1010 off/on: 2850 pairs.
-The release width campaign “90-cell” label means three widths × 30 seeds,
-not ninety distinct geometries. Fit admission requires the full dev roster.
-
-## Robot behaviour gate and bounded fit
-
-The [robot record](pedcontact_10101_robot_gate.json) verifies 2850 paired attempts,
-2845 complete episode pairs and five explicit runtime rejections (5695 episode
-records from 5700 attempts). All 2550 empty-world pairs retain identical
-behavioural metrics. Their law/reference metadata changes intentionally: legacy
-force radius .35m versus effective opt-in physical radius .4m. This metadata is
-reported separately, not mistaken for a trajectory change. The six nominal probe
-roster and all five configured planner arms are verified from their bank identities.
-
-Every new failure is retained with paired outcomes and raw/log hashes:
-- ORCA, crossing dev1001/1008: valid starts, changed pedestrian motion, collisions
-  at step104/123; surface clearance −.000881/−.020177m. Contact excludes pedestrian
-  pairs, not robots; these are planner failures under changed pedestrian motion.
-- Bottleneck-yield and collision-guard hybrids, crossing dev1009: previously
-  successful, now deadlock at600 steps. Zero displacement over final2s, >.55m
-  pedestrian surface clearance, moving candidates rejected by the static gate.
-  Final nearest static distance1.0000m is below the1.05m hard margin. Classify as
-  a static-clearance protective-stop trap after changed pedestrian motion.
-- All five arms, crossing dev1005: first contact call rejects the same invalid
-  pedestrian start inside an obstacle corner. Body3 penetrates wall clearances
-  by .132572/.048417m before contact; solver reaches4096 passes. The original
-  two fast hybrid arms had successful off episodes; ORCA already collided and
-  the other two hybrids already failed. All five new runtime failures are recorded.
-  [Captured-state diagnosis](pedcontact_10101_robot_starts.json) verifies every
-  arm. This is a limitation for invalid initial geometry, not a successful repair
-  or an imputed episode. No protected benchmark map/start config is edited.
-
-The [frozen bounded grid](pedcontact_10101_fit_grid.json) has108 settings:
-radius .25/.28/.30m × cap2/3m/s × wall amplitude3/6/9m/s² × decay .04/.08/.16m
-× range .2/.5m. It was frozen after the complete robot attempt roster and physical
-step4 qualification. The deadline remains2026-10-07 18:32 UTC.
-[Fit result](pedcontact_10101_fit_result.json): all108 rejected, zero survivors,
-zero accepted settings. Six radius/cap equivalence classes each measured all
-three V6 speeds on dev1001–1003 (54 cases plus five free baselines per case).
-V6 has no walls; the actual empty-wall force is independently zero, so changing
-wall parameters cannot rescue a failed V6 class. This is necessary-condition
-pruning, not a full-grid fitness ranking or global-optimum claim.
-
-The closest screened radius .30m gives V6 means2.935701/2.894636/2.841321m;
-slow/normal still fail, fast passes, and cap2/3 yields identical values. No feasible
-best setting exists in this bounded grid. The fully measured reference remains
-radius .28m, cap2, amplitude3, decay.04, range.2, positive desired N(1.29,.19),
-with V1, both V4 slopes and fast V6 passing (4/15). Its remaining values/intervals
-are in the full-dev table. Moving social-force/estimator assumptions is outside
-this wall/contact grid; targets are retained.
-
-[Archived acquisition sources](pedcontact_10101_drivers.json) complement the
-committed comparison/fit modules and raw member hashes. Raw trajectories and
-logs remain in the lane, mirrored on imech192. Producer commits are recorded;
-final documentation commits do not change those frozen physics bytes.
+The final N350 cost meets3× on this fixed CALFIT snapshot; crowded/fallback cost
+elsewhere is not bounded by that measurement. All nine uncongested dev controls
+retain exact state bytes and free-speed/fundamental-diagram slope.

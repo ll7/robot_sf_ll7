@@ -1,6 +1,7 @@
 {
   "arms": {
     "off": {
+      "fallback_count": 0,
       "gate": {
         "checks": [
           {
@@ -215,9 +216,9 @@
           {
             "attempted_n": 30,
             "case": "V6",
-            "difference": 0.8385057596275751,
-            "distance_outside_tolerance": 0.4185057596275752,
-            "estimate": 2.938505759627575,
+            "difference": 1.058747087331176,
+            "distance_outside_tolerance": 0.638747087331176,
+            "estimate": 3.158747087331176,
             "observed_n": 30,
             "quantity": "onset_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
@@ -235,9 +236,9 @@
           {
             "attempted_n": 30,
             "case": "V6",
-            "difference": 0.5288097972922476,
-            "distance_outside_tolerance": 0.04880979729224766,
-            "estimate": 2.9288097972922476,
+            "difference": 1.1998591829471548,
+            "distance_outside_tolerance": 0.7198591829471548,
+            "estimate": 3.5998591829471547,
             "observed_n": 30,
             "quantity": "onset_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
@@ -255,14 +256,14 @@
           {
             "attempted_n": 30,
             "case": "V6",
-            "difference": 0.23013649833148087,
-            "distance_outside_tolerance": 0.0,
-            "estimate": 2.930136498331481,
+            "difference": 1.5748315022703867,
+            "distance_outside_tolerance": 1.0348315022703867,
+            "estimate": 4.274831502270387,
             "observed_n": 30,
             "quantity": "onset_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
             "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
-            "status": "PASS",
+            "status": "FAIL",
             "target": 2.7,
             "target_band": null,
             "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
@@ -275,9 +276,9 @@
           {
             "attempted_n": 30,
             "case": "V4",
-            "difference": -0.5676329088249985,
-            "distance_outside_tolerance": 0.10763290882499854,
-            "estimate": 1.7323670911750013,
+            "difference": -0.5676329088249987,
+            "distance_outside_tolerance": 0.10763290882499876,
+            "estimate": 1.732367091175001,
             "observed_n": 30,
             "quantity": "persons/(m s)",
             "rule": "\u00b120% of literature through-origin flow slope",
@@ -295,9 +296,9 @@
           {
             "attempted_n": 30,
             "case": "V4",
-            "difference": 0.14482665091175084,
+            "difference": 0.1448266509117504,
             "distance_outside_tolerance": 0.0,
-            "estimate": 2.644826650911751,
+            "estimate": 2.6448266509117504,
             "observed_n": 30,
             "quantity": "persons/(m s)",
             "rule": "\u00b120% of literature through-origin flow slope",
@@ -567,6 +568,7 @@
           "V5/diagnostic",
           "V6/1.15",
           "V6/1.42",
+          "V6/1.78",
           "V4/all_data_flow_persons_s width slope"
         ],
         "physical_violations": [
@@ -580,7 +582,6 @@
           "V4/3.6/1001",
           "V4/4.4/1001",
           "V4/5.0/1001",
-          "V6/1.78/1001",
           "V3/0.8/1002",
           "V3/0.9/1002",
           "V3/1.0/1002",
@@ -712,7 +713,6 @@
           "V4/3.6/1013",
           "V4/4.4/1013",
           "V4/5.0/1013",
-          "V6/1.78/1013",
           "V3/0.8/1014",
           "V3/0.9/1014",
           "V3/1.0/1014",
@@ -756,7 +756,6 @@
           "V4/3.6/1017",
           "V4/4.4/1017",
           "V4/5.0/1017",
-          "V6/1.78/1017",
           "V3/0.8/1018",
           "V3/0.9/1018",
           "V3/1.0/1018",
@@ -844,7 +843,6 @@
           "V4/3.6/1025",
           "V4/4.4/1025",
           "V4/5.0/1025",
-          "V6/1.78/1025",
           "V3/0.8/1026",
           "V3/0.9/1026",
           "V3/1.0/1026",
@@ -877,7 +875,6 @@
           "V4/3.6/1028",
           "V4/4.4/1028",
           "V4/5.0/1028",
-          "V6/1.78/1028",
           "V3/0.8/1029",
           "V3/0.9/1029",
           "V3/1.0/1029",
@@ -888,7 +885,6 @@
           "V4/3.6/1029",
           "V4/4.4/1029",
           "V4/5.0/1029",
-          "V6/1.78/1029",
           "V3/0.8/1030",
           "V3/0.9/1030",
           "V3/1.0/1030",
@@ -907,7 +903,9 @@
         "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
         "unspecified_tolerances": []
       },
-      "overlap_pair_steps": 91665539,
+      "maximum_speed_m_s": 2.0000000000000004,
+      "over_cap_samples": 0,
+      "overlap_pair_steps": 91665533,
       "per_case": {
         "V1/native": {
           "attempted_n": 30,
@@ -925,12 +923,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              34.50048902113999,
-              35.56525344538115
+              31.07585334345706,
+              34.570005092667344
             ],
-            "mean": 35.03287123326057,
+            "mean": 32.8229292180622,
             "n": 30,
-            "sd": 1.4257457489657328
+            "sd": 4.678755121094683
           },
           "wall_penetration_ped_steps": 0
         },
@@ -947,12 +945,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.09576088116163373,
-              0.09921962931782644
+              0.09369870054153259,
+              0.0959666610143815
             ],
-            "mean": 0.09749025523973008,
+            "mean": 0.09483268077795705,
             "n": 30,
-            "sd": 0.004631348839391678
+            "sd": 0.003036854847297459
           },
           "wall_penetration_ped_steps": 0
         },
@@ -969,12 +967,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.09577450600187415,
-              0.09850988013935155
+              0.09308978398507979,
+              0.09495199688843244
             ],
-            "mean": 0.09714219307061285,
+            "mean": 0.09402089043675611,
             "n": 30,
-            "sd": 0.0036627332389684675
+            "sd": 0.0024935488735138775
           },
           "wall_penetration_ped_steps": 0
         },
@@ -991,12 +989,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.09600156673715421,
-              0.0988161683158238
+              0.09295130333234235,
+              0.09444354004234708
             ],
-            "mean": 0.097408867526489,
+            "mean": 0.09369742168734471,
             "n": 30,
-            "sd": 0.0037688207311024234
+            "sd": 0.0019981416520899594
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1013,12 +1011,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              2.024498034831089,
-              2.0538407677670176
+              2.002613855791446,
+              2.010638576559943
             ],
-            "mean": 2.0391694012990533,
+            "mean": 2.0066262161756945,
             "n": 30,
-            "sd": 0.03929064100376288
+            "sd": 0.010745298454610048
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1035,12 +1033,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.9862543604934219,
-              0.9911452111500995
+              0.9785625079508999,
+              0.9821864466184778
             ],
-            "mean": 0.9886997858217607,
+            "mean": 0.9803744772846888,
             "n": 30,
-            "sd": 0.006548969306101678
+            "sd": 0.004852542996535624
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1057,12 +1055,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.9585799941268243,
-              0.9639528493863572
+              0.9528161058560647,
+              0.9582953402705323
             ],
-            "mean": 0.9612664217565907,
+            "mean": 0.9555557230632985,
             "n": 30,
-            "sd": 0.007194385322881887
+            "sd": 0.0073368296274373725
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1079,12 +1077,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.8956446122079174,
-              0.9069187881879182
+              0.8911792525401221,
+              0.9036614725986614
             ],
-            "mean": 0.9012817001979178,
+            "mean": 0.8974203625693917,
             "n": 30,
-            "sd": 0.015096398894087334
+            "sd": 0.016713999623720138
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1101,12 +1099,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.9058931232891895,
-              0.9169772247865257
+              0.898938803455973,
+              0.9125306748729721
             ],
-            "mean": 0.9114351740378576,
+            "mean": 0.9057347391644726,
             "n": 30,
-            "sd": 0.014841884487448472
+            "sd": 0.018199850081473474
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1126,12 +1124,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              23.13098353799213,
-              23.252868753151915
+              22.97817174208431,
+              23.103362350715297
             ],
-            "mean": 23.191926145572022,
+            "mean": 23.040767046399804,
             "n": 30,
-            "sd": 0.16320730052536422
+            "sd": 0.16763330367021678
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1151,12 +1149,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              23.606755114381997,
-              23.72835561305368
+              23.453401578059097,
+              23.576305334638196
             ],
-            "mean": 23.667555363717838,
+            "mean": 23.514853456348646,
             "n": 30,
-            "sd": 0.16282605814598183
+            "sd": 0.1645711525339987
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1176,12 +1174,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              23.78091793376332,
-              23.890121096134337
+              23.649592242874782,
+              23.762644404873527
             ],
-            "mean": 23.835519514948828,
+            "mean": 23.706118323874154,
             "n": 30,
-            "sd": 0.14622571996153233
+            "sd": 0.15137962511845512
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1201,12 +1199,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              23.920355318235007,
-              24.051138705249404
+              23.780167419542558,
+              23.895476997741113
             ],
-            "mean": 23.985747011742205,
+            "mean": 23.837822208641835,
             "n": 30,
-            "sd": 0.17512217146436468
+            "sd": 0.1544023609248504
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1226,35 +1224,35 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              23.986603604743213,
-              24.111012554613918
+              23.848228191623488,
+              23.97106535177218
             ],
-            "mean": 24.048808079678565,
+            "mean": 23.909646771697833,
             "n": 30,
-            "sd": 0.16658664336748757
+            "sd": 0.16448197827593
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/all_data_flow_persons_s width slope": {
           "measurement": {
             "ci95": [
-              1.7155175391295447,
-              1.749216643220458
+              1.7155175391295445,
+              1.7492166432204577
             ],
-            "mean": 1.7323670911750013,
+            "mean": 1.732367091175001,
             "n": 30,
-            "sd": 0.04512392911306688
+            "sd": 0.04512392911306682
           }
         },
         "V4/steady_flow_persons_s width slope": {
           "measurement": {
             "ci95": [
-              2.6193680867840223,
-              2.6702852150394794
+              2.619368086784022,
+              2.670285215039479
             ],
-            "mean": 2.644826650911751,
+            "mean": 2.6448266509117504,
             "n": 30,
-            "sd": 0.06817928689860096
+            "sd": 0.06817928689860098
           }
         },
         "V5/diagnostic": {
@@ -1273,12 +1271,12 @@
           "passed_n": 30,
           "runtime_ms_per_step": {
             "ci95": [
-              0.8964407271695234,
-              0.909645991199131
+              0.8947070515198507,
+              0.9118152774920814
             ],
-            "mean": 0.9030433591843272,
+            "mean": 0.903261164505966,
             "n": 30,
-            "sd": 0.017682173282227247
+            "sd": 0.022908335305846322
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1287,23 +1285,23 @@
           "maximum_projection_passes": 0,
           "measurement": {
             "ci95": [
-              2.9381996566837216,
-              2.938811862571429
+              3.1584385741716794,
+              3.1590556004906727
             ],
-            "mean": 2.938505759627575,
+            "mean": 3.158747087331176,
             "n": 30,
-            "sd": 0.000819758739133175
+            "sd": 0.0008262134151706039
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.11701862893593015,
-              0.12343913031763226
+              0.08787155483048525,
+              0.08971395812108307
             ],
-            "mean": 0.12022887962678121,
+            "mean": 0.08879275647578416,
             "n": 30,
-            "sd": 0.008597209244396317
+            "sd": 0.00246702331487307
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1312,23 +1310,23 @@
           "maximum_projection_passes": 0,
           "measurement": {
             "ci95": [
-              2.9285202860535824,
-              2.9290993085309127
+              3.5995649968495464,
+              3.600153369044763
             ],
-            "mean": 2.9288097972922476,
+            "mean": 3.5998591829471547,
             "n": 30,
-            "sd": 0.0007753253365855276
+            "sd": 0.000787844838765474
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.11791657808006886,
-              0.12218166958971446
+              0.08833403683246087,
+              0.0903226793507761
             ],
-            "mean": 0.12004912383489166,
+            "mean": 0.08932835809161849,
             "n": 30,
-            "sd": 0.005711062419427537
+            "sd": 0.002662841237132007
           },
           "wall_penetration_ped_steps": 0
         },
@@ -1337,30 +1335,30 @@
           "maximum_projection_passes": 0,
           "measurement": {
             "ci95": [
-              2.929870841958002,
-              2.93040215470496
+              4.2745483781629625,
+              4.275114626377811
             ],
-            "mean": 2.930136498331481,
+            "mean": 4.274831502270387,
             "n": 30,
-            "sd": 0.0007114408343297864
+            "sd": 0.0007582202849751663
           },
-          "overlap_pair_steps": 30,
+          "overlap_pair_steps": 24,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.12170243242524018,
-              0.12706929497031424
+              0.08828533706702468,
+              0.09010552156145071
             ],
-            "mean": 0.12438586369777721,
+            "mean": 0.0891954293142377,
             "n": 30,
-            "sd": 0.007186360930847306
+            "sd": 0.0024372718003898043
           },
           "wall_penetration_ped_steps": 0
         }
       },
-      "runtime_ms_per_step": 10.141910212451252,
-      "runtime_scope": "Integration only; V6 no-interferer baseline timing excluded",
-      "source_sha": "56d73a4cad05fec11fa77be80a99f0da0c32cc48",
+      "runtime_ms_per_step": 7.399955965952403,
+      "runtime_scope": "All integration calls including five V6 no-interferer baselines; cold JIT included; use separate warmed probe for cost",
+      "source_sha": "ffdd8618b01c9bcba3272771aa97c4b8d8724a1d",
       "table": [
         {
           "attempted_n": 30,
@@ -2741,7 +2739,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 0,
-          "difference": 0.8385057596275751,
+          "difference": 1.058747087331176,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -2752,8 +2750,8 @@
           "location": "Table 1",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5921285006823784,
-              "pair_steps": 3150,
+              "minimum_centre_distance_m": 0.5947361568802656,
+              "pair_steps": 15660,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             },
@@ -2764,8 +2762,8 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5921285006823784,
-              "pair_steps": 3150,
+              "minimum_centre_distance_m": 0.5947361568802656,
+              "pair_steps": 15660,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             }
@@ -2805,9 +2803,9 @@
             1030
           ],
           "simulated": {
-            "mean": 2.938505759627575,
+            "mean": 3.158747087331176,
             "n": 30,
-            "spread_sd": 0.000819758739133175
+            "spread_sd": 0.0008262134151706039
           },
           "source": "Huber et al. 2014",
           "unavailable_reasons": [],
@@ -2828,7 +2826,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 0,
-          "difference": 0.5288097972922476,
+          "difference": 1.1998591829471548,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -2839,8 +2837,8 @@
           "location": "Table 1",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5697845397425434,
-              "pair_steps": 2550,
+              "minimum_centre_distance_m": 0.5720538288365555,
+              "pair_steps": 12690,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             },
@@ -2851,8 +2849,8 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5697845397425434,
-              "pair_steps": 2550,
+              "minimum_centre_distance_m": 0.5720538288365555,
+              "pair_steps": 12690,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             }
@@ -2892,9 +2890,9 @@
             1030
           ],
           "simulated": {
-            "mean": 2.9288097972922476,
+            "mean": 3.5998591829471547,
             "n": 30,
-            "spread_sd": 0.0007753253365855276
+            "spread_sd": 0.000787844838765474
           },
           "source": "Huber et al. 2014",
           "unavailable_reasons": [],
@@ -2915,7 +2913,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 0,
-          "difference": 0.23013649833148087,
+          "difference": 1.5748315022703867,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -2926,10 +2924,10 @@
           "location": "Table 1",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.540192042950747,
-              "pair_steps": 2040,
+              "minimum_centre_distance_m": 0.558123986618591,
+              "pair_steps": 10140,
               "share_below_0_45": 0.0,
-              "share_below_2r": 0.014705882352941176
+              "share_below_2r": 0.002366863905325444
             },
             "group": {
               "minimum_centre_distance_m": null,
@@ -2938,10 +2936,10 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.540192042950747,
-              "pair_steps": 2040,
+              "minimum_centre_distance_m": 0.558123986618591,
+              "pair_steps": 10140,
               "share_below_0_45": 0.0,
-              "share_below_2r": 0.014705882352941176
+              "share_below_2r": 0.002366863905325444
             }
           },
           "published_value": 2.7,
@@ -2979,9 +2977,9 @@
             1030
           ],
           "simulated": {
-            "mean": 2.930136498331481,
+            "mean": 4.274831502270387,
             "n": 30,
-            "spread_sd": 0.0007114408343297864
+            "spread_sd": 0.0007582202849751663
           },
           "source": "Huber et al. 2014",
           "unavailable_reasons": [],
@@ -2991,16 +2989,16 @@
         {
           "attempted_n": 30,
           "case": "V4",
-          "difference": -0.5676329088249985,
+          "difference": -0.5676329088249987,
           "estimator_status": "documented_equivalent",
           "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
           "location": "Section 4; Fig. 9a caption reverses labels",
           "published_value": 2.3,
           "quantity": "persons/(m s)",
           "simulated": {
-            "mean": 1.7323670911750013,
+            "mean": 1.732367091175001,
             "n": 30,
-            "spread_sd": 0.04512392911306688
+            "spread_sd": 0.04512392911306682
           },
           "source": "Liao et al. 2014",
           "variant": "all_data_flow_persons_s width slope"
@@ -3008,24 +3006,26 @@
         {
           "attempted_n": 30,
           "case": "V4",
-          "difference": 0.14482665091175084,
+          "difference": 0.1448266509117504,
           "estimator_status": "documented_equivalent",
           "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
           "location": "Section 4; Fig. 9a caption reverses labels",
           "published_value": 2.5,
           "quantity": "persons/(m s)",
           "simulated": {
-            "mean": 2.644826650911751,
+            "mean": 2.6448266509117504,
             "n": 30,
-            "spread_sd": 0.06817928689860096
+            "spread_sd": 0.06817928689860098
           },
           "source": "Liao et al. 2014",
           "variant": "steady_flow_persons_s width slope"
         }
       ],
+      "unresolved_count": 0,
       "wall_penetration_ped_steps": 0
     },
     "on": {
+      "fallback_count": 3461,
       "gate": {
         "checks": [
           {
@@ -3051,9 +3051,9 @@
           {
             "attempted_n": 30,
             "case": "V2",
-            "difference": -0.11699240600684607,
-            "distance_outside_tolerance": 0.03699240600684606,
-            "estimate": 0.023007593993153937,
+            "difference": -0.09326999426532476,
+            "distance_outside_tolerance": 0.013269994265324735,
+            "estimate": 0.04673000573467526,
             "observed_n": 30,
             "quantity": "speed_drop_m_s",
             "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
@@ -3074,9 +3074,9 @@
           {
             "attempted_n": 30,
             "case": "V2",
-            "difference": -0.1397457682783385,
-            "distance_outside_tolerance": 0.05974576827833848,
-            "estimate": 0.0002542317216615131,
+            "difference": -0.13962501378013478,
+            "distance_outside_tolerance": 0.059625013780134774,
+            "estimate": 0.0003749862198652217,
             "observed_n": 30,
             "quantity": "speed_drop_m_s",
             "rule": "same positive sign; \u00b150% magnitude; .9-to-1.3 source-anchor interpolation below 1.3",
@@ -3120,10 +3120,10 @@
           {
             "attempted_n": 30,
             "case": "V3",
-            "difference": -0.6584866587642946,
-            "distance_outside_tolerance": 0.33648665876429473,
-            "estimate": 0.9515133412357055,
-            "observed_n": 1,
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
             "quantity": "specific_flow_persons_m_s",
             "rule": "\u00b120% of literature flow",
             "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
@@ -3140,10 +3140,10 @@
           {
             "attempted_n": 30,
             "case": "V3",
-            "difference": -0.9312344895327748,
-            "distance_outside_tolerance": 0.5592344895327749,
-            "estimate": 0.9287655104672253,
-            "observed_n": 9,
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
             "quantity": "specific_flow_persons_m_s",
             "rule": "\u00b120% of literature flow",
             "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
@@ -3160,10 +3160,10 @@
           {
             "attempted_n": 30,
             "case": "V3",
-            "difference": -0.9484785668378428,
-            "distance_outside_tolerance": 0.5684785668378429,
-            "estimate": 0.9515214331621571,
-            "observed_n": 8,
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
             "quantity": "specific_flow_persons_m_s",
             "rule": "\u00b120% of literature flow",
             "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
@@ -3180,10 +3180,10 @@
           {
             "attempted_n": 30,
             "case": "V3",
-            "difference": -0.9516894927197705,
-            "distance_outside_tolerance": 0.5656894927197706,
-            "estimate": 0.9783105072802294,
-            "observed_n": 19,
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
             "quantity": "specific_flow_persons_m_s",
             "rule": "\u00b120% of literature flow",
             "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
@@ -3200,10 +3200,10 @@
           {
             "attempted_n": 30,
             "case": "V3",
-            "difference": -0.918464387085768,
-            "distance_outside_tolerance": 0.5244643870857681,
-            "estimate": 1.051535612914232,
-            "observed_n": 29,
+            "difference": null,
+            "distance_outside_tolerance": null,
+            "estimate": null,
+            "observed_n": 0,
             "quantity": "specific_flow_persons_m_s",
             "rule": "\u00b120% of literature flow",
             "source": "Seyfried et al. 2009, Table 2; https://arxiv.org/abs/physics/0702004",
@@ -3220,9 +3220,9 @@
           {
             "attempted_n": 30,
             "case": "V5",
-            "difference": -0.11343341843170296,
-            "distance_outside_tolerance": 0.013433418431702981,
-            "estimate": 0.38656658156829704,
+            "difference": -0.11416373119449152,
+            "distance_outside_tolerance": 0.014163731194491547,
+            "estimate": 0.3858362688055085,
             "observed_n": 30,
             "quantity": "lateral_cm_to_edge_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
@@ -3240,9 +3240,9 @@
           {
             "attempted_n": 30,
             "case": "V6",
-            "difference": 0.8385057596275751,
-            "distance_outside_tolerance": 0.4185057596275752,
-            "estimate": 2.938505759627575,
+            "difference": 1.058747087331176,
+            "distance_outside_tolerance": 0.638747087331176,
+            "estimate": 3.158747087331176,
             "observed_n": 30,
             "quantity": "onset_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
@@ -3260,9 +3260,9 @@
           {
             "attempted_n": 30,
             "case": "V6",
-            "difference": 0.5288097972922476,
-            "distance_outside_tolerance": 0.04880979729224766,
-            "estimate": 2.9288097972922476,
+            "difference": 1.1998591829471548,
+            "distance_outside_tolerance": 0.7198591829471548,
+            "estimate": 3.5998591829471547,
             "observed_n": 30,
             "quantity": "onset_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
@@ -3280,14 +3280,14 @@
           {
             "attempted_n": 30,
             "case": "V6",
-            "difference": 0.20441449300016368,
-            "distance_outside_tolerance": 0.0,
-            "estimate": 2.904414493000164,
+            "difference": 1.5636218084999722,
+            "distance_outside_tolerance": 1.0236218084999722,
+            "estimate": 4.263621808499972,
             "observed_n": 30,
             "quantity": "onset_m",
             "rule": "no reported SD; author fallback \u00b120% of literature mean",
             "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
-            "status": "PASS",
+            "status": "FAIL",
             "target": 2.7,
             "target_band": null,
             "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
@@ -3300,14 +3300,14 @@
           {
             "attempted_n": 30,
             "case": "V4",
-            "difference": -0.32652106222578614,
-            "distance_outside_tolerance": 0.0,
-            "estimate": 1.9734789377742137,
+            "difference": -0.6847714508001845,
+            "distance_outside_tolerance": 0.22477145080018457,
+            "estimate": 1.6152285491998153,
             "observed_n": 30,
             "quantity": "persons/(m s)",
             "rule": "\u00b120% of literature through-origin flow slope",
             "source": "Liao et al. 2014, section 4; https://doi.org/10.1016/j.trpro.2014.09.005",
-            "status": "PASS",
+            "status": "FAIL",
             "target": 2.3,
             "target_band": null,
             "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
@@ -3320,14 +3320,14 @@
           {
             "attempted_n": 30,
             "case": "V4",
-            "difference": 0.17304361977699356,
-            "distance_outside_tolerance": 0.0,
-            "estimate": 2.6730436197769936,
+            "difference": 0.5437565816471563,
+            "distance_outside_tolerance": 0.043756581647156345,
+            "estimate": 3.0437565816471563,
             "observed_n": 30,
             "quantity": "persons/(m s)",
             "rule": "\u00b120% of literature through-origin flow slope",
             "source": "Liao et al. 2014, section 4; https://doi.org/10.1016/j.trpro.2014.09.005",
-            "status": "PASS",
+            "status": "FAIL",
             "target": 2.5,
             "target_band": null,
             "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
@@ -3342,67 +3342,115 @@
         "exit_code": 2,
         "measurement_missing": [
           "V3/0.8/1001",
+          "V3/0.9/1001",
           "V3/1.0/1001",
+          "V3/1.1/1001",
+          "V3/1.2/1001",
           "V3/0.8/1002",
           "V3/0.9/1002",
           "V3/1.0/1002",
           "V3/1.1/1002",
+          "V3/1.2/1002",
           "V3/0.8/1003",
           "V3/0.9/1003",
           "V3/1.0/1003",
           "V3/1.1/1003",
+          "V3/1.2/1003",
           "V3/0.8/1004",
           "V3/0.9/1004",
           "V3/1.0/1004",
+          "V3/1.1/1004",
+          "V3/1.2/1004",
           "V3/0.8/1005",
+          "V3/0.9/1005",
           "V3/1.0/1005",
+          "V3/1.1/1005",
+          "V3/1.2/1005",
           "V3/0.8/1006",
           "V3/0.9/1006",
           "V3/1.0/1006",
           "V3/1.1/1006",
+          "V3/1.2/1006",
           "V3/0.8/1007",
+          "V3/0.9/1007",
           "V3/1.0/1007",
+          "V3/1.1/1007",
+          "V3/1.2/1007",
           "V3/0.8/1008",
           "V3/0.9/1008",
           "V3/1.0/1008",
           "V3/1.1/1008",
+          "V3/1.2/1008",
           "V3/0.8/1009",
           "V3/0.9/1009",
           "V3/1.0/1009",
           "V3/1.1/1009",
+          "V3/1.2/1009",
           "V3/0.8/1010",
+          "V3/0.9/1010",
           "V3/1.0/1010",
           "V3/1.1/1010",
+          "V3/1.2/1010",
+          "V3/0.8/1011",
           "V3/0.9/1011",
+          "V3/1.0/1011",
           "V3/1.1/1011",
+          "V3/1.2/1011",
           "V3/0.8/1012",
           "V3/0.9/1012",
           "V3/1.0/1012",
+          "V3/1.1/1012",
+          "V3/1.2/1012",
           "V3/0.8/1013",
           "V3/0.9/1013",
+          "V3/1.0/1013",
+          "V3/1.1/1013",
+          "V3/1.2/1013",
           "V3/0.8/1014",
           "V3/0.9/1014",
+          "V3/1.0/1014",
+          "V3/1.1/1014",
+          "V3/1.2/1014",
           "V3/0.8/1015",
           "V3/0.9/1015",
           "V3/1.0/1015",
           "V3/1.1/1015",
+          "V3/1.2/1015",
           "V3/0.8/1016",
+          "V3/0.9/1016",
           "V3/1.0/1016",
+          "V3/1.1/1016",
+          "V3/1.2/1016",
           "V3/0.8/1017",
           "V3/0.9/1017",
+          "V3/1.0/1017",
+          "V3/1.1/1017",
+          "V3/1.2/1017",
           "V3/0.8/1018",
           "V3/0.9/1018",
+          "V3/1.0/1018",
+          "V3/1.1/1018",
+          "V3/1.2/1018",
           "V3/0.8/1019",
           "V3/0.9/1019",
           "V3/1.0/1019",
+          "V3/1.1/1019",
+          "V3/1.2/1019",
           "V3/0.8/1020",
           "V3/0.9/1020",
+          "V3/1.0/1020",
+          "V3/1.1/1020",
+          "V3/1.2/1020",
           "V3/0.8/1021",
+          "V3/0.9/1021",
           "V3/1.0/1021",
           "V3/1.1/1021",
+          "V3/1.2/1021",
           "V3/0.8/1022",
+          "V3/0.9/1022",
           "V3/1.0/1022",
           "V3/1.1/1022",
+          "V3/1.2/1022",
           "V3/0.8/1023",
           "V3/0.9/1023",
           "V3/1.0/1023",
@@ -3411,20 +3459,38 @@
           "V3/0.8/1024",
           "V3/0.9/1024",
           "V3/1.0/1024",
+          "V3/1.1/1024",
+          "V3/1.2/1024",
           "V3/0.8/1025",
           "V3/0.9/1025",
           "V3/1.0/1025",
+          "V3/1.1/1025",
+          "V3/1.2/1025",
           "V3/0.8/1026",
           "V3/0.9/1026",
+          "V3/1.0/1026",
+          "V3/1.1/1026",
+          "V3/1.2/1026",
           "V3/0.8/1027",
           "V3/0.9/1027",
           "V3/1.0/1027",
+          "V3/1.1/1027",
+          "V3/1.2/1027",
           "V3/0.8/1028",
           "V3/0.9/1028",
           "V3/1.0/1028",
+          "V3/1.1/1028",
+          "V3/1.2/1028",
           "V3/0.8/1029",
+          "V3/0.9/1029",
           "V3/1.0/1029",
-          "V3/0.8/1030"
+          "V3/1.1/1029",
+          "V3/1.2/1029",
+          "V3/0.8/1030",
+          "V3/0.9/1030",
+          "V3/1.0/1030",
+          "V3/1.1/1030",
+          "V3/1.2/1030"
         ],
         "model_limitations": [
           {
@@ -3440,7 +3506,10 @@
           "V2/0.966",
           "V5/diagnostic",
           "V6/1.15",
-          "V6/1.42"
+          "V6/1.42",
+          "V6/1.78",
+          "V4/all_data_flow_persons_s width slope",
+          "V4/steady_flow_persons_s width slope"
         ],
         "physical_violations": [],
         "release_admission": "engineering dev validation only; no release or paper admission",
@@ -3449,6 +3518,8 @@
         "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
         "unspecified_tolerances": []
       },
+      "maximum_speed_m_s": 2.0000000000000004,
+      "over_cap_samples": 0,
       "overlap_pair_steps": 0,
       "per_case": {
         "V1/native": {
@@ -3467,12 +3538,12 @@
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              53.70759144678875,
-              56.082437128475796
+              26.81844664033204,
+              37.43328353271808
             ],
-            "mean": 54.89501428763227,
+            "mean": 32.12586508652506,
             "n": 30,
-            "sd": 3.1799767704748723
+            "sd": 14.213527641168017
           },
           "wall_penetration_ped_steps": 0
         },
@@ -3481,23 +3552,23 @@
           "maximum_projection_passes": 1,
           "measurement": {
             "ci95": [
-              0.017880118595906352,
-              0.028135069390401522
+              0.043648556528135755,
+              0.04981145494121477
             ],
-            "mean": 0.023007593993153937,
+            "mean": 0.04673000573467526,
             "n": 30,
-            "sd": 0.01373163130569883
+            "sd": 0.00825227253438454
           },
           "overlap_pair_steps": 0,
           "passed_n": 30,
           "runtime_ms_per_step": {
             "ci95": [
-              0.18582477598746464,
-              0.1982361787069626
+              0.17044399086456985,
+              0.18132839627971759
             ],
-            "mean": 0.19203047734721362,
+            "mean": 0.17588619357214372,
             "n": 30,
-            "sd": 0.01661917346518913
+            "sd": 0.014574486522430744
           },
           "wall_penetration_ped_steps": 0
         },
@@ -3506,23 +3577,23 @@
           "maximum_projection_passes": 1,
           "measurement": {
             "ci95": [
-              -3.580067161143704e-05,
-              0.0005442641149344632
+              -5.2683677099879566e-05,
+              0.0008026561168303229
             ],
-            "mean": 0.0002542317216615131,
+            "mean": 0.0003749862198652217,
             "n": 30,
-            "sd": 0.0007767210142580999
+            "sd": 0.001145321018765566
           },
           "overlap_pair_steps": 0,
           "passed_n": 30,
           "runtime_ms_per_step": {
             "ci95": [
-              0.18688073064853905,
-              0.19805962696132834
+              0.16088190002458505,
+              0.1715549528086219
             ],
-            "mean": 0.1924701788049337,
+            "mean": 0.16621842641660348,
             "n": 30,
-            "sd": 0.01496881707655383
+            "sd": 0.014291480151745669
           },
           "wall_penetration_ped_steps": 0
         },
@@ -3542,282 +3613,270 @@
           "passed_n": 30,
           "runtime_ms_per_step": {
             "ci95": [
-              0.18610868673453485,
-              0.19777826985197222
+              0.1610959214309132,
+              0.17134374137509975
             ],
-            "mean": 0.19194347829325353,
+            "mean": 0.16621983140300647,
             "n": 30,
-            "sd": 0.015625858775048965
+            "sd": 0.013722082921772278
           },
           "wall_penetration_ped_steps": 0
         },
         "V3/0.8": {
           "attempted_n": 30,
-          "maximum_projection_passes": 973,
+          "maximum_projection_passes": 256,
           "measurement": {
             "ci95": null,
-            "mean": 0.9515133412357055,
-            "n": 1,
+            "mean": null,
+            "n": 0,
             "sd": null
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              27.893824087017133,
-              29.963309598982104
+              4.274990876807472,
+              5.59883004195993
             ],
-            "mean": 28.92856684299962,
+            "mean": 4.936910459383701,
             "n": 30,
-            "sd": 2.771091993736602
+            "sd": 1.7726531982655511
           },
           "wall_penetration_ped_steps": 0
         },
         "V3/0.9": {
           "attempted_n": 30,
-          "maximum_projection_passes": 973,
+          "maximum_projection_passes": 256,
           "measurement": {
-            "ci95": [
-              0.8631735774661844,
-              0.9943574434682663
-            ],
-            "mean": 0.9287655104672253,
-            "n": 9,
-            "sd": 0.08533193674680943
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              22.30198692942787,
-              24.138436981631173
+              3.115440593871692,
+              3.647005704052731
             ],
-            "mean": 23.22021195552952,
+            "mean": 3.3812231489622113,
             "n": 30,
-            "sd": 2.45905178225953
+            "sd": 0.711778754891484
           },
           "wall_penetration_ped_steps": 0
         },
         "V3/1.0": {
           "attempted_n": 30,
-          "maximum_projection_passes": 988,
+          "maximum_projection_passes": 256,
           "measurement": {
-            "ci95": [
-              0.8851844357807118,
-              1.0178584305436023
-            ],
-            "mean": 0.9515214331621571,
-            "n": 8,
-            "sd": 0.0793484895714453
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              19.06155992174181,
-              20.390470645157528
+              2.6684177765835226,
+              2.9849402505226283
             ],
-            "mean": 19.72601528344967,
+            "mean": 2.8266790135530755,
             "n": 30,
-            "sd": 1.7794441395008607
+            "sd": 0.4238313765905721
           },
           "wall_penetration_ped_steps": 0
         },
         "V3/1.1": {
           "attempted_n": 30,
-          "maximum_projection_passes": 918,
+          "maximum_projection_passes": 256,
           "measurement": {
-            "ci95": [
-              0.9549171705024919,
-              1.0017038440579669
-            ],
-            "mean": 0.9783105072802294,
-            "n": 19,
-            "sd": 0.04853544730040148
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              17.420189008944735,
-              18.379373538255937
+              2.4291881528770918,
+              2.7115355556936875
             ],
-            "mean": 17.899781273600336,
+            "mean": 2.5703618542853897,
             "n": 30,
-            "sd": 1.2843716732119257
+            "sd": 0.37807011591711803
           },
           "wall_penetration_ped_steps": 0
         },
         "V3/1.2": {
           "attempted_n": 30,
-          "maximum_projection_passes": 592,
+          "maximum_projection_passes": 256,
           "measurement": {
-            "ci95": [
-              1.029389281860981,
-              1.0736819439674827
-            ],
-            "mean": 1.051535612914232,
-            "n": 29,
-            "sd": 0.0582216494766732
+            "ci95": null,
+            "mean": null,
+            "n": 0,
+            "sd": null
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              15.892640133553341,
-              16.60353822475485
+              2.301215583711959,
+              2.439214200692155
             ],
-            "mean": 16.248089179154096,
+            "mean": 2.370214892202057,
             "n": 30,
-            "sd": 0.9519100266716334
+            "sd": 0.18478354182699822
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/2.4": {
           "attempted_n": 30,
-          "maximum_projection_passes": 838,
+          "maximum_projection_passes": 256,
           "measurement": {
             "ci95": [
-              2.2660296582507726,
-              2.3047293218199654
+              1.9634816041035899,
+              2.0108629362261645
             ],
-            "mean": 2.285379490035369,
+            "mean": 1.987172270164877,
             "n": 30,
-            "sd": 0.05181980122927572
+            "sd": 0.06344476892364129
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              411.4435010475396,
-              421.68652424655556
+              45.43138915356697,
+              46.368829602268306
             ],
-            "mean": 416.5650126470476,
+            "mean": 45.90010937791764,
             "n": 30,
-            "sd": 13.715659962026331
+            "sd": 1.2552558145403963
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/3.0": {
           "attempted_n": 30,
-          "maximum_projection_passes": 584,
+          "maximum_projection_passes": 256,
           "measurement": {
             "ci95": [
-              2.165513538051899,
-              2.1997367675363666
+              1.8421575025247299,
+              1.88566142275845
             ],
-            "mean": 2.1826251527941327,
+            "mean": 1.86390946264159,
             "n": 30,
-            "sd": 0.045825745904436166
+            "sd": 0.058252819050350506
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              404.3898332941502,
-              424.70236340578015
+              45.17869004874036,
+              45.707517543157145
             ],
-            "mean": 414.5460983499652,
+            "mean": 45.44310379594875,
             "n": 30,
-            "sd": 27.198977349411958
+            "sd": 0.7081130200591433
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/3.6": {
           "attempted_n": 30,
-          "maximum_projection_passes": 544,
+          "maximum_projection_passes": 221,
           "measurement": {
             "ci95": [
-              2.049559993898757,
-              2.092520360804753
+              1.7208192240357143,
+              1.7560388559812121
             ],
-            "mean": 2.071040177351755,
+            "mean": 1.7384290400084632,
             "n": 30,
-            "sd": 0.05752498777735287
+            "sd": 0.047159953303491105
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              423.26112498810113,
-              445.8310175054599
+              45.46835556324337,
+              46.308229537188716
             ],
-            "mean": 434.5460712467805,
+            "mean": 45.88829255021604,
             "n": 30,
-            "sd": 30.221641124205714
+            "sd": 1.1246119054671906
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/4.4": {
           "attempted_n": 30,
-          "maximum_projection_passes": 592,
+          "maximum_projection_passes": 195,
           "measurement": {
             "ci95": [
-              1.8958059867733406,
-              1.940568498538842
+              1.5282825651540821,
+              1.559805386088874
             ],
-            "mean": 1.9181872426560913,
+            "mean": 1.544043975621478,
             "n": 30,
-            "sd": 0.059938104062948847
+            "sd": 0.0422098324474151
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              474.3602097602832,
-              507.6615857604018
+              44.34961720588338,
+              45.36424720775964
             ],
-            "mean": 491.0108977603425,
+            "mean": 44.85693220682151,
             "n": 30,
-            "sd": 44.591361418481256
+            "sd": 1.3586145245030443
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/5.0": {
           "attempted_n": 30,
-          "maximum_projection_passes": 611,
+          "maximum_projection_passes": 187,
           "measurement": {
             "ci95": [
-              1.8005542502399496,
-              1.836578860217148
+              1.410496176197439,
+              1.4520353965911368
             ],
-            "mean": 1.8185665552285488,
+            "mean": 1.431265786394288,
             "n": 30,
-            "sd": 0.04823783868412391
+            "sd": 0.055622037648255934
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              521.4871400088123,
-              556.1837457882441
+              43.76232400399717,
+              44.587981000533254
             ],
-            "mean": 538.8354428985282,
+            "mean": 44.17515250226521,
             "n": 30,
-            "sd": 46.45960840476073
+            "sd": 1.105575023089346
           },
           "wall_penetration_ped_steps": 0
         },
         "V4/all_data_flow_persons_s width slope": {
           "measurement": {
             "ci95": [
-              1.9577124593456616,
-              1.9892454162027657
+              1.6029152112622622,
+              1.6275418871373684
             ],
-            "mean": 1.9734789377742137,
+            "mean": 1.6152285491998153,
             "n": 30,
-            "sd": 0.04222340469665557
+            "sd": 0.03297572462107098
           }
         },
         "V4/steady_flow_persons_s width slope": {
           "measurement": {
             "ci95": [
-              2.6481802150300147,
-              2.6979070245239725
+              3.006178273543322,
+              3.0813348897509907
             ],
-            "mean": 2.6730436197769936,
+            "mean": 3.0437565816471563,
             "n": 30,
-            "sd": 0.06658542080438803
+            "sd": 0.10063655736911038
           }
         },
         "V5/diagnostic": {
@@ -3825,23 +3884,23 @@
           "maximum_projection_passes": 2,
           "measurement": {
             "ci95": [
-              0.38527516361330205,
-              0.38785799952329203
+              0.3847874149863435,
+              0.38688512262467345
             ],
-            "mean": 0.38656658156829704,
+            "mean": 0.3858362688055085,
             "n": 30,
-            "sd": 0.0034584808011112475
+            "sd": 0.002808882114983632
           },
           "overlap_pair_steps": 0,
           "passed_n": 30,
           "runtime_ms_per_step": {
             "ci95": [
-              0.2562538654044297,
-              0.27227952547395956
+              0.22085016103247057,
+              0.3743772075470859
             ],
-            "mean": 0.2642666954391946,
+            "mean": 0.29761368428977825,
             "n": 30,
-            "sd": 0.021458752939445727
+            "sd": 0.20557649085193438
           },
           "wall_penetration_ped_steps": 0
         },
@@ -3850,23 +3909,23 @@
           "maximum_projection_passes": 1,
           "measurement": {
             "ci95": [
-              2.9381996566837216,
-              2.938811862571429
+              3.1584385741716794,
+              3.1590556004906727
             ],
-            "mean": 2.938505759627575,
+            "mean": 3.158747087331176,
             "n": 30,
-            "sd": 0.000819758739133175
+            "sd": 0.0008262134151706039
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.17791974671631675,
-              0.18875932983252644
+              0.18251662184484194,
+              0.19657981948942613
             ],
-            "mean": 0.1833395382744216,
+            "mean": 0.18954822066713403,
             "n": 30,
-            "sd": 0.014514468361873471
+            "sd": 0.018830967491161806
           },
           "wall_penetration_ped_steps": 0
         },
@@ -3875,23 +3934,23 @@
           "maximum_projection_passes": 1,
           "measurement": {
             "ci95": [
-              2.9285202860535824,
-              2.9290993085309127
+              3.5995649968495464,
+              3.600153369044763
             ],
-            "mean": 2.9288097972922476,
+            "mean": 3.5998591829471547,
             "n": 30,
-            "sd": 0.0007753253365855276
+            "sd": 0.000787844838765474
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.17882843674882481,
-              0.18966216256613128
+              0.12601961553387622,
+              0.1353214736945272
             ],
-            "mean": 0.18424529965747805,
+            "mean": 0.13067054461420172,
             "n": 30,
-            "sd": 0.014506625294598131
+            "sd": 0.012455416830330416
           },
           "wall_penetration_ped_steps": 0
         },
@@ -3900,30 +3959,30 @@
           "maximum_projection_passes": 2,
           "measurement": {
             "ci95": [
-              2.9038083735905933,
-              2.9050206124097344
+              4.2630791867889055,
+              4.264164430211039
             ],
-            "mean": 2.904414493000164,
+            "mean": 4.263621808499972,
             "n": 30,
-            "sd": 0.0016232175904579873
+            "sd": 0.0014531676307683204
           },
           "overlap_pair_steps": 0,
           "passed_n": 0,
           "runtime_ms_per_step": {
             "ci95": [
-              0.1802430426766279,
-              0.19149349808377877
+              0.12645620690616458,
+              0.1346188305705884
             ],
-            "mean": 0.18586827038020334,
+            "mean": 0.1305375187383765,
             "n": 30,
-            "sd": 0.015064636463699993
+            "sd": 0.010929953823592027
           },
           "wall_penetration_ped_steps": 0
         }
       },
-      "runtime_ms_per_step": 218.43044386668197,
-      "runtime_scope": "Integration only; V6 no-interferer baseline timing excluded",
-      "source_sha": "56d73a4cad05fec11fa77be80a99f0da0c32cc48",
+      "runtime_ms_per_step": 15.775720945434538,
+      "runtime_scope": "All integration calls including five V6 no-interferer baselines; cold JIT included; use separate warmed probe for cost",
+      "source_sha": "ffdd8618b01c9bcba3272771aa97c4b8d8724a1d",
       "table": [
         {
           "attempted_n": 30,
@@ -4099,9 +4158,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.023007593993153937,
+            "mean": 0.04673000573467526,
             "n": 30,
-            "spread_sd": 0.01373163130569883
+            "spread_sd": 0.00825227253438454
           },
           "source": "Wilmut et al. 2015",
           "unavailable_reasons": [],
@@ -4187,9 +4246,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.0002542317216615131,
+            "mean": 0.0003749862198652217,
             "n": 30,
-            "spread_sd": 0.0007767210142580999
+            "spread_sd": 0.001145321018765566
           },
           "source": "Wilmut et al. 2015",
           "unavailable_reasons": [],
@@ -4288,17 +4347,17 @@
           "attempted_n": 30,
           "case": "V3",
           "censored_specific_flow": {
-            "mean": 1.0802284198749865,
+            "mean": 0.8998146477882287,
             "n": 30,
-            "spread_sd": 0.08493863417476262
+            "spread_sd": 0.17058285406964058
           },
           "crossed": {
-            "mean": 58.06666666666667,
+            "mean": 57.43333333333333,
             "n": 30,
-            "spread_sd": 0.36514837167011066
+            "spread_sd": 3.1037611591959418
           },
           "diagnostic_passed_n": 0,
-          "difference": -0.6584866587642946,
+          "difference": null,
           "estimator_status": "source_equivalent_estimator",
           "initial_pair_overlaps": {
             "mean": 0.0,
@@ -4309,7 +4368,7 @@
           "location": "Table 2, N=60; Fig. 2",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000001604966,
+              "minimum_centre_distance_m": 0.5600000000911877,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4321,7 +4380,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000001604966,
+              "minimum_centre_distance_m": 0.5600000000911877,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4362,9 +4421,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.9515133412357055,
-            "n": 1,
-            "spread_sd": 0.0
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
           },
           "source": "Seyfried et al. 2009",
           "unavailable_reasons": [],
@@ -4375,17 +4434,17 @@
           "attempted_n": 30,
           "case": "V3",
           "censored_specific_flow": {
-            "mean": 1.0418156135918353,
+            "mean": 1.0190719592363455,
             "n": 30,
-            "spread_sd": 0.10460805789706148
+            "spread_sd": 0.1426138010487467
           },
           "crossed": {
-            "mean": 58.6,
+            "mean": 58.0,
             "n": 30,
-            "spread_sd": 0.9321831993987982
+            "spread_sd": 0.0
           },
           "diagnostic_passed_n": 0,
-          "difference": -0.9312344895327748,
+          "difference": null,
           "estimator_status": "source_equivalent_estimator",
           "initial_pair_overlaps": {
             "mean": 0.0,
@@ -4396,7 +4455,7 @@
           "location": "Table 2, N=60; Fig. 2",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000001772983,
+              "minimum_centre_distance_m": 0.5600000000248342,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4408,7 +4467,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000001772983,
+              "minimum_centre_distance_m": 0.5600000000248342,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4449,9 +4508,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.9287655104672253,
-            "n": 9,
-            "spread_sd": 0.08533193674680943
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
           },
           "source": "Seyfried et al. 2009",
           "unavailable_reasons": [],
@@ -4462,17 +4521,17 @@
           "attempted_n": 30,
           "case": "V3",
           "censored_specific_flow": {
-            "mean": 1.0883568204006135,
+            "mean": 1.0787559915964249,
             "n": 30,
-            "spread_sd": 0.10696478100810272
+            "spread_sd": 0.10899375973461285
           },
           "crossed": {
-            "mean": 58.53333333333333,
+            "mean": 58.0,
             "n": 30,
-            "spread_sd": 0.8995528902176073
+            "spread_sd": 0.0
           },
           "diagnostic_passed_n": 0,
-          "difference": -0.9484785668378428,
+          "difference": null,
           "estimator_status": "source_equivalent_estimator",
           "initial_pair_overlaps": {
             "mean": 0.0,
@@ -4483,7 +4542,7 @@
           "location": "Table 2, N=60; Fig. 2",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000002900335,
+              "minimum_centre_distance_m": 0.5600000001900832,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4495,7 +4554,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000002900335,
+              "minimum_centre_distance_m": 0.5600000001900832,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4536,9 +4595,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.9515214331621571,
-            "n": 8,
-            "spread_sd": 0.0793484895714453
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
           },
           "source": "Seyfried et al. 2009",
           "unavailable_reasons": [],
@@ -4549,17 +4608,17 @@
           "attempted_n": 30,
           "case": "V3",
           "censored_specific_flow": {
-            "mean": 1.0592795639347388,
+            "mean": 1.2044420163049196,
             "n": 30,
-            "spread_sd": 0.12165394147201425
+            "spread_sd": 0.12196071248692854
           },
           "crossed": {
-            "mean": 59.266666666666666,
+            "mean": 58.0,
             "n": 30,
-            "spread_sd": 0.9802650357071221
+            "spread_sd": 0.0
           },
           "diagnostic_passed_n": 0,
-          "difference": -0.9516894927197705,
+          "difference": null,
           "estimator_status": "source_equivalent_estimator",
           "initial_pair_overlaps": {
             "mean": 0.0,
@@ -4570,7 +4629,7 @@
           "location": "Table 2, N=60; Fig. 2",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000006221661,
+              "minimum_centre_distance_m": 0.560000001511778,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4582,7 +4641,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000006221661,
+              "minimum_centre_distance_m": 0.560000001511778,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4623,9 +4682,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.9783105072802294,
-            "n": 19,
-            "spread_sd": 0.04853544730040148
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
           },
           "source": "Seyfried et al. 2009",
           "unavailable_reasons": [],
@@ -4636,17 +4695,17 @@
           "attempted_n": 30,
           "case": "V3",
           "censored_specific_flow": {
-            "mean": 1.059312281137638,
+            "mean": 1.2871765024352084,
             "n": 30,
-            "spread_sd": 0.0713243943928035
+            "spread_sd": 0.08268691768315144
           },
           "crossed": {
-            "mean": 59.93333333333333,
+            "mean": 58.0,
             "n": 30,
-            "spread_sd": 0.36514837167011066
+            "spread_sd": 0.0
           },
           "diagnostic_passed_n": 0,
-          "difference": -0.918464387085768,
+          "difference": null,
           "estimator_status": "source_equivalent_estimator",
           "initial_pair_overlaps": {
             "mean": 0.0,
@@ -4657,7 +4716,7 @@
           "location": "Table 2, N=60; Fig. 2",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000051169074,
+              "minimum_centre_distance_m": 0.5600000015797448,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4669,7 +4728,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000051169074,
+              "minimum_centre_distance_m": 0.5600000015797448,
               "pair_steps": 84960000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4710,9 +4769,9 @@
             1030
           ],
           "simulated": {
-            "mean": 1.051535612914232,
-            "n": 29,
-            "spread_sd": 0.0582216494766732
+            "mean": null,
+            "n": 0,
+            "spread_sd": null
           },
           "source": "Seyfried et al. 2009",
           "unavailable_reasons": [],
@@ -4723,9 +4782,9 @@
           "attempted_n": 30,
           "case": "V4",
           "censored_specific_flow": {
-            "mean": 2.2853794900353694,
+            "mean": 1.987172270164877,
             "n": 30,
-            "spread_sd": 0.05181980122927578
+            "spread_sd": 0.06344476892364127
           },
           "crossed": {
             "mean": 350.0,
@@ -4744,7 +4803,7 @@
           "location": "Section 4; Fig. 9a caption reverses labels",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000000613518,
+              "minimum_centre_distance_m": 0.5600000019213747,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4756,7 +4815,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000000613518,
+              "minimum_centre_distance_m": 0.5600000019213747,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4800,15 +4859,15 @@
             1030
           ],
           "simulated": {
-            "mean": 2.285379490035369,
+            "mean": 1.987172270164877,
             "n": 30,
-            "spread_sd": 0.05181980122927572
+            "spread_sd": 0.06344476892364129
           },
           "source": "Liao et al. 2014",
           "steady_specific_flow": {
-            "mean": 2.9255435040382927,
+            "mean": 3.38923050260711,
             "n": 30,
-            "spread_sd": 0.15787843122789666
+            "spread_sd": 0.2736661421015397
           },
           "unavailable_reasons": [],
           "variant": "2.4",
@@ -4818,9 +4877,9 @@
           "attempted_n": 30,
           "case": "V4",
           "censored_specific_flow": {
-            "mean": 2.1826251527941327,
+            "mean": 1.8639094626415902,
             "n": 30,
-            "spread_sd": 0.045825745904436145
+            "spread_sd": 0.058252819050350506
           },
           "crossed": {
             "mean": 350.0,
@@ -4839,7 +4898,7 @@
           "location": "Section 4; Fig. 9a caption reverses labels",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000000020892,
+              "minimum_centre_distance_m": 0.5600000012780898,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4851,7 +4910,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000000020892,
+              "minimum_centre_distance_m": 0.5600000012780898,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4895,15 +4954,15 @@
             1030
           ],
           "simulated": {
-            "mean": 2.1826251527941327,
+            "mean": 1.86390946264159,
             "n": 30,
-            "spread_sd": 0.045825745904436166
+            "spread_sd": 0.058252819050350506
           },
           "source": "Liao et al. 2014",
           "steady_specific_flow": {
-            "mean": 2.825124803900005,
+            "mean": 3.250758135592888,
             "n": 30,
-            "spread_sd": 0.09769408137207301
+            "spread_sd": 0.1351968439933214
           },
           "unavailable_reasons": [],
           "variant": "3.0",
@@ -4913,9 +4972,9 @@
           "attempted_n": 30,
           "case": "V4",
           "censored_specific_flow": {
-            "mean": 2.071040177351755,
+            "mean": 1.738429040008463,
             "n": 30,
-            "spread_sd": 0.057524987777352814
+            "spread_sd": 0.04715995330349108
           },
           "crossed": {
             "mean": 350.0,
@@ -4934,7 +4993,7 @@
           "location": "Section 4; Fig. 9a caption reverses labels",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.560000000274672,
+              "minimum_centre_distance_m": 0.5600000012178386,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4946,7 +5005,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.560000000274672,
+              "minimum_centre_distance_m": 0.5600000012178386,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -4990,15 +5049,15 @@
             1030
           ],
           "simulated": {
-            "mean": 2.071040177351755,
+            "mean": 1.7384290400084632,
             "n": 30,
-            "spread_sd": 0.05752498777735287
+            "spread_sd": 0.047159953303491105
           },
           "source": "Liao et al. 2014",
           "steady_specific_flow": {
-            "mean": 2.6954602689368468,
+            "mean": 3.1034659409495213,
             "n": 30,
-            "spread_sd": 0.11018393353122283
+            "spread_sd": 0.17540146905708512
           },
           "unavailable_reasons": [],
           "variant": "3.6",
@@ -5008,9 +5067,9 @@
           "attempted_n": 30,
           "case": "V4",
           "censored_specific_flow": {
-            "mean": 1.9181872426560913,
+            "mean": 1.5440439756214785,
             "n": 30,
-            "spread_sd": 0.05993810406294879
+            "spread_sd": 0.04220983244741511
           },
           "crossed": {
             "mean": 350.0,
@@ -5029,7 +5088,7 @@
           "location": "Section 4; Fig. 9a caption reverses labels",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000001632384,
+              "minimum_centre_distance_m": 0.5600000028549312,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -5041,7 +5100,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000001632384,
+              "minimum_centre_distance_m": 0.5600000028549312,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -5085,15 +5144,15 @@
             1030
           ],
           "simulated": {
-            "mean": 1.9181872426560913,
+            "mean": 1.544043975621478,
             "n": 30,
-            "spread_sd": 0.059938104062948847
+            "spread_sd": 0.0422098324474151
           },
           "source": "Liao et al. 2014",
           "steady_specific_flow": {
-            "mean": 2.631682169725875,
+            "mean": 2.977286973871295,
             "n": 30,
-            "spread_sd": 0.12065676425643829
+            "spread_sd": 0.14393756630678636
           },
           "unavailable_reasons": [],
           "variant": "4.4",
@@ -5103,9 +5162,9 @@
           "attempted_n": 30,
           "case": "V4",
           "censored_specific_flow": {
-            "mean": 1.8185665552285488,
+            "mean": 1.431265786394288,
             "n": 30,
-            "spread_sd": 0.048237838684123915
+            "spread_sd": 0.05562203764825593
           },
           "crossed": {
             "mean": 350.0,
@@ -5124,7 +5183,7 @@
           "location": "Section 4; Fig. 9a caption reverses labels",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5600000001451907,
+              "minimum_centre_distance_m": 0.56000000169945,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -5136,7 +5195,7 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5600000001451907,
+              "minimum_centre_distance_m": 0.56000000169945,
               "pair_steps": 2931600000,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
@@ -5180,15 +5239,15 @@
             1030
           ],
           "simulated": {
-            "mean": 1.8185665552285488,
+            "mean": 1.431265786394288,
             "n": 30,
-            "spread_sd": 0.04823783868412391
+            "spread_sd": 0.055622037648255934
           },
           "source": "Liao et al. 2014",
           "steady_specific_flow": {
-            "mean": 2.580527936154023,
+            "mean": 2.9101595632368014,
             "n": 30,
-            "spread_sd": 0.12055576814995249
+            "spread_sd": 0.17382857241524335
           },
           "unavailable_reasons": [],
           "variant": "5.0",
@@ -5208,7 +5267,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 30,
-          "difference": -0.11343341843170296,
+          "difference": -0.11416373119449152,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -5275,9 +5334,9 @@
             1030
           ],
           "simulated": {
-            "mean": 0.38656658156829704,
+            "mean": 0.3858362688055085,
             "n": 30,
-            "spread_sd": 0.0034584808011112475
+            "spread_sd": 0.002808882114983632
           },
           "source": "Gerin-Lajoie et al. 2005, cited in 2008",
           "unavailable_reasons": [],
@@ -5298,7 +5357,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 0,
-          "difference": 0.8385057596275751,
+          "difference": 1.058747087331176,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -5309,8 +5368,8 @@
           "location": "Table 1",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5921285006823784,
-              "pair_steps": 3150,
+              "minimum_centre_distance_m": 0.5947361568802656,
+              "pair_steps": 15660,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             },
@@ -5321,8 +5380,8 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5921285006823784,
-              "pair_steps": 3150,
+              "minimum_centre_distance_m": 0.5947361568802656,
+              "pair_steps": 15660,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             }
@@ -5362,9 +5421,9 @@
             1030
           ],
           "simulated": {
-            "mean": 2.938505759627575,
+            "mean": 3.158747087331176,
             "n": 30,
-            "spread_sd": 0.000819758739133175
+            "spread_sd": 0.0008262134151706039
           },
           "source": "Huber et al. 2014",
           "unavailable_reasons": [],
@@ -5385,7 +5444,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 0,
-          "difference": 0.5288097972922476,
+          "difference": 1.1998591829471548,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -5396,8 +5455,8 @@
           "location": "Table 1",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.5697845397425434,
-              "pair_steps": 2550,
+              "minimum_centre_distance_m": 0.5720538288365555,
+              "pair_steps": 12690,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             },
@@ -5408,8 +5467,8 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.5697845397425434,
-              "pair_steps": 2550,
+              "minimum_centre_distance_m": 0.5720538288365555,
+              "pair_steps": 12690,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             }
@@ -5449,9 +5508,9 @@
             1030
           ],
           "simulated": {
-            "mean": 2.9288097972922476,
+            "mean": 3.5998591829471547,
             "n": 30,
-            "spread_sd": 0.0007753253365855276
+            "spread_sd": 0.000787844838765474
           },
           "source": "Huber et al. 2014",
           "unavailable_reasons": [],
@@ -5472,7 +5531,7 @@
             "spread_sd": null
           },
           "diagnostic_passed_n": 0,
-          "difference": 0.20441449300016368,
+          "difference": 1.5636218084999722,
           "estimator_status": "documented_equivalent",
           "initial_pair_overlaps": {
             "mean": null,
@@ -5483,8 +5542,8 @@
           "location": "Table 1",
           "pair_overlap": {
             "all": {
-              "minimum_centre_distance_m": 0.6015419338850228,
-              "pair_steps": 2040,
+              "minimum_centre_distance_m": 0.5948350508901074,
+              "pair_steps": 10140,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             },
@@ -5495,8 +5554,8 @@
               "share_below_2r": null
             },
             "non_group": {
-              "minimum_centre_distance_m": 0.6015419338850228,
-              "pair_steps": 2040,
+              "minimum_centre_distance_m": 0.5948350508901074,
+              "pair_steps": 10140,
               "share_below_0_45": 0.0,
               "share_below_2r": 0.0
             }
@@ -5536,9 +5595,9 @@
             1030
           ],
           "simulated": {
-            "mean": 2.904414493000164,
+            "mean": 4.263621808499972,
             "n": 30,
-            "spread_sd": 0.0016232175904579873
+            "spread_sd": 0.0014531676307683204
           },
           "source": "Huber et al. 2014",
           "unavailable_reasons": [],
@@ -5548,16 +5607,16 @@
         {
           "attempted_n": 30,
           "case": "V4",
-          "difference": -0.32652106222578614,
+          "difference": -0.6847714508001845,
           "estimator_status": "documented_equivalent",
           "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
           "location": "Section 4; Fig. 9a caption reverses labels",
           "published_value": 2.3,
           "quantity": "persons/(m s)",
           "simulated": {
-            "mean": 1.9734789377742137,
+            "mean": 1.6152285491998153,
             "n": 30,
-            "spread_sd": 0.04222340469665557
+            "spread_sd": 0.03297572462107098
           },
           "source": "Liao et al. 2014",
           "variant": "all_data_flow_persons_s width slope"
@@ -5565,27 +5624,29 @@
         {
           "attempted_n": 30,
           "case": "V4",
-          "difference": 0.17304361977699356,
+          "difference": 0.5437565816471563,
           "estimator_status": "documented_equivalent",
           "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
           "location": "Section 4; Fig. 9a caption reverses labels",
           "published_value": 2.5,
           "quantity": "persons/(m s)",
           "simulated": {
-            "mean": 2.6730436197769936,
+            "mean": 3.0437565816471563,
             "n": 30,
-            "spread_sd": 0.06658542080438803
+            "spread_sd": 0.10063655736911038
           },
           "source": "Liao et al. 2014",
           "variant": "steady_flow_persons_s width slope"
         }
       ],
+      "unresolved_count": 0,
       "wall_penetration_ped_steps": 0
     }
   },
+  "correction": "Round 2 supersedes the reviewed ead48d9c summary; old V6-pruned conclusions withdrawn.",
   "fit_admitted": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "runtime_on_off_ratio": 21.53740659215404,
+  "runtime_on_off_ratio": 2.131866867589413,
   "schema": "pedcontact.comparison.v1",
   "seeds": [
     1001,

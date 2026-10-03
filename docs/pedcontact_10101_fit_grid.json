@@ -1,10 +1,11 @@
 {
   "admission_sha256": {
-    "robot_gate_summary.json": "f44fce9834febafb6d3dc574567000c385bb21a81e5646c799fff901094e752f",
-    "step4_comparison.json": "3476f68210d07f14ac1719b7e688f1e26293030c52e8471391085ae2727b8936"
+    "robot_gate_summary.json": "178292a2d62b9729d7a7de3283de931b5073dda3e65a3c73ca5af52db9c130a8",
+    "step4_comparison.json": "3e959eda0a40a5226103a7048f9fdd35e15fcddea0b2ac77cc616a542c43e1d9"
   },
+  "correction": "Round 2 supersedes the reviewed ead48d9c summary; old V6-pruned conclusions withdrawn.",
   "deadline_utc": "2026-10-07T18:32:00+00:00",
-  "driver_sha256": "e92395ba570a77a2b5ae09a59153d4ce2d2d0545b3982a928099c3bf4ec9bc6b",
+  "driver_sha256": "5d15be0887c950b5ebb366c64b80c940ab37ed9d17154c8476b0c2abf1b9d4a6",
   "groups": [
     "r0.25_cap2.0",
     "r0.25_cap3.0",
@@ -13,8 +14,7 @@
     "r0.30_cap2.0",
     "r0.30_cap3.0"
   ],
-  "invariance": "V6 has no obstacles, wall force is exactly zero for all wall parameters; other parameters fixed within each radius/cap group",
-  "original_artifact_sha256": "78c2293035f96bee71d6bbd572c75c16b11bc200dc77d56a21a2c6a1b83bacaa",
+  "invariance": "V6 has no walls; its physical threshold is independent of deterministic baseline noise. No invariance is used to prune candidates.",
   "points": [
     {
       "cap_m_s": 2.0,
@@ -1962,12 +1962,12 @@
     }
   ],
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema": "pedcontact.bounded_fit.v1",
-  "screen": "V6 all three controlled speeds; necessary-condition pruning only",
+  "schema": "pedcontact.bounded_fit.v2",
+  "screen": "V2 and V5 evaluated for every wall setting; all 18 cases measured, no pruning",
   "seeds": [
     1001,
     1002,
     1003
   ],
-  "source_sha": "290a934c3c0efbb70625fa038fb688e80f1db6d0"
+  "source_sha": "ffdd8618b01c9bcba3272771aa97c4b8d8724a1d"
 }

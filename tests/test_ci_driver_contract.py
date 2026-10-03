@@ -1321,6 +1321,11 @@ def test_fast_feedback_redistributes_heavy_tail_without_reducing_coverage() -> N
     assert fast["env"]["PYTEST_XDIST_DIST"] == "worksteal"
     assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
     assert fast["env"]["PYTEST_SHARD_COUNT"] == 6
+    assert "PYTEST_NUM_WORKERS" not in fast["env"]
+    merge = next(
+        step for step in workflow["jobs"]["ci"]["steps"] if step["name"] == "Merge test durations"
+    )
+    assert f"--shard-count {fast['env']['PYTEST_SHARD_COUNT']}" in merge["run"]
     assert fast["timeout-minutes"] == 45
     assert fast["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert (

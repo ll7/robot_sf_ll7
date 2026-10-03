@@ -1634,7 +1634,8 @@ def sample_baseline_data():
 
 
 # =====================================================================# Occupancy Grid Fixtures
-# =======================================================
+# ==============================================================
+
 
 @pytest.fixture
 def simple_grid_config():
@@ -1781,7 +1782,8 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 
 # =====================================================================# Shared Subprocess Mock Fixture
-# =======================================================
+# ==============================================================
+
 
 def _build_matcher_predicate(
     matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],

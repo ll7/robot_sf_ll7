@@ -1359,29 +1359,38 @@ def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> N
     freeze = next(s for s in dispatch["steps"] if s.get("id") == "freeze-durations")
     assert "--snapshot-input .test_durations --output .test_durations" in freeze["run"]
     assert freeze["if"] == "steps.decision.outputs.run_full_ci == 'true'"
-    save = next(s for s in dispatch["steps"] if s["name"] == "Save frozen test durations")
-    assert "actions/cache/save@" in save["uses"]
-    assert save["if"] == freeze["if"]
-    assert save["with"] == {
-        "key": "test-duration-snapshot-${{ github.run_id }}",
+    upload = next(s for s in dispatch["steps"] if s["name"] == "Upload frozen test durations")
+    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    assert upload["if"] == freeze["if"]
+    assert upload["with"] == {
+        "name": "test-duration-snapshot",
         "path": ".test_durations",
+        "include-hidden-files": True,
+        "if-no-files-found": "error",
     }
     fast = workflow["jobs"]["fast-feedback"]
     assert fast["needs"] == "dispatch-ownership"
-    restore = next(s for s in fast["steps"] if s["name"] == "Restore frozen test durations")
-    assert "actions/cache/restore@" in restore["uses"]
-    assert restore["with"] == {
-        "key": save["with"]["key"],
-        "path": save["with"]["path"],
-        "fail-on-cache-miss": True,
+    assert fast["permissions"] == {"contents": "read", "actions": "read"}
+    download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
+    assert download["uses"] == "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    # An explicit token selects the run-scoped REST lookup, which sees the
+    # successful owner's original artifact during a failed-jobs-only rerun.
+    assert download["with"] == {
+        "name": upload["with"]["name"],
+        "path": ".",
+        "run-id": "${{ github.run_id }}",
+        "github-token": "${{ github.token }}",
     }
-    assert "github.run_attempt" not in restore["with"]["key"]
-    assert "continue-on-error" not in restore
+    assert "continue-on-error" not in upload
+    assert "continue-on-error" not in download
+    assert "if" not in download
     assert "duration_snapshot" not in dispatch["outputs"]
     for job in (dispatch, fast):
-        assert not any(
-            "frozen test durations" in step.get("name", "").lower()
-            and "actions/" in step.get("uses", "")
-            and "artifact@" in step["uses"]
-            for step in job["steps"]
-        )
+        snapshot_steps = [
+            s for s in job["steps"] if "frozen test durations" in s.get("name", "").lower()
+        ]
+        assert len(snapshot_steps) == 1
+        assert "cache@" not in snapshot_steps[0]["uses"]
+        assert "cache/" not in snapshot_steps[0]["uses"]
+        assert "run_attempt" not in str(snapshot_steps[0])
+        assert "GITHUB_RUN_ATTEMPT" not in str(snapshot_steps[0])

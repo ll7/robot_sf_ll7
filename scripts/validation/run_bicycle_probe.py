@@ -43,6 +43,7 @@ logger.remove()
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ["BIKEFIX_OUTPUT"]).resolve()
 OUT.mkdir(parents=True, exist_ok=True)
+WRAPPER_ENABLED = os.environ.get("BIKEFIX_WRAPPER_ENABLED") == "1"
 logger.add(OUT / f"runtime-{os.getpid()}.log", level="WARNING")
 SCENPATH = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 TEMPLATE = (
@@ -89,6 +90,9 @@ def prepare():
             ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
         ).strip(),
         "kind": "diagnostic-only",
+        "safety_wrapper_enabled": WRAPPER_ENABLED,
+        "cbf_safety_filter_enabled": False,
+        "wrapper_deadlock_recovery_enabled": WRAPPER_ENABLED,
         "roster": ROSTER,
         "probe1_seeds": list(range(1001, 1006)),
         "probe2_seeds": list(range(1001, 1011)),
@@ -131,7 +135,7 @@ def prepare():
 ACTIVE = {}
 ORIG_MAKE = episode.make_robot_env
 ORIG_ACTION = episode._policy_command_to_env_action
-ORIG_PROJECT = BicycleDriveKinematicsModel.project
+ORIG_PROJECT_WITH_INFO = BicycleDriveKinematicsModel.project_with_creep_info
 ORIG_SAFETY = episode._step_safety_filters
 ORIG_CONVERT = episode._step_convert_and_execute
 
@@ -169,24 +173,20 @@ episode._step_safety_filters = safety_capture
 
 
 def project_capture(self, command):
-    """Capture requested commands before the real projection."""
-    result = ORIG_PROJECT(self, command)
+    """Capture the model's own creep decision and requested command."""
+    result, creep_applied = ORIG_PROJECT_WITH_INFO(self, command)
     ACTIVE.setdefault("projections", []).append(
         [
             list(map(float, command)),
             list(map(float, result)),
             bool(self.is_feasible(command)),
-            bool(
-                abs(command[0]) < 1e-3
-                and result[0] > max(command[0], 0.0)
-                and abs(command[1]) > 1e-6
-            ),
+            creep_applied,
         ]
     )
-    return result
+    return result, creep_applied
 
 
-BicycleDriveKinematicsModel.project = project_capture
+BicycleDriveKinematicsModel.project_with_creep_info = project_capture
 
 
 def action_capture(*, env, config, command, **kwargs):
@@ -443,6 +443,12 @@ def run_cell(p, arm, probe, name, seed):
             algo_config=policy_config,
             adapter_impact_eval=p.get("adapter_impact_eval", False),
             record_simulation_step_trace=False,
+            safety_wrapper=(
+                {"enabled": True, "arm_key": "wrapper_on", "deadlock_recovery_enabled": True}
+                if WRAPPER_ENABLED
+                else None
+            ),
+            cbf_safety_filter=None,
             policy_builder=_build_policy,
             pair_reset_hook=reset_hook(bearing),
             runtime_input_records=records,

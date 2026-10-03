@@ -72,7 +72,11 @@ class PlannerActionAdapter:
             self.kinematics_model = kinematics_model
         if safety_intervention and isinstance(kinematics_model, BicycleDriveKinematicsModel):
             kinematics_model = replace(kinematics_model, creep_speed=0.0)
-        projected = kinematics_model.project(float_cmd)
+        creep_applied = False
+        if isinstance(kinematics_model, BicycleDriveKinematicsModel):
+            projected, creep_applied = kinematics_model.project_with_creep_info(float_cmd)
+        else:
+            projected = kinematics_model.project(float_cmd)
         self.last_kinematics_diagnostics = kinematics_model.diagnostics(
             float_cmd,
             projected,
@@ -81,11 +85,7 @@ class PlannerActionAdapter:
         if isinstance(self.robot, BicycleDriveRobot):
             self.last_kinematics_diagnostics.update(
                 safety_intervention=safety_intervention,
-                creep_applied=(
-                    0.0 <= float_cmd[0] < 1e-3
-                    and abs(float_cmd[1]) >= math.radians(1.0)
-                    and projected[0] > float_cmd[0]
-                ),
+                creep_applied=creep_applied,
             )
             return self._bicycle_action(linear_target, angular_target)
         if isinstance(self.robot, DifferentialDriveRobot):

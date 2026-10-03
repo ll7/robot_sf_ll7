@@ -11,4 +11,5 @@ robot_config:
   max_accel: 1.0
   max_decel: 1.0
   creep_speed: 0.0  # Explicit opt-in only; safety interventions always veto creep.
-  allow_backwards: false  # #10068 has not landed at the pinned base.
+  allow_backwards: false
+  limited_reverse: false  # Intentionally forward-only for this diagnostic plant.

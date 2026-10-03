@@ -169,23 +169,28 @@ class BicycleDriveKinematicsModel:
         )
 
     def project(self, command: Command2D) -> Command2D:
-        """Preserve bounded speed and clip yaw to the bicycle-feasible cone.
-
-        Creep is disabled by default. Explicit creep requires nonnegative
-        near-zero speed and at least one degree/second of yaw intent. Safety
-        interventions disable creep at the adapter boundary. A zero/zero stop
-        stays stopped. This is a speed-priority projection,
-        not a Euclidean nearest-point projection.
+        """Project with speed priority onto the coupled bicycle cone.
 
         Returns:
-            Command2D: Projected command in feasible set.
+            Command2D: Physically feasible speed and yaw command.
+        """
+        return self.project_with_creep_info(command)[0]
+
+    def project_with_creep_info(self, command: Command2D) -> tuple[Command2D, bool]:
+        """Project and report creep from the same branch that applies it.
+
+        Returns:
+            Projected command and whether the optional creep branch raised speed.
         """
         v, omega = command
+        creep_applied = False
         if self.creep_speed > v and 0.0 <= v < 1e-3 and abs(omega) >= math.radians(1.0):
-            v = min(self.creep_speed, self.max_velocity)
+            creep_velocity = min(self.creep_speed, self.max_velocity)
+            creep_applied = creep_velocity > v
+            v = creep_velocity
         v = float(np.clip(v, self.min_velocity, self.max_velocity))
         yaw_limit = min(self.max_angular_speed, abs(v) * self.curvature_limit)
-        return v, float(np.clip(omega, -yaw_limit, yaw_limit))
+        return (v, float(np.clip(omega, -yaw_limit, yaw_limit))), creep_applied
 
     def diagnostics(self, command: Command2D, projected: Command2D) -> dict[str, Any]:
         """Build projection diagnostics payload for metadata and debugging.
@@ -248,7 +253,6 @@ def resolve_benchmark_kinematics_model(
             max_angular_speed=float(limits.get("bicycle_max_angular_speed", max_angular)),
             allow_backwards=bool(limits.get("allow_backwards", False)),
             max_curvature=limits.get("bicycle_max_curvature"),
-            creep_speed=float(limits.get("bicycle_creep_speed", 0.0)),
             limited_reverse=limits.get("limited_reverse", False),
             max_reverse_speed=limits.get("max_reverse_speed", 0.5),
         )

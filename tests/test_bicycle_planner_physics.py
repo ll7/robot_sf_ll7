@@ -211,3 +211,24 @@ def test_episode_policy_receives_t60_limits():
     assert ctx.policy_cfg.get("bicycle_max_velocity") == 1.34
     assert ctx.policy_cfg.get("bicycle_max_curvature") == pytest.approx(0.636179811391)
     assert ctx.policy_cfg.get("bicycle_max_angular_speed") == pytest.approx(0.852480947264)
+
+
+@pytest.mark.parametrize("omega", [-1.0, 1.0])
+def test_limited_reverse_bicycle_preserves_coupled_yaw_and_sign(omega):
+    """Limited reverse respects the cone and real reverse steering direction."""
+    robot = BicycleDriveRobot(BicycleDriveSettings(wheelbase=0.90, max_steer=0.79))
+    # Attribute binding makes the pre-merge run reach the physical assertion.
+    robot.config.limited_reverse = True
+    robot.config.max_reverse_speed = 0.3
+    robot.config.creep_speed = 0.1
+    a = PlannerActionAdapter(robot, robot.action_space, 0.1)
+    model = a._default_kinematics_model()
+    projected = model.project((-2.0, omega))
+    assert projected[0] == pytest.approx(-0.3), "limited reverse must admit capped negative speed"
+    assert projected[1] == pytest.approx(math.copysign(0.3 * math.tan(0.79) / 0.90, omega))
+    assert model.is_feasible(projected)
+    assert not model.is_feasible((-0.3, omega))
+    robot.apply_action(tuple(a.from_velocity_command((-2.0, omega))), 0.1)
+    assert robot.state.velocity == pytest.approx(-0.1)
+    assert robot.current_yaw_rate * omega > 0.0
+    assert abs(robot.current_yaw_rate) <= 0.1 * math.tan(0.79) / 0.90 + 1e-6

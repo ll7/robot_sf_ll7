@@ -153,7 +153,7 @@ def test_mutable_robot_settings_reject_invalid_creep(creep_speed):
     settings = BicycleDriveSettings()
     settings.creep_speed = creep_speed
     with pytest.raises(ValueError, match="creep_speed"):
-        settings.__post_init__()
+        settings.__post_init__(settings.limited_reverse, settings.max_reverse_speed)
 
 
 @pytest.mark.parametrize("creep_speed", [-0.1, math.nan])
@@ -168,3 +168,71 @@ def test_meaningful_opt_in_turn_is_projected():
     assert model(creep_speed=0.1).project((0.0, math.radians(1))) == pytest.approx(
         (0.1, math.radians(1))
     )
+
+
+def test_guarded_ppo_uncertainty_stop_survives_policy_projection_with_creep():
+    """Real episode binding, uncertainty shield and conversion keep a slow-down veto stopped."""
+    from pathlib import Path
+
+    import yaml
+
+    from robot_sf.benchmark.map_runner.map_runner_episode import _resolve_episode_run_context
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import (
+        _project_with_feasibility,
+    )
+    from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
+    from robot_sf.training.scenario_loader import load_scenarios
+    from tests.planner.test_guarded_ppo import _obs
+    from tests.planner.test_guarded_ppo_uncertainty_fallback import _uncertainty_guard
+
+    scenario_path = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
+    scenario = next(
+        s for s in load_scenarios(scenario_path) if s["name"] == "classic_t_intersection_medium"
+    )
+    scenario = dict(scenario, seeds=[1001])
+    scenario.pop("seed_set", None)
+    scenario["robot_config"] = yaml.safe_load(
+        Path("configs/robots/t60_bicycle_45deg_v1.yaml").read_text()
+    )["robot_config"]
+    scenario["robot_config"]["creep_speed"] = 0.1
+    context = _resolve_episode_run_context(
+        scenario=scenario,
+        seed=1001,
+        horizon=600,
+        dt=0.1,
+        algo="guarded_ppo",
+        scenario_path=scenario_path,
+        algo_config={},
+        algo_config_path=None,
+        experimental_ped_impact=False,
+        ped_impact_radius_m=1.0,
+        ped_impact_window_steps=1,
+        observation_mode=None,
+        observation_level=None,
+        benchmark_track=None,
+        track_schema_version=None,
+        observation_noise=None,
+        tracking_precision=None,
+        synthetic_actuation_profile=None,
+        latency_stress_profile=None,
+        safety_wrapper=None,
+        cbf_safety_filter=None,
+    )
+    guard = _uncertainty_guard(mode="slow_down", extra={"uncertainty_slow_down_speed_m_s": 0.0})
+    decision = guard.choose_command_decision(
+        _obs(ped_positions=[(1.0, 0.0)], ped_velocities=[(0.0, 0.0)]), (0.6, 0.3)
+    )
+    assert decision.decision_label == "uncertainty_fallback_slow_down"
+    assert decision.filtered_action == (0.0, 0.3)
+    policy_model = resolve_benchmark_kinematics_model(
+        robot_kinematics="bicycle_drive", command_limits=context.policy_cfg
+    )
+    command = _project_with_feasibility(
+        model=policy_model, command=decision.filtered_action, meta={}
+    )
+    robot = BicycleDriveRobot(context.config.robot_config)
+    adapter = PlannerActionAdapter(robot, robot.action_space, 0.1)
+    for _ in range(10):
+        robot.apply_action(tuple(adapter.from_velocity_command(command)), 0.1)
+    assert robot.state.velocity == 0.0, "in-policy veto must not regain forward creep"
+    assert robot.pos == pytest.approx((0.0, 0.0))

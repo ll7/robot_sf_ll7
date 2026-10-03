@@ -9087,7 +9087,7 @@
     "historical_copy_matches_base": true,
     "released_files_identical": true
   },
-  "comparison_scope": "Current working bytes match acquisition producer hashes; final head verified again in lane report. Avoid a self-referential document SHA.",
+  "comparison_scope": "Eleven working producer files are byte-identical; the sole later acceptance-module docstring correction has identical executable AST; final head verified again in lane report. Avoid a self-referential document SHA.",
   "current_main": {
     "compared_main_files": 1525,
     "identical_main_files": 1471,
@@ -9423,11 +9423,25 @@
     "scope_note": "The stack predates current main release additions. This proves no PEDCONTACT-induced released edits; it does not claim the older stack equals every current-main artifact.",
     "stack_base_sha": "e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36"
   },
+  "final_producer_verification": {
+    "documentation_only_changes": [
+      {
+        "current_sha256": "470fab5b60fbbbb6961cd82ecab72b9fe84ef4eca368527f5d3b65f1c2180d10",
+        "executable_AST_identical": true,
+        "path": "robot_sf/research/pedestrian_acceptance.py",
+        "producer_sha256": "3fc303aabe37f7f0b4920c9628afd27812c1ffefdd9be777e5027697da0bbc3e",
+        "reason": "Correct stale V5/V6 \u00b120% docstring: only V5 uses that band; V6 has one-sided lower bounds. No acquisition behavior changed."
+      }
+    ],
+    "identical_files": 11,
+    "producer_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44",
+    "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  },
   "producer_files": {
     "physics_and_acquisition_paths": {
       "configs/benchmarks/pedestrian_validation_0_0_9.json": "35e57d01ee6dfb1b99b0f2642fd734aaf64c171185a7dcbdb069979bdec64da8",
       "configs/benchmarks/pedestrian_validation_0_0_9_history_v1.json": "f8b3edc781de9dfe5d048d2f3dd229c141e1e305ea2e4edd07eedcfac8c7f862",
-      "fast-pysf/pysocialforce/contact.py": "466ec9ef3378286311fe3e8a6d0146d6131a0a9b69382ca7185cef315e4ceb1b",
+      "fast-pysf/pysocialforce/contact.py": "8fa0eadc161ed7bad383dd0df54e089e8f6b4dc16248f783ee2575f5a6e2a15c",
       "fast-pysf/pysocialforce/forces.py": "52e579f2961a644b457c3713155f80accec351cb7d5108972e8ced20bc139640",
       "robot_sf/research/pedestrian_acceptance.py": "3fc303aabe37f7f0b4920c9628afd27812c1ffefdd9be777e5027697da0bbc3e",
       "robot_sf/research/pedestrian_validation.py": "9b13e1772c093bbb8f178c1e807ec58026afc3fe44138b68bbfb52e4ab183c24",
@@ -9439,7 +9453,8 @@
       "scripts/validation/pedestrian_validation_10074.py": "d529be17d126dce7e35668605c388f56ec336732c2bc9832d2500753a2ab40d4"
     },
     "pin_scope": "Runtime physics, estimators, acquisition drivers and active/historical config bytes; tests and evidence documents are outside acquisition producer scope.",
-    "source_sha": "b4aafc536a6b9c7b940d171815ed3ac1e3983263"
+    "reacquisition_reason": "Close transitive endpoint contacts created by local fallback rollback; previous Round 3 producer evidence is historical.",
+    "source_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44"
   },
   "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

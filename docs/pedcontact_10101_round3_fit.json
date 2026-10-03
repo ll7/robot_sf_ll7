@@ -6,20 +6,10 @@
   "pruned_points": 0,
   "ranking": [
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 18375,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 8,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/1.2/1001",
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/1.1/1002",
-        "V3/1.2/1002",
-        "V3/0.8/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -265,7 +255,7 @@
           "crossed": [
             1,
             3,
-            4
+            3
           ],
           "difference": -1.133717354385009,
           "distance_outside_tolerance": 0.8117173543850091,
@@ -424,7 +414,7 @@
           "case": "V3",
           "crossed": [
             3,
-            7,
+            3,
             4
           ],
           "difference": -1.6533634004139222,
@@ -646,20 +636,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 8420,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 8,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/1.1/1001",
-        "V3/1.2/1001",
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/1.1/1002",
-        "V3/1.2/1002",
-        "V3/0.9/1003",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -1064,7 +1044,7 @@
           "case": "V3",
           "crossed": [
             3,
-            3,
+            1,
             15
           ],
           "difference": -1.6533142689063631,
@@ -1286,17 +1266,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 15106,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 8,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/1.1/1001",
-        "V3/0.9/1002",
-        "V3/1.1/1002",
-        "V3/0.9/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -1923,15 +1896,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 620,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 8,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/0.8/1002",
-        "V3/1.2/1002",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -2215,7 +2183,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            7,
+            3,
             5,
             6
           ],
@@ -2558,14 +2526,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 12872,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 8,
-      "physical_violations": [
-        "V3/0.8/1002",
-        "V3/1.2/1002",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -3192,17 +3156,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 12135,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 8,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/1.0/1001",
-        "V3/1.1/1001",
-        "V3/1.1/1002",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -4459,17 +4416,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 2005,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.0/1001",
-        "V3/1.1/1002",
-        "V3/0.9/1003",
-        "V3/1.0/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -4755,7 +4705,7 @@
           "crossed": [
             1,
             2,
-            6
+            3
           ],
           "difference": -1.4365540646307422,
           "distance_outside_tolerance": 1.0645540646307423,
@@ -4795,7 +4745,7 @@
           "crossed": [
             2,
             4,
-            6
+            5
           ],
           "difference": -1.5197989901683384,
           "distance_outside_tolerance": 1.1397989901683385,
@@ -4875,7 +4825,7 @@
           "crossed": [
             3,
             11,
-            12
+            6
           ],
           "difference": -1.653320970459554,
           "distance_outside_tolerance": 1.259320970459554,
@@ -5096,17 +5046,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 11286,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/0.8/1002",
-        "V3/1.0/1002",
-        "V3/1.1/1002",
-        "V3/0.8/1003",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -5431,7 +5374,7 @@
           "case": "V3",
           "crossed": [
             4,
-            8,
+            4,
             7
           ],
           "difference": -1.5196922033766103,
@@ -5471,7 +5414,7 @@
           "case": "V3",
           "crossed": [
             4,
-            12,
+            15,
             6
           ],
           "difference": -1.5843941412798204,
@@ -5733,13 +5676,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 3709,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.8/1002",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -6145,7 +6085,7 @@
           "crossed": [
             1,
             11,
-            20
+            10
           ],
           "difference": -1.653210845444305,
           "distance_outside_tolerance": 1.2592108454443052,
@@ -6366,17 +6306,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 22598,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/1.1/1001",
-        "V3/1.2/1001",
-        "V3/0.9/1002",
-        "V3/1.1/1002",
-        "V3/0.9/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -7633,12 +7566,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 1,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -7922,7 +7853,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            5,
+            4,
             1,
             6
           ],
@@ -9525,12 +9456,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 2,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.2/1002"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -9935,7 +9864,7 @@
           "case": "V3",
           "crossed": [
             4,
-            19,
+            9,
             58
           ],
           "difference": -1.6531867360111745,
@@ -10157,14 +10086,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 10099,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -10490,7 +10415,7 @@
           "crossed": [
             1,
             4,
-            3
+            2
           ],
           "difference": -1.5196595712492318,
           "distance_outside_tolerance": 1.139659571249232,
@@ -10791,13 +10716,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 2306,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -11424,13 +11346,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 185,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.1/1001",
-        "V3/1.2/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -12057,14 +11976,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 1318,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.1/1002",
-        "V3/0.9/1003",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -13321,12 +13236,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 33,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1002"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -14583,15 +14496,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 9464,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/1.1/1002",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -15218,16 +15126,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 518,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/1.2/1001",
-        "V3/0.8/1003",
-        "V3/1.1/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -15473,7 +15375,7 @@
           "crossed": [
             5,
             2,
-            4
+            2
           ],
           "difference": -1.1327096854846608,
           "distance_outside_tolerance": 0.8107096854846609,
@@ -15631,7 +15533,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            10,
+            7,
             58,
             13
           ],
@@ -15854,16 +15756,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 8609,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.1/1001",
-        "V3/1.2/1001",
-        "V3/1.1/1002",
-        "V3/1.2/1002"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -16147,7 +16043,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            4,
+            7,
             2,
             2
           ],
@@ -16490,15 +16386,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 13318,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/0.9/1003",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -18385,14 +18276,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 491,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/1.1/1002",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -18758,7 +18645,7 @@
           "crossed": [
             3,
             8,
-            16
+            5
           ],
           "difference": -1.5841975523361647,
           "distance_outside_tolerance": 1.1981975523361648,
@@ -19649,13 +19536,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 15080,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.1/1001",
-        "V3/1.2/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -20282,14 +20166,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 59,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.2/1001",
-        "V3/1.0/1003",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -22806,20 +22686,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 2470,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.0/1001",
-        "V3/0.8/1002",
-        "V3/1.0/1002",
-        "V3/1.2/1002",
-        "V3/0.9/1003",
-        "V3/1.0/1003",
-        "V3/1.1/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -23185,7 +23055,7 @@
           "crossed": [
             1,
             9,
-            4
+            15
           ],
           "difference": -1.5842231044914785,
           "distance_outside_tolerance": 1.1982231044914786,
@@ -23224,7 +23094,7 @@
           "case": "V3",
           "crossed": [
             11,
-            14,
+            9,
             5
           ],
           "difference": -1.653200432959688,
@@ -24076,15 +23946,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 802,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/0.8/1002",
-        "V3/1.1/1002",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -24449,7 +24314,7 @@
           "case": "V3",
           "crossed": [
             1,
-            14,
+            30,
             8
           ],
           "difference": -1.5842644566055388,
@@ -24490,7 +24355,7 @@
           "crossed": [
             19,
             12,
-            11
+            4
           ],
           "difference": -1.653190789907958,
           "distance_outside_tolerance": 1.2591907899079582,
@@ -25971,12 +25836,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 18,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.2/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -26603,13 +26466,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 22,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.1/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -26975,7 +26835,7 @@
           "crossed": [
             6,
             7,
-            16
+            10
           ],
           "difference": -1.5842565504866817,
           "distance_outside_tolerance": 1.1982565504866818,
@@ -27015,7 +26875,7 @@
           "crossed": [
             1,
             58,
-            13
+            46
           ],
           "difference": -1.653201942664129,
           "distance_outside_tolerance": 1.259201942664129,
@@ -31016,17 +30876,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 214,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/1.2/1001",
-        "V3/1.0/1002",
-        "V3/1.1/1002",
-        "V3/0.8/1003",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -31272,7 +31125,7 @@
           "crossed": [
             2,
             2,
-            36
+            18
           ],
           "difference": -1.132774216650147,
           "distance_outside_tolerance": 0.8107742166501473,
@@ -31653,17 +31506,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 691,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.2/1001",
-        "V3/1.1/1002",
-        "V3/1.2/1002",
-        "V3/0.8/1003",
-        "V3/1.0/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -31909,7 +31755,7 @@
           "crossed": [
             7,
             2,
-            7
+            3
           ],
           "difference": -1.1330575787020767,
           "distance_outside_tolerance": 0.8110575787020768,
@@ -37330,13 +37176,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 8,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/0.8/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -37963,12 +37806,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 1,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -38595,14 +38436,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 8,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1001",
-        "V3/1.0/1002",
-        "V3/0.8/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -38948,7 +38785,7 @@
           "case": "V3",
           "crossed": [
             58,
-            58,
+            57,
             58
           ],
           "difference": -1.5197606013140783,
@@ -39247,12 +39084,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 1,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -39897,14 +39732,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 37,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/1.0/1002",
-        "V3/0.9/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -40211,7 +40042,7 @@
           "crossed": [
             58,
             42,
-            51
+            17
           ],
           "difference": -1.4375814944566698,
           "distance_outside_tolerance": 1.06558149445667,
@@ -40549,13 +40380,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 6,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/1.0/1002"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -40820,7 +40648,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            11,
+            1,
             4,
             5
           ],
@@ -41200,17 +41028,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 386,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.0/1001",
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/0.8/1003",
-        "V3/0.9/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -41515,8 +41336,8 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            28,
-            12,
+            1,
+            58,
             9
           ],
           "difference": -1.4375338781937965,
@@ -41855,15 +41676,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 143,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 7,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.0/1001",
-        "V3/0.8/1002",
-        "V3/0.9/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -42508,19 +42324,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 9783,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.2/1001",
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/0.9/1003",
-        "V3/1.0/1003",
-        "V3/1.1/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -42806,7 +42613,7 @@
           "crossed": [
             2,
             3,
-            3
+            4
           ],
           "difference": -1.4372001991279568,
           "distance_outside_tolerance": 1.065200199127957,
@@ -43147,17 +42954,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 19582,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/0.9/1002",
-        "V3/1.0/1002",
-        "V3/1.0/1003",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -48194,16 +47994,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 1764,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/1.1/1001",
-        "V3/1.2/1001",
-        "V3/0.9/1003",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -48447,7 +48241,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            7,
+            4,
             3,
             6
           ],
@@ -49460,16 +49254,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 12834,
+      "gate_exit": 1,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/1.1/1001",
-        "V3/1.2/1001",
-        "V3/0.8/1003",
-        "V3/0.9/1003",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -49755,7 +49543,7 @@
           "crossed": [
             5,
             3,
-            5
+            3
           ],
           "difference": -1.4373360499796113,
           "distance_outside_tolerance": 1.0653360499796114,
@@ -52034,19 +51822,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 4453,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/0.8/1002",
-        "V3/1.0/1002",
-        "V3/1.1/1002",
-        "V3/1.2/1002",
-        "V3/0.8/1003",
-        "V3/0.9/1003",
-        "V3/1.2/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -52315,7 +52094,7 @@
           "case": "V3",
           "crossed": [
             3,
-            13,
+            17,
             2
           ],
           "difference": -1.1343380170564161,
@@ -52435,7 +52214,7 @@
           "case": "V3",
           "crossed": [
             4,
-            13,
+            18,
             7
           ],
           "difference": -1.5843519237159607,
@@ -52475,8 +52254,8 @@
           "case": "V3",
           "crossed": [
             20,
-            10,
-            58
+            4,
+            9
           ],
           "difference": -1.6531527634328005,
           "distance_outside_tolerance": 1.2591527634328006,
@@ -52697,20 +52476,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 2639,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/1.1/1001",
-        "V3/1.2/1001",
-        "V3/0.8/1002",
-        "V3/1.0/1002",
-        "V3/0.9/1003",
-        "V3/1.0/1003",
-        "V3/1.1/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -52979,7 +52748,7 @@
           "case": "V3",
           "crossed": [
             5,
-            8,
+            5,
             1
           ],
           "difference": -1.1344428452683117,
@@ -53018,9 +52787,9 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            2,
+            3,
             22,
-            19
+            7
           ],
           "difference": -1.4374576922732785,
           "distance_outside_tolerance": 1.0654576922732786,
@@ -53059,8 +52828,8 @@
           "case": "V3",
           "crossed": [
             8,
-            12,
-            9
+            13,
+            8
           ],
           "difference": -1.519826231937917,
           "distance_outside_tolerance": 1.139826231937917,
@@ -53098,7 +52867,7 @@
           "attempted_n": 3,
           "case": "V3",
           "crossed": [
-            21,
+            58,
             8,
             11
           ],
@@ -55953,14 +55722,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 142,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/1.0/1002",
-        "V3/0.9/1003",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -56605,14 +56370,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 28,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.9/1001",
-        "V3/0.8/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -57257,13 +57018,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 37,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.8/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -57908,13 +57666,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 98,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 6,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/1.0/1002"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -60473,12 +60228,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 7,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 5,
-      "physical_violations": [
-        "V3/0.9/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -61129,16 +60882,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 69,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 5,
-      "physical_violations": [
-        "V3/0.9/1001",
-        "V3/1.0/1001",
-        "V3/0.8/1002",
-        "V3/1.0/1002",
-        "V3/0.8/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -61783,14 +61530,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 15,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 5,
-      "physical_violations": [
-        "V3/1.0/1002",
-        "V3/0.8/1003",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -63083,12 +62826,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 5,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 5,
-      "physical_violations": [
-        "V3/0.8/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -64381,12 +64122,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 1,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 5,
-      "physical_violations": [
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -66939,12 +66678,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 97,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 4,
-      "physical_violations": [
-        "V3/0.9/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -67589,12 +67326,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 17,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 4,
-      "physical_violations": [
-        "V3/0.8/1001"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 2.0,
         "desired_mean_m_s": 1.29,
@@ -68239,15 +67974,10 @@
       "wall_penetration_ped_steps": 0
     },
     {
-      "gate_exit": 3,
-      "overlap_pair_steps": 37,
+      "gate_exit": 2,
+      "overlap_pair_steps": 0,
       "passed_items": 4,
-      "physical_violations": [
-        "V3/0.8/1001",
-        "V3/0.8/1002",
-        "V3/1.0/1002",
-        "V3/1.0/1003"
-      ],
+      "physical_violations": [],
       "point": {
         "cap_m_s": 3.0,
         "desired_mean_m_s": 1.29,
@@ -68899,5 +68629,5 @@
     1002,
     1003
   ],
-  "source_sha": "b4aafc536a6b9c7b940d171815ed3ac1e3983263"
+  "source_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44"
 }

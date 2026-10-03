@@ -59,6 +59,26 @@ def publish_optional_receipts(root, output):
             )
 
 
+def crossing_count_table(comparison):
+    """Expose improvement in observed crossings alongside completion censoring.
+
+    Returns:
+        Markdown rows with seed-mean intervals and censored trial counts.
+    """
+    lines = [
+        "",
+        "| V3 width (m) | Off crossings /60 | Contact crossings /60 | Wall crossings /60 | Both crossings /60 |",
+        "|---|---|---|---|---|",
+    ]
+    for width in ("0.8", "0.9", "1.0", "1.1", "1.2"):
+        cells = []
+        for arm in ARMS:
+            row = comparison["arms"][arm]["per_case"]["V3/" + width]
+            cells.append(display(row["crossed"]) + f"; censored {row['right_censored_n']}/30")
+        lines.append("| " + width + " | " + " | ".join(cells) + " |")
+    return lines
+
+
 def render(root, output):
     """Write versioned numerical receipts and a compact measurement table."""
     comparison = read(root, "step4_comparison.json")
@@ -128,6 +148,7 @@ def render(root, output):
             f"| {data['overlap_pair_steps']} | {data['wall_penetration_ped_steps']} "
             f"| {data['runtime_ms_per_step']:.4g} |"
         )
+    lines += crossing_count_table(comparison)
     lines += ["", "| Warm N | Off ms/step | Both ms/step | Ratio |", "|---|---|---|---|"]
     for n in (60, 150, 350):
         cases = {x["mode"]: x for x in warm["cases"] if x["n"] == n}

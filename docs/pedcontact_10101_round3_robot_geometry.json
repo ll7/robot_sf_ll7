@@ -118,7 +118,7 @@
           "stop": 1
         }
       },
-      "producer_sha": "b4aafc536a6b9c7b940d171815ed3ac1e3983263",
+      "producer_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44",
       "project_spawn_validity": {
         "invalid_reason": null,
         "invalid_run": false,
@@ -265,7 +265,7 @@
           "stop": 1
         }
       },
-      "producer_sha": "b4aafc536a6b9c7b940d171815ed3ac1e3983263",
+      "producer_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44",
       "project_spawn_validity": {
         "invalid_reason": null,
         "invalid_run": false,

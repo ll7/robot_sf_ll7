@@ -1,0 +1,108 @@
+{
+  "claim": "Analytic metric negative controls, no simulator reset or step. The lower-bound check is falsifiable: a late sustained turn fails. This is not an additional simulated fit setting.",
+  "driver_sha256": "b908f50820a2596ec2d8de411bcb7605e11588a7024bc8c77158caaf5499cd25",
+  "estimator_sha256": "9b13e1772c093bbb8f178c1e807ec58026afc3fe44138b68bbfb52e4ab183c24",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "analytic_turn_start_x_m": 20.0,
+      "check": {
+        "attempted_n": 1,
+        "case": "V6",
+        "comparison": "published_lower_bound",
+        "difference": 0.2999999999999998,
+        "distance_outside_tolerance": 0.0,
+        "estimate": 3.0,
+        "estimator_id": "fixed_yaw_source_window_lower_bound_v3",
+        "observed_n": 1,
+        "quantity": "onset_m",
+        "right_censored_n": 1,
+        "rule": "2026-10-03 author ruling: model onset >= published lower bound",
+        "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+        "status": "PASS",
+        "target": 2.7,
+        "target_band": null,
+        "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+        "tolerance_range": [
+          2.7,
+          null
+        ],
+        "variant": "1.78"
+      },
+      "metric": {
+        "analysis_window_m": 3.0,
+        "baseline_maxima_rad_s": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "baseline_turning_rad_s": 0.0,
+        "first_observed_onset_m": 3.0,
+        "onset_definition": "fixed_yaw_source_window_lower_bound_v3",
+        "onset_lower_bound_m": 3.0,
+        "onset_m": 3.0,
+        "onset_persistence_s": 0.3,
+        "onset_right_censored": true,
+        "onset_threshold_rad_s": 0.05,
+        "onset_time_s": 26.6,
+        "pomd_own_x_m": 29.6,
+        "pomd_time_s": 29.6,
+        "reason": null,
+        "wrong_side": false
+      },
+      "trajectory": "x=t; y=.03*max(t-turn_start,0)^2; interferer x=60-t,y=0"
+    },
+    {
+      "analytic_turn_start_x_m": 29.0,
+      "check": {
+        "attempted_n": 1,
+        "case": "V6",
+        "comparison": "published_lower_bound",
+        "difference": -2.0000000000000044,
+        "distance_outside_tolerance": 2.0000000000000044,
+        "estimate": 0.6999999999999957,
+        "estimator_id": "fixed_yaw_source_window_lower_bound_v3",
+        "observed_n": 1,
+        "quantity": "onset_m",
+        "right_censored_n": 0,
+        "rule": "2026-10-03 author ruling: model onset >= published lower bound",
+        "source": "Huber et al. 2014, Table 1, 180-degree condition; https://doi.org/10.1371/journal.pone.0089589",
+        "status": "FAIL",
+        "target": 2.7,
+        "target_band": null,
+        "tolerance_note": "author-delegated engineering tolerance, 2026-10-02",
+        "tolerance_range": [
+          2.7,
+          null
+        ],
+        "variant": "1.78"
+      },
+      "metric": {
+        "analysis_window_m": 3.0,
+        "baseline_maxima_rad_s": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "baseline_turning_rad_s": 0.0,
+        "first_observed_onset_m": 0.6999999999999957,
+        "onset_definition": "fixed_yaw_source_window_lower_bound_v3",
+        "onset_lower_bound_m": 0.6999999999999957,
+        "onset_m": 0.6999999999999957,
+        "onset_persistence_s": 0.3,
+        "onset_right_censored": false,
+        "onset_threshold_rad_s": 0.05,
+        "onset_time_s": 29.3,
+        "pomd_own_x_m": 30.0,
+        "pomd_time_s": 30.0,
+        "reason": null,
+        "wrong_side": false
+      },
+      "trajectory": "x=t; y=.03*max(t-turn_start,0)^2; interferer x=60-t,y=0"
+    }
+  ]
+}

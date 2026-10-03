@@ -26,15 +26,23 @@ The denominator is scoreable checks (measured estimates or decisive bounds). An 
 
 | Arm | Passed / scoreable / potential | Overlap pair-steps | Wall penetration pedestrian-steps | ms/step |
 |---|---|---|---|---|
-| off | 5/10/15 | 91665533 | 0 | 7.378 |
-| contact | 5/12/15 | 0 | 343667 | 11.17 |
-| wall | 5/15/15 | 62026876 | 0 | 9.116 |
-| on | 5/15/15 | 0 | 0 | 16.55 |
+| off | 5/10/15 | 91665533 | 0 | 7.34 |
+| contact | 5/12/15 | 0 | 343667 | 11.09 |
+| wall | 5/15/15 | 62026876 | 0 | 9.027 |
+| on | 5/15/15 | 0 | 0 | 16.83 |
+
+| V3 width (m) | Off crossings /60 | Contact crossings /60 | Wall crossings /60 | Both crossings /60 |
+|---|---|---|---|---|
+| 0.8 | 0 [0, 0]; censored 30/30 | 18.3 [17.12, 19.48]; censored 30/30 | 58 [58, 58]; censored 30/30 | 46.47 [38.23, 54.7]; censored 30/30 |
+| 0.9 | 0 [0, 0]; censored 30/30 | 29 [25.83, 32.17]; censored 30/30 | 58 [58, 58]; censored 30/30 | 50.67 [43.86, 57.48]; censored 30/30 |
+| 1.0 | 19.83 [19.17, 20.5]; censored 30/30 | 48.23 [45.1, 51.37]; censored 30/30 | 58 [58, 58]; censored 30/30 | 51.13 [44.48, 57.79]; censored 30/30 |
+| 1.1 | 58.07 [57.93, 58.2]; censored 29/30 | 58.33 [58.05, 58.62]; censored 25/30 | 58 [58, 58]; censored 30/30 | 54.4 [49.28, 59.52]; censored 30/30 |
+| 1.2 | 58.07 [57.93, 58.2]; censored 29/30 | 58.13 [57.94, 58.32]; censored 28/30 | 58 [58, 58]; censored 30/30 | 58 [58, 58]; censored 30/30 |
 
 | Warm N | Off ms/step | Both ms/step | Ratio |
 |---|---|---|---|
-| 60 | 0.8665 | 1.593 | 1.838 |
-| 150 | 4.344 | 6.319 | 1.455 |
-| 350 | 21.84 | 31.17 | 1.427 |
+| 60 | 0.8739 | 1.571 | 1.797 |
+| 150 | 4.471 | 6.685 | 1.495 |
+| 350 | 22.34 | 31.32 | 1.402 |
 
 Warm measurement uses the same real congested V4 frame after one warm-up step, then 20 timed steps. Full-suite runtime includes all measured scenarios and compilation/start-up effects; it must not be represented by the warm ratio.

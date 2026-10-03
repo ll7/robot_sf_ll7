@@ -1022,7 +1022,7 @@
       "test_id": "tests.docs.test_sphinx_strict_build::test_real_curated_strict_build_passes"
     },
     {
-      "base_exception_class": "AssertionError",
+      "base_exception_class": "Failed",
       "base_same_guard_failed": true,
       "classification": "guard refusal before reset; recorded and continued",
       "exception_class": "Failed",
@@ -1031,7 +1031,7 @@
       "test_id": "tests.examples.test_examples_run::test_example_runs_without_error[benchmarks/demo_aggregate.py]"
     },
     {
-      "base_exception_class": "AssertionError",
+      "base_exception_class": "Failed",
       "base_same_guard_failed": true,
       "classification": "guard refusal before reset; recorded and continued",
       "exception_class": "Failed",
@@ -1301,7 +1301,7 @@
       "test_id": "tests.ped_npc.test_spawn_sampler_capture::test_capture_disabled_by_default_leaves_population_unchanged"
     },
     {
-      "base_exception_class": "AssertionError",
+      "base_exception_class": "Failed",
       "base_same_guard_failed": true,
       "classification": "guard refusal before reset; recorded and continued",
       "exception_class": "Failed",
@@ -2759,15 +2759,11 @@
       "test_id": "tests.visuals.test_render_encode_split::test_performance_manifest_has_render_encode_keys"
     }
   ],
-  "guard_decision": "All254 also fail on exact CALFIT base with identical protected-seed guard; pre-RNG/reset refusals only. They do not indicate new stepping or simulator regressions.",
-  "matching_pre_reset_guard_failures": 254,
-  "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "reviewed_full_head": "69753f16548add94a6ade93964d2a3f52e811ae9",
   "grouped_failures": [
     {
-      "exception_class": "AssertionError",
       "classification": "guard refusal before reset; exact serial blocked/missing-output witness and matching node/seed/stack receipts",
       "count": 14,
+      "exception_class": "AssertionError",
       "test_ids": [
         "tests.benchmark.test_spawn_preflight::test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds",
         "tests.benchmark.test_spawn_preflight::test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds",
@@ -2786,9 +2782,9 @@
       ]
     },
     {
-      "exception_class": "AssertionError",
       "classification": "guard refusal before reset; recorded and continued",
       "count": 10,
+      "exception_class": "AssertionError",
       "test_ids": [
         "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_campaign_wrapper_preflight_only_never_launches_campaign",
         "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_campaign_wrapper_preflight_honors_config_env_override",
@@ -2803,9 +2799,9 @@
       ]
     },
     {
-      "exception_class": "AssertionError",
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
       "count": 8,
+      "exception_class": "AssertionError",
       "test_ids": [
         "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_preflight_passes_on_frozen_powered_contract",
         "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_cli_check_and_identity_emission",
@@ -2818,9 +2814,9 @@
       ]
     },
     {
-      "exception_class": "AttributeError",
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
       "count": 3,
+      "exception_class": "AttributeError",
       "test_ids": [
         "tests.planner.test_diagnostics_conformance::test_protocol_member_diagnostics_payload[robot_sf.planner.guarded_ppo-GuardedPPOAdapter]",
         "tests.planner.test_diagnostics_conformance::test_protocol_member_diagnostics_payload[robot_sf.planner.predictive_mppi-PredictiveMPPIAdapter]",
@@ -2828,25 +2824,25 @@
       ]
     },
     {
-      "exception_class": "CalledProcessError",
       "classification": "guard refusal before reset; verified wrapped/empty-row witness, recorded and continued",
       "count": 1,
+      "exception_class": "CalledProcessError",
       "test_ids": [
         "tests.test_lazy_pygame_init::test_debug_robot_env_materializes_pygame_on_first_render"
       ]
     },
     {
-      "exception_class": "EpisodeRecordInputError",
       "classification": "guard refusal before reset; exact serial blocked/missing-output witness and matching node/seed/stack receipts",
       "count": 1,
+      "exception_class": "EpisodeRecordInputError",
       "test_ids": [
         "tests.test_baseline_stats::test_run_and_compute_baseline"
       ]
     },
     {
-      "exception_class": "Failed",
       "classification": "guard refusal before reset; recorded and continued",
       "count": 3,
+      "exception_class": "Failed",
       "test_ids": [
         "tests.examples.test_examples_run::test_example_runs_without_error[benchmarks/demo_aggregate.py]",
         "tests.examples.test_examples_run::test_example_runs_without_error[advanced/01_backend_selection.py]",
@@ -2854,25 +2850,25 @@
       ]
     },
     {
-      "exception_class": "Failed",
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
       "count": 1,
+      "exception_class": "Failed",
       "test_ids": [
         "tests.validation.test_pr_contract_check::test_regression_last_20_merged_prs"
       ]
     },
     {
-      "exception_class": "Failed",
       "classification": "isolation finding; repeated example fixture reused nonempty fixed output; serial passes after preserving prior output",
       "count": 1,
+      "exception_class": "Failed",
       "test_ids": [
         "tests.examples.test_examples_run::test_example_runs_without_error[advanced/41_artifact_preservation.py]"
       ]
     },
     {
-      "exception_class": "FileNotFoundError",
       "classification": "guard refusal before reset; exact serial blocked/missing-output witness and matching node/seed/stack receipts",
       "count": 4,
+      "exception_class": "FileNotFoundError",
       "test_ids": [
         "tests.test_manifest_resume::test_manifest_stale_fallbacks_to_scan",
         "tests.test_manifest_resume::test_manifest_identity_hash_mismatch_forces_scan",
@@ -2881,34 +2877,34 @@
       ]
     },
     {
-      "exception_class": "FileNotFoundError",
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
       "count": 1,
+      "exception_class": "FileNotFoundError",
       "test_ids": [
         "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_detached_worktree_uses_explicit_reference"
       ]
     },
     {
-      "exception_class": "FileNotFoundError",
       "classification": "isolation finding; parallel watchdog startup/cleanup race; same guard and deadlines pass serially",
       "count": 1,
+      "exception_class": "FileNotFoundError",
       "test_ids": [
         "tests.validation.test_check_issue_5416_sipp_native_smoke::test_native_watchdog_cleans_descendant_after_parent_exits"
       ]
     },
     {
-      "exception_class": "IndexError",
       "classification": "guard refusal before reset; verified wrapped/empty-row witness, recorded and continued",
       "count": 2,
+      "exception_class": "IndexError",
       "test_ids": [
         "tests.benchmark.test_hybrid_rule_v4_doorway_regression::test_v4_avoids_the_v3_doorway_pedestrian_collision[classic_doorway_high-111]",
         "tests.benchmark.test_hybrid_rule_v4_doorway_regression::test_v4_avoids_the_v3_doorway_pedestrian_collision[classic_doorway_low-120]"
       ]
     },
     {
-      "exception_class": "InventoryError",
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
       "count": 6,
+      "exception_class": "InventoryError",
       "test_ids": [
         "tests.dev.test_issue_7330_assert_inventory::test_current_main_residuals_are_complete_and_internal",
         "tests.dev.test_issue_7330_assert_inventory::test_json_and_markdown_rendering_is_deterministic",
@@ -2919,9 +2915,9 @@
       ]
     },
     {
-      "exception_class": "LaneSeedRefusal",
       "classification": "guard refusal before reset; recorded and continued",
       "count": 219,
+      "exception_class": "LaneSeedRefusal",
       "test_ids": [
         "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_s20_preflight_stays_no_claim_but_allows_table_review",
         "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_verified_completed_s20_never_renders_blocked_until_run",
@@ -3145,12 +3141,16 @@
       ]
     },
     {
-      "exception_class": "OSError",
       "classification": "inherited; unchanged Sphinx wrapper exceeds Linux argument limit on exact CALFIT base and final head; serial failure reproduced",
       "count": 1,
+      "exception_class": "OSError",
       "test_ids": [
         "tests.docs.test_sphinx_strict_build::test_real_curated_strict_build_passes"
       ]
     }
-  ]
+  ],
+  "guard_decision": "All254 also fail on exact CALFIT base with identical protected-seed guard; pre-RNG/reset refusals only. They do not indicate new stepping or simulator regressions.",
+  "matching_pre_reset_guard_failures": 254,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "reviewed_full_head": "69753f16548add94a6ade93964d2a3f52e811ae9"
 }

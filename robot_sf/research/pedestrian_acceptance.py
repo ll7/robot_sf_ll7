@@ -246,7 +246,8 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
 
     Full acquisition admission additionally requires the complete declared grid;
     callers evaluating a single case receive an explicitly observed-cases scope.
-    V5/V6 without reported spread use the author-approved ±20% fallback.
+    V5 without reported spread uses the author-approved ±20% fallback.
+    V6 uses the author-ruled one-sided published onset lower bounds.
 
     Returns:
         Gate table with residuals, ranges, provenance and independent hard failures.

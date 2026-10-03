@@ -1,23 +1,11 @@
 {
-  "seed": 1001,
-  "wall_parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4",
-  "velocity_note": "Finite-difference endpoint velocity is a reconstruction; no exact stored velocity vector or live-force claim.",
-  "source": "Measured V3 1.0m endpoint; original goals reconstructed using the committed runner goal-update rule. No reset/step.",
+  "driver_sha256": "feafd687032f63b2dc4ed6f4f42bfacda0f5bf0286a0a5835bce8c347eae6958",
+  "input_row_sha256": "b73970ec61fd6cbbf7c330c152bd82e540027f8b3244f892e532fa380050706e",
+  "input_trajectory_sha256": "59284070e3f6e421f476161f718dcfcdd822799bc01337451c46486347c2984e",
+  "producer_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "rows": [
     {
-      "id": 8,
-      "position": [
-        -0.28412145465779093,
-        -0.9166009554138405
-      ],
-      "goal": [
-        3.4,
-        -0.17
-      ],
-      "inferred_velocity": [
-        0.011252659984083424,
-        0.0023703313495904155
-      ],
       "forces": {
         "desired": [
           2.389821478843685,
@@ -28,29 +16,29 @@
           -0.027382187941950572
         ],
         "wall": [
-          -2.439543901527047,
-          -0.46652877176699153
+          -2.4395439015270473,
+          -0.46652877176699087
         ]
       },
+      "goal": [
+        3.4,
+        -0.17
+      ],
+      "id": 8,
+      "inferred_velocity": [
+        0.011252659984083424,
+        0.0023703313495904155
+      ],
       "net": [
-        -0.024083670474000396,
-        -0.009784598090480101
+        -0.02408367047400084,
+        -0.009784598090479435
+      ],
+      "position": [
+        -0.28412145465779093,
+        -0.9166009554138405
       ]
     },
     {
-      "id": 59,
-      "position": [
-        -0.29843986671982387,
-        0.9252085194788405
-      ],
-      "goal": [
-        3.4,
-        0.17
-      ],
-      "inferred_velocity": [
-        -0.009341791790001275,
-        0.002167484106713191
-      ],
       "forces": {
         "desired": [
           1.656747882650988,
@@ -65,14 +53,27 @@
           0.3191894034020815
         ]
       },
+      "goal": [
+        3.4,
+        0.17
+      ],
+      "id": 59,
+      "inferred_velocity": [
+        -0.009341791790001275,
+        0.002167484106713191
+      ],
       "net": [
         -0.07470751863472991,
         0.007749607336640707
+      ],
+      "position": [
+        -0.29843986671982387,
+        0.9252085194788405
       ]
     }
   ],
-  "source_sha": "b4aafc536a6b9c7b940d171815ed3ac1e3983263",
-  "raw_trajectory_sha256": "59284070e3f6e421f476161f718dcfcdd822799bc01337451c46486347c2984e",
-  "driver_sha256": "f1fd96e9243b570cf6c7a86cb739917ed35475ad2f198f64ed48e992c7e07923",
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  "seed": 1001,
+  "source": "Measured V3 1.0m endpoint; original goals reconstructed using the committed runner goal-update rule. No reset/step.",
+  "velocity_note": "Finite-difference endpoint velocity is a reconstruction; no exact stored velocity vector or live-force claim.",
+  "wall_parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
 }

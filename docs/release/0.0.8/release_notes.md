@@ -1,6 +1,6 @@
 # Release 0.0.8 notes
 
-These notes disclose the adopted release limitations. They contain no sealed-campaign outcome numbers.
+These notes disclose the adopted release limitations. They contain no sealed-campaign outcome numbers. Historical references to the planned 0.0.9 release now mean 0.1.0.
 
 ## Scripted pedestrian speed
 

@@ -67,3 +67,28 @@ def test_runner_refuses_stale_mint_receipt_before_preflight(sealed_repository, m
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "release_notes_refused"
     assert "digest mismatch against mint receipt" in payload["status_reason"]
+
+
+def test_production_mint_verifier_refuses_stale_disclosure_receipt(sealed_repository, capsys):
+    import json
+
+    from robot_sf.evidence.writers import write_json
+    from scripts.tools import resolve_benchmark_release_identity as resolver
+    from tests.benchmark.test_sealed_source_pins import materialize
+
+    repo = sealed_repository
+    manifest = materialize(repo, "main")
+    capsys.readouterr()
+    path = manifest.path.parent / "release_notes_gate.v1.json"
+    receipt = json.loads(path.read_bytes()) if path.exists() else {}
+    receipt["notes_sha256"] = "0" * 64
+    write_json(path, receipt)
+    # This is the public verifier argv used by private production mint's
+    # verify_materialized_manifest, not a separate test-only admission seam.
+    assert (
+        resolver.main(["verify", "--identity", str(manifest.path), "--repository-root", str(repo)])
+        == 2
+    )
+    rejected = json.loads(capsys.readouterr().out)
+    assert rejected["status"] == "rejected"
+    assert "digest mismatch against mint receipt" in rejected["reason"]

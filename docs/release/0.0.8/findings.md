@@ -21,7 +21,7 @@ Severity follows the source: P1 changes results, P2 could change results, P3
 hygiene. "(open)" means the fixing pull request is not merged yet. Decision
 IDs (D-0NN) refer to [decisions.md](decisions.md). Full reports are in the
 private review archive (`docs/reviews/0.0.8/` in the private operations
-repository). State checked on 2026-10-01 against main and the current open PR heads. Measurements are attributed to the archived reviewer reports; this records lane did not rerun simulations. A disclosure disposition records the adopted disclosure policy, not confirmation that the release notes or thesis have already been edited.
+repository). PR states reconciled on 2026-10-03 against main `c979e0337da4ad053d59a76225fbb9154140ee73`; see [freeze audit](freeze_audit.md). Measurements are attributed to the archived reviewer reports; this records lane did not rerun simulations. A disclosure disposition records the adopted disclosure policy, not confirmation that the release notes or thesis have already been edited.
 
 ## Planner integration
 
@@ -169,9 +169,9 @@ repository). State checked on 2026-10-01 against main and the current open PR he
 
 | ID | Source | Finding | Severity | Verified | Disposition | Link |
 |---|---|---|---|---|---|---|
-| PLAUS-1 | plausibility check | francis2023_pedestrian_overtaking: the robot spawns inside the pedestrian's lane on 12/30 seeds, and risk_dwa collides on 11/30. | P1 | confirmed | fix pending in #10067 (open, train 2 part 2) | #10063 |
+| PLAUS-1 | plausibility check | francis2023_pedestrian_overtaking: the robot spawns inside the pedestrian's lane on 12/30 seeds, and risk_dwa collides on 11/30. | P1 | confirmed | fixed via train 2 part 2 / #10095 at `879f75b69eb93ca16006f2019ee5c85c7aa724dd`; #10067 is CLOSED on GitHub because the train integrated it, not a separately merged PR | #10063 |
 | PLAUS-2 | plausibility check | When no command is admissible, risk_dwa, predictive_mppi and the guarded-PPO guard brake to zero and can never reach their escape. This caused most of the 353 rehearsal timeouts. | P1 | confirmed | **fixed** in #10066 (merged in #10080; predictive_mppi successes 105 → 149) | #10064 |
-| PLAUS-4 | plausibility check | Published PPO success fell from about 50 % to 18 % under the correct action reading. That is an honest out-of-distribution result. | – | confirmed | **disclosed**; arm replacement pending in #10077 (D-053, D-054) | #9995 |
+| PLAUS-4 | plausibility check | Published PPO success fell from about 50 % to 18 % under the correct action reading. That is an honest out-of-distribution result. | – | confirmed | **disclosed**; arm replaced in #10077 (merged) (D-053, D-054) | #9995 |
 | PLAUS-5 | plausibility check | The 0.0.8 gains come mainly from configs that fix 0.0.7 plant mismatches. The 0.0.7 predictive_mppi baseline is invalid. | – | confirmed | **disclosed** (D-062); #10058 | plaus_report.md, private-ops review archive |
 | PPO-1 | PPO evaluation | The retrained PPO collides in 89/240 episodes, 85 % of them with static geometry. Variant B drives at the 2.0 m/s cap on 97–100 % of steps, and the policy std grows during training. | P2 | confirmed | **disclosed**; **0.1.0** | #10071 |
 | GRID-1 | thesis figure capture | The circle rasteriser places pedestrians about half a cell off (+0.08 to +0.14 m) in the grid that PPO and guarded PPO read. | P2 | confirmed | **disclosed** (D-060); **0.1.0** | #10082 |
@@ -198,11 +198,11 @@ repository). State checked on 2026-10-01 against main and the current open PR he
 | CHAIN-1 | post-freeze chain | Release acceptance refused the 1,260-cell doorway slice. | P1 (freeze blocker) | confirmed; fixed | **closed**: [#10081](https://github.com/ll7/robot_sf_ll7/pull/10081) merged in train 2 (`879f75b69eb93ca16006f2019ee5c85c7aa724dd`); `tests/benchmark/test_doorway_release_acceptance.py::test_bound_doorway_slice_accepted` admits all 1,260 unique cells (lines 83–89); the static acceptance witnesses passed on main `f52de283e3b60ec85910fd761e432d07ab748158` on 2026-10-02 | #10078 |
 | CHAIN-2 | release-notes lane | The authored release template used seeds 111–140 and was outside the sealed allowlist. | P1 (release day) | confirmed; fixed | **closed**: train 2 / [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999), D-083; [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) closed after accepted CHAIN-2 verification on 2026-10-02. Both `tests/benchmark/test_release_campaign_authority.py` witnesses passed on main `f52de283e3b60ec85910fd761e432d07ab748158`: real sealed-file resolution, source-bound recording-stub admission, retired-band and retired-template refusal, without reset or step. Packaging remains a separate CHAIN-3 requirement | [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085) |
 | CHAIN-3 | intake prep | Rehearsal 1 never ran the release packaging tool. | P2 | confirmed; packaging verified; intake open | **packaging complete under D-086**: [#10103](https://github.com/ll7/robot_sf_ll7/pull/10103), tooling source `b8d5e970ab2428285aeb532b0d8e73b4601a33a6`, completed the common 672-cell smoke and prescribed 2,016-cell Slurm campaign (32 CPUs), publication export, all bundle checks, development SNQI binding and D-062 diagnostic comparison against pinned 0.0.7; each exited 0. Release comparator mode refused with exit 2. Archive size/digest and full commands are recorded under [D-070](decisions.md#d-070-the-freeze-commit-is-the-train-2-head-on-main-after-rehearsal-2-passes-on-it) and the lane handoff. Dissertation intake awaits the orchestrator; no release eligibility or freeze SHA is asserted. | diss#3026; [#10013](https://github.com/ll7/robot_sf_ll7/issues/10013) |
-| CHAIN-4 | runbook | The post-freeze chain has 12 gaps (G01–G12). | P1 | confirmed | G05, G07, G08-mint and G11 fixed in private-ops #421; G09 partly fixed; the rest open | runbook_report.md, private-ops review archive |
+| CHAIN-4 | runbook | The post-freeze chain has 12 gaps (G01–G12). | P1 | confirmed | current G01–G12 status and remaining mint/publication checks are listed in [runbook.md](runbook.md#chain-4-gap-readback-g01g12); private-ops #421 is merged, but its old public G12 admission blocker was fixed by #10081 | runbook_report.md, private-ops review archive |
 | CHAIN-5 | release-notes lane | The former SNQI calibration file name said dev101_102 but held 1001/1002 data. | P3 | confirmed; fixed | **closed**: #10045 renamed it to `calibration.dev1001_1002_scheduled_acquisition.yaml`; enforced by `test_development_calibration_matches_candidate_and_preserves_frozen_007` (`tests/unit/benchmark/test_snqi_v2.py:79–94`) | [#10045](https://github.com/ll7/robot_sf_ll7/pull/10045) |
 | SCN-A1 | obstacle-force investigation | Scenario authoring defects: the double bottleneck, a station platform waypoint, a stale slice manifest. | P2 | confirmed | **0.1.0** | #10062 |
-| HZN-1 | #9999 review | The first legacy-horizon fix extended historical runs to 600 steps under the same episode id (exposure: 1,505 published 0.0.7 rows). | P1 | confirmed | fix pending in #9999 (open), D-064 | #9999 |
-| HZN-2 | #9999 review | The fixed-horizon binding broke 37 historical configs and re-hashed 88 more. | P1 | confirmed | fix pending in #9999 (open) | #9999 |
+| HZN-1 | #9999 review | The first legacy-horizon fix extended historical runs to 600 steps under the same episode id (exposure: 1,505 published 0.0.7 rows). | P1 | confirmed | fixed in #9999 (merged via train 2 / #10095), D-064 | #9999 |
+| HZN-2 | #9999 review | The fixed-horizon binding broke 37 historical configs and re-hashed 88 more. | P1 | confirmed | fixed in #9999 (merged via train 2 / #10095) | #9999 |
 | REPRO-2 | seed review | `uv sync --frozen` does not refresh a stale installed pysocialforce copy. | P2 | confirmed | **fixed** for sealed runs (#10039); virtual environments rebuilt | #10039 |
 
 ### Seed hygiene (all on retired seeds 111–140; sealed seeds never stepped)
@@ -236,8 +236,8 @@ Each finding is counted once under its main disposition (the first one in its ro
 | 0.1.0 issue only | 17 |
 | disclosure or retained method | 29 |
 | explained by another finding | 1 |
-| fix pending in an open pull request | 3 |
-| fixed in a merged pull request | 52 |
+| fix pending in an open pull request | 0 |
+| fixed in a merged pull request | 55 |
 | not exposed in the 0.0.8 release | 18 |
 | open release-chain follow-up | 1 |
 | partly fixed release-chain follow-up | 1 |

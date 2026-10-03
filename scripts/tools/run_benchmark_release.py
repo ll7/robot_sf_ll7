@@ -1822,7 +1822,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         )
         print(json.dumps(result, indent=2))
         return 2
-    campaign_options = {"allow_pending_snqi_v2": True} if development_smoke else {}
+    campaign_options = (
+        {"allow_pending_snqi_v2": True, "pending_snqi_v2_identity": manifest.resolved_identity_path}
+        if development_smoke
+        else {}
+    )
     run_payload = run_campaign(
         cfg,
         output_root=args.output_root,

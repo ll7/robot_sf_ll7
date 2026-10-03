@@ -8089,3 +8089,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/2026-10-03_issue10112_mintorder
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

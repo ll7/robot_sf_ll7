@@ -42,12 +42,16 @@ def _binding_api():
     return v2_binding
 
 
-def test_pending_campaign_cannot_execute():
+def test_pending_campaign_cannot_execute(monkeypatch):
     """No direct campaign route may silently publish an unscored SNQI-v2 campaign."""
-    _binding_api()
+    from robot_sf.benchmark.camera_ready import campaign
+
     cfg = load_campaign_config(CONFIG)
-    assert cfg.snqi_v2_binding is not None
-    assert cfg.snqi_v2_spec is None
+
+    def forbidden_execution(*args, **kwargs):
+        pytest.fail("unscored authored campaign reached execution")
+
+    monkeypatch.setattr(campaign, "_run_campaign_orchestrator", forbidden_execution)
     with pytest.raises(ValueError, match="acquisition and anchors are required"):
         run_campaign(cfg)
 
@@ -200,3 +204,77 @@ def test_rehearsal_option_reaches_campaign_implementation(monkeypatch, allowed):
     monkeypatch.setattr(facade, "_run_campaign_impl", implementation)
     result = facade.run_campaign(cfg, allow_pending_snqi_v2=allowed)
     assert result["allow_pending_snqi_v2"] is allowed
+
+
+@pytest.mark.parametrize("route", ["native", "facade"])
+@pytest.mark.parametrize("identity", [None, "not-an-identity.json"])
+def test_pending_permission_requires_rehearsal_identity_before_execution(
+    monkeypatch, route, identity
+):
+    """The caller flag alone cannot unlock an unscored source-bound campaign."""
+    from robot_sf.benchmark.camera_ready import campaign
+    from robot_sf.benchmark.camera_ready_campaign import SeedPolicy
+
+    cfg = replace(
+        load_campaign_config(CONFIG), seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001,))
+    )
+
+    def forbidden_execution(*args, **kwargs):
+        pytest.fail("pending keyword bypassed identity admission")
+
+    monkeypatch.setattr(campaign, "_run_campaign_orchestrator", forbidden_execution)
+    execute = campaign.run_campaign if route == "native" else run_campaign
+    kwargs = {"allow_pending_snqi_v2": True}
+    if identity is not None:
+        kwargs["pending_snqi_v2_identity"] = ROOT / identity
+    with pytest.raises(
+        (ValueError, FileNotFoundError), match="rehearsal identity|resolved release identity"
+    ):
+        execute(cfg, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "seeds,drift",
+    [((1001,), False), ((42,), False), ((1001, 42), False), ((1001,), True)],
+    ids=["matched_dev", "non_dev", "mixed_seeds", "changed_config"],
+)
+def test_pending_permission_matches_verified_identity_config(monkeypatch, seeds, drift):
+    """Even verified development identity input must match the actual runner config."""
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark import release_protocol
+    from robot_sf.benchmark.camera_ready import campaign
+    from robot_sf.benchmark.camera_ready_campaign import SeedPolicy
+
+    expected = replace(
+        load_campaign_config(CONFIG), seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001,))
+    )
+    cfg = replace(
+        expected,
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=seeds),
+        dt=0.2 if drift else expected.dt,
+    )
+    identity = SimpleNamespace(release_kind="development_rehearsal", resolved_seeds=(1001,))
+    calls = []
+    monkeypatch.setattr(release_protocol, "verify_resolved_release_identity", lambda path: identity)
+    monkeypatch.setattr(release_protocol, "load_release_campaign_config", lambda manifest: expected)
+    monkeypatch.setattr(
+        campaign,
+        "_run_campaign_orchestrator",
+        lambda *a, **k: calls.append(a[0]) or {"diagnostic": True},
+    )
+    if seeds == (1001,) and not drift:
+        assert campaign.run_campaign(
+            cfg,
+            allow_pending_snqi_v2=True,
+            pending_snqi_v2_identity=ROOT / "output/rehearsal/identity.json",
+        ) == {"diagnostic": True}
+        assert calls == [cfg]
+    else:
+        with pytest.raises(ValueError, match="development seeds|identity config"):
+            campaign.run_campaign(
+                cfg,
+                allow_pending_snqi_v2=True,
+                pending_snqi_v2_identity=ROOT / "output/rehearsal/identity.json",
+            )
+        assert calls == []

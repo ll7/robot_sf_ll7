@@ -386,8 +386,8 @@ production receipts. Access succeeded; no inaccessible gap is guessed closed.
 |---|---|
 | G01 integrated whole-roster rehearsal | Packaging completed by #10103 / D-086 on `b8d5e970…`, 672 smoke +2,016 development cells. Candidate `c979e033…` includes later #10108 hardening; exact-candidate intake/rehearsal acceptance still belongs to orchestrator. |
 | G02 calibration custody | Open: acquire exact 1,344 dev 1001/1002 cells; 2,016 rehearsal rows cannot be relabelled as calibration. #10045 supplies strict freeze validator. |
-| G03 v2 assets and manifest binding | #10112 binds pending acquisition/spec/assets to both templates; land reviewed successors before freeze. Real acquired anchors and independent scientific review remain post-freeze inputs. |
-| G04 calibration versus frozen-source trust | #10112 requires same-source acquisition/configuration custody; private scientific trust set remains empty until independent review of actual acquired anchors and sealed ruling. |
+| G03 v2 assets and manifest binding | **Blocks freeze** until #10112 lands. #10112 binds pending acquisition/spec/assets to both templates; land reviewed successors before freeze. Real acquired anchors and independent scientific review remain post-freeze inputs. |
+| G04 calibration versus frozen-source trust | **Blocks freeze** until the #10112 same-source acquisition/trust contract lands; actual acquisition/review follow the named freeze. #10112 requires same-source acquisition/configuration custody; private scientific trust set remains empty until independent review of actual acquired anchors and sealed ruling. |
 | G05 authored-horizon mint and bounded diagnostic | Tooling fixed by merged private #421; static dev diagnostics non-dispatchable, production CPUs 32–60. Not proof production inputs are admitted. |
 | G06 doorway H600 versus H400 | Fixed: #9999 authored slice schedule and #10081 strict companion acceptance; static source-pin witnesses bind H400. |
 | G07 same-node two-track chain | Tooling fixed in private #421: distinct identities/checkpoints, shared source/DOI and sequential runners. Final reconciliation/preservation remain G12. |
@@ -446,6 +446,9 @@ fixed diagnostic DOIs `10.5281/zenodo.99000001` / `10.5281/zenodo.99000002`,
 `development-rehearsal-<full SHA>` tag and the same D-083 authored template.
 The Slurm wrapper's `ROBOT_SF_DEVELOPMENT_RUNTIME_SMOKE=1` uses fifth argument
 `-`; subsequent development campaign consumes that exact-source smoke result.
+The native campaign entry also requires the verified rehearsal identity path,
+matching complete campaign configuration and fixed-list development seeds
+before `allow_pending_snqi_v2` can take effect; the facade keyword alone refuses.
 These outputs retain `release_eligible: false`; comparator requires
 `--diagnostic-partial`. Preserve the complete raw custody and diagnostic bundle;
 they are never substitutes for steps 3–7 production admission.
@@ -464,7 +467,12 @@ Both v0.2 templates pin those same assets. The source anchor file remains
 `pending_calibration`; loading a configuration is permitted for identity and
 checkpoint preparation, but executing an unscored bound campaign refuses.
 The doorway template selects its v2 campaign successor; its original v1 config
-and concrete manifest remain historical bytes.
+and concrete manifest remain historical bytes. **Before any doorway execution,
+regenerate its concrete manifest from the v0.2 doorway template at the named
+freeze**, selecting the v2 campaign and four v2 assets with reviewed acquired
+anchors. The checked-in `three_width_doorway_release_0_0_8_v1.yaml` still names
+the historical v1 campaign/legacy v3 weights; it is not an executable current
+0.0.8 packet. Its fail-closed source-pin test remains mandatory.
 
 Acquisition freezes a separate artifact after the freeze, without editing the
 tracked pending file or moving the named source. The release runner accepts

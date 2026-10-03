@@ -79,6 +79,7 @@ from robot_sf.benchmark.camera_ready._summaries import (
     _build_statistical_sufficiency_payload,
 )
 from robot_sf.benchmark.camera_ready._util import (
+    _config_hash_payload,
     _kinematics_matrix_or_default,
     _latency_stress_metadata,
     _repo_relative,
@@ -355,6 +356,7 @@ def run_campaign(  # noqa: PLR0913
     export_publication_bundle: Callable[..., Any] | None = None,
     arm_isolation: str | None = None,
     allow_pending_snqi_v2: bool = False,
+    pending_snqi_v2_identity: Path | None = None,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign and emit campaign artifacts.
 
@@ -375,6 +377,7 @@ def run_campaign(  # noqa: PLR0913
         compute_aggregates_with_ci: Optional aggregates collaborator override.
         export_publication_bundle: Optional publication bundle collaborator override.
         allow_pending_snqi_v2: Permit unscored, permanently diagnostic preparation smoke only.
+        pending_snqi_v2_identity: Verified development identity binding that permission.
         arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
             If None, uses cfg.arm_isolation (issue #4826).
 
@@ -388,6 +391,33 @@ def run_campaign(  # noqa: PLR0913
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
+    if allow_pending_snqi_v2:
+        from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
+            is_development_rehearsal,
+            load_release_campaign_config,
+            verify_resolved_release_identity,
+        )
+
+        if pending_snqi_v2_identity is None:
+            raise ValueError("pending SNQI-v2 execution requires a verified rehearsal identity")
+        identity = verify_resolved_release_identity(pending_snqi_v2_identity)
+        seeds = cfg.seed_policy.seeds
+        if (
+            not is_development_rehearsal(identity)
+            or cfg.seed_policy.mode != "fixed-list"
+            or not seeds
+            or any(type(seed) is not int or not 1001 <= seed <= 1030 for seed in seeds)
+            or tuple(seeds) != tuple(identity.resolved_seeds)
+        ):
+            raise ValueError(
+                "pending SNQI-v2 execution requires matching identity development seeds"
+            )
+        if _config_hash_payload(cfg) != _config_hash_payload(
+            load_release_campaign_config(identity)
+        ):
+            raise ValueError(
+                "pending SNQI-v2 execution differs from the verified rehearsal identity config"
+            )
     if cfg.snqi_v2_binding and cfg.snqi_v2_spec is None and not allow_pending_snqi_v2:
         raise ValueError("SNQI-v2 acquisition and anchors are required before campaign execution")
     dependencies = _resolve_campaign_runtime_dependencies(

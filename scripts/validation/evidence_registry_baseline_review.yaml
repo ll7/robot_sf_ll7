@@ -18,6 +18,18 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10112
+    reviewed_date: 2026-10-03
+    finding_delta: four diagnostic config-locator bookkeeping findings
+    disposition: baseline
+    decision: >-
+      MINTORDER round 1 commits compact source-d56092ed proofs, review sidecars and
+      a generator; raw episodes and bundles remain external with exact SHA-256 pins.
+      The main identity ledger retains exact 18-field values. Four hash_without_artifact_path
+      findings are explicitly classified below and Git-blob verified by the generator.
+      Missing smoke config metadata and doorway relative-path custody are repaired;
+      no other new finding is accepted. This is the implementing agent's integrity
+      review, not an independent scientific/source approval.
   - issue: 10007
     reviewed_date: 2026-10-02
     finding_delta: none
@@ -509,6 +521,17 @@ disposition_legend:
     Finding to be fixed in the evidence file itself; not applicable to this refresh because no
     file admitted a trivial, in-repo repair.
 reviewed_files:
+  - path: docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Four literal SNQI-v2 source hashes in the exact 18-field historical identity ledger
+      have adjacent configs/... paths; the generic linter intentionally excludes those
+      config paths as artifact locators. The committed build_mintorder_evidence.py identity
+      route verifies all four hashes against actual Git blobs at producer d56092ed.
+      Preserve exact old/new identity values rather than insert non-identity annotations.
+      Scoped diagnostic provenance disposition for #10112; no scientific admission or
+      independent reviewer sign-off is claimed.
   - path: docs/context/evidence/issue_10007_fxs2_summary.json
     codes: [hash_without_artifact_path]
     disposition: baseline

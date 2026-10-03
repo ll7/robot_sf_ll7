@@ -71,6 +71,27 @@ def _expected_algorithm(
     return bindings.get((arm, episode["scenario_id"]), bindings.get(arm))
 
 
+def _planner_source_config_path(planner: Mapping[str, Any], repo_root: Path) -> Path | None:
+    """Resolve a repository-relative route declaration without trusting caller paths.
+
+    Returns:
+        Contained source file, or None for a planner without an algorithm config.
+    """
+    raw_path = planner.get("algo_config_path")
+    if raw_path is None:
+        return None
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError("SNQI-v2 algo_config_path must be a non-empty string")
+    if Path(raw_path).is_absolute():
+        raise ValueError("SNQI-v2 algo_config_path must be repository-relative")
+    resolved = (repo_root / raw_path).resolve()
+    try:
+        resolved.relative_to(repo_root.resolve())
+    except ValueError as exc:
+        raise ValueError("SNQI-v2 algo_config_path escapes the repository") from exc
+    return resolved
+
+
 def _source_scenario_algorithms(planner: Mapping[str, Any], repo_root: Path) -> dict[str, str]:
     """Read routes from the actual planner source; observations cannot declare routes.
 
@@ -84,10 +105,10 @@ def _source_scenario_algorithms(planner: Mapping[str, Any], repo_root: Path) -> 
         assert_release_parameters_frozen,
     )
 
-    raw_path = planner.get("algo_config_path")
-    if raw_path is None:
+    source_path = _planner_source_config_path(planner, repo_root)
+    if source_path is None:
         return {}
-    payload = parse_v2_yaml((repo_root / raw_path).read_bytes())
+    payload = parse_v2_yaml(source_path.read_bytes())
     if not isinstance(payload, dict):
         raise ValueError("SNQI-v2 planner configuration must be a mapping")
     if payload.get("algo") is not None and payload["algo"] != planner.get("algo"):
@@ -694,7 +715,27 @@ def _validated_run_input(
         or (planner.get("algo") is not None and not isinstance(planner["algo"], str))
     ):
         raise ValueError("SNQI-v2 run requires explicit planner.key and a string planner.algo")
-    return (repo_root / path_value).resolve(), planner
+    path = (repo_root / path_value).resolve()
+    source_path = _planner_source_config_path(planner, repo_root)
+    sidecar = manifest_path_for_result_jsonl(path)
+    if not sidecar.is_file():
+        raise ValueError("SNQI-v2 requires the producer provenance sidecar")
+    payload = parse_v2_json(sidecar.read_text(encoding="utf-8"))
+    validate_result_provenance_manifest(payload)
+    producer_config = payload["inputs"]["algo_config"]
+    producer_path = producer_config.get("path")
+    if source_path is None:
+        if producer_path is not None:
+            raise ValueError("SNQI-v2 producer algo_config_path differs from run config")
+    elif (
+        not isinstance(producer_path, str)
+        or not producer_path
+        or (repo_root / producer_path).resolve() != source_path
+        or producer_config.get("sha256") != sha256_file(source_path)
+        or producer_config.get("artifact_status") != "available"
+    ):
+        raise ValueError("SNQI-v2 producer algo_config_path or config bytes differ from run config")
+    return path, planner
 
 
 def _validated_v2_record_algorithms(

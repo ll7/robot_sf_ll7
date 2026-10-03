@@ -1,10 +1,13 @@
 {
   "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths. The payload also carries an evidence_tree manifest (issue #6839): adding or removing any file under docs/context/evidence/ without refreshing this baseline fails the ratchet on the causing PR, so a stale baseline can never redden main after merge.",
   "evidence_tree": {
-    "count": 2947,
-    "sha256": "7db14378fb62dcf5b143b62a3337a930a89327c3b3440b263da136c5b9f5dec6"
+    "count": 2969,
+    "sha256": "634bda181f75cf749f5b60872511fa99124b79903408144d6b5a049f9690f4a7"
   },
   "findings_by_path": {
+    "docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json": {
+      "hash_without_artifact_path": 4
+    },
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
       "dangling_commit": 1,
       "missing_config_path": 1,
@@ -382,7 +385,7 @@
       "artifact_hash_mismatch": 4
     }
   },
-  "generated_at": "2026-10-02T15:32:42Z",
+  "generated_at": "2026-10-03T18:50:47Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
@@ -391,14 +394,14 @@
       "config_missing_at_commit": 7,
       "dangling_commit": 23,
       "duplicate_campaign_id": 7,
-      "hash_without_artifact_path": 110,
+      "hash_without_artifact_path": 114,
       "invalid_sha256": 1,
       "missing_commit": 27,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 101,
-    "total_findings": 450
+    "files_with_findings": 102,
+    "total_findings": 454
   }
 }

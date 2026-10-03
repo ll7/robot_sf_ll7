@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import fields
+from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 import pygame
@@ -21,6 +26,19 @@ from robot_sf.render.presentation_style import (
     validate_style,
 )
 from robot_sf.render.sim_view import SimulationView
+
+
+@pytest.fixture
+def initialized_fonts() -> Iterator[None]:
+    """Make direct font rendering independent of earlier SimulationView tests."""
+    previously_initialized = pygame.font.get_init()
+    if not previously_initialized:
+        pygame.font.init()
+    try:
+        yield
+    finally:
+        if not previously_initialized:
+            pygame.font.quit()
 
 
 def test_preset_validates_clean() -> None:
@@ -84,7 +102,7 @@ def test_kwargs_leave_radii_and_physics_untouched() -> None:
     assert set(kwargs["color_overrides"]) >= {"robot", "pedestrian", "background"}
 
 
-def test_legend_text_unclipped_at_slide_sizes() -> None:
+def test_legend_text_unclipped_at_slide_sizes(initialized_fonts: None) -> None:
     """Legend text fits its panel; title blocks fit 1080p and 720p surfaces."""
     _panel, bounds = render_legend_panel(PRESENTATION_FLAT)
     for _label, (x, y, width, height) in bounds:

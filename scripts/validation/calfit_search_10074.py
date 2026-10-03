@@ -141,6 +141,9 @@ def run_candidate(point, seeds, out, workers=2, config_path=None) -> dict[str, o
         "wall_profile": "gradient_v3" if point["family"] == "gradient_v3" else "legacy_v1",
         "execution_cap_m_s": point["cap_m_s"],
         "shoulder_width_m": config["V2"]["shoulder_proxy_m"],
+        "yaw_threshold_rad_s": config["V6"].get("yaw_threshold_rad_s", 0.05),
+        "analysis_window_m": config["V6"].get("analysis_window_m", 3.0),
+        "onset_persistence_s": config["V6"].get("persistence_s", 0.3),
         "equivalence": {f"V{i}": config[f"V{i}"]["equivalence"] for i in range(1, 7)},
     }
     for key in (
@@ -279,7 +282,7 @@ def candidate_summary(point, rows, gate) -> dict[str, object]:
             "attempted_n": len(bank),
             "mean_crossed": float(np.mean([r["crossed"] for r in bank])) if bank else None,
         }
-    complete = bool(narrow) and all(r["specific_flow_persons_m_s"] is not None for r in narrow)
+    complete = bool(narrow) and all(r["all_crossed"] for r in narrow)
     targets = [1.61, 1.86, 1.90, 1.93, 1.97]
     return {
         "candidate": point,

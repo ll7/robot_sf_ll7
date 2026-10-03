@@ -412,6 +412,8 @@ def protocol_simulate(  # noqa: C901, PLR0913
         speeds.append(np.linalg.norm(sim.peds.vel(), axis=1))
         if stop_x is not None and sim.peds.pos()[0, 0] > stop_x:
             break
+    if physics_receipts is not None:
+        physics_receipts[-1] = sim.pedestrian_physics_metadata()
     if step_receipts is not None:
         step_receipts.append(
             {
@@ -676,7 +678,15 @@ def run_task(task):  # noqa: C901, PLR0912, PLR0915
                 )
                 baselines.append(bp[:, 0])
             row.update(
-                estimators.turning_onset(p[:, 0], p[:, 1], np.arange(len(p)) * 0.1, baselines)
+                estimators.turning_onset(
+                    p[:, 0],
+                    p[:, 1],
+                    np.arange(len(p)) * 0.1,
+                    baselines,
+                    yaw_threshold_rad_s=options.get("yaw_threshold_rad_s", 0.05),
+                    analysis_window_m=options.get("analysis_window_m", 3.0),
+                    persistence_s=options.get("onset_persistence_s", 0.3),
+                )
             )
             row["interferer_nonreactive"] = True
             row["baseline_trial_n"] = 5
@@ -792,6 +802,8 @@ def protocol_summary(rows, config):  # noqa: C901
             }
             if entry["simulated"]["mean"] is not None:
                 entry["difference"] = entry["simulated"]["mean"] - 0.5
+        entry["right_censored_n"] = sum(bool(r.get("onset_right_censored")) for r in group)
+        entry["comparison"] = {"V6": "published_lower_bound"}.get(case)
         if case == "V6" and entry["simulated"]["mean"] is not None:
             entry["difference"] = entry["simulated"]["mean"] - entry["published_value"]
         if case == "V8":

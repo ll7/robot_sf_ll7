@@ -59,6 +59,16 @@ def test_wall_force_is_continuous_across_aperture_medial_axis():
     f = bounded_wall_force(p, walls, 0.28, 3.0, 0.04, 0.20)
     assert np.linalg.norm(f[2] - f[0]) < 0.001
     np.testing.assert_allclose(f[1], [0, 0], atol=1e-12)
+    # Check the complete optional force too: restoring the singular near field
+    # must not undo the finite-normal continuity correction.
+    cfg = config(wall=True)
+    cfg.obstacle_force_config.factor = 0.003
+    cfg.obstacle_force_config.threshold = 0.375
+    cfg.obstacle_force_config.sigma = 0.0
+    state = np.column_stack([p, np.zeros((3, 2)), np.tile([10, 0, 0.5], (3, 1))])
+    sim = Simulator(state, obstacles=[(-3, 3, 0.305, 0.305), (-3, 3, -0.305, -0.305)], config=cfg)
+    full = sim.forces[2]()
+    assert np.linalg.norm(full[2] - full[0]) < 0.001
 
 
 def test_contact_removes_closing_velocity_after_overrelaxed_position_repair():
@@ -149,7 +159,7 @@ def test_turning_onset_changes_with_actual_manoeuvre_location():
     for location in [19.0, 24.0]:
         path = baseline.copy()
         path[:, 1] = 0.5 * (1 + np.tanh((t - location) / 0.5))
-        values.append(turning_onset(path, q, t, [baseline] * 5)["onset_m"])
+        values.append(turning_onset(path, q, t, [baseline] * 5, analysis_window_m=25.0)["onset_m"])
     assert all(v is not None for v in values)
     assert values[0] - values[1] == pytest.approx(5.0, abs=0.2)
     assert values[0] > 3.0

@@ -28,11 +28,12 @@ def default_point(arm: str) -> dict[str, object]:
     """
     point = search.candidate("calibrated_v2", 0.003, 0.375, 0.28, 2.0)
     point["pedcontact_measurement"] = True
-    if arm == "on":
+    if arm not in {"off", "contact", "wall", "on"}:
+        raise ValueError("PEDCONTACT arm must be off/contact/wall/on")
+    if arm in {"contact", "on"}:
         point["pedestrian_contact_rule"] = "projection_v1"
+    if arm in {"wall", "on"}:
         point["pedestrian_wall_rule"] = "bounded_edge_v1"
-    elif arm != "off":
-        raise ValueError("PEDCONTACT arm must be off or on")
     point.pop("id")
     point["id"] = hashlib.sha256(json.dumps(point, sort_keys=True).encode()).hexdigest()[:12]
     return point
@@ -70,7 +71,7 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
     """
     config = suite.load_config(suite.DEFAULT_CONFIG)
     result = {"schema": "pedcontact.comparison.v1", "seeds": config["seeds"], "arms": {}}
-    for arm in ("off", "on"):
+    for arm in ("off", "contact", "wall", "on"):
         rows = []
         identities = []
         for seed in config["seeds"]:
@@ -112,6 +113,18 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
                     row["wall_penetration_ped_steps"] for row in bank
                 ),
                 "passed_n": sum(bool(row.get("passed")) for row in bank),
+                "crossed": interval([row.get("crossed") for row in bank]),
+                "right_censored_n": sum(
+                    bool(row.get("onset_right_censored") or row.get("flow_right_censored"))
+                    for row in bank
+                ),
+                "measurement_interpretation": "upper bound"
+                if any(row.get("flow_right_censored") for row in bank)
+                else (
+                    "onset lower bound"
+                    if any(row.get("onset_right_censored") for row in bank)
+                    else "exact"
+                ),
                 "attempted_n": len(bank),
                 "maximum_projection_passes": max(
                     r["maximum_projection_passes"] for row in bank for r in row["step_runtime"]
@@ -192,7 +205,7 @@ def main() -> None:
     parser.add_argument("mode", choices=("run", "collect"))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--root", type=Path)
-    parser.add_argument("--arm", choices=("off", "on"))
+    parser.add_argument("--arm", choices=("off", "contact", "wall", "on"))
     parser.add_argument("--seed", type=int)
     args = parser.parse_args()
     if args.mode == "run":

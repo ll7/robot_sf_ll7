@@ -61,7 +61,9 @@ def estimator_controls() -> list[dict[str, object]]:
     for location in (19.0, 24.0):
         path = straight.copy()
         path[:, 1] = 0.5 * (1 + np.tanh((t - location) / 0.5))
-        onsets.append(m.turning_onset(path, interferer, t, [straight] * 5)["onset_m"])
+        onsets.append(
+            m.turning_onset(path, interferer, t, [straight] * 5, analysis_window_m=25.0)["onset_m"]
+        )
     shifted = {
         "onset_translation_m": None if any(v is None for v in onsets) else onsets[0] - onsets[1]
     }

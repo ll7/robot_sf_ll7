@@ -247,6 +247,13 @@ def bottleneck(candidate, seed, width, wide=False, physical_radius_m=None):
     times.sort()
     count = len(times)
     flow = count / (times[-1] - times[0]) if count >= 2 else 0.0
+    observation_end = (len(positions) - 1) * 0.1
+    censored = count < n
+    # The last of N crossings lies beyond capture: N/(t_last-t_first)/w
+    # is bounded ABOVE by N/(capture_end-t_first)/w. Prefix rate is diagnostic.
+    bound = (
+        n / (observation_end - times[0]) / width if times and observation_end > times[0] else None
+    )
     central = times[int(0.2 * count) : int(0.8 * count)]
     central_flow = (len(central) - 1) / (central[-1] - central[0]) if len(central) >= 2 else 0.0
     delta = state[:, None, :2] - state[None, :, :2]
@@ -269,7 +276,15 @@ def bottleneck(candidate, seed, width, wide=False, physical_radius_m=None):
         "crossed": count,
         "all_crossed": count == n,
         "flow_persons_s": flow,
-        "specific_flow_persons_m_s": flow / width if count == n else None,
+        "specific_flow_persons_m_s": bound if censored else flow / width,
+        "specific_flow_bound": "upper" if censored else "exact",
+        "flow_right_censored": censored,
+        "flow_estimator_id": "finite_n_completion_upper_bound_v2",
+        "observation_end_s": observation_end,
+        "observed_window_specific_flow_persons_m_s": count / observation_end / width,
+        "completion_flow_interval_persons_m_s": [0.0, bound]
+        if censored
+        else [flow / width, flow / width],
         "censored_specific_flow_persons_m_s": flow / width,
         "central_20_80_flow_persons_s": central_flow,
         "central_period_is_proven_stationary": False,

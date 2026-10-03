@@ -257,18 +257,18 @@ def turning_onset(
     baselines,
     *,
     yaw_threshold_rad_s=0.05,
-    analysis_window_m=25.0,
+    analysis_window_m=3.0,
     persistence_s=0.3,
 ) -> dict[str, object]:
     """Physical yaw onset; own X distance to synchronized PoMD.
 
-    Huber et al. 2014 sections 4.2/4.4 define filtered yaw and a human baseline
-    threshold (https://doi.org/10.1371/journal.pone.0089589). Deterministic CM
-    baselines contain no sway: their near-zero maxima cannot define onset.
-    The explicit engineering equivalent is 0.05 rad/s sustained for 0.3 s,
-    about 0.86 degrees of heading change. This is not a published Huber number.
-    The 25 m own-X window exceeds the configured 20 m social-force range.
-    Baseline maxima remain diagnostics, never the physical threshold.
+    Huber 2014 section 4.4 describes own-X distances about synchronized PoMD,
+    a [-3,+3] m analysis region and baseline-derived angular-speed onset
+    (https://doi.org/10.1371/journal.pone.0089589). The author ruling of
+    2026-10-03 keeps the Fig. 4C engineering equivalent at 0.05 rad/s for
+    deterministic bodies without sway, sustained for 0.3 s. A turn already
+    underway at the left boundary is right-censored in positive onset distance:
+    its onset is at least the window extent. Baselines remain diagnostics.
 
     Returns:
         Measurement values with explicit missingness and units.
@@ -302,14 +302,27 @@ def turning_onset(
     runs = np.convolve(above.astype(int), np.ones(required, dtype=int), mode="valid")
     excess = np.flatnonzero(runs == required)
     onset = int(excess[0]) if len(excess) else None
+    first_valid = np.flatnonzero(valid)
+    right_censored = False
+    if onset is not None and len(first_valid) and onset == first_valid[0] and onset > 0:
+        boundary_x = p[closest, 0] - analysis_window_m
+        previous_x, next_x = p[onset - 1, 0], p[onset, 0]
+        if previous_x <= boundary_x <= next_x and next_x > previous_x:
+            fraction = (boundary_x - previous_x) / (next_x - previous_x)
+            boundary_yaw = omega[onset - 1] + fraction * (omega[onset] - omega[onset - 1])
+            right_censored = bool(boundary_yaw > threshold)
+    measured = None if onset is None else float(abs(p[closest, 0] - p[onset, 0]))
     return {
-        "onset_m": None if onset is None else float(abs(p[closest, 0] - p[onset, 0])),
+        "onset_m": analysis_window_m if right_censored else measured,
+        "onset_right_censored": right_censored,
+        "onset_lower_bound_m": analysis_window_m if right_censored else measured,
+        "first_observed_onset_m": measured,
         "onset_time_s": None if onset is None else float(t[onset]),
         "baseline_turning_rad_s": float(np.mean(maxima)),
         "onset_threshold_rad_s": threshold,
         "onset_persistence_s": persistence_s,
         "analysis_window_m": analysis_window_m,
-        "onset_definition": "fixed_physical_yaw_engineering_equivalent_v2",
+        "onset_definition": "fixed_yaw_source_window_lower_bound_v3",
         "baseline_maxima_rad_s": maxima,
         "pomd_time_s": float(t[closest]),
         "pomd_own_x_m": float(p[closest, 0]),

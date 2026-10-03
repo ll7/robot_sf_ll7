@@ -152,7 +152,7 @@ def test_runtime_wall_record_names_executed_law_and_parameters():
     assert before["applied"] is False
     sim.step()
     record = sim.obstacle_force_law_metadata()
-    assert record["law_version"] == "bounded_edge_v1"
+    assert record["law_version"] == "legacy_far_field_edge_correction_v2"
     assert record["resolution_mode"] == "explicit"
     assert record["applied"] is True
     assert record["radius_convention"] == "physical_body_edge_clearance"

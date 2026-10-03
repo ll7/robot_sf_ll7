@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEADLINE = datetime(2026, 10, 7, 18, 32, tzinfo=UTC)
 SEEDS = [1001, 1002, 1003]
 # 48 main scenarios + 3 doorway widths + 6 probes, five arms, ten dev seeds.
-ROBOT_GATE_PAIRS = (48 + 3 + 6) * 5 * 10
+ROBOT_GATE_PAIRS = (48 + 3 + 6) * 5 * 10 * 3
 
 
 def identity(point):
@@ -183,6 +183,8 @@ def collect(root):
                 "point": point,
                 "passed_items": passed,
                 "total_items": len(checks),
+                "producible_items": gate["producible_items"],
+                "unproducible_items": [c for c in checks if c["status"] not in {"PASS", "FAIL"}],
                 "range_residual": residual,
                 "gate_exit": gate["exit_code"],
                 "values": values,

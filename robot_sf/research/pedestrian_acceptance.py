@@ -142,17 +142,26 @@ def _case_checks(case, variant, bank, config):
         target = config["V3"]["published_specific_flow_persons_m_s"][
             config["V3"]["widths_m"].index(float(variant))
         ]
-        checks.append(
-            _check(
-                case,
-                variant,
-                required[case][0],
-                values,
-                target,
-                [0.8 * target, 1.2 * target],
-                "±20% of literature flow",
-            )
+        check = _check(
+            case,
+            variant,
+            required[case][0],
+            values,
+            target,
+            [0.8 * target, 1.2 * target],
+            "±20% of literature finite-N flow",
         )
+        censored = [r for r in bank if r.get("flow_right_censored", False)]
+        check["right_censored_n"] = len(censored)
+        check["crossed"] = [r.get("crossed") for r in bank]
+        check["estimator_id"] = "finite_n_completion_upper_bound_v2"
+        if censored and check["estimate"] is not None:
+            # Average completion flow is in [0, average observed upper bound].
+            # Only a bound BELOW the accepted band can settle a failure.
+            check["identified_interval"] = [0.0, check["estimate"]]
+            check["status"] = "FAIL" if check["estimate"] < 0.8 * target else "CENSORED"
+            check["rule"] += "; incomplete full-N flow upper bound; cannot establish PASS"
+        checks.append(check)
     elif case in {"V5", "V6"}:
         source = config[case]
         if case == "V5":
@@ -163,8 +172,24 @@ def _case_checks(case, variant, bank, config):
             target = source["published_onset_m"][i]
             band = (source.get("acceptance_ranges_m") or [None] * 3)[i]
             sd = (source.get("published_onset_sd_m") or [None] * 3)[i]
-        bounds, rule = _distribution_tolerance(target, band, sd)
-        checks.append(_check(case, variant, required[case][0], values, target, bounds, rule))
+        if case == "V6":
+            check = _check(
+                case,
+                variant,
+                required[case][0],
+                values,
+                target,
+                [target, float("inf")],
+                "2026-10-03 author ruling: model onset >= published lower bound",
+            )
+            check["tolerance_range"] = [target, None]
+            check["comparison"] = "published_lower_bound"
+            check["right_censored_n"] = sum(bool(r.get("onset_right_censored")) for r in bank)
+            check["estimator_id"] = "fixed_yaw_source_window_lower_bound_v3"
+            checks.append(check)
+        else:
+            bounds, rule = _distribution_tolerance(target, band, sd)
+            checks.append(_check(case, variant, required[case][0], values, target, bounds, rule))
     return checks
 
 
@@ -269,6 +294,7 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         if len(observed) != len(expected) or set(observed) != expected:
             missing.append("complete declared V1-V6 dev grid")
     numerical = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "FAIL"]
+    censored = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "CENSORED"]
     unspecified = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "UNSPECIFIED"]
     missing += [
         f"{c['case']}/{c['variant']}"
@@ -280,7 +306,9 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         4
         if not rows
         else (
-            3 if physical else (2 if missing else (1 if numerical else (5 if unspecified else 0)))
+            3
+            if physical
+            else (2 if missing else (1 if numerical else (5 if unspecified or censored else 0)))
         )
     )
     return {
@@ -291,6 +319,10 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         "numeric_failures": numerical,
         "unspecified_tolerances": unspecified,
         "checks": checks,
+        "censored_unresolved": censored,
+        "producible_items": sum(c["status"] in {"PASS", "FAIL"} for c in checks),
+        "potential_items": len(checks),
+        "passed_items": sum(c["status"] == "PASS" for c in checks),
         "excluded_measurements": [
             {
                 "case": r["case"],

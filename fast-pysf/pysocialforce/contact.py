@@ -81,6 +81,25 @@ def bounded_wall_force(
 
 
 @njit(cache=True)
+def wall_far_field_weight(positions, obstacles, radius, near_range, far_clearance):
+    """Smoothly restore the legacy field outside the body-edge correction region.
+
+    Returns:
+        Per-body legacy weights: zero near the edge, one in the far field.
+    """
+    weights = np.ones(len(positions))
+    for i in range(len(positions)):
+        nearest = np.inf
+        for segment in obstacles:
+            if near_segment(positions[i], positions[i], segment, radius + far_clearance):
+                delta = positions[i] - closest_point(positions[i], segment)
+                nearest = min(nearest, np.sqrt(np.dot(delta, delta)))
+        x = max(0.0, min(1.0, (nearest - radius - near_range) / (far_clearance - near_range)))
+        weights[i] = x * x * (3.0 - 2.0 * x)
+    return weights
+
+
+@njit(cache=True)
 def near_segment(start, end, segment, radius):
     """Cull capsules whose expanded AABB cannot intersect the swept centre.
 
@@ -424,6 +443,31 @@ def project_velocity(positions, velocity, obstacles, radius, pairs, walls, fixed
     return v
 
 
+@njit(cache=True)
+def unresolved_contact_mask(positions, obstacles, radius, pairs, walls):
+    """Identify only bodies still violating endpoint exclusion constraints.
+
+    Returns:
+        Per-body mask; separated walkers never belong to the unresolved set.
+    """
+    affected = np.zeros(len(positions), dtype=np.bool_)
+    if pairs:
+        for pair in grid_pairs(positions, positions, 2 * radius + SEPARATION_MARGIN_M):
+            i, j = pair[0], pair[1]
+            if np.sum((positions[i] - positions[j]) ** 2) < (2 * radius) ** 2:
+                affected[i] = affected[j] = True
+    if walls:
+        for i in range(len(positions)):
+            for segment in obstacles:
+                if near_segment(positions[i], positions[i], segment, radius):
+                    if (
+                        np.sum((positions[i] - closest_point(positions[i], segment)) ** 2)
+                        < radius**2
+                    ):
+                        affected[i] = True
+    return affected
+
+
 def apply_contact_step(sim, previous: np.ndarray) -> None:
     """Project geometry and closing velocities; cap, count and continue on fallback."""
     pairs = getattr(sim.config, "pedestrian_contact_rule", None) == PROJECTION_RULE
@@ -450,16 +494,16 @@ def apply_contact_step(sim, previous: np.ndarray) -> None:
         corrected, _, converged = project_step(
             corrected, corrected, obstacles, radius, pairs, walls, 1024, fixed
         )
-        if (
-            not converged
-            and geometry_valid(previous_positions, obstacles, radius, pairs, walls)
-            and not fixed.any()
-        ):
-            corrected = previous_positions.copy()
-            converged = True
+        converged = converged or geometry_valid(corrected, obstacles, radius, pairs, walls)
+        if not converged and not fixed.any():
+            affected = unresolved_contact_mask(corrected, obstacles, radius, pairs, walls)
+            if geometry_valid(previous_positions, obstacles, radius, pairs, walls):
+                corrected[affected] = previous_positions[affected]
+                converged = geometry_valid(corrected, obstacles, radius, pairs, walls)
         if not converged:
             sim.contact_projection_unresolved_count += 1
-        sim.peds.state[~fixed, 2:4] = 0.0
+            unresolved = unresolved_contact_mask(corrected, obstacles, radius, pairs, walls)
+            sim.peds.state[unresolved & ~fixed, 2:4] = 0.0
     attempted = current.copy()
     sim.peds.state[:, :2] = corrected
     velocity = project_velocity(
@@ -503,7 +547,7 @@ def contact_law_metadata(sim) -> dict[str, object]:
             "broad_phase_skin_m": PAIR_GRID_SKIN_M,
             "broad_phase_rebuild_displacement_m": PAIR_GRID_SKIN_M / 2,
             "velocity": "closing_normal_removal_then_speed_cap",
-            "cap_fallback": "endpoint_push_out_then_admissible_previous",
+            "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
             "swept_pair_guard": True,
             "prescribed_indices": list(getattr(sim.config, "contact_prescribed_indices", ())),
         },
@@ -511,6 +555,9 @@ def contact_law_metadata(sim) -> dict[str, object]:
             "law": getattr(obstacle, "wall_contact_rule", None),
             "radius_m": float(sim.peds.agent_radius),
             **parameters,
+            "effective_force_metadata": wall_force.law_metadata()
+            if wall_force is not None
+            else None,
             "surface_aggregation": "nearest_with_finite_normal_blend",
             "nonpenetration": "swept_capsule_projection",
         },

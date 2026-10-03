@@ -87,6 +87,8 @@ def render(root, output):
                 else ("unavailable" if estimate is None else f"{estimate:.4g}")
             )
             if check.get("right_censored_n"):
+                if estimate is not None:
+                    cell = ("≥" if item["case"] == "V6" else "upper bound ") + cell
                 cell += f"; censored {check['right_censored_n']}/30"
             cells.append(cell + " " + check["status"])
         lines.append("| " + item["case"] + " " + item["variant"] + " | " + " | ".join(cells) + " |")
@@ -94,7 +96,10 @@ def render(root, output):
         "",
         "The denominator is scoreable checks (measured estimates or decisive bounds). "
         "An upper bound overlapping the acceptance range is CENSORED and cannot PASS; "
-        "an unavailable estimate is MISSING. Neither enters the scoreable denominator.",
+        "an unavailable estimate is MISSING. Neither enters the scoreable denominator. "
+        "At the default both/wall settings, seven checks use point measurements and "
+        "eight use decisive bounds (five V3 upper bounds plus three V6 lower bounds). "
+        "Exact complete V3 flows and exact V6 onsets remain unmeasured.",
         "",
         "| Arm | Passed / scoreable / potential | Overlap pair-steps | Wall penetration pedestrian-steps | ms/step |",
         "|---|---|---|---|---|",

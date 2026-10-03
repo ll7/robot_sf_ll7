@@ -1750,10 +1750,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -1763,7 +1762,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -1775,10 +1774,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -1792,7 +1791,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 3.5528020840138197,
+            "step_time_s": 3.2997112330049276,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -1906,10 +1905,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -1919,7 +1917,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -1931,10 +1929,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -1948,7 +1946,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.07084586517885327,
+            "step_time_s": 0.06797904567793012,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -2062,10 +2060,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -2075,7 +2072,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -2087,10 +2084,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -2104,7 +2101,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.07015839498490095,
+            "step_time_s": 0.0675746900960803,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -2231,10 +2228,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -2244,7 +2240,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -2256,10 +2252,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -2273,7 +2269,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.05745869455859065,
+            "step_time_s": 0.05486678844317794,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -2400,10 +2396,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -2413,7 +2408,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -2425,10 +2420,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -2442,7 +2437,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.057392364367842674,
+            "step_time_s": 0.05533356964588165,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -2569,10 +2564,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -2582,7 +2576,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -2594,10 +2588,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -2611,7 +2605,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.058177150785923004,
+            "step_time_s": 0.05527600971981883,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -2738,10 +2732,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -2751,7 +2744,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -2763,10 +2756,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -2780,7 +2773,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.058542534708976746,
+            "step_time_s": 0.05514091672375798,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -2907,10 +2900,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -2920,7 +2912,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -2932,10 +2924,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -2949,7 +2941,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.05755290761590004,
+            "step_time_s": 0.05506628146395087,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -3076,10 +3068,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -3089,7 +3080,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -3101,10 +3092,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -3118,7 +3109,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.05763257062062621,
+            "step_time_s": 0.05464589921757579,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -3245,10 +3236,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -3258,7 +3248,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -3270,10 +3260,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -3287,7 +3277,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.05731827300041914,
+            "step_time_s": 0.05508374283090234,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -3414,10 +3404,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -3427,7 +3416,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -3439,10 +3428,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -3456,7 +3445,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.05776102747768164,
+            "step_time_s": 0.0547449248842895,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -3583,10 +3572,9 @@
               "normal_blend_m": 0.3,
               "effective_force_metadata": {
                 "schema_version": "obstacle_force_law_metadata.v2",
-                "law_version": "legacy_far_field_edge_correction_v2",
+                "law_version": "diagnostic_literal_addition",
                 "selector": "bounded_edge_v1",
-                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
-                "far_field_clearance_m": 1.0,
+                "composition": "legacy + bounded_edge",
                 "base_law_version": "legacy_shifted_gradient_v1",
                 "base_parameters": {
                   "factor": 0.003,
@@ -3596,7 +3584,7 @@
                 "site": "fast_pysf",
                 "geometry_convention": "closest_finite_segment_surface",
                 "radius_convention": "physical_body_edge_clearance",
-                "compatibility_mode": "corrected_opt_in",
+                "compatibility_mode": "diagnostic_only",
                 "enabled": true,
                 "applied": true,
                 "resolution_mode": "explicit",
@@ -3608,10 +3596,10 @@
                   "agent_radius": 0.28,
                   "legacy_factor": 0.003,
                   "legacy_sigma": 0.0,
-                  "legacy_threshold": 0.375,
-                  "far_field_clearance_m": 1.0
+                  "legacy_threshold": 0.375
                 },
-                "parameters_sha256": "5012a4da71d0fb3d71f690bcd34263960c5d3967c6554e04847479253e5c22b4"
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
               },
               "surface_aggregation": "nearest_with_finite_normal_blend",
               "nonpenetration": "swept_capsule_projection"
@@ -3625,7 +3613,7 @@
         "step_runtime": [
           {
             "steps": 1000,
-            "step_time_s": 0.05806864984333515,
+            "step_time_s": 0.055576423183083534,
             "maximum_projection_passes": 1,
             "fallback_count": 0,
             "unresolved_count": 0,
@@ -7305,6 +7293,2021 @@
         "wall_profile": "legacy_v1",
         "width_m": 0.966
       }
+    ],
+    "replacement_control": [
+      {
+        "case": "V5",
+        "seed": 1001,
+        "variant": "diagnostic",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "minimum_cm_to_edge_m": 0.27882181818165197,
+        "lateral_cm_to_edge_m": 0.38253200473345217,
+        "abeam_time_s": 7.243403660575283,
+        "passed": true,
+        "reason": null,
+        "min_center_distance_m": 0.2800009999999999,
+        "min_edge_distance_m": 9.999999998622222e-07,
+        "wall_penetration_m": 0.0,
+        "obstacle_polygon_sides": 32,
+        "obstacle_radius_m": 0.25,
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 7.750168634467921,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.4671412626728864
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "4c8800f6a38d043a192b7967836cf1b2ca6e3c4a006ce331eacee3f6933cdad7",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 1000,
+            "step_time_s": 3.2454754789359868,
+            "maximum_projection_passes": 2,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.4671390339424477,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V5",
+        "seed": 1002,
+        "variant": "diagnostic",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "minimum_cm_to_edge_m": 0.2789188574981377,
+        "lateral_cm_to_edge_m": 0.38455682939665004,
+        "abeam_time_s": 8.055769422195754,
+        "passed": true,
+        "reason": null,
+        "min_center_distance_m": 0.28000099999999983,
+        "min_edge_distance_m": 9.99999999806711e-07,
+        "wall_penetration_m": 0.0,
+        "obstacle_polygon_sides": 32,
+        "obstacle_radius_m": 0.25,
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 7.7501536914772915,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.3103306293743051
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "028e78fbf7712ef3f4e143f28e4f643a8c5407aa6be762e18feb5a8552e34726",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 1000,
+            "step_time_s": 0.0701248929835856,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.3103301309929163,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V5",
+        "seed": 1003,
+        "variant": "diagnostic",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "minimum_cm_to_edge_m": 0.2789456845319056,
+        "lateral_cm_to_edge_m": 0.3883411848236208,
+        "abeam_time_s": 9.51528241142997,
+        "passed": true,
+        "reason": null,
+        "min_center_distance_m": 0.28000099999999983,
+        "min_edge_distance_m": 9.99999999806711e-07,
+        "wall_penetration_m": 0.0,
+        "obstacle_polygon_sides": 32,
+        "obstacle_radius_m": 0.25,
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 7.750141773342884,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.0958708618679898
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "acaae59c3d5fd3a81f1efe57b93b035c7f0a275aa972d12a84f75935dc70f46e",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 1000,
+            "step_time_s": 0.06896530603989959,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.0958708330540263,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1001,
+        "variant": "0.61",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.61,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.4100293498120893,
+        "approach_speed_m_s": 1.4625943465155637,
+        "final_x_m": 9.238591305245624,
+        "min_center_distance_m": 0.30149313301910774,
+        "min_edge_distance_m": 0.021493133019107713,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": 0.049196211424682446,
+        "speed_drop_m_s": 0.03722581851359652,
+        "approach_sd_m_s": 0.008541530747751377,
+        "reduction_event": true,
+        "passage_time_s": 4.356547554906006,
+        "capture_time_s": 1.6197470722042822,
+        "trend_rmse_m_s": 0.009022375208166797,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.238591305245624,
+          "final_x_m": 9.238591305245624,
+          "terminal_speed_m_s": 1.4731736159350153,
+          "last_10s_displacement_m": 7.238593342735617
+        },
+        "aperture_shoulder_ratio": 1.326086956521739,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.993244304285803,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.4671412626728864
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "9702eff12655f5ac2efa87c375fdac461976d4cd822931da07dae2f6940e74f7",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 52,
+            "step_time_s": 0.003044277895241976,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.4855526020718077,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1002,
+        "variant": "0.61",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.61,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.2469582793620282,
+        "approach_speed_m_s": 1.3072544774115624,
+        "final_x_m": 9.271140436505364,
+        "min_center_distance_m": 0.3014133651869105,
+        "min_edge_distance_m": 0.02141336518691045,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": 0.05867767928595802,
+        "speed_drop_m_s": 0.04025791053789707,
+        "approach_sd_m_s": 0.006376214891684256,
+        "reduction_event": true,
+        "passage_time_s": 4.830878541104386,
+        "capture_time_s": 1.768896640296976,
+        "trend_rmse_m_s": 0.008865168644112123,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.271140436505364,
+          "final_x_m": 9.271140436505364,
+          "terminal_speed_m_s": 1.3158204003312028,
+          "last_10s_displacement_m": 7.27114298161098
+        },
+        "aperture_shoulder_ratio": 1.326086956521739,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.992849269568987,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.3103306293743051
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "56a84fe3afcb253cf88c1ab86362d8e6f5c3a60d0394b1bb7894a876b534d8ac",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 58,
+            "step_time_s": 0.011323812417685986,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.3312757227585923,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1003,
+        "variant": "0.61",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.61,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.0175550958346613,
+        "approach_speed_m_s": 1.0941432989901008,
+        "final_x_m": 9.205909809070821,
+        "min_center_distance_m": 0.29520090514336556,
+        "min_edge_distance_m": 0.015200905143365528,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": 0.07681661673895057,
+        "speed_drop_m_s": 0.05126185981191966,
+        "approach_sd_m_s": 0.004572789832733234,
+        "reduction_event": true,
+        "passage_time_s": 5.701745634788831,
+        "capture_time_s": 2.040225215197086,
+        "trend_rmse_m_s": 0.010029960529224526,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.205909809070821,
+          "final_x_m": 9.205909809070821,
+          "terminal_speed_m_s": 1.1025757956637159,
+          "last_10s_displacement_m": 7.20593250147873
+        },
+        "aperture_shoulder_ratio": 1.326086956521739,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.981265442096118,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.0958708618679898
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "367cbbbd8d5e67fcbc608be995207613a7ee8e38d1a3055ec7a4a04cad305518",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 68,
+            "step_time_s": 0.004225355107337236,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.125253911287488,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1001,
+        "variant": "0.788",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.788,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.4625523544924754,
+        "approach_speed_m_s": 1.4615382254349358,
+        "final_x_m": 9.241943461155813,
+        "min_center_distance_m": 0.3903562692375476,
+        "min_edge_distance_m": 0.1103562692375476,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": -0.0033267932557037305,
+        "speed_drop_m_s": 0.0,
+        "approach_sd_m_s": 0.00693289527792959,
+        "reduction_event": false,
+        "passage_time_s": 4.353497404592652,
+        "capture_time_s": 1.6197470722042822,
+        "trend_rmse_m_s": 0.0011218120301267516,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.241943461155813,
+          "final_x_m": 9.241943461155813,
+          "terminal_speed_m_s": 1.467525276459801,
+          "last_10s_displacement_m": 7.241944514001505
+        },
+        "aperture_shoulder_ratio": 1.7130434782608697,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.993244304285803,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.4671412626728864
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "f9f9c86787dbb6f4b8f783ba863ef158183f7f2fbc481a952d6750ea236a8a28",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 52,
+            "step_time_s": 0.0030352030880749226,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.4683132056619241,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1002,
+        "variant": "0.788",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.788,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.3054592007242547,
+        "approach_speed_m_s": 1.3066116621474275,
+        "final_x_m": 9.275492915096626,
+        "min_center_distance_m": 0.3901714039132301,
+        "min_edge_distance_m": 0.11017140391323005,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": 0.00017675792373150756,
+        "speed_drop_m_s": 0.0,
+        "approach_sd_m_s": 0.004622363550154311,
+        "reduction_event": false,
+        "passage_time_s": 4.826666748243247,
+        "capture_time_s": 1.768896640296976,
+        "trend_rmse_m_s": 0.0010561568650179968,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.275492915096626,
+          "final_x_m": 9.275492915096626,
+          "terminal_speed_m_s": 1.3107236527802444,
+          "last_10s_displacement_m": 7.2754941212979745
+        },
+        "aperture_shoulder_ratio": 1.7130434782608697,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.992849269568987,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.3103306293743051
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "a2e79a366aac676ac325245bb3eb20caf62e3fac912695b076f7a653bfe435f9",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 58,
+            "step_time_s": 0.0033972961828112602,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.3118299368464268,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1003,
+        "variant": "0.788",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.788,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.0896886981720728,
+        "approach_speed_m_s": 1.0944274008443369,
+        "final_x_m": 9.213282792304865,
+        "min_center_distance_m": 0.3838171638142773,
+        "min_edge_distance_m": 0.10381716381427725,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": 0.004683014401539065,
+        "speed_drop_m_s": 0.0,
+        "approach_sd_m_s": 0.0016798505402380033,
+        "reduction_event": false,
+        "passage_time_s": 5.693288085942083,
+        "capture_time_s": 2.040225215197086,
+        "trend_rmse_m_s": 0.0010396551828456462,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.213282792304865,
+          "final_x_m": 9.213282792304865,
+          "terminal_speed_m_s": 1.0964658732405719,
+          "last_10s_displacement_m": 7.213291485019945
+        },
+        "aperture_shoulder_ratio": 1.7130434782608697,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.981265442096118,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.0958708618679898
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "08b5b73d4340e53c81d0c603eda0b2debf2e2920f71358bae06219a64cf14adb",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 68,
+            "step_time_s": 0.003983999136835337,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.0987087903470574,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1001,
+        "variant": "0.966",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.966,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.4668901784277557,
+        "approach_speed_m_s": 1.4614473087551199,
+        "final_x_m": 9.242280962108728,
+        "min_center_distance_m": 0.4793379129393416,
+        "min_edge_distance_m": 0.19933791293934155,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": -0.007664617190983991,
+        "speed_drop_m_s": 0.0,
+        "approach_sd_m_s": 0.006874280083517717,
+        "reduction_event": false,
+        "passage_time_s": 4.353250739575755,
+        "capture_time_s": 1.6197470722042822,
+        "trend_rmse_m_s": 0.0005906252313608417,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.242280962108728,
+          "final_x_m": 9.242280962108728,
+          "terminal_speed_m_s": 1.467132603253551,
+          "last_10s_displacement_m": 7.242281914349391
+        },
+        "aperture_shoulder_ratio": 2.0999999999999996,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.993244304285803,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.4671412626728864
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "71f08671681da505b4ebe8807906033d1a1acc92b1ef941b2112c12769111661",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 52,
+            "step_time_s": 0.003064163960516453,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.467132603253551,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1002,
+        "variant": "0.966",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.966,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.3102444602333132,
+        "approach_speed_m_s": 1.306559184800261,
+        "final_x_m": 9.275786240974002,
+        "min_center_distance_m": 0.4791398642942845,
+        "min_edge_distance_m": 0.19913986429428449,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": -0.004608501585326996,
+        "speed_drop_m_s": 0.0,
+        "approach_sd_m_s": 0.004598290461822286,
+        "reduction_event": false,
+        "passage_time_s": 4.82635921481134,
+        "capture_time_s": 1.768896640296976,
+        "trend_rmse_m_s": 0.0005533562178585996,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.275786240974002,
+          "final_x_m": 9.275786240974002,
+          "terminal_speed_m_s": 1.3103291420313279,
+          "last_10s_displacement_m": 7.275787313320433
+        },
+        "aperture_shoulder_ratio": 2.0999999999999996,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.992849269568987,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.3103306293743051
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "9e7bfcb8b9227f29b329c50a5e396c977d1437cd1c8d8b1b100b6b19ebfd889d",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 58,
+            "step_time_s": 0.003424304071813822,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.3103291420313279,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      },
+      {
+        "case": "V2",
+        "seed": 1003,
+        "variant": "0.966",
+        "radius_m": 0.28,
+        "mode": "radius",
+        "wall_profile": "legacy_v1",
+        "speed_tier": "literature",
+        "groups": [],
+        "estimator_status": "documented_equivalent",
+        "width_m": 0.966,
+        "desired_speed_m_s": 0.65,
+        "passed": true,
+        "crossing_min_speed_m_s": 1.0958472083295083,
+        "approach_speed_m_s": 1.09445084372573,
+        "final_x_m": 9.213572698696698,
+        "min_center_distance_m": 0.4727588528994945,
+        "min_edge_distance_m": 0.19275885289949446,
+        "wall_penetration_m": 0.0,
+        "legacy_spatial_speed_drop_m_s": -0.0014754957558964499,
+        "speed_drop_m_s": 0.0,
+        "approach_sd_m_s": 0.001720986400136505,
+        "reduction_event": false,
+        "passage_time_s": 5.69259940809281,
+        "capture_time_s": 2.040225215197086,
+        "trend_rmse_m_s": 0.00024054800735754682,
+        "reason": null,
+        "passage_diagnostic": {
+          "passage_plane_m": 8.0,
+          "maximum_x_m": 9.213572698696698,
+          "final_x_m": 9.213572698696698,
+          "terminal_speed_m_s": 1.0958733742974531,
+          "last_10s_displacement_m": 7.213580009984359
+        },
+        "aperture_shoulder_ratio": 2.0999999999999996,
+        "shoulder_width_m": 0.46,
+        "shoulder_basis": "fixed proxy; independent of disc diameter; measured acromion widths unavailable",
+        "initial_admissibility": {
+          "admissible": true,
+          "persons": 1,
+          "radius_m": 0.28,
+          "minimum_centre_spacing_m": null,
+          "required_centre_spacing_m": 0.5800000000000001,
+          "overlapping_pairs": 0,
+          "pairs_below_start_gap": 0,
+          "minimum_wall_centre_clearance_m": 2.981265442096118,
+          "initial_wall_overlap_count": 0
+        },
+        "pair_overlap": {
+          "group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "non_group": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          },
+          "all": {
+            "pair_steps": 0,
+            "below_2r_count": 0,
+            "below_0_45_count": 0,
+            "share_below_2r": null,
+            "share_below_0_45": null,
+            "minimum_centre_distance_m": null,
+            "initial_overlapping_pairs": 0
+          }
+        },
+        "desired_speeds_m_s": [
+          1.0958708618679898
+        ],
+        "execution_cap_m_s": 2.0,
+        "calfit_candidate": {
+          "family": "calibrated_v2",
+          "factor": 0.003,
+          "offset_m": 0.375,
+          "radius_m": 0.28,
+          "cap_m_s": 2.0,
+          "desired_mean_m_s": 1.29,
+          "desired_sd_m_s": 0.19,
+          "pedcontact_measurement": true,
+          "pedestrian_contact_rule": "projection_v1",
+          "pedestrian_wall_rule": "bounded_edge_v1",
+          "id": "33b847bc251b"
+        },
+        "desired_distribution": "positive N(1.29,0.19), no upper clipping",
+        "trajectory_sha256": "58b9aab81c76aa3e1a15daa92a58af6f6e384f34923105cea89d5ea029aee6d2",
+        "effective_pedestrian_physics": [
+          {
+            "pedestrian_contact": {
+              "law": "projection_v1",
+              "radius_m": 0.28,
+              "max_passes": 256,
+              "separation_margin_m": 1e-06,
+              "sliding_friction": false,
+              "solver": "uniform_grid_alternating_gauss_seidel_1.6",
+              "broad_phase_skin_m": 0.1,
+              "broad_phase_rebuild_displacement_m": 0.05,
+              "velocity": "closing_normal_removal_then_speed_cap",
+              "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+              "swept_pair_guard": true,
+              "prescribed_indices": []
+            },
+            "wall": {
+              "law": "bounded_edge_v1",
+              "radius_m": 0.28,
+              "amplitude_m_s2": 3.0,
+              "decay_m": 0.04,
+              "range_m": 0.2,
+              "normal_blend_m": 0.3,
+              "effective_force_metadata": {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "diagnostic_replacement_control",
+                "selector": "bounded_edge_v1",
+                "composition": "bounded_edge alone",
+                "base_law_version": "legacy_shifted_gradient_v1",
+                "base_parameters": {
+                  "factor": 0.003,
+                  "sigma": 0.0,
+                  "threshold": 0.375
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "diagnostic_only",
+                "enabled": true,
+                "applied": true,
+                "resolution_mode": "explicit",
+                "parameters": {
+                  "amplitude_m_s2": 3.0,
+                  "decay_m": 0.04,
+                  "range_m": 0.2,
+                  "normal_blend_m": 0.3,
+                  "agent_radius": 0.28,
+                  "legacy_factor": 0.003,
+                  "legacy_sigma": 0.0,
+                  "legacy_threshold": 0.375
+                },
+                "parameters_sha256": "efd43b4c27f13c6723a213c4cc77d1b8edc0e9f3ba1680e1fd44e04dcbdc4a55",
+                "diagnostic_driver_sha256": "489d42904bf9b1076cdfcc98617a491c5f1efb494096814862cd5f8c718f482f"
+              },
+              "surface_aggregation": "nearest_with_finite_normal_blend",
+              "nonpenetration": "swept_capsule_projection"
+            },
+            "integration": {
+              "dt_s": 0.1,
+              "integrator": "semi_implicit_euler"
+            }
+          }
+        ],
+        "step_runtime": [
+          {
+            "steps": 68,
+            "step_time_s": 0.004094923380762339,
+            "maximum_projection_passes": 1,
+            "fallback_count": 0,
+            "unresolved_count": 0,
+            "maximum_speed_m_s": 1.0958895811860334,
+            "over_cap_samples": 0
+          }
+        ],
+        "wall_penetration_ped_steps": 0
+      }
     ]
   },
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
@@ -7329,5 +9332,6 @@
       "max_speed_m_s": 1.2910082346190856
     }
   ],
-  "pilot_control": "The literal-addition probe overrides both ObstacleForce.__call__ and the candidate_config ORIGINAL_FORCE control. The earlier class-only monkeypatch was reset by candidate_config and is withdrawn; the corrected pilot is recorded here."
+  "pilot_control": "The literal-addition probe overrides both ObstacleForce.__call__ and the candidate_config ORIGINAL_FORCE control. The earlier class-only monkeypatch was reset by candidate_config and is withdrawn; the corrected pilot is recorded here.",
+  "alternative_probe_metadata_note": "Literal addition and replacement-control receipts explicitly identify their diagnostic monkey-patched laws. The acquisition loop restores ORIGINAL_FORCE, so both the restoration target and __call__ were patched; the earlier class-only literal pilot is withdrawn. These alternatives are dev1001-1003 pilots, not the primary 30-seed banks."
 }

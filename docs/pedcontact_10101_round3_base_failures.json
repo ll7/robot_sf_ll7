@@ -1025,7 +1025,7 @@
       "base_exception_class": "AssertionError",
       "base_same_guard_failed": true,
       "classification": "guard refusal before reset; recorded and continued",
-      "exception_class": "AssertionError",
+      "exception_class": "Failed",
       "kind": "failure",
       "message": "Failed: benchmarks/demo_aggregate.py exited with code 1 after 12.30s.\nstdout tail:\nRunning a tiny batch to produce episodes.jsonl ...\nComputing grouped aggregates with bootstrap CIs ...\n---\nstderr tail:\n        ^^^^^^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n        bootstrap_seed=bootstrap_seed,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/aggregate.py\", line 1243, in _attach_ci_for_group\n    lo_hi_mean = _bootstrap_ci(\n        arr,\n    ...<3 lines>...\n        seed=bootstrap_seed,\n    )\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/benchmark/aggregate.py\", line 1175, in _bootstrap_ci\n    rng = np.random.default_rng(seed)\n  File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n    return _original(fence.checked(value),*args,**kwargs)\n                     ~~~~~~~~~~~~~^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n    raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None",
       "test_id": "tests.examples.test_examples_run::test_example_runs_without_error[benchmarks/demo_aggregate.py]"
@@ -1034,7 +1034,7 @@
       "base_exception_class": "AssertionError",
       "base_same_guard_failed": true,
       "classification": "guard refusal before reset; recorded and continued",
-      "exception_class": "AssertionError",
+      "exception_class": "Failed",
       "kind": "failure",
       "message": "Failed: advanced/01_backend_selection.py exited with code 1 after 8.59s.\nstdout tail:\n\n============================================================\nBackend Selection Demo\n============================================================\n\nDemonstrates swapping simulation backends via config\nwithout changing environment code.\n\n\n=== Demo: fast-pysf backend ===\n---\nstderr tail:\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/advanced/01_backend_selection.py\", line 75, in <module>\n    demo_fast_pysf_backend()\n    ~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/advanced/01_backend_selection.py\", line 31, in demo_fast_pysf_backend\n    obs, _info = env.reset(seed=123)\n                 ~~~~~~~~~^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/robot_env.py\", line 1240, in reset\n    with global_reset_seed(seed):\n         ~~~~~~~~~~~~~~~~~^^^^^^\n  File \"/home/luttkule/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/contextlib.py\", line 141, in __enter__\n    return next(self.gen)\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/env_util.py\", line 76, in global_reset_seed\n    random.seed(int(seed))\n    ~~~~~~~~~~~^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n    return _original(fence.checked(value),*args,**kwargs)\n                     ~~~~~~~~~~~~~^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n    raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None",
       "test_id": "tests.examples.test_examples_run::test_example_runs_without_error[advanced/01_backend_selection.py]"
@@ -1304,7 +1304,7 @@
       "base_exception_class": "AssertionError",
       "base_same_guard_failed": true,
       "classification": "guard refusal before reset; recorded and continued",
-      "exception_class": "AssertionError",
+      "exception_class": "Failed",
       "kind": "failure",
       "message": "Failed: occupancy_reward_shaping.py exited with code 1 after 8.42s.\nstdout tail:\n\n---\nstderr tail:\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/occupancy_reward_shaping.py\", line 66, in <module>\n    main()\n    ~~~~^^\n  File \"/home/luttkule/lanes/pedcontact/repo/examples/occupancy_reward_shaping.py\", line 39, in main\n    obs, _info = env.reset(seed=123)\n                 ~~~~~~~~~^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/robot_env.py\", line 1240, in reset\n    with global_reset_seed(seed):\n         ~~~~~~~~~~~~~~~~~^^^^^^\n  File \"/home/luttkule/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/contextlib.py\", line 141, in __enter__\n    return next(self.gen)\n  File \"/home/luttkule/lanes/pedcontact/repo/robot_sf/gym_env/env_util.py\", line 76, in global_reset_seed\n    random.seed(int(seed))\n    ~~~~~~~~~~~^^^^^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/sitecustomize.py\", line 12, in guarded\n    return _original(fence.checked(value),*args,**kwargs)\n                     ~~~~~~~~~~~~~^^^^^^^\n  File \"/home/luttkule/lanes/pedcontact/lane_seed_guard_round2.py\", line 21, in checked\n    raise LaneSeedRefusal(f'protected RNG request {value} refused; node={CURRENT_NODE}')\nlane_seed_guard_round2.LaneSeedRefusal: protected RNG request 123 refused; node=None",
       "test_id": "tests.examples.test_examples_run::test_example_runs_without_error[occupancy_reward_shaping.py]"
@@ -1313,7 +1313,7 @@
       "base_exception_class": null,
       "base_same_guard_failed": false,
       "classification": "isolation finding; repeated example fixture reused nonempty fixed output; serial passes after preserving prior output",
-      "exception_class": "AssertionError",
+      "exception_class": "Failed",
       "kind": "failure",
       "message": "Failed: advanced/41_artifact_preservation.py exited with code 2 after 0.14s.\nstdout tail:\n\n---\nstderr tail:\nartifact-preservation: not_fresh: walkthrough output must be empty",
       "test_id": "tests.examples.test_examples_run::test_example_runs_without_error[advanced/41_artifact_preservation.py]"
@@ -2726,7 +2726,7 @@
       "base_exception_class": null,
       "base_same_guard_failed": false,
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
-      "exception_class": "AssertionError",
+      "exception_class": "Failed",
       "kind": "failure",
       "message": "Failed: Cannot prove the live PR regression sweep: immutable diff evidence unavailable for PR #10081",
       "test_id": "tests.validation.test_pr_contract_check::test_regression_last_20_merged_prs"
@@ -2788,13 +2788,10 @@
     {
       "exception_class": "AssertionError",
       "classification": "guard refusal before reset; recorded and continued",
-      "count": 13,
+      "count": 10,
       "test_ids": [
         "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_campaign_wrapper_preflight_only_never_launches_campaign",
         "tests.benchmark.test_build_headline_ci_rank_stability_report_issue_3216::test_campaign_wrapper_preflight_honors_config_env_override",
-        "tests.examples.test_examples_run::test_example_runs_without_error[benchmarks/demo_aggregate.py]",
-        "tests.examples.test_examples_run::test_example_runs_without_error[advanced/01_backend_selection.py]",
-        "tests.examples.test_examples_run::test_example_runs_without_error[occupancy_reward_shaping.py]",
         "tests.test_snqi.test_bootstrap_intervals::test_bootstrap_ci_interval_contains_mean[optimize]",
         "tests.test_snqi.test_bootstrap_intervals::test_bootstrap_ci_interval_contains_mean[recompute]",
         "tests.training.test_train_ppo_mamba_config_issue_4014::test_ppo_mamba_dry_run_emits_parameter_summary_placeholder",
@@ -2808,7 +2805,7 @@
     {
       "exception_class": "AssertionError",
       "classification": "inherited; same node failed on exact CALFIT base in retained replay",
-      "count": 9,
+      "count": 8,
       "test_ids": [
         "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_preflight_passes_on_frozen_powered_contract",
         "tests.adversarial.test_issue_5303_search_promotion_contract_v2::test_cli_check_and_identity_emission",
@@ -2817,16 +2814,7 @@
         "tests.dev.test_issue_7331_benchmark_namespace_inventory::test_cli_writes_json_and_markdown",
         "tests.integration.test_check_config_abs_paths.TestCheckConfigAbsPaths::test_repo_baseline_is_clean",
         "tests.ci.test_self_hosted_routing::test_container_setup_keeps_ephemeral_and_no_host_mounts",
-        "tests.test_optimized_assert_guards::test_converted_guards_survive_python_optimized_mode",
-        "tests.validation.test_pr_contract_check::test_regression_last_20_merged_prs"
-      ]
-    },
-    {
-      "exception_class": "AssertionError",
-      "classification": "isolation finding; repeated example fixture reused nonempty fixed output; serial passes after preserving prior output",
-      "count": 1,
-      "test_ids": [
-        "tests.examples.test_examples_run::test_example_runs_without_error[advanced/41_artifact_preservation.py]"
+        "tests.test_optimized_assert_guards::test_converted_guards_survive_python_optimized_mode"
       ]
     },
     {
@@ -2853,6 +2841,32 @@
       "count": 1,
       "test_ids": [
         "tests.test_baseline_stats::test_run_and_compute_baseline"
+      ]
+    },
+    {
+      "exception_class": "Failed",
+      "classification": "guard refusal before reset; recorded and continued",
+      "count": 3,
+      "test_ids": [
+        "tests.examples.test_examples_run::test_example_runs_without_error[benchmarks/demo_aggregate.py]",
+        "tests.examples.test_examples_run::test_example_runs_without_error[advanced/01_backend_selection.py]",
+        "tests.examples.test_examples_run::test_example_runs_without_error[occupancy_reward_shaping.py]"
+      ]
+    },
+    {
+      "exception_class": "Failed",
+      "classification": "inherited; same node failed on exact CALFIT base in retained replay",
+      "count": 1,
+      "test_ids": [
+        "tests.validation.test_pr_contract_check::test_regression_last_20_merged_prs"
+      ]
+    },
+    {
+      "exception_class": "Failed",
+      "classification": "isolation finding; repeated example fixture reused nonempty fixed output; serial passes after preserving prior output",
+      "count": 1,
+      "test_ids": [
+        "tests.examples.test_examples_run::test_example_runs_without_error[advanced/41_artifact_preservation.py]"
       ]
     },
     {

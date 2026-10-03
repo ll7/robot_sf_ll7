@@ -29,8 +29,11 @@ show at most 1 cm displacement for an isolated .1 s request from rest, followed
 by immediate braking on the next stop. Noise below one degree/second cannot
 start creep. This bounds the isolated-pulse effect for the tested 1 m/s² plant;
 it does not make a sustained intentional arc safe near obstacles. Safety vetoes
-still take precedence on every step. Direct adapter callers must pass
-`safety_intervention=True` when their upstream safety stage intervenes.
+still take precedence on every step. Creep is confined to final robot conversion,
+where the runtime safety flag is known. Policy models never receive
+`bicycle_creep_speed`: guarded-PPO uncertainty/fallback and in-policy CBF vetoes
+are projected with creep disabled before conversion. Direct adapter callers
+with a separate upstream safety stage must still pass `safety_intervention=True`.
 
 ## Opt-in T60 proxy
 
@@ -39,7 +42,8 @@ Choose `configs/robots/t60_bicycle_30deg_v1.yaml` or
 into a scenario before `build_robot_config_from_scenario`. Both use estimated
 .90 m wheelbase, .52/.79 rad steering (approximately 30°/45°), 1.34 m/s forward
 cap, 1 m/s² acceleration/braking, no reverse, and a **.64 m covering disc**.
-The capsule and reverse integration are separate work. The corresponding
+The capsule is separate work. Main’s #10097 limited reverse is integrated,
+but `limited_reverse: false` is intentional for these forward-only diagnostic plants. The corresponding
 minimum centre-path turning radii are approximately 1.57/.89 m.
 Wheelbase/steering/autonomous speed are task proxies, not manufacturer measurements.
 [Segway's T60 page](https://b2b.segway.com/kickscooter-t60/) identifies the
@@ -90,12 +94,17 @@ rejects (-.5,.2) and accepts/projects (-.5,.1) at explicitly supplied curvature 
 ## Measurement and failure evidence
 
 The complete **6,650-cell** fixed matrix ran on 32 Slurm CPUs (job16478),
-producer `b81d58234439e58a5d86d8c4e7b9063a8c4dbacc`. The accepted
-implementation matches all six measured runtime file hashes. All paired reset
+producer `b81d58234439e58a5d86d8c4e7b9063a8c4dbacc`. This is historical round-1 evidence, not a measurement of the merged round-2 head.
+The current policy projection removes upstream creep; its new wrapper arm is reported below. All paired reset
 states agree and learned checkpoint loads succeed without fallback. The extra
 creep-on scenario arms supply counterfactuals alongside the requested default-off
 scenario comparison. Historical controls and the exact reviewed-head replay remain
 separate source-bound corpora.
+
+Every roster algo_config in that matrix has `safety_wrapper` and
+`cbf_safety_filter` disabled. Its `safety_*` columns are therefore structurally
+empty, not an observed null result. Veto interaction was covered only by unit
+tests in round 1; round 2 adds the separate wrapper-enabled episode arm below.
 
 Counts below pool all 14 planners. Parentheses are 95% Wilson rate intervals;
 the linked CSVs contain every planner/scenario/bearing and the unrounded rates.
@@ -210,3 +219,71 @@ Review/custody information is in `.review.json` sidecars and the
 resolved axes and hashes over sorted raw results/traces/records. Regeneration
 into an independent root must match all eight public CSV/JSON/sidecar files
 byte-for-byte. Raw records and traces remain in the task lane, not release custody.
+
+## Fix round 2
+
+Normal merge of main `007299e2a` integrates #10097. The merge preserves the
+reviewed `project`, `is_feasible` and `curvature_limit` source verbatim, combines
+reverse and curvature validation in one constructor, and uses limited reverse
+in `min_velocity`. The subsequent diagnostic refactor moves the same creep/cone
+arithmetic into `project_with_creep_info`; `project` delegates to it. The adapter
+uses that returned flag, so it cannot independently reinterpret the creep gate.
+
+At `9ac03d75`, the real uncertainty slow-down `(0,.3)` survives as `.1 m/s` and
+moves the bicycle about .090 m in 1 s. After the fix it produces zero speed and
+zero displacement. The new limited-reverse witnesses fail there at `0 != -.3`
+and now enforce the reverse cone and requested yaw sign through the real plant.
+
+Test-value answers (no production test-only seams):
+- Shield binding: protects a zero-speed uncertainty veto; reinjecting policy
+  creep reproduces the failure; the previous shield test stops at its filtered
+  tuple and omits episode binding/projection/conversion; the new test uses the
+  real context, shield, projector and robot motion, with a literal zero oracle.
+- Reverse cone: protects capped negative speed and signed feasible yaw; merging
+  independent axes or omitting reverse binding breaks it; #10097’s nearest test
+  uses zero yaw and the old reverse-turn witness uses unrestricted reverse;
+  this test uses real model/adapter/plant bytes and the independently specified
+  `.3*tan(.79)/.90` physical limit.
+- Existing reverse projection coverage now supplies physical curvature `.2`;
+  the mutable-settings validation test supplies main’s two new InitVar arguments.
+  Both preserve their original claims while exercising the merged constructors.
+
+The candidate-rollout advisory is tracked separately in [#10109](https://github.com/ll7/robot_sf_ll7/issues/10109).
+Both T60 configs retain `creep_speed: 0.0`; enabling it remains a later PR.
+
+### Wrapper-enabled episode arm
+
+One roster planner (`goal`), six KINPROBE scenarios × dev seeds 1001–1010,
+600-step horizon/.1 s step; fixed wrapper thresholds, deadlock recovery enabled,
+and CBF disabled. Producer `990dc6f0bfd53c57181990c69e2fefb6489b42a1`,
+Slurm job17387, 16 CPUs, nice100; all 180 cells completed with identical paired
+resets and no fallback. The first allocation (17386) failed before any episode
+because the interpreter path was absent; the rerun uses lane-owned Python.
+
+| Arm | N | Success (95% Wilson) | Collision (95% Wilson) | Timeout | Terminal safety interventions | Safety steps | Safety-creep steps | Zero-speed yaw veto steps |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| DD | 60 | 26 (31.6–55.9%) | 2 (0.9–11.4%) | 32 (40.9–65.4%) | 31 | 14000 | 0 | 3763 |
+| T60-45 | 60 | 28 (34.6–59.1%) | 1 (0.3–8.9%) | 31 (39.3–63.8%) | 32 | 14122 | 0 | 2911 |
+| T60-45-on | 60 | 28 (34.6–59.1%) | 1 (0.3–8.9%) | 31 (39.3–63.8%) | 32 | 14122 | 0 | 2911 |
+
+Terminal safety interventions count episodes with at least one intervention on
+the final executed step, not summed labels. DD terminal labels are hard_stop25,
+speed_cap6, recovery4; T60 off/on are hard_stop26, speed_cap6, recovery5.
+Labels overlap. This arm contains real yaw-bearing stop vetoes. No ordinary creep
+fires in either bicycle arm: the goal policy already projects yaw-only commands
+with creep disabled, and the wrapper veto suppresses recovery creep downstream.
+Consequently the off/on trajectories agree; these data support veto preservation,
+not a benefit or general safety claim for enabled creep. Defaults stay off.
+Low-displacement windows are DD4122, T60 off/on5927 using the unchanged 2 s/.05 m
+metric. These descriptive correlated-seed intervals do not establish a ranking.
+
+[Episode evidence](bicycle_wrapper_probe_episodes.csv),
+[summary and Wilson bounds](bicycle_wrapper_probe_summary.json),
+[raw/source provenance](bicycle_wrapper_probe_provenance.json).
+Regenerate all four wrapper artifacts with:
+
+```bash
+python scripts/validation/summarize_bicycle_wrapper_probe.py \
+  --input ../evidence/fix-round2/wrapper-probe --output-root <comparison-root>
+```
+

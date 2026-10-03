@@ -68,7 +68,13 @@ unset PR_READY_PR_BODY_FILE
 source "$SCRIPT_DIR/common_setup.sh"
 
 fast_fail="${PYTEST_FAST_FAIL:-1}"
-dist_mode="${PYTEST_XDIST_DIST:-load}"
+default_dist_mode=load
+# Sharded suites have long heterogeneous release-check batches. Let idle workers
+# steal their queued tests; ordinary local runs retain the existing scheduler.
+if [[ "${PYTEST_SHARD_COUNT:-1}" =~ ^[0-9]+$ ]] && [[ "${PYTEST_SHARD_COUNT:-1}" -gt 1 ]]; then
+  default_dist_mode=worksteal
+fi
+dist_mode="${PYTEST_XDIST_DIST:-$default_dist_mode}"
 order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
 lane_mode="${ROBOT_SF_TEST_LANE:-all}"

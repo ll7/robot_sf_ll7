@@ -278,3 +278,140 @@ def test_needs_normalizes_github_needs_objects() -> None:
         "fast-feedback": "success",
         "coverage-gate": "skipped",
     }
+
+
+def test_duration_bootstrap_retains_completed_shards_after_missing_shard(
+    tmp_path: Path,
+) -> None:
+    """Three real artifact stores seed balancing when the fourth job is cancelled."""
+    for index in (1, 3, 4):
+        _write_shard(tmp_path, f"pytest-durations-{index}", {f"test_{index}": float(index)})
+    assert merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True) == {
+        "test_1": 1.0,
+        "test_3": 3.0,
+        "test_4": 4.0,
+    }
+
+
+@pytest.mark.parametrize("durations", [{}, {"node": float("nan")}, {"node": True}, {"node": -1}])
+def test_partial_duration_bootstrap_rejects_bad_store(tmp_path: Path, durations: dict) -> None:
+    """A missing shard never relaxes the measurement schema or empty-data guard."""
+    _write_shard(tmp_path, "pytest-durations-1", durations)
+    with pytest.raises(SystemExit, match="Invalid pytest duration store"):
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+
+
+def test_partial_duration_bootstrap_rejects_no_artifacts(tmp_path: Path) -> None:
+    """A skipped matrix must not save an empty cache over usable history."""
+    with pytest.raises(SystemExit, match="missing="):
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+
+
+def test_partial_duration_bootstrap_rejects_overlap_and_unexpected(
+    tmp_path: Path,
+) -> None:
+    """Partial mode preserves disjoint stores and recognized shard identities."""
+    _write_shard(tmp_path, "pytest-durations-1", {"node": 1.0})
+    _write_shard(tmp_path, "pytest-durations-2", {"node": 2.0})
+    with pytest.raises(SystemExit, match="Overlapping"):
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+    _write_shard(tmp_path, "pytest-durations-9", {"other": 3.0})
+    with pytest.raises(SystemExit, match="unexpected="):
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+
+
+def test_partial_duration_cli_records_failed_matrix_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cached hints from a failed matrix never claim a complete test verdict."""
+    artifacts = tmp_path / "artifacts"
+    _write_shard(artifacts, "pytest-durations-1", {"actual_test": 12.5})
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    monkeypatch.setenv("DURATION_SOURCE_SHA", "b" * 40)
+    monkeypatch.setenv("GITHUB_RUN_ID", "1234")
+    monkeypatch.setenv("FAST_FEEDBACK_RESULT", "failure")
+    monkeypatch.setenv("DURATION_CACHE_KEY", "test-durations-v2-Linux-X64-lock-1234-1")
+    output, metadata = tmp_path / ".test_durations", tmp_path / "cache" / "metadata.json"
+    assert (
+        merge_test_durations.main(
+            [
+                "--artifact-dir",
+                str(artifacts),
+                "--output",
+                str(output),
+                "--allow-partial",
+                "--metadata-output",
+                str(metadata),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(output.read_text()) == {"actual_test": 12.5}
+    receipt = json.loads(metadata.read_text())
+    assert receipt["source_sha"] == "b" * 40
+    assert receipt["producer_sha"] == "a" * 40
+    assert receipt["run_id"] == "1234"
+    assert receipt["purpose"] == "scheduling-only"
+    assert receipt["cache_key"] == "test-durations-v2-Linux-X64-lock-1234-1"
+    assert receipt["missing_shards"] == [
+        "pytest-durations-2",
+        "pytest-durations-3",
+        "pytest-durations-4",
+    ]
+    assert receipt["complete_matrix"] is False
+    assert receipt["measurement_completeness"] == "partial_or_unverified"
+
+
+def test_duration_cli_does_not_publish_empty_or_replace_output(tmp_path: Path) -> None:
+    """Invalid inputs leave the previous cache bytes untouched and create no receipt."""
+    _write_shard(tmp_path / "artifacts", "pytest-durations-1", {})
+    output, metadata = tmp_path / ".test_durations", tmp_path / "cache" / "metadata.json"
+    output.write_text('{"old": 3.0}\n')
+    assert (
+        merge_test_durations.main(
+            [
+                "--artifact-dir",
+                str(tmp_path / "artifacts"),
+                "--output",
+                str(output),
+                "--allow-partial",
+                "--metadata-output",
+                str(metadata),
+            ]
+        )
+        == 1
+    )
+    assert output.read_text() == '{"old": 3.0}\n'
+    assert not metadata.exists()
+
+
+@pytest.mark.parametrize(
+    "matrix_result, complete", [("success", True), ("failure", False), ("cancelled", False)]
+)
+def test_all_duration_artifacts_do_not_imply_successful_matrix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, matrix_result: str, complete: bool
+) -> None:
+    """Four uploaded artifacts can still come from failed or interrupted sessions."""
+    _four_valid_shards(tmp_path / "artifacts")
+    monkeypatch.setenv("FAST_FEEDBACK_RESULT", matrix_result)
+    metadata = tmp_path / "cache" / "metadata.json"
+    assert (
+        merge_test_durations.main(
+            [
+                "--artifact-dir",
+                str(tmp_path / "artifacts"),
+                "--output",
+                str(tmp_path / ".test_durations"),
+                "--allow-partial",
+                "--metadata-output",
+                str(metadata),
+            ]
+        )
+        == 0
+    )
+    receipt = json.loads(metadata.read_text())
+    assert receipt["complete_matrix"] is complete
+    assert receipt["missing_shards"] == []
+    assert receipt["measurement_completeness"] == (
+        "complete" if complete else "partial_or_unverified"
+    )

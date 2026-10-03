@@ -1264,3 +1264,83 @@ def test_packaging_extras_metadata_and_readme_trigger_contract() -> None:
     assert "dist/*.whl" in run_cmd, "Twine check must validate wheels (dist/*.whl)"
     assert "dist/*.tar.gz" in run_cmd, "Twine check must validate sdists (dist/*.tar.gz)"
     assert "--no-project" in run_cmd, "Twine invocation must be ephemeral (--no-project)"
+
+
+def test_failed_matrix_publishes_nonempty_duration_bootstrap() -> None:
+    """Cache preparation must execute after a failed matrix or preceding verdict step."""
+    workflow = yaml.safe_load(_workflow_text())
+    steps = {step["name"]: step for step in workflow["jobs"]["ci"]["steps"]}
+    for name in (
+        "Download test-duration shards",
+        "Merge test durations",
+        "Save merged test durations",
+    ):
+        condition = steps[name]["if"]
+        assert "always()" in condition
+        assert "needs.fast-feedback.result == 'success'" not in condition
+        assert "steps.checkout_ci_source.outcome == 'success'" in condition
+    merge = steps["Merge test durations"]
+    assert "--allow-partial" in merge["run"]
+    assert "--metadata-output .pytest_cache/test_durations_metadata.json" in merge["run"]
+    assert merge["env"]["FAST_FEEDBACK_RESULT"] == "${{ needs.fast-feedback.result }}"
+    save = steps["Save merged test durations"]
+    assert "steps.merge-test-durations.outcome == 'success'" in save["if"]
+    assert ".pytest_cache/test_durations_metadata.json" in save["with"]["path"]
+    assert merge["env"]["DURATION_CACHE_KEY"] == save["with"]["key"]
+    checkout = next(
+        step for step in workflow["jobs"]["fast-feedback"]["steps"] if step["name"] == "Checkout"
+    )
+    assert merge["env"]["DURATION_SOURCE_SHA"] == checkout["with"]["ref"]
+
+
+def test_duration_dependency_key_miss_has_platform_scoped_fallback() -> None:
+    """A lock change reuses scheduling hints without crossing OS/architecture/schema."""
+    workflow = yaml.safe_load(_workflow_text())
+    steps = workflow["jobs"]["fast-feedback"]["steps"]
+    restore = next(
+        step
+        for step in steps
+        if step["name"] == "Restore test durations for pytest-split balancing"
+    )
+    prefixes = restore["with"]["restore-keys"].splitlines()
+    assert prefixes[-1] == "test-durations-v2-${{ runner.os }}-${{ runner.arch }}-"
+    assert "hashFiles('pyproject.toml', 'uv.lock')" in prefixes[0]
+    save = next(
+        step
+        for step in workflow["jobs"]["ci"]["steps"]
+        if step["name"] == "Save merged test durations"
+    )
+    assert restore["with"]["key"] == save["with"]["key"]
+    assert restore["with"]["path"] == save["with"]["path"]
+
+
+def test_fast_feedback_redistributes_heavy_tail_without_reducing_coverage() -> None:
+    """CI must steal queued release checks from a busy worker while keeping all shards."""
+    workflow = yaml.safe_load(_workflow_text())
+    fast = workflow["jobs"]["fast-feedback"]
+    assert fast["env"]["PYTEST_XDIST_DIST"] == "worksteal"
+    assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert fast["timeout-minutes"] == 45
+    assert fast["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
+    assert (
+        next(step for step in fast["steps"] if step["name"] == "Unit tests")["run"]
+        == "scripts/dev/ci_driver.sh test"
+    )
+
+
+def test_ci_uv_cache_keeps_downloaded_wheels_and_keys_only_locked_environment() -> None:
+    """An exact uv cache hit must carry dependencies rather than metadata alone."""
+    action = yaml.safe_load(CI_SETUP_ACTION.read_text())
+    install = next(step for step in action["runs"]["steps"] if step.get("id") == "setup-uv")
+    assert install["with"]["enable-cache"] == "true"
+    assert install["with"]["prune-cache"] == "false"
+    assert install["with"]["cache-dependency-glob"].splitlines() == [
+        "pyproject.toml",
+        "uv.lock",
+    ]
+    sync = next(
+        step for step in action["runs"]["steps"] if "Sync dependencies" in step.get("name", "")
+    )
+    assert "uv_sync_retry.sh" in sync["run"]
+    assert "inputs.sync-args" in sync["run"]
+    assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"

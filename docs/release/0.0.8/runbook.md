@@ -53,9 +53,13 @@ identifies its release/tag and the immutable baseline provenance. `BUNDLE_NAME`
 is an export input chosen from the fresh campaign identity, not an exporter
 receipt. Preserve all 0.0.7 artifacts.
 
-Execution order: 1 freeze → 3a preparatory row mint/identities → 2 calibration →
-3b same-source smoke → 3c final campaign mint → 4 sealed campaign → 5 export/
-preflight → 6 comparator → 7 tag/publication/DOI. No final mint runs before smoke.
+Execution order under the 2026-10-04 ruling below: 1 freeze → 3a preparatory
+row mint/admission → 2 calibration and acquired-anchor freeze. Authentic DOI
+reservation and 3a resolved identities may follow acquisition when the author
+token is available. Identities and independent scientific review must complete
+before 3b same-source smoke → 3c final campaign mint → 4 sealed campaign →
+5 export/preflight → 6 comparator → 7 tag/publication/DOI. No final mint runs
+before smoke.
 
 **Orchestrator ruling, 2026-10-03:** [#10112](https://github.com/ll7/robot_sf_ll7/issues/10112)
 **blocks the freeze**: D-083 SNQI-v2 binding, the smoke contract and mint ordering
@@ -89,14 +93,51 @@ docs dependency skip explains the 42,785 outcome census. Broad-exception,
 seed-diff and fast-routing checks passed; strict curated Sphinx passed after
 installing the repository's separate docs dependency group.
 
-**Preparation remains blocked:** authentic reserved-unpublished concept/version
-DOI coordinates and reservation custody have not been supplied, so resolved
-release identities and the concrete doorway successor have not been generated.
-Calibration dispatch also requires the independently reviewed preparatory row
-on canonical private main. Acquired rows and frozen acquired anchors: none.
-The tracked anchor file remains `pending_calibration`. No smoke, final mint,
-sealed execution or publication occurred, and the six scientific-review boxes
-and private Git-blob trust pins remain untouched.
+**2026-10-03 preparation snapshot:** resolved identities, the concrete doorway
+successor and acquired anchors did not exist; authentic DOI custody and
+canonical preparatory-row admission were pending. The tracked anchor file
+remained `pending_calibration`. No smoke, final mint, sealed execution or
+publication occurred, and the six scientific-review boxes and private Git-blob
+trust pins remained untouched. The following ruling supersedes DOI custody as
+a calibration prerequisite.
+
+### Reorder ruling — 2026-10-04
+
+The orchestrator authorizes calibration **before DOI reservation and identity
+generation**, accepting `rr424`'s **Reorder: SAFE** reasoning from the independent
+exact-head **MERGE** review of private preparatory PR #424 at
+`33d56b4ef539d44d67d2bba4234532f9229b9cc9` (public freeze-record PR #10123 was
+also accepted at `269c26ef0d866b78eb7c140f3eb29c4d92b301fe`). The DOI waits for
+the author's token. This is operational admission, not the later scientific review.
+
+At freeze `3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6`, calibration file bytes
+and the parsed `campaign_config_hash` bind the literal `release_tag` and `doi`
+fields at lines 67–68. Preserve them exactly:
+
+```yaml
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+```
+
+The [identity resolver](../../../robot_sf/benchmark/release_protocol.py) writes
+Git-ignored outputs, refuses tracked output paths, and checks a clean exact
+source before and after writing. DOI reservation and later output-only identity
+generation cannot change the acquisition configuration. Calibration preflight
+accepts the literals: `export_publication_bundle: false` and the launcher's
+`--skip-publication-bundle` disable the only DOI-consuming export. These fields
+remain recorded verbatim in acquisition provenance; they must never be resolved
+in place, because doing so invalidates the acquired anchors' configuration binding.
+
+Mint and admit the preparatory rows using the accepted exact-head review
+reference. The orchestrator merges that PR; only then may the canonical-main
+owner dry-run/upsert the rows through the guarded writer and submit a separate
+queue PR. After its merge and a fresh resume, dispatch **only** dev1001/1002
+calibration through the canonical driver, verify all 1,344 rows, and freeze the
+separate acquired anchor artifact. Stop for the six independent scientific
+checks and Git-blob pins. DOI-dependent identities, smoke, final mint, sealed
+execution and publication retain their separate later gates. Reopen this reorder
+ruling if the resolver can mutate acquisition inputs or calibration preflight
+begins requiring resolved publication metadata.
 
 ## 1. Move the freeze branch — orchestrator only
 
@@ -160,7 +201,9 @@ acquisition and sealed-source ruling. Use the checklist below before final mint.
 
 ### 3a. Preparatory row mint and resolved identities
 
-DOI coordinates must already be authentic reserved-unpublished coordinates.
+For resolved identity generation, DOI coordinates must already be authentic
+reserved-unpublished coordinates; they are not a preparatory mint or calibration
+prerequisite under the 2026-10-04 ruling.
 If absent, the **author-reserved delegated DOI operator** performs the existing
 reservation command before identity generation, not a second reservation at tag:
 

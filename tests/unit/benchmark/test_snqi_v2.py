@@ -70,6 +70,15 @@ FROZEN_007_PLANNER_CONFIG_SHA256 = {
 }
 
 
+def test_scheduled_calibration_keeps_literal_publication_placeholders():
+    """Acquired anchors bind these bytes; identity resolution must write elsewhere."""
+    lines = (ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml").read_bytes()
+    assert lines.splitlines(keepends=True)[66:68] == [
+        b"release_tag: '{{release_tag}}'\n",
+        b"doi: '{{version_doi}}'\n",
+    ], "Calibration lines 67-68 must stay literal; resolving them invalidates acquired anchors"
+
+
 def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     """Calibrate the candidate inputs while keeping 0.0.7 comparison bytes pinned."""
     frozen_bytes = FROZEN_007_CAMPAIGN.read_bytes()

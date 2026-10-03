@@ -33,6 +33,16 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--concept-doi", required=True)
     generate.add_argument("--version-doi", required=True)
     generate.add_argument("--repository-root", type=Path, default=None)
+    generate.add_argument(
+        "--development-rehearsal",
+        action="store_true",
+        help="Generate a non-releasable D-070 development identity.",
+    )
+    generate.add_argument(
+        "--development-seeds",
+        default=None,
+        help="Comma-separated development seeds, allowed only with rehearsal opt-in.",
+    )
 
     verify = subparsers.add_parser("verify", help="Reproduce and verify resolved identity bytes.")
     verify.add_argument("--identity", type=Path, required=True)
@@ -54,6 +64,13 @@ def main(argv: list[str] | None = None) -> int:
     repository_root = (args.repository_root or get_repository_root()).resolve()
     try:
         if args.command == "generate":
+            rehearsal_seeds = None
+            if args.development_rehearsal:
+                rehearsal_seeds = tuple(
+                    int(value) for value in (args.development_seeds or "1001,1002,1003").split(",")
+                )
+            elif args.development_seeds is not None:
+                raise ValueError("development seeds require --development-rehearsal")
             output = args.output if args.output.is_absolute() else repository_root / args.output
             payload = write_resolved_release_identity(
                 template_path=args.template,
@@ -63,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
                 concept_doi=args.concept_doi,
                 version_doi=args.version_doi,
                 repository_root=repository_root,
+                development_rehearsal_seeds=rehearsal_seeds,
             )
             metadata = output.parent / RESOLVED_RELEASE_METADATA_FILENAME
             _print(

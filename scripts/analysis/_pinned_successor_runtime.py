@@ -107,6 +107,18 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 )
             # Match load_release_campaign_config: scientific inputs stay source-bound.
             cfg = replace(cfg, **publication)
+        if "development_rehearsal_seeds" in request:
+            from types import SimpleNamespace
+
+            from robot_sf.benchmark.release_protocol import _development_campaign_config
+
+            cfg = _development_campaign_config(
+                SimpleNamespace(
+                    release_kind="development_rehearsal",
+                    resolved_seeds=request["development_rehearsal_seeds"],
+                ),
+                cfg,
+            )
         for path in (cfg.source_config_path, cfg.scenario_matrix_path):
             if path is None or not path.resolve().is_relative_to(checkout):
                 raise ValueError("successor config source escapes pinned checkout")

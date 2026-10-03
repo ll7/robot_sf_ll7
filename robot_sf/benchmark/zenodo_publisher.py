@@ -720,6 +720,12 @@ def _normalize_release_binding(binding: Any) -> dict[str, Any]:
     """
     if binding is None:
         raise ZenodoPublisherError("Zenodo release binding is missing")
+    if _binding_value(binding, "release_kind") == "development_rehearsal" or str(
+        _binding_value(binding, "release_tag") or ""
+    ).startswith("development-rehearsal-"):
+        raise ZenodoPublisherError(
+            "development rehearsal cannot be published as a release or reserve a DOI"
+        )
     metadata_path_value = _binding_value(binding, "metadata_path")
     if metadata_path_value is None:
         raise ZenodoPublisherError("Zenodo release binding metadata_path is missing")
@@ -860,6 +866,12 @@ def _validate_state_binding(
     state["release_binding"] = expected_state_binding
 
 
+def _refuse_development_metadata(metadata: Mapping[str, Any]) -> None:
+    """Reject diagnostic deposition data before any authenticated API operation."""
+    if metadata.get("non_releasable_development_rehearsal") is True:
+        raise ZenodoPublisherError("development rehearsal cannot reserve a DOI or be published")
+
+
 def _validate_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the public benchmark-data metadata contract.
 
@@ -868,6 +880,7 @@ def _validate_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """
     if not isinstance(metadata, Mapping):
         raise ZenodoPublisherError("Zenodo metadata must be a JSON object")
+    _refuse_development_metadata(metadata)
     try:
         _canonical_bytes(metadata)
     except (TypeError, ValueError, OverflowError) as exc:
@@ -2100,6 +2113,7 @@ def load_dataset_metadata(
     *,
     expected_source_tag: str | None = None,
     expected_metadata_sha256: str | None = None,
+    allow_development_rehearsal: bool = False,
 ) -> dict[str, Any]:
     """Load and validate benchmark-dataset deposition metadata.
 
@@ -2122,7 +2136,13 @@ def load_dataset_metadata(
     metadata = payload.get("metadata") if isinstance(payload, dict) else None
     if not isinstance(metadata, Mapping):
         raise ZenodoPublisherError("metadata file must contain a top-level metadata object")
-    normalized = _validate_metadata(metadata)
+    development = metadata.get("non_releasable_development_rehearsal") is True
+    validated_metadata = dict(metadata)
+    if development and allow_development_rehearsal:
+        validated_metadata.pop("non_releasable_development_rehearsal")
+    normalized = _validate_metadata(validated_metadata)
+    if development:
+        normalized["non_releasable_development_rehearsal"] = True
     source_tag = _source_tag(normalized)
     if expected_source_tag is not None:
         expected_url = (

@@ -444,6 +444,15 @@ def validate_release_publication_contract(  # noqa: C901, PLR0912, PLR0915
         release_result = _read_json(release_result_path)
         publication = _read_json(manifest_path)
         campaign = _campaign_block(summary)
+        if release_result.get("release_kind") == "development_rehearsal" or (
+            release_result.get("benchmark_release", {}).get("release_kind")
+            == "development_rehearsal"
+        ):
+            return {
+                "schema_version": CONTRACT_SCHEMA_VERSION,
+                "status": "blocked",
+                "blockers": ["development rehearsal cannot be published as a release"],
+            }
     except (OSError, ValueError) as exc:
         blockers.append(str(exc))
         return {

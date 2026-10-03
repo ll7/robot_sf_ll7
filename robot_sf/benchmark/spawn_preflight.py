@@ -1206,6 +1206,25 @@ def guard_manifest_execution(
         )
     if effective.intersection(RETIRED_EVAL_SEEDS_0_0_7):
         raise ValueError("retired evaluation seeds are forbidden for execution (D-049)")
+    from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
+        _require_clean_exact_checkout,
+        _require_sealed_runtime_sources,
+        _require_sealed_source_inputs,
+        _validated_development_seeds,
+        is_development_rehearsal,
+    )
+
+    if is_development_rehearsal(manifest):
+        _validated_development_seeds(tuple(sorted(effective)))
+        if manifest.resolved_identity_path is None:
+            raise ValueError("development rehearsal requires a verified materialized identity")
+        _require_clean_exact_checkout(
+            root,
+            source_commit=source_commit or manifest.source_sha,
+            template_path=manifest.identity_template_path,
+        )
+        _require_sealed_source_inputs(manifest, root, manifest.source_sha)
+        _require_sealed_runtime_sources(root, manifest.source_sha)
     problem = sealed_seed_execution_problem(
         manifest,
         tuple(sorted(effective)),

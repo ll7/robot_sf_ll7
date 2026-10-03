@@ -27,6 +27,7 @@ from robot_sf.benchmark.release_acceptance import (
 )
 from robot_sf.benchmark.release_protocol import (
     BENCHMARK_PROTOCOL_VERSION,
+    DEVELOPMENT_REHEARSAL_KIND,
     is_development_rehearsal,
     load_release_campaign_config,
     load_release_manifest,
@@ -1256,7 +1257,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             "runtime smoke result is not the canonical release receipt"
         )
     result = _read_object(resolved_result, "runtime smoke result")
-    if result.get("release_kind") == "development_rehearsal":
+    if result.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND:
         if not development_rehearsal:
             raise RuntimeSmokeAdmissionError(
                 "development rehearsal cannot satisfy release runtime smoke"

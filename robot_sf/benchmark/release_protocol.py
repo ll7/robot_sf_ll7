@@ -2477,9 +2477,13 @@ def _validate_release_seed_policy(
         problems.append(
             "retired evaluation seeds are forbidden for non-historical releases (D-049)"
         )
-    if (
-        not is_development_rehearsal(manifest)
-        and manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
+    if is_development_rehearsal(manifest):
+        try:
+            _validated_development_seeds(resolved)
+        except ValueError as exc:
+            problems.append(str(exc))
+    elif (
+        manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
         and (
             "0.0.8" in manifest.release_tag
             or "0_0_8" in manifest.scenario_matrix_path.name

@@ -718,9 +718,12 @@ def _normalize_release_binding(binding: Any) -> dict[str, Any]:
     Returns:
         Normalized release identity and metadata path fields.
     """
+    # Local import: release_protocol also imports the generic publisher.
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
     if binding is None:
         raise ZenodoPublisherError("Zenodo release binding is missing")
-    if _binding_value(binding, "release_kind") == "development_rehearsal" or str(
+    if _binding_value(binding, "release_kind") == DEVELOPMENT_REHEARSAL_KIND or str(
         _binding_value(binding, "release_tag") or ""
     ).startswith("development-rehearsal-"):
         raise ZenodoPublisherError(
@@ -764,9 +767,8 @@ def _normalize_release_binding(binding: Any) -> dict[str, Any]:
 def build_release_binding(manifest: Any) -> dict[str, Any]:
     """Build a publisher binding from a validated benchmark release manifest.
 
-    The function intentionally accepts a manifest-like object instead of
-    importing the release protocol module, keeping the generic publisher
-    independent from the benchmark manifest implementation.
+    The function accepts a manifest-like object; only the non-release marker
+    constant is imported lazily from the release protocol.
 
     Returns:
         Normalized release identity and metadata path fields.

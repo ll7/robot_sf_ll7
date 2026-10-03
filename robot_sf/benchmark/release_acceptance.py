@@ -56,6 +56,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
     _resolve_policy_search_candidate_runtime,
 )
 from robot_sf.benchmark.release_protocol import (
+    DEVELOPMENT_REHEARSAL_KIND,
     DOORWAY_RELEASE_CELLS,
     DOORWAY_RELEASE_HORIZON,
     STRESS_SMOKE_EXPECTED_DT,
@@ -2815,7 +2816,7 @@ def validate_full_benchmark_release_acceptance(
     Returns:
         Full-release acceptance report with explicit diagnostic refusals.
     """
-    if getattr(manifest, "release_kind", None) == "development_rehearsal":
+    if getattr(manifest, "release_kind", None) == DEVELOPMENT_REHEARSAL_KIND:
         return {
             "schema_version": FULL_RELEASE_ACCEPTANCE_SCHEMA_VERSION,
             "status": "invalid",

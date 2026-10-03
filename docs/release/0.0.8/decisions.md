@@ -238,12 +238,12 @@ repository).
 - **Decided by:** delegated (#9926 comment, #10011 verdict).
 - **Alternatives:** restore a 1.6 s window; silently hold the last
   forecast beyond 8 steps.
-- **Implemented in:** #9926 (merged), #10011 (open).
+- **Implemented in:** #9926 (merged), #10011 (merged).
 - **Evidence:** #9926, #10011; original ledger provenance preserved.
 - **Enforced by:**
   `tests/planner/test_release_horizons.py::test_release_checkpoint_effective_window_is_zero_point_eight_seconds`;
   `tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast`
-  (open PR).
+  (merged PR).
 
 ### D-013: Risk-DWA gets a real dynamic window for 0.0.8
 - **Date:** 2026-09-29
@@ -306,12 +306,12 @@ repository).
   the training-versus-benchmark motion mismatch, which D-017 addresses.
 - **Decided by:** delegated (#9995 verdicts and diagnostic).
 - **Alternatives:** keep the absolute-target reading.
-- **Implemented in:** #9995 (open, approved).
+- **Implemented in:** #9995 (merged).
 - **Evidence:** #9995; original ledger provenance preserved.
 - **Enforced by:**
   `tests/baselines/test_ppo_action_semantics.py::test_signed_delta_precedes_release_clipping`,
   `tests/baselines/test_ppo_action_semantics.py::test_release_checkpoints_fail_closed_without_delta_declaration`
-  (open PR).
+  (merged PR).
 
 ### D-017: Retrain PPO on the benchmark motion model
 - **Date:** 2026-09-30
@@ -356,13 +356,13 @@ repository).
 - **Decided by:** delegated (#10008 review comment).
 - **Alternatives:** 2.0 m/s; 3 agents; a heading-hold adapter (would
   change the checkpoint's decision timing).
-- **Implemented in:** #10008 (open, approved).
+- **Implemented in:** #10008 (merged).
 - **Evidence:** #10008; original ledger provenance preserved.
 - **Enforced by:**
   `tests/planner/test_fxs_release_contract.py::test_release_preferred_speed_reaches_checkpoint_host_input`,
   `tests/planner/test_fxs_release_contract.py::test_release_observes_nineteen_nearest_agents_without_padding_in_sequence`,
   `tests/planner/test_fxs_release_contract.py::test_checkpoint_rejects_configured_agent_count_above_nineteen`
-  (open PR). The heading mapping has no test yet.
+  (merged PR). The heading mapping has no test yet.
 
 ### D-019: Planners read the simulation clock and fail closed without it
 - **Date:** 2026-09-30
@@ -376,14 +376,14 @@ repository).
   times the real step.
 - **Decided by:** delegated.
 - **Alternatives:** keep per-planner defaults.
-- **Implemented in:** #10009 (open, approved). Planners outside the release
+- **Implemented in:** #10009 (merged). Planners outside the release
   roster are listed on #10007 for 0.0.9.
 - **Evidence:** #10009, #10007; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_issue_10007_fxb.py::test_social_force_uses_real_flat_sim_dt`,
   `tests/benchmark/test_issue_10007_fxb.py::test_invalid_primary_clock_does_not_fall_through_to_dt`,
   `tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt`
-  (open PR).
+  (merged PR).
 
 ### D-020: ORCA commands only the forward part of its velocity
 - **Date:** 2026-09-30
@@ -402,12 +402,12 @@ repository).
   which accepted the rule implemented by the fix lane.
 - **Alternatives:** keep the old cap-only slowdown; a
   guarantee-preserving nonholonomic ORCA variant (a new method).
-- **Implemented in:** #10009 (open, approved).
+- **Implemented in:** #10009 (merged).
 - **Evidence:** #10009; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component`,
   `tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap`
-  (open PR).
+  (merged PR).
 
 ### D-021: prediction_planner keeps no wall term in 0.0.8
 - **Date:** 2026-09-30
@@ -422,11 +422,11 @@ repository).
   the reverted code reproduces the reviewed episodes exactly.
 - **Decided by:** delegated (#10011 review comment).
 - **Alternatives:** ship the non-firing term; design a new term now.
-- **Implemented in:** #10011 (open, approved).
+- **Implemented in:** #10011 (merged).
 - **Evidence:** #10011; original ledger provenance preserved.
 - **Enforced by:**
   `tests/planner/test_prediction_fxp_regressions.py::test_prediction_real_doorway_grid_has_no_effective_static_obstacle_cost`
-  (open PR).
+  (merged PR).
 
 ### D-022: The prediction model is not retrained for 0.0.8
 - **Date:** 2026-09-30
@@ -438,11 +438,11 @@ repository).
   not fit the freeze.
 - **Decided by:** delegated.
 - **Alternatives:** retrain now; keep the collectors unchanged.
-- **Implemented in:** collector fix in #10011 (open); retrain in #10018.
+- **Implemented in:** collector fix in #10011 (merged); retrain in #10018.
 - **Evidence:** #10011, #10018; original ledger provenance preserved.
 - **Enforced by:**
   `tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading`
-  (open PR; enforces the collector fix, not the retrain).
+  (merged PR; enforces the collector fix, not the retrain).
 
 ### D-023: guarded_ppo rows keep "ppo" as the base-policy algorithm
 - **Date:** 2026-09-30
@@ -492,14 +492,14 @@ repository).
 - **Decided by:** author. This replaced an earlier delegated decision that the
   fixed 600-step horizon should win.
 - **Alternatives:** a fixed 600-step horizon for every scenario.
-- **Implemented in:** #9999 (open, approved).
+- **Implemented in:** #9999 (merged).
 - **Evidence:** #9999; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_campaign_horizon_authority.py::test_real_release_0_0_8_template_preserves_authored_budgets`,
   `tests/benchmark/test_campaign_horizon_authority.py::test_undeclared_shorter_scenario_limit_is_refused`,
   `tests/benchmark/test_campaign_horizon_authority.py::test_real_simulator_budget_timeout_and_terminal_controls`,
   `tests/unit/benchmark/test_snqi_v2.py::test_development_calibration_matches_candidate_and_preserves_frozen_007`
-  (open PR).
+  (merged PR).
 
 ### D-026: Budgets stay after the data check; four scenarios are disclosed
 - **Date:** 2026-09-30
@@ -530,13 +530,13 @@ repository).
   0.66 m/s on a curved route as deadlocked.
 - **Decided by:** delegated (#10014 review comment).
 - **Alternatives:** keep Euclidean distance with a corrected window.
-- **Implemented in:** #10014 (open, approved).
+- **Implemented in:** #10014 (merged).
 - **Evidence:** #10014; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_fxm2_metrics.py::test_real_merging_timeout_keeps_route_progress`,
   `tests/benchmark/test_fxm_metric_definitions.py::test_slow_steady_approach_is_not_a_deadlock`,
   `tests/benchmark/test_fxm_metric_definitions.py::test_collision_episode_is_not_a_deadlock`
-  (open PR).
+  (merged PR).
 
 ### D-028: Metric v2: path efficiency is defined only for successful episodes
 - **Date:** 2026-09-30
@@ -547,13 +547,13 @@ repository).
 - **Reason:** This matches the thesis definition; clipping hid failures.
 - **Decided by:** delegated (#10014 review comment).
 - **Alternatives:** keep clipping; report zero for failures.
-- **Implemented in:** #10014 (open, approved).
+- **Implemented in:** #10014 (merged).
 - **Evidence:** #10014; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_fxm2_metrics.py::test_failure_efficiency_is_undefined`,
   `tests/benchmark/test_fxm2_metrics.py::test_completion_with_collision_has_no_path_efficiency`,
   `tests/benchmark/test_fxm2_metrics.py::test_success_efficiency_is_unclipped_and_reference_violation_flagged`
-  (open PR).
+  (merged PR).
 
 ### D-029: Metric v2: the goal reference is the goal-zone polygon
 - **Date:** 2026-09-30
@@ -568,13 +568,13 @@ repository).
   SNQI v2 time term incomparable across planners.
 - **Decided by:** delegated (#10014 review comment).
 - **Alternatives:** the sampled goal point; the last active waypoint.
-- **Implemented in:** #10014 (open, approved).
+- **Implemented in:** #10014 (merged).
 - **Evidence:** #10014; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_fxm2_metrics.py::test_goal_zone_shortest_path_is_to_continuous_polygon`,
   `tests/benchmark/test_fxm2_metrics.py::test_map_producer_uses_same_zone_reference_for_efficiency_and_ideal_time`,
   `tests/benchmark/test_fxm_metric_definitions.py::test_final_route_goal_is_captured_at_reset`
-  (open PR).
+  (merged PR).
 
 ### D-030: Metric v2: a schema version fence separates old and new meanings
 - **Date:** 2026-09-30
@@ -590,7 +590,7 @@ repository).
   name. A later v3 would cost more.
 - **Decided by:** delegated (#10014 review comment).
 - **Alternatives:** change the definitions in place without a version.
-- **Implemented in:** #10014 (open, approved); the auditor accepts only v1 or
+- **Implemented in:** #10014 (merged); the auditor accepts only v1 or
   v2 markers (#9997). Remaining gaps are #10022 (0.0.9).
 - **Evidence:** #10014, #9997, #10022; original ledger provenance preserved.
 - **Enforced by:**
@@ -598,7 +598,7 @@ repository).
   `tests/benchmark/test_fxm_metric_definitions.py::test_aggregation_rejects_mixed_metric_meanings`,
   `tests/benchmark/test_fxm_metric_definitions.py::test_old_anchors_cannot_normalize_new_metric_definitions`,
   `tests/benchmark/test_fxm_metric_definitions.py::test_jerk_has_physical_time_units`
-  (open PR).
+  (merged PR).
 
 ### D-031: SNQI v2 uses the robot-attributable force
 - **Date:** 2026-09-30 (thesis rule); the metric and index were decided
@@ -635,12 +635,12 @@ repository).
   on and how many were dropped.
 - **Decided by:** delegated (#10019 review rounds).
 - **Alternatives:** keep `episodes` as the raw row count.
-- **Implemented in:** #10019 (open; last review FIX).
+- **Implemented in:** #10019 (merged).
 - **Evidence:** #10019; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_release_reporting_cohort.py::test_campaign_table_counts_match_metric_cohort_and_writers`,
   `tests/benchmark/test_release_reporting_cohort.py::test_all_excluded_arms_remain_in_breakdown_and_seed_outputs`
-  (open PR).
+  (merged PR).
 
 ### D-033: Release acceptance counts `episodes_total`; excluded rows are named
 - **Date:** 2026-09-30
@@ -673,14 +673,12 @@ repository).
 - **Reason:** For the same seed every planner must face the same crowd.
 - **Decided by:** delegated.
 - **Alternatives:** re-seed the global generator each step.
-- **Implemented in:** #10024 (open; last review FIX: 13 existing tests break
-  and some entry points seeded only through the global generator lose
-  reproducibility).
+- **Implemented in:** #10024 (merged).
 - **Evidence:** #10024; original ledger provenance preserved.
 - **Enforced by:**
   `tests/ped_npc/test_pedfix_episode_contract.py::test_trajectories_ignore_global_numpy_after_respawn`,
   `tests/ped_npc/test_pedfix_episode_contract.py::test_vendored_population_leaves_global_numpy_untouched`
-  (open PR).
+  (merged PR).
 
 ### D-035: `simulation_config.groups` is the fraction of pedestrians in groups
 - **Date:** 2026-09-30
@@ -698,7 +696,7 @@ repository).
 - **Evidence:** #10024; original ledger provenance preserved.
 - **Enforced by:** no test yet for the fraction meaning. The current test
   `tests/ped_npc/test_pedfix_episode_contract.py::test_groups_override_changes_real_population`
-  (open PR) only checks that the key has an effect.
+  (merged PR) only checks that the key has an effect.
 
 ### D-036: Unknown `simulation_config` keys fail closed
 - **Date:** 2026-09-30
@@ -708,12 +706,12 @@ repository).
   something it does not do.
 - **Decided by:** delegated.
 - **Alternatives:** warn only.
-- **Implemented in:** #10024 (open). The review found shipped non-release
+- **Implemented in:** #10024 (merged). The review found shipped non-release
   configs and runtime writers that now fail; they must be migrated.
 - **Evidence:** #10024; original ledger provenance preserved.
 - **Enforced by:**
   `tests/ped_npc/test_pedfix_episode_contract.py::test_unknown_simulation_key_fails_at_real_loader`
-  (open PR).
+  (merged PR).
 
 ### D-037: A pedestrian moved off the robot at reset keeps a reaction buffer
 - **Date:** 2026-09-30
@@ -726,12 +724,12 @@ repository).
 - **Reason:** An unavoidable early collision was charged to the planner.
 - **Decided by:** delegated.
 - **Alternatives:** keep the 0.1 m margin.
-- **Implemented in:** #10024 (open).
+- **Implemented in:** #10024 (merged).
 - **Evidence:** #10024; original ledger provenance preserved.
 - **Enforced by:**
   `tests/ped_npc/test_pedfix_episode_contract.py::test_relocation_has_reaction_clearance_and_route_velocity`,
   `tests/ped_npc/test_pedfix_episode_contract.py::test_relocation_keeps_reaction_buffer_when_goal_is_inside_robot`
-  (open PR).
+  (merged PR).
 
 ### D-038: Wall law and stuck pedestrians: disclosed for 0.0.8, fixed in 0.0.9
 - **Date:** 2026-09-30
@@ -763,8 +761,7 @@ repository).
 - **Alternatives:** divide by 1.3 when seeding the speed.
 - **Implemented in:** documentation (#10017).
 - **Evidence:** #10017; original ledger provenance preserved.
-- **Enforced by:** no test yet.
-
+- **Enforced by:** `tests/test_emergent_phenomena.py::test_released_default_speed_matches_substrate_derivation` and `test_released_default_config_pins_substrate_defaults` pin the crowd substrate multiplier/defaults; they do not check scripted-speed disclosure text. No release-notes presence check exists on main. Required before production mint and repeated before publication; tracked with the other disclosure gaps in [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110).
 ### D-040: Group gaze and group repulsion: disclosed for 0.0.8, fixed in 0.0.9
 - **Date:** 2026-09-30
 - **Question:** The external pedestrian review found that the group gaze force
@@ -812,13 +809,13 @@ repository).
   through about ten consumers and the map format.
 - **Decided by:** delegated (fix lane choice, recorded in #10026).
 - **Alternatives:** switch to a 4-corner encoding.
-- **Implemented in:** #10026 (open, review pending).
+- **Implemented in:** #10026 (merged).
 - **Evidence:** #10026; original ledger provenance preserved.
 - **Enforced by:**
   `tests/test_scenario_map_review_fixes.py::test_svg_rectangle_zone_samples_the_full_rectangle`,
   `tests/test_scenario_map_review_fixes.py::test_parsed_svg_spawn_zone_covers_the_whole_rectangle`,
   `tests/test_scenario_map_review_fixes.py::test_true_triangle_zones_stay_triangular`
-  (open PR).
+  (merged PR).
 
 ### D-043: Triangle sampling in 0.0.7 is a coverage limitation, not a numbers error
 - **Date:** 2026-09-30
@@ -861,7 +858,7 @@ repository).
 - **Evidence:** #9976; original ledger provenance preserved.
 - **Enforced by:**
   `tests/benchmark/test_infeasible_probe_safe_failure.py::test_force_above_zero_without_collision_is_safe_failure`,
-  `tests/benchmark/test_infeasible_probe_safe_failure.py::test_gate_refuses_duplicate_that_offsets_a_missing_slot`.
+  `tests/benchmark/test_infeasible_probe_safe_failure.py::test_gate_refuses_duplicate_that_offsets_a_missing_slot`. Both are present on main; there is no missing release-notes check in this contact-only decision.
 
 ## Campaign operations
 
@@ -1121,7 +1118,7 @@ Historical measurements below are attributed to the named review report; they we
   chat timestamp.
 - **Implemented in:** process rule (lane rules); #10053 had already migrated
   the seeds it touched to development seeds.
-- **Enforced by:** none yet: distinguish existing retired-seed tests from new episode work. `tests/validation/test_check_seed_holdout_diff.py::test_new_sealed_names_require_explicit_allowlist` covers added sealed names only; the current runtime test guard still rejects the retired band. This implementation gap does not rescind the author ruling.
+- **Enforced by:** The always-loaded root pytest plugin `tests.support.heldout_seed_guard` installs `tests.support.seedguard_boundaries` in every worker and Python child and refuses BOTH retired and sealed simulation seeds before factory/reset/population/episode execution. `tests/test_heldout_seed_guard.py` proves those boundaries. `scripts/validation/check_seed_holdout_diff.py` checks new diff additions and static fixture allowlists; it does not distinguish existing retired-seed tests from new ones. The historical D-051 existing-test exception is not implemented by the runtime guard. FREEZEPREP expressly uses the stricter task rule: any actual reset/step on either band is a STOP; refusal before reset is recorded and work continues. This audit does not amend the historical author ruling.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-052: Held-out guard refusal witnesses may name a sealed seed
@@ -1171,9 +1168,9 @@ Historical measurements below are attributed to the named review report; they we
   model prerelease `models-ppo-release-robot-2026-10-01`, asset SHA-256
   `764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc`;
   model card `model/cards/ppo_release_robot_0_0_8.md`; ppoeval_report.md, private-ops review archive.
-- **Implemented in:** #10077 (open; supersedes #10072). Further training: #10071
+- **Implemented in:** #10077 (merged). Further training: #10071
   (milestone 0.1.0).
-- **Enforced by:** (open PR #10077) `tests/benchmark/test_ppo_release_robot_binding.py::test_release_campaign_resolver_binds_plain_ppo_to_release_robot`, `tests/benchmark/test_ppo_release_robot_binding.py::test_release_ppo_registry_has_training_and_observation_contract`, `tests/baselines/test_ppo_action_semantics.py::test_new_registry_checkpoint_decodes_signed_velocity_delta`, `tests/integration/test_ppo_release_robot_asset.py::test_release_robot_asset_resolves_and_verifies_sha256`; none yet: release-notes wording check.
+- **Enforced by:** `tests/benchmark/test_ppo_release_robot_binding.py::test_release_campaign_resolver_binds_plain_ppo_to_release_robot`, `test_release_ppo_registry_has_training_and_observation_contract`, `tests/baselines/test_ppo_action_semantics.py::test_new_registry_checkpoint_decodes_signed_velocity_delta`, and `tests/integration/test_ppo_release_robot_asset.py::test_release_robot_asset_resolves_and_verifies_sha256` are now on main (#10077 merged). No release-notes wording check exists. It is required before production mint and repeated before publication; [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110).
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-054: The PPO velocity-delta reading stays after the plausibility check
@@ -1225,9 +1222,7 @@ Historical measurements below are attributed to the named review report; they we
   obstacle-force investigation report; obst_report.md, private-ops review archive.
 - **Implemented in:** disclosure (release notes draft; thesis intake diss#3027).
   Fix: #10061, #10074 (milestone 0.1.0).
-- **Enforced by:** none yet: a release-notes presence check that lists the
-  flagged scenario ids, plus a thesis check that no prose draws a door-width or
-  doorway-ranking claim from those rows.
+- **Enforced by:** No executable disclosure or thesis claim gate was located on main. The adopted flagged-row and forbidden-claim policy is documentation/process enforcement only. The release-notes check must exist before production mint and run again before publication; [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110). Thesis intake/claim review remains separate (diss#3027). Do not confuse the private D-055 curvature label with public D-055.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-056: The three-width doorway slice stays in 0.0.8, disclosed as measured against a queue
@@ -1285,7 +1280,7 @@ Historical measurements below are attributed to the named review report; they we
   validation baseline (draft #10075); diss research note
   `2026-10-01_chatgpt_pedestrian_dynamics.md`; pedval_report.md, private-ops review archive.
 - **Implemented in:** release-notes draft; thesis appendix (planned).
-- **Enforced by:** none yet: a release-notes presence check. D-039 describes scripted input speed; the crowd path derives both its desired speed and cap from the same 0.5 × 1.3 value, so there is no headroom above that target.
+- **Enforced by:** `tests/test_emergent_phenomena.py::test_released_default_speed_matches_substrate_derivation`, `test_released_default_config_pins_substrate_defaults`, and `tests/sim/test_pedestrian_desired_speed.py::test_default_simulator_keeps_legacy_slow_regime` pin the crowd speed derivation/defaults. They do not enforce disclosure or body-size prose. No release-notes presence check exists; required before production mint and repeated before publication, [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110). D-039 is the scripted-input convention; crowd target and hard cap are both 0.65 m/s.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-058: Pedestrians do not steer around the robot and collisions are not attributed: disclose for 0.0.8
@@ -1385,8 +1380,8 @@ Historical measurements below are attributed to the named review report; they we
   author's fresh-seed decision (D-049).
 - **Alternatives:** a paired per-seed comparison.
 - **Evidence:** rehearsal plausibility report; #10058 (distribution comparator); plaus_report.md, private-ops review archive.
-- **Implemented in:** release-notes draft; #10058 (open).
-- **Enforced by:** (open PR #10058) `tests/analysis/test_compare_release_distributions.py::test_definition_changed_never_differenced_and_success_support`, `tests/analysis/test_compare_release_distributions.py::test_schema_mixture_and_reversed_versions_refused`; none yet: disclosure presence check.
+- **Implemented in:** release-notes draft; #10058 (merged).
+- **Enforced by:** (merged PR #10058) `tests/analysis/test_compare_release_distributions.py::test_definition_changed_never_differenced_and_success_support`, `tests/analysis/test_compare_release_distributions.py::test_schema_mixture_and_reversed_versions_refused`; none yet: disclosure presence check.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-063: `groups` keeps the large-crowd formula; small-crowd truncation is documented
@@ -1434,7 +1429,7 @@ Historical measurements below are attributed to the named review report; they we
 - **Evidence:** #9999 review comments RR9999d (P1 witness) and RR9999E (37
   historical configs raised, 88 re-hashed); #9999 body; rr9999e_report.md, private-ops review archive.
 - **Implemented in:** #9999, still open; verified at its fetched head, not yet effective on main.
-- **Enforced by:** (open PR #9999) `tests/benchmark/test_campaign_horizon_compatibility.py::test_every_tracked_campaign_preserves_main_admission_and_simulator_limits`, `tests/benchmark/test_scheduled_campaign_compatibility.py::test_historical_schedule_preserves_all_main_scenario_bytes`, `tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle`.
+- **Enforced by:** (merged PR #9999) `tests/benchmark/test_campaign_horizon_compatibility.py::test_every_tracked_campaign_preserves_main_admission_and_simulator_limits`, `tests/benchmark/test_scheduled_campaign_compatibility.py::test_historical_schedule_preserves_all_main_scenario_bytes`, `tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle`.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-065: A non-release sampler test checks safety, not goal arrival, under its authored 400-step budget (re-scoped by D-050)
@@ -1516,7 +1511,7 @@ Historical measurements below are attributed to the named review report; they we
 - **Alternatives:** 101/102.
 - **Amends:** D-048 ("seeds 101-102").
 - **Evidence:** private orchestration notes; #10045; rr10045b_report.md, private-ops review archive.
-- **Implemented in:** #10045 (refresh implemented; PR open).
+- **Implemented in:** #10045 (merged).
 - **Enforced by:**
   `tests/unit/benchmark/test_snqi_v2.py::test_development_calibration_matches_candidate_and_preserves_frozen_007`
   (lines 79–94), which loads the new filename and asserts development seeds
@@ -1539,8 +1534,8 @@ Historical measurements below are attributed to the named review report; they we
   0.0.7-vs-0.0.8 comparison at #10047 head 31d09675.
 - **Alternatives:** trace all release rows.
 - **Evidence:** #10047 body and review RR10047; rr10047_report.md, private-ops review archive.
-- **Implemented in:** #10047 (open).
-- **Enforced by:** (open PR #10047) `tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_small_real_trace_read_discards_series` verifies reading untraced rows; none yet: campaign-level prohibition of sealed diagnostic trace runs. Trace-schema tests do not enforce the untraced-release policy.
+- **Implemented in:** #10047 (merged).
+- **Enforced by:** (merged PR #10047) `tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_small_real_trace_read_discards_series` verifies reading untraced rows; none yet: campaign-level prohibition of sealed diagnostic trace runs. Trace-schema tests do not enforce the untraced-release policy.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-070: The freeze commit is the train-2 head on main, after rehearsal 2 passes on it
@@ -1640,9 +1635,8 @@ open; this branch evidence does not name a freeze SHA or grant release status.
 - **Alternatives:** disclose only.
 - **Evidence:** #10063, #10064; #10066 diagnostic gate (1,440 paired dev
   episodes; predictive_mppi 105 -> 149 successes); rr10066_report.md, private-ops review archive.
-- **Implemented in:** #10066 (merged in #10080, closes #10064); #10067 (open,
-  train 2 part 2, for #10063).
-- **Enforced by:** `tests/planner/test_no_admissible_recovery.py::test_infeasible_progress_escape_is_selectable`, `tests/planner/test_no_admissible_recovery.py::test_mppi_infeasible_escape_beats_zero_with_real_clearance_costs`; (open PR #10067) `tests/validation/test_release_spawn_goal_overlap.py::test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle`.
+- **Implemented in:** #10066 (merged in #10080, closes #10064); #10067 (integrated through merged train #10095 at `879f75b69eb93ca16006f2019ee5c85c7aa724dd`; GitHub CLOSED, for #10063).
+- **Enforced by:** `tests/planner/test_no_admissible_recovery.py::test_infeasible_progress_escape_is_selectable`, `tests/planner/test_no_admissible_recovery.py::test_mppi_infeasible_escape_beats_zero_with_real_clearance_costs`; (integrated via merged train #10095) `tests/validation/test_release_spawn_goal_overlap.py::test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle`.
 - **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-074: The release campaign template binds the sealed seeds
@@ -1757,7 +1751,7 @@ open; this branch evidence does not name a freeze SHA or grant release status.
 | Original | Effective later record | Amendment |
 |---|---|---|
 | D-004 | D-070 | The old freeze commit is superseded by the train-2 head after rehearsal 2, packaging and intake pass. No final freeze SHA is asserted here. |
-| D-017 | D-053 | The author replaces the plain PPO arm; the older supplementary-only choice remains historical. #10077 is still open. |
+| D-017 | D-053 | The author replaces the plain PPO arm; the older supplementary-only choice remains historical. #10077 is merged. |
 | D-048 | D-068 | Calibration uses 1001/1002. #10045 renamed the file to `calibration.dev1001_1002_scheduled_acquisition.yaml`; `test_development_calibration_matches_candidate_and_preserves_frozen_007` in `tests/unit/benchmark/test_snqi_v2.py:79–94` enforces the filename and seed policy. |
 | D-049 | D-051, D-052 | Existing tests may execute retired seeds; refusal witnesses must stop before reset/step. Sealed seeds remain forbidden outside the sealed campaign. |
 | D-039 | D-057 | Scripted input speed and crowd-derived desired speed are distinct paths; crowd target and cap are both 0.65 m/s. |
@@ -1833,17 +1827,7 @@ open; this branch evidence does not name a freeze SHA or grant release status.
   primary; the paired joint scenario resample as primary. Both were rejected.
 - **Evidence:** rr10047c review, private-ops review archive, P2-A and
   P3-a/P3-b/P3-c; [delegated comparison-method ruling for #10058](https://github.com/ll7/robot_sf_ll7/pull/10058#issuecomment-5936509251).
-- **Enforced by:** none yet: pending in #10058's fix round in
-  `tests/analysis/test_compare_release_distributions.py`: update
-  `test_two_stage_bootstrap_retains_between_scenario_variation` to pin the
-  new primary; add the null split-half known-difference-zero regression with
-  a width bound, the Holm-28-primary/separate-BH-exploratory-family check,
-  the M5 BH step-up monotonicity test, the M6 test that `changed` requires
-  the difference CI to exclude 0, and the md/csv conditional-on-success
-  marker check. These named intended checks are pending, not enforcement
-  already present on main; new node IDs are not yet committed. The strict
-  v2 PR contract must require benchmark `domain_approval` at the new head
-  after the fix round and delta review.
+- **Enforced by:** merged #10058, `tests/analysis/test_compare_release_distributions.py::test_fixed_scenario_seed_bootstrap_excludes_between_scenario_variation`, `test_null_split_half_fixed_suite_has_zero_difference_and_narrow_interval`, `test_paired_scenario_sensitivity_preserves_fixed_suite_primary`, `test_primary_holm_family_is_separate_from_exploratory_bh`, `test_bh_step_up_monotonicity_hand_calculated`, `test_changed_requires_difference_ci_to_exclude_zero`, and `test_holm_predeclared_family_uses_step_down_monotonicity`. The report/output tests retain conditional-on-success support markers. These are present on main; the earlier intended checks are no longer pending.
 - **Reopen:** New material evidence, a changed estimand or implementation,
   or an explicit author/orchestrator ruling.
 
@@ -1925,3 +1909,9 @@ These private labels were never public ledger IDs. Read each citation in its PR 
 ## Enforcement gaps in the catch-up entries
 
 Fields marked `none yet:` identify the intended checks. A cited open-PR test is not yet effective on main, and a structural ledger test does not enforce any runtime or disclosure decision.
+
+## FREEZEPREP candidate readback (2026-10-03)
+
+The audited candidate is main `c979e0337da4ad053d59a76225fbb9154140ee73`, not a new freeze ruling. It contains both merge trains (#10046, #10080, #10095), #9999/D-083, #10067 through #10095, #10081, #10045, #10103/D-086 and #10108. The orchestrator must name and move `release/0.0.8-freeze`; this lane did neither. D-004's pinned-source requirement and D-070's intake condition remain active. See [freeze_audit.md](freeze_audit.md) for exact proof and [runbook.md](runbook.md) for the ordered execution/admission chain.
+
+Publish, tag and DOI are author-reserved actions whose execution was delegated on 2026-09-28. That records delegation, not approval or release admission. Missing release-notes checks are one mint/publication follow-up, [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110); they are not measured-number freeze blockers.

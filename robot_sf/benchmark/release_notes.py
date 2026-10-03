@@ -217,7 +217,7 @@ def check_notes(data: bytes, *, phase: str) -> list[str]:
         raise ValueError("release notes phase must be mint or publication")
     text = data.decode("utf-8")
     if phase == "publication" and re.search(
-        r"PLACEHOLDER|\bTODO\b|\bTBD\b|\{\{|<[^>]*>", text, re.IGNORECASE
+        r"PLACEHOLDER|\bTODO\b|\bTBD\b|\{\{|<(?![!/?])[^<>\n]+>", text, re.IGNORECASE
     ):
         raise ValueError("release notes publication refuses placeholders")
     sections: dict[str, list[str]] = {}

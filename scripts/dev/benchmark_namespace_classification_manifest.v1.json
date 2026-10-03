@@ -237,6 +237,7 @@
     "release_erratum.py",
     "release_gates.py",
     "release_map_mirror.py",
+    "release_notes.py",
     "release_parameter_freeze.py",
     "release_preflight.py",
     "release_protocol.py",

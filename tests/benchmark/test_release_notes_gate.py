@@ -113,6 +113,18 @@ def test_placeholder_mint_allowed_publication_refused(notes_repo, placeholder):
         notes_gate(notes_repo, source_commit="a" * 40, phase="publication", receipt=receipt)
 
 
+def test_review_marker_is_not_a_publication_placeholder(notes_repo):
+    from robot_sf.benchmark.release_notes import notes_gate
+
+    path = notes_repo / NOTES
+    write_text(path, path.read_text())
+    receipt = notes_gate(notes_repo, source_commit="a" * 40)
+    assert (
+        notes_gate(notes_repo, source_commit="a" * 40, phase="publication", receipt=receipt)
+        == receipt
+    )
+
+
 def test_stale_notes_rejected_even_when_disclosures_pass(notes_repo):
     from robot_sf.benchmark.release_notes import notes_gate
 

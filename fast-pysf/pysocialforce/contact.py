@@ -18,7 +18,7 @@ SEPARATION_MARGIN_M = 1e-6
 WALL_AMPLITUDE_M_S2 = 3.0
 WALL_DECAY_M = 0.04
 WALL_RANGE_M = 0.20
-WALL_NORMAL_BLEND_M = 0.04
+WALL_NORMAL_BLEND_M = 0.30
 
 
 def validate_contact_rules(config) -> None:

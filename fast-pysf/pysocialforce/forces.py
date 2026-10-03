@@ -40,6 +40,7 @@ from pysocialforce.config import (
 from pysocialforce.contact import (
     WALL_AMPLITUDE_M_S2,
     WALL_DECAY_M,
+    WALL_NORMAL_BLEND_M,
     WALL_RANGE_M,
     bounded_wall_force,
 )
@@ -443,7 +444,9 @@ class ObstacleForce:
                 ),
                 "decay_m": float(getattr(config, "wall_contact_decay_m", WALL_DECAY_M)),
                 "range_m": float(getattr(config, "wall_contact_range_m", WALL_RANGE_M)),
-                "normal_blend_m": float(getattr(config, "wall_contact_normal_blend_m", 0.04)),
+                "normal_blend_m": float(
+                    getattr(config, "wall_contact_normal_blend_m", WALL_NORMAL_BLEND_M)
+                ),
             }
             if any(not np.isfinite(v) or v <= 0 for v in self.contact_wall_parameters.values()):
                 raise ValueError("wall contact parameters must be finite and positive")

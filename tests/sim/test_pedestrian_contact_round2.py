@@ -69,6 +69,26 @@ def test_contact_removes_closing_velocity_after_overrelaxed_position_repair():
     np.testing.assert_allclose(sim.peds.vel(), np.zeros((2, 2)), atol=1e-12)
 
 
+@pytest.mark.parametrize("amplitude", [3.0, 6.0, 9.0])
+def test_gap_wall_response_damps_instead_of_entering_a_lateral_cycle(amplitude):
+    """Actual goal/wall forces must damp an admissible near-wall disturbance."""
+    from scripts.validation.pedestrian_validation_10074 import protocol_simulate
+
+    cfg = config(wall=True)
+    cfg.obstacle_force_config.wall_contact_amplitude_m_s2 = amplitude
+    state = np.array([[0, 0.024998, 1.29, 0, 1000, 0, 0.5]], float)
+    positions, _, _ = protocol_simulate(
+        state,
+        [(-100, 0.305, 1000, 0.305), (-100, -0.305, 1000, -0.305)],
+        cfg,
+        300,
+        speed_cap_m_s=2.0,
+        desired_distribution=(1.29, 0.0),
+        desired_seed=1001,
+    )
+    assert np.max(np.abs(positions[-100:, 0, 1])) < 1e-5, "persistent gap chatter"
+
+
 @pytest.mark.parametrize("pair,wall", [(True, False), (False, True), (True, True)])
 def test_unset_radius_is_not_changed_by_law_selection(pair, wall):
     """Selectors preserve the backend radius when no physical radius is supplied."""

@@ -39,8 +39,13 @@ is attempted, then an admissible previous state is used where possible. Fallback
 unresolved counters remain visible; no exception aborts the episode. Residual geometry
 is still counted as a violation rather than admitted as a success.
 Velocity correction removes closing normal components and reapplies the integration cap;
-it never converts geometric displacement into velocity. Wall normals blend over 0.04 m,
+it never converts geometric displacement into velocity. Wall normals blend over 0.30 m,
 avoiding medial-axis chatter while preserving the bounded finite-range strength.
+A 0.04 m trial remained in a clipped lateral cycle at a near-wall start and is
+superseded. The 0.30 m band makes the parallel-gap restoring-gradient bound
+A(4/blend + 1/decay) <= 345/s² for the whole A<=9, decay>=.04 grid. At dt=.1
+and tau=.5, the damped semi-implicit limit is 360/s². A real-force 300-step
+witness at amplitudes 3/6/9 must damp below 10 micrometres, not just be continuous.
 Selectors retain the backend radius unless pedestrian_radius_m is explicitly provided.
 Both robot gate arms explicitly use [milestone 0.1.0's 0.28 m radius](https://github.com/ll7/robot_sf_ll7/milestone/11).
 

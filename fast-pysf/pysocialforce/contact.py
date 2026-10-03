@@ -497,9 +497,22 @@ def apply_contact_step(sim, previous: np.ndarray) -> None:
         converged = converged or geometry_valid(corrected, obstacles, radius, pairs, walls)
         if not converged and not fixed.any():
             affected = unresolved_contact_mask(corrected, obstacles, radius, pairs, walls)
-            if geometry_valid(previous_positions, obstacles, radius, pairs, walls):
-                corrected[affected] = previous_positions[affected]
-                converged = geometry_valid(corrected, obstacles, radius, pairs, walls)
+            if not unresolved_contact_mask(
+                previous_positions, obstacles, radius, pairs, walls
+            ).any():
+                # Restoring one body can overlap a neighbour that advanced this
+                # step. Close that contact set before accepting the rollback.
+                # Each unsuccessful iteration adds a body; an admissible prior
+                # state therefore guarantees termination in at most N passes.
+                for _ in range(len(corrected)):
+                    corrected[affected] = previous_positions[affected]
+                    newly_affected = unresolved_contact_mask(
+                        corrected, obstacles, radius, pairs, walls
+                    )
+                    if not newly_affected.any():
+                        converged = True
+                        break
+                    affected |= newly_affected
         if not converged:
             sim.contact_projection_unresolved_count += 1
             unresolved = unresolved_contact_mask(corrected, obstacles, radius, pairs, walls)
@@ -547,7 +560,7 @@ def contact_law_metadata(sim) -> dict[str, object]:
             "broad_phase_skin_m": PAIR_GRID_SKIN_M,
             "broad_phase_rebuild_displacement_m": PAIR_GRID_SKIN_M / 2,
             "velocity": "closing_normal_removal_then_speed_cap",
-            "cap_fallback": "endpoint_push_out_then_local_admissible_previous; stop_only_unresolved_bodies",
+            "cap_fallback": "endpoint_push_out_then_contact_closure_admissible_previous; stop_only_unresolved_bodies",
             "swept_pair_guard": True,
             "prescribed_indices": list(getattr(sim.config, "contact_prescribed_indices", ())),
         },

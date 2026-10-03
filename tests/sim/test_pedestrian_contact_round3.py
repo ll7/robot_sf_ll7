@@ -29,6 +29,33 @@ def test_capped_contact_retry_preserves_isolated_walker(monkeypatch, unresolved)
     np.testing.assert_array_equal(sim.peds.vel()[-1], [1.3, 0])
 
 
+def test_local_rollback_closes_new_contacts_without_stopping_isolated_walker(monkeypatch):
+    """Rolling back a jam must include a neighbour newly overlapped by that rollback."""
+    np.random.seed(1001)
+    cfg = config()
+    cfg.scene_config.agent_radius = 0.30
+    previous = np.array(
+        [
+            [0, 0, 1.2, 0, 10, 0, 0.5],
+            [0.61, 0, 0.4, 0, 10, 0, 0.5],
+            [-0.61, 0, 1.1, 0, 10, 0, 0.5],
+            [50, 50, 1.3, 0, 100, 50, 0.5],
+        ]
+    )
+    attempted = np.array([[0.12, 0], [0.65, 0], [-0.50, 0], [50.13, 50]])
+    sim = Simulator(previous.copy(), config=cfg, make_forces=free_forces)
+    sim.peds.max_speeds[:] = 2
+    sim.peds.state[:, :2] = attempted
+    monkeypatch.setattr(contact, "project_step", lambda *args: (attempted.copy(), 1, False))
+    contact.apply_contact_step(sim, previous)
+    distances = np.linalg.norm(sim.peds.pos()[:3, None] - sim.peds.pos()[None, :3], axis=2)
+    assert distances[np.triu_indices(3, 1)].min() >= 0.60
+    np.testing.assert_array_equal(sim.peds.pos()[-1], attempted[-1])
+    np.testing.assert_array_equal(sim.peds.vel()[-1], [1.3, 0])
+    assert sim.contact_projection_fallback_count == 1
+    assert sim.contact_projection_unresolved_count == 0
+
+
 def test_turn_already_underway_at_source_window_is_right_censored():
     """A manoeuvre beginning before x=-3 has a lower bound, not a late exact onset."""
     t = np.arange(601) * 0.1

@@ -66,7 +66,7 @@ def load_cells(names):
     return cells
 
 
-def hybrid_config(scenario, enabled=False, platform=False):
+def hybrid_config(scenario, enabled=False, goal_validity=False):
     """Load the named hybrid candidate including its scenario overrides."""
     _, payload, cfg, path = load_candidate_definition(ROOT / _DEFAULT_REGISTRY, CANDIDATE)
     algo, cfg = _effective_candidate_runtime_for_scenario(
@@ -76,9 +76,8 @@ def hybrid_config(scenario, enabled=False, platform=False):
     cfg["debug_candidate_evaluator"] = True
     if enabled:
         cfg["physical_static_exclusion_enabled"] = True
+    if goal_validity:
         cfg["goal_next_validity_enabled"] = True
-    if platform:
-        cfg["platform_speed_candidates_enabled"] = True
     return cfg
 
 
@@ -164,8 +163,6 @@ def evaluate_orca_step(shadow, obs, state, command, end):
 
 def missing_candidate_probe(planner, obs, state, command):
     """Find an admissible forward action excluded by the scalar proximity speed cap."""
-    if planner.config.platform_speed_candidates_enabled:
-        return None  # The drive-reachable endpoint is now in the generated set.
     cap = planner._last_v4_speed_safety["speed_cap"]
     _, reachable, _, _ = planner._dynamic_window(
         state["current_speed"], planner._v4_effective_max_speed()
@@ -206,7 +203,9 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     )
     cfg = _build_env_config(scenario, scenario_path=matrix)
     hcfg = hybrid_config(
-        scenario, enabled=arm in {"on", "static", "both"}, platform=arm in {"platform", "both"}
+        scenario,
+        enabled=arm in {"static_only", "static_plus_goal_validity"},
+        goal_validity=arm == "static_plus_goal_validity",
     )
     cfg.include_goal_next_valid = bool(hcfg.get("goal_next_validity_enabled", False))
     algo = "orca" if arm == "orca" else "hybrid_rule_local_planner"
@@ -357,7 +356,7 @@ def main():
     parser.add_argument(
         "--arms",
         nargs="+",
-        choices=["off", "on", "static", "platform", "both", "orca"],
+        choices=["off", "static_only", "static_plus_goal_validity", "orca"],
         default=["off", "orca"],
     )
     parser.add_argument("--empty", action="store_true")
@@ -397,10 +396,9 @@ def main():
         "arms": args.arms,
         "arm_flags": {
             a: {
-                "physical_static_exclusion_enabled": a in {"static", "both"},
-                "platform_speed_candidates_enabled": a in {"platform", "both"},
-                "goal_next_validity_enabled": a in {"static", "both"},
-                "include_goal_next_valid": a in {"static", "both"},
+                "physical_static_exclusion_enabled": a in {"static_only", "static_plus_goal_validity"},
+                "goal_next_validity_enabled": a == "static_plus_goal_validity",
+                "include_goal_next_valid": a == "static_plus_goal_validity",
             }
             for a in args.arms
             if a != "orca"

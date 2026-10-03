@@ -190,13 +190,12 @@ map observation bridge preserve the optional bit. Without the field, they retain
 selection. Physical exclusion alone does not change goal selection. Default
 observations, observation spaces and frozen 0.0.8 policy remain unchanged.
 
-Independently, `platform_speed_candidates_enabled: true` (default: false) adds
-reachable speeds above the comfort band, **never above the nearest-pedestrian
-braking cap**. It keeps every legacy candidate and requires
-`v4_braking_check_enabled`. Speed preference is normalized by the drive's
-effective maximum speed, rather than saturating at the comfort cap. The existing
-pedestrian prediction check remains; an added physical wall check covers the
-complete committed-step-plus-braking tail with swept-disc/arc exclusion.
+The wall flag also checks the complete committed-step-plus-braking tail against
+physical map geometry. Limited reverse from main is respected by this sweep.
+The platform candidate-injection experiment was removed after round 3: with the
+current-position braking cap enforced it adds no meaningful success benefit and
+increases near misses. Historical measurements and the braking audit remain in
+`docs/validation/hybdiag/`; they are not an adoption recommendation.
 
 The 1.60 m threshold in these scenarios is a **candidate rejection radius applied
 to constant-velocity predicted pedestrian positions at rollout endpoints**.
@@ -211,7 +210,7 @@ The development-only driver uses the benchmark environment and action adapter:
 ```bash
 uv run python -m scripts.validation.run_hybrid_feasibility_diagnostics \
   --scenarios francis2023_narrow_doorway_width_2p20 --seeds 1001 \
-  --arms off static platform both --workers 1 --output output/hybrid_feasibility
+  --arms off static_only static_plus_goal_validity --workers 1 --output output/hybrid_feasibility
 ```
 
 It validates resolved seeds before environment creation and permits only
@@ -222,9 +221,9 @@ Summary JSON and compressed per-step JSONL retain forced/preferred decisions,
 actual-plant stopped-time fraction (speed <= 0.05 m/s), time without a feasible
 moving command, longest stationary interval, and diagnostic freezing (stationary
 for >10 s, or net displacement <0.5 m across a window longer than 10 s).
-The four arms toggle neither physical/platform flag, static, platform, or both;
-the static and both arms also explicitly enable successor validity and its sensor field;
-`on` remains an alias for `static`. Native pedestrian minimum center separation
+The three comparison arms are `off`, `static_only` (only
+`physical_static_exclusion_enabled`), and `static_plus_goal_validity` (also
+`goal_next_validity_enabled` and `include_goal_next_valid`). Native pedestrian minimum center separation
 and near-miss steps/events are retained. A near miss has a surface gap in
 `[0, 0.50)` m; an event starts when the per-step near-miss indicator turns on.
 

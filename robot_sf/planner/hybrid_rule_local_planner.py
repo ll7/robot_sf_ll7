@@ -315,7 +315,6 @@ class HybridRuleLocalPlannerConfig:
     static_hard_safety_margin: float = -1.0
     debug_candidate_evaluator: bool = False
     physical_static_exclusion_enabled: bool = False
-    platform_speed_candidates_enabled: bool = False
     goal_next_validity_enabled: bool = False
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9
@@ -584,10 +583,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             swept_geometry=(
                 StaticObstacleClearance(obstacle_segments.reshape(-1, 2, 2), [])
                 if self._v4_clearance_braking
-                and (
-                    self.config.physical_static_exclusion_enabled
-                    or self.config.platform_speed_candidates_enabled
-                )
+                and self.config.physical_static_exclusion_enabled
                 else None
             ),
         )
@@ -1038,7 +1034,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             Rejection evidence for a wall in the stopping sweep, otherwise None.
         """
         context = self._continuous_static_context
-        if not self.config.platform_speed_candidates_enabled or context is None:
+        if not self.config.physical_static_exclusion_enabled or context is None:
             return None
         geometry = context.swept_geometry
         if geometry is None:
@@ -1922,43 +1918,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 clipped.source
             ) > self._candidate_source_priority(existing.source):
                 unique[key] = clipped
-        for extra in self._admissible_speed_candidates(state, speed_cap, candidates):
-            unique.setdefault(self._candidate_key(extra), extra)
         return list(unique.values())
-
-    def _admissible_speed_candidates(
-        self, state: dict[str, Any], speed_cap: float, candidates: list[HybridRuleCandidate]
-    ) -> list[HybridRuleCandidate]:
-        """Extend the comfort band, retaining the nearest-pedestrian braking bound.
-
-        Returns:
-            Extra drive-reachable commands; every command still requires evaluation.
-        """
-        if not (
-            self._v4_clearance_braking
-            and self.config.platform_speed_candidates_enabled
-            and self.config.v4_braking_check_enabled
-        ):
-            return []
-        maximum = self._v4_effective_max_speed()
-        self._v4_human_speed_cap(state)
-        braking_cap = self._last_v4_speed_safety["braking_cap"]
-        if braking_cap is not None:
-            maximum = min(maximum, float(braking_cap))
-        minimum, reachable, _, _ = self._dynamic_window(state["current_speed"], maximum)
-        if reachable <= speed_cap + _EPS:
-            return []
-        speeds = np.linspace(minimum, reachable, max(int(self.config.linear_samples), 2))
-        angles = sorted({float(c.angular) for c in candidates if c.linear > _EPS})
-        return [
-            self._clip_candidate(
-                HybridRuleCandidate(float(linear), angular, "admissible_speed"),
-                speed_cap=maximum,
-            )
-            for linear in speeds
-            if linear > speed_cap + _EPS
-            for angular in angles
-        ]
 
     def _build_clearance_context(
         self, observation: dict[str, Any]
@@ -3361,12 +3321,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "path_alignment": float(np.cos(metrics["heading_error"])),
             "speed_preference": _clip01(
                 metrics["rollout_mean_linear"]
-                / max(
-                    self._v4_effective_max_speed()
-                    if self._v4_clearance_braking and self.config.platform_speed_candidates_enabled
-                    else speed_cap,
-                    _EPS,
-                )
+                / max(speed_cap, _EPS)
             ),
             "static_clearance": metrics["static_clearance"],
             "dynamic_clearance": metrics["dynamic_clearance"],

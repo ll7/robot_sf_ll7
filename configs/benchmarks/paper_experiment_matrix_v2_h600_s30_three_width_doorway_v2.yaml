@@ -26,8 +26,10 @@ amv_profile:
     - bottleneck
 seed_policy:
   mode: seed-set
+  # seed-holdout: release-evaluation begin
   seed_set: release_eval_0_0_8
   seed_sets_path: configs/benchmarks/seed_sets_0_0_8.yaml
+  # seed-holdout: release-evaluation end
 snqi_v2_spec:
   weights_path: configs/benchmarks/snqi_v2/weights.v2.0.json
   weights_sha256: 684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25

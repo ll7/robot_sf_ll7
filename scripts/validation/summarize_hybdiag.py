@@ -18,6 +18,7 @@ import math
 from pathlib import Path
 
 ARMS = ("off", "static", "platform", "both")
+ROUND4_ARMS = ("off", "static_only", "static_plus_goal_validity")
 DEFAULT_OUTPUT = Path("docs/validation/hybdiag")
 
 
@@ -66,6 +67,7 @@ def aggregate(rows: list[dict]) -> dict:
 
 def validate(payload: dict) -> None:
     """Refuse partial grids, duplicate episodes and non-dev experimental seeds."""
+    arms = ROUND4_ARMS if payload["round"] >= 4 else ARMS
     if any(row["world"] not in {"crowd", "empty"} for row in payload["episodes"]):
         raise ValueError("Unknown episode world")
     for world in ("crowd", "empty"):
@@ -74,9 +76,9 @@ def validate(payload: dict) -> None:
         scenario_count = 10 if world == "crowd" else 51
         if manifest["seeds"] != seeds or len(set(manifest["scenarios"])) != scenario_count:
             raise ValueError(f"Wrong scenario/seed domain: {world}")
-        if manifest["arms"] != list(ARMS):
+        if manifest["arms"] != list(arms):
             raise ValueError(f"Incomplete arms: {world}")
-        expected = set(itertools.product(manifest["scenarios"], seeds, ARMS))
+        expected = set(itertools.product(manifest["scenarios"], seeds, arms))
         rows = [row for row in payload["episodes"] if row["world"] == world]
         keys = [(row["scenario"], row["seed"], row["arm"]) for row in rows]
         if len(keys) != len(set(keys)) or set(keys) != expected:
@@ -85,6 +87,27 @@ def validate(payload: dict) -> None:
             raise ValueError(f"Invalid outcome: {world}")
         if any(row["duration_s"] <= 0 for row in rows):
             raise ValueError(f"Invalid exposure: {world}")
+        if payload["round"] >= 4:
+            validate_round4_flags(manifest, rows, arms, world)
+
+
+def validate_round4_flags(manifest: dict, rows: list[dict], arms: tuple, world: str) -> None:
+    """Refuse coupled wall/goal arms or dropped validity fields."""
+    expected_flags = {
+        arm: {
+            "physical_static_exclusion_enabled": arm != "off",
+            "goal_next_validity_enabled": arm == "static_plus_goal_validity",
+            "include_goal_next_valid": arm == "static_plus_goal_validity",
+        }
+        for arm in arms
+    }
+    if manifest["arm_flags"] != expected_flags:
+        raise ValueError(f"Coupled or incorrect Round 4 flags: {world}")
+    if any(
+        row["next_valid_field_observed"] != (row["arm"] == "static_plus_goal_validity")
+        for row in rows
+    ):
+        raise ValueError(f"Optional observation field disagrees with arm: {world}")
 
 
 def import_runs(round_number: int, crowd: Path, empty: Path) -> dict:
@@ -156,13 +179,14 @@ def import_runs(round_number: int, crowd: Path, empty: Path) -> dict:
 def summarize(payload: dict) -> dict:
     """Generate per-scenario and pooled tables plus paired acceptance witnesses."""
     validate(payload)
+    arms = ROUND4_ARMS if payload["round"] >= 4 else ARMS
     cells, failures, gates = [], [], {}
     for world in ("crowd", "empty"):
         rows = [row for row in payload["episodes"] if row["world"] == world]
         lookup = {(row["scenario"], row["seed"], row["arm"]): row for row in rows}
         scenarios = payload["manifests"][world]["scenarios"]
         for scenario in ["ALL", *scenarios]:
-            for arm in ARMS:
+            for arm in arms:
                 subset = [
                     row
                     for row in rows
@@ -194,7 +218,7 @@ def summarize(payload: dict) -> dict:
                             )
                         }
                     )
-    for arm in ARMS[1:]:
+    for arm in arms[1:]:
         new_empty = [row for row in failures if row["world"] == "empty" and row["arm"] == arm]
         safe = all(
             cell["collision_wilson_low"]
@@ -235,11 +259,11 @@ def csv_text(rows: list[dict]) -> str:
 def comparison_markdown(summaries: list[dict]) -> str:
     """Render the public pooled comparison directly from the verified summaries."""
     lines = [
-        "# HYBDIAG Round 2 versus Round 3",
+        f"# HYBDIAG Round {summaries[0]['round']} versus Round {summaries[-1]['round']}",
         "",
-        "AI-GENERATED/NEEDS-REVIEW. Development seeds only. Restoring the pedestrian",
-        "braking bound removes the earlier platform gain; zero collisions do not",
-        "prove unchanged pedestrian safety. Per-scenario intervals and all metrics",
+        "AI-GENERATED/NEEDS-REVIEW. Development seeds only. The platform experiment",
+        "is historical and has been removed; zero collisions do not prove unchanged",
+        "pedestrian safety. Per-scenario intervals and all metrics",
         "are in the corresponding `round*-results.csv` files.",
         "",
         "| Round/world | Arm | S/C/T | Success Wilson 95% | Collision Wilson 95% | Timeout Wilson 95% | Freeze | Stopped % | No moving s | Min ped m | Near events; per 1,000 robot-s |",
@@ -264,7 +288,48 @@ def comparison_markdown(summaries: list[dict]) -> str:
                 f"{cell['near_miss_events']}; {cell['near_miss_events_per_1000_robot_seconds']:.2f} |"
             )
     lines.extend(["", "Each crowded arm has 300 episodes; each empty arm has 102.", ""])
+    lines.extend(near_miss_markdown(summaries))
     return "\n".join(lines)
+
+
+def near_miss_rows(summaries: list[dict]) -> list[dict]:
+    """Expose scenario contributions and denominators alongside pooled event rates."""
+    keys = (
+        "round",
+        "scenario",
+        "arm",
+        "near_miss_events",
+        "robot_seconds",
+        "near_miss_events_per_1000_robot_seconds",
+        "minimum_pedestrian_separation_m",
+        "near_miss_time_fraction",
+    )
+    return [
+        {key: cell[key] for key in keys}
+        for summary in summaries
+        for cell in summary["cells"]
+        if cell["world"] == "crowd"
+    ]
+
+
+def near_miss_markdown(summaries: list[dict]) -> list[str]:
+    """Show exposure rather than interpreting a pooled rate as identical encounter risk."""
+    lines = [
+        "Per-scenario near-miss decomposition (crowded worlds). Events count entries",
+        "into the global-any-pedestrian surface-gap [0, 0.50) m predicate. Robot-seconds",
+        "are actual exposure. Different route completion changes encounter exposure.",
+        "",
+        "| Round | Scenario | Arm | Events | Robot-seconds | Events / 1,000 robot-s |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in near_miss_rows(summaries):
+        lines.append(
+            f"| {row['round']} | {row['scenario']} | {row['arm']} | "
+            f"{row['near_miss_events']} | {row['robot_seconds']:.1f} | "
+            f"{row['near_miss_events_per_1000_robot_seconds']:.2f} |"
+        )
+    lines.append("")
+    return lines
 
 
 def validate_wall_witness(witness: dict, final: dict, combined: dict) -> float:
@@ -472,6 +537,120 @@ def audit_native_controls(directory: Path, crowd: Path, empty: Path, previous: P
     (directory / "round3-native-audit.json").write_text(json.dumps(result, indent=2) + "\n")
 
 
+def audit_round4_controls(directory: Path, crowd: Path, empty: Path, previous: Path) -> None:
+    """Verify new native custody, separated observation flags and unchanged off traces."""
+    payload = json.loads((directory / "round4-episodes.json").read_text())
+    validate(payload)
+    root = Path(__file__).resolve().parents[2]
+    proof = {
+        "status": "AI-GENERATED/NEEDS-REVIEW",
+        "default_off": [],
+        "optional_field_episodes": {},
+        "runtime_module_sha256": {},
+        "publication_module_sha256": {},
+    }
+    for world, source, folder in (("crowd", crowd, "measure"), ("empty", empty, "empty")):
+        manifest = json.loads((source / "manifest.json").read_text())
+        for arm in ROUND4_ARMS:
+            rows = [
+                row for row in payload["episodes"] if row["world"] == world and row["arm"] == arm
+            ]
+            proof["optional_field_episodes"][f"{world}/{arm}"] = sum(
+                row["next_valid_field_observed"] for row in rows
+            )
+        for row in (row for row in payload["episodes"] if row["world"] == world):
+            if row["execution_head"] != manifest["head"]:
+                raise ValueError("Round 4 must contain only newly measured runtime episodes")
+        for path in sorted(source.glob(f"*__off__{world}.jsonl.gz")):
+            encoded = []
+            for trace in (previous / f"round3-{folder}" / path.name, path):
+                with gzip.open(trace, "rt") as stream:
+                    values = [
+                        {
+                            key: row[key]
+                            for key in ("position", "end_position", "command", "collision")
+                        }
+                        for row in map(json.loads, stream)
+                    ]
+                encoded.append(json.dumps(values, sort_keys=True, separators=(",", ":")).encode())
+            proof["default_off"].append(
+                {
+                    "episode": path.name.removesuffix(".jsonl.gz"),
+                    "round3_sha256": hashlib.sha256(encoded[0]).hexdigest(),
+                    "round4_sha256": hashlib.sha256(encoded[1]).hexdigest(),
+                    "identical": encoded[0] == encoded[1],
+                }
+            )
+        audit_runtime_modules(manifest, root, proof)
+    if len(proof["default_off"]) != 402:
+        raise ValueError("Expected 402 freshly measured off trajectories")
+    (directory / "round4-native-audit.json").write_text(json.dumps(proof, indent=2) + "\n")
+
+
+def audit_runtime_modules(manifest: dict, root: Path, proof: dict) -> None:
+    """Require the published evaluator, sensor, reader and geometry bytes used natively."""
+    for relative, digest in manifest["sha256"].items():
+        if relative.endswith(".py") and not relative.startswith("scripts/"):
+            current = hashlib.sha256((root / relative).read_bytes()).hexdigest()
+            if digest != current:
+                raise ValueError(f"Runtime module differs from publication: {relative}")
+            proof["runtime_module_sha256"][relative] = digest
+            proof["publication_module_sha256"][relative] = current
+
+
+def classify_round4_goal_ablation(earlier: dict, later: dict) -> dict:
+    """Classify every new off failure and lost success after withdrawing goal validity."""
+    validate(later)
+    lookup = {
+        (row["world"], row["scenario"], row["seed"], row["arm"]): row for row in later["episodes"]
+    }
+    old = {
+        (row["world"], row["scenario"], row["seed"], row["arm"]): row for row in earlier["episodes"]
+    }
+    episodes = []
+    for row in later["episodes"]:
+        if row["arm"] == "off" or row["outcome"] == "success":
+            continue
+        off = lookup[row["world"], row["scenario"], row["seed"], "off"]
+        previous = old[row["world"], row["scenario"], row["seed"], "static"]
+        if off["outcome"] != "success" and previous["outcome"] != "success":
+            continue
+        paired = lookup[row["world"], row["scenario"], row["seed"], "static_plus_goal_validity"]
+        feasible = row["final_diagnostics"]["feasible_moving_count"]
+        if not (
+            row["arm"] == "static_only"
+            and paired["outcome"] == "success"
+            and row["no_feasible_moving_s"] == 0
+            and feasible > 0
+        ):
+            raise ValueError(f"Unclassified Round 4 failure: {row['scenario']} {row['seed']}")
+        episodes.append(
+            {
+                "world": row["world"],
+                "scenario": row["scenario"],
+                "seed": row["seed"],
+                "arm": row["arm"],
+                "classification": "livelock",
+                "new_vs_off": off["outcome"] == "success",
+                "lost_vs_round3_static_with_goal_validity": previous["outcome"] == "success",
+                "evidence": f"Timeout at {row['duration_s']:.1f}s, goal gap {row['final_goal_distance_m']:.6f}m; "
+                f"{feasible} feasible moving candidates at last step and zero no-moving time; "
+                f"explicit successor-validity pair succeeds in {paired['duration_s']:.1f}s. "
+                "The retained absent-successor origin target produces the near-goal cycle, "
+                "rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+                "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+                "only_final": row["final_diagnostics"],
+                "paired_duration_s": paired["duration_s"],
+                "only_freezing_metric": row["freezing"],
+            }
+        )
+    return {
+        "status": "AI-GENERATED/NEEDS-REVIEW; dev-only",
+        "meaning": "New failures versus off plus lost successes versus the former combined static/goal arm; one class per episode",
+        "episodes": episodes,
+    }
+
+
 def outputs(directory: Path) -> dict[str, str]:
     """Derive reproducible tables from the committed compact input summaries."""
     results, summaries = {}, []
@@ -481,12 +660,39 @@ def outputs(directory: Path) -> dict[str, str]:
         prefix = f"round{summary['round']}"
         results[f"{prefix}-summary.json"] = json.dumps(summary, indent=2) + "\n"
         results[f"{prefix}-results.csv"] = csv_text(summary["cells"])
-    if len(summaries) == 2:
+    by_round = {summary["round"]: summary for summary in summaries}
+    if 4 in by_round:
+        results["round3-vs-round4.md"] = comparison_markdown([by_round[3], by_round[4]])
+        results["round3-vs-round4.csv"] = csv_text(
+            [
+                cell
+                for number in (3, 4)
+                for cell in by_round[number]["cells"]
+                if cell["scenario"] == "ALL"
+            ]
+        )
+        results["round4-new-failures.json"] = (
+            json.dumps(by_round[4]["new_failures"], indent=2) + "\n"
+        )
+        results["round4-failure-classifications.json"] = (
+            json.dumps(
+                classify_round4_goal_ablation(
+                    json.loads((directory / "round3-episodes.json").read_text()),
+                    json.loads((directory / "round4-episodes.json").read_text()),
+                ),
+                indent=2,
+            )
+            + "\n"
+        )
+    for summary in summaries:
+        results[f"round{summary['round']}-near-misses.csv"] = csv_text(near_miss_rows([summary]))
+    if 2 in by_round and 3 in by_round:
+        historical = [by_round[2], by_round[3]]
         pooled = [
-            cell for summary in summaries for cell in summary["cells"] if cell["scenario"] == "ALL"
+            cell for summary in historical for cell in summary["cells"] if cell["scenario"] == "ALL"
         ]
         results["round2-vs-round3.csv"] = csv_text(pooled)
-        results["round2-vs-round3.md"] = comparison_markdown(summaries)
+        results["round2-vs-round3.md"] = comparison_markdown(historical)
         earlier = json.loads((directory / "round2-episodes.json").read_text())
         later = json.loads((directory / "round3-episodes.json").read_text())
         lookup = {
@@ -549,6 +755,10 @@ def import_requested_native(args: argparse.Namespace, parser: argparse.ArgumentP
         if args.check:
             parser.error("Audit import cannot use --check")
         audit_braking_bound(args.output, args.audit_braking_bound)
+    if args.audit_round4_controls is not None:
+        if args.check or args.crowd is None or args.empty is None:
+            parser.error("Round 4 audit requires --crowd/--empty and cannot use --check")
+        audit_round4_controls(args.output, args.crowd, args.empty, args.audit_round4_controls)
     if args.audit_native_controls is not None:
         if args.check or args.crowd is None or args.empty is None:
             parser.error("Native audit requires --crowd/--empty and cannot use --check")
@@ -559,10 +769,15 @@ def main() -> None:
     """Import native summaries or verify/rebuild all committed result tables."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--import-round", type=int, choices=(2, 3))
+    parser.add_argument("--import-round", type=int, choices=(2, 3, 4))
     parser.add_argument("--crowd", type=Path)
     parser.add_argument("--empty", type=Path)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--audit-round4-controls",
+        type=Path,
+        help="Prior artifact parent containing round3-measure/round3-empty",
+    )
     parser.add_argument(
         "--audit-native-controls",
         type=Path,

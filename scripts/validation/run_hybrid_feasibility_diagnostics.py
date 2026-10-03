@@ -396,7 +396,8 @@ def main():
         "arms": args.arms,
         "arm_flags": {
             a: {
-                "physical_static_exclusion_enabled": a in {"static_only", "static_plus_goal_validity"},
+                "physical_static_exclusion_enabled": a
+                in {"static_only", "static_plus_goal_validity"},
                 "goal_next_validity_enabled": a == "static_plus_goal_validity",
                 "include_goal_next_valid": a == "static_plus_goal_validity",
             }

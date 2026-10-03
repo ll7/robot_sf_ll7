@@ -12,6 +12,10 @@ python -m scripts.validation.summarize_hybdiag
 python -m scripts.validation.summarize_hybdiag --check
 ```
 
+`round*-near-misses.csv` and the readable comparison tables show per-scenario
+events, robot-seconds and rates next to pooled rates. This distinguishes changed
+route exposure from changed risk at the same encounter.
+
 CSV files begin with a normal header. Success, collisions, timeouts and freezing
 have two-sided 95% Wilson intervals over episodes. Stopped time and time without a
 feasible moving candidate are weighted by robot exposure. A near-miss event starts
@@ -21,7 +25,7 @@ pedestrian separation is the executed center-to-center minimum. Robot radius is
 1.0 m, pedestrian radius 0.4 m. No inference of independence between repeated
 near-miss events is made.
 
-`off` retains the frozen behavior. `static` enables physical wall exclusion;
+Historical Round 2/3: `off` retains the corresponding main behavior. `static` enables physical wall exclusion;
 `platform` extends speed candidates while retaining predicted pedestrian exclusion;
 `both` enables both. Round 2 couples the absent-successor guard to static exclusion.
 Round 3 explicitly enables `goal_next_validity_enabled` and the optional sensor
@@ -33,6 +37,15 @@ constant-velocity predicted positions at rollout endpoints. It is not a hard lim
 on executed separation. Round 3 retains the current-position pedestrian braking
 cap, normalizes speed preference by drive maximum, checks wall stopping distance
 past the finite rollout, and conservatively covers turning arcs during swept checks.
+
+Round 4 removes the platform injection flag and code: its restored braking cap
+yields no meaningful benefit with a measurable pedestrian-proximity cost.
+The braking audit remains; `round4-platform-verdict.md` records the review verdict
+and follow-up issue #10111. Current arms are `off`, `static_only` (wall exclusion
+only), and `static_plus_goal_validity` (also planner validity plus sensor field).
+`round3-vs-round4.md` and `round4-results.csv` compare the merged-tree results.
+The exact adopted flags are named in `round4-adoption.md`; sealed-seed
+confirmation remains pending. No sealed seed is executed by this lane.
 
 The empty-world gate compares each enabled arm to paired off episodes. Acceptance
 requires no new empty-world failure and collision Wilson bounds not above off
@@ -75,3 +88,19 @@ The first full suite caught two config-reference parity regressions: the new
 canonical environment-config generator refreshes those default-False rows; the
 existing byte-parity and exact-field tests reproduce the defect and pass after
 regeneration. No test or planner behavior was changed to repair this drift.
+
+Round 4 native custody can be re-imported with the committed exporter:
+
+```sh
+python -m scripts.validation.summarize_hybdiag --import-round 4 \
+  --crowd <round4-crowd-folder> --empty <round4-empty-folder>
+python -m scripts.validation.summarize_hybdiag --audit-round4-controls <prior-artifact-parent> \
+  --crowd <round4-crowd-folder> --empty <round4-empty-folder>
+```
+
+The parent contains `round3-measure` and `round3-empty`. The audit checks all 402
+new off command/pose/contact trajectories against Round 3, optional-field delivery
+for every enabled goal arm, and runtime evaluator/sensor/reader/geometry bytes
+against publication. The table checker also refuses coupled static-only flags.
+Raw traces are needed only to import custody; public CSV/JSON tables regenerate
+from committed compact episode inputs alone.

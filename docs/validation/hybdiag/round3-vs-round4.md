@@ -1,4 +1,4 @@
-# HYBDIAG Round 2 versus Round 3
+# HYBDIAG Round 3 versus Round 4
 
 AI-GENERATED/NEEDS-REVIEW. Development seeds only. The platform experiment
 is historical and has been removed; zero collisions do not prove unchanged
@@ -7,14 +7,6 @@ are in the corresponding `round*-results.csv` files.
 
 | Round/world | Arm | S/C/T | Success Wilson 95% | Collision Wilson 95% | Timeout Wilson 95% | Freeze | Stopped % | No moving s | Min ped m | Near events; per 1,000 robot-s |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2/crowd | off | 235/0/65 | 73.3–82.6% | 0.0–1.3% | 17.4–26.7% | 35/300 | 19.44 | 1739.2 | 1.593 | 255; 27.34 |
-| 2/crowd | static | 270/0/30 | 86.1–92.9% | 0.0–1.3% | 7.1–13.9% | 0/300 | 1.47 | 21.2 | 1.593 | 276; 34.03 |
-| 2/crowd | platform | 261/0/39 | 82.7–90.3% | 0.0–1.3% | 9.7–17.3% | 33/300 | 21.70 | 1682.8 | 1.589 | 526; 65.04 |
-| 2/crowd | both | 291/0/9 | 94.4–98.4% | 0.0–1.3% | 1.6–5.6% | 0/300 | 1.66 | 15.1 | 1.530 | 553; 82.19 |
-| 2/empty | off | 89/0/13 | 79.4–92.4% | 0.0–3.6% | 7.6–20.6% | 4/102 | 10.31 | 202.0 | — | 0; 0.00 |
-| 2/empty | static | 100/0/2 | 93.1–99.5% | 0.0–3.6% | 0.5–6.9% | 2/102 | 7.41 | 98.4 | — | 0; 0.00 |
-| 2/empty | platform | 89/0/13 | 79.4–92.4% | 0.0–3.6% | 7.6–20.6% | 4/102 | 10.31 | 202.0 | — | 0; 0.00 |
-| 2/empty | both | 100/0/2 | 93.1–99.5% | 0.0–3.6% | 0.5–6.9% | 2/102 | 7.41 | 98.4 | — | 0; 0.00 |
 | 3/crowd | off | 235/0/65 | 73.3–82.6% | 0.0–1.3% | 17.4–26.7% | 35/300 | 19.44 | 1739.2 | 1.593 | 255; 27.34 |
 | 3/crowd | static | 270/0/30 | 86.1–92.9% | 0.0–1.3% | 7.1–13.9% | 0/300 | 1.47 | 21.2 | 1.593 | 276; 34.03 |
 | 3/crowd | platform | 236/0/64 | 73.7–82.9% | 0.0–1.3% | 17.1–26.3% | 34/300 | 19.60 | 1711.8 | 1.530 | 330; 36.24 |
@@ -23,6 +15,12 @@ are in the corresponding `round*-results.csv` files.
 | 3/empty | static | 100/0/2 | 93.1–99.5% | 0.0–3.6% | 0.5–6.9% | 2/102 | 7.44 | 98.8 | — | 0; 0.00 |
 | 3/empty | platform | 89/0/13 | 79.4–92.4% | 0.0–3.6% | 7.6–20.6% | 4/102 | 10.31 | 202.0 | — | 0; 0.00 |
 | 3/empty | both | 100/0/2 | 93.1–99.5% | 0.0–3.6% | 0.5–6.9% | 2/102 | 7.44 | 98.8 | — | 0; 0.00 |
+| 4/crowd | off | 235/0/65 | 73.3–82.6% | 0.0–1.3% | 17.4–26.7% | 35/300 | 19.44 | 1739.2 | 1.593 | 255; 27.34 |
+| 4/crowd | static_only | 270/0/30 | 86.1–92.9% | 0.0–1.3% | 7.1–13.9% | 1/300 | 1.46 | 21.2 | 1.593 | 276; 33.62 |
+| 4/crowd | static_plus_goal_validity | 270/0/30 | 86.1–92.9% | 0.0–1.3% | 7.1–13.9% | 0/300 | 1.47 | 21.2 | 1.593 | 276; 34.02 |
+| 4/empty | off | 89/0/13 | 79.4–92.4% | 0.0–3.6% | 7.6–20.6% | 4/102 | 10.31 | 202.0 | — | 0; 0.00 |
+| 4/empty | static_only | 94/0/8 | 85.3–96.0% | 0.0–3.6% | 4.0–14.7% | 3/102 | 6.24 | 98.8 | — | 0; 0.00 |
+| 4/empty | static_plus_goal_validity | 100/0/2 | 93.1–99.5% | 0.0–3.6% | 0.5–6.9% | 2/102 | 7.44 | 98.8 | — | 0; 0.00 |
 
 Each crowded arm has 300 episodes; each empty arm has 102.
 
@@ -32,50 +30,6 @@ are actual exposure. Different route completion changes encounter exposure.
 
 | Round | Scenario | Arm | Events | Robot-seconds | Events / 1,000 robot-s |
 | --- | --- | --- | --- | --- | --- |
-| 2 | ALL | off | 255 | 9326.4 | 27.34 |
-| 2 | ALL | static | 276 | 8110.8 | 34.03 |
-| 2 | ALL | platform | 526 | 8087.1 | 65.04 |
-| 2 | ALL | both | 553 | 6728.2 | 82.19 |
-| 2 | classic_station_platform_medium | off | 102 | 1800.0 | 56.67 |
-| 2 | classic_station_platform_medium | static | 87 | 1800.0 | 48.33 |
-| 2 | classic_station_platform_medium | platform | 237 | 1676.7 | 141.35 |
-| 2 | classic_station_platform_medium | both | 227 | 1707.1 | 132.97 |
-| 2 | classic_cross_trap_high | off | 51 | 1221.0 | 41.77 |
-| 2 | classic_cross_trap_high | static | 50 | 1259.9 | 39.69 |
-| 2 | classic_cross_trap_high | platform | 104 | 865.7 | 120.13 |
-| 2 | classic_cross_trap_high | both | 101 | 844.5 | 119.60 |
-| 2 | classic_t_intersection_medium | off | 8 | 629.6 | 12.71 |
-| 2 | classic_t_intersection_medium | static | 12 | 641.5 | 18.71 |
-| 2 | classic_t_intersection_medium | platform | 15 | 533.1 | 28.14 |
-| 2 | classic_t_intersection_medium | both | 21 | 510.1 | 41.17 |
-| 2 | francis2023_narrow_doorway_width_2p20 | off | 0 | 1800.0 | 0.00 |
-| 2 | francis2023_narrow_doorway_width_2p20 | static | 30 | 521.1 | 57.57 |
-| 2 | francis2023_narrow_doorway_width_2p20 | platform | 0 | 1800.0 | 0.00 |
-| 2 | francis2023_narrow_doorway_width_2p20 | both | 30 | 459.7 | 65.26 |
-| 2 | classic_cross_trap_low | off | 8 | 850.1 | 9.41 |
-| 2 | classic_cross_trap_low | static | 12 | 888.1 | 13.51 |
-| 2 | classic_cross_trap_low | platform | 30 | 732.3 | 40.97 |
-| 2 | classic_cross_trap_low | both | 31 | 740.4 | 41.87 |
-| 2 | classic_cross_trap_medium | off | 35 | 1122.9 | 31.17 |
-| 2 | classic_cross_trap_medium | static | 34 | 1121.0 | 30.33 |
-| 2 | classic_cross_trap_medium | platform | 67 | 810.0 | 82.72 |
-| 2 | classic_cross_trap_medium | both | 66 | 823.7 | 80.13 |
-| 2 | classic_t_intersection_low | off | 7 | 624.8 | 11.20 |
-| 2 | classic_t_intersection_low | static | 8 | 607.6 | 13.17 |
-| 2 | classic_t_intersection_low | platform | 9 | 530.0 | 16.98 |
-| 2 | classic_t_intersection_low | both | 13 | 505.0 | 25.74 |
-| 2 | classic_doorway_low | off | 24 | 362.4 | 66.23 |
-| 2 | classic_doorway_low | static | 22 | 358.4 | 61.38 |
-| 2 | classic_doorway_low | platform | 23 | 325.4 | 70.68 |
-| 2 | classic_doorway_low | both | 23 | 319.6 | 71.96 |
-| 2 | classic_group_crossing_low | off | 5 | 377.5 | 13.25 |
-| 2 | classic_group_crossing_low | static | 4 | 375.1 | 10.66 |
-| 2 | classic_group_crossing_low | platform | 17 | 330.4 | 51.45 |
-| 2 | classic_group_crossing_low | both | 17 | 333.6 | 50.96 |
-| 2 | classic_head_on_corridor_low | off | 15 | 538.1 | 27.88 |
-| 2 | classic_head_on_corridor_low | static | 17 | 538.1 | 31.59 |
-| 2 | classic_head_on_corridor_low | platform | 24 | 483.5 | 49.64 |
-| 2 | classic_head_on_corridor_low | both | 24 | 484.5 | 49.54 |
 | 3 | ALL | off | 255 | 9326.4 | 27.34 |
 | 3 | ALL | static | 276 | 8110.8 | 34.03 |
 | 3 | ALL | platform | 330 | 9105.9 | 36.24 |
@@ -120,3 +74,36 @@ are actual exposure. Different route completion changes encounter exposure.
 | 3 | classic_head_on_corridor_low | static | 17 | 538.1 | 31.59 |
 | 3 | classic_head_on_corridor_low | platform | 16 | 538.3 | 29.72 |
 | 3 | classic_head_on_corridor_low | both | 18 | 534.3 | 33.69 |
+| 4 | ALL | off | 255 | 9326.4 | 27.34 |
+| 4 | ALL | static_only | 276 | 8210.2 | 33.62 |
+| 4 | ALL | static_plus_goal_validity | 276 | 8112.9 | 34.02 |
+| 4 | classic_station_platform_medium | off | 102 | 1800.0 | 56.67 |
+| 4 | classic_station_platform_medium | static_only | 87 | 1800.0 | 48.33 |
+| 4 | classic_station_platform_medium | static_plus_goal_validity | 87 | 1800.0 | 48.33 |
+| 4 | classic_cross_trap_high | off | 51 | 1221.0 | 41.77 |
+| 4 | classic_cross_trap_high | static_only | 50 | 1259.5 | 39.70 |
+| 4 | classic_cross_trap_high | static_plus_goal_validity | 50 | 1259.5 | 39.70 |
+| 4 | classic_t_intersection_medium | off | 8 | 629.6 | 12.71 |
+| 4 | classic_t_intersection_medium | static_only | 12 | 641.5 | 18.71 |
+| 4 | classic_t_intersection_medium | static_plus_goal_validity | 12 | 641.5 | 18.71 |
+| 4 | francis2023_narrow_doorway_width_2p20 | off | 0 | 1800.0 | 0.00 |
+| 4 | francis2023_narrow_doorway_width_2p20 | static_only | 30 | 620.9 | 48.32 |
+| 4 | francis2023_narrow_doorway_width_2p20 | static_plus_goal_validity | 30 | 523.6 | 57.30 |
+| 4 | classic_cross_trap_low | off | 8 | 850.1 | 9.41 |
+| 4 | classic_cross_trap_low | static_only | 12 | 888.1 | 13.51 |
+| 4 | classic_cross_trap_low | static_plus_goal_validity | 12 | 888.1 | 13.51 |
+| 4 | classic_cross_trap_medium | off | 35 | 1122.9 | 31.17 |
+| 4 | classic_cross_trap_medium | static_only | 34 | 1121.0 | 30.33 |
+| 4 | classic_cross_trap_medium | static_plus_goal_validity | 34 | 1121.0 | 30.33 |
+| 4 | classic_t_intersection_low | off | 7 | 624.8 | 11.20 |
+| 4 | classic_t_intersection_low | static_only | 8 | 607.6 | 13.17 |
+| 4 | classic_t_intersection_low | static_plus_goal_validity | 8 | 607.6 | 13.17 |
+| 4 | classic_doorway_low | off | 24 | 362.4 | 66.23 |
+| 4 | classic_doorway_low | static_only | 22 | 358.4 | 61.38 |
+| 4 | classic_doorway_low | static_plus_goal_validity | 22 | 358.4 | 61.38 |
+| 4 | classic_group_crossing_low | off | 5 | 377.5 | 13.25 |
+| 4 | classic_group_crossing_low | static_only | 4 | 375.1 | 10.66 |
+| 4 | classic_group_crossing_low | static_plus_goal_validity | 4 | 375.1 | 10.66 |
+| 4 | classic_head_on_corridor_low | off | 15 | 538.1 | 27.88 |
+| 4 | classic_head_on_corridor_low | static_only | 17 | 538.1 | 31.59 |
+| 4 | classic_head_on_corridor_low | static_plus_goal_validity | 17 | 538.1 | 31.59 |

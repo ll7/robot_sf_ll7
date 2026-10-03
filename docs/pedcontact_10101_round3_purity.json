@@ -9107,8 +9107,13 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
-        "path": "configs/algos/orca_release_v0_0_8.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/algos/orca_release_v0_0_8.yaml",
+        "historical_path_parts": [
+          "configs",
+          "algos",
+          "orca_release_v0_0_8.yaml"
+        ],
+        "main_sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9131,20 +9136,37 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a",
-        "path": "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/baselines/ppo_release_robot_0_0_8_cpu.yaml",
+        "historical_path_parts": [
+          "configs",
+          "baselines",
+          "ppo_release_robot_0_0_8_cpu.yaml"
+        ],
+        "main_sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
-        "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "horizon_schedules",
+          "release_0_0_8_authored_v1.yaml"
+        ],
+        "main_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9",
-        "path": "configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "horizon_schedules",
+          "three_width_doorway_release_0_0_8_authored_v1.yaml"
+        ],
+        "main_sha256": "e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9173,14 +9195,24 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "187e540234b2b44ca8ad4f2bf04c9d4007fb12d135fb70206d34d410ad9b0864",
-        "path": "configs/benchmarks/issue_9748_authored_horizons_v2.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/issue_9748_authored_horizons_v2.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "issue_9748_authored_horizons_v2.yaml"
+        ],
+        "main_sha256": "187e540234b2b44ca8ad4f2bf04c9d4007fb12d135fb70206d34d410ad9b0864"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "fb2aa66a17314dcdd93cc7607b3e36883ccca3ae4c33dd8e4a188b8b5962170a",
-        "path": "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "issue_9748_hybrid_v4_dev_split_v2.yaml"
+        ],
+        "main_sha256": "fb2aa66a17314dcdd93cc7607b3e36883ccca3ae4c33dd8e4a188b8b5962170a"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9209,8 +9241,13 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "abc410028a7779e4577c083362ee2d668afc28121e64f8cfd523fdfa45794c63",
-        "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ],
+        "main_sha256": "abc410028a7779e4577c083362ee2d668afc28121e64f8cfd523fdfa45794c63"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9251,8 +9288,14 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "018c4d0742b714ce6cd72058988796ace04ebfbea67722a95500671ca7680592",
-        "path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "releases",
+          "three_width_doorway_release_0_0_8_v1.template.yaml"
+        ],
+        "main_sha256": "018c4d0742b714ce6cd72058988796ace04ebfbea67722a95500671ca7680592"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9263,14 +9306,25 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "f3806581db53a826857ca9091e9fbc27f15303a37f3a154d313dab66f1c134dd",
-        "path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "releases",
+          "three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json"
+        ],
+        "main_sha256": "f3806581db53a826857ca9091e9fbc27f15303a37f3a154d313dab66f1c134dd"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706",
-        "path": "configs/benchmarks/seed_sets_0_0_8.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/seed_sets_0_0_8.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "seed_sets_0_0_8.yaml"
+        ],
+        "main_sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9281,8 +9335,14 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
-        "path": "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml",
+        "historical_path_parts": [
+          "configs",
+          "benchmarks",
+          "snqi_v2",
+          "calibration.dev1001_1002_scheduled_acquisition.yaml"
+        ],
+        "main_sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9299,8 +9359,13 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "8e28e07b3c2cca8a822025200fdc5c9e113e2e1131dbd7380ee0b2a87944959c",
-        "path": "configs/scenarios/release_0_0_8_endpoint_dispositions.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/scenarios/release_0_0_8_endpoint_dispositions.yaml",
+        "historical_path_parts": [
+          "configs",
+          "scenarios",
+          "release_0_0_8_endpoint_dispositions.yaml"
+        ],
+        "main_sha256": "8e28e07b3c2cca8a822025200fdc5c9e113e2e1131dbd7380ee0b2a87944959c"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9311,8 +9376,14 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "61592a6eea90e169f14b01afce2147777d5ab7e206dd0b8aca3bdf9421bd9ab0",
-        "path": "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
+        "historical_path_parts": [
+          "configs",
+          "scenarios",
+          "sets",
+          "issue_9748_hybrid_v4_dev_variants_v2.yaml"
+        ],
+        "main_sha256": "61592a6eea90e169f14b01afce2147777d5ab7e206dd0b8aca3bdf9421bd9ab0"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9359,38 +9430,76 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "1400f44158d4b5c2d9d833c4ce1419caf1ce52cf61024dcfe838685ff2e5c203",
-        "path": "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
+        "historical_path_parts": [
+          "configs",
+          "training",
+          "ppo",
+          "ablations",
+          "expert_ppo_release_contract_a_seed1001.yaml"
+        ],
+        "main_sha256": "1400f44158d4b5c2d9d833c4ce1419caf1ce52cf61024dcfe838685ff2e5c203"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "53b6abd4b3f8756fea02dffe0b0b531a77cc8adb6f46547d54515056eba19385",
-        "path": "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",
+        "historical_path_parts": [
+          "configs",
+          "training",
+          "ppo",
+          "ablations",
+          "expert_ppo_release_contract_a_seed1002.yaml"
+        ],
+        "main_sha256": "53b6abd4b3f8756fea02dffe0b0b531a77cc8adb6f46547d54515056eba19385"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "aaf6b6e2c55047116745704f88f188a982acdcd7c795136b1a8e4c41dc143fb9",
-        "path": "configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml",
+        "historical_path_parts": [
+          "configs",
+          "training",
+          "ppo",
+          "expert_ppo_release_contract_b_seed1001.yaml"
+        ],
+        "main_sha256": "aaf6b6e2c55047116745704f88f188a982acdcd7c795136b1a8e4c41dc143fb9"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "541d7a07b97165bafb40aac0a16e11fe7bd935f7a2c7113a73c34f8d716bb108",
-        "path": "configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml",
+        "historical_path_parts": [
+          "configs",
+          "training",
+          "ppo",
+          "expert_ppo_release_contract_b_seed1002.yaml"
+        ],
+        "main_sha256": "541d7a07b97165bafb40aac0a16e11fe7bd935f7a2c7113a73c34f8d716bb108"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "0d72a61fa4dc0a1ababdd1799d74e3b05dbe7cf4b94a72604d2c3c4c458eab79",
-        "path": "configs/training/ppo/ppo_release_contract_dev_eval_seeds.yaml"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/configs/training/ppo/ppo_release_contract_dev_eval_seeds.yaml",
+        "historical_path_parts": [
+          "configs",
+          "training",
+          "ppo",
+          "ppo_release_contract_dev_eval_seeds.yaml"
+        ],
+        "main_sha256": "0d72a61fa4dc0a1ababdd1799d74e3b05dbe7cf4b94a72604d2c3c4c458eab79"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "b92ec4bdf50701ce6892c318d19db0a32c01e3d237d0d34f1615abfe47b91c3c",
-        "path": "robot_sf/benchmark/schemas/campaign-table-row.v2.json"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/robot_sf/benchmark/schemas/campaign-table-row.v2.json",
+        "historical_path_parts": [
+          "robot_sf",
+          "benchmark",
+          "schemas",
+          "campaign-table-row.v2.json"
+        ],
+        "main_sha256": "b92ec4bdf50701ce6892c318d19db0a32c01e3d237d0d34f1615abfe47b91c3c"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
@@ -9407,8 +9516,13 @@
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",
         "current_sha256": null,
-        "main_sha256": "0b25f7478712e85d499fc338c1b0b4866ce7daecb0402cb9ace76e11d9897f9d",
-        "path": "tests/benchmark/test_cmpreal_trace_schema.py"
+        "historical_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/f52de283e3b60ec85910fd761e432d07ab748158/tests/benchmark/test_cmpreal_trace_schema.py",
+        "historical_path_parts": [
+          "tests",
+          "benchmark",
+          "test_cmpreal_trace_schema.py"
+        ],
+        "main_sha256": "0b25f7478712e85d499fc338c1b0b4866ce7daecb0402cb9ace76e11d9897f9d"
       },
       {
         "classification": "inherited CALFIT stack divergence; unchanged by PEDCONTACT",

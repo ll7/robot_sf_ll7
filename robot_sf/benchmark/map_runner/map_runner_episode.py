@@ -213,6 +213,7 @@ from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.reverse_drive import bound_drive_settings, warn_unsupported_reverse
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 from robot_sf.sim.spawn_validation import reset_spawn_clearance
 
@@ -3811,6 +3812,9 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
     env = make_robot_env(config=args.config, seed=int(args.seed), debug=False)
     state: _StepLoopState | None = None
     try:
+        adapter = getattr(policy_fn, "_planner_adapter", None)
+        if adapter is not None:
+            warn_unsupported_reverse(adapter, bound_drive_settings(env))
         active_harness = LatencyMeasurementHarness.get_current()
         if active_harness is not None:
             policy_fn = active_harness.wrap_policy(policy_fn)

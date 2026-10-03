@@ -66,7 +66,9 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
     StressSmokeBranchWitness,
+    _validated_development_seeds,
     doorway_width_slice_blockers,
+    is_development_rehearsal,
     is_doorway_width_slice,
     load_release_campaign_config,
     resolve_campaign_artifact_path,
@@ -2801,12 +2803,67 @@ def _carries_legacy_horizon_policy(value: Any) -> bool:
     return False
 
 
-def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
+def validate_full_benchmark_release_acceptance(
     campaign_root: Path,
     *,
     manifest: Any,
     campaign_config: Any | None = None,
     source_repository_root: Path | None = None,
+) -> dict[str, Any]:
+    """Admit sealed publication evidence; development identities can never qualify.
+
+    Returns:
+        Full-release acceptance report with explicit diagnostic refusals.
+    """
+    if getattr(manifest, "release_kind", None) == "development_rehearsal":
+        return {
+            "schema_version": FULL_RELEASE_ACCEPTANCE_SCHEMA_VERSION,
+            "status": "invalid",
+            "benchmark_success": False,
+            "claim_boundary": "development rehearsal; never release evidence",
+            "blockers": ["development rehearsal cannot satisfy full release acceptance"],
+        }
+    return _validate_benchmark_campaign_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=source_repository_root,
+    )
+
+
+def validate_development_rehearsal_acceptance(
+    campaign_root: Path,
+    *,
+    manifest: Any,
+    campaign_config: Any | None = None,
+    source_repository_root: Path | None = None,
+) -> dict[str, Any]:
+    """Run the same completeness, budget, metric and provenance checks diagnostically.
+
+    Returns:
+        Diagnostic report which grants no release status.
+    """
+    if not is_development_rehearsal(manifest):
+        raise ValueError("development acceptance requires a development rehearsal identity")
+    _validated_development_seeds(manifest.resolved_seeds)
+    result = _validate_benchmark_campaign_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=source_repository_root,
+        development_rehearsal=True,
+    )
+    result["schema_version"] = "benchmark-development-rehearsal-acceptance.v1"
+    return result
+
+
+def _validate_benchmark_campaign_acceptance(  # noqa: C901, PLR0912, PLR0915
+    campaign_root: Path,
+    *,
+    manifest: Any,
+    campaign_config: Any | None = None,
+    source_repository_root: Path | None = None,
+    development_rehearsal: bool = False,
 ) -> dict[str, Any]:
     """Validate the publication-grade S30 campaign and its bound episode budgets.
 
@@ -2828,7 +2885,13 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         }
 
     slice_release = is_doorway_width_slice(manifest)
-    required_cells = DOORWAY_RELEASE_CELLS if slice_release else FULL_RELEASE_EXPECTED_EPISODE_CELLS
+    required_cells = (
+        14 * 48 * len(manifest.resolved_seeds)
+        if development_rehearsal
+        else DOORWAY_RELEASE_CELLS
+        if slice_release
+        else FULL_RELEASE_EXPECTED_EPISODE_CELLS
+    )
     row_horizon = DOORWAY_RELEASE_HORIZON if slice_release else FULL_RELEASE_EXPECTED_HORIZON_STEPS
     blockers: list[str] = []
     trusted_source_root = Path(source_repository_root or get_repository_root()).resolve()
@@ -2922,12 +2985,16 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             f"manifest-resolved campaign must contain exactly {3 if slice_release else 48} scenarios",
         )
     if (
-        "0.0.8" in str(getattr(manifest, "release_tag", ""))
-        or "0_0_8" in str(getattr(manifest, "scenario_matrix_path", ""))
-        or "0_0_8" in str(getattr(manifest, "canonical_campaign_config_path", ""))
-    ) and tuple(resolved_seeds) != EVAL_SEEDS_0_0_8:
+        not development_rehearsal
+        and (
+            "0.0.8" in str(getattr(manifest, "release_tag", ""))
+            or "0_0_8" in str(getattr(manifest, "scenario_matrix_path", ""))
+            or "0_0_8" in str(getattr(manifest, "canonical_campaign_config_path", ""))
+        )
+        and tuple(resolved_seeds) != EVAL_SEEDS_0_0_8
+    ):
         _append_blocker(blockers, "0.0.8 requires the exact sealed evaluation seeds (D-049)")
-    if len(resolved_seeds) != 30:
+    if not development_rehearsal and len(resolved_seeds) != 30:
         _append_blocker(blockers, "manifest-resolved campaign must contain exactly 30 seeds")
     if len(planner_keys) * len(scenario_ids) * len(resolved_seeds) != expected_cells:
         _append_blocker(
@@ -3338,7 +3405,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     return {
         "schema_version": FULL_RELEASE_ACCEPTANCE_SCHEMA_VERSION,
         "status": status,
-        "benchmark_success": status == "valid",
+        "benchmark_success": status == "valid" and not development_rehearsal,
         "expected_planner_arms": FULL_RELEASE_EXPECTED_PLANNER_ARMS,
         "successful_planner_arms": sum(
             1
@@ -3358,7 +3425,9 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         "exclusion_reasons": dict(sorted(exclusion_counts.items())),
         "blockers": blockers,
         "claim_boundary": (
-            f"Publication-grade benchmark evidence requires all 14 arms, all {required_cells:,} unique "
+            "development rehearsal; never release evidence"
+            if development_rehearsal
+            else f"Publication-grade benchmark evidence requires all 14 arms, all {required_cells:,} unique "
             "manifest-resolved planner/scenario/seed identities, one source commit, and zero "
             "fallback/degraded/failed/unavailable rows."
         ),

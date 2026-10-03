@@ -430,6 +430,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 
 ### Architecture & Refactoring
 
+* **[Limited reverse driving](./design/limited_reverse.md)** — Opt-in plant identity, speed caps, planner support, and development comparison scope.
+
 * **[Refactoring Overview](./refactoring/)** - Complete guide to the refactored environment architecture (deployment status, plan, migration guide, summary, automated codebase analysis)
 * **[Subtree Migration Guide](./SUBTREE_MIGRATION.md)** - Git subtree integration for fast-pysf (migration from submodule)
 * **[UV Migration Notes](./UV_MIGRATION.md)** - Migration to UV package manager

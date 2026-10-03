@@ -15,7 +15,13 @@ from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec
 from robot_sf.benchmark.checkpoint_staging_receipt import CheckpointStagingReceiptError
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.evidence.writers import write_json
 from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
+from tests.benchmark.test_release_campaign_authority import no_execution as _no_execution
+from tests.benchmark.test_release_development_rehearsal import generate
+from tests.benchmark.test_sealed_source_pins import sealed_repository as _sealed_repository
+
+sealed_repository = _sealed_repository
 
 _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY = (
     run_benchmark_release._assert_spawn_preflight_report_identity
@@ -2305,3 +2311,125 @@ def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_
         assert payload["checkpoint_identity_admission"]["status"] == "admitted"
         assert payload["resume_admission"]["status"] == "fresh_campaign"
         assert "/home/private" not in json.dumps(payload)
+
+
+@pytest.mark.parametrize("smoke_run,accepted", [(True, True), (False, True), (False, False)])
+def test_development_identity_uses_shared_runner_without_release_success(
+    sealed_repository, monkeypatch, smoke_run, accepted
+):
+    """Real D-083 identity reaches common orchestration with recording runtime stubs.
+
+    Test value: catches accidental release promotion or a separate rehearsal runner;
+    existing release tests lack diagnostic identities. Public real-input resolution
+    and recorded common calls make the assertions independent of the branch code.
+    """
+    from robot_sf.benchmark import release_protocol, spawn_preflight
+
+    repo = sealed_repository
+    _no_execution.__wrapped__(monkeypatch)
+
+    def marked_json(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(path, payload)
+
+    monkeypatch.setattr(sys.modules[__name__], "_write_json", marked_json)
+    code, identity = generate(repo, "1001" if smoke_run else "1001,1002,1003")
+    assert code == 0
+    manifest = release_protocol.load_release_manifest(identity, repository_root=repo)
+    campaign_root = _make_campaign_tree(repo / "output/driver")
+    calls = []
+    monkeypatch.setattr(
+        run_benchmark_release, "guard_manifest_execution", spawn_preflight.guard_manifest_execution
+    )
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(run_benchmark_release, "_required_artifacts_missing", lambda *_a: [])
+    receipt = _admit_checkpoint_receipt(monkeypatch, repo / "output/checkpoints")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+    smoke_path = repo / "output/smoke.json"
+    _write_json(smoke_path, {})
+
+    def smoke(*args, **kwargs):
+        calls.append(("smoke", kwargs.get("development_rehearsal")))
+        return {"status": "admitted_diagnostic", "release_eligible": False}
+
+    monkeypatch.setattr(run_benchmark_release, "validate_runtime_smoke_result", smoke)
+
+    def campaign(cfg, **kwargs):
+        calls.append(("campaign", cfg.seed_policy.seeds, kwargs["skip_publication_bundle"]))
+        return {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "campaign_execution_status": "completed",
+            "status": "benchmark_success",
+            "status_reason": "recording runtime completed",
+            "exit_code": 0,
+        }
+
+    monkeypatch.setattr(run_benchmark_release, "run_campaign", campaign)
+
+    def acceptance(root, **kwargs):
+        assert root == campaign_root
+        assert kwargs["manifest"] == manifest
+        calls.append(("acceptance", kwargs["campaign_config"].seed_policy.seeds))
+        return {
+            "schema_version": "benchmark-development-rehearsal-acceptance.v1",
+            "status": "valid" if accepted else "invalid",
+            "benchmark_success": False,
+            "blockers": [] if accepted else ["recording runtime incomplete"],
+        }
+
+    monkeypatch.setattr(
+        run_benchmark_release, "validate_development_rehearsal_acceptance", acceptance
+    )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("development runner attempted full release acceptance")
+
+    monkeypatch.setattr(
+        run_benchmark_release, "validate_full_benchmark_release_acceptance", forbidden
+    )
+    bundle = repo / "output/bundle"
+    bundle.mkdir()
+    descriptor = {
+        "bundle_dir": "output/bundle",
+        "archive_path": "output/bundle.tar.gz",
+        "checksums_path": "output/bundle/checksums.sha256",
+        "manifest_path": "output/bundle/publication_manifest.json",
+        "file_count": 1,
+        "total_bytes": 1,
+    }
+
+    def export(**kwargs):
+        calls.append(("export", kwargs["campaign_root"]))
+        return descriptor
+
+    monkeypatch.setattr(run_benchmark_release, "_build_publication_payload", export)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_publication_preflight",
+        lambda path: calls.append(("bundle-validator", path)),
+    )
+    args = [
+        "--manifest",
+        str(identity),
+        "--checkpoint-receipt",
+        str(receipt),
+        "--runtime-smoke-receipt",
+        "-" if smoke_run else str(smoke_path),
+    ]
+    if smoke_run:
+        args.append("--development-runtime-smoke")
+    status = run_benchmark_release.main(args)
+    result = json.loads((campaign_root / "release/release_result.json").read_text())
+    assert status == (0 if accepted else 2)
+    assert result["release_eligible"] is False
+    assert result["release_benchmark_success"] is False
+    assert result["benchmark_success"] is False
+    assert result["diagnostic_success"] is accepted
+    assert ("campaign", manifest.resolved_seeds, True) in calls
+    assert ("acceptance", manifest.resolved_seeds) in calls
+    assert any(call[0] == "export" for call in calls) is accepted
+    assert any(call[0] == "bundle-validator" for call in calls) is accepted
+    assert (
+        ("smoke", True) in calls if not smoke_run else not any(call[0] == "smoke" for call in calls)
+    )

@@ -1722,7 +1722,9 @@ def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
             local = config_path.parent / path
             path = local if local.exists() else get_repository_root() / path
         paths.append(path)
-    return load_snqi_v2_spec(*paths)
+    from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION  # noqa: PLC0415
+
+    return load_snqi_v2_spec(*paths, expected_metric_schema_version=METRIC_SCHEMA_VERSION)
 
 
 def _assemble_campaign_config(
@@ -1922,4 +1924,12 @@ def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> 
         repository_root=repository_root,
     )
     _validate_campaign_config(cfg)
+    if cfg.snqi_v2_spec is not None:
+        scenarios = _load_campaign_scenarios(cfg, repository_root)
+        cfg.snqi_v2_spec.validate_evaluation_schedule(
+            {
+                scenario["name"]: scenario["simulation_config"]["max_episode_steps"]
+                for scenario in scenarios
+            }
+        )
     return cfg

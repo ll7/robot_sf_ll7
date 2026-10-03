@@ -39,7 +39,9 @@ SMOKE_MANIFEST_PATH = REPO_ROOT / (
 CAMPAIGN_TEMPLATE_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
-CALIBRATION_CONFIG_PATH = REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
+CALIBRATION_CONFIG_PATH = (
+    REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+)
 RUNTIME_SMOKE_V03_CONFIG_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
 )
@@ -63,7 +65,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "f955fe56d6ec0963f53555ceda043d469810cbab41c7475eca7c95292f962ce1"
+CAMPAIGN_TEMPLATE_SHA256 = "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -470,6 +472,9 @@ def test_runtime_smoke_v0_4_preserves_main_runner_cap_and_v0_3() -> None:
         "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",
+        "snqi_contract.enabled",
+        "snqi_weights",
+        "snqi_baseline",
         "zenodo",
     }
     # The current template advances the simulator kernel and Social Force selector;
@@ -540,7 +545,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     ]
     calibration, smoke, template = raw
     assert template["protocol_version"] == smoke["protocol_version"] == "0.0.8"
-    assert calibration.get("protocol_version") is None
+    assert calibration["protocol_version"] == "0.0.8"
     assert calibration["planners"] == smoke["planners"] == template["planners"]
     _assert_versioned_kernel_and_v4_freeze(raw, scenarios)
     allowed_calibration_differences = {
@@ -584,9 +589,9 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     assert len(scenarios[0]) == len(scenarios[2]) == 48
     assert len(scenarios[1]) == 1
     assert len(configs[0].planners) == len(configs[1].planners) == len(configs[2].planners) == 14
-    assert {101, 102}.isdisjoint(range(111, 141))
+    assert {1001, 1002}.isdisjoint(range(111, 141))
     assert {103}.isdisjoint({101, 102} | set(range(111, 141)) | set(range(1001, 1031)))
-    assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
+    assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {1001, 1002}
     assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
     assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(EVAL_SEEDS_0_0_8)
     assert configs[2].horizon is None
@@ -612,14 +617,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
             right_scenario = dict(reference)
             left_scenario.pop("seeds", None)
             right_scenario.pop("seeds", None)
-            expected_scenario_differences = (
-                {
-                    "metadata.scenario_horizon.sha256",
-                    "metadata.scenario_horizon.authored_max_episode_steps",
-                }
-                if index == 0
-                else set()
-            )
+            expected_scenario_differences = set()
             actual_scenario_differences = _diff_paths(left_scenario, right_scenario)
             if actual_scenario_differences != expected_scenario_differences:
                 mismatches.append(
@@ -629,8 +627,11 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
             if index == 0:
                 historical_schedule = scenario["metadata"]["scenario_horizon"]
                 current_schedule = reference["metadata"]["scenario_horizon"]
-                assert "sha256" not in historical_schedule
-                assert "authored_max_episode_steps" not in historical_schedule
+                assert historical_schedule["sha256"] == configs[0].scenario_horizons_sha256
+                assert (
+                    historical_schedule["authored_max_episode_steps"]
+                    == reference["simulation_config"]["max_episode_steps"]
+                )
                 assert current_schedule["sha256"] == configs[2].scenario_horizons_sha256
                 assert (
                     current_schedule["authored_max_episode_steps"]
@@ -722,6 +723,9 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         "release_tag",
         "scenario_matrix",
         "seed_policy.seeds",
+        "snqi_weights",
+        "snqi_baseline",
+        "snqi_contract.enabled",
     }
     assert successor["name"] == "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5"
     assert successor["release_tag"] == "paper-matrix-v2-h600-s30-runtime-smoke-v0_5"
@@ -742,6 +746,11 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         "scenario.matrix_path",
         "scenario.matrix_sha256",
         "seed_policy.seeds",
+        "metrics.snqi_weights_path",
+        "metrics.snqi_weights_sha256",
+        "metrics.snqi_baseline_path",
+        "metrics.snqi_baseline_sha256",
+        "artifacts.required_paths",
     } | {f"planners.groups.{key}" for key in changed_group_keys}
     assert new_manifest["release_id"] == successor["name"]
     assert new_manifest["release_tag"] == successor["release_tag"]
@@ -752,6 +761,17 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         REPO_ROOT / successor["scenario_matrix"]
     )
     assert new_manifest["planners"]["keys"] == EXPECTED_0_0_8_PLANNER_KEYS
+    assert new_manifest["artifacts"]["required_paths"] == [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "preflight/validate_config.json",
+        "preflight/preview_scenarios.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_report.md",
+        "reports/matrix_summary.json",
+        "reports/campaign_table.md",
+    ]
 
     manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
     validation = validate_release_manifest(manifest)

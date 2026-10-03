@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from typing import Any, Protocol
 
 import numpy as np
 from loguru import logger
+
+from robot_sf.robot.reverse_drive import validate_reverse_settings
 
 Command2D = tuple[float, float]
 
@@ -54,6 +56,14 @@ class DifferentialDriveKinematicsModel:
     max_angular_speed: float
     allow_backwards: bool = False
     name: str = "differential_drive"
+    limited_reverse: InitVar[bool] = False
+    max_reverse_speed: InitVar[float] = 0.5
+
+    def __post_init__(self, limited_reverse: bool, max_reverse_speed: float) -> None:
+        """Validate the opt-in reverse bounds without changing legacy serialization."""
+        validate_reverse_settings(limited_reverse, max_reverse_speed)
+        object.__setattr__(self, "limited_reverse", limited_reverse)
+        object.__setattr__(self, "max_reverse_speed", float(max_reverse_speed))
 
     def is_feasible(self, command: Command2D) -> bool:
         """Check whether ``(v, omega)`` is within configured bounds.
@@ -62,7 +72,13 @@ class DifferentialDriveKinematicsModel:
             bool: ``True`` when command is already feasible.
         """
         v, omega = command
-        min_linear = -self.max_linear_speed if self.allow_backwards else 0.0
+        min_linear = (
+            -self.max_reverse_speed
+            if self.limited_reverse
+            else -self.max_linear_speed
+            if self.allow_backwards
+            else 0.0
+        )
         return bool(
             min_linear <= v <= self.max_linear_speed
             and -self.max_angular_speed <= omega <= self.max_angular_speed
@@ -75,7 +91,13 @@ class DifferentialDriveKinematicsModel:
             Command2D: Projected command in feasible set.
         """
         v, omega = command
-        min_linear = -self.max_linear_speed if self.allow_backwards else 0.0
+        min_linear = (
+            -self.max_reverse_speed
+            if self.limited_reverse
+            else -self.max_linear_speed
+            if self.allow_backwards
+            else 0.0
+        )
         return (
             float(np.clip(v, min_linear, self.max_linear_speed)),
             float(np.clip(omega, -self.max_angular_speed, self.max_angular_speed)),
@@ -100,9 +122,14 @@ class BicycleDriveKinematicsModel:
     name: str = "bicycle_drive"
     max_curvature: float | None = None
     creep_speed: float = 0.0
+    limited_reverse: InitVar[bool] = False
+    max_reverse_speed: InitVar[float] = 0.5
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, limited_reverse: bool, max_reverse_speed: float) -> None:
         """Require physical curvature and an explicit nonnegative creep speed."""
+        validate_reverse_settings(limited_reverse, max_reverse_speed)
+        object.__setattr__(self, "limited_reverse", limited_reverse)
+        object.__setattr__(self, "max_reverse_speed", float(max_reverse_speed))
         if (
             self.max_curvature is None
             or not math.isfinite(self.max_curvature)
@@ -125,6 +152,8 @@ class BicycleDriveKinematicsModel:
         Returns:
             float: Negative max speed when backwards motion is allowed, otherwise ``0.0``.
         """
+        if self.limited_reverse:
+            return -self.max_reverse_speed
         return -self.max_velocity if self.allow_backwards else 0.0
 
     def is_feasible(self, command: Command2D) -> bool:
@@ -220,6 +249,8 @@ def resolve_benchmark_kinematics_model(
             allow_backwards=bool(limits.get("allow_backwards", False)),
             max_curvature=limits.get("bicycle_max_curvature"),
             creep_speed=float(limits.get("bicycle_creep_speed", 0.0)),
+            limited_reverse=limits.get("limited_reverse", False),
+            max_reverse_speed=limits.get("max_reverse_speed", 0.5),
         )
     if kinematics in {"holonomic", "omni", "omnidirectional"}:
         return HolonomicPassthroughKinematicsModel()
@@ -235,6 +266,8 @@ def resolve_benchmark_kinematics_model(
         max_linear_speed=max_linear,
         max_angular_speed=max_angular,
         allow_backwards=bool(limits.get("allow_backwards", False)),
+        limited_reverse=limits.get("limited_reverse", False),
+        max_reverse_speed=limits.get("max_reverse_speed", 0.5),
     )
 
 

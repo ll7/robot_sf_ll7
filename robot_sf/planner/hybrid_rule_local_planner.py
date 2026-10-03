@@ -214,6 +214,9 @@ def _resolve_drive_limits(env: Any) -> dict[str, Any]:
     if accel is None and decel is None:
         limits["source"] += "+default_accel_limits"
     _apply_angular_limits(limits, robot_config)
+    if getattr(robot_config, "limited_reverse", False):
+        limits["min_linear_speed"] = -float(robot_config.max_reverse_speed)
+        limits["reverse_drive_version"] = "limited_reverse.v1"
     return limits
 
 
@@ -901,12 +904,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         accel_step = float(limits["max_linear_accel"]) * float(dt)
         decel_step = float(limits["max_linear_decel"]) * float(dt)
         max_speed = self._v4_effective_max_speed()
-        speed = float(np.clip(float(current_speed), 0.0, max_speed))
+        speed = float(np.clip(float(current_speed), self._min_linear_speed(max_speed), max_speed))
         angular_speed = float(self._v4_angular_estimate)
         realized: list[tuple[float, float]] = []
         for linear, angular in rollout_commands:
             speed = float(np.clip(float(linear), speed - decel_step, speed + accel_step))
-            speed = float(np.clip(speed, 0.0, max_speed))
+            speed = float(np.clip(speed, self._min_linear_speed(max_speed), max_speed))
             angular_speed = self._v4_step_angular(float(angular), angular_speed, float(dt))
             realized.append((speed, angular_speed))
         return realized
@@ -941,7 +944,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         decel = max(float(limits["max_linear_decel"]), _EPS)
         accel = float(limits["max_linear_accel"])
         max_speed = self._v4_effective_max_speed()
-        current_speed = float(np.clip(float(state["current_speed"]), 0.0, max_speed))
+        current_speed = float(
+            np.clip(float(state["current_speed"]), self._min_linear_speed(max_speed), max_speed)
+        )
         speed = float(
             np.clip(
                 float(candidate.linear),
@@ -949,16 +954,21 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 current_speed + accel * step,
             )
         )
-        speed = float(np.clip(speed, 0.0, max_speed))
+        speed = float(np.clip(speed, self._min_linear_speed(max_speed), max_speed))
         moving_threshold = max(float(self.config.freezing_speed_threshold), 0.0)
         robot_pos = np.array(state["robot_pos"], dtype=float)
         heading = float(state["heading"])
         start_distances = np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)
-        max_steps = int(np.ceil(max_speed / (decel * step))) + 2
+        braking_peak = max_speed
+        braking_authority = decel
+        if self._min_linear_speed(max_speed) < 0.0:
+            braking_peak = max(max_speed, abs(self._min_linear_speed(max_speed)))
+            braking_authority = min(accel, decel)
+        max_steps = int(np.ceil(braking_peak / (braking_authority * step))) + 2
         elapsed = 0.0
         angular_speed = float(self._v4_angular_estimate)
         for step_idx in range(max_steps):
-            if speed <= moving_threshold:
+            if abs(speed) <= moving_threshold:
                 return None
             # Commit step: turn toward the candidate's rate; braking tail: the
             # drive is commanded to zero turn rate and decays at its limit.
@@ -980,8 +990,18 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     "collision_radius": float(collision_radius),
                     "time": float(elapsed),
                 }
-            speed = max(0.0, speed - decel * step)
+            speed = (
+                max(0.0, speed - decel * step) if speed >= 0.0 else min(0.0, speed + accel * step)
+            )
         return None
+
+    def _min_linear_speed(self, speed_cap: float) -> float:
+        """Return the opt-in reverse bound, restricted by the current safety cap."""
+        if not self._v4_clearance_braking:
+            return 0.0
+        return max(
+            float(self._v4_drive_limits().get("min_linear_speed", 0.0)), -max(speed_cap, 0.0)
+        )
 
     def _dynamic_window(
         self, current_speed: float, speed_cap: float
@@ -995,7 +1015,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         else:
             linear_decel = float(self.config.max_linear_decel)
             linear_accel = float(self.config.max_linear_accel)
-        v_min = max(0.0, float(current_speed) - linear_decel * period)
+        v_min = max(self._min_linear_speed(speed_cap), float(current_speed) - linear_decel * period)
         v_max = min(
             float(speed_cap),
             float(current_speed) + linear_accel * period,
@@ -1052,7 +1072,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             segments.append(
                 (
                     duration,
-                    float(np.clip(linear, 0.0, max_linear)),
+                    float(np.clip(linear, self._min_linear_speed(speed_cap), max_linear)),
                     float(np.clip(angular, -max_angular, max_angular)),
                 )
             )
@@ -1068,7 +1088,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         max_linear = max(min(float(speed_cap), float(self.config.max_linear_speed)), 0.0)
         max_angular = max(self._max_angular_speed(), 0.0)
         return HybridRuleCandidate(
-            float(np.clip(candidate.linear, 0.0, max_linear)),
+            float(np.clip(candidate.linear, self._min_linear_speed(speed_cap), max_linear)),
             float(np.clip(candidate.angular, -max_angular, max_angular)),
             candidate.source,
             self._clip_rollout_sequence(candidate.rollout_sequence, speed_cap=speed_cap),
@@ -1124,7 +1144,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             tuple[float, float]: Mean and maximum linear speed across rollout steps.
         """
         linear_values = [command[0] for command in rollout_commands]
-        return float(np.mean(linear_values)), float(np.max(linear_values))
+        return float(np.mean(linear_values)), float(np.max(np.abs(linear_values)))
 
     def _candidate_source_priority(self, source: str) -> int:
         """Return a source priority for preserving specialized duplicate commands."""
@@ -1790,6 +1810,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ]
         )
 
+        if self.config.static_clearance_escape_enabled and v_min < 0.0:
+            reverse_speed = max(v_min, -float(self.config.static_clearance_escape_max_speed))
+            candidates.append(HybridRuleCandidate(reverse_speed, 0.0, "reverse_escape"))
+
         unique: dict[tuple[Any, ...], HybridRuleCandidate] = {}
         for candidate in candidates:
             clipped = self._clip_candidate(candidate, speed_cap=speed_cap)
@@ -2068,9 +2092,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             return False
         if current_min_clearance < min_escape_clearance:
             return False
-        if candidate.linear <= float(self.config.freezing_speed_threshold):
+        if abs(candidate.linear) <= float(self.config.freezing_speed_threshold):
             return False
-        if candidate.linear > float(self.config.static_clearance_escape_max_speed):
+        if abs(candidate.linear) > float(self.config.static_clearance_escape_max_speed):
             return False
         tolerance = max(float(self.config.static_clearance_escape_tolerance), 0.0)
         if initial_clearance > hard_static_clearance:
@@ -2096,9 +2120,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if not bool(self.config.static_corridor_transit_enabled):
             return False
-        if candidate.linear <= float(self.config.freezing_speed_threshold):
+        if abs(candidate.linear) <= float(self.config.freezing_speed_threshold):
             return False
-        if candidate.linear > float(self.config.static_clearance_escape_max_speed):
+        if abs(candidate.linear) > float(self.config.static_clearance_escape_max_speed):
             return False
         if step_progress <= 0.0:
             return False
@@ -2170,7 +2194,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if not bool(self.config.static_recenter_enabled):
             return 0.0
-        if candidate.linear > float(self.config.freezing_speed_threshold):
+        if abs(candidate.linear) > float(self.config.freezing_speed_threshold):
             return 0.0
         if abs(candidate.angular) < float(self.config.deadlock_rotation_threshold):
             return 0.0
@@ -2970,7 +2994,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and stalled_progress
             and start_dist > float(self.config.goal_far_distance)
             and recovery_nearest_ped >= float(self.config.slow_distance_human)
-            and candidate.linear <= float(self.config.freezing_speed_threshold)
+            and abs(candidate.linear) <= float(self.config.freezing_speed_threshold)
             and abs(candidate.angular) >= float(self.config.deadlock_rotation_threshold)
             else 0.0
         )
@@ -3489,7 +3513,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             rejection_counts[reason] += 1
             source_counts = rejection_counts_by_source.setdefault(candidate.source, Counter())
             source_counts[reason] += 1
-            if candidate.linear > float(self.config.freezing_speed_threshold):
+            if abs(candidate.linear) > float(self.config.freezing_speed_threshold):
                 moving_rejection_counts[reason] += 1
             if len(rejected_examples) < max(int(self.config.top_k_diagnostics), 1):
                 rejected_examples.append(self._rejection_diagnostic(evaluation))

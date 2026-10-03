@@ -41,6 +41,51 @@ RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
 RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION = "benchmark-release-identity-template.v1"
 RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION = "benchmark-release-resolved-identity.v1"
 RESOLVED_RELEASE_METADATA_FILENAME = "zenodo_metadata.resolved.json"
+DEVELOPMENT_REHEARSAL_KIND = "development_rehearsal"
+DEVELOPMENT_REHEARSAL_DOIS = ("10.5281/zenodo.99000001", "10.5281/zenodo.99000002")
+
+
+def is_development_rehearsal(manifest: Any) -> bool:
+    """Identify the digest-covered, permanently non-releasable D-070 projection.
+
+    Returns:
+        Whether the manifest is diagnostic development work.
+    """
+    return getattr(manifest, "release_kind", None) == DEVELOPMENT_REHEARSAL_KIND
+
+
+def _validated_development_seeds(seeds: Any) -> tuple[int, ...]:
+    """Validate the opt-in inventory before reading or executing any scenario.
+
+    Returns:
+        Sorted unique development inventory.
+    """
+    if (
+        not isinstance(seeds, (list, tuple))
+        or not seeds
+        or any(type(seed) is not int or not 1001 <= seed <= 1030 for seed in seeds)
+        or len(set(seeds)) != len(seeds)
+    ):
+        raise ValueError("development rehearsal accepts only unique development seeds 1001-1030")
+    return tuple(sorted(seeds))
+
+
+def _development_campaign_config(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Overlay only development seeds and diagnostic scoring on canonical inputs.
+
+    Returns:
+        Canonical configuration with the development overlay when opted in.
+    """
+    if not is_development_rehearsal(manifest):
+        return cfg
+    seeds = _validated_development_seeds(manifest.resolved_seeds)
+    return replace(
+        cfg,
+        seed_policy=replace(cfg.seed_policy, mode="fixed-list", seed_set=None, seeds=seeds),
+        snqi_v2_spec=(replace(cfg.snqi_v2_spec, diagnostic=True) if cfg.snqi_v2_spec else None),
+    )
+
+
 SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS = frozenset(
     {RELEASE_MANIFEST_SCHEMA_VERSION, RELEASE_MANIFEST_SCHEMA_VERSION_V0_2}
 )
@@ -280,9 +325,13 @@ def _require_source_derived_release_tag(
     release_tag: str,
     source_commit: str,
     allow_existing_exact_tag: bool = False,
+    development_rehearsal: bool = False,
 ) -> None:
     """Require the one canonical ``<prefix>-<full SHA>`` tag representation."""
-    tag_problems = check_canonical_source_tag(release_tag, source_commit)
+    if development_rehearsal and release_tag != f"development-rehearsal-{source_commit}":
+        raise ValueError("development rehearsal requires its reserved diagnostic source label")
+    checked_tag = f"rehearsal-{source_commit}" if development_rehearsal else release_tag
+    tag_problems = check_canonical_source_tag(checked_tag, source_commit)
     if tag_problems:
         raise ValueError(tag_problems[0])
     tag = release_tag
@@ -1743,8 +1792,11 @@ def load_release_campaign_config(
     if _sha256_file(config_path) != manifest.campaign_config_sha256:
         raise ValueError("canonical campaign config hash does not match resolved identity")
     cfg = load_campaign_config(config_path, repository_root=root)
-    return _release_campaign_horizon(
-        manifest, replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+    return _development_campaign_config(
+        manifest,
+        _release_campaign_horizon(
+            manifest, replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+        ),
     )
 
 
@@ -2124,7 +2176,7 @@ def _validate_release_campaign_contract(  # noqa: C901
         and cfg.holonomic_command_mode != manifest.expected_holonomic_command_mode
     ):
         problems.append("kinematics.holonomic_command_mode does not match campaign config")
-    if manifest.release_kind == "benchmark-data":
+    if manifest.release_kind in {"benchmark-data", DEVELOPMENT_REHEARSAL_KIND}:
         if cfg.checkpoint_provenance_enforcement != "error":
             problems.append(
                 "benchmark-data release requires checkpoint_provenance_enforcement=error"
@@ -2304,7 +2356,7 @@ def _require_sealed_runtime_sources(root: Path, source_commit: str) -> None:
         raise ValueError(f"imported pysocialforce/{name} {problem}; {remedy}")
 
 
-def sealed_seed_execution_problem(
+def sealed_seed_execution_problem(  # noqa: C901 - independent frozen/diagnostic admission boundaries
     manifest: Any,
     seeds: tuple[int, ...],
     *,
@@ -2316,6 +2368,8 @@ def sealed_seed_execution_problem(
     The runner supplies its checked-out source; static callers resolve HEAD.
     A source argument never supplies a missing manifest freeze binding.
     """
+    if is_development_rehearsal(manifest) and set(seeds).intersection(EVAL_SEEDS_0_0_8):
+        return "development rehearsal cannot be a sealed release"
     if not set(seeds).intersection(EVAL_SEEDS_0_0_8):
         return None
     root = (repository_root or get_repository_root()).resolve()
@@ -2424,7 +2478,8 @@ def _validate_release_seed_policy(
             "retired evaluation seeds are forbidden for non-historical releases (D-049)"
         )
     if (
-        manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
+        not is_development_rehearsal(manifest)
+        and manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
         and (
             "0.0.8" in manifest.release_tag
             or "0_0_8" in manifest.scenario_matrix_path.name
@@ -3385,6 +3440,39 @@ def _require_tracked_input_at_source(
         raise ValueError(f"{label} bytes differ from source_commit")
 
 
+def _development_template_overlay(
+    payload: dict[str, Any], seeds: tuple[int, ...] | None, template: Path, root: Path
+) -> None:
+    """Apply the explicit D-070 seed/marker projection without altering source files."""
+    if seeds is None:
+        return
+    seeds = _validated_development_seeds(seeds)
+    if (
+        template.relative_to(root).as_posix()
+        != "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
+    ):
+        raise ValueError("development rehearsal requires the selected D-083 identity template")
+    payload["release_kind"] = DEVELOPMENT_REHEARSAL_KIND
+    payload["claim_boundary"]["evidence_class_after_full_acceptance"] = (
+        "diagnostic-development-rehearsal"
+    )
+    payload["seed_policy"].update(
+        {
+            "mode": "fixed-list",
+            "seed_set": None,
+            "seeds": list(seeds),
+            "resolved_seeds": list(seeds),
+        }
+    )
+    payload["matrix"].update({"seeds": len(seeds), "expected_episode_cells": 14 * 48 * len(seeds)})
+
+
+def _development_metadata_overlay(payload: dict[str, Any], seeds: tuple[int, ...] | None) -> None:
+    """Make copied deposition metadata unusable by the public DOI publisher."""
+    if seeds is not None:
+        payload["metadata"]["non_releasable_development_rehearsal"] = True
+
+
 def _build_resolved_release_identity(
     *,
     template_path: Path,
@@ -3394,6 +3482,7 @@ def _build_resolved_release_identity(
     concept_doi: str,
     version_doi: str,
     repository_root: Path,
+    development_rehearsal_seeds: tuple[int, ...] | None = None,
 ) -> tuple[dict[str, Any], bytes, BenchmarkReleaseManifest]:
     """Build canonical identity and metadata bytes after all read-only admissions.
 
@@ -3420,6 +3509,7 @@ def _build_resolved_release_identity(
     resolved_metadata = _replace_identity_tokens(metadata_template_payload, replacements)
     if not isinstance(resolved_metadata, dict):  # pragma: no cover - recursive shape guard
         raise ValueError("resolved publication metadata must be a JSON object")
+    _development_metadata_overlay(resolved_metadata, development_rehearsal_seeds)
     metadata_bytes = _canonical_json_bytes(resolved_metadata)
     metadata_sha256 = hashlib.sha256(metadata_bytes).hexdigest()
     final_metadata_path = output_path.parent / RESOLVED_RELEASE_METADATA_FILENAME
@@ -3433,6 +3523,7 @@ def _build_resolved_release_identity(
                 scratch_metadata,
                 expected_source_tag=release_tag,
                 expected_metadata_sha256=metadata_sha256,
+                allow_development_rehearsal=development_rehearsal_seeds is not None,
             )
         except ZenodoPublisherError as exc:
             raise ValueError(f"resolved Zenodo metadata is invalid: {exc}") from exc
@@ -3447,6 +3538,9 @@ def _build_resolved_release_identity(
             concept_doi=concept_doi,
             version_doi=version_doi,
             repository_root=repository_root,
+        )
+        _development_template_overlay(
+            materialized_payload, development_rehearsal_seeds, template_path, repository_root
         )
         materialized_path = scratch_root / "release_manifest.materialized.json"
         materialized_path.write_bytes(_canonical_json_bytes(materialized_payload))
@@ -3466,6 +3560,7 @@ def _build_resolved_release_identity(
         cfg = _release_campaign_horizon(
             manifest, replace(cfg, release_tag=release_tag, doi=version_doi)
         )
+        cfg = _development_campaign_config(manifest, cfg)
         validation = validate_release_manifest(
             manifest,
             campaign_config=cfg,
@@ -3547,6 +3642,11 @@ def _build_resolved_release_identity(
         "resolved_manifest": resolved_manifest,
         "resolved_manifest_sha256": resolved_manifest_sha256,
     }
+    if development_rehearsal_seeds is not None:
+        envelope["development_rehearsal"] = {
+            "seeds": list(development_rehearsal_seeds),
+            "release_eligible": False,
+        }
     manifest = replace(
         manifest,
         path=output_path,
@@ -3604,6 +3704,7 @@ def write_resolved_release_identity(
     concept_doi: str,
     version_doi: str,
     repository_root: Path | None = None,
+    development_rehearsal_seeds: tuple[int, ...] | None = None,
 ) -> dict[str, Any]:
     """Generate one canonical resolved release identity without source edits.
 
@@ -3611,6 +3712,12 @@ def write_resolved_release_identity(
         The canonical identity payload written to ``output_path``.
     """
     root = (repository_root or get_repository_root()).resolve()
+    if development_rehearsal_seeds is not None:
+        development_rehearsal_seeds = _validated_development_seeds(development_rehearsal_seeds)
+        if (concept_doi, version_doi) != DEVELOPMENT_REHEARSAL_DOIS:
+            raise ValueError(
+                "development rehearsal cannot use reserved publication DOIs; use diagnostic coordinates"
+            )
     template = _safe_repository_file(
         Path(template_path), root, field_name="release identity template"
     )
@@ -3631,6 +3738,7 @@ def write_resolved_release_identity(
         root,
         release_tag=release_tag,
         source_commit=normalized_source,
+        development_rehearsal=development_rehearsal_seeds is not None,
     )
     concept_doi, version_doi = _require_publication_coordinates(concept_doi, version_doi)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -3642,6 +3750,7 @@ def write_resolved_release_identity(
         concept_doi=concept_doi,
         version_doi=version_doi,
         repository_root=root,
+        development_rehearsal_seeds=development_rehearsal_seeds,
     )
     _require_clean_exact_checkout(
         root,
@@ -3717,6 +3826,16 @@ def verify_resolved_release_identity(
     )
     source_commit = str(observed.get("source_commit", "")).strip().lower()
     release_tag = str(observed.get("release_tag", "")).strip()
+    rehearsal = observed.get("development_rehearsal")
+    rehearsal_seeds = None
+    if rehearsal is not None:
+        if (
+            not isinstance(rehearsal, dict)
+            or set(rehearsal) != {"seeds", "release_eligible"}
+            or rehearsal["release_eligible"] is not False
+        ):
+            raise ValueError("development rehearsal identity must be explicitly non-releasable")
+        rehearsal_seeds = _validated_development_seeds(rehearsal["seeds"])
     concept_doi, version_doi = _require_publication_coordinates(
         publication.get("concept_doi"),
         publication.get("version_doi"),
@@ -3734,6 +3853,7 @@ def verify_resolved_release_identity(
         release_tag=release_tag,
         source_commit=normalized_source,
         allow_existing_exact_tag=True,
+        development_rehearsal=rehearsal_seeds is not None,
     )
     envelope, metadata_bytes, manifest = _build_resolved_release_identity(
         template_path=template_path,
@@ -3743,6 +3863,7 @@ def verify_resolved_release_identity(
         concept_doi=concept_doi,
         version_doi=version_doi,
         repository_root=root,
+        development_rehearsal_seeds=rehearsal_seeds,
     )
     _require_clean_exact_checkout(
         root,
@@ -3764,6 +3885,11 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(description="Run a benchmark release workflow.")
+    parser.add_argument(
+        "--development-runtime-smoke",
+        action="store_true",
+        help="Run the full D-083 matrix on dev seed 1001 as a non-releasable smoke receipt.",
+    )
     parser.add_argument("--manifest", type=Path, required=True, help="Benchmark release manifest.")
     parser.add_argument(
         "--output-root",

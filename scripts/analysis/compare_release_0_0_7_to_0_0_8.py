@@ -376,6 +376,7 @@ def _runtime_successor_identity(
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
     *,
     publication_identity: Mapping[str, str] | None = None,
+    development_rehearsal_seeds: tuple[int, ...] | None = None,
 ) -> tuple[
     str,
     str,
@@ -406,6 +407,8 @@ def _runtime_successor_identity(
             }
             if publication_identity is not None:
                 request["publication_identity"] = dict(publication_identity)
+            if development_rehearsal_seeds is not None:
+                request["development_rehearsal_seeds"] = list(development_rehearsal_seeds)
             resolved = subprocess.run(
                 [sys.executable, "-I", str(worker)],
                 input=json.dumps(request),

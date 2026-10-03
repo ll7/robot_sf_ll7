@@ -177,7 +177,7 @@ authored horizon/kinematics contract, exact imported runtime; allocation ≤32 C
 Output: `output/benchmarks/camera_ready/$SMOKE_ID/release/release_result.json`, raw rows and separately authenticated environment receipt. Set `SMOKE_RESULT` to that absolute result path. `CAMPAIGN_ROOT` and the companion root are the respective `output/benchmarks/camera_ready/<id>` directories; `BUNDLE_DIR`/`BUNDLE_ARCHIVE` come from the exporter receipt, not an invented file name.
 Admission: every arm successful/native, source/model bindings equal campaign,
 result and staging age ≤24 h, independently accepted environment/stress receipt.
-Record CPU model; learned episodes/resume must stay on the same node (D-050).
+Record CPU model; learned episodes/resume must stay on the same node (D-072).
 
 **No admissible production input pair exists on this main yet:** v0_5 config and
 manifest use **103**, while private mint expects **1003**. The ordinary public

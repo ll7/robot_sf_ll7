@@ -184,6 +184,11 @@ class OccupancyAwarePlannerMixin:
             goal_state = {
                 "current": self._as_1d_float(observation.get("goal_current", [0.0, 0.0]), pad=2),
                 "next": self._as_1d_float(observation.get("goal_next", [0.0, 0.0]), pad=2),
+                **(
+                    {"next_valid": observation["goal_next_valid"]}
+                    if "goal_next_valid" in observation
+                    else {}
+                ),
             }
             ped_state = {
                 "positions": observation.get("pedestrians_positions"),

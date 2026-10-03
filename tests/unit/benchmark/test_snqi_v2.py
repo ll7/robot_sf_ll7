@@ -112,8 +112,11 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
         "export_publication_bundle",
         "arm_isolation",
     }
+    assert "snqi_v2_spec" not in calibration, "calibration must not declare a spec"
     assert {key: value for key, value in calibration.items() if key not in allowed_deviations} == {
-        key: value for key, value in template.items() if key not in allowed_deviations
+        key: value
+        for key, value in template.items()
+        if key not in allowed_deviations and key != "snqi_v2_spec"
     }
     assert hashlib.sha256((ROOT / frozen["scenario_matrix"]).read_bytes()).hexdigest() == (
         FROZEN_007_SCENARIO_SHA256
@@ -759,7 +762,7 @@ def test_family_determinism_grid_and_scaling():
     assert report["top1_frequency"] == other["top1_frequency"]
 
 
-def write_campaign_arm(path, rows):
+def write_campaign_arm(path, rows, *, algo_config_path=None):
     """Create real producer custody for synthetic episode rows."""
     from robot_sf.benchmark.result_provenance import (
         build_result_provenance_manifest,
@@ -784,7 +787,7 @@ def write_campaign_arm(path, rows):
         scenario_path=ROOT / "configs/scenarios/classic_interactions_francis2023.yaml",
         scenarios=[{"name": "fixture"}],
         algo=rows[0]["algo"],
-        algo_config_path=None,
+        algo_config_path=algo_config_path,
         benchmark_profile="baseline-safe",
         suite_key="fixture",
         total_jobs=len(rows),
@@ -3316,3 +3319,166 @@ def test_snqirefresh_enrichment_refuses_wrong_split_before_replacing_bytes(tmp_p
         )
     assert all(path.read_bytes() == original for path, original in before.items())
     assert not list(tmp_path.glob("*.snqi-v2.*"))
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    ],
+)
+@pytest.mark.parametrize("defect", [None, "wrong_cell", "missing_declaration"])
+def test_d083_snqi_enrichment_retains_declared_scenario_algorithm_routes(tmp_path, arm, defect):
+    """Score the reviewed ORCA branch without accepting undeclared algorithm swaps."""
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    authored = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ).read_bytes()
+    )
+    configured = next(p for p in authored["planners"] if p["key"] == arm)
+    source = yaml.safe_load((ROOT / configured["algo_config"]).read_bytes())
+    assert source["scenario_algo_overrides"]["francis2023_leave_group"]["algo"] == "orca"
+    rows = [
+        {
+            "algo": "orca" if scenario == "francis2023_leave_group" else configured["algo"],
+            "scenario_id": scenario,
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(),
+        }
+        for scenario in ("classic_bottleneck_low", "francis2023_leave_group")
+        for seed in (1001, 1002)
+    ]
+    if defect == "wrong_cell":
+        rows[1]["algo"] = "orca"
+    path = tmp_path / "episodes.jsonl"
+    written = write_campaign_arm(
+        path,
+        rows,
+        algo_config_path=(
+            ROOT / configured["algo_config"] if defect != "missing_declaration" else None
+        ),
+    )
+    write_review_sidecar(path, repo_root=tmp_path)
+    entry = {
+        "status": "ok",
+        "planner": {
+            "key": arm,
+            "algo": configured["algo"],
+            "kinematics": "differential_drive",
+            **(
+                {"algo_config_path": configured["algo_config"]}
+                if defect != "missing_declaration"
+                else {}
+            ),
+        },
+        "episodes_path": str(path),
+    }
+    original = path.read_bytes()
+    if defect:
+        with pytest.raises(ValueError, match="algorithm"):
+            enrich_campaign_v2(
+                [entry],
+                replace(fixture_spec(), diagnostic=True),
+                tmp_path / "reports",
+                repo_root=ROOT,
+                bootstrap_samples=2,
+            )
+        assert path.read_bytes() == original
+        assert not list(tmp_path.glob(".*.snqi-v2.tmp"))
+        return
+    artifacts = enrich_campaign_v2(
+        [entry],
+        replace(fixture_spec(), diagnostic=True),
+        tmp_path / "reports",
+        repo_root=ROOT,
+        bootstrap_samples=2,
+    )
+    enriched = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(enriched) == 4
+    assert [row["algo"] for row in enriched] == [row["algo"] for row in written]
+    assert all(row["planner_key"] == arm for row in enriched)
+    assert all(
+        row["metrics"]["snqi_v2"] == score_episode(row, fixture_spec())["metrics"]["snqi_v2"]
+        for row in enriched
+    )
+    family = json.loads(Path(artifacts["snqi_v2_family_json"]).read_bytes())
+    assert [row["planner"] for row in family["declared_ranking"]] == [f"{arm}::differential_drive"]
+
+
+@pytest.mark.parametrize(
+    "path_kind", ["absolute", "traversal", "symlink", "non_string", "sidecar_mismatch"]
+)
+def test_scenario_routes_refuse_untrusted_config_paths(tmp_path, path_kind):
+    """A forged route file cannot authorize the wrong-cell algorithm via path escape."""
+    from robot_sf.evidence.writers import write_text
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Use the tracked D-083 recipe, rather than assuming its file basename.
+    authored = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ).read_bytes()
+    )
+    planner = next(
+        p
+        for p in authored["planners"]
+        if p["key"] == "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4"
+    )
+    actual = ROOT / planner["algo_config"]
+    declared_config = repo / "trusted.yaml"
+    write_text(declared_config, "# AI-GENERATED NEEDS-REVIEW\n" + actual.read_text())
+    forged_payload = yaml.safe_load(actual.read_bytes())
+    forged_payload["scenario_algo_overrides"]["classic_bottleneck_low"] = {"algo": "orca"}
+    forged = tmp_path / "forged.yaml"
+    write_text(forged, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(forged_payload))
+    if path_kind == "absolute":
+        raw_path = str(forged)
+    elif path_kind == "traversal":
+        raw_path = "../forged.yaml"
+    elif path_kind == "symlink":
+        (repo / "linked.yaml").symlink_to(forged)
+        raw_path = "linked.yaml"
+    elif path_kind == "non_string":
+        raw_path = 1001
+    else:
+        write_text(repo / "forged.yaml", forged.read_text())
+        raw_path = "forged.yaml"
+    rows = [
+        {"algo": algo, "scenario_id": scenario, "seed": seed, "steps": 100, "metrics": metrics()}
+        for scenario, seed, algo in (
+            ("classic_bottleneck_medium", 1001, planner["algo"]),
+            ("classic_bottleneck_low", 1001, "orca"),
+            ("classic_bottleneck_medium", 1002, planner["algo"]),
+            ("classic_bottleneck_low", 1002, "orca"),
+        )
+    ]
+    path = repo / "episodes.jsonl"
+    write_campaign_arm(path, rows, algo_config_path=declared_config)
+    entry = {
+        "status": "ok",
+        "episodes_path": str(path),
+        "planner": {"key": planner["key"], "algo": planner["algo"], "algo_config_path": raw_path},
+    }
+    original = path.read_bytes()
+    from robot_sf.benchmark.result_provenance import manifest_path_for_result_jsonl
+
+    sidecar = manifest_path_for_result_jsonl(path)
+    original_sidecar = sidecar.read_bytes()
+    with pytest.raises(ValueError, match="algo_config_path|producer.*config"):
+        enrich_campaign_v2(
+            [entry],
+            replace(fixture_spec(), diagnostic=True),
+            repo / "reports",
+            repo_root=repo,
+            bootstrap_samples=2,
+        )
+    assert path.read_bytes() == original
+    assert sidecar.read_bytes() == original_sidecar
+    assert not list(repo.glob(".*.snqi-v2.tmp"))

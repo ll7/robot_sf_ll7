@@ -50,6 +50,8 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "configs/benchmarks/seed_sets_0_0_8.yaml",
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+        # #10112 successor retains the sealed guard; only its static source inventory is allowed.
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
         "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml",
         "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",

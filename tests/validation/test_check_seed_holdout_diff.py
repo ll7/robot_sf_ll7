@@ -650,6 +650,7 @@ def test_added_yaml_bound_uses_unchanged_sibling(tmp_path):
         "docs/release/0.0.8/decisions.md",
         "configs/benchmarks/seed_sets_0_0_8.yaml",
         "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
         "tests/benchmark/test_sealed_source_pins.py",
     ],
 )

@@ -110,6 +110,14 @@ def test_slice_requires_freeze_source(sealed_repository, source):
     repo = sealed_repository
     if source is None:
         manifest = protocol.load_release_manifest(repo / "configs/benchmarks/releases" / SLICE)
+        # The historical concrete manifest stays immutable; exercise the successor's guard path.
+        manifest = replace(
+            manifest,
+            canonical_campaign_config_path=(
+                repo
+                / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml"
+            ),
+        )
         result = protocol.validate_release_manifest(manifest, repository_root=repo)
         assert any("sealed" in p and "source_sha" in p for p in result["problems"]), result
         return

@@ -2335,6 +2335,84 @@ def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_
         assert "/home/private" not in json.dumps(payload)
 
 
+def _record_acquired_scoring(monkeypatch):
+    """Stub scoring custody only; retain the real source/manifest admission witnesses."""
+    from dataclasses import replace
+
+    from robot_sf.benchmark.snqi import v2_binding
+    from tests.unit.benchmark.test_snqi_v2 import fixture_spec
+
+    monkeypatch.setattr(
+        v2_binding,
+        "bind_acquired_anchors",
+        lambda cfg, **kw: replace(cfg, snqi_v2_spec=replace(fixture_spec(), diagnostic=True)),
+    )
+
+
+@pytest.mark.parametrize("custody_without_anchors", [False, True])
+def test_pending_release_cli_refuses_before_campaign(
+    sealed_repository, monkeypatch, capsys, custody_without_anchors
+):
+    """The real CLI refuses pending scoring and raw custody without frozen anchors.
+
+    Removing either refusal can start an unscored release; prior binding tests
+    exercised the lower campaign API only. Resolve real D-083 development bytes,
+    stub unrelated operational admissions, and forbid the actual campaign entry.
+    No production seam or episode execution is introduced.
+    """
+    from robot_sf.benchmark import release_protocol
+
+    repo = sealed_repository
+    _no_execution.__wrapped__(monkeypatch)
+    code, identity = generate(repo, "1001,1002,1003")
+    assert code == 0
+    manifest = release_protocol.load_release_manifest(identity, repository_root=repo)
+    cfg = release_protocol.load_release_campaign_config(manifest, repository_root=repo)
+    if not custody_without_anchors:
+        assert getattr(cfg, "snqi_v2_binding", None), "D-083 source has no pending scoring binding"
+    assert cfg.snqi_v2_spec is None
+    capsys.readouterr()
+
+    def marked_json(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(path, payload)
+
+    monkeypatch.setattr(sys.modules[__name__], "_write_json", marked_json)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda _cfg: None)
+    receipt = _admit_checkpoint_receipt(monkeypatch, repo / "output/checkpoints")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+    smoke = repo / "output/smoke.json"
+    write_json(smoke, {})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *_a, **_kw: {"status": "admitted_diagnostic", "release_eligible": False},
+    )
+
+    def forbidden(*_a, **_kw):
+        raise AssertionError("pending scoring reached campaign execution")
+
+    monkeypatch.setattr(run_benchmark_release, "run_campaign", forbidden)
+    args = [
+        "--manifest",
+        str(identity),
+        "--checkpoint-receipt",
+        str(receipt),
+        "--runtime-smoke-receipt",
+        str(smoke),
+    ]
+    if custody_without_anchors:
+        args.extend(["--snqi-v2-calibration-root", str(repo / "output/calibration")])
+        with pytest.raises(ValueError, match="custody requires frozen anchors"):
+            run_benchmark_release.main(args)
+    else:
+        assert run_benchmark_release.main(args) == 2
+        result = json.loads(capsys.readouterr().out)
+        assert result["status"] == "snqi_v2_acquisition_required"
+        assert result["benchmark_success"] is False
+        assert result["release_exit_code"] == 2
+
+
 @pytest.mark.parametrize("smoke_run,accepted", [(True, True), (False, True), (False, False)])
 def test_development_identity_uses_shared_runner_without_release_success(
     sealed_repository, monkeypatch, smoke_run, accepted
@@ -2355,6 +2433,7 @@ def test_development_identity_uses_shared_runner_without_release_success(
         write_json(path, payload)
 
     monkeypatch.setattr(sys.modules[__name__], "_write_json", marked_json)
+    _record_acquired_scoring(monkeypatch)
     code, identity = generate(repo, "1001" if smoke_run else "1001,1002,1003")
     assert code == 0
     manifest = release_protocol.load_release_manifest(identity, repository_root=repo)
@@ -2439,6 +2518,15 @@ def test_development_identity_uses_shared_runner_without_release_success(
         "--runtime-smoke-receipt",
         "-" if smoke_run else str(smoke_path),
     ]
+    if not smoke_run:
+        args.extend(
+            [
+                "--snqi-v2-calibration-root",
+                str(repo / "output/calibration"),
+                "--snqi-v2-anchors",
+                str(repo / "output/anchors.json"),
+            ]
+        )
     if smoke_run:
         args.append("--development-runtime-smoke")
     status = run_benchmark_release.main(args)

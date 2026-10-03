@@ -1311,6 +1311,18 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         raise ValueError(
             "development runtime smoke requires a rehearsal identity on dev seed 1001 only"
         )
+    if args.snqi_v2_anchors is not None or args.snqi_v2_calibration_root is not None:
+        from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors
+
+        if args.snqi_v2_anchors is None:
+            raise ValueError("SNQI-v2 acquisition custody requires frozen anchors")
+        cfg = bind_acquired_anchors(
+            cfg,
+            calibration_root=args.snqi_v2_calibration_root,
+            anchors_path=args.snqi_v2_anchors,
+            source_commit=manifest.source_sha or _current_source_commit(),
+            diagnostic=development_rehearsal,
+        )
     runtime_source_commit: str | None = None
     runtime_source_admission: dict[str, Any] = {
         "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
@@ -1801,6 +1813,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         )
         print(json.dumps(result, indent=2))
         return 2
+    if getattr(cfg, "snqi_v2_binding", None) and cfg.snqi_v2_spec is None and not development_smoke:
+        result.update(
+            status="snqi_v2_acquisition_required",
+            benchmark_success=False,
+            status_reason="SNQI-v2 acquisition and anchors are required before campaign execution",
+            release_exit_code=2,
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    campaign_options = (
+        {"allow_pending_snqi_v2": True, "pending_snqi_v2_identity": manifest.resolved_identity_path}
+        if development_smoke
+        else {}
+    )
     run_payload = run_campaign(
         cfg,
         output_root=args.output_root,
@@ -1808,6 +1834,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         campaign_id=campaign_id,
         skip_publication_bundle=True,
         invoked_command=invoked_command,
+        **campaign_options,
     )
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
     try:

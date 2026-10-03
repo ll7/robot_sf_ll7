@@ -53,7 +53,7 @@ identifies its release/tag and the immutable baseline provenance. `BUNDLE_NAME`
 is an export input chosen from the fresh campaign identity, not an exporter
 receipt. Preserve all 0.0.7 artifacts.
 
-Execution order: 1 freeze → 2 calibration → 3a preparatory row mint/identities →
+Execution order: 1 freeze → 3a preparatory row mint/identities → 2 calibration →
 3b same-source smoke → 3c final campaign mint → 4 sealed campaign → 5 export/
 preflight → 6 comparator → 7 tag/publication/DOI. No final mint runs before smoke.
 
@@ -115,17 +115,14 @@ Admission: print the resolved dev seeds before dispatch; exact 14×48×2 census,
 zero fallback/degraded rows, no imputation, actual F/J/K p95, T=3/N=0.25 and
 strict calibration binding. A 3-seed rehearsal is not calibration custody.
 
-**Current G03/G04 stop:** canonical anchors are `pending_calibration`; the
-selected D-083 campaign has no `snqi_v2_spec` and its release templates do not
-bind v2 asset digests. Review and pin the actual anchors/weights/family and
-campaign/manifest hashes; their source binding and the smoke/mint-ordering fixes
-must land before the final freeze under the orchestrator ruling of 2026-10-03.
-This requires a reviewed source change,
-not copying ignored anchors into a clean source and pretending it is unchanged.
-The final named source must be reconciled/reproved by the orchestrator if it
-changes; forbid metric/runtime definition drift from calibration to campaign.
-Private scientific trust pins are empty and require independent review.
-[#10112](https://github.com/ll7/robot_sf_ll7/issues/10112) tracks these seams.
+**Post-freeze scientific stop:** D-083 and both current templates now bind the
+weights, family, pending anchors and scheduled dev1001/1002 acquisition inputs.
+The source anchor file stays `pending_calibration`. Freeze a separate acquired
+artifact at the named source; do not edit tracked anchors or move the source
+between acquisition and campaign. The public runner's strict loader checks its
+source/configuration identity; complete raw custody can additionally be rederived.
+Private scientific trust pins remain empty until independent review of actual
+acquisition and sealed-source ruling. Use the checklist below before final mint.
 
 ## 3. Two-phase preparation and final mint
 
@@ -206,12 +203,14 @@ Admission: every arm successful/native, source/model bindings equal campaign,
 result and staging age ≤24 h, independently accepted environment/stress receipt.
 Record CPU model; learned episodes/resume must stay on the same node (D-072).
 
-**No admissible production input pair exists on this main yet:** v0_5 config and
-manifest use **103**, while private mint expects **1003**. The ordinary public
-runtime-smoke validator still selects v0_2/H600 and the old v3 roster.
-Do not run historical retired-seed smoke or silently rename 103 to 1003.
-D-086 all-roster development smoke is supported but permanently diagnostic and
-explicitly refused as ordinary release admission. G08/G09 / #10112 own the fix.
+**Current reviewed-source contract:** use the tracked v0_6 config/manifest,
+all 14 current D-083 keys, dev seed **1003**, dt=0.1, differential drive and the
+authored blind-corner **H400**. The public validator selects this successor;
+v0_2 and v0_5 remain historical bytes. Same-source native success plus authentic
+separate environment/stress/staging/cold-custody receipts is still required.
+D-086 all-roster development smoke remains permanently diagnostic and is
+explicitly refused as ordinary release admission. A source contract is not an
+admission receipt.
 
 ### 3c. Final campaign mint after admitted smoke
 
@@ -243,10 +242,11 @@ those exact receipts in `full-mint-request.json`.
 **Ordering stop retained:** existing main cannot execute literal final mint →
 first smoke: full mint requires a successful smoke already. Stage 3a is the
 different preparatory-row tool, stage 3b must produce and admit that same-source
-receipt, and only then can stage 3c run. Current public smoke inputs/validator
-remain inadmissible as described in 3b; renumbering does not fix them. #10112
-must land before the final freeze. Do not omit smoke inputs or use diagnostic
-receipts as admission.
+receipt, and only then can stage 3c run. The #10112 public/private successors
+must land before freeze naming. Do not omit smoke inputs or use diagnostic
+receipts as admission. The private executor forwards the reviewed `snqi_anchors`
+artifact to both public runners; raw custody is an optional additional public
+rederivation input, never an independent scientific trust grant.
 
 ## 4. Sealed campaign and fixed companion
 
@@ -386,13 +386,13 @@ production receipts. Access succeeded; no inaccessible gap is guessed closed.
 |---|---|
 | G01 integrated whole-roster rehearsal | Packaging completed by #10103 / D-086 on `b8d5e970…`, 672 smoke +2,016 development cells. Candidate `c979e033…` includes later #10108 hardening; exact-candidate intake/rehearsal acceptance still belongs to orchestrator. |
 | G02 calibration custody | Open: acquire exact 1,344 dev 1001/1002 cells; 2,016 rehearsal rows cannot be relabelled as calibration. #10045 supplies strict freeze validator. |
-| G03 v2 assets and manifest binding | **Blocks freeze (orchestrator, 2026-10-03):** pending anchors, no D-083 `snqi_v2_spec`, no v2 release-template pins; #10112. Open #9894 proposes another release tooling path, not an admitted D-083 successor. |
-| G04 calibration versus frozen-source trust | **Blocks freeze for release-source reconciliation (2026-10-03):** final anchor/source reconciliation and independently reviewed scientific pins; private trust set empty. #10112. |
+| G03 v2 assets and manifest binding | **Blocks freeze** until #10112 lands. #10112 binds pending acquisition/spec/assets to both templates; land reviewed successors before freeze. Real acquired anchors and independent scientific review remain post-freeze inputs. |
+| G04 calibration versus frozen-source trust | **Blocks freeze** until the #10112 same-source acquisition/trust contract lands; actual acquisition/review follow the named freeze. #10112 requires same-source acquisition/configuration custody; private scientific trust set remains empty until independent review of actual acquired anchors and sealed ruling. |
 | G05 authored-horizon mint and bounded diagnostic | Tooling fixed by merged private #421; static dev diagnostics non-dispatchable, production CPUs 32–60. Not proof production inputs are admitted. |
 | G06 doorway H600 versus H400 | Fixed: #9999 authored slice schedule and #10081 strict companion acceptance; static source-pin witnesses bind H400. |
 | G07 same-node two-track chain | Tooling fixed in private #421: distinct identities/checkpoints, shared source/DOI and sequential runners. Final reconciliation/preservation remain G12. |
-| G08 preparation seeds | Partial: private #421 expects 1001/1002 calibration and 1003 smoke; public calibration fixed by #10045, public v0_5 smoke remains 103. #10112. |
-| G09 exact-freeze smoke/stress/staging/cold custody | Partial tooling in #421; authentic candidate receipts absent, canonical public smoke contract still v0_2/v3. Production mint requires smoke before final mint. #10112. |
+| G08 preparation seeds | #10112/private successor selects scheduled dev1001/1002 acquisition and tracked v0_6 dev1003 smoke; historical v0_5 remains seed103. |
+| G09 exact-freeze smoke/stress/staging/cold custody | #10112 selects v0_6/current keys/authored H400 and preparatory mint → smoke → final mint. Authentic same-freeze environment/stress/staging/preservation/cold receipts remain required. |
 | G10 comparator end-to-end | Development path verified in #10103, correct relative source binding and release-mode refusal. Strict full sealed-census comparison still due after execution. |
 | G11 DOI reservation order | Documented/fixed in private #421: reserve unpublished before identity/mint, publish last. Authentic reservation receipt remains operator input; none performed here. |
 | G12 full publication chain | Public doorway-runner seam fixed by #10081. Width scientific review, two-bundle/result/projection reconciliation, scanner/cold preservation, intake and final authorization remain open; not supplied by a diagnostic mint/rehearsal. |
@@ -446,6 +446,83 @@ fixed diagnostic DOIs `10.5281/zenodo.99000001` / `10.5281/zenodo.99000002`,
 `development-rehearsal-<full SHA>` tag and the same D-083 authored template.
 The Slurm wrapper's `ROBOT_SF_DEVELOPMENT_RUNTIME_SMOKE=1` uses fifth argument
 `-`; subsequent development campaign consumes that exact-source smoke result.
+The native campaign entry also requires the verified rehearsal identity path,
+matching complete campaign configuration and fixed-list development seeds
+before `allow_pending_snqi_v2` can take effect; the facade keyword alone refuses.
 These outputs retain `release_eligible: false`; comparator requires
 `--diagnostic-partial`. Preserve the complete raw custody and diagnostic bundle;
 they are never substitutes for steps 3–7 production admission.
+
+## Before the freeze: #10112 source contract
+
+[#10112](https://github.com/ll7/robot_sf_ll7/issues/10112) **blocks the freeze**.
+Its scoring, smoke and ordering changes must land on main before the orchestrator
+names the freeze commit. This ruling supersedes the earlier preparation audit's
+classification of #10112 as a mint-only blocker. Historical manifests remain
+unchanged; regenerate every identity/packet at the newly named clean source.
+
+D-083 now declares `snqi_v2_spec` with the weights, family, pending anchor asset,
+and `calibration.dev1001_1002_scheduled_acquisition.yaml`, each hash-bound.
+Both v0.2 templates pin those same assets. The source anchor file remains
+`pending_calibration`; loading a configuration is permitted for identity and
+checkpoint preparation, but executing an unscored bound campaign refuses.
+The doorway template selects its v2 campaign successor; its original v1 config
+and concrete manifest remain historical bytes. **Before any doorway execution,
+regenerate its concrete manifest from the v0.2 doorway template at the named
+freeze**, selecting the v2 campaign and four v2 assets with reviewed acquired
+anchors. The checked-in `three_width_doorway_release_0_0_8_v1.yaml` still names
+the historical v1 campaign/legacy v3 weights; it is not an executable current
+0.0.8 packet. Its fail-closed source-pin test remains mandatory.
+
+Acquisition freezes a separate artifact after the freeze, without editing the
+tracked pending file or moving the named source. The release runner accepts
+`--snqi-v2-anchors <artifact>` and checks the strict frozen loader, dev1001/1002
+split, calibration source and exact acquisition configuration identity. Supply
+`--snqi-v2-calibration-root <complete raw root>` to additionally rederive and
+compare the anchors from every producer row/sidecar. Independent scientific
+pins remain mandatory in production; these checks confer no scientific authority.
+
+## Independent scientific review required before production mint
+
+Leave these boxes unchecked here. An independent reviewer completes them after
+actual acquisition; this integration and a rehearsal cannot fill the trust set.
+
+- [ ] Review the complete dev1001/1002 14×48×2 acquisition custody, actual producer
+  hashes/sidecars, native/adapter/mixed census, absence of fallback/degraded rows,
+  force-source decision, schema/zero anchors, T=3, N=0.25 and real positive F/J/K p95.
+- [ ] Bind the calibration source to the named freeze. Verify zero metric/runtime,
+  planner/model, physics, schema and authored-budget drift between acquisition and
+  campaign; keep the sealed seed commitment and the D-084 overtaking H600.
+- [ ] Independently review anchor applicability to the fixed doorway width slice;
+  retain its separate scientific and publication boundary (CHAIN-4 G12).
+- [ ] Review the sealed evaluation ruling binding the freeze, concrete main and
+  companion manifests/configs, canonical acquired anchor digest, exact sealed
+  tuple and review reference. No request-created receipt can authenticate it.
+- [ ] In a separate reviewed private code change, add the actual
+  `REVIEWED_SCIENTIFIC_SOURCES` entry: `freeze_sha`, `review_ref`, and both
+  `snqi_anchors` / `evaluation_seed_admission` sources, each with repository,
+  relative path, full source commit and SHA-256. Test positive controls on the
+  actual pinned Git blobs and negative controls on changed bytes/source/splits.
+- [ ] Re-run production mint's strict loader and all scientific/source/custody
+  gates at the exact admitted public/private revisions. The trust set is empty
+  until that independently reviewed change lands; retain the refusal meanwhile.
+
+## Rehearsing acquisition and scored packaging (D-086)
+
+At a clean rehearsal source, use the same acquisition file on dev1001/1002,
+freeze anchors into ignored output, then generate the D-086 seed-1001 preparatory
+smoke and seed-1001/1002/1003 campaign identities described above. The preparatory
+D-086 smoke may remain unscored and is permanently diagnostic. Before the scored
+campaign wrapper, set `ROBOT_SF_SNQI_V2_ANCHORS=<artifact>` and
+`ROBOT_SF_SNQI_V2_CALIBRATION_ROOT=<complete acquisition root>`; the wrapper forwards
+both as explicit runner inputs. The runner revalidates acquisition custody,
+computes `snqi_v2`/terms and exports the shared diagnostic bundle. Inspect the
+actual 2,016 scored rows and bundle, retaining `release_eligible: false`.
+Development anchors/receipts never admit a later source or a sealed campaign.
+
+SNQI v2 enrichment retains the actual per-episode algorithm. The two reviewed
+scenario-adaptive hybrid arms use their frozen ORCA branch on
+`francis2023_leave_group`; they remain single configured arms in the paired
+reports. Enrichment reads these declarations from the source planner config and
+rejects an algorithm swap outside its declared scenario. It does not infer
+permitted routing from observed rows or relax fallback/degraded checks.

@@ -502,6 +502,7 @@ class BenchmarkReleaseManifest:
     doi: str
     citation_path: Path
     release_checklist_path: Path
+    snqi_v2_binding: dict[str, Any] | None = None
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
     expected_horizon_steps: int | None = None
@@ -670,6 +671,38 @@ def _load_manifest_scenario_section(
     if not scenario_matrix_sha256:
         raise ValueError("scenario.matrix_sha256 must be a non-empty string")
     return scenario_matrix_path, scenario_matrix_sha256
+
+
+def _load_manifest_v2_binding(
+    manifest_path: Path, payload: Mapping[str, Any], repository_root: Path | None
+) -> dict[str, Any] | None:
+    """Read explicit source assets; their presence/digests must agree with the campaign.
+
+    Returns:
+        Normalized source asset pins, or None when absent."""
+    from robot_sf.benchmark.snqi.v2_binding import ASSET_NAMES  # noqa: PLC0415
+
+    raw = payload.get("metrics", {}).get("snqi_v2_binding")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != set(ASSET_NAMES):
+        raise ValueError(
+            "metrics.snqi_v2_binding requires weights, anchors, family and acquisition_config"
+        )
+    result = {}
+    for name, asset in raw.items():
+        if not isinstance(asset, dict) or set(asset) != {"path", "sha256"}:
+            raise ValueError("metrics.snqi_v2_binding asset requires path and sha256")
+        path = _resolve_required_file(
+            manifest_path,
+            asset["path"],
+            f"metrics.snqi_v2_binding.{name}",
+            repository_root=repository_root,
+        )
+        if _sha256_file(path) != asset["sha256"]:
+            raise ValueError(f"metrics.snqi_v2_binding.{name} digest mismatch")
+        result[name] = {"path": path, "sha256": asset["sha256"]}
+    return result
 
 
 def _load_manifest_metrics_section(
@@ -1572,6 +1605,7 @@ def load_release_manifest(
         scenario_matrix_sha256=scenario_matrix_sha256,
         campaign_config_sha256=config_sha256,
         seed_policy=dict(seed_policy),
+        snqi_v2_binding=_load_manifest_v2_binding(manifest_path, payload, repository_root),
         snqi_weights_path=metrics["snqi_weights_path"],
         snqi_weights_sha256=metrics["snqi_weights_sha256"],
         snqi_baseline_path=metrics["snqi_baseline_path"],
@@ -2105,6 +2139,17 @@ def _validate_release_hashes_and_assets(
     problems: list[str],
 ) -> None:
     """Validate release hashes and asset/path alignment."""
+    binding = getattr(cfg, "snqi_v2_binding", None)
+    expected_binding = (
+        {
+            name: {"path": binding[f"{name}_path"], "sha256": binding[f"{name}_sha256"]}
+            for name in ("weights", "anchors", "family", "acquisition_config")
+        }
+        if binding
+        else None
+    )
+    if manifest.snqi_v2_binding != expected_binding:
+        problems.append("metrics.snqi_v2_binding differs from campaign acquisition assets")
     if _sha256_file(manifest.canonical_campaign_config_path) != manifest.campaign_config_sha256:
         problems.append("campaign_config_sha256 does not match canonical_campaign_config")
     if _sha256_file(manifest.scenario_matrix_path) != manifest.scenario_matrix_sha256:
@@ -2397,7 +2442,7 @@ def sealed_seed_execution_problem(  # noqa: C901 - independent frozen/diagnostic
         is_doorway_width_slice(manifest)
         and manifest.release_id == "three_width_doorway_0_0_8_v1"
         and config_name
-        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml"
         and matrix_name
         == "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
     )
@@ -3135,6 +3180,11 @@ def build_resolved_release_manifest(
         },
         "release_kind": manifest.release_kind,
     }
+    if manifest.snqi_v2_binding:
+        payload["metrics"]["snqi_v2_binding"] = {
+            name: {"path": str(asset["path"]), "sha256": asset["sha256"]}
+            for name, asset in manifest.snqi_v2_binding.items()
+        }
     source_sha = _resolve_release_source_sha(manifest, source_commit)
     if source_sha is not None:
         # Keep the final source identity at the resolved-manifest root as well
@@ -3344,6 +3394,34 @@ def _bind_doorway_template_horizon(payload: dict[str, Any]) -> None:
         matrix["horizon_steps"] = DOORWAY_RELEASE_HORIZON
 
 
+def _materialize_v2_binding_paths(
+    payload: dict[str, Any], template_path: Path, repository_root: Path
+) -> None:
+    """Project nested source asset paths without editing their tracked templates."""
+    binding = payload.get("metrics", {}).get("snqi_v2_binding")
+    if binding:
+        for name, asset in binding.items():
+            asset["path"] = _absolute_template_file(
+                template_path,
+                asset["path"],
+                repository_root=repository_root,
+                field_name=f"metrics.snqi_v2_binding.{name}",
+            )
+
+
+def _require_v2_source_assets(
+    manifest: BenchmarkReleaseManifest, repository_root: Path, source_commit: str
+) -> None:
+    """Require every v2 source asset at the identity's clean selected source."""
+    for name, asset in (manifest.snqi_v2_binding or {}).items():
+        _require_tracked_input_at_source(
+            asset["path"],
+            repository_root=repository_root,
+            source_commit=source_commit,
+            label=f"SNQI-v2 {name}",
+        )
+
+
 def _materialize_release_template_payload(  # noqa: PLR0913
     template_payload: Mapping[str, Any],
     *,
@@ -3411,6 +3489,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
                 repository_root=repository_root,
                 field_name=f"{section_name}.{field}",
             )
+    _materialize_v2_binding_paths(payload, template_path, repository_root)
     publication = payload.get("publication")
     if not isinstance(publication, dict):
         raise ValueError("resolved publication identity must be a mapping")
@@ -3581,6 +3660,7 @@ def _build_resolved_release_identity(
             repository_root=repository_root,
         )
 
+    _require_v2_source_assets(manifest, repository_root, source_commit)
     tracked_inputs = (
         (template_path, "release identity template"),
         (metadata_template, "publication metadata template"),
@@ -3954,6 +4034,16 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
             "An existing fixed-id release campaign is rejected unless --resume-receipt "
             "proves an infrastructure-only interruption with unchanged inputs."
         ),
+    )
+    parser.add_argument(
+        "--snqi-v2-calibration-root",
+        type=Path,
+        help="Complete same-source dev1001/1002 acquisition custody.",
+    )
+    parser.add_argument(
+        "--snqi-v2-anchors",
+        type=Path,
+        help="Frozen anchors rederived from that acquisition before scoring.",
     )
     parser.add_argument(
         "--checkpoint-receipt",

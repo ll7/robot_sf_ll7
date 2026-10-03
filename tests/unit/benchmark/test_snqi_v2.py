@@ -3432,8 +3432,8 @@ def test_scenario_routes_refuse_untrusted_config_paths(tmp_path, path_kind):
         if p["key"] == "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4"
     )
     actual = ROOT / planner["algo_config"]
-    trusted = repo / "trusted.yaml"
-    write_text(trusted, "# AI-GENERATED NEEDS-REVIEW\n" + actual.read_text())
+    declared_config = repo / "trusted.yaml"
+    write_text(declared_config, "# AI-GENERATED NEEDS-REVIEW\n" + actual.read_text())
     forged_payload = yaml.safe_load(actual.read_bytes())
     forged_payload["scenario_algo_overrides"]["classic_bottleneck_low"] = {"algo": "orca"}
     forged = tmp_path / "forged.yaml"
@@ -3460,7 +3460,7 @@ def test_scenario_routes_refuse_untrusted_config_paths(tmp_path, path_kind):
         )
     ]
     path = repo / "episodes.jsonl"
-    write_campaign_arm(path, rows, algo_config_path=trusted)
+    write_campaign_arm(path, rows, algo_config_path=declared_config)
     entry = {
         "status": "ok",
         "episodes_path": str(path),

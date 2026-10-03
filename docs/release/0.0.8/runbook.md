@@ -74,3 +74,33 @@ admission or the comparator's statistical implementation. Release mode refuses
 the rehearsal identity. Record commands, exits and output paths, and preserve
 the intake archive's size and SHA-256. These steps do not mint, publish, tag or
 reserve a DOI, and their outputs remain permanently non-releasable.
+
+## Release-notes admission before mint and publication
+
+The versioned [release notes](release_notes.md) state the adopted limitations by
+content. `write_resolved_release_identity` (the production identity generator)
+checks complete required paragraphs in named sections, and atomically retains
+`release_notes_gate.v1.json` beside the identity and metadata. The receipt binds
+the notes digest, checker digest, decision-register digest and exact source commit;
+it is separate from the resolved sealed identity bytes. The production runner
+rechecks it before spawn preflight or execution. Private mint tooling must use
+this generator and retain its receipt with the release packet.
+
+Publication export retains `release_metadata/release_notes.md` and the mint
+receipt. Bundle preflight repeats the same gate on those bytes; the direct
+publication CLI repeats it against the source notes before creating an
+authenticated client. A missing receipt, missing statement, wrong section or
+changed digest refuses admission. This is disclosure admission, not release
+approval.
+
+These notes contain no sealed-campaign outcome numbers. If outcome numbers are
+added before mint, mark unavailable values as `PLACEHOLDER_SEALED_<FIELD_NAME>`.
+Mint allows placeholders; publication refuses them (also TODO, TBD and template
+markers). Fill them before the final production mint: editing notes after mint
+requires a new receipt and packet at the selected exact source. The short GitHub
+release body must link to the notes at that source commit.
+
+The issue's group-truncation and notes-location content maps to D-063 and D-076
+in the public register, in addition to its named D-065 and D-075. The public
+register has no adopted straight-force-forecast disclosure; this gate does not
+invent one.

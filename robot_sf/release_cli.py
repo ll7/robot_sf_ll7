@@ -14,6 +14,7 @@ from robot_sf.benchmark.release_erratum import (
     ReleaseErratumError,
     load_erratum_contract,
 )
+from robot_sf.benchmark.release_notes import gate_manifest, notes_gate
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -328,6 +329,8 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
     if validation["status"] != "valid":
         problems = "; ".join(str(problem) for problem in validation["problems"])
         raise zenodo_publisher.ZenodoPublisherError(f"release manifest is invalid: {problems}")
+    if getattr(args, "zenodo_mode", None) == "publish":
+        _publication_notes_gate(manifest)
     binding = zenodo_publisher.build_release_binding(manifest)
     metadata_path = getattr(args, "metadata", None)
     if metadata_path is not None and Path(metadata_path).resolve() != binding["metadata_path"]:
@@ -478,6 +481,21 @@ def _handle_published_audit(args: argparse.Namespace) -> int:
     if receipt["status"] == "invalid":
         return 1
     return 2
+
+
+def _publication_notes_gate(manifest: Any) -> None:
+    """Repeat the mint disclosure check immediately before publication admission."""
+    try:
+        receipt = gate_manifest(manifest, get_repository_root())
+        if receipt is not None:
+            notes_gate(
+                get_repository_root(),
+                source_commit=manifest.source_sha,
+                phase="publication",
+                receipt=receipt,
+            )
+    except (OSError, TypeError, ValueError) as exc:
+        raise zenodo_publisher.ZenodoPublisherError(str(exc)) from exc
 
 
 def handle(args: argparse.Namespace) -> int:  # noqa: C901

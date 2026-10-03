@@ -247,6 +247,7 @@ def run_campaign(
     skip_publication_bundle: bool = False,
     invoked_command: str | None = None,
     arm_isolation: str | None = None,
+    allow_pending_snqi_v2: bool = False,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign via the extracted campaign module.
 
@@ -277,6 +278,7 @@ def run_campaign(
         compute_aggregates_with_ci=compute_aggregates_with_ci,
         export_publication_bundle=export_publication_bundle,
         arm_isolation=arm_isolation,
+        allow_pending_snqi_v2=allow_pending_snqi_v2,
     )
 
 

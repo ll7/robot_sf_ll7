@@ -179,3 +179,24 @@ def test_reviewed_artifact_route_still_requires_exact_acquisition_identity(
     else:
         with pytest.raises(ValueError, match="source differs|acquisition configuration"):
             binding_api.bind_acquired_anchors(cfg, **kwargs)
+
+
+@pytest.mark.parametrize("allowed", [False, True])
+def test_rehearsal_option_reaches_campaign_implementation(monkeypatch, allowed):
+    """The compatibility entry must forward the explicit preparatory flag without admission.
+
+    Forgetting the keyword raises before the native runner; earlier CLI tests
+    replaced the facade and missed this seam. This uses the actual entry and
+    its existing implementation hook, with no production test-only seam.
+    """
+    from robot_sf.benchmark import camera_ready_campaign as facade
+
+    cfg = object()
+
+    def implementation(observed, **kwargs):
+        assert observed is cfg
+        return kwargs
+
+    monkeypatch.setattr(facade, "_run_campaign_impl", implementation)
+    result = facade.run_campaign(cfg, allow_pending_snqi_v2=allowed)
+    assert result["allow_pending_snqi_v2"] is allowed

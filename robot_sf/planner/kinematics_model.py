@@ -177,7 +177,13 @@ class BicycleDriveKinematicsModel:
         return self.project_with_creep_info(command)[0]
 
     def project_with_creep_info(self, command: Command2D) -> tuple[Command2D, bool]:
-        """Project and report creep from the same branch that applies it.
+        """Project with speed priority and report the optional creep branch.
+
+        This clips yaw at the bounded requested speed, rather than finding a
+        Euclidean nearest point. Creep is disabled by default; a zero/zero stop
+        stays stopped. Creep must never apply under a safety intervention:
+        callers carrying a veto must use a creep-disabled model, as the robot
+        adapter does when ``safety_intervention=True``.
 
         Returns:
             Projected command and whether the optional creep branch raised speed.

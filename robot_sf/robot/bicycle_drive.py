@@ -38,7 +38,7 @@ class BicycleDriveSettings:
     max_decel: float | None = None
     # Planner adaptation only; explicitly opt in to motion for yaw-only requests.
     # Every safety intervention suppresses this downstream.
-    creep_speed: float = 0.0
+    creep_speed: InitVar[float] = 0.0
 
     # InitVars keep dataclasses.asdict() byte-identical for historical configs.
     # Explicit limited_reverse selects the versioned plant, independently of the
@@ -46,7 +46,9 @@ class BicycleDriveSettings:
     limited_reverse: InitVar[bool] = False
     max_reverse_speed: InitVar[float] = 0.5
 
-    def __post_init__(self, limited_reverse: bool, max_reverse_speed: float) -> None:
+    def __post_init__(
+        self, creep_speed: float, limited_reverse: bool, max_reverse_speed: float
+    ) -> None:
         """Resolve the braking-authority default for backward compatibility.
 
         When ``max_decel`` is unset, braking authority defaults to the forward
@@ -54,6 +56,7 @@ class BicycleDriveSettings:
         explicit ``max_decel`` decouples braking from forward acceleration.
         """
         validate_reverse_settings(limited_reverse, max_reverse_speed)
+        self.creep_speed = creep_speed
         self.limited_reverse = limited_reverse
         self.max_reverse_speed = float(max_reverse_speed)
 
@@ -87,12 +90,15 @@ class BicycleDriveSettings:
         return -self.max_velocity if self.allow_backwards else 0.0
 
     def _config_hash_overrides(self) -> dict:
-        """Bind the opt-in plant version and cap in canonical config identity.
+        """Bind enabled reverse and nonzero creep in canonical config identity.
 
         Returns:
             Opt-in selectors, or no additions for legacy settings.
         """
-        return reverse_identity(self)
+        overrides = reverse_identity(self)
+        if self.creep_speed != 0.0:
+            overrides["creep_speed"] = float(self.creep_speed)
+        return overrides
 
 
 @dataclass

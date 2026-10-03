@@ -12,7 +12,9 @@ supply wheelbase or steering geometry. Zero curvature is a valid straight plant.
 
 **Creep is disabled by default**, including both opt-in T60 configs. Select
 `robot_config.creep_speed: 0.1` to enable forward arcs for intentional yaw-only
-requests. The gate is `0 <= v < .001 m/s` and `abs(omega) >= pi/180 rad/s`.
+requests through direct `PlannerActionAdapter` callers, including
+`examples/advanced/31_*` and `scripts/tools/*`. It has no effect in
+`map_runner` episodes; the runner warns once per process for a nonzero setting. The gate is `0 <= v < .001 m/s` and `abs(omega) >= pi/180 rad/s`.
 Negative requests never become forward creep; creep cannot reduce a positive
 speed request. The adapter uses the model/config speed, without a second .1
 constant. Hard-stop/yield, deadlock-monitor and CBF interventions carry a veto
@@ -29,8 +31,11 @@ show at most 1 cm displacement for an isolated .1 s request from rest, followed
 by immediate braking on the next stop. Noise below one degree/second cannot
 start creep. This bounds the isolated-pulse effect for the tested 1 m/s² plant;
 it does not make a sustained intentional arc safe near obstacles. Safety vetoes
-still take precedence on every step. Creep is confined to final robot conversion,
-where the runtime safety flag is known. Policy models never receive
+still take precedence on every step. In the whole `map_runner` path, ordinary
+creep is unreachable: policy projection removes yaw-only commands, and the
+remaining yaw-only commands come from safety stages whose veto suppresses creep
+at conversion. Only direct adapter callers can reach ordinary creep.
+Policy models never receive
 `bicycle_creep_speed`: guarded-PPO uncertainty/fallback and in-policy CBF vetoes
 are projected with creep disabled before conversion. Direct adapter callers
 with a separate upstream safety stage must still pass `safety_intervention=True`.
@@ -72,6 +77,8 @@ and non-tautological assertions.
 
 | Tests | Behavior and credible regression | Nearest prior coverage gap |
 |---|---|---|
+| default bicycle identity / opted-in creep | Main's fixed default env hash is preserved; enabled creep and its speed change real environment identity | Release/DD purity tests missed the bicycle dataclass payload; uses the production hash and real settings, not a mirrored hash implementation |
+| runner creep warning | Real episode-context resolution warns once for nonzero creep and stays silent for default-off plants | Veto tests covered safe projection but did not tell config users that ordinary runner creep is unreachable; log sink observes the actual runner warning |
 | default creep / noise gates | Stop remains stopped; tiny yaw cannot silently start .1 m/s motion | Old yaw-only physics test assumed implicit creep; no intent threshold |
 | small reverse / tiny positive | Preserve signed bounded speed; near-zero reverse must not flip forward and disabled creep must not erase positive speed | Coupled projection boundaries lacked these near-zero signed requests |
 | three safety-veto integrations | Forty actual hard-stop/deadlock-filter commands stay at zero speed/position even with creep opted in | Safety tests ended before bicycle conversion; adapter tests never composed safety stages |
@@ -125,7 +132,10 @@ the linked CSVs contain every planner/scenario/bearing and the unrounded rates.
 | Six scenarios | T60-30-on | 840 | 466 (52.1–58.8%) | 143 (14.6–19.7%) | 231 (24.6–30.6%) | 4772 |
 | Six scenarios | T60-45-on | 840 | 451 (50.3–57.0%) | 161 (16.6–22.0%) | 228 (24.2–30.2%) | 4249 |
 
-`T60-30`/`T60-45` are default creep-off; `-on` explicitly selects .1 m/s.
+`T60-30`/`T60-45` are default creep-off; historical round-1 `-on` rows
+explicitly selected .1 m/s at their recorded producer. Those `-on` rows are
+**not reproducible at this head**: `map_runner` no longer applies ordinary creep.
+Reproducing them requires the historical source, not merely a nonzero config.
 
 | Same legacy plant, empty world | Success / 350 | Low-displacement windows |
 |---|---:|---:|
@@ -275,8 +285,10 @@ Terminal safety interventions count episodes with at least one intervention on
 the final executed step, not summed labels. DD terminal labels are hard_stop25,
 speed_cap6, recovery4; T60 off/on are hard_stop26, speed_cap6, recovery5.
 Labels overlap. This arm contains real yaw-bearing stop vetoes. No ordinary creep
-fires in either bicycle arm: the goal policy already projects yaw-only commands
-with creep disabled, and the wrapper veto suppresses recovery creep downstream.
+fires anywhere in the current `map_runner` path: policy models project yaw-only
+commands with creep disabled, and safety-stage vetoes suppress any remaining
+recovery yaw downstream. Creep is reachable only through direct
+`PlannerActionAdapter` callers (`examples/advanced/31_*`, `scripts/tools/*`).
 Consequently the off/on trajectories agree; these data support veto preservation,
 not a benefit or general safety claim for enabled creep. Defaults stay off.
 Low-displacement windows are DD4122, T60 off/on5927 using the unchanged 2 s/.05 m

@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import cache
 from pathlib import Path  # noqa: TC003 - runtime type-hint consumers resolve Path
 from typing import Any, cast
 
@@ -1396,6 +1397,15 @@ def _bind_episode_horizon(
     return horizon_val
 
 
+@cache
+def _warn_bicycle_creep_ignored() -> None:
+    """Warn once per process that runner policies cannot reach ordinary creep."""
+    logger.warning(
+        "Nonzero robot_config.creep_speed has no effect in map_runner episodes; "
+        "ordinary creep is reachable only through direct PlannerActionAdapter callers."
+    )
+
+
 def _resolve_episode_run_context(  # noqa: PLR0913
     *,
     scenario: dict[str, Any],
@@ -1516,6 +1526,8 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     )
     if robot_kinematics == "bicycle_drive":
         robot_cfg = config.robot_config
+        if robot_cfg.creep_speed != 0.0:
+            _warn_bicycle_creep_ignored()
         curvature = math.tan(robot_cfg.max_steer) / robot_cfg.wheelbase
         policy_cfg = dict(policy_cfg)
         policy_cfg.update(

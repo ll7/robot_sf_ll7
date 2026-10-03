@@ -153,7 +153,9 @@ def test_mutable_robot_settings_reject_invalid_creep(creep_speed):
     settings = BicycleDriveSettings()
     settings.creep_speed = creep_speed
     with pytest.raises(ValueError, match="creep_speed"):
-        settings.__post_init__(settings.limited_reverse, settings.max_reverse_speed)
+        settings.__post_init__(
+            settings.creep_speed, settings.limited_reverse, settings.max_reverse_speed
+        )
 
 
 @pytest.mark.parametrize("creep_speed", [-0.1, math.nan])
@@ -236,3 +238,61 @@ def test_guarded_ppo_uncertainty_stop_survives_policy_projection_with_creep():
         robot.apply_action(tuple(adapter.from_velocity_command(command)), 0.1)
     assert robot.state.velocity == 0.0, "in-policy veto must not regain forward creep"
     assert robot.pos == pytest.approx((0.0, 0.0))
+
+
+def test_runner_warns_once_when_creep_has_no_effect():
+    """Actual context binding warns once for enabled creep, never for defaults."""
+    from pathlib import Path
+
+    from loguru import logger
+
+    from robot_sf.benchmark.map_runner import map_runner_episode as episode
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    scenario_path = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
+    source = next(
+        s for s in load_scenarios(scenario_path) if s["name"] == "classic_t_intersection_medium"
+    )
+    messages = []
+    warn = getattr(episode, "_warn_bicycle_creep_ignored", None)
+    if warn is not None:
+        warn.cache_clear()
+    sink = logger.add(lambda msg: messages.append(msg.record["message"]), level="WARNING")
+    try:
+        for creep in [0.0, 0.1, 0.2]:
+            scenario = dict(
+                source, seeds=[1001], robot_config={"type": "bicycle_drive", "creep_speed": creep}
+            )
+            scenario.pop("seed_set", None)
+            episode._resolve_episode_run_context(
+                scenario=scenario,
+                seed=1001,
+                horizon=600,
+                dt=0.1,
+                algo="goal",
+                scenario_path=scenario_path,
+                algo_config={},
+                algo_config_path=None,
+                experimental_ped_impact=False,
+                ped_impact_radius_m=1.0,
+                ped_impact_window_steps=1,
+                observation_mode=None,
+                observation_level=None,
+                benchmark_track=None,
+                track_schema_version=None,
+                observation_noise=None,
+                tracking_precision=None,
+                synthetic_actuation_profile=None,
+                latency_stress_profile=None,
+                safety_wrapper=None,
+                cbf_safety_filter=None,
+            )
+            if creep == 0.0:
+                assert not any("creep_speed" in m for m in messages)
+    finally:
+        logger.remove(sink)
+        if warn is not None:
+            warn.cache_clear()
+    creep_warnings = [m for m in messages if "creep_speed" in m]
+    assert len(creep_warnings) == 1
+    assert "has no effect in map_runner episodes" in creep_warnings[0]

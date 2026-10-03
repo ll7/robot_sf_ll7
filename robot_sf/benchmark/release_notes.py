@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -293,6 +294,34 @@ def notes_gate(
     }
 
 
+def is_release_0_0_8(manifest: Any) -> bool:
+    """Recognize the main release and width slice from live or archived metadata.
+
+    Returns:
+        Whether any retained release identifier names the 0.0.8 contract.
+    """
+    from robot_sf.benchmark.release_protocol import DOORWAY_RELEASE_KINDS  # noqa: PLC0415
+
+    def field(name: str) -> Any:
+        return (
+            manifest.get(name, "") if isinstance(manifest, Mapping) else getattr(manifest, name, "")
+        )
+
+    return (
+        field("release_kind") in DOORWAY_RELEASE_KINDS
+        or "0.0.8" in str(field("release_tag"))
+        or any(
+            "0_0_8" in Path(str(field(name))).name
+            for name in (
+                "scenario_matrix_path",
+                "scenario_matrix",
+                "canonical_campaign_config_path",
+                "canonical_campaign_config",
+            )
+        )
+    )
+
+
 def gate_manifest(manifest: Any, repository_root: Path) -> dict[str, Any] | None:
     """Recheck the retained mint disclosure receipt before production preflight.
 
@@ -301,8 +330,7 @@ def gate_manifest(manifest: Any, repository_root: Path) -> dict[str, Any] | None
     """
     if getattr(manifest, "release_kind", None) == "development_rehearsal":
         return None
-    campaign = Path(getattr(manifest, "canonical_campaign_config_path", "")).name
-    if "0_0_8" not in campaign:
+    if not is_release_0_0_8(manifest):
         return None
     identity = getattr(manifest, "resolved_identity_path", None)
     if identity is None:

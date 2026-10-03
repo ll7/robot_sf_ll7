@@ -428,6 +428,16 @@ in the public register, in addition to its named D-065 and D-075. The public
 register has no adopted straight-force-forecast disclosure; this gate does not
 invent one.
 
+### Historical derived-metadata erratum exemption
+
+`release zenodo publish --manifest <erratum-contract>` is exempt from the 0.0.8
+release-notes gate only when the input validates as the derived-metadata erratum
+contract. Its immutable historical predecessor predates the notes receipt; the
+erratum validator binds the predecessor and forbids a new campaign or scientific
+claims. Ordinary release manifests, including the independent doorway-width slice,
+repeat the notes gate before publish. This exemption does not admit a new 0.0.8
+campaign or replace its mint receipt.
+
 ## Development packaging reference
 
 D-086 identities use resolver `generate --development-rehearsal

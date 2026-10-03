@@ -323,6 +323,10 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
             raise zenodo_publisher.ZenodoPublisherError(
                 "Zenodo metadata path does not match the release erratum contract"
             )
+        # Historical derived-metadata errata are the sole release-contract exemption:
+        # their immutable predecessor predates the 0.0.8 notes receipt. The erratum
+        # validator binds that predecessor and permits no new campaign or claims.
+        # Ordinary manifests still pass the publication notes gate below.
         return contract, binding
     manifest = load_release_manifest(manifest_path)
     validation = validate_release_manifest(manifest)

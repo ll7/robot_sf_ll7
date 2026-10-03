@@ -267,6 +267,23 @@ def test_exported_notes_checked_against_retained_digest(notes_repo, monkeypatch)
     assert "bundle receipt differs from mint receipt" in violations[0]
 
 
+def _resign_notes(bundle, notes):
+    """Keep ordinary checksums and manifest entries consistent after a notes edit."""
+    relative = "payload/release_metadata/release_notes.md"
+    digest = hashlib.sha256(notes.read_bytes()).hexdigest()
+    checksums = bundle / "checksums.sha256"
+    lines = [line for line in checksums.read_text().splitlines() if not line.endswith(relative)]
+    marked_write_text(
+        checksums,
+        "# AI-GENERATED NEEDS-REVIEW\n" + "\n".join(lines) + "\n" + digest + "  " + relative + "\n",
+    )
+    path = bundle / "publication_manifest.json"
+    manifest = json.loads(path.read_bytes())
+    manifest["files"] = [entry for entry in manifest["files"] if entry.get("path") != relative]
+    manifest["files"].append({"path": relative, "sha256": digest})
+    write_json(path, manifest)
+
+
 def test_publication_preflight_route_refuses_resigned_stale_notes(notes_repo, monkeypatch):
     from robot_sf.benchmark import artifact_publication as publication
     from robot_sf.benchmark.release_notes import RECEIPT_NAME, notes_gate
@@ -290,17 +307,12 @@ def test_publication_preflight_route_refuses_resigned_stale_notes(notes_repo, mo
     resolved["release_notes_gate"] = json.loads((target / RECEIPT_NAME).read_bytes())
     write_json(payload / "release/release_manifest.resolved.json", resolved)
     monkeypatch.setattr(publication, "get_repository_root", lambda: notes_repo)
+    _resign_notes(bundle, target / "release_notes.md")
     assert publication.verify_publication_bundle_preflight(bundle)["status"] == "pass"
     notes = target / "release_notes.md"
     write_text(notes, notes.read_text() + "\nUnrelated editorial change.\n")
     # Re-signing a changed file cannot substitute for the production mint digest.
-    checksums = bundle / "checksums.sha256"
-    old = checksums.read_text()
-    line = (
-        hashlib.sha256(notes.read_bytes()).hexdigest()
-        + "  payload/release_metadata/release_notes.md\n"
-    )
-    marked_write_text(checksums, "# AI-GENERATED NEEDS-REVIEW\n" + old + line)
+    _resign_notes(bundle, notes)
     with pytest.raises(
         publication.PublicationPreflightError, match="digest mismatch against mint receipt"
     ):
@@ -337,3 +349,24 @@ def test_diagnostic_notes_exemption_requires_consistent_run_markers(notes_repo, 
         assert len(violations) == 1 and "diagnostic exemption disagrees" in violations[0]
         with pytest.raises(ValueError, match="diagnostic exemption disagrees"):
             publication._release_notes_files(payload, notes_repo, resolved)
+
+
+@pytest.mark.parametrize(
+    "fields,expected",
+    [
+        ({"release_kind": "benchmark-doorway-width-slice.v1"}, True),
+        ({"release_kind": "benchmark-width-slice"}, True),
+        ({"release_tag": "release-0.0.8-final"}, True),
+        ({"scenario_matrix": "scenarios_0_0_8.yaml"}, True),
+        ({"scenario_matrix_path": Path("scenarios_0_0_8.yaml")}, True),
+        ({"canonical_campaign_config": "campaign_0_0_8.yaml"}, True),
+        ({"canonical_campaign_config_path": Path("campaign_0_0_8.yaml")}, True),
+        ({"canonical_campaign_config": "paper_experiment_matrix_v2_h600_s30.yaml"}, False),
+        ({}, False),
+    ],
+)
+def test_shared_release_detector_handles_native_and_archived_fields(fields, expected):
+    from robot_sf.benchmark.release_notes import is_release_0_0_8
+
+    assert is_release_0_0_8(fields) is expected
+    assert is_release_0_0_8(SimpleNamespace(**fields)) is expected

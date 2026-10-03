@@ -41,7 +41,10 @@ def test_production_mint_refuses_missing_disclosure(sealed_repository):
     assert not (repo / "output/mint/release_identity.resolved.json").exists()
 
 
-def test_runner_refuses_stale_mint_receipt_before_preflight(sealed_repository, monkeypatch, capsys):
+@pytest.mark.parametrize("kind", ["main", "slice"])
+def test_runner_refuses_stale_mint_receipt_before_preflight(
+    sealed_repository, monkeypatch, capsys, kind
+):
     import json
 
     from robot_sf.evidence.writers import write_json
@@ -49,7 +52,7 @@ def test_runner_refuses_stale_mint_receipt_before_preflight(sealed_repository, m
     from tests.benchmark.test_sealed_source_pins import materialize
 
     repo = sealed_repository
-    manifest = materialize(repo, "main")
+    manifest = materialize(repo, kind)
     capsys.readouterr()
     receipt_path = manifest.path.parent / "release_notes_gate.v1.json"
     receipt = json.loads(receipt_path.read_bytes()) if receipt_path.exists() else {}
@@ -69,7 +72,8 @@ def test_runner_refuses_stale_mint_receipt_before_preflight(sealed_repository, m
     assert "digest mismatch against mint receipt" in payload["status_reason"]
 
 
-def test_production_mint_verifier_refuses_stale_disclosure_receipt(sealed_repository, capsys):
+@pytest.mark.parametrize("kind", ["main", "slice"])
+def test_production_mint_verifier_refuses_stale_disclosure_receipt(sealed_repository, capsys, kind):
     import json
 
     from robot_sf.evidence.writers import write_json
@@ -77,7 +81,7 @@ def test_production_mint_verifier_refuses_stale_disclosure_receipt(sealed_reposi
     from tests.benchmark.test_sealed_source_pins import materialize
 
     repo = sealed_repository
-    manifest = materialize(repo, "main")
+    manifest = materialize(repo, kind)
     capsys.readouterr()
     path = manifest.path.parent / "release_notes_gate.v1.json"
     receipt = json.loads(path.read_bytes()) if path.exists() else {}
@@ -92,3 +96,126 @@ def test_production_mint_verifier_refuses_stale_disclosure_receipt(sealed_reposi
     rejected = json.loads(capsys.readouterr().out)
     assert rejected["status"] == "rejected"
     assert "digest mismatch against mint receipt" in rejected["reason"]
+
+
+@pytest.mark.parametrize("kind", ["main", "slice"])
+def test_public_export_refuses_edited_notes(sealed_repository, monkeypatch, kind):
+    """Exercise the exporter call site with real minted main and slice metadata."""
+    import json
+
+    from robot_sf.benchmark import artifact_publication as publication
+    from robot_sf.evidence.writers import write_json
+    from tests.benchmark.test_artifact_publication import _make_run
+    from tests.benchmark.test_sealed_source_pins import materialize
+
+    repo = sealed_repository
+    manifest = materialize(repo, kind)
+    resolved = protocol.build_resolved_release_manifest(manifest)
+    receipt_path = manifest.path.parent / "release_notes_gate.v1.json"
+    resolved["release_notes_gate"] = (
+        json.loads(receipt_path.read_bytes()) if receipt_path.exists() else {}
+    )
+    run = repo / "run"
+    _make_run(run, with_video=False)
+    (run / "release").mkdir()
+    write_json(run / "release/release_manifest.resolved.json", resolved)
+    write_json(
+        run / "release/release_result.json", {"status": "ok", "source_commit": manifest.source_sha}
+    )
+    monkeypatch.setattr(publication, "get_repository_root", lambda: repo)
+    notes = repo / "docs/release/0.0.8/release_notes.md"
+    original = notes.read_text()
+    write_text(notes, original + "\nEdited after mint.\n")
+    with pytest.raises(ValueError, match="digest mismatch against mint receipt"):
+        publication.export_publication_bundle(run, repo / "bundles", bundle_name="stale")
+    assert not (repo / "bundles/stale").exists()
+    # Restore exactly the minted bytes, including their existing review marker.
+    from shutil import copyfile
+
+    from tests.benchmark.test_sealed_source_pins import ROOT
+
+    copyfile(ROOT / "docs/release/0.0.8/release_notes.md", notes)
+    result = publication.export_publication_bundle(run, repo / "bundles", bundle_name="valid")
+    assert (
+        result.bundle_dir / "payload/release_metadata/release_notes.md"
+    ).read_bytes() == notes.read_bytes()
+
+
+@pytest.mark.parametrize("kind", ["main", "slice"])
+def test_public_zenodo_publish_refuses_edited_notes(sealed_repository, monkeypatch, capsys, kind):
+    """The public CLI must refuse before constructing an authenticated session."""
+    from robot_sf import release_cli
+    from tests.benchmark.test_release_cli_edge_cases import _args
+    from tests.benchmark.test_sealed_source_pins import materialize
+
+    repo = sealed_repository
+    manifest = materialize(repo, kind)
+    args = _args("publish", repo)
+    args.manifest = manifest.path
+    args.metadata = None
+    monkeypatch.setattr(release_cli, "get_repository_root", lambda: repo)
+    publisher = release_cli.zenodo_publisher
+    sessions = []
+    published = []
+    monkeypatch.setattr(publisher, "build_session", lambda _path: sessions.append(True) or object())
+    monkeypatch.setattr(publisher, "load_state", lambda _path: {})
+    monkeypatch.setattr(publisher, "load_dataset_metadata", lambda *_a, **_kw: {})
+    monkeypatch.setattr(publisher, "publish", lambda *_a, **_kw: published.append(True) or {})
+    monkeypatch.setattr(publisher, "write_state", lambda *_a: None)
+    assert release_cli.handle(args) == 0
+    assert sessions == published == [True]
+    sessions.clear()
+    published.clear()
+    capsys.readouterr()
+    notes = repo / "docs/release/0.0.8/release_notes.md"
+    # An index flag can hide edited notes from the generic clean-source guard.
+    # Disclosure admission must inspect actual bytes regardless of git status.
+    git(repo, "update-index", "--assume-unchanged", "docs/release/0.0.8/release_notes.md")
+    write_text(notes, notes.read_text() + "\nEdited after mint.\n")
+    assert git(repo, "status", "--porcelain") == ""
+    assert release_cli.handle(args) == 2
+    assert sessions == published == []
+    result = __import__("json").loads(capsys.readouterr().out)
+    assert result["status"] == "blocked"
+    assert "digest mismatch against mint receipt" in result["reason"]
+
+
+@pytest.mark.parametrize("kind", ["main", "slice"])
+def test_cold_preflight_refuses_edited_notes(sealed_repository, monkeypatch, kind):
+    """A resigned bundle still has to match the main or slice mint receipt."""
+    import json
+    import shutil
+
+    from robot_sf.benchmark import artifact_publication as publication
+    from robot_sf.evidence.writers import write_json
+    from tests.benchmark.test_release_notes_gate import _resign_notes
+    from tests.benchmark.test_sealed_source_pins import materialize
+    from tests.validation.test_publication_preflight import _build_bundle
+
+    repo = sealed_repository
+    manifest = materialize(repo, kind)
+    resolved = protocol.build_resolved_release_manifest(manifest)
+    receipt_path = manifest.path.parent / "release_notes_gate.v1.json"
+    receipt = json.loads(receipt_path.read_bytes()) if receipt_path.exists() else {}
+    bundle = _build_bundle(repo / "cold-test", publication_commit=manifest.source_sha)
+    payload = bundle / "payload"
+    target = payload / "release_metadata"
+    target.mkdir()
+    notes = target / "release_notes.md"
+    shutil.copy2(repo / "docs/release/0.0.8/release_notes.md", notes)
+    write_json(target / "release_notes_gate.v1.json", receipt)
+    resolved["release_notes_gate"] = json.loads(
+        (target / "release_notes_gate.v1.json").read_bytes()
+    )
+    write_json(payload / "release/release_manifest.resolved.json", resolved)
+    monkeypatch.setattr(publication, "get_repository_root", lambda: repo)
+    # No publication metadata contract is fabricated: this witnesses the cold
+    # notes route independently of metric reconciliation and role discovery.
+    _resign_notes(bundle, notes)
+    assert publication.verify_publication_bundle_preflight(bundle)["status"] == "pass"
+    write_text(notes, notes.read_text() + "\nEdited exported notes.\n")
+    _resign_notes(bundle, notes)
+    with pytest.raises(
+        publication.PublicationPreflightError, match="digest mismatch against mint receipt"
+    ):
+        publication.verify_publication_bundle_preflight(bundle)

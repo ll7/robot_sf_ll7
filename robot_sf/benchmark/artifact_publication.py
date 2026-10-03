@@ -28,7 +28,7 @@ import numpy as np
 from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.metrics import snqi as _curvature_aware_snqi
-from robot_sf.benchmark.release_notes import NOTES_PATH, RECEIPT_NAME, notes_gate
+from robot_sf.benchmark.release_notes import NOTES_PATH, RECEIPT_NAME, is_release_0_0_8, notes_gate
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping as _load_snqi_baseline_mapping,
 )
@@ -2816,16 +2816,12 @@ def _requires_release_notes(resolved: Mapping[str, Any]) -> bool:
     Returns:
         Whether this production release requires bound disclosures.
     """
-    return resolved.get("release_kind") != "development_rehearsal" and "0_0_8" in str(
-        resolved.get("canonical_campaign_config", "")
-    )
+    return resolved.get("release_kind") != "development_rehearsal" and is_release_0_0_8(resolved)
 
 
 def _check_notes_development_marker(artifact_root: Path, resolved: Mapping[str, Any]) -> None:
     """Require the diagnostic exemption to agree with the completed run's markers."""
-    if resolved.get("release_kind") != "development_rehearsal" or "0_0_8" not in str(
-        resolved.get("canonical_campaign_config", "")
-    ):
+    if resolved.get("release_kind") != "development_rehearsal" or not is_release_0_0_8(resolved):
         return
     result = _read_json_file(artifact_root / "release/release_result.json")
     if (

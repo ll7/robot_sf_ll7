@@ -259,7 +259,7 @@ def test_admissible_speed_flag_samples_above_comfort_band_without_relaxing_safet
     obs = _obs(robot=(4, 15), goal=(20, 15), speed=0.6, ped_positions=[(4, 16.9)])
     obs["robot"]["radius"] = np.array([1.0])
     obs["pedestrians"]["radius"] = 0.4
-    state = planner._extract_state(obs)  # radius sum 0.50, gap 0.50 m
+    state = planner._extract_state(obs)  # radius sum 1.40 m, surface gap 0.50 m
     cap = planner._v4_human_speed_cap(state)
     # The default drive brakes at 1 m/s²: 0.8*0.1 + 0.8²/2 = 0.50 - 0.10.
     assert planner._last_v4_speed_safety["braking_cap"] == pytest.approx(0.8)

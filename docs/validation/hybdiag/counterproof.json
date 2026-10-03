@@ -7,7 +7,7 @@
     "robot_sf/sensor/socnav_observation.py": "4e9d5b16e96bf75244199ab829981129578471afed7013cfd1e965493b24d471",
     "robot_sf/benchmark/map_runner/map_runner_observations.py": "6fd165d5435aa726ddd78118593bdf96c3fbe482ea2985f3311ca096f8279ff9"
   },
-  "test_sha256": "2d84c88d108cf6f6c47d50909f6a40d846d4a71022d040ad2e5f06bfe5d08fcb",
+  "test_sha256": "8075c98c17d8421a6ceca63682acea5bd2eaa2a91756bb41fe47c81bd9a107de",
   "exit": 1,
   "argv": [
     "tests/planner/test_hybrid_feasibility_diagnostics.py::test_platform_speed_preference_does_not_saturate_at_comfort_cap",

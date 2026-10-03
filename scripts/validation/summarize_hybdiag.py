@@ -232,6 +232,140 @@ def csv_text(rows: list[dict]) -> str:
     return stream.getvalue()
 
 
+def comparison_markdown(summaries: list[dict]) -> str:
+    """Render the public pooled comparison directly from the verified summaries."""
+    lines = [
+        "# HYBDIAG Round 2 versus Round 3",
+        "",
+        "AI-GENERATED/NEEDS-REVIEW. Development seeds only. Restoring the pedestrian",
+        "braking bound removes the earlier platform gain; zero collisions do not",
+        "prove unchanged pedestrian safety. Per-scenario intervals and all metrics",
+        "are in the corresponding `round*-results.csv` files.",
+        "",
+        "| Round/world | Arm | S/C/T | Success Wilson 95% | Collision Wilson 95% | Timeout Wilson 95% | Freeze | Stopped % | No moving s | Min ped m | Near events; per 1,000 robot-s |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for summary in summaries:
+        for cell in summary["cells"]:
+            if cell["scenario"] != "ALL":
+                continue
+            intervals = [
+                f"{100 * cell[f'{kind}_wilson_low']:.1f}–{100 * cell[f'{kind}_wilson_high']:.1f}%"
+                for kind in ("success", "collision", "timeout")
+            ]
+            separation = cell["minimum_pedestrian_separation_m"]
+            minimum = "—" if separation is None else f"{separation:.3f}"
+            lines.append(
+                f"| {cell['round']}/{cell['world']} | {cell['arm']} | "
+                f"{cell['success']}/{cell['collision']}/{cell['timeout']} | "
+                + " | ".join(intervals)
+                + f" | {cell['freezing']}/{cell['episodes']} | {100 * cell['stopped_time_fraction']:.2f} | "
+                f"{cell['no_feasible_moving_s']:.1f} | {minimum} | "
+                f"{cell['near_miss_events']}; {cell['near_miss_events_per_1000_robot_seconds']:.2f} |"
+            )
+    lines.extend(["", "Each crowded arm has 300 episodes; each empty arm has 102.", ""])
+    return "\n".join(lines)
+
+
+def validate_wall_witness(witness: dict, final: dict, combined: dict) -> float:
+    """Check physical-versus-comfort geometry and the paired combined success."""
+    x, y = witness["position"]
+    ax, ay, bx, by = witness["closest_wall"]
+    dx, dy = bx - ax, by - ay
+    fraction = min(1, max(0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)))
+    distance = math.hypot(x - ax - fraction * dx, y - ay - fraction * dy)
+    if not math.isclose(distance, witness["center_distance_m"], abs_tol=1e-12):
+        raise ValueError("Incorrect wall distance witness")
+    if not witness["physical_radius_m"] < distance < witness["legacy_hard_radius_m"]:
+        raise ValueError("Wall witness does not distinguish body from comfort")
+    if combined["outcome"] != "success" or final["feasible_moving_count"] != 0:
+        raise ValueError("Missing wall-margin counterexample")
+    return distance
+
+
+def classify_new_failures(directory: Path, earlier: dict, later: dict) -> dict:
+    """Join every new failure to a compact, independently checkable cause witness.
+
+    Unknown failures refuse publication until evidence is supplied. Restored-bound
+    progress loss is not labeled genuine physical infeasibility: the comparison
+    changes several safeguards and does not isolate a single causal intervention.
+    """
+    keys = ("world", "scenario", "seed", "arm")
+    old = {tuple(row[k] for k in keys): row for row in earlier["episodes"]}
+    current = {tuple(row[k] for k in keys): row for row in later["episodes"]}
+    audited = {
+        (row["scenario"], row["seed"], row["arm"]): row
+        for row in json.loads((directory / "round2-braking-bound-audit.json").read_text())[
+            "episodes"
+        ]
+    }
+    walls = {
+        (row["scenario"], row["seed"], row["arm"]): row
+        for row in json.loads((directory / "round3-wall-witnesses.json").read_text())["episodes"]
+    }
+    classified = []
+    for key, row in sorted(current.items()):
+        if row["arm"] == "off" or row["outcome"] == "success":
+            continue
+        off = current[(row["world"], row["scenario"], row["seed"], "off")]
+        comparisons = []
+        if off["outcome"] == "success":
+            comparisons.append("paired_off")
+        if old[key]["outcome"] == "success":
+            comparisons.append("same_arm_round2")
+        if not comparisons:
+            continue
+        identity = (row["scenario"], row["seed"], row["arm"])
+        record = {k: row[k] for k in keys}
+        record.update(new_vs=comparisons, outcome=row["outcome"])
+        final = row["final_diagnostics"]
+        if identity in audited and row["world"] == "crowd":
+            witness = audited[identity]
+            first = witness["first_bound_exceedance"]
+            if first is None:
+                raise ValueError(f"Missing retained-bound progress evidence: {identity}")
+            constraints = ", ".join(
+                f"{c['constraint']} at {c['threshold']} ({c['rejected']} rejections)"
+                for c in final["constraints"]
+            )
+            record.update(
+                classification="progress shortfall under restored braking bound",
+                evidence=(
+                    f"Round 2 requested {first['command_m_s']:.6f} m/s above "
+                    f"{first['braking_cap_m_s']:.6f} m/s braking cap at step {first['step']}; "
+                    f"Round 3 times out with {final['feasible_moving_count']} feasible moving "
+                    f"candidates at the final step and {row['final_goal_distance_m']:.3f} m remaining; "
+                    f"no-moving time {row['no_feasible_moving_s']:.1f}/60 s; "
+                    f"final constraints: {constraints or 'none'}. "
+                    "Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof."
+                ),
+                next_step="planner route/progress work within retained safety bounds",
+                witness=witness,
+            )
+        elif identity in walls and row["world"] == "crowd":
+            witness = walls[identity]
+            combined = current[(row["world"], row["scenario"], row["seed"], "both")]
+            distance = validate_wall_witness(witness, final, combined)
+            record.update(
+                classification="artificial geometric infeasibility",
+                evidence=(
+                    f"At rest wall-center distance {distance:.12f} m exceeds physical "
+                    f"{witness['physical_radius_m']:.2f} m but is below legacy hard "
+                    f"{witness['legacy_hard_radius_m']:.2f} m; no moving candidate; both arm succeeds."
+                ),
+                next_step="supplied physical-static flag; planner defect, not physical limit",
+                witness=witness,
+            )
+        else:
+            raise ValueError(f"Unclassified new failure: {key}")
+        classified.append(record)
+    return {
+        "status": "AI-GENERATED/NEEDS-REVIEW; dev-only",
+        "meaning": "Union of new failures versus paired off and same-arm Round 2; one cause/evidence line per episode",
+        "episodes": classified,
+    }
+
+
 def audit_braking_bound(directory: Path, native: Path) -> None:
     """Summarize cap bypasses in the 45 successful Round-2 station trajectories."""
     payload = json.loads((directory / "round2-episodes.json").read_text())
@@ -285,6 +419,59 @@ def audit_braking_bound(directory: Path, native: Path) -> None:
     (directory / "round2-braking-bound-audit.json").write_text(json.dumps(result, indent=2) + "\n")
 
 
+def audit_injected_commands(source: Path, world: str, arm: str) -> int:
+    """Count selected added commands, refusing any current-position cap breach."""
+    commands = 0
+    for path in sorted(source.glob(f"*__{arm}__{world}.jsonl.gz")):
+        with gzip.open(path, "rt") as stream:
+            for line in stream:
+                row = json.loads(line)
+                decision = row["decision"]
+                if decision.get("selected_source") != "admissible_speed":
+                    continue
+                commands += 1
+                cap = decision.get("speed_safety", {}).get("braking_cap")
+                if cap is not None and row["command"][0] > cap + 1e-6:
+                    raise ValueError(f"Injected command exceeds braking bound: {path.name}")
+    return commands
+
+
+def audit_native_controls(directory: Path, crowd: Path, empty: Path, previous: Path) -> None:
+    """Prove native off identity and audit all selected injected braking commands.
+
+    Previous contains round2-measure and round2-empty. Only per-episode hashes and
+    aggregate command counts are published, never runtime trajectories.
+    """
+    result = {"status": "AI-GENERATED/NEEDS-REVIEW; dev-only", "off": [], "injected_bounds": {}}
+    for world, source, old_folder in (
+        ("crowd", crowd, "round2-measure"),
+        ("empty", empty, "round2-empty"),
+    ):
+        for path in sorted(source.glob(f"*__off__{world}.jsonl.gz")):
+            encoded = []
+            for trace in (previous / old_folder / path.name, path):
+                with gzip.open(trace, "rt") as stream:
+                    rows = [json.loads(line) for line in stream]
+                values = [
+                    {k: row[k] for k in ("position", "end_position", "command", "collision")}
+                    for row in rows
+                ]
+                encoded.append(json.dumps(values, sort_keys=True, separators=(",", ":")).encode())
+            if encoded[0] != encoded[1]:
+                raise ValueError(f"Default native trajectory changed: {path.name}")
+            result["off"].append(
+                {"episode": path.stem, "sha256": hashlib.sha256(encoded[1]).hexdigest()}
+            )
+        for arm in ("platform", "both"):
+            result["injected_bounds"][f"{world}/{arm}"] = {
+                "injected_commands": audit_injected_commands(source, world, arm),
+                "bound_exceedances": 0,
+            }
+    if len(result["off"]) != 402:
+        raise ValueError("Native controls require all 300 crowded and 102 empty off episodes")
+    (directory / "round3-native-audit.json").write_text(json.dumps(result, indent=2) + "\n")
+
+
 def outputs(directory: Path) -> dict[str, str]:
     """Derive reproducible tables from the committed compact input summaries."""
     results, summaries = {}, []
@@ -299,6 +486,7 @@ def outputs(directory: Path) -> dict[str, str]:
             cell for summary in summaries for cell in summary["cells"] if cell["scenario"] == "ALL"
         ]
         results["round2-vs-round3.csv"] = csv_text(pooled)
+        results["round2-vs-round3.md"] = comparison_markdown(summaries)
         earlier = json.loads((directory / "round2-episodes.json").read_text())
         later = json.loads((directory / "round3-episodes.json").read_text())
         lookup = {
@@ -324,6 +512,9 @@ def outputs(directory: Path) -> dict[str, str]:
                     }
                 )
         results["round3-new-failures-vs-round2.json"] = json.dumps(transitions, indent=2) + "\n"
+        results["round3-failure-classifications.json"] = (
+            json.dumps(classify_new_failures(directory, earlier, later), indent=2) + "\n"
+        )
     audit_path = directory / "round2-braking-bound-audit.json"
     if audit_path.exists():
         audited = []
@@ -344,20 +535,8 @@ def outputs(directory: Path) -> dict[str, str]:
     return results
 
 
-def main() -> None:
-    """Import native summaries or verify/rebuild all committed result tables."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--import-round", type=int, choices=(2, 3))
-    parser.add_argument("--crowd", type=Path)
-    parser.add_argument("--empty", type=Path)
-    parser.add_argument("--check", action="store_true")
-    parser.add_argument(
-        "--audit-braking-bound",
-        type=Path,
-        help="Native Round-2 crowd folder; publish compact injected-cap audit, without raw traces",
-    )
-    args = parser.parse_args()
+def import_requested_native(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Perform explicitly requested imports before generating verifiable tables."""
     if args.import_round is not None:
         if args.check or args.crowd is None or args.empty is None:
             parser.error("Import requires --crowd/--empty and cannot use --check")
@@ -370,6 +549,32 @@ def main() -> None:
         if args.check:
             parser.error("Audit import cannot use --check")
         audit_braking_bound(args.output, args.audit_braking_bound)
+    if args.audit_native_controls is not None:
+        if args.check or args.crowd is None or args.empty is None:
+            parser.error("Native audit requires --crowd/--empty and cannot use --check")
+        audit_native_controls(args.output, args.crowd, args.empty, args.audit_native_controls)
+
+
+def main() -> None:
+    """Import native summaries or verify/rebuild all committed result tables."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--import-round", type=int, choices=(2, 3))
+    parser.add_argument("--crowd", type=Path)
+    parser.add_argument("--empty", type=Path)
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--audit-native-controls",
+        type=Path,
+        help="Prior artifact parent containing round2-measure/round2-empty; requires --crowd/--empty",
+    )
+    parser.add_argument(
+        "--audit-braking-bound",
+        type=Path,
+        help="Native Round-2 crowd folder; publish compact injected-cap audit, without raw traces",
+    )
+    args = parser.parse_args()
+    import_requested_native(args, parser)
     generated = outputs(args.output)
     if not generated:
         parser.error("No committed episode summaries found")

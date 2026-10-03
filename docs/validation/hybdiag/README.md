@@ -49,3 +49,23 @@ import command is:
 ```sh
 python -m scripts.validation.summarize_hybdiag --audit-braking-bound <round2-native-crowd-folder>
 ```
+
+Round 3 public artifacts include `round2-vs-round3.md` (generated readable
+comparison), `round3-failure-classifications.json` (every new failure versus off
+and Round 2), and `round3-wall-witnesses.json` (two compact exact-map geometry
+witnesses). The exporter independently recomputes point-to-segment distance and
+requires matching combined-arm success. Lost station successes join the prior
+braking-cap audit; their remaining progress shortfall is not labeled a genuine
+physical limit. Unknown failures refuse publication until classified.
+
+The native default/bound audit publishes only per-episode executed-field hashes
+and aggregate injected-command counts. Recreate it from private run folders:
+
+```sh
+python -m scripts.validation.summarize_hybdiag --audit-native-controls <prior-artifact-parent> \
+  --crowd <round3-crowd-folder> --empty <round3-empty-folder>
+```
+
+The parent contains `round2-measure` and `round2-empty`. The audit requires all
+402 off episodes to match command/position/end-position/contact bytes and refuses
+any selected added command above the reported current-position braking cap.

@@ -16,7 +16,7 @@ successes,100/102 empty successes, zero contacts, zero new empty failures and
 collision intervals no higher than off. Sealed 0.0.8 confirmation is still pending.
 
 The wall-only arm's sole new failure versus off is **livelock** in
-`francis 2023_narrow_hallway`, seed 1002: 60 s timeout, final goal gap 0.704654 m,
+`francis2023_narrow_hallway`, seed 1002: 60 s timeout, final goal gap 0.704654 m,
 57 feasible moving candidates at the last step, zero no-moving time, and 0.5%
 stopped time. The robot continues the known near-goal orbit because the absent
 successor retains its legacy world-origin target. The independently flagged

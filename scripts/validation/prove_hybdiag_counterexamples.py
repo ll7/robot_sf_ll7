@@ -66,7 +66,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-ref", default="14c1adf46436fc7b9e051b44981900acf525b9b2")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--group", choices=("all", "flattened"), default="all")
+    parser.add_argument("--group", choices=("all", "flattened", "round4"), default="all")
+    parser.add_argument("--test-ref", default="f16a53f5a924e0d50a749ea8f74e30fa4ac2db4a")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     head = subprocess.check_output(["git", "rev-parse", args.base_ref], cwd=root, text=True).strip()
@@ -75,9 +76,27 @@ def main() -> None:
     selected = TESTS if args.group == "all" else TESTS[-2:]
     expected_count = 13 if args.group == "all" else 3
     selected_reasons = REASONS if args.group == "all" else REASONS[-2:]
-    tests = [f"{TEST_PATH}::{name}" for name in selected] + ["-n", "0", "-q"]
+    test_data = (root / TEST_PATH).read_bytes()
+    if args.group == "round4":
+        selected = (
+            "test_physical_wall_stop_rejects_reverse_toward_wall_behind",
+            "test_debug_wall_exclusion_reports_applied_arc_padding",
+        )
+        selected_reasons = (
+            "reverse wall stopping sweep was skipped",
+            "reported exclusion radius omits arc padding",
+        )
+        expected_count = 3
+    else:
+        # Retain the removed platform experiment's original witnesses in history.
+        test_data = subprocess.check_output(
+            ["git", "show", f"{args.test_ref}:{TEST_PATH}"], cwd=root
+        )
     log = args.output / "counterproof.log"
     with tempfile.TemporaryDirectory(prefix="old-hybdiag-", dir=args.output) as directory:
+        test_file = Path(directory) / "test_hybdiag_counterexamples.py"
+        test_file.write_bytes(test_data)
+        tests = [f"{test_file.resolve()}::{name}" for name in selected] + ["-n", "0", "-q"]
         paths = []
         for module in MODULES:
             relative = module.replace(".", "/") + ".py"
@@ -101,7 +120,7 @@ def main() -> None:
     proof = {
         "head": head,
         "modules": hashes,
-        "test_sha256": hashlib.sha256((root / TEST_PATH).read_bytes()).hexdigest(),
+        "test_sha256": hashlib.sha256(test_data).hexdigest(),
         "exit": result.returncode,
         "argv": tests,
         "intended_reasons_verified": passed,

@@ -422,3 +422,80 @@ def test_map_observation_bridge_preserves_optional_successor_validity():
         "map observation bridge drops opt-in successor validity"
     )
     assert normalized["goal"]["next_valid"] is default["goal_next_valid"]
+
+
+@pytest.mark.parametrize("current_speed,wall_x", [(-0.8, 3.45), (0.0, 3.745)])
+def test_physical_wall_stop_rejects_reverse_toward_wall_behind(current_speed, wall_x):
+    """The negative command's swept braking tail must protect the rear footprint."""
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+
+    planner = _planner(physical_static_exclusion_enabled=True)
+    drive = DifferentialDriveSettings(limited_reverse=True, max_reverse_speed=0.8)
+    planner.bind_env(
+        SimpleNamespace(
+            env_config=SimpleNamespace(robot_config=drive),
+            simulator=SimpleNamespace(
+                map_def=SimpleNamespace(width=30, height=30),
+                get_obstacle_lines=lambda: np.array([[wall_x, 14, wall_x, 16]]),
+            ),
+        )
+    )
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=current_speed)
+    state = planner._extract_state(obs)
+    rejection = planner._v4_wall_stopping_rejection(HybridRuleCandidate(-0.8, 0, "reverse"), state)
+    # At -0.8m/s, 0.1s commit then 1m/s² braking covers 0.4m; wall body gap 0.30m.
+    # From rest, first drive step reaches -0.1 then stops, sweeping 0.010m;
+    # wall body gap is 0.005m. Both are behind heading=0, not in front.
+    assert rejection is not None, "reverse wall stopping sweep was skipped"
+    assert rejection["reason"] == "wall_braking_infeasible"
+    assert rejection["time"] >= 0.1
+
+
+def test_debug_wall_exclusion_reports_applied_arc_padding():
+    """Debug evidence names the actual expanded radius, not only the body radius."""
+    planner = _planner(physical_static_exclusion_enabled=True)
+    for reason in ("static_collision", "wall_braking_infeasible"):
+        evaluation = {
+            "reason": reason,
+            "continuous_static_collision": True,
+            "hard_static_clearance": 0.25,
+            "arc_padding_m": 0.0013,
+        }
+        _, threshold_name, threshold = planner._debug_rejection_constraint(evaluation)
+        assert threshold_name == "exclusion_radius_m"
+        assert threshold == pytest.approx(0.2513), "reported exclusion radius omits arc padding"
+        assert planner._rejection_diagnostic(evaluation)["arc_padding_m"] == 0.0013
+
+
+def test_physical_exclusion_checks_wall_stop_beyond_rollout_horizon():
+    from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+
+    planner = _planner(
+        physical_static_exclusion_enabled=True,
+        rollout_horizon=0.2,
+        hard_collision_horizon=0.2,
+    )
+    planner.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                map_def=SimpleNamespace(width=30, height=30),
+                get_obstacle_lines=lambda: np.array([[6, 14, 6, 16]]),
+            )
+        )
+    )
+    obs = _obs(robot=(4, 15), goal=(20, 15), speed=2)
+    state = planner._extract_state(obs)
+    r = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(2, 0, "forward"),
+        observation=obs,
+        state=state,
+        speed_cap=2,
+        nearest_ped=float("inf"),
+    )
+    # First0.2s is clear; reaction+braking travels2.2m toward wall2m away.
+    assert not r["accepted"], "finite horizon misses wall inside full stopping distance"
+    assert r["reason"] == "wall_braking_infeasible"
+    assert r["time"] > 0.2
+    assert r["hard_static_clearance"] == 0.25

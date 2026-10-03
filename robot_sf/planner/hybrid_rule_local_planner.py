@@ -582,8 +582,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             obstacle_segments=obstacle_segments,
             swept_geometry=(
                 StaticObstacleClearance(obstacle_segments.reshape(-1, 2, 2), [])
-                if self._v4_clearance_braking
-                and self.config.physical_static_exclusion_enabled
+                if self._v4_clearance_braking and self.config.physical_static_exclusion_enabled
                 else None
             ),
         )
@@ -1044,7 +1043,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         radius = float(state["robot_radius"])
         pos = np.array(state["robot_pos"], dtype=float)
         heading = float(state["heading"])
-        speed = max(float(state["current_speed"]), 0.0)
+        maximum = self._v4_effective_max_speed()
+        minimum = self._min_linear_speed(maximum)
+        speed = float(np.clip(float(state["current_speed"]), minimum, maximum))
         robot_fields, _, _ = self._socnav_fields(state["observation"])
         angular = float(
             self._as_1d_float(
@@ -1052,22 +1053,23 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             )[0]
         )
         decel = max(float(limits["max_linear_decel"]), _EPS)
-        count = int(np.ceil(max(speed, self._v4_effective_max_speed()) / (decel * dt))) + 2
+        accel = max(float(limits["max_linear_accel"]), _EPS)
+        count = int(np.ceil(max(abs(speed), maximum, abs(minimum)) / (min(accel, decel) * dt))) + 2
         for i in range(count):
-            next_speed = max(0.0, speed - decel * dt)
+            next_speed = (
+                max(0.0, speed - decel * dt) if speed >= 0.0 else min(0.0, speed + accel * dt)
+            )
             if i == 0:
                 next_speed = float(
-                    np.clip(
-                        candidate.linear, next_speed, speed + float(limits["max_linear_accel"]) * dt
-                    )
+                    np.clip(candidate.linear, speed - decel * dt, speed + accel * dt)
                 )
-                next_speed = min(next_speed, self._v4_effective_max_speed())
+                next_speed = float(np.clip(next_speed, minimum, maximum))
             next_angular = self._v4_step_angular(candidate.angular if i == 0 else 0, angular, dt)
             turn = 0.5 * (angular + next_angular) * dt
-            distance = 0.5 * (speed + next_speed) * dt
-            end = pos + distance * np.array(
-                [np.cos(heading + turn / 2), np.sin(heading + turn / 2)]
-            )
+            signed_distance = 0.5 * (speed + next_speed) * dt
+            distance = abs(signed_distance)
+            travel_heading = heading + turn / 2 + (np.pi if signed_distance < 0.0 else 0.0)
+            end = pos + distance * np.array([np.cos(travel_heading), np.sin(travel_heading)])
             padding = abs(distance * turn) / 8.0
             if geometry.clearance(end, radius + padding, pos) <= 0:
                 return {
@@ -1085,7 +1087,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 next_speed,
                 next_angular,
             )
-            if speed <= _EPS:
+            if abs(speed) <= _EPS:
                 return None
         return None
 
@@ -1096,7 +1098,6 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         return max(
             float(self._v4_drive_limits().get("min_linear_speed", 0.0)), -max(speed_cap, 0.0)
         )
-
 
     def _dynamic_window(
         self, current_speed: float, speed_cap: float
@@ -3319,10 +3320,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 max_progress=metrics["max_progress"],
             ),
             "path_alignment": float(np.cos(metrics["heading_error"])),
-            "speed_preference": _clip01(
-                metrics["rollout_mean_linear"]
-                / max(speed_cap, _EPS)
-            ),
+            "speed_preference": _clip01(metrics["rollout_mean_linear"] / max(speed_cap, _EPS)),
             "static_clearance": metrics["static_clearance"],
             "dynamic_clearance": metrics["dynamic_clearance"],
             "time_to_collision_margin": 1.0
@@ -3613,6 +3611,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         for key in (
             "min_static_clearance",
             "hard_static_clearance",
+            "arc_padding_m",
             "required_static_clearance",
             "min_dynamic_clearance",
             "collision_radius",
@@ -3656,7 +3655,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         moving_rejection_counts: Counter[str] = Counter()
         rejection_counts_by_source: dict[str, Counter[str]] = {}
         rejected_examples: list[dict[str, Any]] = []
-        debug_constraints: Counter[tuple[str, str, float]] = Counter()
+        debug_constraints: Counter[tuple[str, str, float, float | None]] = Counter()
 
         for candidate in candidates:
             evaluation = self._evaluate_candidate(
@@ -3677,7 +3676,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             reason = str(evaluation.get("reason", "unknown"))
             if self.config.debug_candidate_evaluator:
                 name, threshold_name, threshold = self._debug_rejection_constraint(evaluation)
-                debug_constraints[(name, threshold_name, threshold)] += 1
+                debug_constraints[
+                    (name, threshold_name, threshold, evaluation.get("arc_padding_m"))
+                ] += 1
             rejection_counts[reason] += 1
             source_counts = rejection_counts_by_source.setdefault(candidate.source, Counter())
             source_counts[reason] += 1
@@ -3706,8 +3707,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                         "threshold_name": key,
                         "threshold": value,
                         "rejected": count,
+                        **({"arc_padding_m": padding} if padding is not None else {}),
                     }
-                    for (name, key, value), count in sorted(debug_constraints.items())
+                    for (name, key, value, padding), count in sorted(debug_constraints.items())
                 ],
                 "candidate_count": len(candidates),
                 "feasible_moving_count": len(moving),
@@ -3738,13 +3740,19 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         reason = str(evaluation["reason"])
         if reason == "wall_braking_infeasible":
-            return reason, "exclusion_radius_m", float(evaluation["hard_static_clearance"])
+            return (
+                reason,
+                "exclusion_radius_m",
+                float(evaluation["hard_static_clearance"])
+                + float(evaluation.get("arc_padding_m", 0)),
+            )
         if reason == "static_collision":
             if evaluation.get("continuous_static_collision"):
                 return (
                     "exact_body_wall_overlap",
                     "exclusion_radius_m",
-                    float(evaluation["hard_static_clearance"]),
+                    float(evaluation["hard_static_clearance"])
+                    + float(evaluation.get("arc_padding_m", 0)),
                 )
             return (
                 "occupied_center_cell",

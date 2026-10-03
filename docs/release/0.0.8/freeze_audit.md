@@ -19,10 +19,19 @@ hybrid_rule_v4_fast_progress_static_escape,
 hybrid_rule_v4_fast_progress_static_escape_continuous, guarded_ppo, predictive_mppi, risk_dwa. It resolves 14×48×30=20,160
 cells; the fixed doorway companion is 14×3×30=1,260 cells/H400.
 
-**No open PR is established as a blocks-freeze measured-number P1 on this roster.**
-Shared runtime opt-ins, diagnostic code and incomplete mint/publication tooling
-are identified below; this is not blanket permission to merge them into a named
-freeze. Labels alone do not establish release reachability or an outcome delta.
+**Freeze blocked — orchestrator ruling of 2026-10-03:**
+[#10112](https://github.com/ll7/robot_sf_ll7/issues/10112) **blocks the freeze**.
+The D-083 template lacks an SNQI-v2 spec; the smoke contract and mint ordering
+also require fixes to the release source that the resolved identity binds.
+SNQI v2 is a reported 0.0.8 number, so these are pre-freeze corrections.
+[#10110](https://github.com/ll7/robot_sf_ll7/issues/10110) **must land before the
+freeze** too: its mint/preflight release-notes gate belongs to that bound source.
+This ruling supersedes this audit's earlier mint/publication-only disposition.
+The candidate's historical test/dry-identity proof below remains evidence for
+that source, not admission of a final freeze lacking these fixes.
+
+Other runtime opt-ins and diagnostic changes remain classified below; the ruling
+does not grant blanket permission to merge them into the final freeze.
 
 ## Every open PR
 
@@ -94,8 +103,8 @@ not treated as closed because an issue's label remains high.
 
 | Issue | Classification | Evidence / required completion |
 |---|---|---|
-| #10110 | blocks-mint-or-publish only | Missing disclosure checks D-039/D-053/D-055/D-057 and related disclosures; required before production mint and repeated before publication. Runtime tests do not inspect notes. |
-| #10112 | blocks-mint-or-publish only | Pending anchors/no D-083 v2 asset binding, public smoke 103 versus private 1003 and v0_2/v3 validator, empty trust pins, final mint requires an earlier smoke. |
+| #10110 | **blocks-freeze (orchestrator, 2026-10-03)** | Missing disclosure checks D-039/D-053/D-055/D-057 and related disclosures. The mint/preflight gate is release source the identity binds, so implementation must land before freeze, then pass at mint and again before publication. Runtime tests do not inspect notes. |
+| #10112 | **blocks-freeze (orchestrator, 2026-10-03)** | SNQI v2 is a reported 0.0.8 number; absent D-083 v2 spec/binding, smoke contract and mint ordering require changes to the identity-bound release source. Pending anchors, public 103/private 1003, v0_2/v3 validator and empty trust pins remain concrete admission gaps. |
 | #10055 | not blocking | Direct campaign production guard/fallback migration is next-release work. Existing pytest and sealed release source/seed guards protect this route; never launch old eval/seedless configs here. |
 | #10052 | blocks-mint-or-publish only | 8/20 cross-host reruns differed; 76/76 same-node repeats equal. Record one node/CPU and enforce same-node resume, disclose hardware limitation; no new planner arithmetic fix is selected. |
 | #10051 | not blocking under recorded disposition | ADVV: #9926 fixes contact TTC/exact static geometry; sampling native rollouts now #10008. Residual guard probe success 298→298, collisions 3→2 over 480 paired dev episodes, McNemar p=1; adopted next-release residuals, not an admitted release correction. NaN occurred 0/15,412; parser unused. Reopen if a new admitted measurable P1 is shown. |
@@ -114,9 +123,9 @@ not treated as closed because an issue's label remains high.
 | #9488 | not blocking | BA-05 broad autonomous service gates explicitly declined; supervised existing auditor use remains. |
 | #9483 | not blocking | Auditor epic; supervised BA01–04/use does not require declined BA05/06 integration to freeze numbers. |
 
-The open-label inventory contains no additional confirmed measured-number P1
-requiring a pre-freeze runtime change at this head. Missing scientific,
-operational, notes or publication admission still prevents mint/publish.
+The 2026-10-03 ruling requires #10112 and #10110 to land before the freeze.
+No additional blocker is established by the remaining snapshot classifications.
+Scientific, operational and publication admission remains separately required.
 
 ## Integrated fixes and ancestry
 

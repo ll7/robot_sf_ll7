@@ -28,6 +28,14 @@ export CALIBRATION_ID='<fresh development calibration campaign id>'
 export CAMPAIGN_ID='<fresh sealed campaign id>'
 export DOORWAY_CAMPAIGN_ID='<fresh companion campaign id>'
 export SMOKE_ID='<fresh admitted development runtime smoke id>'
+# Publication plan selects a fresh main bundle basename; use a distinct companion name.
+export BUNDLE_NAME="${CAMPAIGN_ID}_publication_bundle"
+# Hydrate this immutable 0.0.7 archive from the release identified in README.md:48-50.
+export BASELINE_007_ARCHIVE="$ARTIFACT_ROOT/baseline/issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_bundle.tar.gz"
+# Bound to the generated and verified main identity by sha256sum in step 3a.
+export MAIN_IDENTITY_SHA256='<not usable until step 3a binds the digest>'
+export MINT_DATE='<fresh YYYYMMDD suffix from the preparation packet>'
+export OPS_RUNTIME='<reviewed detached private-ops runtime checkout inside the lane>'
 export CONCEPT_DOI='<actual reserved concept DOI>'
 export VERSION_DOI='<actual reserved unpublished version DOI>'
 export ZENODO_STATE='<operator-owned reservation state file>'
@@ -39,7 +47,24 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 `<...>` denotes required input, never a usable placeholder. Baseline input is
 `issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_bundle.tar.gz`,
 SHA-256 `684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`,
-source `07f7e8d43084de748915e1b1eb8b2a1603357c6e`. Preserve all 0.0.7 artifacts.
+source `07f7e8d43084de748915e1b1eb8b2a1603357c6e`. The archive must exist at
+`BASELINE_007_ARCHIVE` and match that SHA-256 before step 6; the [root README](../../../README.md)
+identifies its release/tag and the immutable baseline provenance. `BUNDLE_NAME`
+is an export input chosen from the fresh campaign identity, not an exporter
+receipt. Preserve all 0.0.7 artifacts.
+
+Execution order: 1 freeze → 2 calibration → 3a preparatory row mint/identities →
+3b same-source smoke → 3c final campaign mint → 4 sealed campaign → 5 export/
+preflight → 6 comparator → 7 tag/publication/DOI. No final mint runs before smoke.
+
+**Orchestrator ruling, 2026-10-03:** [#10112](https://github.com/ll7/robot_sf_ll7/issues/10112)
+**blocks the freeze**: D-083 SNQI-v2 binding, the smoke contract and mint ordering
+require release-source fixes, and SNQI v2 is a reported 0.0.8 number.
+[#10110](https://github.com/ll7/robot_sf_ll7/issues/10110) **must also land before
+the freeze**: the mint/preflight release-notes gate is source that the resolved
+identity binds. Complete and review both fixes before naming/moving the final
+freeze; then reprove its source and identity. This supersedes the earlier
+mint/publication-only classification; this documentation is not the fixes.
 
 ## 1. Move the freeze branch — orchestrator only
 
@@ -56,7 +81,8 @@ Inputs: named candidate, exact-head test/audit/rehearsal/intake evidence and
 current remote freeze ref. Output: remote freeze points to the named SHA;
 clean detached checkout and rebuilt installed physics. Admission: full suite,
 pin/seed/identity witnesses classified, hosted CI checked, all measured P1
-blockers closed, D-070 intake disposition recorded; verify the remote SHA by
+blockers closed, #10112 and #10110 source fixes landed and reviewed under the
+2026-10-03 ruling, D-070 intake disposition recorded; verify the remote SHA by
 readback. Check ancestry of the train commits and #10081/#10045/#10103/#10108.
 If non-fast-forward, stop for the orchestrator; never force. See
 [freeze_audit.md](freeze_audit.md) for the candidate, which is not a ruling.
@@ -92,14 +118,18 @@ strict calibration binding. A 3-seed rehearsal is not calibration custody.
 **Current G03/G04 stop:** canonical anchors are `pending_calibration`; the
 selected D-083 campaign has no `snqi_v2_spec` and its release templates do not
 bind v2 asset digests. Review and pin the actual anchors/weights/family and
-campaign/manifest hashes before mint. This requires a reviewed source change,
+campaign/manifest hashes; their source binding and the smoke/mint-ordering fixes
+must land before the final freeze under the orchestrator ruling of 2026-10-03.
+This requires a reviewed source change,
 not copying ignored anchors into a clean source and pretending it is unchanged.
 The final named source must be reconciled/reproved by the orchestrator if it
 changes; forbid metric/runtime definition drift from calibration to campaign.
 Private scientific trust pins are empty and require independent review.
 [#10112](https://github.com/ll7/robot_sf_ll7/issues/10112) tracks these seams.
 
-## 3. Materialize identities and mint proposed rows/packet
+## 3. Two-phase preparation and final mint
+
+### 3a. Preparatory row mint and resolved identities
 
 DOI coordinates must already be authentic reserved-unpublished coordinates.
 If absent, the **author-reserved delegated DOI operator** performs the existing
@@ -128,7 +158,62 @@ uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
 uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
   --identity output/release-008/doorway/release_identity.resolved.json
 sha256sum output/release-008/{main,doorway}/release_identity.resolved.json
+export MAIN_IDENTITY_SHA256="$(sha256sum output/release-008/main/release_identity.resolved.json | awk '{print $1}')"
 ```
+
+Mint preparation rows with the existing private-ops tool (not the final campaign
+mint, and not submission):
+
+```bash
+"$OPS/.venv/bin/python" "$OPS/ops/jobs/scripts/mint_snqi_v2_release_rows.py" \
+  --public-root "$PWD" --public-sha "$FREEZE_SHA" --date "$MINT_DATE" \
+  --private-ops-root "$OPS" --private-ops-runtime-worktree "$OPS_RUNTIME" \
+  --out-dir "$ARTIFACT_ROOT/preparatory-rows"
+```
+
+Inputs: clean named public source, clean reviewed private runtime, fresh suffix,
+reserved coordinates and calibration/smoke source contracts. Outputs: proposed
+calibration/smoke rows and packets, plus both verified resolved identities;
+`MAIN_IDENTITY_SHA256` is the actual main identity digest consumed in step 6.
+Admission: inspect the proposed rows and complete independent queue/packet
+admission before any smoke dispatch; no `--admit` or diagnostic output grants
+release authority. The completed step-2 calibration custody remains mandatory.
+
+### 3b. Same-source runtime smoke before final mint
+
+The existing ordinary release runner command is:
+
+```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config "$SMOKE_CONFIG" --stage --json --report-path "$ARTIFACT_ROOT/smoke-checkpoints.json"
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest "$SMOKE_MANIFEST" --label runtime-smoke-008 --campaign-id "$SMOKE_ID" \
+  --checkpoint-receipt "$ARTIFACT_ROOT/smoke-checkpoints.json"
+```
+
+Inputs `SMOKE_CONFIG`/`SMOKE_MANIFEST`: a reviewed tracked same-source 0.0.8
+successor, full 14-arm roster, dev **1003**, same learned-model fingerprints,
+authored horizon/kinematics contract, exact imported runtime; allocation ≤32 CPUs.
+Bind the produced receipt only after successful smoke and admission:
+
+```bash
+export SMOKE_RESULT="$PWD/output/benchmarks/camera_ready/$SMOKE_ID/release/release_result.json"
+test -f "$SMOKE_RESULT"
+```
+
+Output: that release result, raw rows and separately authenticated environment receipt. `CAMPAIGN_ROOT` and the companion root are the respective `output/benchmarks/camera_ready/<id>` directories; `BUNDLE_DIR`/`BUNDLE_ARCHIVE` come from the exporter receipt, not an invented file name.
+Admission: every arm successful/native, source/model bindings equal campaign,
+result and staging age ≤24 h, independently accepted environment/stress receipt.
+Record CPU model; learned episodes/resume must stay on the same node (D-072).
+
+**No admissible production input pair exists on this main yet:** v0_5 config and
+manifest use **103**, while private mint expects **1003**. The ordinary public
+runtime-smoke validator still selects v0_2/H600 and the old v3 roster.
+Do not run historical retired-seed smoke or silently rename 103 to 1003.
+D-086 all-roster development smoke is supported but permanently diagnostic and
+explicitly refused as ordinary release admission. G08/G09 / #10112 own the fix.
+
+### 3c. Final campaign mint after admitted smoke
 
 Public main has an identity resolver, **no production queue mint**. The existing
 private-ops main production mint is:
@@ -150,43 +235,20 @@ Outputs: atomic **proposed, go=false, non-dispatchable** queue/packet pair and
 mint report; no submission or authority grant. Admission: exact sealed tuple,
 20,160 main +1,260 companion cells, disjoint cell identities, shared source/DOIs,
 strict source/model/hash closure and independently reviewed trust pins; release
-notes gate [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110) must pass.
+notes gate [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110) must already
+be implemented in the freeze-bound source and pass. Stop unless stage 3b produced
+the authenticated `SMOKE_RESULT` and separate environment admission; supply
+those exact receipts in `full-mint-request.json`.
 
-**Ordering stop:** production mint already requires successful smoke, so literal
-final mint → first smoke cannot pass. Preparatory row mint (`mint_snqi_v2_release_rows.py`)
-is a different tool; full mint cannot stand in for it. A preparatory same-source
-smoke must precede the final mint; step 4 then supplies/rechecks its fresh runtime
-receipt. Do not omit required smoke inputs or use `--diagnostic` as admission.
-G08/G09 and #10112 track the source/seed and ordering contract.
+**Ordering stop retained:** existing main cannot execute literal final mint →
+first smoke: full mint requires a successful smoke already. Stage 3a is the
+different preparatory-row tool, stage 3b must produce and admit that same-source
+receipt, and only then can stage 3c run. Current public smoke inputs/validator
+remain inadmissible as described in 3b; renumbering does not fix them. #10112
+must land before the final freeze. Do not omit smoke inputs or use diagnostic
+receipts as admission.
 
-## 4. Runtime smoke
-
-The existing ordinary release runner command is:
-
-```bash
-uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
-  --config "$SMOKE_CONFIG" --stage --json --report-path "$ARTIFACT_ROOT/smoke-checkpoints.json"
-uv run python scripts/tools/run_benchmark_release.py \
-  --manifest "$SMOKE_MANIFEST" --label runtime-smoke-008 --campaign-id "$SMOKE_ID" \
-  --checkpoint-receipt "$ARTIFACT_ROOT/smoke-checkpoints.json"
-```
-
-Inputs `SMOKE_CONFIG`/`SMOKE_MANIFEST`: a reviewed tracked same-source 0.0.8
-successor, full 14-arm roster, dev **1003**, same learned-model fingerprints,
-authored horizon/kinematics contract, exact imported runtime; allocation ≤32 CPUs.
-Output: `output/benchmarks/camera_ready/$SMOKE_ID/release/release_result.json`, raw rows and separately authenticated environment receipt. Set `SMOKE_RESULT` to that absolute result path. `CAMPAIGN_ROOT` and the companion root are the respective `output/benchmarks/camera_ready/<id>` directories; `BUNDLE_DIR`/`BUNDLE_ARCHIVE` come from the exporter receipt, not an invented file name.
-Admission: every arm successful/native, source/model bindings equal campaign,
-result and staging age ≤24 h, independently accepted environment/stress receipt.
-Record CPU model; learned episodes/resume must stay on the same node (D-072).
-
-**No admissible production input pair exists on this main yet:** v0_5 config and
-manifest use **103**, while private mint expects **1003**. The ordinary public
-runtime-smoke validator still selects v0_2/H600 and the old v3 roster.
-Do not run historical retired-seed smoke or silently rename 103 to 1003.
-D-086 all-roster development smoke is supported but permanently diagnostic and
-explicitly refused as ordinary release admission. G08/G09 / #10112 own the fix.
-
-## 5. Sealed campaign and fixed companion
+## 4. Sealed campaign and fixed companion
 
 After independent queue/packet/scientific admission, the canonical private driver
 submits the minted row; do not bypass its environment/allocation/smoke/stress
@@ -239,7 +301,7 @@ companion contract. An infrastructure resume needs an immutable receipt, the
 same source/config/CPU node and a classified interruption; code defects require
 a corrected source/fresh ID, not resubmission. No step in FREEZEPREP executes this.
 
-## 6. Publication export and preflight — local preparation
+## 5. Publication export and preflight — local preparation
 
 The release runner exports through the common exporter. If explicitly exporting
 its accepted raw root, use the existing command (no overwrite of earlier custody):
@@ -262,7 +324,7 @@ zero unresolved publication scanner findings and disclosure gate green.
 `--no-require-release-reconciliation` is not release admission. Export is local
 preparation; remote publication remains author-reserved.
 
-## 7. D-062 comparator against pinned 0.0.7
+## 6. D-062 comparator against pinned 0.0.7
 
 ```bash
 uv run python scripts/analysis/compare_release_distributions.py \
@@ -279,7 +341,7 @@ Admission: strict full census, schema/source binding, no paired-seed outcome
 claim, changed definitions excluded, report the D-062 plant/world/seed caveats.
 No `--diagnostic-partial` for the release; development output cannot promote it.
 
-## 8. Tag, publish and DOI — author-reserved, delegated 2026-09-28
+## 7. Tag, publish and DOI — author-reserved, delegated 2026-09-28
 
 Only after all preceding admissions, final comparison/intake/scanner review and
 explicit release authorization; same source, coordinates, notes and bundle digests:
@@ -324,8 +386,8 @@ production receipts. Access succeeded; no inaccessible gap is guessed closed.
 |---|---|
 | G01 integrated whole-roster rehearsal | Packaging completed by #10103 / D-086 on `b8d5e970…`, 672 smoke +2,016 development cells. Candidate `c979e033…` includes later #10108 hardening; exact-candidate intake/rehearsal acceptance still belongs to orchestrator. |
 | G02 calibration custody | Open: acquire exact 1,344 dev 1001/1002 cells; 2,016 rehearsal rows cannot be relabelled as calibration. #10045 supplies strict freeze validator. |
-| G03 v2 assets and manifest binding | Open: pending anchors, no D-083 `snqi_v2_spec`, no v2 release-template pins; #10112. Open #9894 proposes another release tooling path, not an admitted D-083 successor. |
-| G04 calibration versus frozen-source trust | Open: final anchor/source reconciliation and independently reviewed scientific pins; private trust set empty. #10112. |
+| G03 v2 assets and manifest binding | **Blocks freeze (orchestrator, 2026-10-03):** pending anchors, no D-083 `snqi_v2_spec`, no v2 release-template pins; #10112. Open #9894 proposes another release tooling path, not an admitted D-083 successor. |
+| G04 calibration versus frozen-source trust | **Blocks freeze for release-source reconciliation (2026-10-03):** final anchor/source reconciliation and independently reviewed scientific pins; private trust set empty. #10112. |
 | G05 authored-horizon mint and bounded diagnostic | Tooling fixed by merged private #421; static dev diagnostics non-dispatchable, production CPUs 32–60. Not proof production inputs are admitted. |
 | G06 doorway H600 versus H400 | Fixed: #9999 authored slice schedule and #10081 strict companion acceptance; static source-pin witnesses bind H400. |
 | G07 same-node two-track chain | Tooling fixed in private #421: distinct identities/checkpoints, shared source/DOI and sequential runners. Final reconciliation/preservation remain G12. |
@@ -345,4 +407,4 @@ The Slurm wrapper's `ROBOT_SF_DEVELOPMENT_RUNTIME_SMOKE=1` uses fifth argument
 `-`; subsequent development campaign consumes that exact-source smoke result.
 These outputs retain `release_eligible: false`; comparator requires
 `--diagnostic-partial`. Preserve the complete raw custody and diagnostic bundle;
-they are never substitutes for steps 3–8 production admission.
+they are never substitutes for steps 3–7 production admission.

@@ -1,0 +1,272 @@
+{
+  "V2_interpretation": "Default physical stalls are resolved. Per-slot pass settings show what wall parameters can move. A missing joint pass in this bounded family is a parameter tradeoff/model-family limitation, not proof that source targets are wrong. Human anticipation and shoulder rotation are not modeled; their causal contribution to remaining numeric misses is not proven.",
+  "V3_interpretation": "Completion flow is measured exactly only for complete cohorts; incomplete capture retains crossing counts and a conservative upper bound. An upper bound below the target band proves a failure without inventing a point estimate.",
+  "V5_interpretation": "Clearance is movable by wall parameters; the default miss is tunable. The personal-space source does not establish statistical equivalence of this scalar engineering acceptance band.",
+  "V6_interpretation": "The earlier upper-limit failure was a source-comparison defect. The corrected one-sided checks score censored lower bounds; exact early onset and speed dependence remain unidentifiable. All settings are still evaluated without pruning.",
+  "radii": [
+    {
+      "V2": [
+        {
+          "actual_width_m": 0.55,
+          "pass_settings": [
+            "6e6331ee7aaa",
+            "32bcc1437379",
+            "f19ff10b11e5",
+            "c2ed6a463d44",
+            "4a148941542d",
+            "f57186724e3a",
+            "011262573841",
+            "b61782dffdac",
+            "2e86ee48977f",
+            "3ddc514812aa",
+            "daa92d3d8ed2",
+            "b31797aadd6c",
+            "38f6514b4405",
+            "1e74a34dc174",
+            "ba82ee8a76ff",
+            "0726ee85e621",
+            "39bfa0974a4c",
+            "2a0d0429ffc5",
+            "b5eefe174036",
+            "8a674445284c",
+            "b58316317ccd",
+            "cb8da29ff937",
+            "949c22f67d32",
+            "44d2ce9f109f"
+          ],
+          "slot": "small",
+          "status_counts": {
+            "FAIL": 10,
+            "MISSING": 2,
+            "PASS": 24
+          }
+        },
+        {
+          "actual_width_m": 0.758,
+          "pass_settings": [
+            "6e6331ee7aaa",
+            "32bcc1437379",
+            "3b847dda46c5",
+            "f19ff10b11e5",
+            "4ce616c5a215",
+            "c2ed6a463d44",
+            "4a148941542d",
+            "f57186724e3a",
+            "011262573841",
+            "b61782dffdac",
+            "2e86ee48977f",
+            "3ddc514812aa",
+            "eb1147ac528c",
+            "910ca37def24",
+            "a2b44f463c9e",
+            "1328d4f60092",
+            "ba82ee8a76ff",
+            "0726ee85e621"
+          ],
+          "slot": "middle",
+          "status_counts": {
+            "FAIL": 18,
+            "PASS": 18
+          }
+        },
+        {
+          "actual_width_m": 0.966,
+          "pass_settings": [
+            "3b847dda46c5",
+            "4ce616c5a215",
+            "c6c934ec31c1",
+            "e5ada472c090"
+          ],
+          "slot": "large",
+          "status_counts": {
+            "FAIL": 32,
+            "PASS": 4
+          }
+        }
+      ],
+      "V2_joint_three_pass_settings": [],
+      "V5_status_counts": {
+        "FAIL": 14,
+        "PASS": 22
+      },
+      "V6_status_counts": {
+        "PASS": 108
+      },
+      "physical_exclusion_settings": 36,
+      "radius_m": 0.25,
+      "settings": 36
+    },
+    {
+      "V2": [
+        {
+          "actual_width_m": 0.61,
+          "pass_settings": [
+            "b24e1d438596",
+            "1ef0b07d6d37",
+            "80d96d78af0a",
+            "7470d457617e",
+            "87ff0f6e3262",
+            "ac3ca720b117",
+            "f4bf66fe0b06",
+            "bcee3b6e6b09",
+            "736dc54ebbcc",
+            "28b5572c9a94",
+            "fcf9ebbebf4a",
+            "c21f03b2ab55",
+            "0b863332bb7b",
+            "fc9620cb8fda",
+            "7fcca1acb50c",
+            "01c0dbab9e6c",
+            "5a0b0e67f93c",
+            "81cc0f71df08",
+            "e52a4e1270a1",
+            "99d66a1b18e2",
+            "a5697ff4d6c2",
+            "60f1ed3a2c91"
+          ],
+          "slot": "small",
+          "status_counts": {
+            "FAIL": 12,
+            "MISSING": 2,
+            "PASS": 22
+          }
+        },
+        {
+          "actual_width_m": 0.788,
+          "pass_settings": [
+            "887afea64525",
+            "80d96d78af0a",
+            "7470d457617e",
+            "76f2b063e229",
+            "ac3ca720b117",
+            "6fc6b6426ff0",
+            "80a75b30e4a4",
+            "28b5572c9a94",
+            "4aec6b2288a2",
+            "a26d94430d5a",
+            "befa91b7cc0a",
+            "1d2c1ef915bf",
+            "f055939923c4",
+            "3de3f848da75"
+          ],
+          "slot": "middle",
+          "status_counts": {
+            "FAIL": 22,
+            "PASS": 14
+          }
+        },
+        {
+          "actual_width_m": 0.966,
+          "pass_settings": [
+            "1d2c1ef915bf",
+            "3de3f848da75",
+            "24a260c83cd8",
+            "684fd2ca1d11"
+          ],
+          "slot": "large",
+          "status_counts": {
+            "FAIL": 32,
+            "PASS": 4
+          }
+        }
+      ],
+      "V2_joint_three_pass_settings": [],
+      "V5_status_counts": {
+        "FAIL": 8,
+        "PASS": 28
+      },
+      "V6_status_counts": {
+        "PASS": 108
+      },
+      "physical_exclusion_settings": 36,
+      "radius_m": 0.28,
+      "settings": 36
+    },
+    {
+      "V2": [
+        {
+          "actual_width_m": 0.65,
+          "pass_settings": [
+            "60884e2af9f0",
+            "c1547cf0fec2",
+            "7538a2c3f966",
+            "b94ced5b1318",
+            "eb3d8e71761a",
+            "d5fa8c3e511b",
+            "efe8107cdcf8",
+            "70be97719fab",
+            "01be2d9c3a72",
+            "c59a2db0a0ba",
+            "ba003d305c73",
+            "08fe65d60b80",
+            "29dafe48d12a",
+            "de66c7bd467e",
+            "fc13c80b02d9",
+            "96c559498d38",
+            "3f61543d1772",
+            "cd34531281d6",
+            "bb1ed8c1defe",
+            "360516cb0d1b",
+            "873f22239c5e",
+            "ee5880b3e370"
+          ],
+          "slot": "small",
+          "status_counts": {
+            "FAIL": 12,
+            "MISSING": 2,
+            "PASS": 22
+          }
+        },
+        {
+          "actual_width_m": 0.808,
+          "pass_settings": [
+            "60884e2af9f0",
+            "c1547cf0fec2",
+            "b94ced5b1318",
+            "eb3d8e71761a",
+            "d840f72bf1a5",
+            "8c92a0d607be",
+            "c460a395f52f",
+            "e814fc93bb28",
+            "779907f27ecf",
+            "8261e0e9303b",
+            "da86916be706",
+            "c36da44f9380"
+          ],
+          "slot": "middle",
+          "status_counts": {
+            "FAIL": 24,
+            "PASS": 12
+          }
+        },
+        {
+          "actual_width_m": 0.966,
+          "pass_settings": [
+            "dd0be87df04a",
+            "9caf137e206b",
+            "43b8b1880d2f",
+            "8549bafa3ac1"
+          ],
+          "slot": "large",
+          "status_counts": {
+            "FAIL": 32,
+            "PASS": 4
+          }
+        }
+      ],
+      "V2_joint_three_pass_settings": [],
+      "V5_status_counts": {
+        "FAIL": 4,
+        "PASS": 32
+      },
+      "V6_status_counts": {
+        "PASS": 108
+      },
+      "physical_exclusion_settings": 36,
+      "radius_m": 0.3,
+      "settings": 36
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "source_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44"
+}

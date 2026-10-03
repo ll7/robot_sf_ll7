@@ -1,0 +1,1973 @@
+{
+  "admission_sha256": {
+    "robot_gate_summary.json": "178292a2d62b9729d7a7de3283de931b5073dda3e65a3c73ca5af52db9c130a8",
+    "step4_comparison.json": "3e959eda0a40a5226103a7048f9fdd35e15fcddea0b2ac77cc616a542c43e1d9"
+  },
+  "correction": "Round 2 supersedes the reviewed ead48d9c summary; old V6-pruned conclusions withdrawn.",
+  "deadline_utc": "2026-10-07T18:32:00+00:00",
+  "driver_sha256": "5d15be0887c950b5ebb366c64b80c940ab37ed9d17154c8476b0c2abf1b9d4a6",
+  "groups": [
+    "r0.25_cap2.0",
+    "r0.25_cap3.0",
+    "r0.28_cap2.0",
+    "r0.28_cap3.0",
+    "r0.30_cap2.0",
+    "r0.30_cap3.0"
+  ],
+  "invariance": "V6 has no walls; its physical threshold is independent of deterministic baseline noise. No invariance is used to prune candidates.",
+  "points": [
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "1b86bf232fbe",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "ef61086201ea",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "b5eefe174036",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "39bfa0974a4c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "0726ee85e621",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "2e86ee48977f",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "b58316317ccd",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "44d2ce9f109f",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "b61782dffdac",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c2ed6a463d44",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "4a148941542d",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "3b847dda46c5",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "daa92d3d8ed2",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "1e74a34dc174",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "32bcc1437379",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "eb1147ac528c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "910ca37def24",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c6c934ec31c1",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "9635acd7390b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "7ff9925c9a6b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "8a674445284c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "2a0d0429ffc5",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "ba82ee8a76ff",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "3ddc514812aa",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "cb8da29ff937",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "949c22f67d32",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "f57186724e3a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "f19ff10b11e5",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "011262573841",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "4ce616c5a215",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "38f6514b4405",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "b31797aadd6c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "6e6331ee7aaa",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "1328d4f60092",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "a2b44f463c9e",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "e5ada472c090",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.25,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "a5697ff4d6c2",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "99c0c7ba210a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "01c0dbab9e6c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "fc9620cb8fda",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "99d66a1b18e2",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "7470d457617e",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "bcee3b6e6b09",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "81cc0f71df08",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "1ef0b07d6d37",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "f055939923c4",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "80d96d78af0a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "1d2c1ef915bf",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "736dc54ebbcc",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "fcf9ebbebf4a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "6fc6b6426ff0",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "befa91b7cc0a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "80a75b30e4a4",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "684fd2ca1d11",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "60f1ed3a2c91",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "a14d558a4770",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "e52a4e1270a1",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "0b863332bb7b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "5a0b0e67f93c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "ac3ca720b117",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "f4bf66fe0b06",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "7fcca1acb50c",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "b24e1d438596",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "887afea64525",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "28b5572c9a94",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "3de3f848da75",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "87ff0f6e3262",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c21f03b2ab55",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "76f2b063e229",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "a26d94430d5a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "4aec6b2288a2",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "24a260c83cd8",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.28,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "cd34531281d6",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "9432d56558f8",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "efe8107cdcf8",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "d5fa8c3e511b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "7538a2c3f966",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c1547cf0fec2",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "de66c7bd467e",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "873f22239c5e",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "01be2d9c3a72",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "d840f72bf1a5",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "eb3d8e71761a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "9caf137e206b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "08fe65d60b80",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "ee5880b3e370",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "779907f27ecf",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "da86916be706",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c460a395f52f",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 2.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "43b8b1880d2f",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "29dafe48d12a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "2d0f084f4892",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "96c559498d38",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "3f61543d1772",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c59a2db0a0ba",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "60884e2af9f0",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 3.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "ba003d305c73",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "360516cb0d1b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "70be97719fab",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "8c92a0d607be",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "b94ced5b1318",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "dd0be87df04a",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 6.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "fc13c80b02d9",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "bb1ed8c1defe",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.04,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "8261e0e9303b",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "c36da44f9380",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.08,
+        "range_m": 0.5
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "e814fc93bb28",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.2
+      }
+    },
+    {
+      "cap_m_s": 3.0,
+      "desired_mean_m_s": 1.29,
+      "desired_sd_m_s": 0.19,
+      "factor": 0.003,
+      "family": "calibrated_v2",
+      "id": "8549bafa3ac1",
+      "offset_m": 0.375,
+      "pedcontact_measurement": true,
+      "pedestrian_contact_rule": "projection_v1",
+      "pedestrian_wall_rule": "bounded_edge_v1",
+      "radius_m": 0.3,
+      "wall_contact_parameters": {
+        "amplitude_m_s2": 9.0,
+        "decay_m": 0.16,
+        "range_m": 0.5
+      }
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "pedcontact.bounded_fit.v2",
+  "screen": "V2 and V5 evaluated for every wall setting; all 18 cases measured, no pruning",
+  "seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "source_sha": "ffdd8618b01c9bcba3272771aa97c4b8d8724a1d"
+}

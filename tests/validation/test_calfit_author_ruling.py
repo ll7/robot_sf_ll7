@@ -114,7 +114,6 @@ def test_original_shoulder_rotation_case_is_a_limitation_not_a_failed_gate():
     "case,variant,field,target,bounds",
     [
         ("V5", "diagnostic", "lateral_cm_to_edge_m", 0.5, [0.4, 0.6]),
-        ("V6", "1.15", "onset_m", 2.1, [1.68, 2.52]),
     ],
 )
 def test_unreported_distribution_sd_uses_author_twenty_percent_fallback(

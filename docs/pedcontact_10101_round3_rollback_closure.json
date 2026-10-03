@@ -1,0 +1,22 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "defect": "A partial position rollback creates new overlaps with advancing neighbours. Expand the rollback set until endpoint exclusion holds; unrelated walkers retain their movement.",
+  "witness_radius_m": 0.3,
+  "before_minimum_separation_m": 0.5,
+  "required_separation_m": 0.6,
+  "green_cases": 10,
+  "original_round3_producer": "b4aafc536a6b9c7b940d171815ed3ac1e3983263",
+  "reviewed_head": "69753f16548add94a6ade93964d2a3f52e811ae9",
+  "test_value": {
+    "defect": "Fallback creates overlap and can unnecessarily stop unrelated walkers",
+    "existing_tests": "Existing tests did not combine rollback with a moving neighbour outside the initial jam",
+    "real_bytes": "Real Simulator state, geometry, contact mask, velocity projection; only exhausting solver calls are injected",
+    "non_tautological": "Hand-known .60 m exclusion and isolated pose/velocity independent of solver formulas"
+  },
+  "log_sha256": {
+    "rollback_closure_red_b4.log": "13c4b9ab66c0363e56738ce29f0379cc5644d92eff5860f725fad5285442bc93",
+    "closure_green.log": "1c0d4ede3cb687aa6a3e5578839835cfa3fe251139a508614bf1c20afb4e2a78",
+    "rollback_closure_red_69753.log": "066eb86fd1f53b1451aa5ca2febdd5b253bf2994c4af8aeebe6856edbedd4b39",
+    "closure_backend_install.log": "25132e8ac3ee6dc442d624d4e3081614df35102e94bb390f17c51d780600669b"
+  }
+}

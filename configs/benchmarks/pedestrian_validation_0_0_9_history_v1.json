@@ -1,5 +1,5 @@
 {
-  "schema": "pedval.config.v2",
+  "schema": "pedval.config.v1",
   "seeds": [
     1001,
     1002,
@@ -125,11 +125,10 @@
       1.97
     ],
     "plane": "channel centre; y=0.4 is local video coordinate",
-    "window": "Complete: N/(last-first)/width; incomplete: full-N completion flow in [0,N/(capture_end-first)/width], with crossing count and censoring flag",
+    "window": "60/(t_last-t_first)/width; incomplete runs unavailable",
     "setup_status": "nominal supply/density matched; archived initial sites adapted for 0.40 m margin; individual human starts unavailable",
     "equivalence": "source_equivalent_estimator",
-    "protocol_reason": "Seyfried finite-N estimator; right-censored final crossing bounds completion flow above. A bound below accepted range proves FAIL; otherwise CENSORED, excluded from producible denominator. Observed-window throughput and prefix crossing rate are diagnostics.",
-    "estimator_id": "finite_n_completion_upper_bound_v2"
+    "protocol_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts."
   },
   "V4": {
     "source": "Liao et al. 2014",
@@ -176,15 +175,10 @@
       2.4,
       2.7
     ],
-    "onset_definition": "0.05 rad/s sustained 0.3 s; own X in [-3,+3] m about synchronized PoMD; onset already underway at -3 m is right-censored >=3 m",
+    "onset_definition": "first absolute angular speed above subject/speed mean maximum from five no-interferer trials; own X displacement to PoMD after marker filtering",
     "setup_status": "Nonreactive matching-speed interferer, filtered own-X onset and five no-interferer trials; deterministic CM samples substitute for trunk markers.",
     "equivalence": "documented_equivalent",
-    "protocol_reason": "Huber 2014 section 4.4 and Fig. 4C; 2026-10-03 author ruling: published 2.1/2.4/2.7 m are lower bounds; no upper acceptance limit. Deterministic no-sway baselines are diagnostics, not thresholds. Filtering unchanged.",
-    "estimator_id": "fixed_yaw_source_window_lower_bound_v3",
-    "yaw_threshold_rad_s": 0.05,
-    "analysis_window_m": 3.0,
-    "persistence_s": 0.3,
-    "comparison": "published_lower_bound"
+    "protocol_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway."
   },
   "V7": {
     "source": "Zhang et al. 2012; Feliciani and Nishinari 2016",

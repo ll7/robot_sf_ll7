@@ -1,0 +1,299 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "attribution": "wall-induced dynamic-clearance deadlock; contact-only succeeds",
+      "classification": "hybrid dynamic-clearance deadlock after changed pedestrian motion",
+      "collision_events": [],
+      "law_arm": "wall",
+      "law_arm_outcomes": {
+        "contact": {
+          "collisions": 0,
+          "status": "success",
+          "success": true
+        },
+        "on": {
+          "collisions": 0,
+          "status": "failure",
+          "success": false
+        },
+        "wall": {
+          "collisions": 0,
+          "status": "failure",
+          "success": false
+        }
+      },
+      "map_sha256": "42f3911d15c8a2edc61e177d2d25fbb8416810ba937b2ec5009ad6220308cb48",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "planner_runtime_evidence": {
+        "last_decision": {
+          "moving_rejection_counts": {
+            "dynamic_collision": 38
+          },
+          "nearest_pedestrian_distance": 1.4931878072689266,
+          "nearest_static_obstacle_distance": 1.5231546438695542,
+          "planner_mode": "NORMAL",
+          "progress_windows": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "rejected_examples": [
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                -0.15000000000000002
+              ],
+              "min_dynamic_clearance": 1.47912862634272,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 1.0
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.0
+              ],
+              "min_dynamic_clearance": 1.4778980078584645,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 1.0
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.15000000000000002
+              ],
+              "min_dynamic_clearance": 1.4767499286214998,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 1.0
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.29999999999999993
+              ],
+              "min_dynamic_clearance": 1.4798066814969724,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 0.8
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.45000000000000007
+              ],
+              "min_dynamic_clearance": 1.4795681242474692,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 0.8
+            }
+          ],
+          "selected_command": [
+            0.0,
+            0.0
+          ],
+          "selected_source": "dynamic_window"
+        },
+        "protective_stop_count": 6,
+        "rejection_counts": {
+          "braking_infeasible": 1,
+          "dynamic_collision": 21749,
+          "static_collision": 281
+        },
+        "selected_source_counts": {
+          "corridor_subgoal": 17,
+          "creep": 3,
+          "dynamic_protective_stop": 6,
+          "dynamic_window": 463,
+          "path_follow_0.5m": 4,
+          "rotate_left": 5,
+          "route_guide": 1,
+          "stop": 1
+        }
+      },
+      "producer_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44",
+      "project_spawn_validity": {
+        "invalid_reason": null,
+        "invalid_run": false,
+        "reset_clearance": {
+          "obstacle_overlap": false,
+          "overlap": false,
+          "overlapping_pedestrian_rows": [],
+          "pedestrian_overlap": false,
+          "robot_obstacle_min_surface_clearance_m": 5.83438081869512,
+          "robot_pedestrian_min_surface_clearance_m": 4.990809691064754
+        },
+        "reset_clearance_error": null,
+        "reset_clearance_status": "available",
+        "reset_overlap": false,
+        "respawn_overlap_collisions": [],
+        "respawn_overlap_events": [],
+        "schema_version": "spawn_validity.v2"
+      },
+      "robot_radius_m": 1.0,
+      "scenario": "classic_doorway_low",
+      "seed": 1001,
+      "supplemental_pedestrian_spawn_clearance": {
+        "pedestrian_wall_min_surface_m": 0.04437257020953672,
+        "pedestrian_wall_overlap_rows": []
+      },
+      "terminal_pedestrian_wall_min_surface_m": 1.0000000003618226e-06,
+      "terminal_robot_wall_surface_m": 0.6235015587226496,
+      "trace_available": true
+    },
+    {
+      "attribution": "wall-induced dynamic-clearance deadlock; contact-only succeeds",
+      "classification": "hybrid dynamic-clearance deadlock after changed pedestrian motion",
+      "collision_events": [],
+      "law_arm": "on",
+      "law_arm_outcomes": {
+        "contact": {
+          "collisions": 0,
+          "status": "success",
+          "success": true
+        },
+        "on": {
+          "collisions": 0,
+          "status": "failure",
+          "success": false
+        },
+        "wall": {
+          "collisions": 0,
+          "status": "failure",
+          "success": false
+        }
+      },
+      "map_sha256": "42f3911d15c8a2edc61e177d2d25fbb8416810ba937b2ec5009ad6220308cb48",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "planner_runtime_evidence": {
+        "last_decision": {
+          "moving_rejection_counts": {
+            "dynamic_collision": 38
+          },
+          "nearest_pedestrian_distance": 1.4931878072689266,
+          "nearest_static_obstacle_distance": 1.5231546438695542,
+          "planner_mode": "NORMAL",
+          "progress_windows": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "rejected_examples": [
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                -0.15000000000000002
+              ],
+              "min_dynamic_clearance": 1.47912862634272,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 1.0
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.0
+              ],
+              "min_dynamic_clearance": 1.4778980078584645,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 1.0
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.15000000000000002
+              ],
+              "min_dynamic_clearance": 1.4767499286214998,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 1.0
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.29999999999999993
+              ],
+              "min_dynamic_clearance": 1.4798066814969724,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 0.8
+            },
+            {
+              "collision_radius": 1.4800000011920929,
+              "command": [
+                0.024999999999999998,
+                0.45000000000000007
+              ],
+              "min_dynamic_clearance": 1.4795681242474692,
+              "reason": "dynamic_collision",
+              "source": "dynamic_window",
+              "time": 0.8
+            }
+          ],
+          "selected_command": [
+            0.0,
+            0.0
+          ],
+          "selected_source": "dynamic_window"
+        },
+        "protective_stop_count": 6,
+        "rejection_counts": {
+          "braking_infeasible": 1,
+          "dynamic_collision": 21749,
+          "static_collision": 281
+        },
+        "selected_source_counts": {
+          "corridor_subgoal": 17,
+          "creep": 3,
+          "dynamic_protective_stop": 6,
+          "dynamic_window": 463,
+          "path_follow_0.5m": 4,
+          "rotate_left": 5,
+          "route_guide": 1,
+          "stop": 1
+        }
+      },
+      "producer_sha": "d52a1ffbb30acf390f2e78c45ffed2c5c7ea6b44",
+      "project_spawn_validity": {
+        "invalid_reason": null,
+        "invalid_run": false,
+        "reset_clearance": {
+          "obstacle_overlap": false,
+          "overlap": false,
+          "overlapping_pedestrian_rows": [],
+          "pedestrian_overlap": false,
+          "robot_obstacle_min_surface_clearance_m": 5.83438081869512,
+          "robot_pedestrian_min_surface_clearance_m": 4.990809691064754
+        },
+        "reset_clearance_error": null,
+        "reset_clearance_status": "available",
+        "reset_overlap": false,
+        "respawn_overlap_collisions": [],
+        "respawn_overlap_events": [],
+        "schema_version": "spawn_validity.v2"
+      },
+      "robot_radius_m": 1.0,
+      "scenario": "classic_doorway_low",
+      "seed": 1001,
+      "supplemental_pedestrian_spawn_clearance": {
+        "pedestrian_wall_min_surface_m": 0.04437257020953672,
+        "pedestrian_wall_overlap_rows": []
+      },
+      "terminal_pedestrian_wall_min_surface_m": 1.0000000003618226e-06,
+      "terminal_robot_wall_surface_m": 0.6235015587226496,
+      "trace_available": true
+    }
+  ]
+}

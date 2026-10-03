@@ -56,7 +56,6 @@ jobs:
       cancel-in-progress: false
     outputs:
       run_full_ci: ${{ steps.decision.outputs.run_full_ci }}
-      duration_snapshot: ${{ steps.freeze-durations.outputs.artifact_name }}
       compat_os: ${{ steps.paths.outputs.compat_os }}
       examples_smoke: ${{ steps.paths.outputs.examples_smoke }}
       notebooks_smoke: ${{ steps.paths.outputs.notebooks_smoke }}
@@ -168,17 +167,14 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/merge_test_durations.py \
-            --snapshot-input .test_durations --output .duration-snapshot/.test_durations
-          echo "artifact_name=test-duration-snapshot-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+            --snapshot-input .test_durations --output .test_durations
 
-      - name: Upload frozen test durations
+      - name: Save frozen test durations
         if: steps.decision.outputs.run_full_ci == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: ${{ steps.freeze-durations.outputs.artifact_name }}
-          path: .duration-snapshot/.test_durations
-          include-hidden-files: true
-          if-no-files-found: error
+          key: test-duration-snapshot-${{ github.run_id }}
+          path: .test_durations
 
   fast-feedback:
     needs: dispatch-ownership
@@ -258,11 +254,12 @@ jobs:
           restore-keys: |
             pytest-${{ runner.os }}-
 
-      - name: Download frozen test durations
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Restore frozen test durations
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: ${{ needs.dispatch-ownership.outputs.duration_snapshot }}
-          path: .
+          key: test-duration-snapshot-${{ github.run_id }}
+          path: .test_durations
+          fail-on-cache-miss: true
 
       # Lint and typecheck are shard-independent; run them once (shard 1 only)
       # to avoid duplicated annotations on pull-request shard matrices.

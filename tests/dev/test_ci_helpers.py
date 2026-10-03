@@ -109,7 +109,7 @@ def _four_valid_shards(tmp_path: Path) -> None:
 def test_duration_merge_accepts_four_valid_shards(tmp_path: Path) -> None:
     """Four valid, non-overlapping shard stores merge deterministically."""
     _four_valid_shards(tmp_path)
-    merged = merge_test_durations.merge_duration_stores(tmp_path)
+    merged = merge_test_durations.merge_duration_stores(tmp_path, shard_count=4)
     assert len(merged) == 8
     assert merged["test_1_a"] == 1.0
     assert sorted(merged) == sorted(merged)
@@ -121,7 +121,7 @@ def test_duration_merge_rejects_missing_shard(tmp_path: Path) -> None:
     (tmp_path / "pytest-durations-4").rename(tmp_path / "pytest-durations-4-backup")
     try:
         with pytest.raises(SystemExit, match="missing=.*pytest-durations-4"):
-            merge_test_durations.merge_duration_stores(tmp_path)
+            merge_test_durations.merge_duration_stores(tmp_path, shard_count=4)
     finally:
         (tmp_path / "pytest-durations-4-backup").rename(tmp_path / "pytest-durations-4")
 
@@ -131,7 +131,7 @@ def test_duration_merge_rejects_unexpected_shard(tmp_path: Path) -> None:
     _four_valid_shards(tmp_path)
     _write_shard(tmp_path, "pytest-durations-9", {"extra": 1.0})
     with pytest.raises(SystemExit, match="unexpected=.*pytest-durations-9"):
-        merge_test_durations.merge_duration_stores(tmp_path)
+        merge_test_durations.merge_duration_stores(tmp_path, shard_count=4)
 
 
 def test_duration_merge_rejects_overlap(tmp_path: Path) -> None:
@@ -141,7 +141,7 @@ def test_duration_merge_rejects_overlap(tmp_path: Path) -> None:
         json.dumps({"test_1_a": 5.0}), encoding="utf-8"
     )
     with pytest.raises(SystemExit, match="Overlapping pytest duration stores"):
-        merge_test_durations.merge_duration_stores(tmp_path)
+        merge_test_durations.merge_duration_stores(tmp_path, shard_count=4)
 
 
 @pytest.mark.parametrize(
@@ -161,7 +161,7 @@ def test_duration_merge_rejects_malformed_values(tmp_path: Path, bad: dict) -> N
         json.dumps(bad), encoding="utf-8"
     )
     with pytest.raises(SystemExit, match="Invalid pytest duration store"):
-        merge_test_durations.merge_duration_stores(tmp_path)
+        merge_test_durations.merge_duration_stores(tmp_path, shard_count=4)
 
 
 # --- check_ci_needs --------------------------------------------------------
@@ -286,7 +286,9 @@ def test_duration_bootstrap_retains_completed_shards_after_missing_shard(
     """Three real artifact stores seed balancing when the fourth job is cancelled."""
     for index in (1, 3, 4):
         _write_shard(tmp_path, f"pytest-durations-{index}", {f"test_{index}": float(index)})
-    assert merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True) == {
+    assert merge_test_durations.merge_duration_stores(
+        tmp_path, allow_partial=True, shard_count=4
+    ) == {
         "test_1": 1.0,
         "test_3": 3.0,
         "test_4": 4.0,
@@ -298,13 +300,13 @@ def test_partial_duration_bootstrap_rejects_bad_store(tmp_path: Path, durations:
     """A missing shard never relaxes the measurement schema or empty-data guard."""
     _write_shard(tmp_path, "pytest-durations-1", durations)
     with pytest.raises(SystemExit, match="Invalid pytest duration store"):
-        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True, shard_count=4)
 
 
 def test_partial_duration_bootstrap_rejects_no_artifacts(tmp_path: Path) -> None:
     """A skipped matrix must not save an empty cache over usable history."""
     with pytest.raises(SystemExit, match="missing="):
-        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True, shard_count=4)
 
 
 def test_partial_duration_bootstrap_rejects_overlap_and_unexpected(
@@ -314,10 +316,10 @@ def test_partial_duration_bootstrap_rejects_overlap_and_unexpected(
     _write_shard(tmp_path, "pytest-durations-1", {"node": 1.0})
     _write_shard(tmp_path, "pytest-durations-2", {"node": 2.0})
     with pytest.raises(SystemExit, match="Overlapping"):
-        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True, shard_count=4)
     _write_shard(tmp_path, "pytest-durations-9", {"other": 3.0})
     with pytest.raises(SystemExit, match="unexpected="):
-        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True)
+        merge_test_durations.merge_duration_stores(tmp_path, allow_partial=True, shard_count=4)
 
 
 def test_partial_duration_cli_records_failed_matrix_provenance(
@@ -335,6 +337,8 @@ def test_partial_duration_cli_records_failed_matrix_provenance(
     assert (
         merge_test_durations.main(
             [
+                "--shard-count",
+                "4",
                 "--artifact-dir",
                 str(artifacts),
                 "--output",
@@ -370,6 +374,8 @@ def test_duration_cli_does_not_publish_empty_or_replace_output(tmp_path: Path) -
     assert (
         merge_test_durations.main(
             [
+                "--shard-count",
+                "4",
                 "--artifact-dir",
                 str(tmp_path / "artifacts"),
                 "--output",
@@ -398,6 +404,8 @@ def test_all_duration_artifacts_do_not_imply_successful_matrix(
     assert (
         merge_test_durations.main(
             [
+                "--shard-count",
+                "4",
                 "--artifact-dir",
                 str(tmp_path / "artifacts"),
                 "--output",
@@ -479,17 +487,18 @@ def test_duration_snapshot_freezes_one_validated_input_for_every_shard(
 
 
 @pytest.mark.parametrize("bad", [{}, {"node": True}, {"node": float("nan")}, {"node": -1}])
-def test_duration_snapshot_rejects_corrupt_cache_without_replacing_output(
-    tmp_path: Path, bad: dict
+def test_duration_snapshot_replaces_corrupt_cache_with_shared_cold_input(
+    tmp_path: Path, bad: dict, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Corrupt restored data must fail closed rather than diverge across shard restores."""
+    """Invalid scheduling hints cannot wedge CI; every shard gets the same cold input."""
     source, snapshot = tmp_path / "restored.json", tmp_path / "snapshot.json"
     source.write_text(json.dumps(bad), encoding="utf-8")
     snapshot.write_text('{"old": 3}', encoding="utf-8")
     assert (
-        merge_test_durations.main(["--snapshot-input", str(source), "--output", str(snapshot)]) == 1
+        merge_test_durations.main(["--snapshot-input", str(source), "--output", str(snapshot)]) == 0
     )
-    assert json.loads(snapshot.read_text()) == {"old": 3}
+    assert json.loads(snapshot.read_text()) == {}
+    assert "Warning:" in capsys.readouterr().err
 
 
 def test_duration_snapshot_requires_file_output(capsys: pytest.CaptureFixture[str]) -> None:
@@ -498,3 +507,34 @@ def test_duration_snapshot_requires_file_output(capsys: pytest.CaptureFixture[st
         merge_test_durations.main(["--snapshot-input", "missing-cache.json"])
     assert error.value.code == 2
     assert "--snapshot-input requires --output" in capsys.readouterr().err
+
+
+def test_duration_snapshot_recovers_malformed_json_in_place(tmp_path: Path, capsys) -> None:
+    """A broken historical cache is atomically replaced before run-scoped publication."""
+    store = tmp_path / ".test_durations"
+    store.write_text("{broken", encoding="utf-8")
+    assert merge_test_durations.main(["--snapshot-input", str(store), "--output", str(store)]) == 0
+    assert json.loads(store.read_text()) == {}
+    assert "Warning:" in capsys.readouterr().err
+
+
+def test_duration_merge_default_matches_workflow_matrix(tmp_path: Path) -> None:
+    """The default consumes every workflow shard without a CLI override."""
+    import yaml
+
+    workflow = yaml.safe_load((Path(__file__).parents[2] / ".github/workflows/ci.yml").read_text())
+    shards = workflow["jobs"]["fast-feedback"]["strategy"]["matrix"]["shard"]
+    assert shards == [1, 2, 3, 4, 5, 6]
+    for index in shards:
+        _write_shard(tmp_path / "artifacts", f"pytest-durations-{index}", {f"node{index}": 1.0})
+    output = tmp_path / "merged.json"
+    assert (
+        merge_test_durations.main(
+            ["--artifact-dir", str(tmp_path / "artifacts"), "--output", str(output)]
+        )
+        == 0
+    )
+    assert json.loads(output.read_text()) == {f"node{index}": 1.0 for index in shards}
+    assert merge_test_durations.merge_duration_stores(tmp_path / "artifacts") == json.loads(
+        output.read_text()
+    )

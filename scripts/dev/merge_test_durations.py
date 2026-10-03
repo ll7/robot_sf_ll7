@@ -15,8 +15,6 @@ import os
 import sys
 from pathlib import Path
 
-EXPECTED_SHARD_NAMES = tuple(f"pytest-durations-{index}" for index in range(1, 5))
-
 
 def _validate_duration_store(path: Path) -> dict[str, float]:
     """Return the parsed durations for one shard store, failing on any violation."""
@@ -39,7 +37,7 @@ def _validate_duration_store(path: Path) -> dict[str, float]:
 
 
 def merge_duration_stores(
-    artifact_dir: str | Path, *, allow_partial: bool = False, shard_count: int = 4
+    artifact_dir: str | Path, *, allow_partial: bool = False, shard_count: int = 6
 ) -> dict[str, float]:
     """Merge the expected shard stores under *artifact_dir* into one mapping.
 
@@ -94,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--metadata-output", help="Write scheduling provenance alongside the cache")
     parser.add_argument("--snapshot-input", help="Freeze one restored cache for all matrix jobs")
     parser.add_argument(
-        "--shard-count", type=int, default=4, help="Expected matrix size (default: 4)"
+        "--shard-count", type=int, default=6, help="Expected matrix size (default: 6)"
     )
     args = parser.parse_args(argv)
     if args.shard_count < 1:
@@ -107,8 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             durations = _validate_duration_store(source) if source.exists() else {}
         except SystemExit as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
+            print(f"Warning: {exc}; using shared cold duration input", file=sys.stderr)
+            durations = {}
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         temporary = output.with_name(output.name + ".tmp")

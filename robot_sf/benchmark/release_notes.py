@@ -223,6 +223,7 @@ def check_notes(data: bytes, *, phase: str) -> list[str]:
     sections: dict[str, list[str]] = {}
     heading = None
     for block in text.strip().split("\n\n"):
+        block = block.strip()
         if block.startswith("## ") and "\n" not in block:
             heading = block[3:]
             if heading in sections:

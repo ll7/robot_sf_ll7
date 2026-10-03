@@ -223,6 +223,16 @@ def test_preflight_and_direct_publication_recheck_mint_receipt(notes_repo, monke
     assert gate_manifest(SimpleNamespace(), notes_repo) is None
 
 
+@pytest.mark.parametrize("blank_lines", [1, 2, 3, 4])
+def test_duplicate_heading_refused_across_blank_line_counts(notes_repo, blank_lines):
+    from robot_sf.benchmark.release_notes import notes_gate
+
+    path = notes_repo / NOTES
+    write_text(path, path.read_text() + "\n" * blank_lines + "## Robot motion\n")
+    with pytest.raises(ValueError, match="duplicate section: Robot motion"):
+        notes_gate(notes_repo, source_commit="a" * 40)
+
+
 def test_exported_notes_checked_against_retained_digest(notes_repo, monkeypatch):
     from robot_sf.benchmark import artifact_publication as publication
     from robot_sf.benchmark.release_notes import RECEIPT_NAME, notes_gate

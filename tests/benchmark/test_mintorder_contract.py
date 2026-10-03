@@ -54,3 +54,16 @@ def test_canonical_smoke_admits_current_dev_contract():
     config = yaml.safe_load(contract[1].read_bytes())
     assert config["derived_from"]["config"] == AUTHORED
     assert config["planners"] == authored["planners"]
+
+
+def test_authored_smoke_scopes_the_real_producer_identity():
+    """Pin the real dev1003 receipt's scoped digest, rather than a self-derived oracle.
+
+    Omitting kinematics scoping changes this hash. The earlier tracked contract
+    test covers paths/keys/seeds, but not a produced sidecar. No production seam;
+    golden digest is the complete 14-arm source285e73d61126 dev1003 receipt.
+    """
+    contract = smoke._canonical_smoke_contract(
+        repo_root=ROOT, expected_planner_keys=smoke.RUNTIME_SMOKE_PLANNER_KEYS
+    )
+    assert contract[5] == "6f4204a27009a7c7", "authored smoke scoped producer digest differs"

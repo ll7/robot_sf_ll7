@@ -18,6 +18,11 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
     CheckpointStagingReceiptError,
     validate_checkpoint_staging_receipt,
 )
+from robot_sf.benchmark.fallback_policy import (
+    algorithm_metadata_runtime_marker,
+    is_verified_guarded_ppo,
+    runtime_fallback_or_degraded_marker,
+)
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_acceptance import (
     _append_exclusion_blocker,
@@ -389,13 +394,55 @@ def _is_guarded_ppo_safe_shield_marker(
     return numeric >= 0
 
 
-def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[str, Any]) -> bool:
+def _is_allowed_runtime_marker(
+    path: str,
+    key: str,
+    value: Any,
+    *,
+    parent: dict[str, Any],
+    expected_algorithm: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> bool:
     """Return whether a non-boolean/status token is canonical for its exact report surface.
 
     Returns:
         Whether the marker is an explicitly allowed producer representation.
     """
     if _is_campaign_preflight_unknown(path, value):
+        return True
+    # Use the existing composite-planner contract, with the algorithm obtained
+    # from pinned source inputs rather than the receipt's own claim.
+    verified_guard = is_verified_guarded_ppo(metadata, expected_algorithm=expected_algorithm)
+    if (
+        verified_guard
+        and key in {"fallback_safe", "fallback_best_effort", "stop_safe", "stop_best_effort"}
+        and re.search(r"\.(?:guard_stats|shield_stats\.decision_counts)\." + key + r"$", path)
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= 0
+    ):
+        return True
+    if (
+        metadata is not None
+        and isinstance(value, dict)
+        and (
+            (
+                key == "fallback_diagnostics"
+                and path.endswith(".planner_runtime.fallback_diagnostics")
+            )
+            or (
+                verified_guard
+                and key == "fallback_controller_state"
+                and re.search(
+                    r"\.(?:shield_stats|planner_runtime)\.last_decision\." + key + r"$", path
+                )
+            )
+        )
+        and runtime_fallback_or_degraded_marker(
+            value, expected_algorithm=expected_algorithm, algorithm_metadata=metadata
+        )
+        is None
+    ):
         return True
     # Guarded PPO is the fixed arm at index 11 in the canonical roster. Its
     # Risk-DWA safety-shield intervention is part of the declared composite
@@ -459,7 +506,7 @@ def _contains_symlink_component(path: Path) -> bool:
 
 
 def _forbidden_status_markers(  # noqa: C901
-    payload: Any, prefix: str
+    payload: Any, prefix: str, *, expected_algorithm: str | None = None
 ) -> list[tuple[str, str]]:
     """Find forbidden execution markers, including nested policy summaries.
 
@@ -469,7 +516,9 @@ def _forbidden_status_markers(  # noqa: C901
     markers = (
         [
             (path, value)
-            for path, value in _status_markers(payload, prefix)
+            for path, value in _status_markers(
+                payload, prefix, expected_algorithm=expected_algorithm
+            )
             if not _is_guarded_ppo_safe_shield_marker(path, value, normalized_marker=True)
         ]
         if isinstance(payload, dict)
@@ -477,14 +526,48 @@ def _forbidden_status_markers(  # noqa: C901
     )
     seen = {(path, value) for path, value in markers}
 
-    def _walk(value: Any, path: str, *, descend_all: bool = False) -> None:
+    def _metadata_context(child, child_path, normalized_key, metadata):
+        """Validate nested metadata using its independently declared algorithm.
+
+        Returns:
+            Metadata context for validating typed native telemetry.
+        """
+        if normalized_key not in {
+            "algorithm_metadata",
+            "algorithm_metadata_contract",
+        } or not isinstance(child, dict):
+            return metadata
+        found = algorithm_metadata_runtime_marker(child, expected_algorithm=expected_algorithm)
+        if found is not None:
+            marker = (f"{child_path}.{found[0]}", found[1])
+            if marker not in seen and not _is_guarded_ppo_safe_shield_marker(
+                marker[0], marker[1], normalized_marker=True
+            ):
+                markers.append(marker)
+                seen.add(marker)
+        return child
+
+    def _walk(
+        value: Any,
+        path: str,
+        *,
+        descend_all: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         if isinstance(value, dict):
             for key, child in value.items():
                 child_path = f"{path}.{key}"
                 normalized_key = str(key).strip().lower()
                 marker_value = (
                     None
-                    if _is_allowed_runtime_marker(child_path, normalized_key, child, parent=value)
+                    if _is_allowed_runtime_marker(
+                        child_path,
+                        normalized_key,
+                        child,
+                        parent=value,
+                        expected_algorithm=expected_algorithm,
+                        metadata=metadata,
+                    )
                     else _runtime_marker_value(normalized_key, child)
                 )
                 if marker_value is not None:
@@ -494,13 +577,14 @@ def _forbidden_status_markers(  # noqa: C901
                         seen.add(marker)
                 if normalized_key in _RUNTIME_DECLARATIVE_CONTAINERS:
                     continue
+                child_metadata = _metadata_context(child, child_path, normalized_key, metadata)
                 if descend_all or normalized_key in _RUNTIME_DEEP_CONTAINERS:
-                    _walk(child, child_path, descend_all=True)
+                    _walk(child, child_path, descend_all=True, metadata=child_metadata)
                 elif normalized_key in _RUNTIME_SHALLOW_CONTAINERS:
-                    _walk(child, child_path)
+                    _walk(child, child_path, metadata=child_metadata)
         elif isinstance(value, list):
             for index, child in enumerate(value):
-                _walk(child, f"{path}[{index}]", descend_all=descend_all)
+                _walk(child, f"{path}[{index}]", descend_all=descend_all, metadata=metadata)
 
     _walk(payload, prefix)
     return markers
@@ -641,14 +725,12 @@ def _canonical_scenario_matrix_hash(
         raise RuntimeSmokeAdmissionError(
             "canonical runtime smoke must resolve exactly one scenario"
         )
-    if "includes" in payload:
-        return _config_hash(scenarios)
     scenario = dict(scenarios[0])
     observed_id = str(scenario.get("name") or scenario.get("id") or "").strip()
     if observed_id != scenario_id:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario identifier mismatch")
     raw_map = scenario.get("map_file")
-    if isinstance(raw_map, str) and raw_map.strip():
+    if "includes" not in payload and isinstance(raw_map, str) and raw_map.strip():
         map_path = Path(raw_map)
         if not map_path.is_absolute():
             map_path = scenario_path.parent / map_path
@@ -1023,6 +1105,7 @@ def _validate_campaign_metadata(  # noqa: PLR0913
     release: dict[str, Any],
     manifest_path: Path,
     config_path: Path,
+    scenario_relative_path: str,
     problems: list[str],
 ) -> None:
     """Bind campaign/manifest metadata to the canonical smoke identity."""
@@ -1064,7 +1147,7 @@ def _validate_campaign_metadata(  # noqa: PLR0913
     _require_equal(
         problems,
         campaign_manifest.get("scenario_matrix"),
-        "configs/scenarios/single/francis2023_blind_corner.yaml",
+        scenario_relative_path,
         "campaign manifest scenario path",
     )
     seed_policy = campaign_manifest.get("seed_policy")
@@ -1363,6 +1446,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         release=release,
         manifest_path=manifest_path,
         config_path=config_path,
+        scenario_relative_path=scenario_path.relative_to(resolved_repo).as_posix(),
         problems=problems,
     )
 
@@ -1388,7 +1472,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         _require_equal(
             problems,
             resolved_scenario.get("matrix_path"),
-            "configs/scenarios/single/francis2023_blind_corner.yaml",
+            scenario_path.relative_to(resolved_repo).as_posix(),
             "resolved manifest scenario path",
         )
     resolved_seed_policy = resolved.get("seed_policy")
@@ -1605,23 +1689,30 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             RUNTIME_SMOKE_KINEMATICS,
             f"run {index} kinematics",
         )
+        if "horizon" not in planner:
+            problems.append(f"run {index} authored horizon declaration is missing")
         _require_equal(
             problems,
-            _strict_int(planner.get("horizon")),
-            RUNTIME_SMOKE_HORIZON,
+            planner.get("horizon"),
+            None,
             f"run {index} horizon",
         )
         _require_equal(
             problems, planner.get("algo"), algorithms.get(planner_key), f"run {index} algorithm"
         )
         fallback_markers.extend(
-            f"{path}={value}" for path, value in _forbidden_status_markers(entry, f"runs[{index}]")
+            f"{path}={value}"
+            for path, value in _forbidden_status_markers(
+                entry, f"runs[{index}]", expected_algorithm=algorithms.get(planner_key)
+            )
         )
         declared = entry.get("summary")
         declared = declared if isinstance(declared, dict) else {}
         fallback_markers.extend(
             f"{path}={value}"
-            for path, value in _forbidden_status_markers(declared, f"runs[{index}].summary")
+            for path, value in _forbidden_status_markers(
+                declared, f"runs[{index}].summary", expected_algorithm=algorithms.get(planner_key)
+            )
         )
         expected_arm_dir = (
             campaign_root / "runs" / f"{planner_key}__{RUNTIME_SMOKE_KINEMATICS}"
@@ -1668,7 +1759,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         fallback_markers.extend(
             f"{path}={value}"
             for path, value in _forbidden_status_markers(
-                arm_summary, f"runs[{index}].summary_artifact"
+                arm_summary,
+                f"runs[{index}].summary_artifact",
+                expected_algorithm=algorithms.get(planner_key),
             )
         )
         _require_equal(
@@ -1710,7 +1803,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             fallback_markers.extend(
                 f"{path}={value}"
                 for path, value in _forbidden_status_markers(
-                    row, f"runs[{index}].rows[{row_index}]"
+                    row,
+                    f"runs[{index}].rows[{row_index}]",
+                    expected_algorithm=algorithms.get(planner_key),
                 )
             )
             _require_equal(

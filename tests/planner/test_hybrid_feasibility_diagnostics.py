@@ -427,9 +427,8 @@ def test_map_observation_bridge_preserves_optional_successor_validity():
 @pytest.mark.parametrize("current_speed,wall_x", [(-0.8, 3.45), (0.0, 3.745)])
 def test_physical_wall_stop_rejects_reverse_toward_wall_behind(current_speed, wall_x):
     """The negative command's swept braking tail must protect the rear footprint."""
-    from robot_sf.robot.differential_drive import DifferentialDriveSettings
-
     from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
     planner = _planner(physical_static_exclusion_enabled=True)
     drive = DifferentialDriveSettings(limited_reverse=True, max_reverse_speed=0.8)

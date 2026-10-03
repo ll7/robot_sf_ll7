@@ -521,16 +521,6 @@ disposition_legend:
     Finding to be fixed in the evidence file itself; not applicable to this refresh because no
     file admitted a trivial, in-repo repair.
 reviewed_files:
-  - path: docs/context/evidence/2026-10-03_issue10112_mintorder/dev1003-d56092ed-proof.json
-    codes: [config_missing_at_commit, dangling_commit]
-    disposition: baseline
-    reason: >-
-      The producer commit d56092ed9d4b442f9dfb99e31010a9f5a8666547 is PR-branch-only
-      and is unavailable in the frozen_squash_base projection's main ancestry.
-      The diagnostic proof records its producer/config/result bytes by SHA;
-      preserve those exact proof bytes and producer identity instead of rewriting
-      provenance to a main commit. Explicit #10112 round-2 projection disposition;
-      no scientific or production admission is implied.
   - path: docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json
     codes: [hash_without_artifact_path]
     disposition: baseline

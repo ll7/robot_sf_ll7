@@ -5,10 +5,6 @@
     "sha256": "634bda181f75cf749f5b60872511fa99124b79903408144d6b5a049f9690f4a7"
   },
   "findings_by_path": {
-    "docs/context/evidence/2026-10-03_issue10112_mintorder/dev1003-d56092ed-proof.json": {
-      "config_missing_at_commit": 1,
-      "dangling_commit": 1
-    },
     "docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json": {
       "hash_without_artifact_path": 4
     },
@@ -389,14 +385,14 @@
       "artifact_hash_mismatch": 4
     }
   },
-  "generated_at": "2026-10-03T20:17:18Z",
+  "generated_at": "2026-10-03T18:50:47Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
       "artifact_hash_mismatch": 23,
-      "config_missing_at_commit": 8,
-      "dangling_commit": 24,
+      "config_missing_at_commit": 7,
+      "dangling_commit": 23,
       "duplicate_campaign_id": 7,
       "hash_without_artifact_path": 114,
       "invalid_sha256": 1,
@@ -405,7 +401,7 @@
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 103,
-    "total_findings": 456
+    "files_with_findings": 102,
+    "total_findings": 454
   }
 }

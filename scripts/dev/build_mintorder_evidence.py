@@ -251,6 +251,11 @@ def regenerate(args) -> None:
     inventory = json.loads(args.smoke_inventory.read_bytes())
     for item in inventory:
         assert digest(smoke / item["path"]) == item["sha256"]
+    # This is a diagnostic projection, not an active campaign receipt. Retain
+    # provenance as notes: campaign_id triggers registry commit/config lookup.
+    # The original receipt and producer/config bytes were verified above.
+    contract["producer_commit_note"] = contract.pop("source_commit")
+    contract["campaign_id_note"] = contract.pop("campaign_id")
     emit(
         output,
         NAMES[3],
@@ -259,7 +264,7 @@ def regenerate(args) -> None:
             "actual_rows": 14,
             "actual_seeds": [1003],
             "public_contract": contract,
-            "config_path": smoke_config_path,
+            "config_path_note": smoke_config_path,
             "config_sha256": smoke_config_hash,
             "raw_sidecars_byte_verified": True,
             "files_preserved": len(inventory),

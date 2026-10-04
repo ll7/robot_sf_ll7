@@ -1,0 +1,245 @@
+{
+  "anchors_sha256": "12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2",
+  "arm_execution": {
+    "campaign_execution_status": "completed",
+    "evidence_status": "valid",
+    "row_status_summary": {
+      "accepted_unavailable_rows": 0,
+      "fallback_or_degraded_rows": 0,
+      "successful_evidence_rows": 14,
+      "unexpected_failed_rows": 0
+    }
+  },
+  "calibration_rows": 1344,
+  "candidate_attachment": {
+    "artifact_only": "passed",
+    "episodes_executed": 0,
+    "scientific_admission": false,
+    "strict_raw_custody": "passed"
+  },
+  "command_mode_counts": {
+    "goal": {
+      "native": 96
+    },
+    "guarded_ppo": {
+      "mixed": 96
+    },
+    "hybrid_rule_v4_fast_progress_static_escape": {
+      "adapter": 96
+    },
+    "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+      "adapter": 96
+    },
+    "orca": {
+      "adapter": 96
+    },
+    "ppo": {
+      "native": 96
+    },
+    "prediction_planner": {
+      "adapter": 96
+    },
+    "predictive_mppi": {
+      "adapter": 96
+    },
+    "risk_dwa": {
+      "adapter": 96
+    },
+    "sacadrl": {
+      "adapter": 96
+    },
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+      "adapter": 96
+    },
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+      "adapter": 96
+    },
+    "social_force": {
+      "adapter": 96
+    },
+    "socnav_sampling": {
+      "adapter": 96
+    }
+  },
+  "config_sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
+  "determinism_receipt": {
+    "classification": "a",
+    "different_rows": 0,
+    "identical_rows": 1344,
+    "path": "docs/context/evidence/2026-10-04_freeze008_calibration/determinism-receipt.json",
+    "same_recorded_environment": true,
+    "sha256": "cbdc253256e1521bd63e19033e30fd53ffda03be658587aaaf700c58ee8eab9c"
+  },
+  "force_decision_rho_recomputed": 0.60110908310645,
+  "force_sample_status_counts": {
+    "no-pedestrians": 28,
+    "ok": 1316
+  },
+  "force_sample_timing": {
+    "pre_integration": 1344
+  },
+  "force_sources": {
+    "recorded_robot_pedestrian_social_force": 1344
+  },
+  "guard_arbitration_counts": {
+    "guarded_ppo": {
+      "fallback_best_effort": 452,
+      "fallback_safe": 14954,
+      "goal_reached": 0,
+      "ppo_clear": 11431,
+      "ppo_safe": 0,
+      "prior_blend_safe": 0,
+      "prior_residual_safe": 0,
+      "prior_safe": 0,
+      "stop_best_effort": 5147,
+      "stop_safe": 1040,
+      "uncertainty_fallback_configured": 0,
+      "uncertainty_fallback_slow_down": 0,
+      "uncertainty_fallback_stop": 0
+    }
+  },
+  "launcher_sha256": "da8e6480426ef0eb6651dd3f4c5dec3ec6436d6d38a93bcfa881330f473b0280",
+  "navigation_outcomes": {
+    "collision": 201,
+    "failure": 239,
+    "success": 904
+  },
+  "preservation": {
+    "cold_files_byte_verified": 117,
+    "cold_manifest_sha256": "c402c142d01aea43c0c0196863d02940e6a6d5afcfab6e114eb2d72066217611",
+    "independent_snapshot_files_byte_verified": 117,
+    "manifest_digest": "sha256:691d21210c5f0e73da560fc81749fa0346c121d95d73f1bdb0b909aef54414c9",
+    "qualified_name": "ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003:v0",
+    "receipt_sha256": "ca017e892201776fe8aa29b1ff217d963313e20e1a72d34217d3e220e24bcaca"
+  },
+  "producer_manifest_sha256": "0edde89d9e62f9f611132f153b03200747837834cbb46d94b4a5e4eff2cc7954",
+  "producer_provenance_sha256": "9ebb82132be65e14456e6891028e8886c82f7bd5c9b40633094749d3f4d0b71c",
+  "producer_runtime_commit": "c857a30b77fbd82b73fe4f72b71c045aae9c4d10",
+  "producer_signed_files": 104,
+  "recorded_force_sample_totals": {
+    "finite_samples": 1771047,
+    "invalid_samples": 0,
+    "nonzero_force_samples": 1771047,
+    "raw_samples": 1771047,
+    "zero_force_samples": 0
+  },
+  "rehearsal_comparison": {
+    "acquisition_config_byte_identical": true,
+    "causal_attribution": "not isolated by these two acquisitions",
+    "changed_source_paths": [
+      "configs/robots/t60_bicycle_30deg_v1.yaml",
+      "configs/robots/t60_bicycle_45deg_v1.yaml",
+      "robot_sf/benchmark/artifact_publication.py",
+      "robot_sf/benchmark/camera_ready/_legacy_campaign_facade.py",
+      "robot_sf/benchmark/camera_ready/campaign.py",
+      "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "robot_sf/benchmark/map_runner/map_runner_observations.py",
+      "robot_sf/benchmark/map_runner_policies/map_runner_actions.py",
+      "robot_sf/benchmark/release_notes.py",
+      "robot_sf/benchmark/release_protocol.py",
+      "robot_sf/benchmark/snqi/v2_reports.py",
+      "robot_sf/gym_env/unified_config.py",
+      "robot_sf/planner/classic_planner_adapter.py",
+      "robot_sf/planner/grid_route.py",
+      "robot_sf/planner/hybrid_rule_local_planner.py",
+      "robot_sf/planner/kinematics_model.py",
+      "robot_sf/planner/socnav_occupancy.py",
+      "robot_sf/release_cli.py",
+      "robot_sf/robot/bicycle_drive.py",
+      "robot_sf/sensor/socnav_observation.py",
+      "robot_sf/training/scenario_loader.py"
+    ],
+    "changed_source_paths_behaviourally_inert_for_this_grid": true,
+    "changed_source_paths_behaviourally_inert_reason": "rr10126 independently reviewed the complete d56092ed-to-3e73b04b diff: behavioural changes are bicycle-only or gated by default-off flags on this differential-drive grid; other changes are diagnostic metadata.",
+    "jerk_p95_bracketing_rows": [
+      [
+        1.957837635866961,
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "classic_doorway_high",
+        1001
+      ],
+      [
+        1.957837635866961,
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "classic_doorway_high",
+        1001
+      ]
+    ],
+    "jerk_p95_zero_based_index": 1275.85,
+    "source_commit": "d56092ed9d4b442f9dfb99e31010a9f5a8666547"
+  },
+  "rehearsal_delta": {
+    "F": 0.0,
+    "J": 0.018161933593934476,
+    "K": 0.0
+  },
+  "repeat_census": {
+    "arm_execution": {
+      "campaign_execution_status": "completed",
+      "evidence_status": "valid",
+      "row_status_summary": {
+        "accepted_unavailable_rows": 0,
+        "fallback_or_degraded_rows": 0,
+        "successful_evidence_rows": 14,
+        "unexpected_failed_rows": 0
+      }
+    },
+    "force_sample_status_counts": {
+      "no-pedestrians": 28,
+      "ok": 1316
+    },
+    "force_sample_timing": {
+      "pre_integration": 1344
+    },
+    "force_sources": {
+      "recorded_robot_pedestrian_social_force": 1344
+    },
+    "guard_arbitration_counts": {
+      "guarded_ppo": {
+        "fallback_best_effort": 452,
+        "fallback_safe": 14954,
+        "goal_reached": 0,
+        "ppo_clear": 11431,
+        "ppo_safe": 0,
+        "prior_blend_safe": 0,
+        "prior_residual_safe": 0,
+        "prior_safe": 0,
+        "stop_best_effort": 5147,
+        "stop_safe": 1040,
+        "uncertainty_fallback_configured": 0,
+        "uncertainty_fallback_slow_down": 0,
+        "uncertainty_fallback_stop": 0
+      }
+    },
+    "recorded_force_sample_totals": {
+      "finite_samples": 1771047,
+      "invalid_samples": 0,
+      "nonzero_force_samples": 1771047,
+      "raw_samples": 1771047,
+      "zero_force_samples": 0
+    },
+    "rows": 1344
+  },
+  "repeat_preservation": {
+    "cold_files_byte_verified": 183,
+    "cold_manifest_sha256": "bba492353c50f6714e9da51f1e87fd9eadd4d74cc4a48bb522b65cb45fc373a5",
+    "manifest_digest": "sha256:b4f1a2a520bc483881563409c20dba491d4caf464b1ef704058579204ca0dd28",
+    "qualified_name": "ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_repeat21331_20261004:v0",
+    "receipt_sha256": "4496a578737f8a44b7e16f208d6fd68e5ff89606e23567ae21f5c3802c32d5a0"
+  },
+  "run_id": "issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003",
+  "scheduler_job_id": "21331",
+  "schema": "snqi-v2-acquisition-review-input.v1",
+  "scientific_review": "pending_independent_review",
+  "seeds": [
+    1001,
+    1002
+  ],
+  "source_commit": "3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6",
+  "submission_id": "sha256:b4b31ee47d817e58d582fd0d68c4a38fb8cea421a7ec0eb42be4ad52500956ee",
+  "upper_anchors_recomputed": {
+    "F": 78.44270546210876,
+    "J": 1.957837635866961,
+    "K": 0.5160654761904677
+  }
+}

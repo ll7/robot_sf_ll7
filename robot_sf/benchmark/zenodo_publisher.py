@@ -2516,6 +2516,17 @@ def reserve(
         else None
     )
     normalized_metadata["prereserve_doi"] = True
+    if state_path is not None:
+        marker = reserve_attempt_path(state_path)
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            # Retain this lock on every failure, including interruption before POST.
+            with marker.open("x", encoding="utf-8"):
+                pass
+        except OSError as exc:
+            raise ZenodoPublisherError(
+                "could not exclusively create Zenodo reserve attempt; operator recovery required"
+            ) from exc
     response = session.post(
         f"{validated_base}/deposit/depositions",
         json={"metadata": normalized_metadata},
@@ -2545,6 +2556,27 @@ def require_unused_state_path(path: str | Path) -> None:
         raise ZenodoPublisherError(
             "Zenodo reserve state path already exists; reuse the reserved draft"
         )
+    marker = reserve_attempt_path(output)
+    if marker.exists() or marker.is_symlink():
+        raise ZenodoPublisherError(
+            "Zenodo reserve attempt already exists; operator recovery required, never retry reserve"
+        )
+
+
+def reserve_attempt_path(path: str | Path) -> Path:
+    """Return the credential-free reservation attempt lock beside its state file."""
+    output = Path(path)
+    return output.with_name(output.name + ".reserve-attempt")
+
+
+def complete_reserve_attempt(path: str | Path) -> None:
+    """Clear the attempt only after the caller has successfully persisted state."""
+    try:
+        reserve_attempt_path(path).unlink()
+    except OSError as exc:
+        raise ZenodoPublisherError(
+            "could not clear Zenodo reserve attempt; persisted state must be reused"
+        ) from exc
 
 
 def _validate_draft_update_identity(
@@ -2568,7 +2600,10 @@ def _validate_draft_update_metadata(
     observed = payload.get("metadata")
     if not isinstance(observed, Mapping):
         raise ZenodoPublisherError(f"Zenodo {operation} metadata readback omitted metadata")
-    for key, value in _metadata_contract(metadata).items():
+    contract = _metadata_contract(metadata)
+    if set(observed) - {"prereserve_doi"} != set(contract):
+        raise ZenodoPublisherError(f"Zenodo {operation} metadata readback has unexpected fields")
+    for key, value in contract.items():
         actual = _canonical_metadata_value_for_comparison(key, observed.get(key))
         expected = _canonical_metadata_value_for_comparison(key, value)
         if _canonical_bytes({"value": actual}) != _canonical_bytes({"value": expected}):

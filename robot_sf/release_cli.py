@@ -625,6 +625,8 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                     **operation_kwargs,
                 )
             zenodo_publisher.write_state(args.state, state)
+            if args.zenodo_mode == "reserve":
+                zenodo_publisher.complete_reserve_attempt(args.state)
             _print(state)
             return 0
         if args.zenodo_mode == "new-version":

@@ -246,10 +246,14 @@ PY
 export CONCEPT_DOI VERSION_DOI
 ```
 
-An existing state path (including malformed state or a dangling symlink) refuses
-before any reservation POST. Reuse the recorded draft; never delete state to retry
-reservation. If POST may have succeeded but state writing failed, stop and recover
-that one deposition with the operator rather than reserving again.
+An existing state path or `<state>.reserve-attempt` marker (including a dangling
+symlink) refuses before any reservation POST. The attempt marker is created
+exclusively immediately before POST and removed only after state persistence
+succeeds. An interruption before POST, a failed response validation, or a failed
+state write leaves it in place and requires human reconciliation. Recover the
+one deposition with the authorized operator; never delete the marker or state
+to retry reservation. If the operator confirms no POST occurred, handling that
+attempt remains a human decision, not an automatic reservation retry.
 
 For both the main and the fixed H400 2.2/2.8/3.6 m companion:
 
@@ -284,8 +288,9 @@ Zenodo license alias and null creator-affiliation normalization are permitted.
 It preserves file inventory and invalidates any old verification receipt. On a
 readback failure state is unchanged, but the remote PUT may have taken effect:
 inspect and retry the update against the same draft, never reserve a new one.
-The companion has its own generated metadata and identity for its separate
-publication track; do not PUT companion metadata over the main deposition.
+Both tracks share the one reserved concept/version DOI; only the main
+zenodo_metadata.resolved.json is ever PUT, verified and published. The companion
+identity binds its own campaign and bundle — never reserve a second DOI for it.
 
 Mint preparation rows with the existing private-ops tool (not the final campaign
 mint, and not submission):

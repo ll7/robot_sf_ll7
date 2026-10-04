@@ -413,11 +413,14 @@ Keep the token file outside Git with mode `0600`. The state file contains no
 credential. This initial `reserve` is intentionally the only unbound
 pre-reservation mutation: Zenodo returns the version DOI as part of the
 response, so freeze that DOI and the concept identity in the reviewed v0.2
-manifest before continuing. `reserve` refuses an existing state path before
-constructing a session or issuing POST, even when state is malformed. Keep the
-post-write identity guard too; never delete existing state to reserve again. If
-the response/state write fails after POST, recover the existing deposition with
-the operator instead of repeating reservation.
+manifest before continuing. `reserve` refuses an existing state path or
+`<state>.reserve-attempt` marker before constructing a session or issuing POST,
+even when state is malformed or either path is a dangling symlink. The attempt
+marker is created exclusively immediately before POST and removed only after
+state persistence succeeds. Interrupted attempts, response-validation failures
+and state-write failures require human reconciliation: recover the one deposition
+with the operator; never delete the marker or state to repeat reservation.
+The post-write identity guard remains.
 
 `update-draft-metadata` requires matching sealed local state and remote
 unpublished identity before PUT, then compares the PUT response and an independent

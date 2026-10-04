@@ -349,3 +349,143 @@ def test_cli_exposes_bound_draft_update_command(tmp_path: Path) -> None:
     )
     assert args.zenodo_mode == "update-draft-metadata"
     assert args.manifest == tmp_path / "identity.json"
+
+
+@pytest.mark.parametrize("failure", ["response", "write-state"])
+def test_reserve_failed_attempt_blocks_another_post(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """A minted draft without persisted state must never admit another reservation."""
+    args = _args(tmp_path, "reserve")
+    write_json(args.metadata, {"metadata": _metadata()})
+    api = _API()
+    monkeypatch.setattr(publisher, "build_session", lambda _: api)
+    invalid = _draft_payload()
+    invalid["record_id"] = 124  # POST succeeded, but its DOI does not match its record.
+    api.posts = [_Response(invalid if failure == "response" else _draft_payload())]
+    if failure == "write-state":
+
+        def fail_write(*_args: Any) -> None:
+            raise OSError("fake state replacement failure")
+
+        monkeypatch.setattr(publisher.os, "replace", fail_write)
+    assert release_cli.handle(args) == 2
+    assert not args.state.exists()
+    assert len(api.mutations) == 1
+    api.posts = [_Response(_draft_payload())]
+    assert release_cli.handle(args) == 2
+    assert len(api.mutations) == 1, "rerun minted a second DOI after a failed reservation attempt"
+    assert args.state.with_name(args.state.name + ".reserve-attempt").exists()
+
+
+@pytest.mark.parametrize("marker_kind", ["file", "dangling-symlink"])
+def test_reserve_existing_attempt_refuses_before_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, marker_kind: str
+) -> None:
+    """Even an interrupted pre-POST attempt requires operator recovery."""
+    args = _args(tmp_path, "reserve")
+    write_json(args.metadata, {"metadata": _metadata()})
+    marker = args.state.with_name(args.state.name + ".reserve-attempt")
+    if marker_kind == "file":
+        write_text(marker, "", issue_ref="zenodraft")
+    else:
+        marker.symlink_to(tmp_path / "missing-attempt")
+    sessions = []
+    api = _API()
+    api.posts = [_Response(_draft_payload())]
+    monkeypatch.setattr(publisher, "build_session", lambda path: sessions.append(path) or api)
+    assert release_cli.handle(args) == 2
+    assert sessions == [], "reservation attempt marker did not block authentication"
+    assert api.mutations == []
+
+
+def test_reserve_attempt_cleared_only_after_persisted_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exclusive attempt exists throughout POST and state persistence."""
+    args = _args(tmp_path, "reserve")
+    write_json(args.metadata, {"metadata": _metadata()})
+    marker = args.state.with_name(args.state.name + ".reserve-attempt")
+    api = _API()
+    api.posts = [_Response(_draft_payload())]
+    original_post = api.post
+    original_write = publisher.write_state
+
+    def checked_post(url: str, **kwargs: Any) -> _Response:
+        assert marker.is_file(), "POST has no exclusive reservation attempt"
+        return original_post(url, **kwargs)
+
+    def checked_write(path: Path, state: dict[str, Any]) -> None:
+        assert marker.is_file(), "attempt cleared before state persistence"
+        original_write(path, state)
+
+    monkeypatch.setattr(api, "post", checked_post)
+    monkeypatch.setattr(publisher, "write_state", checked_write)
+    monkeypatch.setattr(publisher, "build_session", lambda _: api)
+    assert release_cli.handle(args) == 0
+    assert publisher.load_state(args.state)["doi"] == "10.5281/zenodo.123"
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("phase", ["put", "readback"])
+def test_update_refuses_extra_remote_metadata_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], phase: str
+) -> None:
+    """Remote residue outside the exact caller contract must block acceptance."""
+    args, api, _, metadata = _fixture(tmp_path, monkeypatch)
+    updated = _draft_payload()
+    updated["metadata"].update(metadata)
+    put = deepcopy(updated)
+    (put if phase == "put" else updated)["metadata"]["notes"] = "stale draft residue"
+    before = args.state.read_bytes()
+    api.gets = [_Response(_draft_payload()), _Response(updated)]
+    api.puts = [_Response(put)]
+    assert release_cli.handle(args) == 2
+    assert "unexpected fields" in json.loads(capsys.readouterr().out)["reason"]
+    assert args.state.read_bytes() == before
+
+
+def test_generated_identity_drives_real_cli_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real resolver bytes reach the CLI loader and bind the same reserved draft."""
+    from robot_sf.benchmark import release_protocol
+    from tests.benchmark.test_release_resolved_identity import (
+        _identity_inputs,
+        _release_template_repository,
+    )
+    from tests.benchmark.test_sealed_source_pins import bind_runtime_sources
+
+    repo, template, source = _release_template_repository(tmp_path)
+    bind_runtime_sources(repo, monkeypatch)
+    monkeypatch.setattr(release_cli, "get_repository_root", lambda: repo)
+    monkeypatch.setattr(release_protocol, "get_repository_root", lambda: repo)
+    inputs = _identity_inputs(repo, template, source)
+    inputs.update(concept_doi="10.5281/zenodo.122", version_doi="10.5281/zenodo.123")
+    output = repo / "output/release/release_identity.resolved.json"
+    release_protocol.write_resolved_release_identity(output_path=output, **inputs)
+    args = _args(output.parent)
+    args.manifest = output
+    args.metadata = output.parent / "zenodo_metadata.resolved.json"
+    metadata = publisher.load_dataset_metadata(args.metadata)
+    assert args.state.parent.is_relative_to(repo)
+    assert "{{" not in metadata["description"]
+    assert "10.5281/zenodo.123" in metadata["description"]
+    api = _API()
+    monkeypatch.setattr(publisher, "build_session", lambda _: api)
+    publisher.write_state(
+        args.state, publisher._seal_state(publisher._public_state(_draft_payload()))
+    )
+    updated = _draft_payload()
+    updated["metadata"].update(publisher._metadata_contract(metadata))
+    api.gets = [_Response(_draft_payload()), _Response(updated)]
+    api.puts = [_Response(updated)]
+    assert release_cli.handle(args) == 0
+    state = publisher.load_state(args.state)
+    manifest = json.loads(output.read_text())
+    assert (
+        state["release_binding"]["metadata_sha256"]
+        == hashlib.sha256(args.metadata.read_bytes()).hexdigest()
+    )
+    assert state["release_binding"]["metadata_sha256"] == manifest["publication"]["metadata_sha256"]
+    assert [method for method, _, _ in api.mutations] == ["PUT"]

@@ -482,9 +482,18 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         )
         pref_speed = float(self.config.sacadrl_pref_speed)
 
+        # The reference GA3C-CADRL policy uses the true goal distance. A shorter
+        # local-goal projection is an opt-in transfer aid for larger maps.
+        network_distance = dist_to_goal
+        max_goal_distance = self.config.sacadrl_max_goal_distance
+        if max_goal_distance is not None:
+            if not np.isfinite(max_goal_distance) or max_goal_distance <= 0:
+                raise ValueError("sacadrl_max_goal_distance must be positive and finite")
+            network_distance = min(dist_to_goal, max_goal_distance)
+
         obs_dict = {
             "num_other_agents": np.array([num_other_agents], dtype=np.float32),
-            "dist_to_goal": np.array([dist_to_goal], dtype=np.float32),
+            "dist_to_goal": np.array([network_distance], dtype=np.float32),
             "heading_ego_frame": np.array([heading_ego_frame], dtype=np.float32),
             "pref_speed": np.array([pref_speed], dtype=np.float32),
             "radius": np.array([robot_radius], dtype=np.float32),

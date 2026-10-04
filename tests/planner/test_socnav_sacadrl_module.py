@@ -220,6 +220,31 @@ def test_adapter_builds_network_input_and_agent_states(monkeypatch) -> None:
     assert release_radius_states[0, -1] == pytest.approx(0.0)
 
 
+def test_far_goal_uses_actual_distance_by_default() -> None:
+    """The reference GA3C-CADRL observation uses the active goal's distance."""
+    adapter = sacadrl.SACADRLPlannerAdapter(allow_fallback=True)
+    vector, _, true_distance = adapter._build_network_input(_observation(goal=(30.0, 0.0)))
+
+    assert vector[0, 1] == pytest.approx(30.0)
+    assert true_distance == pytest.approx(30.0)
+
+
+def test_opt_in_goal_cap_changes_only_network_distance() -> None:
+    """A local-goal projection caps the network input without changing the real goal."""
+    adapter = sacadrl.SACADRLPlannerAdapter(
+        config=sacadrl.SocNavPlannerConfig(sacadrl_max_goal_distance=10.0),
+        allow_fallback=True,
+    )
+    observation = _observation(goal=(30.0, 0.0))
+    observation["robot"]["heading"] = np.array([0.3])
+
+    vector, _, true_distance = adapter._build_network_input(observation)
+
+    assert vector[0, 1] == pytest.approx(10.0)
+    assert vector[0, 2] == pytest.approx(0.3)
+    assert true_distance == pytest.approx(30.0)
+
+
 def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, monkeypatch) -> None:
     """Checkpoint resolution retains suffix handling, provenance hashing, and fail-closed errors."""
     prefix = tmp_path / "model"

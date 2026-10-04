@@ -287,7 +287,27 @@ The [cross-source receipt](cross-source-grid-neutrality-receipt.json) recomputes
 all 1,344 historical job-21331 versus F2 job-21337 metric/metric_values/steps/status
 hashes: all are identical. The separate same-source repeat is job 21339.
 Configuration, dependency lock and protected inputs are byte-identical; the
-receipt records every rehashed protected path. The `rehearsal_comparison` below
+receipt records every rehashed protected path. The complete 11-file runtime delta
+from `git diff --name-only 3e73b04b 66f402ba -- robot_sf` is listed below;
+**none** of these files is in `PROTECTED_PATHS`.
+
+| Changed file | Role |
+| --- | --- |
+| `robot_sf/_execution_context.py` | recording: shared execution-context fields |
+| `robot_sf/benchmark/_runtime_smoke_planner_keys.py` | admission: shared learned-checkpoint roster |
+| `robot_sf/benchmark/map_runner/map_runner_episode.py` | recording/admission: worker context observations and pre-reset gate |
+| `robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py` | admission/refusal: selector and learned-policy resolution |
+| `robot_sf/benchmark/release_protocol.py` | release tooling/admission: identity and calibration-context bindings |
+| `robot_sf/benchmark/result_provenance.py` | recording: non-importing Torch/SB3 version capture |
+| `robot_sf/benchmark/runtime_smoke_admission.py` | admission: shared checkpoint-roster import |
+| `robot_sf/benchmark/snqi/execution_context.py` | admission/refusal: calibrated execution-context equality |
+| `robot_sf/benchmark/snqi/v2_binding.py` | admission: determinism-receipt asset binding |
+| `robot_sf/benchmark/zenodo_publisher.py` | release/DOI tooling: draft metadata update |
+| `robot_sf/release_cli.py` | release/DOI tooling: draft reservation and metadata commands |
+
+Neutrality on this grid rests on the measured 1,344/1,344 raw-row comparison,
+not the protected-input rehash. Release/DOI tooling is not recording code.
+The `rehearsal_comparison` below
 retains the hash-bound historical d56092ed-to-3e73b04b source audit exactly; it
 does not claim that rr10126 reviewed the F2 tooling delta. The measured grid
 neutrality is separate evidence. Anchor point values stay unchanged; source/run

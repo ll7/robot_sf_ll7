@@ -17,6 +17,8 @@ statistics are finite; 28 authored `classic_bottleneck_low` zero-pedestrian cell
 are explicitly counted separately from 1,316 sampled cells. No missing force
 value is zero-imputed. The compact rows retain recorded scalars and provenance;
 raw force vectors are not claimed reconstructed from the scalar CSV.
+[Scalar metadata](metadata.json) declares `distance_convention=surface_clearance`
+for the underlying near-miss predicate; the close-clearance fraction is dimensionless.
 
 ## Anchors and rehearsal comparison
 

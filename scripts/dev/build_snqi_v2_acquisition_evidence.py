@@ -222,6 +222,20 @@ def write_review_outputs(args: argparse.Namespace, proof: dict) -> None:
     anchor_output = args.output_dir / "anchors.v2.0.acquired.json"
     anchor_output.write_bytes(args.anchors.read_bytes())
     write_review_sidecar(anchor_output, repo_root=root)
+    metadata = args.output_dir / "metadata.json"
+    metadata.write_text(
+        json.dumps(
+            {
+                "distance_convention": "surface_clearance",
+                "scope": "Underlying near-miss predicate; close_clearance_fraction is dimensionless count/steps",
+                "source_commit": proof["source_commit"],
+                "scalar_file": "calibration-scalars.csv",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    write_review_sidecar(metadata, repo_root=root)
     values = proof["upper_anchors_recomputed"]
     delta = proof["rehearsal_delta"]
     readme = args.output_dir / "README.md"
@@ -244,6 +258,8 @@ statistics are finite; 28 authored `classic_bottleneck_low` zero-pedestrian cell
 are explicitly counted separately from 1,316 sampled cells. No missing force
 value is zero-imputed. The compact rows retain recorded scalars and provenance;
 raw force vectors are not claimed reconstructed from the scalar CSV.
+[Scalar metadata](metadata.json) declares `distance_convention=surface_clearance`
+for the underlying near-miss predicate; the close-clearance fraction is dimensionless.
 
 ## Anchors and rehearsal comparison
 

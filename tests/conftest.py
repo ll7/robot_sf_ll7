@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Provenance/version observation uses retained bytes and fake packages; no episodes.
+    "test_benchmark_result_provenance.py",
     # Retained-row acquisition/determinism proof; no environment reset or step.
     "test_snqi_v2_acquisition_evidence.py",
     # CI setup contracts use fake transports and must run on PRs (#10116).

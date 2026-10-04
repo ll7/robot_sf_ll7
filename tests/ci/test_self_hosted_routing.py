@@ -114,7 +114,11 @@ def test_routed_jobs_resolve_to_expected_runner(context: dict[str, Any], expecte
     for name in ROUTED_JOBS:
         job = jobs[name]
         assert _resolve_runs_on(job["runs-on"], context) == expected, name
-        assert job["permissions"] == {"contents": "read"}
+        expected_permissions = {"contents": "read"}
+        if name == "fast-feedback":
+            # The run-scoped snapshot API needs read access even on failed-job retries.
+            expected_permissions["actions"] = "read"
+        assert job["permissions"] == expected_permissions
 
 
 def test_unset_rollout_switch_keeps_trusted_jobs_hosted() -> None:

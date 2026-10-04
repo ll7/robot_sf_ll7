@@ -5642,7 +5642,6 @@ def run_map_episode(  # noqa: PLR0913
     """
     from robot_sf.benchmark.snqi.execution_context import admit_episode_context  # noqa: PLC0415
 
-    learned_execution_context = admit_episode_context(algo)
     ctx = _resolve_episode_run_context(
         scenario=scenario,
         seed=seed,
@@ -5667,6 +5666,7 @@ def run_map_episode(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         runtime_input_records=runtime_input_records,
     )
+    learned_execution_context = admit_episode_context(ctx.algo)
     scenario = ctx.scenario
     telemetry_profile = telemetry_from_scenario(scenario)
     # The profile is a recording choice only.  It enables the legacy step trace

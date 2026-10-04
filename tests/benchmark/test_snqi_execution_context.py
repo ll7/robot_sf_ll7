@@ -28,7 +28,12 @@ def test_worker_refuses_context_difference_before_episode_setup(monkeypatch):
         reached.append("setup")
         raise AssertionError("episode setup reached before execution-context admission")
 
-    monkeypatch.setattr(episode, "_resolve_episode_run_context", setup)
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        episode, "_resolve_episode_run_context", lambda **_kw: SimpleNamespace(algo="ppo")
+    )
+    monkeypatch.setattr(episode, "telemetry_from_scenario", setup)
     with pytest.raises(ValueError, match="execution context mismatch: cpu_model"):
         episode.run_map_episode(
             {},
@@ -43,6 +48,18 @@ def test_worker_refuses_context_difference_before_episode_setup(monkeypatch):
             policy_builder=lambda *a: pytest.fail("planner construction forbidden"),
         )
     assert reached == []
+
+
+def asset_binding(root=EVIDENCE):
+    import hashlib
+
+    path = root / "determinism-receipt.json"
+    return {
+        "determinism_receipt_path": path,
+        "determinism_receipt_sha256": hashlib.sha256(
+            (EVIDENCE / path.name).read_bytes()
+        ).hexdigest(),
+    }
 
 
 def reference():
@@ -67,16 +84,26 @@ def reference():
     ],
 )
 def test_same_node_cannot_bypass_a_numerical_context_difference(field):
+    import stable_baselines3
+    import torch
+
     from robot_sf.benchmark.snqi.execution_context import assert_context_equal
 
-    expected = reference()
+    expected = build_execution_context_provenance()
     expected.update(
-        kernel="6.8.0-136-generic",
-        glibc="2.39",
-        torch_version="recorded torch",
-        stable_baselines3_version="recorded SB3",
+        torch_version=torch.__version__, stable_baselines3_version=stable_baselines3.__version__
     )
-    observed = deepcopy(expected)
+    observed = build_execution_context_provenance()
+    for name in ("torch_version", "stable_baselines3_version"):
+        assert observed.get(name) == expected[name], f"production builder omitted {name}"
+    # Explicit kernel/glibc fields are supported by the comparison if a receipt records them.
+    if field in {"kernel", "glibc"}:
+        expected[field] = "recorded"
+    if field in {"torch_version", "stable_baselines3_version"}:
+        missing = dict(observed)
+        missing.pop(field)
+        with pytest.raises(ValueError, match=field):
+            assert_context_equal(missing, expected)
     observed[field] = {"OMP_NUM_THREADS": "2"} if field == "thread_env" else "changed"
     with pytest.raises(ValueError, match=field):
         assert_context_equal(observed, expected)
@@ -126,10 +153,10 @@ def test_actual_delivered_proof_binds_context_bytes(tmp_path, mutation):
     if mutation == "missing":
         (tmp_path / "acquisition-proof.json").unlink()
     if mutation == "none":
-        assert load_calibration_context(anchors) == reference()
+        assert load_calibration_context(anchors, asset_binding(tmp_path)) == reference()
     else:
         with pytest.raises((ValueError, FileNotFoundError)):
-            load_calibration_context(anchors)
+            load_calibration_context(anchors, asset_binding(tmp_path))
 
 
 def test_guard_restores_environment_and_records_worker_context(monkeypatch):
@@ -175,10 +202,10 @@ def test_every_learned_row_is_checked_not_only_batch_context(tmp_path, mutation)
         path.parent.mkdir(parents=True)
         write_json(path, row, indent=None)
     if mutation == "none":
-        assert verify_episode_contexts(tmp_path, ctx) == 2
+        assert verify_episode_contexts(tmp_path, ctx, ("ppo", "guarded_ppo")) == 2
     else:
         with pytest.raises(ValueError, match="execution context"):
-            verify_episode_contexts(tmp_path, ctx)
+            verify_episode_contexts(tmp_path, ctx, ("ppo", "guarded_ppo"))
 
 
 @pytest.mark.parametrize("mode", ["preflight", "run"])
@@ -194,7 +221,7 @@ def test_release_cli_refuses_before_source_admission_or_campaign(
 
     manifest = SimpleNamespace(canonical_campaign_config_path=Path("dev.yaml"), source_sha="a" * 40)
     cfg = SimpleNamespace(
-        snqi_v2_binding={"source_bound": True}, snqi_v2_spec=SimpleNamespace(diagnostic=False)
+        snqi_v2_binding=asset_binding(), snqi_v2_spec=SimpleNamespace(diagnostic=False)
     )
     monkeypatch.setattr(runner, "load_release_manifest", lambda _path: manifest)
     monkeypatch.setattr(runner, "load_campaign_config", lambda _path: cfg)
@@ -255,7 +282,7 @@ def test_recorded_context_gate_precedes_full_release_acceptance(
     cfg = SimpleNamespace(export_publication_bundle=True)
     context_args = []
     if context_rows is not None:
-        manifest.source_sha = None
+        manifest.__dict__.update(source_sha=None, planner_keys=manifest.planner_keys or ("ppo",))
         from robot_sf.benchmark.snqi import v2_binding
 
         evidence = (
@@ -268,7 +295,7 @@ def test_recorded_context_gate_precedes_full_release_acceptance(
         monkeypatch.setattr(
             run_benchmark_release, "_snqi_v2_evaluation_seed_receipt", lambda *_a, **_kw: {}
         )
-        cfg.snqi_v2_binding = {"source_bound": True}
+        cfg.snqi_v2_binding = asset_binding()
         cfg.snqi_v2_spec = SimpleNamespace(diagnostic=False)
         monkeypatch.setattr(v2_binding, "bind_acquired_anchors", lambda cfg, **_kw: cfg)
         monkeypatch.setattr(
@@ -370,7 +397,9 @@ def test_recorded_context_gate_precedes_full_release_acceptance(
         assert exit_code == 2
         assert payload["status"] == "snqi_v2_episode_context_refused"
         assert payload["benchmark_success"] is False
-        expected_reason = "census empty" if context_rows == "missing" else "mismatch: numpy_version"
+        expected_reason = (
+            "census missing arms" if context_rows == "missing" else "mismatch: numpy_version"
+        )
         assert expected_reason in payload["status_reason"]
         assert not (campaign_root / "release" / "release_result.json").exists()
         return
@@ -390,7 +419,7 @@ def test_recorded_context_gate_precedes_full_release_acceptance(
 
 
 def test_rehashed_caller_receipt_cannot_redefine_calibration_context(tmp_path):
-    """Coupled custody hashes are insufficient; only the committed calibration record is used."""
+    """Coupled custody hashes are insufficient; only the spec-pinned calibration record is used."""
     import hashlib
 
     from robot_sf.benchmark.snqi.execution_context import load_calibration_context
@@ -411,5 +440,5 @@ def test_rehashed_caller_receipt_cannot_redefine_calibration_context(tmp_path):
         (tmp_path / "determinism-receipt.json").read_bytes()
     ).hexdigest()
     write_json(tmp_path / "acquisition-proof.json", proof)
-    with pytest.raises(ValueError, match="differs from committed calibration reference"):
-        load_calibration_context(tmp_path / "anchors.v2.0.acquired.json")
+    with pytest.raises(ValueError, match="differs from pinned calibration reference"):
+        load_calibration_context(tmp_path / "anchors.v2.0.acquired.json", asset_binding(tmp_path))

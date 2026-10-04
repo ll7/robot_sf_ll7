@@ -12,6 +12,7 @@ from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec, parse_v2_json
 from robot_sf.common.artifact_paths import get_repository_root
 
 ASSET_NAMES = ("weights", "anchors", "family", "acquisition_config")
+CONTEXT_ASSET_NAME = "determinism_receipt"
 
 
 def load_acquisition_binding(raw: Any, config_path: Path) -> dict[str, Any] | None:
@@ -22,7 +23,11 @@ def load_acquisition_binding(raw: Any, config_path: Path) -> dict[str, Any] | No
     if not isinstance(raw, dict) or "anchor_freeze" not in raw:
         return None
     required = {f"{name}_{suffix}" for name in ASSET_NAMES for suffix in ("path", "sha256")}
-    if set(raw) != required | {"anchor_freeze"} or raw["anchor_freeze"] != "same-source-custody":
+    context_keys = {f"{CONTEXT_ASSET_NAME}_{suffix}" for suffix in ("path", "sha256")}
+    if (
+        set(raw) not in (required | {"anchor_freeze"}, required | context_keys | {"anchor_freeze"})
+        or raw["anchor_freeze"] != "same-source-custody"
+    ):
         raise ValueError(
             "SNQI-v2 acquisition binding requires explicit assets and same-source-custody"
         )
@@ -31,7 +36,9 @@ def load_acquisition_binding(raw: Any, config_path: Path) -> dict[str, Any] | No
         get_repository_root(),
     )
     binding: dict[str, Any] = {"anchor_freeze": raw["anchor_freeze"]}
-    for name in ASSET_NAMES:
+    for name in (*ASSET_NAMES, CONTEXT_ASSET_NAME):
+        if name == CONTEXT_ASSET_NAME and f"{name}_path" not in raw:
+            continue
         path = Path(raw[f"{name}_path"])
         if not path.is_absolute():
             local = config_path.parent / path

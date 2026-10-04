@@ -5,19 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
+from robot_sf.benchmark.runtime_smoke_admission import _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
 CONTEXT_ENV = "ROBOT_SF_SNQI_V2_CALIBRATION_CONTEXT"
-LEARNED_ALGORITHMS = frozenset({"ppo", "guarded_ppo", "sacadrl", "drl", "sonic"})
+LEARNED_ALGORITHMS = _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS | frozenset(
+    {"sa_cadrl", "drl", "sonic", "socnav_sampling"}
+)
 REQUIRED_FIELDS = (
     "cpu_model",
     "platform",
@@ -25,9 +27,6 @@ REQUIRED_FIELDS = (
     "numpy_version",
     "numba_version",
     "thread_env",
-)
-REFERENCE_RECEIPT = (
-    "docs/context/evidence/2026-10-04_freeze008_calibration/determinism-receipt.json"
 )
 OPTIONAL_FIELDS = ("kernel", "glibc", "torch_version", "stable_baselines3_version")
 
@@ -50,7 +49,9 @@ def assert_context_equal(observed: Mapping[str, Any], expected: Mapping[str, Any
             raise ValueError(f"SNQI-v2 execution context mismatch: {key}")
 
 
-def load_calibration_context(anchors_path: Path) -> dict[str, Any]:
+def load_calibration_context(
+    anchors_path: Path, asset_binding: Mapping[str, Any]
+) -> dict[str, Any]:
     """Load the original context from the paired, hash-bound acquisition/determinism proof.
 
     Hash binding is integrity, not scientific authority. Independent mint must still authenticate
@@ -63,25 +64,20 @@ def load_calibration_context(anchors_path: Path) -> dict[str, Any]:
     if proof["anchors_sha256"] != hashlib.sha256(anchors_path.read_bytes()).hexdigest():
         raise ValueError("SNQI-v2 execution context anchor binding mismatch")
     binding = proof["determinism_receipt"]
-    # The delivered portable receipt is in the same evidence directory. Do not follow a caller
-    # absolute path or traversal from proof metadata.
-    receipt_path = anchors_path.parent / "determinism-receipt.json"
+    # The freeze need not contain its own acquisition output. The independently
+    # bound spec pins the delivered bytes; rehashing custody alone cannot change it.
+    receipt_path = asset_binding.get("determinism_receipt_path")
+    pinned_digest = asset_binding.get("determinism_receipt_sha256")
+    if receipt_path is None or not pinned_digest:
+        raise ValueError("SNQI-v2 calibration context requires pinned determinism receipt")
+    receipt_path = Path(receipt_path)
     if Path(binding["path"]).name != receipt_path.name:
         raise ValueError("SNQI-v2 determinism receipt path mismatch")
     raw = receipt_path.read_bytes()
-    # The execution source owns the reference. A caller who re-hashes both custody files
-    # cannot redefine the calibration context. Use the committed blob, not a mutable file.
-    committed = subprocess.run(
-        ["git", "show", "HEAD:" + REFERENCE_RECEIPT],
-        cwd=Path(__file__).resolve().parents[3],
-        capture_output=True,
-        check=False,
-    )
-    if committed.returncode != 0:
-        raise ValueError("SNQI-v2 committed calibration context reference unavailable")
-    if raw != committed.stdout:
-        raise ValueError("SNQI-v2 determinism receipt differs from committed calibration reference")
-    if hashlib.sha256(raw).hexdigest() != binding["sha256"]:
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != pinned_digest:
+        raise ValueError("SNQI-v2 determinism receipt differs from pinned calibration reference")
+    if digest != binding["sha256"]:
         raise ValueError("SNQI-v2 determinism receipt digest mismatch")
     receipt = json.loads(raw)
     if receipt["classification"] != "a" or receipt["original_vs_repeat"]["different_rows"] != 0:
@@ -124,7 +120,7 @@ def admit_episode_context(algo: str) -> dict[str, Any] | None:
         The checked worker context, or None outside a gated learned-policy episode.
     """
     raw = os.environ.get(CONTEXT_ENV)
-    if raw is None or algo not in LEARNED_ALGORITHMS:
+    if raw is None or algo.strip().lower() not in LEARNED_ALGORITHMS:
         return None
     expected = json.loads(raw)
     observed = build_execution_context_provenance()
@@ -132,23 +128,35 @@ def admit_episode_context(algo: str) -> dict[str, Any] | None:
     return {k: v for k, v in observed.items() if k != "hostname"}
 
 
-def verify_episode_contexts(campaign_root: Path, expected: dict[str, Any]) -> int:
-    """Require each learned-policy row's worker context before accepting/scoring release output.
+def verify_episode_contexts(
+    campaign_root: Path, expected: dict[str, Any], planner_keys: tuple[str, ...]
+) -> int:
+    """Check learned workers and require every learned arm named by the manifest.
 
     Returns:
-        The number of admitted learned-policy rows. Release acceptance checks the roster census.
+        The number of admitted learned-policy rows; full acceptance checks cell completeness.
     """
+    required = {
+        key.strip().lower() for key in planner_keys if key.strip().lower() in LEARNED_ALGORITHMS
+    }
+    seen: set[str] = set()
     count = 0
     for path in sorted(campaign_root.glob("runs/*/episodes.jsonl")):
+        arm = path.parent.name.split("__", 1)[0].strip().lower()
         for line in path.read_text().splitlines():
             row = json.loads(line)
-            if row["algo"] not in LEARNED_ALGORITHMS:
+            if row["algo"].strip().lower() not in LEARNED_ALGORITHMS and arm not in required:
                 continue
             context = row.get("algorithm_metadata", {}).get("execution_context")
             if not isinstance(context, dict):
                 raise ValueError("SNQI-v2 learned episode execution context missing")
             assert_context_equal(context, expected)
+            seen.add(arm)
             count += 1
-    if not count:
-        raise ValueError("SNQI-v2 learned episode execution context census empty")
+    missing = required - seen
+    if missing:
+        raise ValueError(
+            "SNQI-v2 learned episode execution context census missing arms: "
+            + ", ".join(sorted(missing))
+        )
     return count

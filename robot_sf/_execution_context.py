@@ -1,7 +1,8 @@
-"""Dependency-free execution-context provenance primitives.
+"""Execution-context provenance primitives with optional learned-stack observation.
 
 The exact-repeat and result-provenance paths need the same numerical context
-vocabulary without importing NumPy, Numba, or the benchmark package.  Host
+vocabulary without importing the benchmark package. Learned-stack imports are
+best effort; NumPy and Numba versions are supplied by callers.  Host
 identity is deliberately not part of the canonical context: two distinct
 hosts can be numerically comparable when their execution contexts match.
 """
@@ -12,6 +13,7 @@ import hashlib
 import json
 import os
 import platform
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 EXECUTION_CONTEXT_SCHEMA_VERSION = "benchmark_execution_context.v1"
+
+OPTIONAL_EXECUTION_CONTEXT_FIELDS = ("torch_version", "stable_baselines3_version")
 
 EXECUTION_CONTEXT_FIELDS = (
     "schema_version",
@@ -77,6 +81,19 @@ def build_execution_context(
         "python_version": platform.python_version(),
         "thread_env": {name: os.environ.get(name) for name in THREAD_ENV_VARS},
     }
+    # Optional learned-stack imports are best effort. Use the runtime version,
+    # including Torch's build suffix, rather than distribution metadata alone.
+    for module_name, field in (
+        ("torch", "torch_version"),
+        ("stable_baselines3", "stable_baselines3_version"),
+    ):
+        try:
+            module = import_module(module_name)
+        except ImportError:
+            continue
+        observed_version = getattr(module, "__version__", None)
+        if observed_version is not None:
+            context[field] = str(observed_version)
     if numpy_version is not None:
         context["numpy_version"] = str(numpy_version)
     if numba_version is not None:

@@ -1311,6 +1311,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         )
         else load_campaign_config(manifest.canonical_campaign_config_path)
     )
+    from robot_sf.benchmark.release_protocol import bind_release_context_asset
+
+    cfg = bind_release_context_asset(manifest, cfg)
     stress_smoke = is_diagnostic_stress_smoke(manifest)
     development_rehearsal = is_development_rehearsal(manifest)
     development_smoke = bool(getattr(args, "development_runtime_smoke", False))
@@ -1339,7 +1342,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         try:
             if args.snqi_v2_anchors is None:
                 raise ValueError("SNQI-v2 calibration context requires acquired anchor custody")
-            calibration_context = load_calibration_context(args.snqi_v2_anchors)
+            calibration_context = load_calibration_context(
+                args.snqi_v2_anchors, cfg.snqi_v2_binding
+            )
             assert_context_equal(build_execution_context_provenance(), calibration_context)
         except (OSError, KeyError, TypeError, ValueError) as exc:
             reason = (
@@ -1877,7 +1882,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
     if calibration_context is not None:
         try:
-            verify_episode_contexts(campaign_root, calibration_context)
+            verify_episode_contexts(campaign_root, calibration_context, manifest.planner_keys)
         except (OSError, KeyError, TypeError, ValueError) as exc:
             reason = str(exc) if isinstance(exc, ValueError) else "learned context custody invalid"
             print(

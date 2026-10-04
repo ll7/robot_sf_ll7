@@ -35,6 +35,7 @@ import yaml
 from robot_sf._execution_context import (
     EXECUTION_CONTEXT_FIELDS,
     EXECUTION_CONTEXT_SCHEMA_VERSION,
+    OPTIONAL_EXECUTION_CONTEXT_FIELDS,
     build_execution_context,
     execution_context_digest,
     public_machine_id,
@@ -256,9 +257,17 @@ def _validate_execution_context(  # noqa: C901
     context = _require_mapping(environment.get("execution_context"), "host execution_context")
     if context.get("schema_version") != EXECUTION_CONTEXT_SCHEMA_VERSION:
         raise ValueError("host execution_context has an unsupported schema_version")
-    if set(context) != set(EXECUTION_CONTEXT_FIELDS):
+    if set(context) - set(OPTIONAL_EXECUTION_CONTEXT_FIELDS) != set(EXECUTION_CONTEXT_FIELDS):
         raise ValueError("host execution_context has unsupported fields")
-    for field in ("cpu_model", "platform", "python_version", "numpy_version", "numba_version"):
+    observed_fields = (
+        "cpu_model",
+        "platform",
+        "python_version",
+        "numpy_version",
+        "numba_version",
+        *(field for field in OPTIONAL_EXECUTION_CONTEXT_FIELDS if field in context),
+    )
+    for field in observed_fields:
         _require_text(context.get(field), f"host execution_context {field}")
     thread_env = _require_mapping(context.get("thread_env"), "host execution_context thread_env")
     if set(thread_env) != set(THREAD_ENV_VARS):

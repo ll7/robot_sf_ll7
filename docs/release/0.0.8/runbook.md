@@ -128,9 +128,11 @@ not on the protected-input claim. Release/DOI tooling is not recording code
 The [independent #10137 review](https://github.com/ll7/robot_sf_ll7/pull/10137#issuecomment-5984099933)
 accepted head `e02d17e08c83b04a9299c6a54086fbf3fb3cc569`: MERGE, scientific
 boxes 1=PASS and 2=PASS for F2. This records that external review without ticking
-boxes here. Box 3 remains PARTIAL; boxes 4–6, scientific trust pins, authentic DOI
-reservation, resolved identities, smoke, final mint, sealed execution and
-publication retain their separate gates. No DOI has been reserved.
+boxes here. The later doorway test (Slurm 21364) returned INCONCLUSIVE. The
+2026-10-05 ruling resolves box 3 by the [companion claim scope exclusion](doorway_claim_scope.md),
+not by a PASS; its checkbox remains unticked. Boxes 4–6, scientific trust pins,
+authentic DOI reservation, resolved identities, smoke, final mint, sealed execution
+and publication retain their separate gates. No DOI has been reserved.
 
 ### Superseded initial freeze record — 2026-10-03
 
@@ -695,9 +697,37 @@ production receipts. Access succeeded; no inaccessible gap is guessed closed.
 | G09 exact-freeze smoke/stress/staging/cold custody | #10112 selects v0_6/current keys/authored H400 and preparatory mint → smoke → final mint. Authentic same-freeze environment/stress/staging/preservation/cold receipts remain required. |
 | G10 comparator end-to-end | Development path verified in #10103, correct relative source binding and release-mode refusal. Strict full sealed-census comparison still due after execution. |
 | G11 DOI reservation order | Documented/fixed in private #421: reserve unpublished before identity/mint, publish last. Authentic reservation receipt remains operator input; none performed here. |
-| G12 full publication chain | Public doorway-runner seam fixed by #10081. Width scientific review, two-bundle/result/projection reconciliation, scanner/cold preservation, intake and final authorization remain open; not supplied by a diagnostic mint/rehearsal. |
+| G12 full publication chain | Public doorway-runner seam fixed by #10081. The 2026-10-05 [companion claim scope exclusion](doorway_claim_scope.md), based on the INCONCLUSIVE Slurm 21364 evidence, resolves the box 3 scope decision without a PASS: fixed H400 widths 2.2/2.8/3.6 m are reported with raw metrics only; SNQI v2 diagnostics are retained but not admitted as results, ranked or compared. Verify this exclusion at publication. Two-bundle/result/projection reconciliation, scanner/cold preservation, intake and final authorization remain open; not supplied by a diagnostic mint/rehearsal. |
 
 ## Release-notes admission before mint and publication
+
+### Companion claim admission — ruling of 2026-10-05
+
+The fixed H400 2.2/2.8/3.6 m doorway companion is reported with raw metrics only
+in 0.0.8 (success, collision, time and the other unscored metrics). SNQI v2
+applicability to this slice was not established. The box 3 scope exclusion is
+not a PASS; reopening requires a newly predeclared 0.0.9 test under
+[issue #10140](https://github.com/ll7/robot_sf_ll7/issues/10140).
+
+Before publication, include this ruling in the companion release-notes addendum,
+publication README and dataset README/data dictionary, using the
+[claim scope addendum](doorway_claim_scope.md). Every retained SNQI v2 diagnostic
+column must carry the publication-layer label
+**"not validated for this slice (box 3 inconclusive, 2026-10-05)"**. These values
+remain in the raw companion data but are not admitted as results, ranked or
+compared, including across widths or against the main campaign. Do not strip or
+rewrite raw values, refit anchors, or change the frozen computation to implement
+this disclosure. The observed U/D counts below 7/14 are facts without an
+applicability claim; no expansion to dev seeds 1006–1030 is authorized.
+
+Keep the F2 configuration, template, campaign code, source-bound release notes
+and their admission receipts unchanged. Publish this addendum as supplemental
+claim/publication text, alongside the exact-source notes required below. It is
+not an input to the sealed or companion runner and does not replace the existing
+release-notes digest gate. The release body must link both the exact-source notes
+and this addendum at its reviewed publication commit.
+
+### Exact-source disclosure admission
 
 The versioned [release notes](release_notes.md) state the adopted limitations by
 content. `write_resolved_release_identity` (the production identity generator)
@@ -883,8 +913,14 @@ actual acquisition; this integration and a rehearsal cannot fill the trust set.
   submitting host context is not an attestation of the workers.
   An independent freeze decision must precede sealed execution;
   merging the gate on main alone does not activate it at the existing freeze.
-- [ ] Independently review anchor applicability to the fixed doorway width slice;
-  retain its separate scientific and publication boundary (CHAIN-4 G12).
+- [ ] Independently verify the [companion claim scope exclusion](doorway_claim_scope.md)
+  at publication (CHAIN-4 G12): the fixed H400 2.2/2.8/3.6 m companion is reported
+  with raw metrics only; SNQI v2 applicability was not established. Retained SNQI
+  diagnostics carry "not validated for this slice (box 3 inconclusive, 2026-10-05)"
+  and are not admitted as results, ranked or compared. The 2026-10-05 ruling
+  resolves box 3 by scope exclusion, not a PASS or a checked review box. Reopen
+  only via a newly predeclared 0.0.9 test under
+  [#10140](https://github.com/ll7/robot_sf_ll7/issues/10140); no dev1006–1030 expansion.
 - [ ] Review the sealed evaluation ruling binding the freeze, concrete main and
   companion manifests/configs, canonical acquired anchor digest, exact sealed
   tuple and review reference. No request-created receipt can authenticate it.

@@ -624,6 +624,9 @@ loaded versions take precedence, followed by installed metadata and Torch's lite
 build tag from `version.py` (with metadata fallback). Missing distributions omit their keys;
 F2 acquisition for these learned arms must have both dependencies installed and
 both versions recorded. Do not stamp today's versions onto older producer rows.
+Production and preserved-row revalidation refuse a reference whose original
+context omits either version. Historical receipts remain readable by the
+acquisition/determinism analysis tools; they cannot admit a sealed run.
 
 Freeze a new acquired anchor artifact whose `calibration.source_commit` is F2.
 Compare every `metrics`, `metric_values`, `steps` and `status` value against the
@@ -686,8 +689,9 @@ actual acquisition; this integration and a rehearsal cannot fill the trust set.
   Require every learned-policy episode's worker execution context to equal
   `determinism-receipt.json` `execution_contexts.original`: CPU model, platform
   (including kernel/glibc), Python, NumPy, Numba and the complete recorded thread
-  environment; compare Torch and stable-baselines3 versions when the calibration
-  records them. A node pin is an operational way to obtain equality, never a
+  environment, Torch and stable-baselines3 versions. The production reference
+  must record both learned-stack versions. A node pin is an operational way to
+  obtain equality, never a
   substitute for it. Keep the historical missing learned-stack provenance visible; F2 acquisition
   and its same-node repeat must record Torch/SB3.
   The source-bound release entrypoint refuses missing/hash-mismatched paired
@@ -695,6 +699,11 @@ actual acquisition; this integration and a rehearsal cannot fill the trust set.
   calibration reference, or a different live context; it checks each learned
   worker before environment/planner construction or reset, and refuses missing or
   differing recorded row contexts before release acceptance/publication.
+  Learned/checkpoint family aliases come from the canonical readiness catalog.
+  `planner_selector_v2` / `planner_selector_v2_diagnostic` are refused in calibrated
+  production before selector context preparation or child adapter construction:
+  the gate has no calibrated per-child admission contract. Ungated diagnostic
+  selector resolution remains available. Do not include selectors in the sealed chain.
   This gate is runtime code, not a main-only mint helper. The canonical executor
   invokes the release entrypoint from its pinned public source: the old freeze
   lacks this gate. Run live-context preflight inside the intended allocation; the

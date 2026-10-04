@@ -25,7 +25,11 @@ from robot_sf.benchmark.map_runner import map_runner_episode as episode
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 from robot_sf.evidence.writers import write_json, write_review_sidecar
 from tests.benchmark.test_mintorder_binding import CONFIG
-from tests.benchmark.test_snqi_execution_context import ENV, EVIDENCE
+from tests.benchmark.test_snqi_execution_context import (
+    ENV,
+    EVIDENCE,
+    complete_context_asset_binding,
+)
 from tests.unit.benchmark.test_snqi_v2 import spec_files as _spec_files
 
 spec_files = _spec_files
@@ -319,13 +323,11 @@ def test_revalidation_refuses_missing_worker_context_before_acceptance(tmp_path,
     row_path.parent.mkdir(parents=True)
     write_json(row_path, {"algo": " PPO ", "seed": 1004, "algorithm_metadata": {}}, indent=None)
     manifest = SimpleNamespace(planner_keys=("ppo",))
+    reference_root = tmp_path / "current-reference"
     cfg = SimpleNamespace(
-        snqi_v2_binding={
-            "determinism_receipt_path": EVIDENCE / "determinism-receipt.json",
-            "determinism_receipt_sha256": digest(EVIDENCE / "determinism-receipt.json"),
-        },
+        snqi_v2_binding=complete_context_asset_binding(reference_root),
         snqi_v2_spec=SimpleNamespace(
-            paths={"anchors": str(EVIDENCE / "anchors.v2.0.acquired.json")}
+            paths={"anchors": str(reference_root / "anchors.v2.0.acquired.json")}
         ),
     )
     for name in (

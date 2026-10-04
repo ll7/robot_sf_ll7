@@ -12,15 +12,50 @@ from typing import TYPE_CHECKING, Any
 
 from robot_sf._execution_context import LEARNED_POLICY_CONTEXT_FIELDS
 from robot_sf.benchmark._runtime_smoke_planner_keys import _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS
+from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
 CONTEXT_ENV = "ROBOT_SF_SNQI_V2_CALIBRATION_CONTEXT"
-LEARNED_ALGORITHMS = _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS | frozenset(
-    {"sa_cadrl", "drl", "sonic", "socnav_sampling"}
+_LEARNED_FAMILIES = _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS | frozenset(
+    {
+        "crowdnav_height",
+        "drl_vo",
+        "sonic_crowdnav",
+        "sac",
+        "distributional_rl",
+        "socnav_sampling",
+        "dr_mpc",
+        "learned_prediction_mpc",
+        "hybrid_global_rl",
+        "gensafenav_ours_gst",
+        "gensafenav_ours_gst_guarded",
+        "gensafenav_gst_predictor_rand",
+        "gensafenav_gst_predictor_rand_guarded",
+        "hybrid_portfolio",
+        "gap_prediction",
+    }
 )
+
+
+def _learned_algorithm_names() -> frozenset[str]:
+    """Expand explicit learned/checkpoint families through the authoritative alias catalog.
+
+    Returns:
+        Canonical learned-family names, registered aliases and legacy compatibility names.
+    """
+    names = {"drl", "sonic"}  # Retain the pre-catalog compatibility names.
+    for family in sorted(_LEARNED_FAMILIES):
+        readiness = get_algorithm_readiness(family)
+        if readiness is None:
+            raise ValueError(f"SNQI-v2 learned family absent from readiness catalog: {family}")
+        names.update((readiness.canonical_name, *readiness.aliases))
+    return frozenset(names)
+
+
+LEARNED_ALGORITHMS = _learned_algorithm_names()
 REQUIRED_FIELDS = (
     "cpu_model",
     "platform",
@@ -92,6 +127,9 @@ def load_calibration_context(
     ):
         raise ValueError("SNQI-v2 calibration repeat/source binding mismatch")
     expected = receipt["execution_contexts"]["original"]
+    for key in LEARNED_POLICY_CONTEXT_FIELDS:
+        if not isinstance(expected, Mapping) or key not in expected:
+            raise ValueError(f"SNQI-v2 calibration execution context missing {key}")
     assert_context_equal(receipt["execution_contexts"]["repeat"], expected)
     assert_context_equal(expected, expected)
     return expected
@@ -114,6 +152,15 @@ def episode_context_guard(expected: dict[str, Any] | None) -> Iterator[None]:
             os.environ[CONTEXT_ENV] = previous
 
 
+def require_calibrated_algorithm(algo: str) -> None:
+    """Refuse composite selectors whose children have no calibrated per-child contract."""
+    if algo.strip().lower() in {"planner_selector_v2", "planner_selector_v2_diagnostic"}:
+        raise ValueError(
+            "SNQI-v2 calibrated execution refuses planner_selector_v2: "
+            "selector children require independent context admission"
+        )
+
+
 def admit_episode_context(algo: str) -> dict[str, Any] | None:
     """Check the actual learned-policy worker before environment/planner construction or reset.
 
@@ -121,7 +168,10 @@ def admit_episode_context(algo: str) -> dict[str, Any] | None:
         The checked worker context, or None outside a gated learned-policy episode.
     """
     raw = os.environ.get(CONTEXT_ENV)
-    if raw is None or algo.strip().lower() not in LEARNED_ALGORITHMS:
+    if raw is None:
+        return None
+    require_calibrated_algorithm(algo)
+    if algo.strip().lower() not in LEARNED_ALGORITHMS:
         return None
     expected = json.loads(raw)
     observed = build_execution_context_provenance()
@@ -137,6 +187,8 @@ def verify_episode_contexts(
     Returns:
         The number of admitted learned-policy rows; full acceptance checks cell completeness.
     """
+    for key in planner_keys:
+        require_calibrated_algorithm(key)
     required = {
         key.strip().lower() for key in planner_keys if key.strip().lower() in LEARNED_ALGORITHMS
     }
@@ -146,6 +198,7 @@ def verify_episode_contexts(
         arm = path.parent.name.split("__", 1)[0].strip().lower()
         for line in path.read_text().splitlines():
             row = json.loads(line)
+            require_calibrated_algorithm(row["algo"])
             if row["algo"].strip().lower() not in LEARNED_ALGORITHMS and arm not in required:
                 continue
             context = row.get("algorithm_metadata", {}).get("execution_context")

@@ -34,6 +34,10 @@ EXECUTION_CONTEXT_FIELDS = (
     "workers",
 )
 
+# Additive optional observations; historical exact-repeat v1 records retain
+# their original required field set and digest.
+LEARNED_POLICY_CONTEXT_FIELDS = ("torch_version", "stable_baselines3_version")
+
 
 def cpu_model() -> str:
     """Return a best-effort CPU model string without importing numeric stacks."""
@@ -53,6 +57,8 @@ def build_execution_context(
     *,
     numpy_version: str | None = None,
     numba_version: str | None = None,
+    torch_version: str | None = None,
+    stable_baselines3_version: str | None = None,
     cpu_only: bool | None = None,
     workers: int | None = None,
 ) -> dict[str, Any]:
@@ -61,7 +67,8 @@ def build_execution_context(
     Every field is optional and omitted when the caller cannot observe it, so
     the context never asserts an execution mode it did not verify.  The NumPy
     and Numba values are supplied by callers after those libraries are
-    imported.  ``cpu_only`` and ``workers`` are supplied only by callers that
+    imported; learned-policy distribution versions can be observed without
+    importing the inference stack. ``cpu_only`` and ``workers`` are supplied only by callers that
     enforce or observe the execution mode (for example the exact-repeat path,
     whose contract is CPU-only single-worker execution); general result
     provenance records the real worker count in its own run metadata instead of
@@ -81,6 +88,10 @@ def build_execution_context(
         context["numpy_version"] = str(numpy_version)
     if numba_version is not None:
         context["numba_version"] = str(numba_version)
+    if torch_version is not None:
+        context["torch_version"] = str(torch_version)
+    if stable_baselines3_version is not None:
+        context["stable_baselines3_version"] = str(stable_baselines3_version)
     if cpu_only is not None:
         context["cpu_only"] = bool(cpu_only)
     if workers is not None:
@@ -104,6 +115,7 @@ def public_machine_id(machine_id: str) -> str:
 __all__ = [
     "EXECUTION_CONTEXT_FIELDS",
     "EXECUTION_CONTEXT_SCHEMA_VERSION",
+    "LEARNED_POLICY_CONTEXT_FIELDS",
     "build_execution_context",
     "cpu_model",
     "execution_context_digest",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import platform
 from hashlib import sha256
+from importlib.metadata import PackageNotFoundError, version
 from io import StringIO
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pytest
 
 from robot_sf._execution_context import EXECUTION_CONTEXT_FIELDS, execution_context_digest
 from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
+from robot_sf.benchmark import result_provenance
 from robot_sf.benchmark.result_provenance import (
     INPUT_BINDING_SCHEMA_VERSION,
     SCHEMA_VERSION,
@@ -35,7 +37,7 @@ from scripts.validation import check_benchmark_result_provenance
 # execution mode (exact-repeat), not to every benchmark run.
 _OBSERVED_CONTEXT_FIELDS = tuple(
     field for field in EXECUTION_CONTEXT_FIELDS if field not in {"cpu_only", "workers"}
-)
+) + ("torch_version", "stable_baselines3_version")
 
 
 def _write_input_files(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -170,7 +172,35 @@ def test_manifest_execution_context_does_not_assert_unobserved_execution_mode() 
     assert "workers" not in provenance
 
 
-@pytest.mark.parametrize("field", ["numpy_version", "numba_version"])
+def test_execution_context_records_installed_learned_policy_versions() -> None:
+    """Policy-stack drift must be observable in the context used by the release gate."""
+    provenance = build_execution_context_provenance()
+    assert provenance["torch_version"] == version("torch")
+    assert provenance["stable_baselines3_version"] == version("stable-baselines3")
+
+
+def test_execution_context_does_not_invent_missing_policy_versions(monkeypatch) -> None:
+    """An environment without optional policy distributions must not claim their versions."""
+
+    def missing(distribution):
+        raise PackageNotFoundError(distribution)
+
+    monkeypatch.setattr(result_provenance, "version", missing)
+    context = build_execution_context_provenance()
+    assert "torch_version" not in context
+    assert "stable_baselines3_version" not in context
+    assert context["numpy_version"] == np.__version__
+    canonical = {
+        key: value
+        for key, value in context.items()
+        if key not in {"hostname", "execution_context_sha256"}
+    }
+    assert context["execution_context_sha256"] == execution_context_digest(canonical)
+
+
+@pytest.mark.parametrize(
+    "field", ["numpy_version", "numba_version", "torch_version", "stable_baselines3_version"]
+)
 def test_execution_context_digest_binds_runtime_versions(field: str) -> None:
     """Changing either runtime version changes the canonical context digest."""
     provenance = build_execution_context_provenance()

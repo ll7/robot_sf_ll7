@@ -19,6 +19,7 @@ import sys
 import uuid
 from collections.abc import Mapping
 from hashlib import sha256
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -192,6 +193,18 @@ def _cpu_model() -> str:
     return platform.processor() or "Unknown CPU"
 
 
+def _installed_version(distribution: str) -> str | None:
+    """Observe optional policy-stack versions without importing their runtime.
+
+    Returns:
+        Installed distribution version, or None when it is unavailable.
+    """
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
+
+
 def build_execution_context_provenance() -> dict[str, Any]:
     """Capture the execution-context provenance of the current run.
 
@@ -207,6 +220,8 @@ def build_execution_context_provenance() -> dict[str, Any]:
     context = build_execution_context(
         numpy_version=np.__version__,
         numba_version=str(numba.__version__),
+        torch_version=_installed_version("torch"),
+        stable_baselines3_version=_installed_version("stable-baselines3"),
     )
     return {
         "hostname": platform.node(),

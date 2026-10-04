@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/2026-10-04_freeze008_calibration/calibration-scalars.csv",
-  "artifact_sha256": "23f621044642c8f71c1c29fadc64b82097805820cc3d0bd43392b08df1848a07",
+  "artifact_sha256": "1bf89052327ae6d6f2659e8a618a1d556025ff8110771952d35a117287db06b3",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

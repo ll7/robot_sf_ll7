@@ -199,7 +199,7 @@ def write_scalars(output_dir: Path, scalars: list) -> None:
     """Emit sortable, independently readable calibration scalar columns."""
     csv_path = output_dir / "calibration-scalars.csv"
     with csv_path.open("w", newline="") as stream:
-        writer = csv.writer(stream)
+        writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(
             (
                 "arm",

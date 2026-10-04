@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,6 +25,9 @@ REQUIRED_FIELDS = (
     "numpy_version",
     "numba_version",
     "thread_env",
+)
+REFERENCE_RECEIPT = (
+    "docs/context/evidence/2026-10-04_freeze008_calibration/determinism-receipt.json"
 )
 OPTIONAL_FIELDS = ("kernel", "glibc", "torch_version", "stable_baselines3_version")
 
@@ -65,6 +69,18 @@ def load_calibration_context(anchors_path: Path) -> dict[str, Any]:
     if Path(binding["path"]).name != receipt_path.name:
         raise ValueError("SNQI-v2 determinism receipt path mismatch")
     raw = receipt_path.read_bytes()
+    # The execution source owns the reference. A caller who re-hashes both custody files
+    # cannot redefine the calibration context. Use the committed blob, not a mutable file.
+    committed = subprocess.run(
+        ["git", "show", "HEAD:" + REFERENCE_RECEIPT],
+        cwd=Path(__file__).resolve().parents[3],
+        capture_output=True,
+        check=False,
+    )
+    if committed.returncode != 0:
+        raise ValueError("SNQI-v2 committed calibration context reference unavailable")
+    if raw != committed.stdout:
+        raise ValueError("SNQI-v2 determinism receipt differs from committed calibration reference")
     if hashlib.sha256(raw).hexdigest() != binding["sha256"]:
         raise ValueError("SNQI-v2 determinism receipt digest mismatch")
     receipt = json.loads(raw)

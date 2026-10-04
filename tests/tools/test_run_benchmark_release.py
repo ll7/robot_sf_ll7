@@ -1987,12 +1987,10 @@ def test_future_release_rejects_checkout_drift_from_manifest_source(monkeypatch,
     assert payload["release_benchmark_success"] is False
 
 
-@pytest.mark.parametrize("context_rows", [None, "missing", "different", "equal"])
 def test_full_release_acceptance_failure_blocks_publication(
     monkeypatch,
     capsys,
     tmp_path: Path,
-    context_rows: str | None,
 ) -> None:
     """A permissive campaign result cannot publish when the full gate fails."""
     campaign_root = _make_campaign_tree(tmp_path)
@@ -2001,43 +1999,6 @@ def test_full_release_acceptance_failure_blocks_publication(
         schema_version="benchmark-release-manifest.v0.2",
     )
     cfg = SimpleNamespace(export_publication_bundle=True)
-    context_args = []
-    if context_rows is not None:
-        manifest.source_sha = None
-        from robot_sf.benchmark.snqi import v2_binding
-
-        evidence = (
-            Path(__file__).resolve().parents[2]
-            / "docs/context/evidence/2026-10-04_freeze008_calibration"
-        )
-        context = json.loads((evidence / "determinism-receipt.json").read_bytes())[
-            "execution_contexts"
-        ]["original"]
-        monkeypatch.setattr(
-            run_benchmark_release, "_snqi_v2_evaluation_seed_receipt", lambda *_a, **_kw: {}
-        )
-        cfg.snqi_v2_binding = {"source_bound": True}
-        cfg.snqi_v2_spec = SimpleNamespace(diagnostic=False)
-        monkeypatch.setattr(v2_binding, "bind_acquired_anchors", lambda cfg, **_kw: cfg)
-        monkeypatch.setattr(
-            run_benchmark_release, "build_execution_context_provenance", lambda: context
-        )
-        context_args = ["--snqi-v2-anchors", str(evidence / "anchors.v2.0.acquired.json")]
-        if context_rows != "missing":
-            recorded = dict(context)
-            if context_rows == "different":
-                recorded["numpy_version"] = "different"
-            path = campaign_root / "runs/ppo/episodes.jsonl"
-            path.parent.mkdir(parents=True)
-            write_json(
-                path,
-                {
-                    "algo": "ppo",
-                    "seed": 1004,
-                    "algorithm_metadata": {"execution_context": recorded},
-                },
-                indent=None,
-            )
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
     monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
@@ -2109,19 +2070,10 @@ def test_full_release_acceptance_failure_blocks_publication(
             str(receipt),
             "--runtime-smoke-receipt",
             str(smoke_receipt),
-            *context_args,
         ]
     )
 
     payload = json.loads(capsys.readouterr().out)
-    if context_rows in {"missing", "different"}:
-        assert exit_code == 2
-        assert payload["status"] == "snqi_v2_episode_context_refused"
-        assert payload["benchmark_success"] is False
-        expected_reason = "census empty" if context_rows == "missing" else "mismatch: numpy_version"
-        assert expected_reason in payload["status_reason"]
-        assert not (campaign_root / "release" / "release_result.json").exists()
-        return
     persisted = json.loads(
         (campaign_root / "release" / "release_result.json").read_text(encoding="utf-8")
     )

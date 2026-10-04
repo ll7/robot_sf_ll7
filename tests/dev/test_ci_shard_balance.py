@@ -168,3 +168,32 @@ def test_dry_run_example_preserves_headless_environment_for_following_tests() ->
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "2 passed" in result.stdout
+
+
+def test_replay_registry_override_preserves_following_source_hashes(tmp_path: Path) -> None:
+    """A replay test's temporary registry must not alter later source identities."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-n0",
+            "-q",
+            "-m",
+            "slow or not slow",
+            "--basetemp",
+            str(tmp_path / "pytest"),
+            "-o",
+            f"cache_dir={tmp_path / 'cache'}",
+            "tests/adversarial/test_replay_gallery.py::test_map_id_materialization_uses_registry_bytes_captured_at_selection",
+            "tests/benchmark/test_exact_repeat_campaign.py::test_resolver_hash_matches_all_140_runnable_source_definitions",
+        ],
+        cwd=ROOT,
+        env={**os.environ, "PYTEST_ADDOPTS": ""},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "2 passed" in result.stdout

@@ -40,6 +40,7 @@ export CONCEPT_DOI='<actual reserved concept DOI>'
 export VERSION_DOI='<actual reserved unpublished version DOI>'
 export ZENODO_STATE='<operator-owned reservation state file>'
 export ZENODO_METADATA='<concrete operator-reviewed Zenodo metadata JSON>'
+export RESERVATION_METADATA="$ARTIFACT_ROOT/zenodo-reservation-metadata.json"
 export TOKEN_FILE='<operator-owned token file; never log its contents>'
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 ```
@@ -134,7 +135,10 @@ owner dry-run/upsert the rows through the guarded writer and submit a separate
 queue PR. After its merge and a fresh resume, dispatch **only** dev1001/1002
 calibration through the canonical driver, verify all 1,344 rows, and freeze the
 separate acquired anchor artifact. Stop for the six independent scientific
-checks and Git-blob pins. DOI-dependent identities, smoke, final mint, sealed
+checks and Git-blob pins. Step 3a then uses the order **minimal metadata → one
+reservation → DOI-bound identity generation → draft metadata update**; never
+reserve using the old 0.0.7 metadata or the unresolved publication template.
+DOI-dependent identities, smoke, final mint, sealed
 execution and publication retain their separate later gates. Reopen this reorder
 ruling if the resolver can mutate acquisition inputs or calibration preflight
 begins requiring resolved publication metadata.
@@ -204,13 +208,48 @@ acquisition and sealed-source ruling. Use the checklist below before final mint.
 For resolved identity generation, DOI coordinates must already be authentic
 reserved-unpublished coordinates; they are not a preparatory mint or calibration
 prerequisite under the 2026-10-04 ruling.
-If absent, the **author-reserved delegated DOI operator** performs the existing
-reservation command before identity generation, not a second reservation at tag:
+If absent, the **author-reserved delegated DOI operator** creates minimal
+pre-reservation metadata and reserves exactly once before identity generation.
+The minimal form retains the dataset/license/creator/source-tag and SNQI claim
+boundary, but makes no DOI-bound provenance assertion. It is draft input only:
 
 ```bash
+uv run python - "$TAG" "$RESERVATION_METADATA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+metadata = json.loads(Path(
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json"
+).read_text())["metadata"]
+metadata["description"] = (
+    "Unpublished benchmark-data DOI reservation. SNQI is advisory only; "
+    "this reservation makes no SNQI ranking claim."
+)
+metadata["related_identifiers"] = [{
+    "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/" + sys.argv[1],
+    "relation": "isSupplementTo", "scheme": "url",
+}]
+output = Path(sys.argv[2])
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps({"metadata": metadata}, indent=2) + "\n")
+PY
 uv run robot-sf release zenodo reserve --token-file "$TOKEN_FILE" \
-  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA"
+  --state "$ZENODO_STATE" --metadata "$RESERVATION_METADATA"
+read -r CONCEPT_DOI VERSION_DOI < <(uv run python - "$ZENODO_STATE" <<'PY'
+import sys
+from robot_sf.benchmark.zenodo_publisher import load_state
+state = load_state(sys.argv[1])
+print("10.5281/zenodo." + state["concept_record_id"], state["doi"])
+PY
+)
+export CONCEPT_DOI VERSION_DOI
 ```
+
+An existing state path (including malformed state or a dangling symlink) refuses
+before any reservation POST. Reuse the recorded draft; never delete state to retry
+reservation. If POST may have succeeded but state writing failed, stop and recover
+that one deposition with the operator rather than reserving again.
 
 For both the main and the fixed H400 2.2/2.8/3.6 m companion:
 
@@ -231,7 +270,22 @@ uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
   --identity output/release-008/doorway/release_identity.resolved.json
 sha256sum output/release-008/{main,doorway}/release_identity.resolved.json
 export MAIN_IDENTITY_SHA256="$(sha256sum output/release-008/main/release_identity.resolved.json | awk '{print $1}')"
+export ZENODO_METADATA="$PWD/output/release-008/main/zenodo_metadata.resolved.json"
+uv run robot-sf release zenodo update-draft-metadata --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
 ```
+
+Review the generated metadata before updating. This draft-only step binds the
+main identity's exact metadata file/hash and DOI pair to the reserved state,
+checks the same unpublished deposition before PUT, and checks both PUT and GET
+readback. Description and source identifiers must match exactly; only the existing
+Zenodo license alias and null creator-affiliation normalization are permitted.
+It preserves file inventory and invalidates any old verification receipt. On a
+readback failure state is unchanged, but the remote PUT may have taken effect:
+inspect and retry the update against the same draft, never reserve a new one.
+The companion has its own generated metadata and identity for its separate
+publication track; do not PUT companion metadata over the main deposition.
 
 Mint preparation rows with the existing private-ops tool (not the final campaign
 mint, and not submission):
@@ -378,6 +432,10 @@ a corrected source/fresh ID, not resubmission. No step in FREEZEPREP executes th
 
 ## 5. Publication export and preflight — local preparation
 
+The main Zenodo draft already carries the DOI-bound metadata from step 3a.
+Keep that generated metadata unchanged through upload, draft verify, publish,
+and published verify in step 7; no second reservation occurs here.
+
 The release runner exports through the common exporter. If explicitly exporting
 its accepted raw root, use the existing command (no overwrite of earlier custody):
 
@@ -437,6 +495,9 @@ uv run robot-sf release zenodo verify --token-file "$TOKEN_FILE" \
   --manifest output/release-008/main/release_identity.resolved.json
 gh release edit "$TAG" --repo ll7/robot_sf_ll7 --draft=false
 uv run robot-sf release zenodo publish --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+uv run robot-sf release zenodo verify --token-file "$TOKEN_FILE" \
   --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
   --manifest output/release-008/main/release_identity.resolved.json
 ```

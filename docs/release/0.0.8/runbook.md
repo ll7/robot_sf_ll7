@@ -103,13 +103,27 @@ determinism receipt SHA-256:
 `cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464`.
 Historical evidence and its `12503fbf…` anchor remain preserved separately.
 
-The protected-input rehash covers its explicit `PROTECTED_PATHS` only. Changed
-recording/admission runtime files outside that set include
-`robot_sf/benchmark/map_runner/map_runner_episode.py`,
-`robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py`,
-`robot_sf/benchmark/result_provenance.py` and `robot_sf/_execution_context.py`.
+The protected-input rehash covers its explicit `PROTECTED_PATHS` only. The complete
+11-file delta from `git diff --name-only 3e73b04b 66f402ba -- robot_sf` is below;
+**none** of these files is in `PROTECTED_PATHS`.
+
+| Changed file | Role |
+| --- | --- |
+| `robot_sf/_execution_context.py` | recording: shared execution-context fields |
+| `robot_sf/benchmark/_runtime_smoke_planner_keys.py` | admission: shared learned-checkpoint roster |
+| `robot_sf/benchmark/map_runner/map_runner_episode.py` | recording/admission: worker context observations and pre-reset gate |
+| `robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py` | admission/refusal: selector and learned-policy resolution |
+| `robot_sf/benchmark/release_protocol.py` | release tooling/admission: identity and calibration-context bindings |
+| `robot_sf/benchmark/result_provenance.py` | recording: non-importing Torch/SB3 version capture |
+| `robot_sf/benchmark/runtime_smoke_admission.py` | admission: shared checkpoint-roster import |
+| `robot_sf/benchmark/snqi/execution_context.py` | admission/refusal: calibrated execution-context equality |
+| `robot_sf/benchmark/snqi/v2_binding.py` | admission: determinism-receipt asset binding |
+| `robot_sf/benchmark/zenodo_publisher.py` | release/DOI tooling: draft metadata update |
+| `robot_sf/release_cli.py` | release/DOI tooling: draft reservation and metadata commands |
+
 Their neutrality on this grid rests on the **measured 1,344-row comparison**,
-not on the protected-input claim ([#10138](https://github.com/ll7/robot_sf_ll7/issues/10138)).
+not on the protected-input claim. Release/DOI tooling is not recording code
+([#10138](https://github.com/ll7/robot_sf_ll7/issues/10138)).
 
 The [independent #10137 review](https://github.com/ll7/robot_sf_ll7/pull/10137#issuecomment-5984099933)
 accepted head `e02d17e08c83b04a9299c6a54086fbf3fb3cc569`: MERGE, scientific

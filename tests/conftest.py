@@ -415,6 +415,8 @@ _FAST_FILE_PREFIXES = (
 _FAST_FILES = {
     "test_snqi_execution_context.py",
     "test_snqi_context_fix_round.py",
+    # Provenance/version observation uses retained bytes and fake packages; no episodes.
+    "test_benchmark_result_provenance.py",
     # Retained-row acquisition/determinism proof; no environment reset or step.
     "test_snqi_v2_acquisition_evidence.py",
     # CI setup contracts use fake transports and must run on PRs (#10116).
@@ -1050,6 +1052,7 @@ _FAST_FILES = {
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
+    "test_zenodo_draft_metadata.py",
     "test_zenodo_publisher.py",
     "test_zenodo_publisher_edge_cases.py",
     # SocNav runtime-adapter tests cover the changed fallback diagnostics in

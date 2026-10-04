@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import platform
+import sys
 from hashlib import sha256
+from importlib.metadata import PackageNotFoundError, version
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import numba
 import numpy as np
@@ -14,6 +17,7 @@ import pytest
 
 from robot_sf._execution_context import EXECUTION_CONTEXT_FIELDS, execution_context_digest
 from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
+from robot_sf.benchmark import result_provenance
 from robot_sf.benchmark.result_provenance import (
     INPUT_BINDING_SCHEMA_VERSION,
     SCHEMA_VERSION,
@@ -28,6 +32,7 @@ from robot_sf.benchmark.result_provenance import (
     validate_result_provenance_manifest,
     write_result_provenance_manifest,
 )
+from robot_sf.evidence.writers import write_text
 from scripts.validation import check_benchmark_result_provenance
 
 # Canonical context fields the generic benchmark provenance path can actually
@@ -35,7 +40,7 @@ from scripts.validation import check_benchmark_result_provenance
 # execution mode (exact-repeat), not to every benchmark run.
 _OBSERVED_CONTEXT_FIELDS = tuple(
     field for field in EXECUTION_CONTEXT_FIELDS if field not in {"cpu_only", "workers"}
-)
+) + ("torch_version", "stable_baselines3_version")
 
 
 def _write_input_files(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -176,7 +181,161 @@ def test_manifest_execution_context_does_not_assert_unobserved_execution_mode() 
     assert "workers" not in provenance
 
 
-@pytest.mark.parametrize("field", ["numpy_version", "numba_version"])
+def test_execution_context_records_installed_learned_policy_versions() -> None:
+    """Policy-stack drift must be observable in the context used by the release gate."""
+    import stable_baselines3
+    import torch
+
+    provenance = build_execution_context_provenance()
+    assert provenance["torch_version"] == str(torch.__version__)
+    assert provenance["stable_baselines3_version"] == str(stable_baselines3.__version__)
+
+
+def test_execution_context_preserves_torch_build_tag_without_importing_runtime(monkeypatch) -> None:
+    """Unloaded Torch must retain its runtime build tag without executing package imports."""
+    import torch
+
+    expected = str(torch.__version__)
+    monkeypatch.delitem(sys.modules, "torch")
+    provenance = build_execution_context_provenance()
+    assert provenance["torch_version"] == expected
+    assert "torch" not in sys.modules
+
+
+def test_execution_context_falls_back_for_originless_torch(monkeypatch) -> None:
+    """An optional build-tag observation cannot abort a real context capture."""
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(result_provenance, "find_spec", lambda _: SimpleNamespace(origin=None))
+    assert build_execution_context_provenance()["torch_version"] == version("torch")
+    assert "torch" not in sys.modules
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["__version__: str = '9.8.7+cpu'", "__version__ = '9.8.7' + '+cpu'", "__version__ =", None],
+)
+def test_execution_context_falls_back_for_unreadable_torch_version(
+    monkeypatch, tmp_path: Path, source: str | None
+) -> None:
+    """Unsupported syntax and absent files retain the installed wheel version."""
+    if source is not None:
+        write_text(tmp_path / "version.py", "# AI-GENERATED NEEDS-REVIEW\n" + source + "\n")
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(
+        result_provenance,
+        "find_spec",
+        lambda _: SimpleNamespace(origin=str(tmp_path / "__init__.py")),
+    )
+    assert build_execution_context_provenance()["torch_version"] == version("torch")
+    assert "torch" not in sys.modules
+
+
+@pytest.mark.parametrize(
+    ("source", "origin", "expected_torch"),
+    [
+        ("other = 1\n__version__ = '9.8.7+cpu'", "file", "9.8.7+cpu"),
+        ("__version__ = '9.8.7' + '+cpu'", "file", "9.8.7"),
+        ("__version__: str = '9.8.7+cpu'", "file", "9.8.7"),
+        ("other = 1", "file", "9.8.7"),
+        ("__version__ =", "file", "9.8.7"),
+        (None, "file", "9.8.7"),
+        (None, None, "9.8.7"),
+        (None, "no-spec", "9.8.7"),
+    ],
+)
+def test_execution_context_with_fake_policy_distributions(
+    monkeypatch, tmp_path: Path, source: str | None, origin: str | None, expected_torch: str
+) -> None:
+    """Observe installed package bytes without depending on an inference-stack installation."""
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "stable_baselines3", raising=False)
+    metadata = {"torch": "9.8.7", "stable-baselines3": "2.9.1"}
+    monkeypatch.setattr(result_provenance, "version", metadata.__getitem__)
+    if source is not None:
+        write_text(tmp_path / "version.py", "# AI-GENERATED NEEDS-REVIEW\n" + source + "\n")
+    spec = (
+        None
+        if origin == "no-spec"
+        else SimpleNamespace(origin=str(tmp_path / "__init__.py") if origin == "file" else None)
+    )
+    monkeypatch.setattr(result_provenance, "find_spec", lambda _: spec)
+
+    assert result_provenance._installed_version("torch") == expected_torch
+    assert result_provenance._installed_version("stable-baselines3") == "2.9.1"
+    context = build_execution_context_provenance()
+    assert context["torch_version"] == expected_torch
+    assert context["stable_baselines3_version"] == "2.9.1"
+    canonical = {
+        k: v for k, v in context.items() if k not in {"hostname", "execution_context_sha256"}
+    }
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    assert context["execution_context_sha256"] == sha256(encoded.encode()).hexdigest()
+    assert "torch" not in sys.modules
+    assert "stable_baselines3" not in sys.modules
+
+
+@pytest.mark.parametrize("present", [(), ("torch",), ("stable-baselines3",)])
+def test_execution_context_with_fake_optional_package_absence(monkeypatch, present) -> None:
+    """Omit only missing distributions; keep the installed member of a partial stack."""
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "stable_baselines3", raising=False)
+
+    def metadata(distribution):
+        if distribution not in present:
+            raise PackageNotFoundError(distribution)
+        return {"torch": "9.8.7", "stable-baselines3": "2.9.1"}[distribution]
+
+    monkeypatch.setattr(result_provenance, "version", metadata)
+    monkeypatch.setattr(result_provenance, "find_spec", lambda _: None)
+    context = build_execution_context_provenance()
+    for distribution, expected in [("torch", "9.8.7"), ("stable-baselines3", "2.9.1")]:
+        field = distribution.replace("-", "_") + "_version"
+        if distribution in present:
+            assert context[field] == expected
+        else:
+            assert field not in context
+    assert "torch" not in sys.modules
+    assert "stable_baselines3" not in sys.modules
+
+
+def test_execution_context_with_fake_loaded_policy_versions(monkeypatch) -> None:
+    """Loaded runtime observations take precedence over stripped wheel metadata."""
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(__version__="9.8.7+cpu"))
+    monkeypatch.setitem(sys.modules, "stable_baselines3", SimpleNamespace(__version__="2.9.1"))
+
+    def unexpected_metadata(distribution):
+        pytest.fail(f"loaded runtime unnecessarily queried metadata for {distribution}")
+
+    monkeypatch.setattr(result_provenance, "version", unexpected_metadata)
+    context = build_execution_context_provenance()
+    assert context["torch_version"] == "9.8.7+cpu"
+    assert context["stable_baselines3_version"] == "2.9.1"
+
+
+def test_execution_context_does_not_invent_missing_policy_versions(monkeypatch) -> None:
+    """An environment without optional policy distributions must not claim their versions."""
+
+    def missing(distribution):
+        raise PackageNotFoundError(distribution)
+
+    monkeypatch.setattr(result_provenance, "version", missing)
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "stable_baselines3", raising=False)
+    context = build_execution_context_provenance()
+    assert "torch_version" not in context
+    assert "stable_baselines3_version" not in context
+    assert context["numpy_version"] == np.__version__
+    canonical = {
+        key: value
+        for key, value in context.items()
+        if key not in {"hostname", "execution_context_sha256"}
+    }
+    assert context["execution_context_sha256"] == execution_context_digest(canonical)
+
+
+@pytest.mark.parametrize(
+    "field", ["numpy_version", "numba_version", "torch_version", "stable_baselines3_version"]
+)
 def test_execution_context_digest_binds_runtime_versions(field: str) -> None:
     """Changing either runtime version changes the canonical context digest."""
     provenance = build_execution_context_provenance()

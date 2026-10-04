@@ -42,6 +42,16 @@ def test_acquisition_proof_has_guard_counters_and_inert_source_audit():
     assert all(type(value) is int and value >= 0 for value in counters.values())
 
 
+def test_repeat_proof_exposes_independent_snapshot_byte_verification():
+    """Cold readback alone must not conceal whether the second copy was checked."""
+    proof = json.loads((EVIDENCE / "acquisition-proof.json").read_text())
+    custody = proof["repeat_preservation"]
+    assert (
+        custody["independent_snapshot_files_byte_verified"] == custody["cold_files_byte_verified"]
+    )
+    assert custody["independent_snapshot_files_byte_verified"] > 0
+
+
 def test_delivered_determinism_receipt_binds_all_paired_rows():
     """The public claim must bind the actual complete comparison, not a summary-only receipt."""
     proof = json.loads((EVIDENCE / "acquisition-proof.json").read_text())

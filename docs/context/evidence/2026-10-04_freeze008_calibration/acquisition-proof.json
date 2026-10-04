@@ -223,6 +223,7 @@
   "repeat_preservation": {
     "cold_files_byte_verified": 183,
     "cold_manifest_sha256": "bba492353c50f6714e9da51f1e87fd9eadd4d74cc4a48bb522b65cb45fc373a5",
+    "independent_snapshot_files_byte_verified": 183,
     "manifest_digest": "sha256:b4f1a2a520bc483881563409c20dba491d4caf464b1ef704058579204ca0dd28",
     "qualified_name": "ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_repeat21331_20261004:v0",
     "receipt_sha256": "4496a578737f8a44b7e16f208d6fd68e5ff89606e23567ae21f5c3802c32d5a0"

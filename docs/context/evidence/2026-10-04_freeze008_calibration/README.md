@@ -74,9 +74,13 @@ Rehearsal CPU: Intel(R) Xeon(R) Silver 4310 CPU @ 2.10GHz; acquisition CPU:
 AMD EPYC 9354P 32-Core Processor. Node, kernel and glibc differ; recorded
 Python/NumPy/Numba versions and thread limits match. F and K delta are zero;
 J delta is 0.9363386659249961% (0.018161933593934476).
-This is the anchors' measured environment sensitivity, consistent with the
+This is a measured cross-acquisition difference; the recorded context does not
+include the learned-policy inference stack. It is consistent with the
 [documented machine/compiler-conditional dynamics sensitivity](../../../benchmark_release_reproducibility.md).
 The experiment does not isolate a pedestrian fast-math or PPO arithmetic mechanism.
+Rehearsal checkpoint equality is inferred from byte-identical `model/registry.yaml`
+at d56092ed and 3e73b04b plus `checkpoint_provenance_enforcement="error"`, because
+the recovered rehearsal custody lacks a checkpoint staging receipt.
 
 The rehearsal p95 is a linear interpolation between 1.930676903661017
 (`guarded_ppo`, `francis2023_leave_group`, 1002) and 1.9412637255574998

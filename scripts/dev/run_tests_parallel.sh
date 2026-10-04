@@ -319,6 +319,9 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
   fi
   sharding_active="1"
   cmd+=("--splits" "$shard_count" "--group" "$shard_index")
+  # Greedy assignment spreads unknown-duration prefixes across runners;
+  # contiguous chunks cannot rebalance an unmeasured collection prefix.
+  cmd+=("--splitting-algorithm" "least_duration")
   # CI restores a prior aggregate and uploads each shard's store for a
   # workflow-level merge job; local runs simply keep the generated file.
   cmd+=("--store-durations" "--durations-path" ".test_durations")
@@ -335,7 +338,7 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
 fi
 
 # Fast PR/local lane: sharding excludes slow tests unless the caller explicitly
-# opts into the complete suite. Main CI uses that opt-in for its four shards.
+# opts into the complete suite. Main CI uses that opt-in for its full-suite shards.
 include_slow="${ROBOT_SF_SHARD_INCLUDE_SLOW:-0}"
 case "$include_slow" in
   1|true|yes|on) include_slow=1 ;;

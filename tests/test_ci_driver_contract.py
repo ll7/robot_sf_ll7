@@ -402,7 +402,7 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
 
 
 def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
-    """Keep main fast by combining complete coverage from four full-suite shards."""
+    """Keep main fast by combining complete coverage from six full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
     coverage_gate = workflow["jobs"]["coverage-gate"]
@@ -423,8 +423,8 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
         step for step in coverage_steps if step.get("name") == "Combine coverage shards"
     )
 
-    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
-    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 4
+    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 6
     assert (
         "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
     )
@@ -1296,7 +1296,7 @@ def test_failed_matrix_publishes_nonempty_duration_bootstrap() -> None:
 def test_duration_dependency_key_miss_has_platform_scoped_fallback() -> None:
     """A lock change reuses scheduling hints without crossing OS/architecture/schema."""
     workflow = yaml.safe_load(_workflow_text())
-    steps = workflow["jobs"]["fast-feedback"]["steps"]
+    steps = workflow["jobs"]["dispatch-ownership"]["steps"]
     restore = next(
         step
         for step in steps
@@ -1319,7 +1319,13 @@ def test_fast_feedback_redistributes_heavy_tail_without_reducing_coverage() -> N
     workflow = yaml.safe_load(_workflow_text())
     fast = workflow["jobs"]["fast-feedback"]
     assert fast["env"]["PYTEST_XDIST_DIST"] == "worksteal"
-    assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert fast["env"]["PYTEST_SHARD_COUNT"] == 6
+    assert "PYTEST_NUM_WORKERS" not in fast["env"]
+    merge = next(
+        step for step in workflow["jobs"]["ci"]["steps"] if step["name"] == "Merge test durations"
+    )
+    assert f"--shard-count {fast['env']['PYTEST_SHARD_COUNT']}" in merge["run"]
     assert fast["timeout-minutes"] == 45
     assert fast["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert (
@@ -1344,3 +1350,47 @@ def test_ci_uv_cache_keeps_downloaded_wheels_and_keys_only_locked_environment() 
     assert "uv_sync_retry.sh" in sync["run"]
     assert "inputs.sync-args" in sync["run"]
     assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
+
+
+def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> None:
+    """Staggered restores and reruns must not select overlapping or missing tests."""
+    workflow = yaml.safe_load(_workflow_text())
+    dispatch = workflow["jobs"]["dispatch-ownership"]
+    freeze = next(s for s in dispatch["steps"] if s.get("id") == "freeze-durations")
+    assert "--snapshot-input .test_durations --output .test_durations" in freeze["run"]
+    assert freeze["if"] == "steps.decision.outputs.run_full_ci == 'true'"
+    upload = next(s for s in dispatch["steps"] if s["name"] == "Upload frozen test durations")
+    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    assert upload["if"] == freeze["if"]
+    assert upload["with"] == {
+        "name": "test-duration-snapshot",
+        "path": ".test_durations",
+        "include-hidden-files": True,
+        "if-no-files-found": "error",
+    }
+    fast = workflow["jobs"]["fast-feedback"]
+    assert fast["needs"] == "dispatch-ownership"
+    assert fast["permissions"] == {"contents": "read", "actions": "read"}
+    download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
+    assert download["uses"] == "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    # An explicit token selects the run-scoped REST lookup, which sees the
+    # successful owner's original artifact during a failed-jobs-only rerun.
+    assert download["with"] == {
+        "name": upload["with"]["name"],
+        "path": ".",
+        "run-id": "${{ github.run_id }}",
+        "github-token": "${{ github.token }}",
+    }
+    assert "continue-on-error" not in upload
+    assert "continue-on-error" not in download
+    assert "if" not in download
+    assert "duration_snapshot" not in dispatch["outputs"]
+    for job in (dispatch, fast):
+        snapshot_steps = [
+            s for s in job["steps"] if "frozen test durations" in s.get("name", "").lower()
+        ]
+        assert len(snapshot_steps) == 1
+        assert "cache@" not in snapshot_steps[0]["uses"]
+        assert "cache/" not in snapshot_steps[0]["uses"]
+        assert "run_attempt" not in str(snapshot_steps[0])
+        assert "GITHUB_RUN_ATTEMPT" not in str(snapshot_steps[0])

@@ -10,6 +10,7 @@ builders and downstream entrypoints. Only existing runtime seams are patched.
 import hashlib
 import json
 import subprocess
+import sys
 from dataclasses import replace
 from itertools import product
 from pathlib import Path
@@ -260,11 +261,11 @@ def test_production_release_census_refuses_a_missing_manifest_learned_arm(
 
 
 def test_receipt_builder_retains_production_learned_stack_versions(tmp_path, monkeypatch):
-    import stable_baselines3
-    import torch
-
+    from robot_sf.benchmark import result_provenance
     from scripts.dev.build_snqi_v2_determinism_receipt import build_receipt
 
+    versions = {"torch": "9.8.7+fixture", "stable-baselines3": "2.9.1+fixture"}
+    monkeypatch.setattr(result_provenance, "_installed_version", versions.__getitem__)
     context = build_execution_context_provenance()
     row = {
         "metrics": {"robot_force_impulse_total": 2.0, "jerk_mean": 3.0, "curvature_mean": 4.0},
@@ -288,21 +289,16 @@ def test_receipt_builder_retains_production_learned_stack_versions(tmp_path, mon
             write_review_sidecar(path)
     receipt = build_receipt(*roots)
     recorded = receipt["execution_contexts"]["original"]
-    assert recorded.get("torch_version") == torch.__version__, (
+    assert recorded.get("torch_version") == versions["torch"], (
         "production receipt omitted torch_version"
     )
-    assert recorded.get("stable_baselines3_version") == stable_baselines3.__version__, (
+    assert recorded.get("stable_baselines3_version") == versions["stable-baselines3"], (
         "production receipt omitted stable_baselines3_version"
     )
     assert receipt["original_vs_repeat"]["identical_rows"] == 1344
     from robot_sf import _execution_context as primitive
 
-    def absent(_name):
-        raise ModuleNotFoundError("optional learned stack absent")
-
-    import importlib
-
-    monkeypatch.setattr(importlib, "import_module", absent)
+    # The primitive serializes supplied observations; only provenance captures versions.
     without_optional_imports = primitive.build_execution_context()
     assert "torch_version" not in without_optional_imports
     assert "stable_baselines3_version" not in without_optional_imports
@@ -458,3 +454,64 @@ def test_release_census_normalizes_recorded_algorithm(tmp_path, monkeypatch, cap
     support.test_recorded_context_gate_precedes_full_release_acceptance(
         monkeypatch, capsys, tmp_path, "equal"
     )
+
+
+def test_fresh_gate_observation_keeps_inference_stack_unloaded():
+    """Observe and enforce installed policy versions without importing either runtime."""
+    probe = r"""
+import importlib.abc
+import importlib.machinery
+import json
+import os
+import sys
+
+class RefusePolicyImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in {"torch", "stable_baselines3"}:
+            spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+            if spec is not None:
+                spec.loader = RefusePolicyExecution()
+            return spec
+
+class RefusePolicyExecution(importlib.abc.Loader):
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module):
+        raise AssertionError("gate observation attempted inference import: " + module.__name__)
+
+assert "torch" not in sys.modules and "stable_baselines3" not in sys.modules
+sys.meta_path.insert(0, RefusePolicyImports())
+from robot_sf._execution_context import LEARNED_POLICY_CONTEXT_FIELDS
+from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
+pin_thread_env_for_determinism()
+from robot_sf.benchmark.snqi.execution_context import (
+    CONTEXT_ENV, admit_episode_context, build_execution_context_provenance,
+)
+reference = build_execution_context_provenance()
+for field in LEARNED_POLICY_CONTEXT_FIELDS:
+    assert isinstance(reference.get(field), str) and reference[field], field
+os.environ[CONTEXT_ENV] = json.dumps(reference)
+admitted = admit_episode_context(" PPO ")
+assert all(admitted[field] == reference[field] for field in LEARNED_POLICY_CONTEXT_FIELDS)
+for field in LEARNED_POLICY_CONTEXT_FIELDS:
+    for value in (None, "deliberately-different"):
+        changed = dict(reference)
+        changed[field] = value
+        os.environ[CONTEXT_ENV] = json.dumps(changed)
+        try:
+            admit_episode_context("sa_cadrl")
+        except ValueError as error:
+            assert field in str(error), str(error)
+        else:
+            raise AssertionError("learned version mismatch bypassed gate: " + field)
+assert "torch" not in sys.modules and "stable_baselines3" not in sys.modules
+print(json.dumps({"loaded_policy_modules": [], "versions": {
+    field: reference[field] for field in LEARNED_POLICY_CONTEXT_FIELDS
+}}))
+"""
+    observed = subprocess.run(
+        [sys.executable, "-c", probe], check=False, capture_output=True, text=True
+    )
+    assert observed.returncode == 0, observed.stderr
+    assert json.loads(observed.stdout)["loaded_policy_modules"] == []

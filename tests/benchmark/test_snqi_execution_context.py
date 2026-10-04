@@ -83,15 +83,15 @@ def reference():
         "stable_baselines3_version",
     ],
 )
-def test_same_node_cannot_bypass_a_numerical_context_difference(field):
-    import stable_baselines3
-    import torch
-
+def test_same_node_cannot_bypass_a_numerical_context_difference(field, monkeypatch):
+    from robot_sf.benchmark import result_provenance
     from robot_sf.benchmark.snqi.execution_context import assert_context_equal
 
+    versions = {"torch": "9.8.7+fixture", "stable-baselines3": "2.9.1+fixture"}
+    monkeypatch.setattr(result_provenance, "_installed_version", versions.__getitem__)
     expected = build_execution_context_provenance()
     expected.update(
-        torch_version=torch.__version__, stable_baselines3_version=stable_baselines3.__version__
+        torch_version=versions["torch"], stable_baselines3_version=versions["stable-baselines3"]
     )
     observed = build_execution_context_provenance()
     for name in ("torch_version", "stable_baselines3_version"):

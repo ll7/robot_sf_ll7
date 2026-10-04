@@ -695,8 +695,9 @@ not move the freeze. Run the complete 14×48×2 dev1001/1002 calibration acquisi
 campaign IDs and preserved raw custody. Both `run_meta.json` execution contexts
 must record CPU/platform/Python/NumPy/Numba, the complete numerical thread
 environment, **`torch_version` and `stable_baselines3_version`**. The production
-context builder observes runtime learned-stack versions (including Torch build
-suffixes) using best-effort imports. Missing imports omit their keys;
+context builder observes learned-stack versions without importing either runtime:
+loaded versions take precedence, followed by installed metadata and Torch's literal
+build tag from `version.py` (with metadata fallback). Missing distributions omit their keys;
 F2 acquisition for these learned arms must have both dependencies installed and
 both versions recorded. Do not stamp today's versions onto older producer rows.
 

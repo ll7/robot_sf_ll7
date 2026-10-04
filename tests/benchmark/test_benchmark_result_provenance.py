@@ -151,17 +151,11 @@ def test_build_manifest_records_execution_context() -> None:
         active_observation_level="full",
     )
     ctx = manifest["run"]["execution_context"]
-    optional = {key for key in ("torch_version", "stable_baselines3_version") if key in ctx}
-    assert set(ctx) == {
-        "hostname",
-        *_OBSERVED_CONTEXT_FIELDS,
-        *optional,
-        "execution_context_sha256",
-    }
+    assert set(ctx) == {"hostname", *_OBSERVED_CONTEXT_FIELDS, "execution_context_sha256"}
     assert isinstance(ctx["hostname"], str) and ctx["hostname"]
     assert isinstance(ctx["thread_env"], dict)
     assert set(ctx["thread_env"]) >= {"OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}
-    canonical_context = {field: ctx[field] for field in (*_OBSERVED_CONTEXT_FIELDS, *optional)}
+    canonical_context = {field: ctx[field] for field in _OBSERVED_CONTEXT_FIELDS}
     assert canonical_context["numpy_version"] == np.__version__
     assert canonical_context["numba_version"] == str(numba.__version__)
     assert ctx["execution_context_sha256"] == execution_context_digest(canonical_context)

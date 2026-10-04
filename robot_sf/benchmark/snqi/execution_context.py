@@ -10,8 +10,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf._execution_context import LEARNED_POLICY_CONTEXT_FIELDS
+from robot_sf.benchmark._runtime_smoke_planner_keys import _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
-from robot_sf.benchmark.runtime_smoke_admission import _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -28,7 +29,7 @@ REQUIRED_FIELDS = (
     "numba_version",
     "thread_env",
 )
-OPTIONAL_FIELDS = ("kernel", "glibc", "torch_version", "stable_baselines3_version")
+OPTIONAL_FIELDS = ("kernel", "glibc", *LEARNED_POLICY_CONTEXT_FIELDS)
 
 
 def assert_context_equal(observed: Mapping[str, Any], expected: Mapping[str, Any]) -> None:

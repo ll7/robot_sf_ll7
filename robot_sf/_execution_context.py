@@ -1,8 +1,7 @@
-"""Execution-context provenance primitives with optional learned-stack observation.
+"""Dependency-free execution-context provenance primitives.
 
 The exact-repeat and result-provenance paths need the same numerical context
-vocabulary without importing the benchmark package. Learned-stack imports are
-best effort; NumPy and Numba versions are supplied by callers.  Host
+vocabulary without importing NumPy, Numba, or the benchmark package.  Host
 identity is deliberately not part of the canonical context: two distinct
 hosts can be numerically comparable when their execution contexts match.
 """
@@ -22,8 +21,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 EXECUTION_CONTEXT_SCHEMA_VERSION = "benchmark_execution_context.v1"
-
-OPTIONAL_EXECUTION_CONTEXT_FIELDS = ("torch_version", "stable_baselines3_version")
 
 EXECUTION_CONTEXT_FIELDS = (
     "schema_version",
@@ -81,8 +78,6 @@ def build_execution_context(
     Returns:
         A JSON-serialisable canonical execution-context mapping.
     """
-    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
-
     context: dict[str, Any] = {
         "schema_version": EXECUTION_CONTEXT_SCHEMA_VERSION,
         "cpu_model": cpu_model(),
@@ -90,16 +85,6 @@ def build_execution_context(
         "python_version": platform.python_version(),
         "thread_env": {name: os.environ.get(name) for name in THREAD_ENV_VARS},
     }
-    # Optional learned-stack imports are best effort. Use the runtime version,
-    # including Torch's build suffix, rather than distribution metadata alone.
-    for module_name, field in (
-        ("torch", "torch_version"),
-        ("stable_baselines3", "stable_baselines3_version"),
-    ):
-        module = try_import(module_name)
-        observed_version = getattr(module, "__version__", None)
-        if observed_version is not None:
-            context[field] = str(observed_version)
     if numpy_version is not None:
         context["numpy_version"] = str(numpy_version)
     if numba_version is not None:

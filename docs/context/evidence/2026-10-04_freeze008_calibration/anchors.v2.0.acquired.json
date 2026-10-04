@@ -1,0 +1,258 @@
+{
+  "anchors": {
+    "F": {
+      "lower": 0,
+      "type": "calibration_p95",
+      "upper": 78.44270546210876
+    },
+    "J": {
+      "lower": 0,
+      "type": "calibration_p95",
+      "upper": 1.957837635866961
+    },
+    "K": {
+      "lower": 0,
+      "type": "calibration_p95",
+      "upper": 0.5160654761904677
+    },
+    "N": {
+      "lower": 0,
+      "type": "normative",
+      "upper": 0.25
+    },
+    "T": {
+      "lower": 0,
+      "type": "normative",
+      "upper": 3
+    }
+  },
+  "calibration": {
+    "arms": [
+      "goal",
+      "guarded_ppo",
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "orca",
+      "ppo",
+      "prediction_planner",
+      "predictive_mppi",
+      "risk_dwa",
+      "sacadrl",
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "social_force",
+      "socnav_sampling"
+    ],
+    "benchmark_execution": "nonfallback",
+    "campaign_config_hash": "6cd6a57f3583d150d51ac52b7a4a4fd80fa7b077795ac3c7973ef643d3f8fbbd",
+    "campaign_config_identity": "6cd6a57f3583d150",
+    "campaign_manifest_sha256": "087d03cf2f1a106cc7cd27558845b09f7d7d3f317a41215c9be223f015330219",
+    "command_mode_counts": {
+      "goal": {
+        "native": 96
+      },
+      "guarded_ppo": {
+        "mixed": 96
+      },
+      "hybrid_rule_v4_fast_progress_static_escape": {
+        "adapter": 96
+      },
+      "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+        "adapter": 96
+      },
+      "orca": {
+        "adapter": 96
+      },
+      "ppo": {
+        "native": 96
+      },
+      "prediction_planner": {
+        "adapter": 96
+      },
+      "predictive_mppi": {
+        "adapter": 96
+      },
+      "risk_dwa": {
+        "adapter": 96
+      },
+      "sacadrl": {
+        "adapter": 96
+      },
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+        "adapter": 96
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+        "adapter": 96
+      },
+      "social_force": {
+        "adapter": 96
+      },
+      "socnav_sampling": {
+        "adapter": 96
+      }
+    },
+    "episode_count": 1344,
+    "episode_files_sha256": {
+      "runs/goal__differential_drive/episodes.jsonl": "05acff900321954bdee0b5e10d121c54ac31e50f7aa9975d62fbc344c2628ebe",
+      "runs/guarded_ppo__differential_drive/episodes.jsonl": "f07aa15c9c8981341e9049d548a842f916a0c5067e5203d637e8e98551e52310",
+      "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl": "7f13c560fad8042ef2b863fc73dfd5c38e6a0109071b64427a1aff4de55973b2",
+      "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl": "0f56f99e6990c20b1831253cf867e631abc889f394191b28e34c84a50c1d535e",
+      "runs/orca__differential_drive/episodes.jsonl": "8a4fec1ac5ba6ce9d0fc7594e9d312a60557a2bcaad9644dd18aee19b757d3f0",
+      "runs/ppo__differential_drive/episodes.jsonl": "02ce40cff606a9d46b9d7943d1fe04e2225e8758a0e753b8c161580849e448b5",
+      "runs/prediction_planner__differential_drive/episodes.jsonl": "657eea8574855e0178165ccce015f8073e7b524b5eaa1ccf0dbdab603d4e3045",
+      "runs/predictive_mppi__differential_drive/episodes.jsonl": "fb548742b8d14ac81cd5d02f31b8cd2bf49da1b9930888ab2e83885dc7dbb7bb",
+      "runs/risk_dwa__differential_drive/episodes.jsonl": "687113b1696c04d3ccb76a4833ae8e1ee90ecb653f976e3ff25aa81b452c8f68",
+      "runs/sacadrl__differential_drive/episodes.jsonl": "af29d64e414d786dcf51612bfc7c0381fb1028087e67130d6a53dec8e52e4447",
+      "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl": "2c68d52d4e7b4412e27437e211cb697b3064742a1413b84d480fcdfeccf950f9",
+      "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl": "8ab172e954046356037ab111dcb26b91d462425eceb6020b71da224ffad3a6d0",
+      "runs/social_force__differential_drive/episodes.jsonl": "4e556608255eec7b526b9ebb196402a15bc6f1c80412b88c6688bfb38e225c80",
+      "runs/socnav_sampling__differential_drive/episodes.jsonl": "cd54fee3791d88b4b292a92c7542909a761706285a2374d8889e111093ea28af"
+    },
+    "episodes_hash_rule": "sha256(sorted compact JSON relative-path-to-file-sha256 map)",
+    "episodes_sha256": "d75b61be48dd2a504c59888f5d641349fbf369fc96cb30af0aa43c4d889ac5ec",
+    "grid_sha256": "3253b281f6059bef111e86536163c1166422fa9f316b5b2acad5de233628c951",
+    "producer_sidecars_sha256": {
+      "runs/goal__differential_drive/episodes.jsonl.provenance.json": "ce8cca8a9f1c89dcd3a58f99ce7ea804a09637959ad41678a59648f4bbc6423f",
+      "runs/guarded_ppo__differential_drive/episodes.jsonl.provenance.json": "ef6c03f73ee16650b37771d8a3f36065f897380b9772e7bbb3a2f66ac6fbd5c1",
+      "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl.provenance.json": "3df4e2e659710a4fe9e61b1927e413e68a29e51c462c12f095a505cbbe9c048b",
+      "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl.provenance.json": "7a83a64463b908c3e23a6280e7dd7bdbf333b02ae07149ba0f6d5c03e187c173",
+      "runs/orca__differential_drive/episodes.jsonl.provenance.json": "294a5db9ee3dac5d1de38a4e36f202cc52c305d013d592b82d4ff66d91d81707",
+      "runs/ppo__differential_drive/episodes.jsonl.provenance.json": "9037747cc820e0aaa8b97d1fc22f5f714e9c582ee7cd24b7b35f35108cf6ff73",
+      "runs/prediction_planner__differential_drive/episodes.jsonl.provenance.json": "cdd46bc7671015d7b8f9355519500c5bd266189c05fd4389898238d146f84d4c",
+      "runs/predictive_mppi__differential_drive/episodes.jsonl.provenance.json": "d693265998d0c5f8dd4c6158d87536f41bcde3a994687125a59219e1efae8509",
+      "runs/risk_dwa__differential_drive/episodes.jsonl.provenance.json": "e5f1e62e76de6aacc8a110910dc12b6c71b4f7e959cb4e0862e1bacc65537ba0",
+      "runs/sacadrl__differential_drive/episodes.jsonl.provenance.json": "2c902ec19655aded343f69195f4fe8022db3e013cfcb69966e99dfc9808e17f9",
+      "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl.provenance.json": "7e162acdc879d12a38c1b12bd8aa143fa99e42cfacd17232a2fb40c455d26f7a",
+      "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl.provenance.json": "e80a323c036eaa40d4b4bb401484fcb2fbd132960ec8fc4aa0e3878815d7f3d1",
+      "runs/social_force__differential_drive/episodes.jsonl.provenance.json": "4ba9cf74a727deb2669ff67ddd14e8dc3af0fc8da1611f83abf27d14cf70ac81",
+      "runs/socnav_sampling__differential_drive/episodes.jsonl.provenance.json": "578594cb1e183dd8610b088bdce2281e57b6de2908883a1f53ac5e2a18c2219b"
+    },
+    "quantile_method": "linear",
+    "run_id": "issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003",
+    "scenario_horizons": {
+      "classic_bottleneck_high": 500,
+      "classic_bottleneck_low": 500,
+      "classic_bottleneck_medium": 500,
+      "classic_cross_trap_high": 600,
+      "classic_cross_trap_low": 600,
+      "classic_cross_trap_medium": 600,
+      "classic_doorway_high": 500,
+      "classic_doorway_low": 500,
+      "classic_doorway_medium": 500,
+      "classic_group_crossing_high": 500,
+      "classic_group_crossing_low": 500,
+      "classic_group_crossing_medium": 500,
+      "classic_head_on_corridor_low": 500,
+      "classic_head_on_corridor_medium": 500,
+      "classic_merging_low": 600,
+      "classic_merging_medium": 600,
+      "classic_overtaking_low": 600,
+      "classic_overtaking_medium": 600,
+      "classic_realworld_double_bottleneck_high": 700,
+      "classic_station_platform_medium": 650,
+      "classic_t_intersection_low": 500,
+      "classic_t_intersection_medium": 500,
+      "classic_urban_crossing_medium": 600,
+      "francis2023_accompanying_peer": 400,
+      "francis2023_blind_corner": 400,
+      "francis2023_circular_crossing": 400,
+      "francis2023_crowd_navigation": 400,
+      "francis2023_down_path": 400,
+      "francis2023_entering_elevator": 400,
+      "francis2023_entering_room": 400,
+      "francis2023_exiting_elevator": 400,
+      "francis2023_exiting_room": 400,
+      "francis2023_following_human": 400,
+      "francis2023_frontal_approach": 400,
+      "francis2023_intersection_no_gesture": 400,
+      "francis2023_intersection_proceed": 400,
+      "francis2023_intersection_wait": 400,
+      "francis2023_join_group": 400,
+      "francis2023_leading_human": 400,
+      "francis2023_leave_group": 400,
+      "francis2023_narrow_doorway": 400,
+      "francis2023_narrow_hallway": 400,
+      "francis2023_parallel_traffic": 400,
+      "francis2023_pedestrian_obstruction": 400,
+      "francis2023_pedestrian_overtaking": 600,
+      "francis2023_perpendicular_traffic": 400,
+      "francis2023_robot_crowding": 400,
+      "francis2023_robot_overtaking": 400
+    },
+    "scenarios": [
+      "classic_bottleneck_high",
+      "classic_bottleneck_low",
+      "classic_bottleneck_medium",
+      "classic_cross_trap_high",
+      "classic_cross_trap_low",
+      "classic_cross_trap_medium",
+      "classic_doorway_high",
+      "classic_doorway_low",
+      "classic_doorway_medium",
+      "classic_group_crossing_high",
+      "classic_group_crossing_low",
+      "classic_group_crossing_medium",
+      "classic_head_on_corridor_low",
+      "classic_head_on_corridor_medium",
+      "classic_merging_low",
+      "classic_merging_medium",
+      "classic_overtaking_low",
+      "classic_overtaking_medium",
+      "classic_realworld_double_bottleneck_high",
+      "classic_station_platform_medium",
+      "classic_t_intersection_low",
+      "classic_t_intersection_medium",
+      "classic_urban_crossing_medium",
+      "francis2023_accompanying_peer",
+      "francis2023_blind_corner",
+      "francis2023_circular_crossing",
+      "francis2023_crowd_navigation",
+      "francis2023_down_path",
+      "francis2023_entering_elevator",
+      "francis2023_entering_room",
+      "francis2023_exiting_elevator",
+      "francis2023_exiting_room",
+      "francis2023_following_human",
+      "francis2023_frontal_approach",
+      "francis2023_intersection_no_gesture",
+      "francis2023_intersection_proceed",
+      "francis2023_intersection_wait",
+      "francis2023_join_group",
+      "francis2023_leading_human",
+      "francis2023_leave_group",
+      "francis2023_narrow_doorway",
+      "francis2023_narrow_hallway",
+      "francis2023_parallel_traffic",
+      "francis2023_pedestrian_obstruction",
+      "francis2023_pedestrian_overtaking",
+      "francis2023_perpendicular_traffic",
+      "francis2023_robot_crowding",
+      "francis2023_robot_overtaking"
+    ],
+    "seeds": [
+      1001,
+      1002
+    ],
+    "source_commit": "3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6",
+    "split_id": "snqi-v2-dev1001-1002-3253b281f605"
+  },
+  "evaluation_seeds_sha256": "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6",
+  "force_decision": {
+    "N": "clip(near_misses/steps/0.25)",
+    "selected_source_contract": {
+      "quantity": "model acceleration, not measured human discomfort",
+      "reference_rule": "social_force_head_on_contact_relative_speed_1m_s_v1",
+      "reference_value_rule": "robot_force_reference(social_force_config, prf_ped_radius_m)",
+      "sample_timing": "pre_integration",
+      "source": "recorded_robot_pedestrian_social_force"
+    },
+    "selected_source_coverage": 1344,
+    "source": "robot_force_impulse_total",
+    "spearman_rho_F_N": 0.60110908310645,
+    "spearman_rho_F_exposure_fraction": 0.6033923370407435,
+    "threshold_absolute_rho": 0.9
+  },
+  "metric_schema_version": "robot-sf-metrics.v2",
+  "status": "frozen",
+  "version": "SNQI-v2.0"
+}

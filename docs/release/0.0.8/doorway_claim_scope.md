@@ -33,8 +33,9 @@ U/D tables, 28 control classifications and custody receipts. The recorded
 outcome is **INCONCLUSIVE** under precedence 4(a). All feasible-width U/D counts
 are below 7/14; these are facts without an applicability claim. The infeasible
 2.0 m control has eight contact rows, from goal, ppo, prediction_planner and
-sacadrl in both seeds; the author identifies these as deterministic planner
-behaviour. This ruling does not reinterpret the predeclared outcome as PASS.
+sacadrl in both seeds; the orchestrator's 2026-10-05 ruling treats these as
+deterministic planner behaviour rather than measurement inconsistency. This
+ruling does not reinterpret the predeclared outcome as PASS.
 
 Reopen only through a newly predeclared doorway applicability test in 0.0.9,
 tracked by [issue #10140](https://github.com/ll7/robot_sf_ll7/issues/10140).

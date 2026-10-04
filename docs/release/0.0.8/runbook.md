@@ -139,6 +139,49 @@ execution and publication retain their separate later gates. Reopen this reorder
 ruling if the resolver can mutate acquisition inputs or calibration preflight
 begins requiring resolved publication metadata.
 
+### Acquired calibration — 2026-10-04
+
+After private queue PR #425 merged at
+`bda7c268b3c32acac18a08936ccf565d64668e64`, the canonical driver submitted only
+the admitted calibration row. Job 21331 completed in 00:51:35 with exit 0;
+the producer finalizer reported complete custody, zero campaign/sync errors,
+and a verified checksum manifest. Public source remained the clean named freeze
+`3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6`; private runtime remained
+`c857a30b77fbd82b73fe4f72b71c045aae9c4d10`.
+
+The [acquisition evidence](../../context/evidence/2026-10-04_freeze008_calibration/README.md)
+records all 1,344 unique 14×48×2 dev1001/1002 cells, 96 per arm. Execution has
+zero fallback, degraded, failed or unavailable arms/rows. Goal and PPO are
+native, guarded PPO is mixed, and the other eleven arms use their declared
+adapters. Force provenance declares recorded model acceleration sampled before
+integration; 28 authored zero-pedestrian baseline cells are explicitly separate
+from 1,316 finite sampled cells, with no missing-value imputation.
+
+The repository freezer and independent scalar recomputation agree:
+F=78.44270546210876, J=1.957837635866961, K=0.5160654761904677; T=3 and N=0.25.
+F's preregistered rho is 0.60110908310645, selecting `robot_force_impulse_total`.
+F and K equal the d56092ed rehearsal; J rises by 0.018161933593934476 (0.93634%).
+The evidence identifies its actual p95 order statistics and source differences;
+these acquisitions do not isolate a causal effect of a particular runtime change.
+The literal acquisition YAML remains byte-identical, SHA-256
+`fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3`.
+
+The separate [acquired anchors](../../context/evidence/2026-10-04_freeze008_calibration/anchors.v2.0.acquired.json)
+have SHA-256 `12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2`.
+Raw-custody and artifact-only attachment to the unchanged candidate pass without
+reset/step; these checks grant no scientific authority. W&B artifact
+`ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003:v0`
+is COMMITTED. All 117 preserved source members pass cold stored/decoded SHA-256
+and independent local checksum-snapshot comparison, manifest digest
+`sha256:691d21210c5f0e73da560fc81749fa0346c121d95d73f1bdb0b909aef54414c9`.
+
+**Stop for independent review.** The six scientific boxes and private Git-blob
+trust sources remain untouched. The tracked pending-anchor asset and named freeze
+do not move. Authentic DOI custody, both resolved release identities and the
+concrete doorway manifest remain later inputs. The smoke row was not submitted;
+no smoke, final mint, sealed execution or publication occurred. Preserve acquisition
+bytes; the stale config comment remains tracked in #10124.
+
 ## 1. Move the freeze branch — orchestrator only
 
 ```bash

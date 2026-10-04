@@ -164,7 +164,17 @@ def test_guard_restores_environment_and_records_worker_context(monkeypatch):
         admit_episode_context,
         episode_context_guard,
     )
+    from scripts.dev.build_snqi_v2_determinism_receipt import metric_row_sha256
+    from tests.benchmark.test_map_runner_episode_algo_meta_isolation import _patch_episode_runtime
 
+    _patch_episode_runtime(monkeypatch)
+    fake_environment = episode.make_robot_env
+
+    def dev_environment(config, seed, debug):
+        assert seed == 1004
+        return fake_environment(config, seed, debug)
+
+    monkeypatch.setattr(episode, "make_robot_env", dev_environment)
     for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         monkeypatch.setenv(variable, "1")
     live = build_execution_context_provenance()
@@ -173,6 +183,28 @@ def test_guard_restores_environment_and_records_worker_context(monkeypatch):
         record = admit_episode_context("ppo")
         assert record["cpu_model"] == live["cpu_model"] and "hostname" not in record
         assert admit_episode_context("goal") is None
+        with monkeypatch.context() as clocks:
+            clocks.setattr(episode.time, "time", lambda: 1700000000.0)
+            clocks.setattr(episode.time, "perf_counter", lambda: 1700000000.0)
+            row = episode.run_map_episode(
+                {"name": "ctxfix-dev1004", "simulation_config": {"max_episode_steps": 1}},
+                seed=1004,
+                horizon=1,
+                dt=0.1,
+                record_forces=False,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo="ppo",
+                scenario_path=Path("dev1004.yaml"),
+                adapter_impact_eval=True,
+                policy_builder=lambda *_a, **_k: (lambda _obs: (1.0, 0.0), {"algorithm": "ppo"}),
+            )
+        assert row["algorithm_metadata"]["execution_context"] == record
+        assert row["steps"] == 1 and row["status"] == "success"
+        # Independently measured on the same fake episode at main eaa3cc8f.
+        assert metric_row_sha256(row) == (
+            "501404c39096faa42edddc6bca7e280f0ceaee37088808e9394abd3210265d9e"
+        )
     assert __import__("os").environ[ENV] == "prior"
     with episode_context_guard(None):
         assert admit_episode_context("ppo") is None

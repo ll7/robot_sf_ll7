@@ -11,6 +11,7 @@ opted into explicitly with ``input_binding_schema_version``.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import platform
@@ -20,6 +21,7 @@ import uuid
 from collections.abc import Mapping
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -194,15 +196,36 @@ def _cpu_model() -> str:
 
 
 def _installed_version(distribution: str) -> str | None:
-    """Observe optional policy-stack versions without importing their runtime.
+    """Observe optional policy versions, including Torch's runtime build tag, without imports.
 
     Returns:
-        Installed distribution version, or None when it is unavailable.
+        Observed runtime/package version, or None when it is unavailable.
     """
+    module_name = distribution.replace("-", "_")
+    observed = getattr(sys.modules.get(module_name), "__version__", None)
+    if observed is not None:
+        return str(observed)
     try:
-        return version(distribution)
+        installed = version(distribution)
     except PackageNotFoundError:
         return None
+    if distribution != "torch":
+        return installed
+    # Wheel metadata can omit +cpu/+cu*; read the actual package's literal
+    # version without executing torch imports, CUDA discovery or RNG setup.
+    spec = find_spec("torch")
+    if spec is not None and spec.origin is not None:
+        version_path = Path(spec.origin).with_name("version.py")
+        for statement in ast.parse(version_path.read_text(encoding="utf-8")).body:
+            if isinstance(statement, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__version__"
+                for target in statement.targets
+            ):
+                value = statement.value
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    return value.value
+                break
+    raise ValueError("Torch runtime version including build tag cannot be observed")
 
 
 def build_execution_context_provenance() -> dict[str, Any]:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import platform
+import sys
 from hashlib import sha256
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError
 from io import StringIO
 from pathlib import Path
 
@@ -174,9 +175,23 @@ def test_manifest_execution_context_does_not_assert_unobserved_execution_mode() 
 
 def test_execution_context_records_installed_learned_policy_versions() -> None:
     """Policy-stack drift must be observable in the context used by the release gate."""
+    import stable_baselines3
+    import torch
+
     provenance = build_execution_context_provenance()
-    assert provenance["torch_version"] == version("torch")
-    assert provenance["stable_baselines3_version"] == version("stable-baselines3")
+    assert provenance["torch_version"] == str(torch.__version__)
+    assert provenance["stable_baselines3_version"] == str(stable_baselines3.__version__)
+
+
+def test_execution_context_preserves_torch_build_tag_without_importing_runtime(monkeypatch) -> None:
+    """Unloaded Torch must retain its runtime build tag without executing package imports."""
+    import torch
+
+    expected = str(torch.__version__)
+    monkeypatch.delitem(sys.modules, "torch")
+    provenance = build_execution_context_provenance()
+    assert provenance["torch_version"] == expected
+    assert "torch" not in sys.modules
 
 
 def test_execution_context_does_not_invent_missing_policy_versions(monkeypatch) -> None:
@@ -186,6 +201,8 @@ def test_execution_context_does_not_invent_missing_policy_versions(monkeypatch) 
         raise PackageNotFoundError(distribution)
 
     monkeypatch.setattr(result_provenance, "version", missing)
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "stable_baselines3", raising=False)
     context = build_execution_context_provenance()
     assert "torch_version" not in context
     assert "stable_baselines3_version" not in context

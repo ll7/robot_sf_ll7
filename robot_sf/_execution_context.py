@@ -67,7 +67,7 @@ def build_execution_context(
     Every field is optional and omitted when the caller cannot observe it, so
     the context never asserts an execution mode it did not verify.  The NumPy
     and Numba values are supplied by callers after those libraries are
-    imported; learned-policy distribution versions can be observed without
+    imported; learned-policy runtime versions can be observed without
     importing the inference stack. ``cpu_only`` and ``workers`` are supplied only by callers that
     enforce or observe the execution mode (for example the exact-repeat path,
     whose contract is CPU-only single-worker execution); general result

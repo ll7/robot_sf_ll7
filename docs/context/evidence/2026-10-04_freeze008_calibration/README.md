@@ -55,6 +55,37 @@ execution. `pedestrian_model.development_model=unknown` remains a provenance
 limitation in these immutable rows; its writer repair is deferred to 0.0.9 in
 [issue #10127](https://github.com/ll7/robot_sf_ll7/issues/10127).
 
+## Fixed-environment repeat and environment sensitivity
+
+[Determinism receipt](determinism-receipt.json) compares all 1,344 metric-column,
+steps and status hashes between jobs 21331 and
+21333: 1344 identical and
+0 different rows, classification `a`.
+J is reproducible for this fixed recorded environment; keep the point anchor. The recorded node identity, CPU/software/thread context match;
+16 workers, subprocess arm isolation and all three thread limits of one remain fixed.
+Public custody uses hashed node identities; private scheduler receipts retain actual names.
+
+The rehearsal raw rows were recovered and all 14 file hashes match its committed
+d56092ed anchor proof. Compared with job 21331, 178 rows differ:
+{"guarded_ppo": 82, "ppo": 96}; 40
+step-count and 7 navigation-status differences.
+Every differing row and both steps/status values are retained in the receipt.
+Rehearsal CPU: Intel(R) Xeon(R) Silver 4310 CPU @ 2.10GHz; acquisition CPU:
+AMD EPYC 9354P 32-Core Processor. Node, kernel and glibc differ; recorded
+Python/NumPy/Numba versions and thread limits match. F and K delta are zero;
+J delta is 0.9363386659249961% (0.018161933593934476).
+This is the anchors' measured environment sensitivity, consistent with the
+[documented machine/compiler-conditional dynamics sensitivity](../../../benchmark_release_reproducibility.md).
+The experiment does not isolate a pedestrian fast-math or PPO arithmetic mechanism.
+
+The rehearsal p95 is a linear interpolation between 1.930676903661017
+(`guarded_ppo`, `francis2023_leave_group`, 1002) and 1.9412637255574998
+(`socnav_sampling`, `classic_bottleneck_high`, 1002), so it need not appear in any
+raw jerk sample. The unchanged hybrid three-way tie moves into the p95 bracket
+as the PPO-arm distribution changes. Exact brackets and all paired metric hashes
+are recorded; the acquired anchor bytes remain unchanged.
+
+Repeat W&B `ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_repeat21331_20261004:v0` is COMMITTED; all 183 source members pass stored/decoded cold and independent snapshot hashes. Manifest `sha256:b4f1a2a520bc483881563409c20dba491d4caf464b1ef704058579204ca0dd28` includes the complete repeat, both determinism receipts and recovered rehearsal raw inputs.
 
 
 ## Preservation and authority boundary
@@ -84,5 +115,5 @@ to it. These commands analyze existing data only:
 cd "$PRODUCER_SOURCE"
 export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 .venv/bin/python scripts/tools/analyze_snqi_contract.py   --campaign-root "$PRODUCER_ROOT/benchmarks/issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003"   --freeze-v2-anchors "$ANCHORS_OUTPUT"
-.venv/bin/python "$REVIEW_REPO/scripts/dev/build_snqi_v2_acquisition_evidence.py"   --producer-root "$PRODUCER_ROOT" --anchors "$ANCHORS_OUTPUT"   --snapshot-root "$SNAPSHOT_ROOT" --cold-root "$COLD_ROOT"   --preservation-receipt "$PRESERVATION_RECEIPT"   --rehearsal docs/context/evidence/2026-10-03_issue10112_mintorder/calibration-d56092ed-grid-proof.json   --output-dir "$REVIEW_REPO/docs/context/evidence/2026-10-04_freeze008_calibration"   --source-commit 3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6   --runtime-commit c857a30b77fbd82b73fe4f72b71c045aae9c4d10   --launcher-sha256 da8e6480426ef0eb6651dd3f4c5dec3ec6436d6d38a93bcfa881330f473b0280
+.venv/bin/python "$REVIEW_REPO/scripts/dev/build_snqi_v2_acquisition_evidence.py"   --producer-root "$PRODUCER_ROOT" --anchors "$ANCHORS_OUTPUT"   --snapshot-root "$SNAPSHOT_ROOT" --cold-root "$COLD_ROOT"   --preservation-receipt "$PRESERVATION_RECEIPT"   --rehearsal docs/context/evidence/2026-10-03_issue10112_mintorder/calibration-d56092ed-grid-proof.json   --output-dir "$REVIEW_REPO/docs/context/evidence/2026-10-04_freeze008_calibration"   --source-commit 3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6   --runtime-commit c857a30b77fbd82b73fe4f72b71c045aae9c4d10   --launcher-sha256 da8e6480426ef0eb6651dd3f4c5dec3ec6436d6d38a93bcfa881330f473b0280   --repeat-producer-root "$REPEAT_PRODUCER_ROOT" --rehearsal-root "$REHEARSAL_ROOT"   --repeat-snapshot-root "$REPEAT_SNAPSHOT_ROOT" --repeat-cold-root "$REPEAT_COLD_ROOT"   --repeat-preservation-receipt "$REPEAT_PRESERVATION_RECEIPT"
 ```

@@ -42,6 +42,32 @@ def test_acquisition_proof_has_guard_counters_and_inert_source_audit():
     assert all(type(value) is int and value >= 0 for value in counters.values())
 
 
+def test_delivered_determinism_receipt_binds_all_paired_rows():
+    """The public claim must bind the actual complete comparison, not a summary-only receipt."""
+    proof = json.loads((EVIDENCE / "acquisition-proof.json").read_text())
+    binding = proof["determinism_receipt"]
+    raw = (ROOT / binding["path"]).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == binding["sha256"]
+    receipt = json.loads(raw)
+    comparison = receipt["original_vs_repeat"]
+    pairs = comparison["row_hashes"]
+    assert len(pairs) == comparison["rows"] == 1344
+    assert len({(row["arm"], row["scenario"], row["seed"]) for row in pairs}) == 1344
+    assert {row["seed"] for row in pairs} == {1001, 1002}
+    different = sum(row["left_sha256"] != row["right_sha256"] for row in pairs)
+    assert different == comparison["different_rows"] == len(comparison["differences"])
+    same_environment = (
+        receipt["execution_contexts"]["original"] == receipt["execution_contexts"]["repeat"]
+    )
+    assert receipt["same_recorded_environment"] == same_environment
+    if receipt["classification"] == "a":
+        assert same_environment and different == 0
+    elif receipt["classification"] == "b":
+        assert same_environment and different > 0
+    else:
+        assert not same_environment
+
+
 def test_metric_row_hash_includes_metrics_steps_status_and_excludes_wall_time():
     """A trajectory change must affect the receipt; bookkeeping time must not."""
     row = sample_row()

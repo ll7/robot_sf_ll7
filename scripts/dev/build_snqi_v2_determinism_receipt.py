@@ -48,7 +48,15 @@ def load_rows(root: Path) -> tuple[dict, dict]:
             rows[key] = row
     counts = Counter(key[0] for key in rows)
     cells = {(key[1], key[2]) for key in rows}
-    if len(files) != 14 or len(rows) != 1344 or set(counts.values()) != {96} or len(cells) != 96:
+    scenarios = {key[1] for key in rows}
+    expected_cells = {(scenario, seed) for scenario in scenarios for seed in (1001, 1002)}
+    if (
+        len(files) != 14
+        or len(rows) != 1344
+        or set(counts.values()) != {96}
+        or len(scenarios) != 48
+        or cells != expected_cells
+    ):
         raise ValueError("incomplete 14 x 48 x 2 development grid")
     return rows, files
 

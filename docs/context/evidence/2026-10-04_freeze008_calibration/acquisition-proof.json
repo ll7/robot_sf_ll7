@@ -62,6 +62,14 @@
     }
   },
   "config_sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
+  "determinism_receipt": {
+    "classification": "a",
+    "different_rows": 0,
+    "identical_rows": 1344,
+    "path": "docs/context/evidence/2026-10-04_freeze008_calibration/determinism-receipt.json",
+    "same_recorded_environment": true,
+    "sha256": "cbdc253256e1521bd63e19033e30fd53ffda03be658587aaaf700c58ee8eab9c"
+  },
   "force_decision_rho_recomputed": 0.60110908310645,
   "force_sample_status_counts": {
     "no-pedestrians": 28,
@@ -164,6 +172,60 @@
     "F": 0.0,
     "J": 0.018161933593934476,
     "K": 0.0
+  },
+  "repeat_census": {
+    "arm_execution": {
+      "campaign_execution_status": "completed",
+      "evidence_status": "valid",
+      "row_status_summary": {
+        "accepted_unavailable_rows": 0,
+        "fallback_or_degraded_rows": 0,
+        "successful_evidence_rows": 14,
+        "unexpected_failed_rows": 0
+      }
+    },
+    "force_sample_status_counts": {
+      "no-pedestrians": 28,
+      "ok": 1316
+    },
+    "force_sample_timing": {
+      "pre_integration": 1344
+    },
+    "force_sources": {
+      "recorded_robot_pedestrian_social_force": 1344
+    },
+    "guard_arbitration_counts": {
+      "guarded_ppo": {
+        "fallback_best_effort": 452,
+        "fallback_safe": 14954,
+        "goal_reached": 0,
+        "ppo_clear": 11431,
+        "ppo_safe": 0,
+        "prior_blend_safe": 0,
+        "prior_residual_safe": 0,
+        "prior_safe": 0,
+        "stop_best_effort": 5147,
+        "stop_safe": 1040,
+        "uncertainty_fallback_configured": 0,
+        "uncertainty_fallback_slow_down": 0,
+        "uncertainty_fallback_stop": 0
+      }
+    },
+    "recorded_force_sample_totals": {
+      "finite_samples": 1771047,
+      "invalid_samples": 0,
+      "nonzero_force_samples": 1771047,
+      "raw_samples": 1771047,
+      "zero_force_samples": 0
+    },
+    "rows": 1344
+  },
+  "repeat_preservation": {
+    "cold_files_byte_verified": 183,
+    "cold_manifest_sha256": "bba492353c50f6714e9da51f1e87fd9eadd4d74cc4a48bb522b65cb45fc373a5",
+    "manifest_digest": "sha256:b4f1a2a520bc483881563409c20dba491d4caf464b1ef704058579204ca0dd28",
+    "qualified_name": "ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_repeat21331_20261004:v0",
+    "receipt_sha256": "4496a578737f8a44b7e16f208d6fd68e5ff89606e23567ae21f5c3802c32d5a0"
   },
   "run_id": "issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003",
   "scheduler_job_id": "21331",

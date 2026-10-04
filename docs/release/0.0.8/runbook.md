@@ -165,6 +165,23 @@ The evidence identifies its actual p95 order statistics and `changed_source_path
 rr10126 independently found these changes behaviourally inert for this grid:
 bicycle-only behaviour, default-off flags and diagnostic metadata. The two
 acquisitions do not isolate a causal effect of a particular runtime change.
+The fixed-environment repeat, job 21333, completed successfully with the original
+node identity, CPU/software/thread context, 16 workers and wrapper unchanged.
+All 1,344 metric-column/steps/status hashes match job 21331 exactly (class a),
+and F/J/K recompute bit-identically. Keep the point anchor. The
+[determinism receipt](../../context/evidence/2026-10-04_freeze008_calibration/determinism-receipt.json)
+retains every paired hash and all 178 rehearsal differences (PPO 96, guarded PPO 82),
+including 40 changed step counts and 7 navigation statuses. The recovered rehearsal
+raw inputs match all 14 previously committed file hashes. Rehearsal and acquisition
+CPU, node, kernel and glibc differ while recorded package versions/thread limits match.
+This is measured environment sensitivity: J +0.9363386659249961%, F/K delta zero,
+consistent with documented machine/compiler-conditional dynamics sensitivity. The
+repeat establishes fixed-environment reproducibility without isolating a pedestrian
+fast-math or PPO arithmetic mechanism. The rehearsal p95 is interpolated between
+raw jerk values; the unchanged hybrid tie moves into the p95 bracket as the PPO-arm
+distribution changes. Per-arm guard arbitration totals accompany mode counts; the
+unknown development pedestrian model writer is deferred to 0.0.9 in #10127.
+
 The literal acquisition YAML remains byte-identical, SHA-256
 `fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3`.
 

@@ -18,7 +18,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from build_snqi_v2_determinism_receipt import build_receipt
+from build_snqi_v2_determinism_receipt import build_receipt, load_rows
 from scipy.stats import spearmanr
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
@@ -345,7 +345,10 @@ export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   --output-dir "$REVIEW_REPO/docs/context/evidence/2026-10-04_freeze008_calibration" \
   --source-commit {proof["source_commit"]} \
   --runtime-commit {proof["producer_runtime_commit"]} \
-  --launcher-sha256 {proof["launcher_sha256"]}
+  --launcher-sha256 {proof["launcher_sha256"]} \
+  --repeat-producer-root "$REPEAT_PRODUCER_ROOT" --rehearsal-root "$REHEARSAL_ROOT" \
+  --repeat-snapshot-root "$REPEAT_SNAPSHOT_ROOT" --repeat-cold-root "$REPEAT_COLD_ROOT" \
+  --repeat-preservation-receipt "$REPEAT_PRESERVATION_RECEIPT"
 ```
 """)
     write_review_sidecar(readme, repo_root=root)
@@ -405,6 +408,47 @@ def aggregate_guard_counters(arm: str, row: dict, totals: dict) -> None:
     totals.setdefault(arm, Counter()).update(counters)
 
 
+def verify_repeat_census(campaign: Path, force_source: str, execution: dict) -> dict:
+    """Retain the repeat's checked force and guard census beside its metric-row receipt."""
+    rows, _ = load_rows(campaign)
+    sources, timings, sample_statuses, force_samples, guards = (
+        Counter(),
+        Counter(),
+        Counter(),
+        Counter(),
+        {},
+    )
+    for key, row in rows.items():
+        check_force_samples(row)
+        provenance = validate_robot_force_provenance(row["metrics"], force_source)
+        sources[provenance["source"]] += 1
+        timings[provenance["sample_timing"]] += 1
+        samples = row["metrics"]["force_sample_stats"]
+        sample_statuses[samples["status"]] += 1
+        force_samples.update(
+            {
+                field: samples[field]
+                for field in (
+                    "raw_samples",
+                    "finite_samples",
+                    "invalid_samples",
+                    "zero_force_samples",
+                    "nonzero_force_samples",
+                )
+            }
+        )
+        aggregate_guard_counters(key[0], row, guards)
+    return {
+        "rows": len(rows),
+        "arm_execution": execution,
+        "force_sources": sources,
+        "force_sample_timing": timings,
+        "recorded_force_sample_totals": force_samples,
+        "force_sample_status_counts": sample_statuses,
+        "guard_arbitration_counts": guards,
+    }
+
+
 def render_determinism_notes(output_dir: Path, proof: dict) -> str:
     """Render the measured result while keeping the six scientific decisions independent."""
     receipt = json.loads((output_dir / "determinism-receipt.json").read_text())
@@ -412,18 +456,23 @@ def render_determinism_notes(output_dir: Path, proof: dict) -> str:
     previous = receipt["rehearsal_vs_original"]
     context = receipt["execution_contexts"]
     verdict = receipt["classification"]
+    context_status = "match" if receipt["same_recorded_environment"] else "do not match"
     message = (
         "J is reproducible for this fixed recorded environment; keep the point anchor."
         if verdict == "a"
         else "The repeat does not establish fixed-environment reproducibility; release remains blocked."
     )
+    custody_notes = ""
+    if "repeat_preservation" in proof:
+        custody = proof["repeat_preservation"]
+        custody_notes = f"Repeat W&B `{custody['qualified_name']}` is COMMITTED; all {custody['cold_files_byte_verified']} source members pass stored/decoded cold and independent snapshot hashes. Manifest `{custody['manifest_digest']}` includes the complete repeat, both determinism receipts and recovered rehearsal raw inputs."
     return f"""## Fixed-environment repeat and environment sensitivity
 
 [Determinism receipt](determinism-receipt.json) compares all 1,344 metric-column,
 steps and status hashes between jobs {receipt["scheduler_job_ids"]["original"]} and
 {receipt["scheduler_job_ids"]["repeat"]}: {compared["identical_rows"]} identical and
 {compared["different_rows"]} different rows, classification `{verdict}`.
-{message} The recorded node identity, CPU/software/thread context match;
+{message} The recorded node identity, CPU/software/thread context {context_status};
 16 workers, subprocess arm isolation and all three thread limits of one remain fixed.
 Public custody uses hashed node identities; private scheduler receipts retain actual names.
 
@@ -446,6 +495,8 @@ The rehearsal p95 is a linear interpolation between 1.930676903661017
 raw jerk sample. The unchanged hybrid three-way tie moves into the p95 bracket
 as the PPO-arm distribution changes. Exact brackets and all paired metric hashes
 are recorded; the acquired anchor bytes remain unchanged.
+
+{custody_notes}
 """
 
 
@@ -492,16 +543,18 @@ def write_determinism_evidence(
         if len(repeated_roots) != 1 or repeated_startup["public_commit"] != head:
             raise ValueError("repeat campaign or source binding differs")
         repeat_campaign = repeated_roots[0]
-        check_execution(
-            campaign_status_axes_payload(
-                json.loads((repeat_campaign / "reports/campaign_summary.json").read_text()),
-                expected_total_runs=14,
-            )
+        repeat_execution = campaign_status_axes_payload(
+            json.loads((repeat_campaign / "reports/campaign_summary.json").read_text()),
+            expected_total_runs=14,
         )
+        check_execution(repeat_execution)
         with tempfile.TemporaryDirectory(dir=args.output_dir) as temporary:
             repeat_anchor_path = Path(temporary) / "repeat-anchors.json"
             freeze_campaign_anchors(repeat_campaign, repeat_anchor_path)
             repeated_anchors = json.loads(repeat_anchor_path.read_text())
+        proof["repeat_census"] = verify_repeat_census(
+            repeat_campaign, repeated_anchors["force_decision"]["source"], repeat_execution
+        )
         determinism = build_receipt(campaign, repeat_campaign, args.rehearsal_root)
         if determinism["upper_anchors"]["repeat"] != {
             term: repeated_anchors["anchors"][term]["upper"] for term in ("F", "J", "K")
@@ -546,7 +599,7 @@ def write_determinism_evidence(
         )
         write_review_sidecar(receipt_path, repo_root=Path(__file__).resolve().parents[2])
         proof["determinism_receipt"] = {
-            "path": receipt_path.name,
+            "path": str(receipt_path.relative_to(Path(__file__).resolve().parents[2])),
             "sha256": digest(receipt_path),
             "classification": determinism["classification"],
             "same_recorded_environment": determinism["same_recorded_environment"],

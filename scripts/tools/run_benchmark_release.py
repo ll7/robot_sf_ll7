@@ -75,6 +75,7 @@ from robot_sf.benchmark.snqi.execution_context import (
     build_execution_context_provenance,
     episode_context_guard,
     load_calibration_context,
+    require_calibrated_algorithm,
     verify_episode_contexts,
 )
 from robot_sf.benchmark.spawn_preflight import (
@@ -1345,6 +1346,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             calibration_context = load_calibration_context(
                 args.snqi_v2_anchors, cfg.snqi_v2_binding
             )
+            for planner_key in manifest.planner_keys or ():
+                require_calibrated_algorithm(planner_key)
             assert_context_equal(build_execution_context_provenance(), calibration_context)
         except (OSError, KeyError, TypeError, ValueError) as exc:
             reason = (

@@ -6,6 +6,7 @@ candidate manifests, selector-v2 runtime wiring, and prediction metadata overrid
 
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from dataclasses import fields
 from pathlib import Path
@@ -254,6 +255,13 @@ def resolve_episode_policy_runtime(
         algo_config=algo_config,
         **root_kwargs,
     )
+    from robot_sf.benchmark.snqi.execution_context import (  # noqa: PLC0415
+        CONTEXT_ENV,
+        require_calibrated_algorithm,
+    )
+
+    if os.environ.get(CONTEXT_ENV) is not None:
+        require_calibrated_algorithm(algo)
     config = _apply_planner_selector_v2_context(algo, config, scenario=scenario, seed=seed)
     return algo, _apply_scenario_uncertainty_envelope_config(algo, config, scenario)
 

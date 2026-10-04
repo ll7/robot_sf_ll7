@@ -73,6 +73,23 @@
   "force_sources": {
     "recorded_robot_pedestrian_social_force": 1344
   },
+  "guard_arbitration_counts": {
+    "guarded_ppo": {
+      "fallback_best_effort": 452,
+      "fallback_safe": 14954,
+      "goal_reached": 0,
+      "ppo_clear": 11431,
+      "ppo_safe": 0,
+      "prior_blend_safe": 0,
+      "prior_residual_safe": 0,
+      "prior_safe": 0,
+      "stop_best_effort": 5147,
+      "stop_safe": 1040,
+      "uncertainty_fallback_configured": 0,
+      "uncertainty_fallback_slow_down": 0,
+      "uncertainty_fallback_stop": 0
+    }
+  },
   "launcher_sha256": "da8e6480426ef0eb6651dd3f4c5dec3ec6436d6d38a93bcfa881330f473b0280",
   "navigation_outcomes": {
     "collision": 201,
@@ -101,7 +118,7 @@
   "rehearsal_comparison": {
     "acquisition_config_byte_identical": true,
     "causal_attribution": "not isolated by these two acquisitions",
-    "changed_runtime_config_paths": [
+    "changed_source_paths": [
       "configs/robots/t60_bicycle_30deg_v1.yaml",
       "configs/robots/t60_bicycle_45deg_v1.yaml",
       "robot_sf/benchmark/artifact_publication.py",
@@ -124,6 +141,8 @@
       "robot_sf/sensor/socnav_observation.py",
       "robot_sf/training/scenario_loader.py"
     ],
+    "changed_source_paths_behaviourally_inert_for_this_grid": true,
+    "changed_source_paths_behaviourally_inert_reason": "rr10126 independently reviewed the complete d56092ed-to-3e73b04b diff: behavioural changes are bicycle-only or gated by default-off flags on this differential-drive grid; other changes are diagnostic metadata.",
     "jerk_p95_bracketing_rows": [
       [
         1.957837635866961,

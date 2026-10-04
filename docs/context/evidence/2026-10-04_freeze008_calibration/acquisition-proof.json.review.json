@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/2026-10-04_freeze008_calibration/acquisition-proof.json",
-  "artifact_sha256": "a420336c952161b41cf5d731539172dbb405984d57de67f4d9cbafb0c7193fe8",
+  "artifact_sha256": "1b713a110bfd8560aa5b283cd88a9a2ce614973601686ebd39fa8a51a291ea6d",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

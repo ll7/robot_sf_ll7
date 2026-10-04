@@ -161,8 +161,10 @@ The repository freezer and independent scalar recomputation agree:
 F=78.44270546210876, J=1.957837635866961, K=0.5160654761904677; T=3 and N=0.25.
 F's preregistered rho is 0.60110908310645, selecting `robot_force_impulse_total`.
 F and K equal the d56092ed rehearsal; J rises by 0.018161933593934476 (0.93634%).
-The evidence identifies its actual p95 order statistics and source differences;
-these acquisitions do not isolate a causal effect of a particular runtime change.
+The evidence identifies its actual p95 order statistics and `changed_source_paths`.
+rr10126 independently found these changes behaviourally inert for this grid:
+bicycle-only behaviour, default-off flags and diagnostic metadata. The two
+acquisitions do not isolate a causal effect of a particular runtime change.
 The literal acquisition YAML remains byte-identical, SHA-256
 `fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3`.
 

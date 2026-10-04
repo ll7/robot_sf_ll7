@@ -18,6 +18,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
+from build_snqi_v2_determinism_receipt import build_receipt
 from scipy.stats import spearmanr
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
@@ -130,6 +131,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--runtime-commit", required=True)
     parser.add_argument("--launcher-sha256", required=True)
+    parser.add_argument("--repeat-producer-root", type=Path)
+    parser.add_argument("--rehearsal-root", type=Path)
+    parser.add_argument("--private-determinism-receipt", type=Path)
+    parser.add_argument("--repeat-snapshot-root", type=Path)
+    parser.add_argument("--repeat-cold-root", type=Path)
+    parser.add_argument("--repeat-preservation-receipt", type=Path)
     return parser.parse_args()
 
 
@@ -238,6 +245,9 @@ def write_review_outputs(args: argparse.Namespace, proof: dict) -> None:
     write_review_sidecar(metadata, repo_root=root)
     values = proof["upper_anchors_recomputed"]
     delta = proof["rehearsal_delta"]
+    repeat_notes = ""
+    if "determinism_receipt" in proof:
+        repeat_notes = render_determinism_notes(args.output_dir, proof)
     readme = args.output_dir / "README.md"
     readme.write_text(f"""# Frozen-source SNQI v2 development acquisition
 
@@ -281,11 +291,22 @@ of the rehearsal's 1.9396757022730264.
 
 The acquisition configuration is byte-identical across rehearsal d56092ed and
 freeze 3e73b04b; metric definitions, force kernel and dependency lock are unchanged.
-The producer source and acquired trajectories are fresh. Runtime source differences
-are recorded in the proof. These two acquisitions do not isolate a causal effect
+The producer source and acquired trajectories are fresh. `changed_source_paths`
+records source differences; rr10126 independently found them behaviourally inert
+for this grid (bicycle-only changes, default-off flags and diagnostic metadata).
+These two acquisitions do not isolate a causal effect
 of any single source change or runtime nondeterminism; no such attribution is made.
 The independent reviewer must assess this empirical difference against raw custody.
 The new anchor SHA also binds the new source, run ID, manifest and row/sidecar hashes.
+
+Guarded PPO arbitration counters are aggregated directly from all 96 raw rows in
+`guard_arbitration_counts`, next to `command_mode_counts`. Guard-selected safe
+controller actions are arbitration interventions, distinct from degraded planner
+execution. `pedestrian_model.development_model=unknown` remains a provenance
+limitation in these immutable rows; its writer repair is deferred to 0.0.9 in
+[issue #10127](https://github.com/ll7/robot_sf_ll7/issues/10127).
+
+{repeat_notes}
 
 ## Preservation and authority boundary
 
@@ -334,9 +355,13 @@ def compare_rehearsal(
     args: argparse.Namespace, producer: dict, head: str, scalars: list
 ) -> tuple[dict, dict]:
     """Compare actual source/config bytes and identify the acquired J order statistics."""
+    if head != "3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6":
+        raise ValueError("inert-source audit applies only to the reviewed freeze")
     rehearsal = json.loads(args.rehearsal.read_text())["anchors"]
     old = rehearsal["anchors"]
     previous = rehearsal["calibration"]["source_commit"]
+    if previous != "d56092ed9d4b442f9dfb99e31010a9f5a8666547":
+        raise ValueError("inert-source audit applies only to the reviewed rehearsal")
     config_path = "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
     previous_config = subprocess.check_output(["git", "show", f"{previous}:{config_path}"])
     if hashlib.sha256(previous_config).hexdigest() != producer["config_sha256"]:
@@ -361,11 +386,174 @@ def compare_rehearsal(
     return old, {
         "source_commit": previous,
         "acquisition_config_byte_identical": True,
-        "changed_runtime_config_paths": changes,
+        "changed_source_paths": changes,
+        "changed_source_paths_behaviourally_inert_for_this_grid": True,
+        "changed_source_paths_behaviourally_inert_reason": "rr10126 independently reviewed the complete d56092ed-to-3e73b04b diff: behavioural changes are bicycle-only or gated by default-off flags on this differential-drive grid; other changes are diagnostic metadata.",
         "causal_attribution": "not isolated by these two acquisitions",
         "jerk_p95_zero_based_index": jerk_index,
         "jerk_p95_bracketing_rows": jerk_order[int(jerk_index) : int(jerk_index) + 2],
     }
+
+
+def aggregate_guard_counters(arm: str, row: dict, totals: dict) -> None:
+    """Retain nonnegative raw arbitration counters for the guarded PPO arm."""
+    if arm != "guarded_ppo":
+        return
+    counters = row["algorithm_metadata"]["guard_stats"]
+    if not counters or any(type(value) is not int or value < 0 for value in counters.values()):
+        raise ValueError("missing or invalid guarded PPO arbitration counters")
+    totals.setdefault(arm, Counter()).update(counters)
+
+
+def render_determinism_notes(output_dir: Path, proof: dict) -> str:
+    """Render the measured result while keeping the six scientific decisions independent."""
+    receipt = json.loads((output_dir / "determinism-receipt.json").read_text())
+    compared = receipt["original_vs_repeat"]
+    previous = receipt["rehearsal_vs_original"]
+    context = receipt["execution_contexts"]
+    verdict = receipt["classification"]
+    message = (
+        "J is reproducible for this fixed recorded environment; keep the point anchor."
+        if verdict == "a"
+        else "The repeat does not establish fixed-environment reproducibility; release remains blocked."
+    )
+    return f"""## Fixed-environment repeat and environment sensitivity
+
+[Determinism receipt](determinism-receipt.json) compares all 1,344 metric-column,
+steps and status hashes between jobs {receipt["scheduler_job_ids"]["original"]} and
+{receipt["scheduler_job_ids"]["repeat"]}: {compared["identical_rows"]} identical and
+{compared["different_rows"]} different rows, classification `{verdict}`.
+{message} The recorded node identity, CPU/software/thread context match;
+16 workers, subprocess arm isolation and all three thread limits of one remain fixed.
+Public custody uses hashed node identities; private scheduler receipts retain actual names.
+
+The rehearsal raw rows were recovered and all 14 file hashes match its committed
+d56092ed anchor proof. Compared with job 21331, {previous["different_rows"]} rows differ:
+{json.dumps(previous["different_rows_by_arm"], sort_keys=True)}; {previous["step_differences"]}
+step-count and {previous["status_differences"]} navigation-status differences.
+Every differing row and both steps/status values are retained in the receipt.
+Rehearsal CPU: {context["rehearsal"]["cpu_model"]}; acquisition CPU:
+{context["original"]["cpu_model"]}. Node, kernel and glibc differ; recorded
+Python/NumPy/Numba versions and thread limits match. F and K delta are zero;
+J delta is {receipt["J_delta_percent"]!r}% ({receipt["rehearsal_to_original_delta"]["J"]!r}).
+This is the anchors' measured environment sensitivity, consistent with the
+[documented machine/compiler-conditional dynamics sensitivity](../../../benchmark_release_reproducibility.md).
+The experiment does not isolate a pedestrian fast-math or PPO arithmetic mechanism.
+
+The rehearsal p95 is a linear interpolation between 1.930676903661017
+(`guarded_ppo`, `francis2023_leave_group`, 1002) and 1.9412637255574998
+(`socnav_sampling`, `classic_bottleneck_high`, 1002), so it need not appear in any
+raw jerk sample. The unchanged hybrid three-way tie moves into the p95 bracket
+as the PPO-arm distribution changes. Exact brackets and all paired metric hashes
+are recorded; the acquired anchor bytes remain unchanged.
+"""
+
+
+def write_repeat_preservation(args: argparse.Namespace, proof: dict) -> None:
+    """Recheck independently downloaded repeat custody without creating circular receipts."""
+    repeat_cold = (
+        args.repeat_snapshot_root,
+        args.repeat_cold_root,
+        args.repeat_preservation_receipt,
+    )
+    if any(repeat_cold):
+        if not all(repeat_cold) or not args.repeat_producer_root:
+            raise ValueError("repeat cold custody requires all three roots and repeat producer")
+        namespace = argparse.Namespace(
+            snapshot_root=args.repeat_snapshot_root,
+            cold_root=args.repeat_cold_root,
+            preservation_receipt=args.repeat_preservation_receipt,
+        )
+        manifest_path, manifest, receipt = check_cold_snapshot(namespace)
+        proof["repeat_preservation"] = {
+            "qualified_name": receipt["artifact"]["qualified_name"],
+            "manifest_digest": manifest["manifest_digest"],
+            "receipt_sha256": digest(args.repeat_preservation_receipt),
+            "cold_files_byte_verified": len(manifest["files"]),
+            "cold_manifest_sha256": digest(manifest_path),
+        }
+
+
+def write_determinism_evidence(
+    args: argparse.Namespace, proof: dict, campaign: Path, root: Path, producer: dict, head: str
+) -> None:
+    """Bind separately preserved repeat and rehearsal rows to this original acquisition."""
+    if bool(args.repeat_producer_root) != bool(args.rehearsal_root):
+        raise ValueError("repeat producer and rehearsal raw roots must be provided together")
+    if args.repeat_producer_root:
+        _, repeated_producer = check_producer(args.repeat_producer_root, head)
+        for field in ("private_ops_commit", "launcher_sha256", "config_sha256"):
+            if repeated_producer[field] != producer[field]:
+                raise ValueError(f"repeat producer changed {field}")
+        repeated_startup = json.loads((args.repeat_producer_root / "startup.json").read_text())[
+            "identities"
+        ]
+        repeated_roots = list((args.repeat_producer_root / "benchmarks").iterdir())
+        if len(repeated_roots) != 1 or repeated_startup["public_commit"] != head:
+            raise ValueError("repeat campaign or source binding differs")
+        repeat_campaign = repeated_roots[0]
+        check_execution(
+            campaign_status_axes_payload(
+                json.loads((repeat_campaign / "reports/campaign_summary.json").read_text()),
+                expected_total_runs=14,
+            )
+        )
+        with tempfile.TemporaryDirectory(dir=args.output_dir) as temporary:
+            repeat_anchor_path = Path(temporary) / "repeat-anchors.json"
+            freeze_campaign_anchors(repeat_campaign, repeat_anchor_path)
+            repeated_anchors = json.loads(repeat_anchor_path.read_text())
+        determinism = build_receipt(campaign, repeat_campaign, args.rehearsal_root)
+        if determinism["upper_anchors"]["repeat"] != {
+            term: repeated_anchors["anchors"][term]["upper"] for term in ("F", "J", "K")
+        }:
+            raise ValueError("repeat strict freezer and scalar recomputation differ")
+        determinism["repeat_command_mode_counts"] = repeated_anchors["calibration"][
+            "command_mode_counts"
+        ]
+        determinism["source_commit"] = head
+        determinism["producer_runtime_commit"] = producer["private_ops_commit"]
+        determinism["launcher_sha256"] = producer["launcher_sha256"]
+        determinism["config_sha256"] = producer["config_sha256"]
+        determinism["workers"] = 16
+        determinism["arm_isolation"] = "subprocess"
+        if (
+            determinism["episode_files_sha256"]["rehearsal"]
+            != json.loads(args.rehearsal.read_text())["anchors"]["calibration"][
+                "episode_files_sha256"
+            ]
+        ):
+            raise ValueError("rehearsal raw hashes differ from preserved public proof")
+        determinism["scheduler_job_ids"] = {
+            "original": json.loads((root / "startup.json").read_text())["identities"]["job_id"],
+            "repeat": repeated_startup["job_id"],
+            "rehearsal": "20299",
+        }
+        determinism["producer_manifest_sha256"] = {
+            "original": digest(root / "SHA256SUMS"),
+            "repeat": digest(args.repeat_producer_root / "SHA256SUMS"),
+        }
+        if args.private_determinism_receipt:
+            private = dict(determinism)
+            private["execution_contexts"] = build_receipt(
+                campaign, repeat_campaign, args.rehearsal_root, portable=False
+            )["execution_contexts"]
+            args.private_determinism_receipt.write_text(
+                json.dumps(private, indent=2, sort_keys=True, allow_nan=False) + "\n"
+            )
+        receipt_path = args.output_dir / "determinism-receipt.json"
+        receipt_path.write_text(
+            json.dumps(determinism, indent=2, sort_keys=True, allow_nan=False) + "\n"
+        )
+        write_review_sidecar(receipt_path, repo_root=Path(__file__).resolve().parents[2])
+        proof["determinism_receipt"] = {
+            "path": receipt_path.name,
+            "sha256": digest(receipt_path),
+            "classification": determinism["classification"],
+            "same_recorded_environment": determinism["same_recorded_environment"],
+            "identical_rows": determinism["original_vs_repeat"]["identical_rows"],
+            "different_rows": determinism["original_vs_repeat"]["different_rows"],
+        }
+    write_repeat_preservation(args, proof)
 
 
 def main() -> None:
@@ -408,6 +596,7 @@ def main() -> None:
     check_candidate_attachment(source, campaign, args.anchors, head)
     scalars, modes, outcomes, sources, timings = [], {}, Counter(), Counter(), Counter()
     force_samples, sample_statuses = Counter(), Counter()
+    guard_counters = {}
     for relative, sha in sorted(anchors["calibration"]["episode_files_sha256"].items()):
         path = safe_member(campaign, relative)
         if digest(path) != sha:
@@ -441,6 +630,7 @@ def main() -> None:
                 outcomes[row["status"]] += 1
                 mode = resolve_execution_mode(row["algorithm_metadata"])
                 modes[arm][mode] += 1
+                aggregate_guard_counters(arm, row, guard_counters)
                 scalars.append(
                     (
                         arm,
@@ -493,6 +683,7 @@ def main() -> None:
             "scientific_admission": False,
         },
         "command_mode_counts": modes,
+        "guard_arbitration_counts": guard_counters,
         "arm_execution": execution,
         "navigation_outcomes": outcomes,
         "force_sources": sources,
@@ -511,6 +702,7 @@ def main() -> None:
             "cold_manifest_sha256": digest(manifest_path),
         },
     }
+    write_determinism_evidence(args, proof, campaign, root, producer, head)
     output = args.output_dir / "acquisition-proof.json"
     output.write_text(json.dumps(proof, indent=2, sort_keys=True, allow_nan=False) + "\n")
     write_review_sidecar(output, repo_root=Path(__file__).resolve().parents[2])

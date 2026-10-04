@@ -40,11 +40,22 @@ of the rehearsal's 1.9396757022730264.
 
 The acquisition configuration is byte-identical across rehearsal d56092ed and
 freeze 3e73b04b; metric definitions, force kernel and dependency lock are unchanged.
-The producer source and acquired trajectories are fresh. Runtime source differences
-are recorded in the proof. These two acquisitions do not isolate a causal effect
+The producer source and acquired trajectories are fresh. `changed_source_paths`
+records source differences; rr10126 independently found them behaviourally inert
+for this grid (bicycle-only changes, default-off flags and diagnostic metadata).
+These two acquisitions do not isolate a causal effect
 of any single source change or runtime nondeterminism; no such attribution is made.
 The independent reviewer must assess this empirical difference against raw custody.
 The new anchor SHA also binds the new source, run ID, manifest and row/sidecar hashes.
+
+Guarded PPO arbitration counters are aggregated directly from all 96 raw rows in
+`guard_arbitration_counts`, next to `command_mode_counts`. Guard-selected safe
+controller actions are arbitration interventions, distinct from degraded planner
+execution. `pedestrian_model.development_model=unknown` remains a provenance
+limitation in these immutable rows; its writer repair is deferred to 0.0.9 in
+[issue #10127](https://github.com/ll7/robot_sf_ll7/issues/10127).
+
+
 
 ## Preservation and authority boundary
 

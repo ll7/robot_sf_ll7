@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import platform
-from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -74,6 +73,8 @@ def build_execution_context(
     Returns:
         A JSON-serialisable canonical execution-context mapping.
     """
+    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
+
     context: dict[str, Any] = {
         "schema_version": EXECUTION_CONTEXT_SCHEMA_VERSION,
         "cpu_model": cpu_model(),
@@ -87,10 +88,7 @@ def build_execution_context(
         ("torch", "torch_version"),
         ("stable_baselines3", "stable_baselines3_version"),
     ):
-        try:
-            module = import_module(module_name)
-        except ImportError:
-            continue
+        module = try_import(module_name)
         observed_version = getattr(module, "__version__", None)
         if observed_version is not None:
             context[field] = str(observed_version)

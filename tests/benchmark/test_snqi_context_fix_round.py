@@ -300,7 +300,9 @@ def test_receipt_builder_retains_production_learned_stack_versions(tmp_path, mon
     def absent(_name):
         raise ModuleNotFoundError("optional learned stack absent")
 
-    monkeypatch.setattr(primitive, "import_module", absent)
+    import importlib
+
+    monkeypatch.setattr(importlib, "import_module", absent)
     without_optional_imports = primitive.build_execution_context()
     assert "torch_version" not in without_optional_imports
     assert "stable_baselines3_version" not in without_optional_imports

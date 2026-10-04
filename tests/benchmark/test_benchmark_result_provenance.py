@@ -6,9 +6,10 @@ import json
 import platform
 import sys
 from hashlib import sha256
-from importlib.metadata import PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import numba
 import numpy as np
@@ -31,6 +32,7 @@ from robot_sf.benchmark.result_provenance import (
     validate_result_provenance_manifest,
     write_result_provenance_manifest,
 )
+from robot_sf.evidence.writers import write_text
 from scripts.validation import check_benchmark_result_provenance
 
 # Canonical context fields the generic benchmark provenance path can actually
@@ -191,6 +193,34 @@ def test_execution_context_preserves_torch_build_tag_without_importing_runtime(m
     monkeypatch.delitem(sys.modules, "torch")
     provenance = build_execution_context_provenance()
     assert provenance["torch_version"] == expected
+    assert "torch" not in sys.modules
+
+
+def test_execution_context_falls_back_for_originless_torch(monkeypatch) -> None:
+    """An optional build-tag observation cannot abort a real context capture."""
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(result_provenance, "find_spec", lambda _: SimpleNamespace(origin=None))
+    assert build_execution_context_provenance()["torch_version"] == version("torch")
+    assert "torch" not in sys.modules
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["__version__: str = '9.8.7+cpu'", "__version__ = '9.8.7' + '+cpu'", "__version__ =", None],
+)
+def test_execution_context_falls_back_for_unreadable_torch_version(
+    monkeypatch, tmp_path: Path, source: str | None
+) -> None:
+    """Unsupported syntax and absent files retain the installed wheel version."""
+    if source is not None:
+        write_text(tmp_path / "version.py", "# AI-GENERATED NEEDS-REVIEW\n" + source + "\n")
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(
+        result_provenance,
+        "find_spec",
+        lambda _: SimpleNamespace(origin=str(tmp_path / "__init__.py")),
+    )
+    assert build_execution_context_provenance()["torch_version"] == version("torch")
     assert "torch" not in sys.modules
 
 

@@ -213,19 +213,22 @@ def _installed_version(distribution: str) -> str | None:
         return installed
     # Wheel metadata can omit +cpu/+cu*; read the actual package's literal
     # version without executing torch imports, CUDA discovery or RNG setup.
-    spec = find_spec("torch")
-    if spec is not None and spec.origin is not None:
-        version_path = Path(spec.origin).with_name("version.py")
-        for statement in ast.parse(version_path.read_text(encoding="utf-8")).body:
-            if isinstance(statement, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "__version__"
-                for target in statement.targets
-            ):
-                value = statement.value
-                if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                    return value.value
-                break
-    raise ValueError("Torch runtime version including build tag cannot be observed")
+    try:
+        spec = find_spec("torch")
+        if spec is not None and spec.origin is not None:
+            version_path = Path(spec.origin).with_name("version.py")
+            for statement in ast.parse(version_path.read_text(encoding="utf-8")).body:
+                if isinstance(statement, ast.Assign) and any(
+                    isinstance(target, ast.Name) and target.id == "__version__"
+                    for target in statement.targets
+                ):
+                    value = statement.value
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        return value.value
+                    break
+    except (OSError, SyntaxError, ValueError):
+        pass
+    return installed
 
 
 def build_execution_context_provenance() -> dict[str, Any]:

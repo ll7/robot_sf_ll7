@@ -224,6 +224,88 @@ def test_execution_context_falls_back_for_unreadable_torch_version(
     assert "torch" not in sys.modules
 
 
+@pytest.mark.parametrize(
+    ("source", "origin", "expected_torch"),
+    [
+        ("other = 1\n__version__ = '9.8.7+cpu'", "file", "9.8.7+cpu"),
+        ("__version__ = '9.8.7' + '+cpu'", "file", "9.8.7"),
+        ("__version__: str = '9.8.7+cpu'", "file", "9.8.7"),
+        ("other = 1", "file", "9.8.7"),
+        ("__version__ =", "file", "9.8.7"),
+        (None, "file", "9.8.7"),
+        (None, None, "9.8.7"),
+        (None, "no-spec", "9.8.7"),
+    ],
+)
+def test_execution_context_with_fake_policy_distributions(
+    monkeypatch, tmp_path: Path, source: str | None, origin: str | None, expected_torch: str
+) -> None:
+    """Observe installed package bytes without depending on an inference-stack installation."""
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "stable_baselines3", raising=False)
+    metadata = {"torch": "9.8.7", "stable-baselines3": "2.9.1"}
+    monkeypatch.setattr(result_provenance, "version", metadata.__getitem__)
+    if source is not None:
+        write_text(tmp_path / "version.py", "# AI-GENERATED NEEDS-REVIEW\n" + source + "\n")
+    spec = (
+        None
+        if origin == "no-spec"
+        else SimpleNamespace(origin=str(tmp_path / "__init__.py") if origin == "file" else None)
+    )
+    monkeypatch.setattr(result_provenance, "find_spec", lambda _: spec)
+
+    assert result_provenance._installed_version("torch") == expected_torch
+    assert result_provenance._installed_version("stable-baselines3") == "2.9.1"
+    context = build_execution_context_provenance()
+    assert context["torch_version"] == expected_torch
+    assert context["stable_baselines3_version"] == "2.9.1"
+    canonical = {
+        k: v for k, v in context.items() if k not in {"hostname", "execution_context_sha256"}
+    }
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    assert context["execution_context_sha256"] == sha256(encoded.encode()).hexdigest()
+    assert "torch" not in sys.modules
+    assert "stable_baselines3" not in sys.modules
+
+
+@pytest.mark.parametrize("present", [(), ("torch",), ("stable-baselines3",)])
+def test_execution_context_with_fake_optional_package_absence(monkeypatch, present) -> None:
+    """Omit only missing distributions; keep the installed member of a partial stack."""
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "stable_baselines3", raising=False)
+
+    def metadata(distribution):
+        if distribution not in present:
+            raise PackageNotFoundError(distribution)
+        return {"torch": "9.8.7", "stable-baselines3": "2.9.1"}[distribution]
+
+    monkeypatch.setattr(result_provenance, "version", metadata)
+    monkeypatch.setattr(result_provenance, "find_spec", lambda _: None)
+    context = build_execution_context_provenance()
+    for distribution, expected in [("torch", "9.8.7"), ("stable-baselines3", "2.9.1")]:
+        field = distribution.replace("-", "_") + "_version"
+        if distribution in present:
+            assert context[field] == expected
+        else:
+            assert field not in context
+    assert "torch" not in sys.modules
+    assert "stable_baselines3" not in sys.modules
+
+
+def test_execution_context_with_fake_loaded_policy_versions(monkeypatch) -> None:
+    """Loaded runtime observations take precedence over stripped wheel metadata."""
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(__version__="9.8.7+cpu"))
+    monkeypatch.setitem(sys.modules, "stable_baselines3", SimpleNamespace(__version__="2.9.1"))
+
+    def unexpected_metadata(distribution):
+        pytest.fail(f"loaded runtime unnecessarily queried metadata for {distribution}")
+
+    monkeypatch.setattr(result_provenance, "version", unexpected_metadata)
+    context = build_execution_context_provenance()
+    assert context["torch_version"] == "9.8.7+cpu"
+    assert context["stable_baselines3_version"] == "2.9.1"
+
+
 def test_execution_context_does_not_invent_missing_policy_versions(monkeypatch) -> None:
     """An environment without optional policy distributions must not claim their versions."""
 

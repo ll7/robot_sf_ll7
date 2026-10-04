@@ -680,14 +680,20 @@ def _load_manifest_v2_binding(
 
     Returns:
         Normalized source asset pins, or None when absent."""
-    from robot_sf.benchmark.snqi.v2_binding import ASSET_NAMES  # noqa: PLC0415
+    from robot_sf.benchmark.snqi.v2_binding import (  # noqa: PLC0415
+        ASSET_NAMES,
+        CONTEXT_ASSET_NAME,
+    )
 
     raw = payload.get("metrics", {}).get("snqi_v2_binding")
     if raw is None:
         return None
-    if not isinstance(raw, dict) or set(raw) != set(ASSET_NAMES):
+    if not isinstance(raw, dict) or set(raw) not in (
+        set(ASSET_NAMES),
+        set(ASSET_NAMES) | {CONTEXT_ASSET_NAME},
+    ):
         raise ValueError(
-            "metrics.snqi_v2_binding requires weights, anchors, family and acquisition_config"
+            "metrics.snqi_v2_binding requires weights, anchors, family, acquisition_config and optional determinism_receipt"
         )
     result = {}
     for name, asset in raw.items():
@@ -1790,6 +1796,24 @@ def _release_campaign_horizon(manifest: Any, cfg: CampaignConfig) -> CampaignCon
     return cfg
 
 
+def bind_release_context_asset(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Attach the identity-pinned post-acquisition receipt without changing source config.
+
+    Returns:
+        A campaign with the receipt pin, when the identity declares it.
+    """
+    asset = (getattr(manifest, "snqi_v2_binding", None) or {}).get("determinism_receipt")
+    if asset is None or not cfg.snqi_v2_binding:
+        return cfg
+    binding = dict(cfg.snqi_v2_binding)
+    for suffix in ("path", "sha256"):
+        key = f"determinism_receipt_{suffix}"
+        if key in binding and binding[key] != asset[suffix]:
+            raise ValueError("SNQI-v2 determinism receipt differs from campaign pin")
+        binding[key] = asset[suffix]
+    return replace(cfg, snqi_v2_binding=binding)
+
+
 def load_release_campaign_config(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -1805,11 +1829,14 @@ def load_release_campaign_config(
         Validated campaign configuration for this release identity.
     """
     if getattr(manifest, "resolved_identity_path", None) is None:
-        return _release_campaign_horizon(
+        return bind_release_context_asset(
             manifest,
-            load_campaign_config(
-                manifest.canonical_campaign_config_path,
-                repository_root=repository_root,
+            _release_campaign_horizon(
+                manifest,
+                load_campaign_config(
+                    manifest.canonical_campaign_config_path,
+                    repository_root=repository_root,
+                ),
             ),
         )
     root = (repository_root or get_repository_root()).resolve()
@@ -1826,7 +1853,9 @@ def load_release_campaign_config(
     )
     if _sha256_file(config_path) != manifest.campaign_config_sha256:
         raise ValueError("canonical campaign config hash does not match resolved identity")
-    cfg = load_campaign_config(config_path, repository_root=root)
+    cfg = bind_release_context_asset(
+        manifest, load_campaign_config(config_path, repository_root=root)
+    )
     return _development_campaign_config(
         manifest,
         _release_campaign_horizon(
@@ -2139,11 +2168,19 @@ def _validate_release_hashes_and_assets(
     problems: list[str],
 ) -> None:
     """Validate release hashes and asset/path alignment."""
+    cfg = bind_release_context_asset(manifest, cfg)
     binding = getattr(cfg, "snqi_v2_binding", None)
     expected_binding = (
         {
             name: {"path": binding[f"{name}_path"], "sha256": binding[f"{name}_sha256"]}
-            for name in ("weights", "anchors", "family", "acquisition_config")
+            for name in (
+                "weights",
+                "anchors",
+                "family",
+                "acquisition_config",
+                "determinism_receipt",
+            )
+            if f"{name}_path" in binding
         }
         if binding
         else None
@@ -3414,6 +3451,8 @@ def _require_v2_source_assets(
 ) -> None:
     """Require every v2 source asset at the identity's clean selected source."""
     for name, asset in (manifest.snqi_v2_binding or {}).items():
+        if name == "determinism_receipt":
+            continue  # Acquisition output is digest-bound, never a frozen source input.
         _require_tracked_input_at_source(
             asset["path"],
             repository_root=repository_root,
@@ -3557,7 +3596,26 @@ def _development_metadata_overlay(payload: dict[str, Any], seeds: tuple[int, ...
         payload["metadata"]["non_releasable_development_rehearsal"] = True
 
 
-def _build_resolved_release_identity(
+def _bind_determinism_receipt(
+    payload: dict[str, Any], asset: Mapping[str, str] | None, repository_root: Path
+) -> None:
+    """Validate a post-acquisition input and add its digest to the resolved spec binding."""
+    if asset is None:
+        return
+    if not isinstance(asset, Mapping) or set(asset) != {"path", "sha256"}:
+        raise ValueError("SNQI-v2 determinism receipt requires path and sha256")
+    path = _safe_repository_file(
+        Path(asset["path"]), repository_root, field_name="determinism receipt"
+    )
+    if _sha256_file(path) != asset["sha256"]:
+        raise ValueError("SNQI-v2 determinism receipt digest mismatch")
+    binding = payload.get("metrics", {}).get("snqi_v2_binding")
+    if not binding:
+        raise ValueError("determinism receipt requires source-bound SNQI-v2 assets")
+    binding["determinism_receipt"] = {"path": str(path), "sha256": asset["sha256"]}
+
+
+def _build_resolved_release_identity(  # noqa: PLR0913
     *,
     template_path: Path,
     output_path: Path,
@@ -3567,6 +3625,7 @@ def _build_resolved_release_identity(
     version_doi: str,
     repository_root: Path,
     development_rehearsal_seeds: tuple[int, ...] | None = None,
+    determinism_receipt: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], bytes, BenchmarkReleaseManifest]:
     """Build canonical identity and metadata bytes after all read-only admissions.
 
@@ -3623,6 +3682,7 @@ def _build_resolved_release_identity(
             version_doi=version_doi,
             repository_root=repository_root,
         )
+        _bind_determinism_receipt(materialized_payload, determinism_receipt, repository_root)
         _development_template_overlay(
             materialized_payload, development_rehearsal_seeds, template_path, repository_root
         )
@@ -3644,7 +3704,7 @@ def _build_resolved_release_identity(
         cfg = _release_campaign_horizon(
             manifest, replace(cfg, release_tag=release_tag, doi=version_doi)
         )
-        cfg = _development_campaign_config(manifest, cfg)
+        cfg = bind_release_context_asset(manifest, _development_campaign_config(manifest, cfg))
         validation = validate_release_manifest(
             manifest,
             campaign_config=cfg,
@@ -3727,6 +3787,15 @@ def _build_resolved_release_identity(
         "resolved_manifest": resolved_manifest,
         "resolved_manifest_sha256": resolved_manifest_sha256,
     }
+    envelope.update(
+        {
+            "determinism_receipt": _normalize_identity_paths(
+                dict(determinism_receipt), repository_root
+            )
+        }
+        if determinism_receipt is not None
+        else {}
+    )
     if development_rehearsal_seeds is not None:
         envelope["development_rehearsal"] = {
             "seeds": list(development_rehearsal_seeds),
@@ -3806,7 +3875,7 @@ def _mint_notes_output(root: Path, output: Path, source: str, dev_seeds: Any) ->
     return ((receipt_path, _canonical_json_bytes(receipt)),)
 
 
-def write_resolved_release_identity(
+def write_resolved_release_identity(  # noqa: PLR0913
     *,
     template_path: Path,
     output_path: Path,
@@ -3816,6 +3885,7 @@ def write_resolved_release_identity(
     version_doi: str,
     repository_root: Path | None = None,
     development_rehearsal_seeds: tuple[int, ...] | None = None,
+    determinism_receipt: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate one canonical resolved release identity without source edits.
 
@@ -3862,6 +3932,7 @@ def write_resolved_release_identity(
         version_doi=version_doi,
         repository_root=root,
         development_rehearsal_seeds=development_rehearsal_seeds,
+        determinism_receipt=determinism_receipt,
     )
     _require_clean_exact_checkout(
         root,
@@ -3978,6 +4049,7 @@ def verify_resolved_release_identity(
         version_doi=version_doi,
         repository_root=root,
         development_rehearsal_seeds=rehearsal_seeds,
+        determinism_receipt=observed.get("determinism_receipt"),
     )
     _require_clean_exact_checkout(
         root,

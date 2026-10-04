@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark._runtime_smoke_planner_keys import _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.checkpoint_staging_receipt import (
@@ -68,9 +69,6 @@ RUNTIME_SMOKE_PLANNER_KEYS = (
     "guarded_ppo",
     "predictive_mppi",
     "risk_dwa",
-)
-_RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS = frozenset(
-    {"prediction_planner", "ppo", "sacadrl", "guarded_ppo", "predictive_mppi"}
 )
 _FORBIDDEN_RUNTIME_STATUSES = frozenset(
     {

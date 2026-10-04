@@ -65,6 +65,10 @@ from robot_sf.benchmark.release_protocol import (
     validate_release_manifest,
 )
 from robot_sf.benchmark.snqi.campaign_contract import SNQI_FAILED_WARN_RECOMMENDATION
+from robot_sf.benchmark.snqi.execution_context import (
+    load_calibration_context,
+    verify_episode_contexts,
+)
 
 FROZEN_SOURCE_SHA = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
 EXPECTED_PRODUCER_SUMS_SHA256 = "2408431cef70bd7f7cf96fe0c42c44e84db89a841ea446e27fbb5650be713506"
@@ -3037,6 +3041,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     erratum_contract: ErratumContract | None = None,
     predecessor_archive: Path | None = None,
     orchestration_repository_root: Path | None = None,
+    snqi_v2_anchors: Path | None = None,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -3158,6 +3163,13 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "release manifest validation failed: "
                 + "; ".join(str(item) for item in manifest_validation.get("problems", []))
             )
+        if getattr(campaign_config, "snqi_v2_binding", None):
+            spec = getattr(campaign_config, "snqi_v2_spec", None)
+            anchors = snqi_v2_anchors or (Path(spec.paths["anchors"]) if spec else None)
+            if anchors is None:
+                raise DerivedReleaseError("SNQI-v2 revalidation requires acquired anchor custody")
+            context = load_calibration_context(anchors, campaign_config.snqi_v2_binding)
+            verify_episode_contexts(acceptance_root, context, manifest.planner_keys)
         acceptance = _run_exact_validator(
             validator_root=validator_repository_root,
             source_root=source_repository_root,
@@ -3392,6 +3404,9 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
 def _build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--snqi-v2-anchors", type=Path, help="Acquired SNQI-v2 anchors for context revalidation."
+    )
     parser.add_argument("--producer-root", type=Path, required=True)
     parser.add_argument(
         "--acceptance-root",
@@ -3485,6 +3500,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             erratum_contract=erratum_contract,
             predecessor_archive=args.predecessor_archive,
             orchestration_repository_root=Path(__file__).resolve().parents[2],
+            snqi_v2_anchors=args.snqi_v2_anchors,
         )
     except (
         DerivedReleaseError,

@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_snqi_execution_context.py",
+    "test_snqi_context_fix_round.py",
     # Provenance/version observation uses retained bytes and fake packages; no episodes.
     "test_benchmark_result_provenance.py",
     # Retained-row acquisition/determinism proof; no environment reset or step.

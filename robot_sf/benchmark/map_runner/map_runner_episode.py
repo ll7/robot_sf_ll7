@@ -5640,6 +5640,8 @@ def run_map_episode(  # noqa: PLR0913
     Returns:
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
+    from robot_sf.benchmark.snqi.execution_context import admit_episode_context  # noqa: PLC0415
+
     ctx = _resolve_episode_run_context(
         scenario=scenario,
         seed=seed,
@@ -5664,6 +5666,7 @@ def run_map_episode(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         runtime_input_records=runtime_input_records,
     )
+    learned_execution_context = admit_episode_context(ctx.algo)
     scenario = ctx.scenario
     telemetry_profile = telemetry_from_scenario(scenario)
     # The profile is a recording choice only.  It enables the legacy step trace
@@ -5818,6 +5821,8 @@ def run_map_episode(  # noqa: PLR0913
     realized_map_id = (
         resolve_map_id(ctx.config, loop_result.map_def) if loop_result.map_def is not None else None
     )
+    if learned_execution_context is not None:
+        episode_record["algorithm_metadata"]["execution_context"] = learned_execution_context
     episode_record["selected_map_identity"] = selected_map_identity_from_runtime_inputs(
         realized_map_id,
         runtime_input_records or [],

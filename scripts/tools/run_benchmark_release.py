@@ -70,6 +70,13 @@ from robot_sf.benchmark.runtime_smoke_admission import (
     RuntimeSmokeAdmissionError,
     validate_runtime_smoke_result,
 )
+from robot_sf.benchmark.snqi.execution_context import (
+    assert_context_equal,
+    build_execution_context_provenance,
+    episode_context_guard,
+    load_calibration_context,
+    verify_episode_contexts,
+)
 from robot_sf.benchmark.spawn_preflight import (
     DEFAULT_CLEARANCE_MARGIN_M,
     DEFAULT_GRID_RESOLUTION_M,
@@ -1323,6 +1330,36 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             source_commit=manifest.source_sha or _current_source_commit(),
             diagnostic=development_rehearsal,
         )
+    calibration_context = None
+    if (
+        getattr(cfg, "snqi_v2_binding", None)
+        and cfg.snqi_v2_spec is not None
+        and not cfg.snqi_v2_spec.diagnostic
+    ):
+        try:
+            if args.snqi_v2_anchors is None:
+                raise ValueError("SNQI-v2 calibration context requires acquired anchor custody")
+            calibration_context = load_calibration_context(args.snqi_v2_anchors)
+            assert_context_equal(build_execution_context_provenance(), calibration_context)
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            reason = (
+                str(exc) if isinstance(exc, ValueError) else "calibration context custody invalid"
+            )
+            print(
+                json.dumps(
+                    {
+                        "mode": args.mode,
+                        "status": "snqi_v2_execution_context_refused",
+                        "status_reason": reason,
+                        "benchmark_success": False,
+                        "campaign_execution_status": "not_started",
+                        "evidence_status": "blocked",
+                        "release_exit_code": 2,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
     runtime_source_commit: str | None = None
     runtime_source_admission: dict[str, Any] = {
         "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
@@ -1827,16 +1864,37 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         if development_smoke
         else {}
     )
-    run_payload = run_campaign(
-        cfg,
-        output_root=args.output_root,
-        label=args.label,
-        campaign_id=campaign_id,
-        skip_publication_bundle=True,
-        invoked_command=invoked_command,
-        **campaign_options,
-    )
+    with episode_context_guard(calibration_context):
+        run_payload = run_campaign(
+            cfg,
+            output_root=args.output_root,
+            label=args.label,
+            campaign_id=campaign_id,
+            skip_publication_bundle=True,
+            invoked_command=invoked_command,
+            **campaign_options,
+        )
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
+    if calibration_context is not None:
+        try:
+            verify_episode_contexts(campaign_root, calibration_context)
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            reason = str(exc) if isinstance(exc, ValueError) else "learned context custody invalid"
+            print(
+                json.dumps(
+                    {
+                        "mode": args.mode,
+                        "status": "snqi_v2_episode_context_refused",
+                        "status_reason": reason,
+                        "benchmark_success": False,
+                        "campaign_execution_status": "completed",
+                        "evidence_status": "blocked",
+                        "release_exit_code": 2,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
     try:
         result.update(_public_campaign_result(run_payload))
     except ReleaseResultPrivacyError:

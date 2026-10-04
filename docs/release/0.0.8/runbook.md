@@ -630,6 +630,20 @@ actual acquisition; this integration and a rehearsal cannot fill the trust set.
 - [ ] Bind the calibration source to the named freeze. Verify zero metric/runtime,
   planner/model, physics, schema and authored-budget drift between acquisition and
   campaign; keep the sealed seed commitment and the D-084 overtaking H600.
+  Require every learned-policy episode's worker execution context to equal
+  `determinism-receipt.json` `execution_contexts.original`: CPU model, platform
+  (including kernel/glibc), Python, NumPy, Numba and the complete recorded thread
+  environment; compare Torch and stable-baselines3 versions when the calibration
+  records them. A node pin is an operational way to obtain equality, never a
+  substitute for it. Keep the historical missing learned-stack provenance visible.
+  The source-bound release entrypoint refuses missing/hash-mismatched paired
+  acquisition/determinism proofs or a different live context, checks each learned
+  worker before environment/planner construction or reset, and refuses missing or
+  differing recorded row contexts before release acceptance/publication.
+  This gate is runtime code, not a main-only mint helper. The canonical executor
+  invokes the release entrypoint from its pinned public source: the old freeze
+  lacks this gate. An independent freeze decision must precede sealed execution;
+  merging the gate on main alone does not activate it at the existing freeze.
 - [ ] Independently review anchor applicability to the fixed doorway width slice;
   retain its separate scientific and publication boundary (CHAIN-4 G12).
 - [ ] Review the sealed evaluation ruling binding the freeze, concrete main and

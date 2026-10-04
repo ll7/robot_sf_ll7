@@ -214,7 +214,10 @@ class _PedEnv:
         return None
 
 
-def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("gated_learned_policy", [False, True])
+def test_run_map_episode_record_carries_native_blocks(
+    monkeypatch: pytest.MonkeyPatch, gated_learned_policy: bool
+) -> None:
     """A real map-runner episode record natively carries both schema blocks."""
     from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 
@@ -289,19 +292,31 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         }
         return policy, {"status": "ok"}
 
-    record = _run_map_episode(
-        {"name": "episode-schema-smoke", "simulation_config": {"max_episode_steps": 1}},
-        seed=1,
-        horizon=1,
-        dt=0.1,
-        record_forces=False,
-        snqi_weights=None,
-        snqi_baseline=None,
-        algo="stream_gap",
-        algo_config={},
-        scenario_path=_SCENARIO_PATH,
-        policy_builder=policy_builder,
-    )
+    from robot_sf.benchmark.result_provenance import build_execution_context_provenance
+    from robot_sf.benchmark.snqi.execution_context import episode_context_guard
+
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(variable, "1")
+    context = build_execution_context_provenance() if gated_learned_policy else None
+    with episode_context_guard(context):
+        record = _run_map_episode(
+            {"name": "episode-schema-smoke", "simulation_config": {"max_episode_steps": 1}},
+            seed=1004,
+            horizon=1,
+            dt=0.1,
+            record_forces=False,
+            snqi_weights=None,
+            snqi_baseline=None,
+            algo="ppo" if gated_learned_policy else "stream_gap",
+            algo_config={},
+            scenario_path=_SCENARIO_PATH,
+            policy_builder=policy_builder,
+        )
+    recorded_context = record["algorithm_metadata"].get("execution_context")
+    if gated_learned_policy:
+        assert recorded_context == {k: v for k, v in context.items() if k != "hostname"}
+    else:
+        assert recorded_context is None
     Draft202012Validator(
         json.loads((_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_text())
     ).validate(record)

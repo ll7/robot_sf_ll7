@@ -71,7 +71,54 @@ identity binds. Complete and review both fixes before naming/moving the final
 freeze; then reprove its source and identity. This supersedes the earlier
 mint/publication-only classification; this documentation is not the fixes.
 
-## Freeze record — 2026-10-03
+## Freeze record — F2, 2026-10-04
+
+The orchestrator fast-forwarded `release/0.0.8-freeze`, without force, from
+`3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6` to
+`66f402ba176b13e45210d0da0b2cf20fcdc0cc02`; remote readback matched.
+The former freeze is **superseded**. F2 was assembled from that former freeze
+using these five merges' first-parent net deltas, in order:
+
+| Input | Merge commit |
+| --- | --- |
+| #10126 calibration evidence | `ab3f2840ed061d2879f79be69116663c2aace16e` |
+| #10131 DOI draft tooling | `dfd1c78564756efbcb98a247d7ff894f6b69ea76` |
+| #10133 learned-stack version capture and evidence wording | `eaa3cc8fc4eca8bcebeb2a008a1b2b072adf72f6` |
+| #10132 sealed execution-context gate | `ca9aeece4d6091627a95d088ecc48a0c61e2c8d1` |
+| #10134 mandatory reference fields, learned aliases and selector refusal | `cf0f74a13ff7f44022b71b7612a12faa9aa43085` |
+
+F2 also restores the calibration-before-DOI runbook and placeholder regression
+pin from main `cf0f74a13ff7f44022b71b7612a12faa9aa43085` (R12's documented
+docs/test exception). The independent candidate audit found no behavior change.
+The move was necessary because DOI draft tooling and the sealed execution-context
+gate must execute from the frozen tree; merging them only on main was insufficient.
+
+The [F2 acquisition evidence](../../context/evidence/2026-10-04_freeze008_f2_calibration/README.md)
+proves 21331 = A21337 = B21339: **1,344/1,344** raw metric/metric_values/steps/status
+hashes match in each comparison. F/J/K remain exactly
+78.44270546210876 / 1.957837635866961 / 0.5160654761904677.
+Acquired anchor SHA-256:
+`8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349`;
+determinism receipt SHA-256:
+`cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464`.
+Historical evidence and its `12503fbf…` anchor remain preserved separately.
+
+The protected-input rehash covers its explicit `PROTECTED_PATHS` only. Changed
+recording/admission runtime files outside that set include
+`robot_sf/benchmark/map_runner/map_runner_episode.py`,
+`robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py`,
+`robot_sf/benchmark/result_provenance.py` and `robot_sf/_execution_context.py`.
+Their neutrality on this grid rests on the **measured 1,344-row comparison**,
+not on the protected-input claim ([#10138](https://github.com/ll7/robot_sf_ll7/issues/10138)).
+
+The [independent #10137 review](https://github.com/ll7/robot_sf_ll7/pull/10137#issuecomment-5984099933)
+accepted head `e02d17e08c83b04a9299c6a54086fbf3fb3cc569`: MERGE, scientific
+boxes 1=PASS and 2=PASS for F2. This records that external review without ticking
+boxes here. Box 3 remains PARTIAL; boxes 4–6, scientific trust pins, authentic DOI
+reservation, resolved identities, smoke, final mint, sealed execution and
+publication retain their separate gates. No DOI has been reserved.
+
+### Superseded initial freeze record — 2026-10-03
 
 The authorized `release/0.0.8-freeze` ref was fast-forwarded, without force,
 from `5c27a404beb51f8b0207f726dcef49b143364d99` to clean main

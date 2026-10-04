@@ -485,9 +485,13 @@ Rehearsal CPU: {context["rehearsal"]["cpu_model"]}; acquisition CPU:
 {context["original"]["cpu_model"]}. Node, kernel and glibc differ; recorded
 Python/NumPy/Numba versions and thread limits match. F and K delta are zero;
 J delta is {receipt["J_delta_percent"]!r}% ({receipt["rehearsal_to_original_delta"]["J"]!r}).
-This is the anchors' measured environment sensitivity, consistent with the
+This is a measured cross-acquisition difference; the recorded context does not
+include the learned-policy inference stack. It is consistent with the
 [documented machine/compiler-conditional dynamics sensitivity](../../../benchmark_release_reproducibility.md).
 The experiment does not isolate a pedestrian fast-math or PPO arithmetic mechanism.
+Rehearsal checkpoint equality is inferred from byte-identical `model/registry.yaml`
+at d56092ed and 3e73b04b plus `checkpoint_provenance_enforcement="error"`, because
+the recovered rehearsal custody lacks a checkpoint staging receipt.
 
 The rehearsal p95 is a linear interpolation between 1.930676903661017
 (`guarded_ppo`, `francis2023_leave_group`, 1002) and 1.9412637255574998
@@ -521,6 +525,7 @@ def write_repeat_preservation(args: argparse.Namespace, proof: dict) -> None:
             "manifest_digest": manifest["manifest_digest"],
             "receipt_sha256": digest(args.repeat_preservation_receipt),
             "cold_files_byte_verified": len(manifest["files"]),
+            "independent_snapshot_files_byte_verified": len(manifest["files"]),
             "cold_manifest_sha256": digest(manifest_path),
         }
 

@@ -609,6 +609,69 @@ split, calibration source and exact acquisition configuration identity. Supply
 compare the anchors from every producer row/sidecar. Independent scientific
 pins remain mandatory in production; these checks confer no scientific authority.
 
+## F2 re-acquisition and execution-context admission
+
+The orchestrator's successor plan is F2 = `3e73b04b` plus reviewed tooling/evidence
+commits only, with no metric, planner, model, physics or authored-budget change.
+The orchestrator must name the full F2 SHA before acquisition; this runbook does
+not move the freeze. Run the complete 14×48×2 dev1001/1002 calibration acquisition
+**and a full same-node repeat at F2 on the calibration node**, each with fresh
+campaign IDs and preserved raw custody. Both `run_meta.json` execution contexts
+must record CPU/platform/Python/NumPy/Numba, the complete numerical thread
+environment, **`torch_version` and `stable_baselines3_version`**. The production
+context builder observes learned-stack versions without importing either runtime:
+loaded versions take precedence, followed by installed metadata and Torch's literal
+build tag from `version.py` (with metadata fallback). Missing distributions omit their keys;
+F2 acquisition for these learned arms must have both dependencies installed and
+both versions recorded. Do not stamp today's versions onto older producer rows.
+
+Freeze a new acquired anchor artifact whose `calibration.source_commit` is F2.
+Compare every `metrics`, `metric_values`, `steps` and `status` value against the
+prior acquisition using the determinism builder's binary float row hashes;
+require identical metric values and identical anchor values. Provenance commit
+fields and timestamps change, so raw episode/calibration digests and the acquired
+anchor SHA change. Rebind the new anchor identity to F2; preserve the historical
+anchor file and calibration evidence unchanged.
+
+Rebuild `determinism-receipt.json` and its paired acquisition proof with
+`scripts/dev/build_snqi_v2_acquisition_evidence.py`, using the F2 acquisition,
+F2 repeat and preserved rehearsal roots and their verified preservation/snapshot/
+cold inputs. The builder carries the original producer's Torch/SB3 versions into
+`execution_contexts.original`. Require classification `a`, equal recorded
+original/repeat contexts, 1,344 identical rows and zero differing rows. Retain the
+receipt digest and new anchor digest in the independent review packet.
+
+The asset vocabulary accepts `determinism_receipt_path` and
+`determinism_receipt_sha256` in `snqi_v2_spec`; the manifest's matching
+`metrics.snqi_v2_binding.determinism_receipt` asset has `path` and `sha256`.
+Both loaders validate these bytes like the weights/anchors/family assets. The
+receipt is acquired after F2 and need not be a Git blob at F2. Preparation may
+omit it; production context admission refuses an absent pin. Supply the reviewed
+post-acquisition pin to each final identity resolver invocation:
+
+```bash
+# Add these to the existing resolve_benchmark_release_identity.py generate command:
+--determinism-receipt-path output/release-008/calibration/determinism-receipt.json \
+--determinism-receipt-sha256 "$DETERMINISM_RECEIPT_SHA256"
+```
+
+The resolver binds that asset into the generated spec/manifest and reproduces
+it during `verify`, without changing the tracked source configuration. Keep the
+delivered receipt under ignored output in the selected source checkout, with
+reviewed bytes/digest and its paired acquired anchors/proof. Rehashing both
+custody files cannot substitute for the independently pinned receipt.
+
+Run the **live-context preflight inside the target allocation**, immediately
+before the sealed chain: a preflight on the submitting host cannot attest the
+workers. Worker admission uses the resolved, normalized algorithm before any
+environment/planner construction or reset. It covers the runtime-smoke
+checkpoint roster, `sa_cadrl`, `drl`, `sonic` and `socnav_sampling`; learned-stack
+fields recorded by the reference are mandatory and must match. Before acceptance,
+all learned rows must match and every manifest learned arm must be present.
+Independent preserved-row revalidation repeats this census; pass its
+`--snqi-v2-anchors` custody input too. Scientific/source/sealed admission and the
+six independent review boxes below remain required.
+
 ## Independent scientific review required before production mint
 
 Leave these boxes unchecked here. An independent reviewer completes them after
@@ -620,6 +683,24 @@ actual acquisition; this integration and a rehearsal cannot fill the trust set.
 - [ ] Bind the calibration source to the named freeze. Verify zero metric/runtime,
   planner/model, physics, schema and authored-budget drift between acquisition and
   campaign; keep the sealed seed commitment and the D-084 overtaking H600.
+  Require every learned-policy episode's worker execution context to equal
+  `determinism-receipt.json` `execution_contexts.original`: CPU model, platform
+  (including kernel/glibc), Python, NumPy, Numba and the complete recorded thread
+  environment; compare Torch and stable-baselines3 versions when the calibration
+  records them. A node pin is an operational way to obtain equality, never a
+  substitute for it. Keep the historical missing learned-stack provenance visible; F2 acquisition
+  and its same-node repeat must record Torch/SB3.
+  The source-bound release entrypoint refuses missing/hash-mismatched paired
+  acquisition/determinism proofs, a receipt differing from the spec-pinned
+  calibration reference, or a different live context; it checks each learned
+  worker before environment/planner construction or reset, and refuses missing or
+  differing recorded row contexts before release acceptance/publication.
+  This gate is runtime code, not a main-only mint helper. The canonical executor
+  invokes the release entrypoint from its pinned public source: the old freeze
+  lacks this gate. Run live-context preflight inside the intended allocation; the
+  submitting host context is not an attestation of the workers.
+  An independent freeze decision must precede sealed execution;
+  merging the gate on main alone does not activate it at the existing freeze.
 - [ ] Independently review anchor applicability to the fixed doorway width slice;
   retain its separate scientific and publication boundary (CHAIN-4 G12).
 - [ ] Review the sealed evaluation ruling binding the freeze, concrete main and

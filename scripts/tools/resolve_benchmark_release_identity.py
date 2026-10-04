@@ -45,6 +45,9 @@ def _parser() -> argparse.ArgumentParser:
         help="Comma-separated development seeds, allowed only with rehearsal opt-in.",
     )
 
+    generate.add_argument("--determinism-receipt-path", type=Path)
+    generate.add_argument("--determinism-receipt-sha256")
+
     verify = subparsers.add_parser("verify", help="Reproduce and verify resolved identity bytes.")
     verify.add_argument("--identity", type=Path, required=True)
     verify.add_argument("--repository-root", type=Path, default=None)
@@ -72,6 +75,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
             elif args.development_seeds is not None:
                 raise ValueError("development seeds require --development-rehearsal")
+            if (args.determinism_receipt_path is None) != (args.determinism_receipt_sha256 is None):
+                raise ValueError("determinism receipt requires both path and sha256")
+            receipt = (
+                {
+                    "path": str(args.determinism_receipt_path),
+                    "sha256": args.determinism_receipt_sha256,
+                }
+                if args.determinism_receipt_path is not None
+                else None
+            )
             output = args.output if args.output.is_absolute() else repository_root / args.output
             payload = write_resolved_release_identity(
                 template_path=args.template,
@@ -82,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
                 version_doi=args.version_doi,
                 repository_root=repository_root,
                 development_rehearsal_seeds=rehearsal_seeds,
+                determinism_receipt=receipt,
             )
             metadata = output.parent / RESOLVED_RELEASE_METADATA_FILENAME
             _print(

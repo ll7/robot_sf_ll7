@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from robot_sf import release_cli
+from robot_sf.evidence.writers import write_text
 
 SOURCE_SHA = "5" * 40
 PREDECESSOR_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
@@ -59,13 +60,14 @@ def test_release_cli_dispatches_each_zenodo_mode(
         "load_state",
         lambda path: state,
     )
-    monkeypatch.setattr(
-        release_cli.zenodo_publisher,
-        "reserve",
-        lambda session, metadata, api_base, **kwargs: (
-            calls.append(("reserve", {"api_base": api_base, **kwargs})) or state
-        ),
-    )
+
+    def fake_reserve(session, metadata, api_base, **kwargs):
+        calls.append(("reserve", {"api_base": api_base, **kwargs}))
+        path = kwargs["state_path"]
+        write_text(path.with_name(path.name + ".reserve-attempt"), "", issue_ref="zenodraft")
+        return state
+
+    monkeypatch.setattr(release_cli.zenodo_publisher, "reserve", fake_reserve)
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "upload",
@@ -120,6 +122,7 @@ def test_release_cli_dispatches_each_zenodo_mode(
         ]
     elif mode == "reserve":
         assert metadata_calls == [{}]
+        assert not args.state.with_name(args.state.name + ".reserve-attempt").exists()
     else:
         assert metadata_calls == []
     assert "secret" not in capsys.readouterr().out

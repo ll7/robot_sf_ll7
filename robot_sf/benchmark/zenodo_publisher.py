@@ -2498,12 +2498,15 @@ def reserve(
     *,
     api_base: str = ZENODO_API_BASE,
     release_binding: Any | None = None,
+    state_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Create a fresh deposition and reserve its version DOI.
 
     Returns:
         Credential-free deposition state.
     """
+    if state_path is not None:
+        require_unused_state_path(state_path)
     validated_base = _validated_api_base(api_base)
     normalized_metadata = _validate_metadata(metadata)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
@@ -2513,6 +2516,17 @@ def reserve(
         else None
     )
     normalized_metadata["prereserve_doi"] = True
+    if state_path is not None:
+        marker = reserve_attempt_path(state_path)
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            # Retain this lock on every failure, including interruption before POST.
+            with marker.open("x", encoding="utf-8"):
+                pass
+        except OSError as exc:
+            raise ZenodoPublisherError(
+                "could not exclusively create Zenodo reserve attempt; operator recovery required"
+            ) from exc
     response = session.post(
         f"{validated_base}/deposit/depositions",
         json={"metadata": normalized_metadata},
@@ -2529,6 +2543,123 @@ def reserve(
             metadata_contract_sha256=_metadata_sha256(file_metadata or normalized_metadata),
         )
     return _seal_state(state)
+
+
+def require_unused_state_path(path: str | Path) -> None:
+    """Refuse a reservation rerun before contacting Zenodo, even for corrupt state.
+
+    A dangling symlink is also an existing reservation destination. Never infer
+    permission to mint another DOI from an unreadable or malformed state file.
+    """
+    output = Path(path)
+    if output.exists() or output.is_symlink():
+        raise ZenodoPublisherError(
+            "Zenodo reserve state path already exists; reuse the reserved draft"
+        )
+    marker = reserve_attempt_path(output)
+    if marker.exists() or marker.is_symlink():
+        raise ZenodoPublisherError(
+            "Zenodo reserve attempt already exists; operator recovery required, never retry reserve"
+        )
+
+
+def reserve_attempt_path(path: str | Path) -> Path:
+    """Return the credential-free reservation attempt lock beside its state file."""
+    output = Path(path)
+    return output.with_name(output.name + ".reserve-attempt")
+
+
+def complete_reserve_attempt(path: str | Path) -> None:
+    """Clear the attempt only after the caller has successfully persisted state."""
+    try:
+        reserve_attempt_path(path).unlink()
+    except OSError as exc:
+        raise ZenodoPublisherError(
+            "could not clear Zenodo reserve attempt; persisted state must be reused"
+        ) from exc
+
+
+def _validate_draft_update_identity(
+    payload: Mapping[str, Any], state: Mapping[str, Any], operation: str
+) -> None:
+    """Require the same unpublished deposition at every draft-update boundary."""
+    _validate_unpublished_draft(payload, operation)
+    observed = _public_state(payload)
+    for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
+        if observed.get(key) != state.get(key):
+            raise ZenodoPublisherError(f"Zenodo {operation} {key} does not match reserved state")
+
+
+def _validate_draft_update_metadata(
+    payload: Mapping[str, Any], metadata: Mapping[str, Any], operation: str
+) -> None:
+    """Compare caller fields exactly after the existing Zenodo license/creator aliases.
+
+    Description, source relations and all other fields receive no normalization.
+    """
+    observed = payload.get("metadata")
+    if not isinstance(observed, Mapping):
+        raise ZenodoPublisherError(f"Zenodo {operation} metadata readback omitted metadata")
+    contract = _metadata_contract(metadata)
+    if set(observed) - {"prereserve_doi"} != set(contract):
+        raise ZenodoPublisherError(f"Zenodo {operation} metadata readback has unexpected fields")
+    for key, value in contract.items():
+        actual = _canonical_metadata_value_for_comparison(key, observed.get(key))
+        expected = _canonical_metadata_value_for_comparison(key, value)
+        if _canonical_bytes({"value": actual}) != _canonical_bytes({"value": expected}):
+            raise ZenodoPublisherError(
+                f"Zenodo {operation} metadata readback mismatch at metadata.{key}"
+            )
+
+
+def update_draft_metadata(
+    session: _Session,
+    state: dict[str, Any],
+    metadata: Mapping[str, Any],
+    *,
+    release_binding: Any,
+    api_base: str = ZENODO_API_BASE,
+) -> dict[str, Any]:
+    """Bind concrete metadata to the one reserved, still-unpublished draft.
+
+    Validate local state and manifest before GET, and remote identity/lifecycle
+    before PUT. Require both the PUT response and an independent GET to agree.
+    The legacy API has no atomic draft-only precondition; concurrent publication
+    is detected at readback and must be reconciled by the operator.
+
+    Returns:
+        Resealed state with the manifest binding and stale verification removed.
+        Refusals leave the caller's state unchanged, even after a remote PUT.
+    """
+    working_state = deepcopy(state)
+    validated_base = _validated_api_base(api_base)
+    _validate_state_for_operation(working_state)
+    _validate_unpublished_draft(working_state, "update-draft-metadata state")
+    normalized_metadata = _validate_metadata(metadata)
+    binding = _normalize_release_binding(release_binding)
+    file_metadata = _validate_release_binding_metadata(normalized_metadata, binding)
+    _validate_state_binding(
+        working_state, binding, metadata_contract_sha256=_metadata_sha256(file_metadata)
+    )
+    url = f"{validated_base}/deposit/depositions/{working_state['deposition_id']}"
+    remote = _get_json_object(session, url, "update-draft-metadata preflight")
+    _validate_draft_update_identity(remote, working_state, "update-draft-metadata preflight")
+    updated = _json_object(
+        session.put(
+            url,
+            json={"metadata": _metadata_contract(normalized_metadata)},
+            timeout=60,
+            allow_redirects=False,
+        ),
+        "update-draft-metadata PUT",
+    )
+    _validate_draft_update_identity(updated, working_state, "update-draft-metadata PUT")
+    _validate_draft_update_metadata(updated, normalized_metadata, "update-draft-metadata PUT")
+    readback = _get_json_object(session, url, "update-draft-metadata readback")
+    _validate_draft_update_identity(readback, working_state, "update-draft-metadata readback")
+    _validate_draft_update_metadata(readback, normalized_metadata, "update-draft-metadata readback")
+    working_state.pop("verification_receipt", None)
+    return _seal_state(working_state)
 
 
 def _validate_new_version_tag_lineage(
@@ -3438,7 +3569,9 @@ __all__ = [
     "publish",
     "read_token_file",
     "recover",
+    "require_unused_state_path",
     "reserve",
+    "update_draft_metadata",
     "upload",
     "verify",
     "write_state",

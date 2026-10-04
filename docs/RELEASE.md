@@ -368,22 +368,70 @@ This mode is read-only and emits no credentials. A passing report is still
 only an acceptance gate: publication requires the independent GitHub/Zenodo
 cold-download checks below, and SNQI remains advisory when calibration fails.
 
-For a future release, reserve a fresh benchmark-data
-concept/version before freezing the DOI into its v0.2 manifest:
+For 0.0.8, use this order: **minimal reservation metadata → reserve once →
+generate concrete DOI-bound identity/metadata → update the unpublished draft →
+upload → draft verify → publish → published verify**. The
+[0.0.8 runbook, step 3a](release/0.0.8/runbook.md#3a-preparatory-row-mint-and-resolved-identities)
+contains the exact command that writes the minimal reservation JSON and reads
+the authentic DOI pair from sealed state. Do not use 0.0.7 metadata or the raw
+template for a new reservation. After creating that minimal file and setting the
+runbook inputs:
 
 ```bash
 uv run robot-sf release zenodo reserve \
-  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
-  --state <credential-free-zenodo-state.json> \
-  --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
+  --token-file "$TOKEN_FILE" --state "$ZENODO_STATE" \
+  --metadata "$RESERVATION_METADATA"
+# Read CONCEPT_DOI and VERSION_DOI from this state, as in runbook step 3a.
+uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
+  --template configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml \
+  --output output/release-008/main/release_identity.resolved.json \
+  --source-commit "$FREEZE_SHA" --release-tag "$TAG" \
+  --concept-doi "$CONCEPT_DOI" --version-doi "$VERSION_DOI"
+uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
+  --identity output/release-008/main/release_identity.resolved.json
+export ZENODO_METADATA="$PWD/output/release-008/main/zenodo_metadata.resolved.json"
+uv run robot-sf release zenodo update-draft-metadata \
+  --token-file "$TOKEN_FILE" --state "$ZENODO_STATE" \
+  --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+# After campaign, bundle and publication admission (runbook steps 4–7):
+uv run robot-sf release zenodo upload \
+  --token-file "$TOKEN_FILE" --state "$ZENODO_STATE" \
+  --manifest output/release-008/main/release_identity.resolved.json "$BUNDLE_ARCHIVE"
+uv run robot-sf release zenodo verify \
+  --token-file "$TOKEN_FILE" --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+uv run robot-sf release zenodo publish \
+  --token-file "$TOKEN_FILE" --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+uv run robot-sf release zenodo verify \
+  --token-file "$TOKEN_FILE" --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
 ```
 
 Keep the token file outside Git with mode `0600`. The state file contains no
 credential. This initial `reserve` is intentionally the only unbound
 pre-reservation mutation: Zenodo returns the version DOI as part of the
 response, so freeze that DOI and the concept identity in the reviewed v0.2
-manifest before continuing. The direct CLI requires `--manifest` for every
-post-reservation `recover`, `upload`, `verify`, and irreversible `publish`
+manifest before continuing. `reserve` refuses an existing state path or
+`<state>.reserve-attempt` marker before constructing a session or issuing POST,
+even when state is malformed or either path is a dangling symlink. The attempt
+marker is created exclusively immediately before POST and removed only after
+state persistence succeeds. Interrupted attempts, response-validation failures
+and state-write failures require human reconciliation: recover the one deposition
+with the operator; never delete the marker or state to repeat reservation.
+The post-write identity guard remains.
+
+`update-draft-metadata` requires matching sealed local state and remote
+unpublished identity before PUT, then compares the PUT response and an independent
+GET with the requested metadata contract. Description/source relations remain
+byte-exact; the existing license and null affiliation aliases remain supported.
+It removes old verification receipts and preserves the file inventory. On failure
+the local state is unchanged; a remote PUT may already have succeeded. Resolve or
+retry against that same draft. Concurrent publication during PUT is detected by
+readback, but the legacy API offers no atomic draft-only precondition.
+The direct CLI requires `--manifest` for every
+post-reservation `recover`, `update-draft-metadata`, `upload`, `verify`, and irreversible `publish`
 operation and rejects an omitted binding before constructing an authenticated
 HTTP session. Do not run `publish` until the accepted 20,160-cell campaign
 bundle has passed independent cold verification.

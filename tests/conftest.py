@@ -1048,6 +1048,7 @@ _FAST_FILES = {
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
+    "test_zenodo_draft_metadata.py",
     "test_zenodo_publisher.py",
     "test_zenodo_publisher_edge_cases.py",
     # SocNav runtime-adapter tests cover the changed fallback diagnostics in

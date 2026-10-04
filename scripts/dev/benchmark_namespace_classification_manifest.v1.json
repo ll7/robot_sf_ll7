@@ -2,6 +2,7 @@
   "schema": "benchmark-namespace-classification.v1",
   "direct_children": [
     "__init__.py",
+    "_runtime_smoke_planner_keys.py",
     "ablation.py",
     "actuator_feasibility.py",
     "adversarial",

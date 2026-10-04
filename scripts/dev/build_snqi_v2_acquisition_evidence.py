@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: Byte-pinned anchors/JSON/plain CSV retain exact bytes; every public output uses the shared write_review_sidecar and is checked by regeneration and integrity gates.
 """Verify preserved development acquisition and emit portable review evidence.
 
 Run from the frozen producer checkout with that checkout on PYTHONPATH. This reads existing rows;

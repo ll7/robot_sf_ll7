@@ -1,3 +1,4 @@
+# evidence-writer-exempt: Signed producer fixtures require plain JSONL/SHA256SUMS; retained fixture bytes use shared write_review_sidecar, while deliberate tamper witnesses must keep the old signatures.
 """Protect portable acquired-anchor evidence without resetting or stepping anything."""
 
 import hashlib

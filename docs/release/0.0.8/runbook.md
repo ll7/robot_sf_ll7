@@ -205,6 +205,42 @@ concrete doorway manifest remain later inputs. The smoke row was not submitted;
 no smoke, final mint, sealed execution or publication occurred. Preserve acquisition
 bytes; the stale config comment remains tracked in #10124.
 
+
+### F2 re-acquisition and same-environment repeat — 2026-10-04
+
+The orchestrator accepted the immutable tooling/evidence candidate
+`66f402ba176b13e45210d0da0b2cf20fcdc0cc02`. The
+[F2 evidence](../../context/evidence/2026-10-04_freeze008_f2_calibration/README.md)
+binds development acquisition A (job 21337) and its same-environment repeat B
+(job 21339), each 14×48×2 cells using only dev1001/1002. Both match every one
+of the 1,344 metric/metric_values/steps/status hashes from historical job 21331,
+and A/B match each other (class a). No degraded/fallback/unavailable/imputed
+execution was accepted. F/J/K remain exactly 78.44270546210876 /
+1.957837635866961 / 0.5160654761904677. The config SHA256 remains `fe55f5ef…`.
+
+The F2 anchor SHA256 is
+`8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349`;
+the A/B determinism receipt SHA256 is
+`cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464`.
+Original/repeat contexts now record Torch 2.13.0+cu130 and stable-baselines3 2.9.0,
+with the same CPU/kernel/glibc/Python/NumPy/Numba and thread limits of one.
+Every learned row and run metadata context matches; B's complete 283-package
+allocated inventory equals A. Frozen all-extras dependencies were used.
+A's 153 preserved files and B's 140 pass independent snapshot and full cold
+readback hashes. The separate historical-to-F2 neutrality receipt rehashes the
+protected inputs and raw paired rows; it does not extend rr10126's historical
+rehearsal-to-3e73b04b source audit to F2. The rehearsal Torch/SB3 versions remain
+unobserved. Historical anchor `12503fbf…` and its complete evidence stay intact.
+
+R16 permits a bounded publication-builder/test exception. The builder retains
+the historical source guard and admits only this F2 with a hash-bound historical
+proof, historical-to-A raw equality, A/B class-a repeat and unchanged config/lock/
+protected inputs. It imports acquisition code from the exact producer checkout;
+publication tooling on main does not alter the immutable F2 tree. **Stop for
+independent scientific review** of the new source/custody/context bindings.
+The freeze reference remains at 3e73b04b. No scientific box, trust pin, DOI,
+identity, smoke, sealed execution or final mint is advanced by this evidence.
+
 ## 1. Move the freeze branch — orchestrator only
 
 ```bash

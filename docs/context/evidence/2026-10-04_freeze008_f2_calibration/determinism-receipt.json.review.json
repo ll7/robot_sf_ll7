@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/2026-10-04_freeze008_f2_calibration/determinism-receipt.json",
+  "artifact_sha256": "cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

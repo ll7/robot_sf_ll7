@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: Byte-pinned anchors/JSON/plain CSV retain exact bytes; every public output uses the shared write_review_sidecar and is checked by regeneration and integrity gates.
 """Verify preserved development acquisition and emit portable review evidence.
 
 Run from the frozen producer checkout with that checkout on PYTHONPATH. This reads existing rows;
@@ -18,7 +19,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from build_snqi_v2_determinism_receipt import build_receipt, load_rows
+from build_snqi_v2_determinism_receipt import build_receipt, compare_rows, load_rows
 from scipy.stats import spearmanr
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
@@ -29,6 +30,30 @@ from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
 from robot_sf.benchmark.snqi.v2_spec import PP_EQUIV_FORCE, SIMULATED_FORCE
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.evidence.writers import write_review_sidecar
+
+HISTORICAL_SOURCE = "3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6"
+F2_SOURCE = "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"
+HISTORICAL_PROOF_SHA256 = "c676a390325e586f1acdf7a261da5db19533e47c3881ce816fb1b848cee63154"
+HISTORICAL_ANCHOR_SHA256 = "12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2"
+CALIBRATION_CONFIG_SHA256 = "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3"
+LOCK_SHA256 = "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"
+PROTECTED_PATHS = (
+    "configs",
+    "model",
+    "maps",
+    "fast-pysf",
+    "uv.lock",
+    "pyproject.toml",
+    "robot_sf/nav",
+    "robot_sf/sim",
+    "robot_sf/gym_env",
+    "robot_sf/planner",
+    "robot_sf/baselines",
+    "robot_sf/policy",
+    "robot_sf/benchmark/metrics.py",
+    "robot_sf/benchmark/snqi/v2_spec.py",
+    "robot_sf/benchmark/snqi/v2_calibration.py",
+)
 
 
 def digest(path: Path) -> str:
@@ -128,6 +153,8 @@ def parse_args() -> argparse.Namespace:
         "output-dir",
     ):
         parser.add_argument(f"--{name}", required=True, type=Path)
+    parser.add_argument("--historical-proof", type=Path)
+    parser.add_argument("--historical-producer-root", type=Path)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--runtime-commit", required=True)
     parser.add_argument("--launcher-sha256", required=True)
@@ -248,6 +275,27 @@ def write_review_outputs(args: argparse.Namespace, proof: dict) -> None:
     repeat_notes = ""
     if "determinism_receipt" in proof:
         repeat_notes = render_determinism_notes(args.output_dir, proof)
+    f2 = proof["source_commit"] == F2_SOURCE
+    source_notes = ""
+    regeneration_flags = ""
+    evidence_directory = "2026-10-04_freeze008_calibration"
+    if f2:
+        evidence_directory = "2026-10-04_freeze008_f2_calibration"
+        source_notes = """## F2 neutrality and historical audit scope
+
+The [cross-source receipt](cross-source-grid-neutrality-receipt.json) recomputes
+all 1,344 historical job-21331 versus F2 job-21337 metric/metric_values/steps/status
+hashes: all are identical. The separate same-source repeat is job 21339.
+Configuration, dependency lock and protected inputs are byte-identical; the
+receipt records every rehashed protected path. The `rehearsal_comparison` below
+retains the hash-bound historical d56092ed-to-3e73b04b source audit exactly; it
+does not claim that rr10126 reviewed the F2 tooling delta. The measured grid
+neutrality is separate evidence. Anchor point values stay unchanged; source/run
+and custody bindings produce the new F2 anchor SHA.
+
+"""
+        regeneration_flags = """  --historical-proof "$HISTORICAL_PROOF" --historical-producer-root "$HISTORICAL_PRODUCER_ROOT" \\
+"""
     readme = args.output_dir / "README.md"
     readme.write_text(f"""# Frozen-source SNQI v2 development acquisition
 
@@ -271,7 +319,7 @@ raw force vectors are not claimed reconstructed from the scalar CSV.
 [Scalar metadata](metadata.json) declares `distance_convention=surface_clearance`
 for the underlying near-miss predicate; the close-clearance fraction is dimensionless.
 
-## Anchors and rehearsal comparison
+{source_notes}## Anchors and rehearsal comparison
 
 | Term | Acquired p95 | Change from d56092ed rehearsal |
 | --- | ---: | ---: |
@@ -342,8 +390,8 @@ export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   --snapshot-root "$SNAPSHOT_ROOT" --cold-root "$COLD_ROOT" \
   --preservation-receipt "$PRESERVATION_RECEIPT" \
   --rehearsal docs/context/evidence/2026-10-03_issue10112_mintorder/calibration-d56092ed-grid-proof.json \
-  --output-dir "$REVIEW_REPO/docs/context/evidence/2026-10-04_freeze008_calibration" \
-  --source-commit {proof["source_commit"]} \
+  --output-dir "$REVIEW_REPO/docs/context/evidence/{evidence_directory}" \
+{regeneration_flags}  --source-commit {proof["source_commit"]} \
   --runtime-commit {proof["producer_runtime_commit"]} \
   --launcher-sha256 {proof["launcher_sha256"]} \
   --repeat-producer-root "$REPEAT_PRODUCER_ROOT" --rehearsal-root "$REHEARSAL_ROOT" \
@@ -351,14 +399,244 @@ export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   --repeat-preservation-receipt "$REPEAT_PRESERVATION_RECEIPT"
 ```
 """)
+    if f2:
+        text = (
+            readme.read_text()
+            .replace(
+                "Manifest `"
+                + proof["preservation"]["manifest_digest"]
+                + "` covers the full producer,\nstartup/source/config/checkpoint/runtime and scheduler/watcher receipts and anchors.",
+                "Manifest `"
+                + proof["preservation"]["manifest_digest"]
+                + "` covers the full producer,\nstartup/source/config/checkpoint/runtime and scheduler/watcher control receipts.\nThe derived F2 anchor and determinism receipt are published in this evidence bundle;\ntheir source and byte bindings are reverified during regeneration.",
+            )
+            .replace(
+                "includes the complete repeat, both determinism receipts and recovered rehearsal raw inputs.",
+                "includes the complete repeat and both metric comparisons, context census and operational controls.",
+            )
+            .replace(
+                'export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1',
+                'export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1',
+            )
+        )
+        commands = [
+            'cd "$PRODUCER_SOURCE"',
+            'export PYTHONPATH="$PRODUCER_SOURCE" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1',
+            ".venv/bin/python scripts/tools/analyze_snqi_contract.py "
+            + f'--campaign-root "$PRODUCER_ROOT/benchmarks/{proof["run_id"]}" '
+            + '--freeze-v2-anchors "$ANCHORS_OUTPUT"',
+        ]
+        options = [
+            '.venv/bin/python "$REVIEW_REPO/scripts/dev/build_snqi_v2_acquisition_evidence.py"',
+            '--producer-root "$PRODUCER_ROOT" --anchors "$ANCHORS_OUTPUT"',
+            '--snapshot-root "$SNAPSHOT_ROOT" --cold-root "$COLD_ROOT"',
+            '--preservation-receipt "$PRESERVATION_RECEIPT"',
+            "--rehearsal docs/context/evidence/2026-10-03_issue10112_mintorder/calibration-d56092ed-grid-proof.json",
+            f'--output-dir "$REVIEW_REPO/docs/context/evidence/{evidence_directory}"',
+            '--historical-proof "$HISTORICAL_PROOF" --historical-producer-root "$HISTORICAL_PRODUCER_ROOT"',
+            f"--source-commit {proof['source_commit']}",
+            f"--runtime-commit {proof['producer_runtime_commit']}",
+            f"--launcher-sha256 {proof['launcher_sha256']}",
+            '--repeat-producer-root "$REPEAT_PRODUCER_ROOT" --rehearsal-root "$REHEARSAL_ROOT"',
+            '--repeat-snapshot-root "$REPEAT_SNAPSHOT_ROOT" --repeat-cold-root "$REPEAT_COLD_ROOT"',
+            '--repeat-preservation-receipt "$REPEAT_PRESERVATION_RECEIPT"',
+        ]
+        commands.append((" " + chr(92) + "\n  ").join(options))
+        text = text.split("```bash\n", 1)[0] + "```bash\n" + "\n".join(commands) + "\n```\n"
+        readme.write_text(text)
     write_review_sidecar(readme, repo_root=root)
+
+
+def verify_protected_inputs(source: Path, head: str) -> dict:
+    """Require unchanged protected blobs and rehash the actual producer checkout bytes."""
+    changed = subprocess.check_output(
+        [
+            "git",
+            "-C",
+            str(source),
+            "diff",
+            "--name-only",
+            HISTORICAL_SOURCE,
+            head,
+            "--",
+            *PROTECTED_PATHS,
+        ],
+        text=True,
+    ).splitlines()
+    dirty = subprocess.check_output(
+        ["git", "-C", str(source), "diff", "HEAD", "--name-only", "--", *PROTECTED_PATHS],
+        text=True,
+    ).splitlines()
+    if changed or dirty:
+        raise ValueError(f"F2 protected input bytes differ: {changed or dirty}")
+    members = subprocess.check_output(
+        ["git", "-C", str(source), "ls-tree", "-r", "--name-only", head, "--", *PROTECTED_PATHS],
+        text=True,
+    ).splitlines()
+    hashes = {member: digest(safe_member(source, member)) for member in members}
+    config = "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+    if hashes.get(config) != CALIBRATION_CONFIG_SHA256 or hashes.get("uv.lock") != LOCK_SHA256:
+        raise ValueError("F2 calibration config or dependency lock digest mismatch")
+    return hashes
+
+
+def load_bound_historical(args: argparse.Namespace, producer: dict) -> tuple:
+    """Authenticate the preserved historical audit and its complete raw producer."""
+    if not getattr(args, "historical_proof", None) or not getattr(
+        args, "historical_producer_root", None
+    ):
+        raise ValueError("F2 requires hash-bound historical acquisition proof and producer")
+    if digest(args.historical_proof) != HISTORICAL_PROOF_SHA256:
+        raise ValueError("historical acquisition proof digest mismatch")
+    legacy = json.loads(args.historical_proof.read_text())
+    historical_anchors = args.historical_proof.parent / "anchors.v2.0.acquired.json"
+    if (
+        digest(historical_anchors) != HISTORICAL_ANCHOR_SHA256
+        or legacy["anchors_sha256"] != HISTORICAL_ANCHOR_SHA256
+    ):
+        raise ValueError("historical anchor digest mismatch")
+    anchor = json.loads(historical_anchors.read_text())["calibration"]
+    signed, previous = check_producer(args.historical_producer_root, HISTORICAL_SOURCE)
+    if (
+        legacy["source_commit"] != HISTORICAL_SOURCE
+        or legacy["scheduler_job_id"] != "21331"
+        or legacy["calibration_rows"] != 1344
+        or legacy["seeds"] != [1001, 1002]
+        or digest(args.historical_producer_root / "SHA256SUMS")
+        != legacy["producer_manifest_sha256"]
+        or digest(args.historical_producer_root / "producer_provenance.json")
+        != legacy["producer_provenance_sha256"]
+        or previous["config_sha256"] != producer["config_sha256"]
+        or producer["config_sha256"] != CALIBRATION_CONFIG_SHA256
+        or any(previous[key] != producer[key] for key in ("private_ops_commit", "launcher_sha256"))
+    ):
+        raise ValueError("historical producer/proof binding mismatch")
+    return legacy, historical_anchors, anchor, signed
+
+
+def load_f2_campaigns(args: argparse.Namespace, producer: dict, head: str) -> tuple:
+    """Check all three source/job identities and both allocated environment bindings."""
+    if not args.repeat_producer_root or not args.rehearsal_root:
+        raise ValueError("F2 requires a same-source repeat and rehearsal raw custody")
+    campaigns = {}
+    environments = {}
+    for label, root, source, job in (
+        ("historical", args.historical_producer_root, HISTORICAL_SOURCE, "21331"),
+        ("original", args.producer_root, head, "21337"),
+        ("repeat", args.repeat_producer_root, head, "21339"),
+    ):
+        _, recorded = check_producer(root, source)
+        startup = json.loads((root / "startup.json").read_text())["identities"]
+        roots = list((root / "benchmarks").iterdir())
+        if len(roots) != 1 or startup["public_commit"] != source or str(startup["job_id"]) != job:
+            raise ValueError("F2 historical/original/repeat source or job binding mismatch")
+        if any(
+            recorded[field] != producer[field]
+            for field in ("config_sha256", "private_ops_commit", "launcher_sha256")
+        ):
+            raise ValueError("F2 repeat producer identity mismatch")
+        campaigns[label] = roots[0]
+        if label != "historical":
+            environments[label] = json.loads((root / "f2-environment.json").read_text())
+            env = environments[label]
+            if (
+                env["source_commit"] != head
+                or str(env["slurm_job_id"]) != job
+                or env["phase"] != "allocated"
+            ):
+                raise ValueError("F2 allocated environment binding mismatch")
+    return campaigns, environments
+
+
+def check_f2_policy_contexts(campaigns: dict, environments: dict, determinism: dict) -> dict:
+    """Require equal allocated inventories and recorded policy contexts in every learned row."""
+    from robot_sf.benchmark.snqi.execution_context import (
+        assert_context_equal,
+        verify_episode_contexts,
+    )
+
+    if (
+        not environments["original"]["installed_packages"]
+        or environments["original"]["installed_packages"]
+        != environments["repeat"]["installed_packages"]
+    ):
+        raise ValueError("F2 installed package inventories differ")
+    census = {}
+    for label in ("original", "repeat"):
+        expected = determinism["execution_contexts"][label]
+        for field in ("torch_version", "stable_baselines3_version"):
+            if not expected.get(field):
+                raise ValueError(f"F2 execution context missing {field}")
+        assert_context_equal(environments[label]["execution_context"], expected)
+        contexts = list(campaigns[label].rglob("run_meta.json"))
+        if not contexts:
+            raise ValueError("F2 run_meta execution context census missing")
+        for path in contexts:
+            assert_context_equal(json.loads(path.read_text())["execution_context"], expected)
+        data, _ = load_rows(campaigns[label])
+        census[label] = {
+            "run_meta_files": len(contexts),
+            "learned_rows": verify_episode_contexts(
+                campaigns[label], expected, tuple(sorted({key[0] for key in data}))
+            ),
+            "installed_packages": len(environments[label]["installed_packages"]),
+        }
+    return census
+
+
+def verify_f2_neutrality(args: argparse.Namespace, producer: dict, head: str) -> dict:
+    """Admit only the reviewed F2 with hash-bound historical custody and two raw comparisons."""
+    if head != F2_SOURCE:
+        raise ValueError("inert-source audit applies only to the reviewed freeze")
+    _, historical_anchors, anchor, signed = load_bound_historical(args, producer)
+    campaigns, environments = load_f2_campaigns(args, producer, head)
+    old_rows, old_files = load_rows(campaigns["historical"])
+    rows, files = load_rows(campaigns["original"])
+    if old_files != anchor["episode_files_sha256"] or anchor["source_commit"] != HISTORICAL_SOURCE:
+        raise ValueError("historical episode hashes differ from hash-bound anchor")
+    compared = compare_rows(old_rows, rows)
+    if compared["identical_rows"] != 1344 or compared["different_rows"]:
+        raise ValueError("historical-to-F2 metric/steps/status hashes differ")
+    determinism = build_receipt(campaigns["original"], campaigns["repeat"], args.rehearsal_root)
+    if (
+        determinism["classification"] != "a"
+        or not determinism["same_recorded_environment"]
+        or determinism["original_vs_repeat"]["identical_rows"] != 1344
+    ):
+        raise ValueError("same-source F2 repeat is not class-a and 1344/1344 identical")
+    census = check_f2_policy_contexts(campaigns, environments, determinism)
+    protected = verify_protected_inputs(get_repository_root(), head)
+    return {
+        "schema": "snqi-v2-F2-neutrality-review-input.v1",
+        "scientific_review": "pending_independent_review",
+        "source_commit": head,
+        "historical_source_commit": HISTORICAL_SOURCE,
+        "historical_acquisition_proof_sha256": digest(args.historical_proof),
+        "historical_anchors_sha256": digest(historical_anchors),
+        "historical_producer_signed_files": len(signed),
+        "scheduler_job_ids": {"historical": "21331", "original": "21337", "repeat": "21339"},
+        "historical_episode_files_sha256": old_files,
+        "original_episode_files_sha256": files,
+        "historical_vs_original": compared,
+        "same_source_repeat_classification": "a",
+        "same_source_repeat": determinism["original_vs_repeat"],
+        "policy_context_census": census,
+        "allocated_inventories_equal": True,
+        "protected_inputs_sha256": protected,
+        "interpretation_limit": "Historical-to-F2 equality is measured on this grid. The rr10126 source audit retains its d56092ed-to-3e73b04b scope; no new causal attribution or scientific approval is inferred.",
+    }
 
 
 def compare_rehearsal(
     args: argparse.Namespace, producer: dict, head: str, scalars: list
 ) -> tuple[dict, dict]:
     """Compare actual source/config bytes and identify the acquired J order statistics."""
-    if head != "3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6":
+    if head == F2_SOURCE:
+        verify_f2_neutrality(args, producer, head)
+        legacy = json.loads(args.historical_proof.read_text())
+        rehearsal = json.loads(args.rehearsal.read_text())["anchors"]
+        return rehearsal["anchors"], legacy["rehearsal_comparison"]
+    if head != HISTORICAL_SOURCE:
         raise ValueError("inert-source audit applies only to the reviewed freeze")
     rehearsal = json.loads(args.rehearsal.read_text())["anchors"]
     old = rehearsal["anchors"]
@@ -466,6 +744,12 @@ def render_determinism_notes(output_dir: Path, proof: dict) -> str:
     if "repeat_preservation" in proof:
         custody = proof["repeat_preservation"]
         custody_notes = f"Repeat W&B `{custody['qualified_name']}` is COMMITTED; all {custody['cold_files_byte_verified']} source members pass stored/decoded cold and independent snapshot hashes. Manifest `{custody['manifest_digest']}` includes the complete repeat, both determinism receipts and recovered rehearsal raw inputs."
+    original_job = (
+        receipt["scheduler_job_ids"]["original"] if proof["source_commit"] == F2_SOURCE else "21331"
+    )
+    inference_note = "the recorded context does not\ninclude the learned-policy inference stack."
+    if proof["source_commit"] == F2_SOURCE:
+        inference_note = "F2 original/repeat contexts include Torch/SB3; the rehearsal context\ndoes not record that learned-policy inference stack, whose versions remain unknown."
     return f"""## Fixed-environment repeat and environment sensitivity
 
 [Determinism receipt](determinism-receipt.json) compares all 1,344 metric-column,
@@ -477,7 +761,7 @@ steps and status hashes between jobs {receipt["scheduler_job_ids"]["original"]} 
 Public custody uses hashed node identities; private scheduler receipts retain actual names.
 
 The rehearsal raw rows were recovered and all 14 file hashes match its committed
-d56092ed anchor proof. Compared with job 21331, {previous["different_rows"]} rows differ:
+d56092ed anchor proof. Compared with job {original_job}, {previous["different_rows"]} rows differ:
 {json.dumps(previous["different_rows_by_arm"], sort_keys=True)}; {previous["step_differences"]}
 step-count and {previous["status_differences"]} navigation-status differences.
 Every differing row and both steps/status values are retained in the receipt.
@@ -485,8 +769,7 @@ Rehearsal CPU: {context["rehearsal"]["cpu_model"]}; acquisition CPU:
 {context["original"]["cpu_model"]}. Node, kernel and glibc differ; recorded
 Python/NumPy/Numba versions and thread limits match. F and K delta are zero;
 J delta is {receipt["J_delta_percent"]!r}% ({receipt["rehearsal_to_original_delta"]["J"]!r}).
-This is a measured cross-acquisition difference; the recorded context does not
-include the learned-policy inference stack. It is consistent with the
+This is a measured cross-acquisition difference; {inference_note} It is consistent with the
 [documented machine/compiler-conditional dynamics sensitivity](../../../benchmark_release_reproducibility.md).
 The experiment does not isolate a pedestrian fast-math or PPO arithmetic mechanism.
 Rehearsal checkpoint equality is inferred from byte-identical `model/registry.yaml`
@@ -530,6 +813,17 @@ def write_repeat_preservation(args: argparse.Namespace, proof: dict) -> None:
         }
 
 
+def bind_repeat_modes(proof: dict, determinism: dict, repeated_anchors: dict, head: str) -> None:
+    """Retain repeat modes without changing the already accepted F2 receipt serialization."""
+    repeated_modes = repeated_anchors["calibration"]["command_mode_counts"]
+    if head == F2_SOURCE:
+        if repeated_modes != proof["command_mode_counts"]:
+            raise ValueError("F2 repeat command modes differ")
+        proof["repeat_census"]["command_mode_counts"] = repeated_modes
+    else:
+        determinism["repeat_command_mode_counts"] = repeated_modes
+
+
 def write_determinism_evidence(
     args: argparse.Namespace, proof: dict, campaign: Path, root: Path, producer: dict, head: str
 ) -> None:
@@ -565,9 +859,7 @@ def write_determinism_evidence(
             term: repeated_anchors["anchors"][term]["upper"] for term in ("F", "J", "K")
         }:
             raise ValueError("repeat strict freezer and scalar recomputation differ")
-        determinism["repeat_command_mode_counts"] = repeated_anchors["calibration"][
-            "command_mode_counts"
-        ]
+        bind_repeat_modes(proof, determinism, repeated_anchors, head)
         determinism["source_commit"] = head
         determinism["producer_runtime_commit"] = producer["private_ops_commit"]
         determinism["launcher_sha256"] = producer["launcher_sha256"]
@@ -612,6 +904,56 @@ def write_determinism_evidence(
             "different_rows": determinism["original_vs_repeat"]["different_rows"],
         }
     write_repeat_preservation(args, proof)
+
+
+def write_f2_bindings(args: argparse.Namespace, proof: dict, producer: dict, head: str) -> None:
+    """Write portable raw-neutrality and two-copy bindings only for the reviewed F2."""
+    if head != F2_SOURCE:
+        return
+    neutrality = verify_f2_neutrality(args, producer, head)
+    neutral_path = args.output_dir / "cross-source-grid-neutrality-receipt.json"
+    neutral_path.write_text(
+        json.dumps(neutrality, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    )
+    write_review_sidecar(neutral_path, repo_root=Path(__file__).resolve().parents[2])
+    proof["historical_to_F2_neutrality"] = {
+        "path": str(neutral_path.relative_to(Path(__file__).resolve().parents[2])),
+        "sha256": digest(neutral_path),
+        "historical_source_commit": HISTORICAL_SOURCE,
+        "original_source_commit": head,
+        "historical_acquisition_proof_sha256": HISTORICAL_PROOF_SHA256,
+        "identical_rows": 1344,
+        "different_rows": 0,
+        "rehearsal_audit_scope": "d56092ed-to-3e73b04b only",
+    }
+    custody_path = args.output_dir / "producer-preservation-receipt.json"
+    custody_path.write_text(
+        json.dumps(
+            {
+                "schema": "snqi-v2-F2-preservation-review-input.v1",
+                "scientific_review": "pending_independent_review",
+                "source_commit": head,
+                "scheduler_job_ids": {"original": proof["scheduler_job_id"], "repeat": "21339"},
+                "original": proof["preservation"],
+                "repeat": proof["repeat_preservation"],
+                "policy_context_census": neutrality["policy_context_census"],
+            },
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        + "\n"
+    )
+    write_review_sidecar(custody_path, repo_root=Path(__file__).resolve().parents[2])
+
+
+def write_acquisition_outputs(args: argparse.Namespace, proof: dict, scalars: list) -> None:
+    """Emit the portable proof, scalar CSV, exact anchor bytes and review sidecars."""
+    output = args.output_dir / "acquisition-proof.json"
+    output.write_text(json.dumps(proof, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    write_review_sidecar(output, repo_root=Path(__file__).resolve().parents[2])
+    write_scalars(args.output_dir, scalars)
+    write_review_outputs(args, proof)
 
 
 def main() -> None:
@@ -761,11 +1103,8 @@ def main() -> None:
         },
     }
     write_determinism_evidence(args, proof, campaign, root, producer, head)
-    output = args.output_dir / "acquisition-proof.json"
-    output.write_text(json.dumps(proof, indent=2, sort_keys=True, allow_nan=False) + "\n")
-    write_review_sidecar(output, repo_root=Path(__file__).resolve().parents[2])
-    write_scalars(args.output_dir, scalars)
-    write_review_outputs(args, proof)
+    write_f2_bindings(args, proof, producer, head)
+    write_acquisition_outputs(args, proof, scalars)
 
 
 if __name__ == "__main__":

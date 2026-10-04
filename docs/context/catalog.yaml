@@ -8097,3 +8097,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/2026-10-04_freeze008_f2_calibration
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

@@ -447,6 +447,7 @@ def _runtime_successor_identity(
 @contextmanager
 def _resolved_source_checkout(source_root, commit, identity_path, payload):
     """Copy only canonical JSON custody into a detached source worktree."""
+    identity_path = identity_path.absolute()
     with tempfile.TemporaryDirectory(prefix="resolved-successor-source-") as directory:
         checkout = Path(directory) / "source"
         try:

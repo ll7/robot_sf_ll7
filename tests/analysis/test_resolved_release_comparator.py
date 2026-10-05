@@ -133,7 +133,10 @@ def _generate_identity(root, track, template):
     return path
 
 
-def test_ignored_native_extension_cannot_shadow_frozen_runtime(resolved_source):
+@pytest.mark.parametrize("relative", [False, True])
+def test_ignored_native_extension_cannot_shadow_frozen_runtime(
+    resolved_source, monkeypatch, relative
+):
     """An ignored import override in custody must never enter the frozen worker."""
     root = resolved_source
     path = _generate_identity(root, "main", "benchmark_data_release_s30_h600.template.yaml")
@@ -149,9 +152,13 @@ def test_ignored_native_extension_cannot_shadow_frozen_runtime(resolved_source):
             text=True,
         )
         assert not clean.stdout
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if relative:
+            monkeypatch.chdir(Path(comparator.__file__).resolve().parents[2])
+            path = Path(os.path.relpath(path))
         verified = comparator._verified_successor_manifest(
             path,
-            hashlib.sha256(path.read_bytes()).hexdigest(),
+            digest,
             root,
             {},
         )

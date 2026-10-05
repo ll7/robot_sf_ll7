@@ -373,8 +373,18 @@ def _is_text_capable(path: Path) -> bool:
 
 
 @contextlib.contextmanager
-def _source_repository_binding(source_root: Path, *, validator_root: Path | None = None):
+def _source_repository_binding(
+    source_root: Path, *, validator_root: Path | None = None, scoring_v2: bool = False
+):
     """Bind repository-aware protocol/export helpers to the frozen checkout."""
+    from robot_sf.benchmark.camera_ready import _util
+    from robot_sf.benchmark.snqi import v2_spec
+
+    previous_util_root = _util.get_repository_root
+    previous_spec_root = v2_spec.get_repository_root
+    if scoring_v2:
+        _util.get_repository_root = lambda: source_root
+        v2_spec.get_repository_root = lambda: source_root
     previous_protocol_root = release_protocol_module.get_repository_root
     previous_publication_root = artifact_publication_module.get_repository_root
     previous_config_root = camera_config_module.get_repository_root
@@ -388,6 +398,8 @@ def _source_repository_binding(source_root: Path, *, validator_root: Path | None
     try:
         yield
     finally:
+        _util.get_repository_root = previous_util_root
+        v2_spec.get_repository_root = previous_spec_root
         release_protocol_module.get_repository_root = previous_protocol_root
         artifact_publication_module.get_repository_root = previous_publication_root
         camera_config_module.get_repository_root = previous_config_root
@@ -1603,6 +1615,139 @@ def _reconcile_publication_snqi_diagnostics(
     }
 
 
+def _verify_publication_v2_reports(  # noqa: C901 - independent immutable scoring and report checks
+    campaign_root,
+    campaign_config,
+    manifest,
+    *,
+    expected_row_count,
+    expected_arm_count,
+    producer_root=None,
+    validator_root=None,
+):
+    """Recompute the inseparable v2 reports offline and preserve all producer bytes."""
+    from robot_sf.benchmark.snqi.v2_reports import (
+        _source_scenario_algorithms,
+        _validated_v2_record_algorithms,
+        compact_report_episode,
+        read_episode_files,
+        score_episode,
+        write_v2_reports,
+    )
+
+    if (campaign_root / "reports/snqi_diagnostics.json").exists():
+        raise DerivedReleaseError("v2 scoring contract excludes legacy SNQI diagnostics")
+    spec = getattr(campaign_config, "snqi_v2_spec", None)
+    if spec is None:
+        raise DerivedReleaseError("v2 report verification requires acquired anchors")
+    payload = getattr(manifest, "resolved_manifest_payload", None) or {}
+    planners = {
+        item["key"]: item for item in payload.get("planners", {}).get("config_identities", [])
+    }
+    episodes = []
+    bindings = {}
+    identities = set()
+    paths = sorted(campaign_root.glob("runs/*/episodes.jsonl"))
+    if planners:
+        run_entries = _read_json(campaign_root / "manifest.json")["runs"]
+        ordered = [
+            campaign_root
+            / "runs"
+            / f"{entry['planner']['key']}__{entry['planner']['kinematics']}"
+            / "episodes.jsonl"
+            for entry in run_entries
+        ]
+        if len(ordered) != len(set(ordered)) or set(ordered) != set(paths):
+            raise DerivedReleaseError("v2 producer report order does not cover the verified runs")
+        paths = ordered
+    for path in paths:
+        records = list(read_episode_files([path]))
+        key = path.parent.name.rsplit("__", 1)[0]
+        if planners:
+            if key not in planners:
+                raise DerivedReleaseError("v2 row planner is absent from verified manifest")
+            planner = planners[key]
+            planner = {**planner, "algo_config_path": planner.get("path")}
+            planner["_scenario_algorithms"] = _source_scenario_algorithms(
+                planner, release_protocol_module.get_repository_root()
+            )
+            bindings.update(_validated_v2_record_algorithms(records, planner, identities))
+        for row in records:
+            scored = score_episode(row, spec)
+            metrics = row["metrics"]
+            if (
+                metrics.get("snqi_v2") != scored["metrics"]["snqi_v2"]
+                or metrics.get("snqi_v2_terms") != scored["metrics"]["snqi_v2_terms"]
+            ):
+                raise DerivedReleaseError(
+                    "stored SNQI-v2 fields differ from verified scoring contract"
+                )
+            episodes.append(compact_report_episode(scored, spec))
+    if (
+        len(episodes) != expected_row_count
+        or len(list(campaign_root.glob("runs/*/episodes.jsonl"))) != expected_arm_count
+    ):
+        raise DerivedReleaseError("v2 report row or arm census mismatch")
+    reports = campaign_root / "reports"
+    from robot_sf.benchmark.snqi.v2_spec import parse_v2_json
+
+    family = parse_v2_json((reports / "snqi_v2_family.json").read_bytes())
+    samples = family.get("bootstrap", {}).get("samples")
+    if type(samples) is not int or samples != campaign_config.bootstrap_samples:
+        raise DerivedReleaseError("v2 report bootstrap contract mismatch")
+    digests = {}
+    with tempfile.TemporaryDirectory(prefix="verify-v2-reports-") as directory:
+        generated = Path(directory)
+        write_v2_reports(
+            episodes,
+            spec,
+            generated,
+            bootstrap_samples=samples,
+            expected_algorithms=bindings or None,
+        )
+        if producer_root is not None:
+            _sanitise_tree_paths(
+                generated,
+                source_root=release_protocol_module.get_repository_root(),
+                producer_root=producer_root,
+                validator_root=validator_root,
+            )
+        for name in ("family", "diagnostics"):
+            path = reports / f"snqi_v2_{name}.json"
+            if parse_v2_json(path.read_bytes()) != parse_v2_json(
+                (generated / path.name).read_bytes()
+            ):
+                raise DerivedReleaseError(
+                    f"SNQI-v2 {name} report differs from verified rows and scoring contract"
+                )
+            digests[path.name] = sha256_file(path)
+            markdown = path.with_suffix(".md")
+            if markdown.read_bytes() != (generated / markdown.name).read_bytes():
+                raise DerivedReleaseError(f"SNQI-v2 {name} Markdown differs from verified report")
+            digests[markdown.name] = sha256_file(markdown)
+    return {
+        "status": "verified_v2_reports_preserved",
+        "claim_boundary": parse_v2_json((reports / "snqi_v2_family.json").read_bytes())[
+            "claim_boundary"
+        ],
+        "verified_episode_rows": expected_row_count,
+        "arm_count": expected_arm_count,
+        "report_sha256": digests,
+        "legacy_scores_created": False,
+        "helper": _helper_provenance(),
+    }
+
+
+def _helper_provenance():
+    """Identify the executing helper separately from source and validator."""
+    root = Path(__file__).resolve().parents[2]
+    return {
+        "commit": _git_value(["rev-parse", "HEAD^{commit}"], cwd=root),
+        "file": "scripts/tools/revalidate_benchmark_release.py",
+        "file_sha256": sha256_file(Path(__file__)),
+    }
+
+
 def _write_derived_checksums(root: Path) -> dict[str, str]:
     """Write a fresh checksum list for the derived tree (excluding itself)."""
     sums_path = root / PRODUCER_SUMS_NAME
@@ -1693,15 +1838,70 @@ def _assert_exact_orchestration_checkout(repo_root: Path, expected_commit: str) 
         raise DerivedReleaseError("erratum orchestration checkout is not clean")
 
 
+def _verified_frozen_identity(path: Path, source_root: Path) -> dict[str, Any] | None:
+    """Verify canonical identity and execution-source guards with the frozen resolver."""
+    if path.suffix != ".json":
+        return None
+    payload = _read_json(path)
+    if payload.get("schema_version") != "benchmark-release-resolved-identity.v1" or not payload.get(
+        "resolved_manifest", {}
+    ).get("metrics", {}).get("snqi_v2_binding"):
+        return None
+    script = r"""
+import dataclasses, json, sys
+from pathlib import Path
+root=Path(sys.argv[1]); path=Path(sys.argv[2])
+sys.path[:0]=[str(root), str(root / 'fast-pysf')]
+from robot_sf.benchmark.release_protocol import load_release_manifest, load_release_campaign_config, validate_release_manifest
+from robot_sf.benchmark.release_notes import gate_manifest
+manifest=load_release_manifest(path, repository_root=root)
+gate_manifest(manifest, repository_root=root)
+cfg=load_release_campaign_config(manifest, repository_root=root)
+validation=validate_release_manifest(manifest, campaign_config=cfg, repository_root=root)
+if validation['status'] != 'valid': raise ValueError(validation)
+print(json.dumps({'manifest':dataclasses.asdict(manifest),
+ 'path_fields':[f.name for f in dataclasses.fields(manifest) if isinstance(getattr(manifest,f.name),Path)],
+ 'tuple_fields':[f.name for f in dataclasses.fields(manifest) if isinstance(getattr(manifest,f.name),tuple)],
+ 'validation':validation}, default=str, sort_keys=True))
+"""
+    before = sha256_file(path)
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, str(source_root), str(path)],
+        cwd=source_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise DerivedReleaseError(
+            f"frozen resolved identity verification failed: {result.stderr.strip()}"
+        )
+    if sha256_file(path) != before:
+        raise DerivedReleaseError("resolved identity changed during frozen verification")
+    return json.loads(result.stdout)
+
+
+def _manifest_from_frozen_evidence(evidence):
+    """Restore a source-verified manifest without rerunning execution guards in tooling."""
+    data = dict(evidence["manifest"])
+    for field in evidence["path_fields"]:
+        data[field] = Path(data[field])
+    for field in evidence["tuple_fields"]:
+        data[field] = tuple(data[field])
+    return release_protocol_module.BenchmarkReleaseManifest(**data)
+
+
 def _run_exact_validator(
     *,
     validator_root: Path,
     source_root: Path,
     acceptance_root: Path,
     manifest_path: Path,
+    snqi_v2_anchors: Path | None = None,
 ) -> dict[str, Any]:
     """Execute the reviewed validator from its clean checkout in isolation."""
     _assert_distinct_validator_checkout(validator_root, source_root)
+    frozen_evidence = _verified_frozen_identity(manifest_path, source_root)
     script = r"""
 import json
 import sys
@@ -1727,11 +1927,29 @@ if Path(acceptance_module.__file__).resolve() != expected_validator_file.resolve
 protocol.get_repository_root = lambda: source_root
 config_module.get_repository_root = lambda: source_root
 run_state_module.get_repository_root = lambda: source_root
-manifest = protocol.load_release_manifest(manifest_path)
+import os
+if os.environ.get("ROBOT_SF_FROZEN_MANIFEST_EVIDENCE"):
+    evidence=json.loads(os.environ["ROBOT_SF_FROZEN_MANIFEST_EVIDENCE"])
+    data=evidence["manifest"]
+    for field in evidence["path_fields"]: data[field]=Path(data[field])
+    for field in evidence["tuple_fields"]: data[field]=tuple(data[field])
+    manifest=protocol.BenchmarkReleaseManifest(**data)
+    from robot_sf.benchmark.camera_ready import _util
+    from robot_sf.benchmark.snqi import v2_spec
+    _util.get_repository_root=lambda: source_root
+    v2_spec.get_repository_root=lambda: source_root
+else:
+    manifest = protocol.load_release_manifest(manifest_path)
 campaign_config = protocol.load_release_campaign_config(
     manifest,
     repository_root=source_root,
 )
+if len(sys.argv) > 5:
+    from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors
+    campaign_config = bind_acquired_anchors(
+        campaign_config, anchors_path=Path(sys.argv[5]), calibration_root=None,
+        source_commit=manifest.source_sha, diagnostic=False,
+    )
 result = acceptance_module.validate_full_benchmark_release_acceptance(
     acceptance_root,
     manifest=manifest,
@@ -1741,6 +1959,9 @@ result = acceptance_module.validate_full_benchmark_release_acceptance(
 print(json.dumps(result, sort_keys=True, default=str))
 """
     environment = os.environ.copy()
+    environment.pop("ROBOT_SF_FROZEN_MANIFEST_EVIDENCE", None)
+    if frozen_evidence is not None:
+        environment["ROBOT_SF_FROZEN_MANIFEST_EVIDENCE"] = json.dumps(frozen_evidence)
     # A validator checkout must win over any editable helper checkout in the
     # caller's environment. Source-owned registry paths must likewise resolve
     # from the frozen execution checkout rather than the validator checkout.
@@ -1759,6 +1980,7 @@ print(json.dumps(result, sort_keys=True, default=str))
             str(source_root),
             str(acceptance_root),
             str(manifest_path),
+            *([str(snqi_v2_anchors)] if snqi_v2_anchors is not None else []),
         ],
         cwd=source_root,
         env=environment,
@@ -1942,6 +2164,7 @@ def _set_accepted_release_metadata(
     acceptance: Mapping[str, Any],
     producer_result: Mapping[str, Any],
     publication_descriptor: Mapping[str, Any],
+    scoring_claim_boundary: str = SNQI_ADVISORY_BOUNDARY,
 ) -> None:
     """Turn only the copied release metadata into an accepted derived result."""
     result_path = campaign_root / "release" / "release_result.json"
@@ -1955,7 +2178,7 @@ def _set_accepted_release_metadata(
                 campaign_root / "release" / "producer_release_result.rejected.json"
             ),
             "producer_release_status": producer_result.get("release_status"),
-            "snqi_claim_boundary": SNQI_ADVISORY_BOUNDARY,
+            "snqi_claim_boundary": scoring_claim_boundary,
         }
     )
     result.update(
@@ -2103,6 +2326,13 @@ def _write_derivation_receipt(  # noqa: PLR0913
         },
         "credentials": "not_recorded",
     }
+    v2_reports = publication_reconciliation.get("snqi_v2_reports")
+    if isinstance(v2_reports, Mapping):
+        receipt["snqi"] = {
+            "status": v2_reports["status"],
+            "claim_boundary": v2_reports["claim_boundary"],
+            "legacy_scores_created": False,
+        }
     _write_json(campaign_root / DERIVATION_RECEIPT_RELATIVE, receipt)
 
 
@@ -2983,6 +3213,7 @@ def _export_stabilised_bundle(  # noqa: PLR0913
     doi: str,
     repository_url: str,
     publication_relative_dir: str,
+    scoring_claim_boundary: str = SNQI_ADVISORY_BOUNDARY,
 ) -> tuple[dict[str, Any], Path, Path]:
     """Export, write descriptors, and repeat until the descriptor is stable."""
     _validate_safe_component(bundle_name, label="bundle_name")
@@ -3001,6 +3232,7 @@ def _export_stabilised_bundle(  # noqa: PLR0913
             acceptance=acceptance,
             producer_result=producer_result,
             publication_descriptor=descriptor,
+            scoring_claim_boundary=scoring_claim_boundary,
         )
         exported = export_publication_bundle(
             campaign_root,
@@ -3042,6 +3274,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     predecessor_archive: Path | None = None,
     orchestration_repository_root: Path | None = None,
     snqi_v2_anchors: Path | None = None,
+    expected_helper_commit: str | None = None,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -3120,6 +3353,10 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     final_publication = final_campaign / publication_name
     if final_campaign.exists():
         raise DerivedReleaseError("derived campaign or publication target already exists")
+    if expected_helper_commit is not None:
+        _assert_exact_orchestration_checkout(
+            Path(__file__).resolve().parents[2], expected_helper_commit
+        )
     _assert_distinct_validator_checkout(validator_repository_root, source_repository_root)
     _assert_frozen_source_repository(source_repository_root, recovery_contract.source_sha)
     validator = _validator_provenance(
@@ -3144,19 +3381,30 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_rejected_result_sha256=recovery_contract.rejected_result_sha256,
     )
 
+    validator_scoring_kwargs = {}
+    frozen_evidence = _verified_frozen_identity(manifest_path, source_repository_root)
     with _source_repository_binding(
         source_repository_root,
         validator_root=validator_repository_root,
+        scoring_v2=frozen_evidence is not None,
     ):
-        manifest = load_release_manifest(manifest_path)
+        manifest = (
+            _manifest_from_frozen_evidence(frozen_evidence)
+            if frozen_evidence
+            else load_release_manifest(manifest_path)
+        )
         _assert_manifest_paths_from_source(manifest, source_repository_root)
         campaign_config = load_release_campaign_config(
             manifest,
             repository_root=source_repository_root,
         )
-        manifest_validation = validate_release_manifest(
-            manifest,
-            campaign_config=campaign_config,
+        manifest_validation = (
+            frozen_evidence["validation"]
+            if frozen_evidence
+            else validate_release_manifest(
+                manifest,
+                campaign_config=campaign_config,
+            )
         )
         if manifest_validation.get("status") != "valid":
             raise DerivedReleaseError(
@@ -3168,13 +3416,24 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             anchors = snqi_v2_anchors or (Path(spec.paths["anchors"]) if spec else None)
             if anchors is None:
                 raise DerivedReleaseError("SNQI-v2 revalidation requires acquired anchor custody")
+            from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors
+
+            campaign_config = bind_acquired_anchors(
+                campaign_config,
+                anchors_path=anchors,
+                calibration_root=None,
+                source_commit=manifest.source_sha,
+                diagnostic=False,
+            )
             context = load_calibration_context(anchors, campaign_config.snqi_v2_binding)
             verify_episode_contexts(acceptance_root, context, manifest.planner_keys)
+            validator_scoring_kwargs = {"snqi_v2_anchors": anchors}
         acceptance = _run_exact_validator(
             validator_root=validator_repository_root,
             source_root=source_repository_root,
             acceptance_root=acceptance_root,
             manifest_path=manifest_path,
+            **validator_scoring_kwargs,
         )
     acceptance = dict(acceptance)
     acceptance["validator_execution"] = {
@@ -3234,17 +3493,34 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         with _source_repository_binding(
             source_repository_root,
             validator_root=validator_repository_root,
+            scoring_v2=bool(getattr(manifest, "snqi_v2_binding", None)),
         ):
-            snqi_reconciliation = _reconcile_publication_snqi_diagnostics(
-                staging_campaign,
-                expected_row_count=recovery_contract.episode_rows,
-                expected_arm_count=recovery_contract.arms,
-            )
+            if getattr(manifest, "snqi_v2_binding", None):
+                if getattr(manifest, "snqi_weights_path", None) or getattr(
+                    manifest, "snqi_baseline_path", None
+                ):
+                    raise DerivedReleaseError("ambiguous legacy and v2 scoring contract")
+                snqi_reconciliation = _verify_publication_v2_reports(
+                    staging_campaign,
+                    campaign_config,
+                    manifest,
+                    expected_row_count=recovery_contract.episode_rows,
+                    expected_arm_count=recovery_contract.arms,
+                    producer_root=producer_root,
+                    validator_root=validator_repository_root,
+                )
+            else:
+                snqi_reconciliation = _reconcile_publication_snqi_diagnostics(
+                    staging_campaign,
+                    expected_row_count=recovery_contract.episode_rows,
+                    expected_arm_count=recovery_contract.arms,
+                )
             projection_acceptance = _run_exact_validator(
                 validator_root=validator_repository_root,
                 source_root=source_repository_root,
                 acceptance_root=staging_campaign,
                 manifest_path=manifest_path,
+                **validator_scoring_kwargs,
             )
         if projection_acceptance.get("status") != "valid":
             raise DerivedReleaseError("derived publication projection failed full acceptance")
@@ -3253,7 +3529,11 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         publication_reconciliation = {
             "goal_timeout_boundary": goal_timeout_reconciliation,
             "sidecar_path_binding": sidecar_reconciliation,
-            "snqi_diagnostics": snqi_reconciliation,
+            (
+                "snqi_v2_reports"
+                if getattr(manifest, "snqi_v2_binding", None)
+                else "snqi_diagnostics"
+            ): snqi_reconciliation,
             "scientific_execution_changed": False,
             "simulation_rerun": False,
         }
@@ -3321,6 +3601,11 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     doi=doi,
                     repository_url=repository_url,
                     publication_relative_dir=publication_name,
+                    scoring_claim_boundary=(
+                        snqi_reconciliation["claim_boundary"]
+                        if getattr(manifest, "snqi_v2_binding", None)
+                        else SNQI_ADVISORY_BOUNDARY
+                    ),
                 )
         if erratum_contract is not None:
             _assert_erratum_publication_identity(staging_campaign, contract=erratum_contract)
@@ -3420,6 +3705,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--derived-name", required=True)
     parser.add_argument("--publication-name")
+    parser.add_argument("--expected-helper-commit", help="Exact clean main tooling checkout SHA")
     parser.add_argument(
         "--recovery-contract",
         type=Path,
@@ -3460,6 +3746,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     acceptance_root = args.acceptance_root or args.producer_root
     try:
+        if args.snqi_v2_anchors is not None and args.expected_helper_commit is None:
+            raise DerivedReleaseError("v2 revalidation requires an exact helper commit pin")
         recovery_contract = (
             load_recovery_contract(args.recovery_contract)
             if args.recovery_contract is not None
@@ -3501,6 +3789,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             predecessor_archive=args.predecessor_archive,
             orchestration_repository_root=Path(__file__).resolve().parents[2],
             snqi_v2_anchors=args.snqi_v2_anchors,
+            expected_helper_commit=args.expected_helper_commit,
         )
     except (
         DerivedReleaseError,

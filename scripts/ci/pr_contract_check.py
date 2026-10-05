@@ -1376,6 +1376,13 @@ def run_all_checks(
     warnings = []
     infos = []
 
+    # Current admission requires a classified, source-bound behaviour receipt.
+    # Immutable historical contract probes retain their pre-enforcement scope.
+    if historical_numstat is _UNSET_NUMSTAT:
+        from scripts.ci.behaviour_receipt import check_receipt
+
+        blockers.extend(check_receipt(body, changed_files, repo))
+
     # 1. Closes-discipline
     commit_messages = None
     commit_messages_checked = False
@@ -1540,13 +1547,13 @@ def get_changed_files(changed_files_file: Path | None, base_ref: str) -> list[st
     if base_ref_is_resolvable(base_ref):
         try:
             res = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                ["git", "diff", "--name-only", "-z", "--no-renames", f"{base_ref}...HEAD"],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             if res.returncode == 0:
-                return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+                return [path for path in res.stdout.split("\0") if path]
         except _BEST_EFFORT_ERRORS:
             pass
 

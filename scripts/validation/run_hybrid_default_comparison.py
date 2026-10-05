@@ -24,11 +24,16 @@ from robot_sf.common.hybrid_defaults import defaults_for_source
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_empty_world_sweep import assert_dev_seeds
 from scripts.validation.run_hybrid_feasibility_diagnostics import (
+    CANDIDATE,
     MAIN_MATRIX,
     ROOT,
     WIDTH_MATRIX,
     load_cells,
     run_cell,
+)
+from scripts.validation.run_policy_search_candidate import (
+    _DEFAULT_REGISTRY,
+    load_candidate_definition,
 )
 
 
@@ -60,10 +65,17 @@ def classify(result, output):
     with gzip.open(path, "rt") as stream:
         rows = [json.loads(line) for line in stream]
     contacts = sorted({k for r in rows for k in r["collision_types"]})
-    feasible = [(r.get("debug") or {}).get("feasible_moving_count", 0) for r in rows]
+    evaluated = [r["debug"] for r in rows if (r.get("debug") or {}).get("candidate_count", 0)]
+    tail = rows[-min(100, len(rows)) :]
     if contacts:
         category = "executed_contact"
-    elif feasible and all(v == 0 for v in feasible[-min(100, len(feasible)) :]):
+    elif tail and all((r.get("decision") or {}).get("planner_mode") == "GOAL_STOP" for r in tail):
+        category = "goal_stop_before_route_completion"
+    elif tail and all(
+        (r.get("debug") or {}).get("candidate_count", 0) > 0
+        and r["debug"]["feasible_moving_count"] == 0
+        for r in tail
+    ):
         category = "forced_stop_timeout"
     elif result["metrics"]["freezing"]:
         category = "low_progress_or_livelock_timeout"
@@ -72,7 +84,10 @@ def classify(result, output):
     return {
         "classification": category,
         "contacts": contacts,
-        "last_feasible_moving_count": feasible[-1] if feasible else None,
+        "last_feasible_moving_count": evaluated[-1]["feasible_moving_count"] if evaluated else None,
+        "last_decision_mode": (rows[-1].get("decision") or {}).get("planner_mode")
+        if rows
+        else None,
         "final_goal_distance_m": result["final_goal_distance_m"],
         "no_feasible_moving_s": result["metrics"]["no_feasible_moving_s"],
         "stopped_time_fraction": result["metrics"]["stopped_time_fraction"],
@@ -172,6 +187,20 @@ def main():  # noqa: C901 - one bounded experiment orchestration path
     logger.remove()
     logger.add(sys.stderr, level="ERROR")
     files.extend(sorted((ROOT / "robot_sf").rglob("*.py")))
+    files.extend(sorted((ROOT / "robot_sf").rglob("*.svg")))
+    files.extend(sorted((ROOT / "fast-pysf/pysocialforce").rglob("*.py")))
+    files.extend(sorted((ROOT / "maps").rglob("*.svg")))
+    files.extend(sorted((ROOT / "configs/scenarios").rglob("*.yaml")))
+    _, candidate, _, candidate_path = load_candidate_definition(ROOT / _DEFAULT_REGISTRY, CANDIDATE)
+    files.extend([ROOT / _DEFAULT_REGISTRY, candidate_path, ROOT / candidate["base_config_path"]])
+    files.extend(
+        ROOT / f"scripts/validation/{name}.py"
+        for name in (
+            "run_empty_world_sweep",
+            "run_policy_search_candidate",
+            "run_policy_search_step_diagnostics",
+        )
+    )
     files.extend([ROOT / "uv.lock", ROOT / "pyproject.toml"])
     manifest = {
         "status": "diagnostic-only",

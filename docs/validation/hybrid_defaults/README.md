@@ -25,7 +25,9 @@ arms use the registered scenario source. Standalone scenario construction uses
 its scenario source. Direct planner builders can pass `source_path`; direct
 constructors can use `defaults_for_source`. Unknown inputs receive current
 defaults. No key is added to the resolved algorithm mapping, and no frozen YAML
-or canonical config digest changes. The scoped policy is restored on exit;
+or canonical config digest changes. The recorded/current digest table is in
+[compatibility_audit.json](compatibility_audit.json); all nine full planner and
+environment dumps match their immutable base snapshots. The scoped policy is restored on exit;
 policy caching also distinguishes the selected default sets.
 
 Episode `algorithm_metadata.hybrid_default_policy` records `legacy-0.0.8` or
@@ -35,7 +37,15 @@ three effective flag values.
 
 Released PPO and guarded PPO model metadata describes observation keys without
 successor validity. The structured environment space changes under the current
-default. Their registered algorithm inputs retain the exact old space. This is
+default. Their registered algorithm inputs retain the exact old space. The cached guarded
+PPO checkpoint was inspected without inference: its checksum matches the model
+registry and its saved structured keys omit successor validity; see
+[learned_observation_check.json](learned_observation_check.json). The Dict PPO
+adapter selects saved model keys, so an extra runtime key need not change its
+model input tensors. Box policies flatten the runtime observation and therefore
+need the legacy flag or an explicit false override to preserve their dimension.
+The plain 0.0.8 PPO checkpoint was not hydrated locally; its registered observation
+metadata and actual environment space were checked. This is
 space/contract preservation, not a checkpoint performance evaluation or retrain.
 Unregistered learned-policy configurations must deliberately choose the sensor
 flag matching their training contract.
@@ -91,7 +101,8 @@ and verifies they resolve true in execution. No release seed policy executes.
 The manifest binds source revision, runtime file hashes, environment versions,
 scenario inputs and expected 3,084 episodes. Full traces preserve contacts,
 feasible-moving candidates and displacement. Failure labels describe executed
-contacts, forced stops, low progress/livelock, or horizon exhaustion; a timeout
+contacts, goal stops before route completion, forced stops with actual evaluated
+candidates, low progress/livelock, or horizon exhaustion; a timeout
 is not proof of physical infeasibility. Success/collision deltas and time deltas
 on common successes are descriptive development results. Fallback or degraded
 execution raises an error and cannot count as success. The hybrid implementation

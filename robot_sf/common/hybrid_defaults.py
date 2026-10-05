@@ -109,7 +109,9 @@ def episode_default_policy(
         with defaults_for_source(source) as policy:
             logger.debug("Typed hybrid defaults: {}", policy)
             record = function(*args, **kwargs)
-            record.setdefault("algorithm_metadata", {})["hybrid_default_policy"] = dict(policy)
+            metadata = dict(record.get("algorithm_metadata") or {})
+            metadata["hybrid_default_policy"] = dict(policy)
+            record["algorithm_metadata"] = metadata
             return record
 
     return wrapped

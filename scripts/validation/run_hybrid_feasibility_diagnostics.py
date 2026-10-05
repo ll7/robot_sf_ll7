@@ -126,7 +126,11 @@ def replay_segment(planner, obs, state, candidate, endpoint):
 def motion_metrics(rows, dt):
     """Measure stationary time and sustained low displacement (diagnostic units: seconds)."""
     stopped = sum(r["displacement_m"] / dt <= 0.05 for r in rows)
-    forced = sum(r["debug"]["feasible_moving_count"] == 0 for r in rows if r.get("debug"))
+    forced = sum(
+        r["debug"]["feasible_moving_count"] == 0
+        for r in rows
+        if (r.get("debug") or {}).get("candidate_count", 0) > 0
+    )
     longest = current = 0
     # A robot that moves less than 0.5 m net over 10 s is stuck/oscillating.
     width = int(np.floor(10 / dt)) + 1  # strictly more than 10 s

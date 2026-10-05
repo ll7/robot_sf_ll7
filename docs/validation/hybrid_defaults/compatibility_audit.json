@@ -1,0 +1,78 @@
+{
+  "base_sha": "303ddac871557ba4350933de54306b83288b437f",
+  "comparison": "full built dataclass values plus unchanged canonical mappings",
+  "sources": [
+    {
+      "source": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml",
+      "recorded_effective_sha256": "bf3838e35c29606a91059afccc25cf8c5ab3002b0f48a0830bbfb595bb3332b7",
+      "current_effective_sha256": "bf3838e35c29606a91059afccc25cf8c5ab3002b0f48a0830bbfb595bb3332b7",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd"
+    },
+    {
+      "source": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml",
+      "recorded_effective_sha256": "162aad53d01014f0ad1e7bba2376ad140c1ea7640da554393196264cddaaf7df",
+      "current_effective_sha256": "162aad53d01014f0ad1e7bba2376ad140c1ea7640da554393196264cddaaf7df",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935"
+    },
+    {
+      "source": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml",
+      "recorded_effective_sha256": "569bd63d6c5f808bf00681d713ab93af0c0207930230fe94ca1a8007fe82cc4c",
+      "current_effective_sha256": "569bd63d6c5f808bf00681d713ab93af0c0207930230fe94ca1a8007fe82cc4c",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888"
+    },
+    {
+      "source": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml",
+      "recorded_effective_sha256": "06cfc1dd8825a3a7ef0401489a004e7e2e9072247396d770b68477b0dd788a3d",
+      "current_effective_sha256": "06cfc1dd8825a3a7ef0401489a004e7e2e9072247396d770b68477b0dd788a3d",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811"
+    },
+    {
+      "source": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml",
+      "recorded_effective_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "current_effective_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87"
+    },
+    {
+      "source": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml",
+      "recorded_effective_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "current_effective_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
+    },
+    {
+      "source": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+      "recorded_effective_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+      "current_effective_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458"
+    },
+    {
+      "source": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml",
+      "recorded_effective_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "current_effective_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
+    },
+    {
+      "source": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
+      "recorded_effective_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+      "current_effective_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+      "full_planner_dump_matches_base": true,
+      "full_environment_dump_matches_base": true,
+      "source_sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94"
+    }
+  ]
+}

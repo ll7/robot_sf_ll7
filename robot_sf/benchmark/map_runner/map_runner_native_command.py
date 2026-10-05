@@ -305,8 +305,8 @@ def _parse_response_payload(
     """Parse a subprocess response and optional geometry-consumption proof.
 
     Returns:
-        Linear and angular command parsed from the ``linear_velocity`` /
-        ``angular_velocity`` keys (numpy-style tuples also accepted).
+        Linear and angular command from one recognized unicycle key pair,
+        plus the optional geometry-consumption proof.
 
     Raises:
         NativeCommandStepError: If the payload is not usable.

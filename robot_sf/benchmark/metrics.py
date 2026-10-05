@@ -220,7 +220,7 @@ def robot_force_reductions(
     mean and per-exposed-pedestrian impulse are NaN (undefined denominator).
 
     Returns:
-        Six named scalar reductions in model acceleration/time units.
+        Six scalar reductions and a validity count in model acceleration/time units.
     """
     if forces.ndim != 3 or forces.shape[-1] != 2:
         raise ValueError("robot forces must have shape (T,K,2)")
@@ -230,9 +230,7 @@ def robot_force_reductions(
     if presence.shape != forces.shape[:2] or presence.dtype != np.dtype(bool):
         raise ValueError("robot force presence must be a boolean array of shape (T,K)")
     if np.any(presence & ~np.isfinite(forces).all(axis=-1)):
-        raise ValueError(
-            "non-finite (including infinite) robot force sample for present pedestrian"
-        )
+        raise ValueError("non-finite or infinite robot force sample for present pedestrian")
     if np.any(~presence & ~np.isnan(forces).all(axis=-1)):
         raise ValueError("absent pedestrian force slot must contain only NaN padding")
     with np.errstate(over="ignore"):

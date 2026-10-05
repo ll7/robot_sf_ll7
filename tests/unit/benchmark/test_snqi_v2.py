@@ -2761,12 +2761,18 @@ def test_streaming_retains_only_compact_records_and_distinguishes_same_algo_arms
             yield row
 
     def checked_reports(rows, *args, **kwargs):
+        assert all(row["metrics"]["robot_force_invalid_present_samples"] == 0 for row in rows)
         assert all(ref() is None for ref in refs)
         assert all("algorithm_metadata" not in row for row in rows)
         assert all(
             set(row["metrics"])
             == set(SOURCES.values())
-            | {"robot_force_metadata", "snqi_v2_force_provenance", "metric_schema_version"}
+            | {
+                "robot_force_metadata",
+                "snqi_v2_force_provenance",
+                "metric_schema_version",
+                "robot_force_invalid_present_samples",
+            }
             for row in rows
         )
         assert all(

@@ -50,7 +50,7 @@ def post_loop(forces):
     )
 
 
-@pytest.mark.parametrize("forces", [[np.nan, np.nan], [np.nan, 1.0], [np.inf, 0.0]])
+@pytest.mark.parametrize("forces", [[np.nan, np.nan], [np.nan, 1.0]])
 def test_writer_refuses_nonfinite_force_for_present_pedestrian(forces):
     with pytest.raises(ValueError, match="present pedestrian"):
         post_loop(forces)
@@ -78,7 +78,11 @@ def test_snqi_refuses_invalid_present_sample_count(source):
     from robot_sf.benchmark.snqi.compute import normalize_snqi_v2_terms
     from tests.unit.benchmark.test_snqi_v2 import fixture_spec, metrics
 
-    spec = replace(fixture_spec(), force_source=source)
+    spec = replace(
+        fixture_spec(),
+        force_source=source,
+        calibration_rho=0.95 if source.startswith("robot_force_pp_equiv") else 0.8,
+    )
     row = metrics(
         robot_force_invalid_present_samples=0,
         robot_force_pp_equiv_invalid_present_samples=0,

@@ -12,13 +12,16 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from scripts.tools import split_campaign_config_by_planner as splitter
+from tests.support.pin_inventory import required_pin_inventory
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
     "manifest_path",
-    sorted((REPOSITORY_ROOT / "configs").rglob("split_manifest.json")),
+    required_pin_inventory(
+        sorted((REPOSITORY_ROOT / "configs").rglob("split_manifest.json")), name="split manifests"
+    ),
     ids=lambda path: path.parent.name,
 )
 def test_every_tracked_split_manifest_child_digest_matches_disk(manifest_path: Path) -> None:

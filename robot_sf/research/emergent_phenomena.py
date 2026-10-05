@@ -48,7 +48,7 @@ from pysocialforce.config import (
     SocialForceConfig,
 )
 
-from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
 from robot_sf.common.pysf_geometry import endpoint_segments_to_pysf
 
 if TYPE_CHECKING:
@@ -575,6 +575,7 @@ def run_scenario(
         ScenarioResult with the recorded trajectory and order parameters.
     """
     check_simulation_seed(config.seed, boundary="emergent run_scenario")
+    check_seed_config(getattr(sim_config, "scene_config", None), boundary="emergent scene")
     if sim_config is None:
         sim_config = released_default_config()
     builder = _BUILDERS.get(config.name)

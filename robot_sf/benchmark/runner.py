@@ -3171,10 +3171,10 @@ def run_batch(  # noqa: PLR0913
         if isinstance(scenarios_or_path, str | Path)
         else scenarios_or_path
     )
-    jobs = []
     if not any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
-        jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
-        for _, seed in jobs:
+        for _, seed in _expand_jobs(
+            scenarios, base_seed=base_seed, repeats_override=repeats_override
+        ):
             check_simulation_seed(seed, boundary="classic run_batch")
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     retained_metric_contract = (
@@ -3245,6 +3245,9 @@ def run_batch(  # noqa: PLR0913
             retained_metric_contract,
             summary,
         )
+
+    # Expand after track metadata is attached; admission above precedes output setup.
+    jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
 
     # Set up fixed parameters
     from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION  # noqa: PLC0415

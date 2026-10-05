@@ -101,7 +101,7 @@ def test_run_batch_parallel_writes_output_in_job_order(tmp_path: Path, monkeypat
         scenarios,
         out_path=out_file,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1001,
         horizon=1,
         dt=0.1,
         record_forces=False,

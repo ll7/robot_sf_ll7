@@ -229,3 +229,43 @@ def test_research_refuses_before_rng_or_raw_simulator(forbidden_sentinel, monkey
         invoke(SENTINEL)
     with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
         invoke(1001)
+
+
+@pytest.mark.parametrize(
+    "boundary", ["run_scenario", "run_native_reference", "run_reference_campaign"]
+)
+def test_research_refuses_nested_desired_speed_seed(forbidden_sentinel, monkeypatch, boundary):
+    from robot_sf.research import emergent_phenomena as emergent
+    from robot_sf.research import lane_formation_reference as reference
+
+    config = emergent.released_default_config()
+    config.scene_config.desired_speed_seed = SENTINEL
+    if boundary == "run_scenario":
+        monkeypatch.setitem(emergent._BUILDERS, "bidirectional_corridor", reached)
+
+        def invoke():
+            emergent.run_scenario(
+                SimpleNamespace(seed=1001, name="bidirectional_corridor"), None, config
+            )
+    elif boundary == "run_native_reference":
+        monkeypatch.setattr(reference, "build_bidirectional_corridor", reached)
+
+        def invoke():
+            reference.run_native_reference(
+                protocol=reference.ReferenceProtocol(),
+                condition="mixed_sustained_flow",
+                seed=1001,
+                calibration=emergent.RELEASED_DEFAULT_CALIBRATION,
+                sim_config=config,
+            )
+    else:
+        monkeypatch.setattr(reference, "run_native_reference", reached)
+
+        def invoke():
+            reference.run_reference_campaign(seeds=[1001], sim_config=config)
+
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        invoke()
+    config.scene_config.desired_speed_seed = 1002
+    with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
+        invoke()

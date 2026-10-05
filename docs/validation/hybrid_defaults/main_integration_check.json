@@ -1,0 +1,28 @@
+{
+  "integrated_base": "33064edd8770ed1887cfd6620c961bb583d7c84e",
+  "integration_head": "53401e0ab1290056efc250c56a956644ff8d834d",
+  "comparison_bound_files": 1428,
+  "changed_bound_files": [],
+  "upstream_changed_paths": [
+    "scripts/analysis/_distribution_admission.py",
+    "scripts/analysis/_pinned_successor_runtime.py",
+    "scripts/analysis/compare_release_0_0_7_to_0_0_8.py",
+    "scripts/analysis/compare_release_distributions.py",
+    "scripts/dev/affected_test_selection.py",
+    "scripts/dev/run_tests_parallel.sh",
+    "tests/analysis/test_resolved_release_comparator.py",
+    "tests/benchmark/test_campaign_horizon_contracts.py",
+    "tests/benchmark/test_release_protocol.py",
+    "tests/benchmark/test_required_pin_paths.py",
+    "tests/ci/test_affected_selection_shell.py",
+    "tests/ci/test_affected_test_selection.py",
+    "tests/ci/test_conservative_selection.py",
+    "tests/ci/test_ecosystem_pr_selection.py",
+    "tests/ci/test_selection_artifact.py",
+    "tests/conftest.py",
+    "tests/support/ci_wrapper_fixture.py",
+    "tests/support/pin_inventory.py",
+    "tests/tools/test_split_campaign_config_by_planner.py"
+  ],
+  "result": "All comparison-bound source and scenario bytes match after rebase."
+}

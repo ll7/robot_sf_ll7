@@ -84,7 +84,9 @@ The diagnostic observer regression
 a first goal-stop decision before speed-cap diagnostics exist. It fails on base
 with `TypeError`, then passes after a reporting-only guard. The inputs are fixed
 and it calls the real planner and counterfactual diagnostic; no simulation is
-reset or stepped. Its base-failure receipt is tracked separately.
+reset or stepped. Existing probe tests start with speed diagnostics already
+available and miss this initial goal-stop path. No test-only production seam is
+needed. Its base-failure receipt is tracked separately.
 
 No production seam was added solely for tests. Preservation assertions naturally
 also hold on base; the same tests include the changed current behavior so the
@@ -116,4 +118,58 @@ execution raises an error and cannot count as success. The hybrid implementation
 runs directly; command-space metadata saying `adapter` is distinct from a
 fallback planner.
 
-Full comparison results are pending until `summary.json` is complete.
+The complete 3,084-episode comparison is recorded in
+[comparison_summary.json](comparison_summary.json). All 294 failed episodes are
+classified there; [comparison_episodes.json.gz](comparison_episodes.json.gz)
+preserves every episode result. The empty-world gate has no newly failing cells
+and no contacts. The larger crowded matrix exposes a contact regression and
+35 newly failing cells, despite 67 recovered failures and a net gain of 32
+successes. These findings require review before adopting the change.
+
+| Set | Episodes per arm | Successes old → current | Collisions old → current | Timeouts old → current | Paired successful time delta |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Empty world | 102 | 88 → 100 (+11.765 percentage points) | 0 → 0 | 14 → 2 | +0.276 s (88 pairs) |
+| Crowded standard scenarios | 1,440 | 1,285 → 1,317 (+2.222 percentage points) | 0 → 1 (+0.069 percentage points) | 155 → 122 | +0.677 s (1,250 pairs) |
+
+Mean time to goal conditional on each arm's own successes changes from 17.181
+to 17.642 s in empty worlds and 22.138 to 22.812 s in crowds. Those populations
+differ; the paired column compares only cells succeeding in both arms. Positive
+deltas mean slower completion. No performance or collision noninferiority claim
+is made.
+
+The sole executed contact occurs with current defaults in
+`francis2023_robot_crowding`, dev1013, after 5.8 s. The environment reports
+`is_pedestrian_collision`; the last native mode is `PROTECTIVE_STOP`, with no
+feasible moving candidates. This does not establish the cause of the contact.
+All fallback and degraded execution counters are zero.
+
+| Failure classification | Old defaults | Current defaults |
+| --- | ---: | ---: |
+| Horizon exhausted with moving candidates | 104 | 75 |
+| Forced stop timeout | 43 | 32 |
+| Low progress or livelock timeout | 22 | 10 |
+| Goal stop before route completion | 0 | 7 |
+| Executed contact | 0 | 1 |
+
+The summary lists all 35 newly failing crowded cells individually. Shared
+narrow-doorway empty failures at dev1001 and dev1002 remain forced-stop timeouts.
+Neither the empty gate nor the net crowded success gain establishes release
+admission or collision safety.
+
+[comparison_manifest.json](comparison_manifest.json) binds 1,428 runtime/input
+files and dependencies. Original producer revisions are preserved even after
+branch rebase. [main_integration_check.json](main_integration_check.json) verifies
+all bound bytes still match after integrating main; upstream changes affect
+analysis and test tooling only. The initial run encountered a diagnostic
+observer error before stepping the environment. After the tested reporting-only
+guard, 1,738 completed episodes were retained with verified unchanged native
+control/input bytes, then the remaining episodes completed. Exact source
+amendment and AST-equivalence evidence are in
+[diagnostic_amendment.json](diagnostic_amendment.json).
+
+[comparison_trace_identities.json.gz](comparison_trace_identities.json.gz)
+records SHA-256 identities and sizes for every raw record and full step trace.
+The raw traces remain under the owned lane's comparison directory; preserve
+that directory during handoff. The tracked complete episode results, failure
+classifications, source manifest and trace identities are durable review
+artifacts; the command above reproduces the complete development matrix.

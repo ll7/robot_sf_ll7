@@ -1,14 +1,14 @@
-"""Conservatively select existing tests affected by a committed Git diff.
+"""Conservative PR test admission, including every slow test after any change.
 
-Imports include transitive local dependencies; literal paths include directory
-pins and joined Path expressions. Dynamic dependency construction remains a
-reason to run the complete suite on the combined train head.
+Import graphs cannot prove completeness for dynamic imports, fixture hooks or
+literal/data dependencies. Until that proof exists, every nonempty diff runs the
+full set. This intentionally trades extra execution for zero mapped omissions.
 """
 
 from __future__ import annotations
 
 import argparse
-import ast
+import json
 import subprocess
 from pathlib import Path
 
@@ -38,96 +38,86 @@ def changed_paths(root: Path, base: str, head: str = "HEAD") -> set[str]:
     return paths
 
 
-def _module(path: str) -> str:
-    return path.removesuffix(".py").removesuffix("/__init__").replace("/", ".")
-
-
-def _joined_literal(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Div, ast.Add)):
-        left, right = _joined_literal(node.left), _joined_literal(node.right)
-        if isinstance(node.op, ast.Div) and left is None:
-            return right
-        if left is not None and right is not None:
-            return left + ("/" if isinstance(node.op, ast.Div) else "") + right
-    if isinstance(node, ast.Call) and node.args:
-        if isinstance(node.func, ast.Name) and node.func.id in {"Path", "PurePath"}:
-            return _joined_literal(node.args[0])
-    return None
-
-
-def _references(path: Path, relative: str) -> tuple[set[str], set[str]]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
-    imports, literals = set(), set()
-    package = _module(relative).split(".")[:-1]
-    if path.name == "__init__.py":
-        package = _module(relative).split(".")
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            prefix = node.module or ""
-            if node.level:
-                prefix = ".".join(
-                    package[: len(package) - node.level + 1] + ([prefix] if prefix else [])
-                )
-            imports.add(prefix)
-            imports.update(f"{prefix}.{alias.name}" for alias in node.names)
-        literal = _joined_literal(node)
-        if literal:
-            literals.add(literal.strip("/"))
-    return imports, literals
-
-
 def affected_tests(root: Path, paths: set[str]) -> list[str]:
-    """Return existing tests importing changed code or naming changed inputs."""
-    sources = {}
-    for directory in ("robot_sf", "scripts", "tests", "fast-pysf"):
-        for path in (root / directory).rglob("*.py"):
-            relative = path.relative_to(root).as_posix()
-            sources[relative] = _references(path, relative)
-    affected = set(paths)
-    while True:
-        modules = {_module(path) for path in affected if path.endswith(".py")}
-        additions = set()
-        for path, (imports, literals) in sources.items():
-            imported = any(
-                name == module or name.startswith(module + ".")
-                for name in imports
-                for module in modules
-            )
-            pinned = any(
-                changed == literal or changed.startswith(literal.rstrip("/") + "/")
-                for literal in literals
-                if "/" in literal
-                for changed in affected
-            )
-            if imported or pinned:
-                additions.add(path)
-        if additions <= affected:
-            break
-        affected.update(additions)
-    # CI support tests cover shell and workflow inputs that cannot be imported.
-    if any(path.startswith(("scripts/ci/", ".github/workflows/")) for path in paths):
-        affected.update(path for path in sources if path.startswith("tests/ci/"))
+    """Return the complete tracked test inventory for every changed input.
+
+    Enumerate every tracked Python file, including vendored packages and roots
+    omitted by the old import scan. No package-name inference or path-literal
+    matching is used to exclude a test. Full pytest roots remain authoritative
+    for execution, including custom collection rules.
+    """
+    if not paths:
+        return []
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "*.py"], cwd=root, check=True, capture_output=True, text=True
+    )
     return sorted(
         path
-        for path in affected
-        if path in sources
+        for path in result.stdout.split("\0")
+        if path
+        and (root / path).is_file()
         and (path.startswith("tests/") or path.startswith("fast-pysf/tests/"))
         and (Path(path).name.startswith("test_") or Path(path).name.endswith("_test.py"))
     )
 
 
+def _identity(root: Path, ref: str) -> str:
+    return subprocess.check_output(
+        ["git", "rev-parse", "--verify", ref], cwd=root, text=True
+    ).strip()
+
+
+def selection_report(root: Path, base: str, head: str = "HEAD") -> dict:
+    """Prepare a reusable immutable diff decision without scanning test bodies."""
+    base_sha = _identity(root, f"{base}^{{commit}}")
+    head_sha = _identity(root, f"{head}^{{commit}}")
+    paths = changed_paths(root, base_sha, head_sha)
+    return {
+        "schema_version": "affected-test-selection.v1",
+        "base_sha": base_sha,
+        "head_sha": head_sha,
+        "tree_sha": _identity(root, f"{head_sha}^{{tree}}"),
+        "mode": "full" if paths else "unchanged",
+        "reason": "Any changed input requires complete admission; dependency inference is not exclusion proof.",
+        "changed_paths": sorted(paths),
+        "tests": affected_tests(root, paths),
+    }
+
+
+def read_report(root: Path, path: Path, base: str, head: str) -> dict:
+    """Reject stale, incomplete or unknown decisions before shard admission."""
+    report = json.loads(path.read_text())
+    if (
+        report.get("schema_version") != "affected-test-selection.v1"
+        or report.get("head_sha") != _identity(root, f"{head}^{{commit}}")
+        or report.get("base_sha") != _identity(root, f"{base}^{{commit}}")
+        or report.get("tree_sha") != _identity(root, f"{head}^{{tree}}")
+        or report.get("mode") not in {"full", "unchanged"}
+        or (report.get("mode") == "unchanged" and report.get("changed_paths") != [])
+    ):
+        raise ValueError("Selection decision is stale or invalid")
+    return report
+
+
 def main() -> None:
-    """Print newline-delimited existing affected test files, failing on bad refs."""
+    """Prepare one decision or read its bound artifact cheaply in each shard."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", default="HEAD")
+    parser.add_argument("--json-output", type=Path)
+    parser.add_argument("--read-report", type=Path)
+    parser.add_argument("--format", choices=("paths", "mode"), default="paths")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    print("\n".join(affected_tests(root, changed_paths(root, args.base, args.head))))
+    report = (
+        read_report(root, args.read_report, args.base, args.head)
+        if args.read_report
+        else selection_report(root, args.base, args.head)
+    )
+    if args.json_output:
+        args.json_output.parent.mkdir(parents=True, exist_ok=True)
+        args.json_output.write_text(json.dumps(report, indent=2) + "\n")
+    print(report["mode"] if args.format == "mode" else "\n".join(report["tests"]))
 
 
 if __name__ == "__main__":

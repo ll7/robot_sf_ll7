@@ -10,38 +10,34 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_changed_slow_pin_is_admitted(tmp_path):
     """A slow pin must execute when its production path changes."""
-    pin = ROOT / "tests/ci/test_temporary_affected_pin.py"
-    try:
-        pin.write_text(
-            'import pytest\npytestmark = pytest.mark.slow\nPIN = "robot_sf/benchmark/metrics.py"\ndef test_pin(): assert False, "pin executed"\n'
-        )
-        env = {
-            **os.environ,
-            "ROBOT_SF_AFFECTED_TEST_PATHS": "tests/ci/test_temporary_affected_pin.py",
-        }
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                str(pin),
-                "-m",
-                "not slow or affected",
-                "-q",
-                "-o",
-                "addopts=",
-            ],
-            cwd=ROOT,
-            env=env,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        assert result.returncode == 1, result.stdout + result.stderr
-        assert "pin executed" in result.stdout
-    finally:
-        pin.unlink(missing_ok=True)
+    pin = tmp_path / "test_temporary_affected_pin.py"
+    pin.write_text(
+        'import pytest\npytestmark = pytest.mark.slow\nPIN = "robot_sf/benchmark/metrics.py"\ndef test_pin(): assert False, "pin executed"\n'
+    )
+    env = {**os.environ, "ROBOT_SF_AFFECTED_TEST_PATHS": str(pin)}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "tests.conftest",
+            str(pin),
+            "-m",
+            "not slow or affected",
+            "-q",
+            "-o",
+            "addopts=",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "pin executed" in result.stdout
 
 
 def test_imports_pins_deletes_and_renames(tmp_path):
@@ -86,4 +82,5 @@ def test_imports_pins_deletes_and_renames(tmp_path):
         "tests/test_directory.py",
         "tests/test_import.py",
         "tests/test_pin.py",
+        "tests/test_unrelated.py",
     ]

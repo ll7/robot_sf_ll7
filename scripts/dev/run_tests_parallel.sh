@@ -355,16 +355,24 @@ for pytest_arg in "${pytest_args[@]}"; do
     break
   fi
 done
-if [[ "$sharding_active" == "1" && "$has_marker" == "0" && "$include_slow" != "1" ]]; then
-  if [[ -n "${ROBOT_SF_AFFECTED_BASE_REF:-}" ]]; then
-    # Command substitution preserves the selector failure; missing history is
-    # a failure, never an empty successful selection.
-    ROBOT_SF_AFFECTED_TEST_PATHS="$(uv run python "$SCRIPT_DIR/affected_test_selection.py" --base "$ROBOT_SF_AFFECTED_BASE_REF")"
-    export ROBOT_SF_AFFECTED_TEST_PATHS
-    cmd+=("-m" "not slow or affected")
-  else
-    cmd+=("-m" "not slow")
+if [[ -n "${ROBOT_SF_AFFECTED_BASE_REF:-}" ]]; then
+  selection_args=(--base "$ROBOT_SF_AFFECTED_BASE_REF" --format mode)
+  if [[ -n "${ROBOT_SF_AFFECTED_SELECTION_FILE:-}" ]]; then
+    selection_args+=(--read-report "$ROBOT_SF_AFFECTED_SELECTION_FILE")
   fi
+  selection_mode="$(uv run python "$SCRIPT_DIR/affected_test_selection.py" "${selection_args[@]}")"
+  case "$selection_mode" in
+    full) include_slow=1 ;;
+    unchanged) ;;
+    *) echo "Invalid affected-test selection decision." >&2; exit 2 ;;
+  esac
+  if [[ "$selection_mode" == "full" && "$has_marker" == "1" ]]; then
+    echo "Full affected-test admission cannot use a marker selector." >&2
+    exit 2
+  fi
+fi
+if [[ "$sharding_active" == "1" && "$has_marker" == "0" && "$include_slow" != "1" ]]; then
+  cmd+=("-m" "not slow")
 fi
 
 coverage_requested="${ROBOT_SF_PYTEST_COVERAGE:-}"

@@ -35,6 +35,9 @@ These are expected for normal development:
 
 * `git` - checkout, branch, and worktree management.
 * `uv` - dependency sync and Python command runner.
+* Node >= 22.7 - browser runtime tests require default ESM syntax detection.
+  `.nvmrc` pins the CI version through the shared CI setup action. Only an absent local Node
+  skips browser checks; missing Node in CI and unsupported installed versions fail.
 * Python 3.12 - the supported interpreter version in GitHub Actions. Run project commands through
   `uv run ...` rather than a globally activated interpreter.
 

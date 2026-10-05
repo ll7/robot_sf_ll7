@@ -414,6 +414,8 @@ _FAST_FILE_PREFIXES = (
 )
 _FAST_FILES = {
     "test_ecosystem_contract.py",
+    # Browser admission and CI runtime setup are deterministic, without simulation.
+    "test_browser_runtime_admission.py",
     "test_snqi_context_reference_policy_fields.py",
     "test_snqi_execution_context.py",
     "test_snqi_context_fix_round.py",

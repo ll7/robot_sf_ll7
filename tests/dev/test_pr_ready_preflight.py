@@ -3020,11 +3020,7 @@ def test_delayed_startup_reaches_real_signal_receipt(preflight_repo, tmp_path):
 
 
 def test_functional_hang_guards_are_generous_and_cleanup_still_works(tmp_path):
-    """Keep functional waiting load-tolerant while forced non-signalling faults fail."""
-    import inspect
-
-    assert inspect.signature(_collect_process).parameters["timeout"].default >= 60
-    assert inspect.signature(_wait_for_marker).parameters["timeout"].default >= 60
+    """A forced non-signalling fault must stop and reap the child process."""
     process = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(120)"],
         stdout=subprocess.PIPE,

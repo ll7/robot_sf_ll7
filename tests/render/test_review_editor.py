@@ -458,7 +458,6 @@ def test_python_storyboard_revision_uses_browser_canonical_token() -> None:
 
 def test_python_generated_model_can_save_storyboard_in_browser_runtime(tmp_path: Path) -> None:
     model = _model(tmp_path)
-    require_node_runtime()
     with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
         session = review_editor.ReviewEditorSession(model, adapter=adapter)
         assert model["storyboard_record_id"] == session.storyboard_record_id()
@@ -472,6 +471,7 @@ def test_python_generated_model_can_save_storyboard_in_browser_runtime(tmp_path:
     model_path = tmp_path / "review-editor.v1.json"
     model_path.write_text(json.dumps(bundle), encoding="utf-8")
     script = Path(__file__).resolve().parent / "review_editor_runtime.mjs"
+    require_node_runtime()
     completed = subprocess.run(
         ["node", str(script), str(model_path)], check=True, capture_output=True, text=True
     )

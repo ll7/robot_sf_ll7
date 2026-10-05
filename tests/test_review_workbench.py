@@ -149,7 +149,6 @@ def test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime(
     tmp_path: Path,
 ) -> None:
     """SREV-15 owns the offline launch while mounting the BA-06 fixture controls."""
-    require_node_runtime()
     _write(tmp_path / "trace-0000.json", {"step": 0})
     _write(tmp_path / "bundle.json", _bundle(tmp_path))
     request = _request(
@@ -196,6 +195,7 @@ def test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime(
     assert all((output / artifact).is_file() for artifact in expected_assets)
 
     runtime = Path(__file__).parent / "render" / "review_workbench_runtime.mjs"
+    require_node_runtime()
     completed = subprocess.run(
         ["node", str(runtime), str(output)],
         check=False,

@@ -2325,7 +2325,7 @@ def _build_lightweight_analysis_steps(
     return steps
 
 
-def run_episode(  # noqa: PLR0913
+def run_episode(  # noqa: PLR0913, PLR0915 - admission precedes existing episode setup
     scenario_params: dict[str, Any],
     seed: int,
     *,
@@ -2355,6 +2355,7 @@ def run_episode(  # noqa: PLR0913
     Returns:
         Episode record dictionary with metrics, trajectories, and metadata.
     """
+    check_simulation_seed(seed, boundary="run_episode")
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
     ts_start = datetime.now(UTC).isoformat()

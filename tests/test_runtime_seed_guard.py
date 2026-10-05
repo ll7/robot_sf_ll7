@@ -197,7 +197,7 @@ def test_classic_batch_admits_every_expanded_seed_before_output(forbidden_sentin
 )
 def test_research_refuses_before_rng_or_raw_simulator(forbidden_sentinel, monkeypatch, boundary):
     from robot_sf.research import emergent_phenomena as emergent
-    from robot_sf.research import lane_formation_reference as reference
+    from robot_sf.research import lane_formation_reference_guarded as reference
 
     if boundary.startswith("build_"):
         monkeypatch.setattr(emergent.np.random, "default_rng", reached)
@@ -210,7 +210,7 @@ def test_research_refuses_before_rng_or_raw_simulator(forbidden_sentinel, monkey
         def invoke(seed):
             emergent.run_scenario(SimpleNamespace(seed=seed, name="bidirectional_corridor"), None)
     elif boundary == "run_native_reference":
-        monkeypatch.setattr(reference, "build_bidirectional_corridor", reached)
+        monkeypatch.setattr(reference._reference, "build_bidirectional_corridor", reached)
 
         def invoke(seed):
             reference.run_native_reference(
@@ -220,7 +220,7 @@ def test_research_refuses_before_rng_or_raw_simulator(forbidden_sentinel, monkey
                 calibration=emergent.RELEASED_DEFAULT_CALIBRATION,
             )
     else:
-        monkeypatch.setattr(reference, "run_native_reference", reached)
+        monkeypatch.setattr(reference._reference, "run_native_reference", reached)
 
         def invoke(seed):
             reference.run_reference_campaign(seeds=[1001, seed])
@@ -236,7 +236,7 @@ def test_research_refuses_before_rng_or_raw_simulator(forbidden_sentinel, monkey
 )
 def test_research_refuses_nested_desired_speed_seed(forbidden_sentinel, monkeypatch, boundary):
     from robot_sf.research import emergent_phenomena as emergent
-    from robot_sf.research import lane_formation_reference as reference
+    from robot_sf.research import lane_formation_reference_guarded as reference
 
     config = emergent.released_default_config()
     config.scene_config.desired_speed_seed = SENTINEL
@@ -248,7 +248,7 @@ def test_research_refuses_nested_desired_speed_seed(forbidden_sentinel, monkeypa
                 SimpleNamespace(seed=1001, name="bidirectional_corridor"), None, config
             )
     elif boundary == "run_native_reference":
-        monkeypatch.setattr(reference, "build_bidirectional_corridor", reached)
+        monkeypatch.setattr(reference._reference, "build_bidirectional_corridor", reached)
 
         def invoke():
             reference.run_native_reference(
@@ -259,7 +259,7 @@ def test_research_refuses_nested_desired_speed_seed(forbidden_sentinel, monkeypa
                 sim_config=config,
             )
     else:
-        monkeypatch.setattr(reference, "run_native_reference", reached)
+        monkeypatch.setattr(reference._reference, "run_native_reference", reached)
 
         def invoke():
             reference.run_reference_campaign(seeds=[1001], sim_config=config)
@@ -279,3 +279,99 @@ def test_historical_inventory_resolution_does_not_admit_execution(forbidden_sent
     assert _select_seeds({}, suite_seeds=inventory, suite_key="classic_interactions") == [SENTINEL]
     with pytest.raises(ValueError, match="held-out simulation seed"):
         build_seed_jobs([{}], suite_seeds=inventory, suite_key="classic_interactions")
+
+
+@pytest.mark.parametrize("boundary", ["classic_episode", "thumbnail", "review_episode"])
+def test_refused_seed_preserves_global_rng_state(
+    forbidden_sentinel, monkeypatch, boundary, tmp_path
+):
+    """Refusal must precede real Python, NumPy and torch seeding and policy creation."""
+    import random
+
+    import numpy as np
+    import torch
+
+    from robot_sf.benchmark import runner, scenario_thumbnails
+    from robot_sf.common.seed import set_global_seed
+
+    set_global_seed(1001)
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_state = torch.get_rng_state().clone()
+    policy_calls = []
+    monkeypatch.setattr(
+        runner, "_create_robot_policy", lambda *a, **kw: policy_calls.append(1) or (None, {})
+    )
+    try:
+        if boundary == "review_episode":
+            from robot_sf.analysis_workbench import review_execute
+
+            result = review_execute._execute_episode_job(
+                {
+                    "scenario_id": review_execute._SUPPORTED_FIXTURE_SCENARIO_ID,
+                    "source_ref": review_execute._supported_fixture_source_reference(),
+                    "seed": SENTINEL,
+                    "horizon_steps": 1,
+                    "robot_speed_m_s": 1.0,
+                    "ped_speed_m_s": 1.0,
+                    "ped_start_delay_s": 0.0,
+                }
+            )
+            assert result["status"] == "error"
+            assert "held-out simulation seed" in result["error"]
+        else:
+            with pytest.raises(ValueError, match="held-out simulation seed"):
+                if boundary == "classic_episode":
+                    runner.run_episode({}, SENTINEL, horizon=1)
+                else:
+                    scenario_thumbnails.render_scenario_thumbnail(
+                        {}, SENTINEL, tmp_path / "unused.png"
+                    )
+        assert random.getstate() == python_state, "refused seed changed Python RNG state"
+        current_numpy = np.random.get_state()
+        assert current_numpy[0] == numpy_state[0]
+        np.testing.assert_array_equal(current_numpy[1], numpy_state[1])
+        assert current_numpy[2:] == numpy_state[2:]
+        assert torch.equal(torch.get_rng_state(), torch_state), (
+            "refused seed changed torch RNG state"
+        )
+        assert policy_calls == [], "refused seed constructed a robot policy"
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+        torch.set_rng_state(torch_state)
+
+
+@pytest.mark.parametrize("boundary", ["inventory", "profile", "command"])
+def test_parameter_screen_admits_all_seeds_before_profile_rng(
+    forbidden_sentinel, monkeypatch, boundary, tmp_path
+):
+    from robot_sf.research import lane_formation_parameter_screen_guarded as screen
+    from scripts.validation import run_issue_6969_parameter_screen_guarded as command
+
+    monkeypatch.setattr(screen._screen, "build_space_filling_profiles", reached)
+
+    def invoke(seed):
+        if boundary == "command":
+            monkeypatch.setattr(
+                command.sys,
+                "argv",
+                [
+                    "guarded-screen",
+                    "--seeds",
+                    f"1001,{seed}",
+                    "--output-dir",
+                    str(tmp_path / "unused"),
+                ],
+            )
+            command.main()
+        elif boundary == "profile":
+            screen.run_parameter_screen(seeds=[1001], profile_seed=seed)
+        else:
+            screen.run_parameter_screen(seeds=[1001, seed])
+
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        invoke(SENTINEL)
+    with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
+        invoke(1001)
+    assert not (tmp_path / "unused").exists()

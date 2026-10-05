@@ -53,6 +53,9 @@ def test_v2_calibration_context_description_does_not_claim_calibration_failed(tr
     )
     assert "calibration failed" not in description.casefold(), description
     assert all(term in description.casefold() for term in ("snqi", "advisory", "ranking"))
+    if track == "doorway":
+        assert "raw metrics only" in description.casefold(), description
+        assert "not validated for this slice" in description.casefold(), description
 
 
 @pytest.mark.parametrize("track", TEMPLATES)
@@ -64,4 +67,7 @@ def test_non_main_freeze_first_parent_is_not_described_as_mainline_base(track):
     parent = "1261295887901e566a93da87a4559ea1040808a7"
     assert identity["resolved_manifest"]["latest_main_base_commit"] == parent
     assert "mainline base" not in description.casefold(), description
-    assert f"freeze-branch base (first parent of the source commit) {parent}" in description
+    if track == "main":
+        assert f"source first parent {parent}" in description
+    else:
+        assert f"freeze-branch base (first parent of the source commit) {parent}" in description

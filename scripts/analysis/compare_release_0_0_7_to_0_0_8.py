@@ -443,16 +443,123 @@ def _runtime_successor_identity(
             )
 
 
+def _verified_resolved_successor(path, digest, source_root, rows, *, snqi_v2_anchors=None):
+    """Verify the canonical envelope with frozen code and derive its runner bindings."""
+    source_root = source_root.resolve()
+    payload = json.loads(path.read_bytes())
+    commit = payload["source_commit"]
+    _require_clean_source(source_root, commit)
+    request = {
+        "resolved_identity_path": str(path.resolve()),
+        "source_commit": commit,
+        "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
+        "rows": [
+            {"slot": slot, "scenario_params": row["_provenance"]["scenario_params"]}
+            for slot, row in rows.items()
+        ],
+    }
+    if snqi_v2_anchors is not None:
+        request["snqi_v2_anchors"] = str(snqi_v2_anchors.resolve())
+    result = subprocess.run(
+        [sys.executable, "-I", str(Path(__file__).with_name("_pinned_successor_runtime.py"))],
+        cwd=source_root,
+        input=json.dumps(request),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise ValueError(f"resolved successor verification failed: {result.stderr.strip()}")
+    runtime = json.loads(result.stdout)
+    _verify_sha256(path, digest, label="successor manifest SHA-256")
+    _require_clean_source(source_root, commit)
+    resolved = payload["resolved_manifest"]
+    for binding in resolved["planners"]["config_identities"]:
+        if (
+            binding.get("path") is not None
+            and hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
+            != binding["sha256"]
+        ):
+            raise ValueError("resolved successor planner Git blob mismatch")
+    config_path = resolved["canonical_campaign_config"]
+    scenario_path = resolved["scenario"]["matrix_path"]
+    for name, expected in (
+        (config_path, resolved["canonical_campaign_config_sha256"]),
+        (scenario_path, resolved["scenario"]["matrix_sha256"]),
+    ):
+        if hashlib.sha256(_source_bytes(source_root, commit, name)).hexdigest() != expected:
+            raise ValueError("resolved successor input Git blob mismatch")
+    return {
+        "source_commit": commit,
+        "campaign_config": {
+            "path": config_path,
+            "sha256": resolved["canonical_campaign_config_sha256"],
+            "runtime_hash": runtime["config_hash"],
+        },
+        "scenario_matrix": {
+            "path": scenario_path,
+            "sha256": resolved["scenario"]["matrix_sha256"],
+            "runtime_hash": runtime["scenario_hash"],
+        },
+        "planner_keys": resolved["planners"]["keys"],
+        "runtime_rows": {tuple(item.pop("slot")): item for item in runtime["rows"]},
+        "scoped_hashes": {
+            (item["planner"], item["kinematics"]): item["hash"] for item in runtime["scoped_hashes"]
+        },
+        "expected_slots": {tuple(item) for item in runtime["expected_slots"]},
+        "manifest_sha256": digest,
+    }
+
+
+def _require_clean_source(root, commit):
+    """The successor checkout must remain clean at the identity's exact source."""
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    dirty = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if head != commit or dirty:
+        raise ValueError("successor source checkout must be clean at the resolved source commit")
+
+
+def _tooling_identity(expected_commit=None):
+    """Record the executing helper revision independently of the acquired source."""
+    root = Path(__file__).resolve().parents[2]
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if expected_commit is not None:
+        _require_clean_source(root, expected_commit)
+    return {
+        "commit": commit,
+        "file": "scripts/analysis/compare_release_0_0_7_to_0_0_8.py",
+        "file_sha256": _sha256(Path(__file__)),
+    }
+
+
 def _verified_successor_manifest(  # noqa: C901, PLR0912
     path: Path,
     digest: str,
     source_root: Path,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
+    *,
+    snqi_v2_anchors: Path | None = None,
 ) -> dict[str, Any]:
     _verify_sha256(
         path, _hex_digest(digest, "successor manifest digest"), label="successor manifest SHA-256"
     )
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        isinstance(manifest, dict)
+        and manifest.get("schema_version") == "benchmark-release-resolved-identity.v1"
+    ):
+        return _verified_resolved_successor(
+            path, digest, source_root, rows, snqi_v2_anchors=snqi_v2_anchors
+        )
     if (
         not isinstance(manifest, dict)
         or manifest.get("schema_version") != "slot-paired-successor.v1"
@@ -540,7 +647,12 @@ def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
     git = manifest.get("git")
     source = git.get("commit") if isinstance(git, dict) else None
     campaign_id = manifest.get("campaign_id")
-    if campaign_id != expected["campaign_id"] or source != expected["source_commit"]:
+    if (
+        not isinstance(campaign_id, str)
+        or not campaign_id
+        or ("campaign_id" in expected and campaign_id != expected["campaign_id"])
+        or source != expected["source_commit"]
+    ):
         raise ValueError("0.0.8 campaign ID/source differs from verified successor manifest")
     checks = {
         "config_hash": expected["campaign_config"]["runtime_hash"],
@@ -930,6 +1042,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     successor_manifest: Path,
     successor_manifest_sha256: str,
     successor_source_root: Path,
+    snqi_v2_anchors: Path | None = None,
     baseline_root: Path | None = None,
     classification_file: Path | None = None,
     baseline_sha256: str = BASELINE_SHA256,
@@ -972,7 +1085,11 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         raise ValueError(f"0.0.7 scenario identity mismatch: {scenario_identity} != {expected}")
     new, duplicates, duplicate_rows = _root_rows(successor_root)
     verified_successor = _verified_successor_manifest(
-        successor_manifest, successor_manifest_sha256, successor_source_root, new
+        successor_manifest,
+        successor_manifest_sha256,
+        successor_source_root,
+        new,
+        snqi_v2_anchors=snqi_v2_anchors,
     )
     successor_identity = _root_identity(successor_root, verified_successor)
     expected_slots = verified_successor["expected_slots"]
@@ -1211,6 +1328,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     unexplained = sum(finding["classification"] == "unexplained" for finding in findings)
     return {
         "schema_version": "slot-paired-release-diff.v1",
+        "tooling": _tooling_identity(),
         "baseline": {"release": "0.0.7", **baseline_identity},
         "successor": {
             "release": "0.0.8",
@@ -1305,6 +1423,8 @@ def main() -> int:
     baseline.add_argument("--baseline-bundle", type=Path)
     baseline.add_argument("--baseline-root", type=Path)
     parser.add_argument("--successor-root", required=True, type=Path)
+    parser.add_argument("--expected-tooling-commit", help="Exact clean main tooling checkout SHA")
+    parser.add_argument("--snqi-v2-anchors", type=Path)
     parser.add_argument("--successor-manifest", required=True, type=Path)
     parser.add_argument("--successor-manifest-sha256", required=True)
     parser.add_argument("--successor-source-root", required=True, type=Path)
@@ -1313,12 +1433,14 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     try:
+        _tooling_identity(args.expected_tooling_commit)
         report = compare(
             args.baseline_bundle,
             args.successor_root,
             successor_manifest=args.successor_manifest,
             successor_manifest_sha256=args.successor_manifest_sha256,
             successor_source_root=args.successor_source_root,
+            snqi_v2_anchors=args.snqi_v2_anchors,
             baseline_root=args.baseline_root,
             classification_file=args.classification_file,
             broad_rule_bound_threshold=args.broad_rule_bound_threshold,

@@ -91,7 +91,30 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
 
     request = json.load(sys.stdin)
     with patch.object(_util, "get_repository_root", return_value=checkout):
-        cfg = load_campaign_config(checkout / request["config_path"], repository_root=checkout)
+        if "resolved_identity_path" in request:
+            from robot_sf.benchmark.release_notes import gate_manifest
+            from robot_sf.benchmark.release_protocol import (
+                load_release_campaign_config,
+                load_release_manifest,
+            )
+
+            manifest = load_release_manifest(
+                request["resolved_identity_path"], repository_root=checkout
+            )
+            gate_manifest(manifest, repository_root=checkout)
+            cfg = load_release_campaign_config(manifest, repository_root=checkout)
+            if request.get("snqi_v2_anchors"):
+                from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors
+
+                cfg = bind_acquired_anchors(
+                    cfg,
+                    anchors_path=Path(request["snqi_v2_anchors"]),
+                    calibration_root=None,
+                    source_commit=manifest.source_sha,
+                    diagnostic=False,
+                )
+        else:
+            cfg = load_campaign_config(checkout / request["config_path"], repository_root=checkout)
         publication = request.get("publication_identity")
         if publication is not None:
             if (

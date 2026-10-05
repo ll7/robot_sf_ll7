@@ -639,6 +639,8 @@ records the tooling SHA and successor source SHA separately.
 ```bash
 # Start here from the clean F2 source checkout used by the sealed campaign.
 export SOURCE_ROOT="$PWD"
+export SNQI_ANCHORS="$SOURCE_ROOT/output/release-008/calibration/anchors.v2.0.acquired.json"
+export CAMPAIGN_ROOT="$SOURCE_ROOT/output/benchmarks/camera_ready/$CAMPAIGN_ID"
 export TOOLING_ROOT='<separate clean public-main tooling checkout>'
 export TOOLING_SHA='<full first main SHA containing all three repairs>'
 test "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" = "$FREEZE_SHA"
@@ -652,11 +654,13 @@ uv run python scripts/analysis/compare_release_distributions.py \
   --baseline-bundle "$BASELINE_007_ARCHIVE" --successor-root "$CAMPAIGN_ROOT" \
   --successor-manifest "$SOURCE_ROOT/output/release-008/main/release_identity.resolved.json" \
   --successor-manifest-sha256 "$MAIN_IDENTITY_SHA256" \
-  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json" \
+  --snqi-v2-anchors "$SNQI_ANCHORS" \
   --successor-source-root "$SOURCE_ROOT" --output-dir "$ARTIFACT_ROOT/comparator"
 ```
 
 Use absolute artifact and campaign paths after changing the working directory.
+`SNQI_ANCHORS` must resolve to the exact `packet.inputs.snqi_anchors.path` the
+producing runner received; this release uses the acquired path exported above.
 The comparator verifies the real `benchmark-release-resolved-identity.v1` envelope
 with the source resolver; retain its metadata and release-notes receipt beside
 it, plus the paired determinism receipt in source custody. It derives runner and
@@ -698,7 +702,7 @@ uv run python scripts/tools/revalidate_benchmark_release.py \
   --validator-repository-root "$VALIDATOR_ROOT" \
   --expected-validator-commit "$VALIDATOR_SHA" \
   --recovery-contract "$RECOVERY_CONTRACT" \
-  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json" \
+  --snqi-v2-anchors "$SNQI_ANCHORS" \
   --output-root "$ARTIFACT_ROOT/revalidation" --derived-name "${CAMPAIGN_ID}_revalidated"
 ```
 

@@ -98,7 +98,7 @@ def _select_seeds(
     elif suite_seeds.get("default"):
         resolved = list(suite_seeds["default"])
     else:
-        resolved = [0]
+        raise ValueError("map seed dispatch requires an explicit seed inventory")
     return resolved
 
 

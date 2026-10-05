@@ -1,5 +1,6 @@
 """Required pin witnesses must execute even from an unrelated working directory."""
 
+import ast
 import os
 import subprocess
 import sys
@@ -60,3 +61,16 @@ def test_required_inventory_and_corrupted_campaign_fail(tmp_path):
     )
     with pytest.raises(AssertionError, match="does not match"):
         test_every_release_manifest_campaign_digest_matches_disk(manifest)
+
+
+def test_pin_inventory_runs_with_python311_grammar():
+    """Minimum-version callers can load and execute the real shared witness helper."""
+    import pytest
+
+    path = ROOT / "tests/support/pin_inventory.py"
+    ast.parse(path.read_text(), filename=str(path), feature_version=(3, 11))
+    from tests.support.pin_inventory import required_pin_inventory as inventory
+
+    assert inventory(iter(["synthetic pin"]), name="compatibility pins") == ("synthetic pin",)
+    with pytest.raises(ValueError, match="Required pin inventory is empty"):
+        inventory(iter([]), name="compatibility pins")

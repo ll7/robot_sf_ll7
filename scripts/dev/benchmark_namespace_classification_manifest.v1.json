@@ -262,6 +262,7 @@
     "route_choice_observability.py",
     "run_config_provenance.py",
     "runner.py",
+    "runtime_seed_guard.py",
     "runtime_smoke_admission.py",
     "safety",
     "scenario",

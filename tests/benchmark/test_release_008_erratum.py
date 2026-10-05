@@ -1,5 +1,6 @@
 """D-087: authentic F2 publication identity, synthetic rows and offline readbacks."""
 # robot-sf-test-lane: fast -- static JSON/archive proof; no simulation or HTTP
+# evidence-writer-exempt: Preserve exact predecessor JSON/JSONL bytes for archive-equality controls; every raw artifact write uses the shared write_review_sidecar marker.
 
 from __future__ import annotations
 

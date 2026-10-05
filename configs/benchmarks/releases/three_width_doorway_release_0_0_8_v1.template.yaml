@@ -144,7 +144,7 @@ publication:
   version_doi: '{{version_doi}}'
   reservation_status: reserved_unpublished
   metadata_path: three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json
-  metadata_sha256: f3806581db53a826857ca9091e9fbc27f15303a37f3a154d313dab66f1c134dd
+  metadata_sha256: d247482fb1d22e64dc77e4e215eb618fd3c3c58574c8c423a3aa66ae4ff47b7a
   github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
 source_sha: '{{source_sha}}'
 matrix:

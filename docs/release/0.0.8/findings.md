@@ -227,6 +227,35 @@ repository). PR states reconciled on 2026-10-03 against main `c979e0337da4ad053d
 
 The draft’s X-ADP summary updates the six existing X-ADP rows above; it is not a seventh adapter finding. Thus 48 draft rows yield 47 new finding IDs and six refreshed adapter dispositions.
 
+## Publication metadata — author ruling 2026-10-05
+
+| ID | Source | Finding | Severity | Verified | Disposition | Link |
+|---|---|---|---|---|---|---|
+| META-008-1 | F2 metadata audit / offline route comparison | F2 main metadata retains the 0.0.7 “SNQI is advisory only because calibration failed” clause although SNQI v2 anchors were acquired on dev1001/1002; both main and doorway templates label the freeze-branch first parent “mainline base”. The doorway already omits the failed-calibration phrase but needs the current raw-only slice exclusion. | P3 (publication prose; no reported-number change) | confirmed at F2 `66f402ba176b13e45210d0da0b2cf20fcdc0cc02`; real inner v0.2 manifest accepted offline | **open release-chain follow-up**, author-selected Route A ([D-087](decisions.md#d-087-correct-the-doi-description-through-a-metadata-only-successor-after-f2-publication)); main templates corrected for future use | [planned successor](planned_metadata_successor.md) |
+
+**Consequence:** The published description would falsely attribute advisory SNQI
+status to calibration failure and imply that F2's first parent was on main.
+The source parent is `1261295887901e566a93da87a4559ea1040808a7`, a freeze-branch
+commit. This changes interpretation of the prose, not reported numbers.
+
+**Cause:** Publication templates retained historical SNQI wording, while the
+resolver's historical `latest_main_base_commit` slot is derived from the exact
+source's first parent. Description bytes are bound by the template/concrete
+metadata digests, the resolved identity and publication readback; editing the
+F2 draft description independently is not an override route.
+
+**Route:** Publish at F2 with bound metadata unchanged, then build and validate a
+`benchmark-release-erratum.v1` / `derived_publication_metadata_only` successor
+with main's tooling under concept DOI `10.5281/zenodo.23150471`. The thesis cites
+that concept DOI. Preserve scientific source and rows, and keep SNQI advisory
+with no ranking claim. The author rejected Route B's measured 1.715-node-hour
+calibration pair plus complete rebind/re-review. Reopen if the real erratum
+build refuses the actual published predecessor archive. The offline test is
+`tests/benchmark/test_release_008_erratum.py`; no planner or environment steps
+were used.
+
+Publication follow-up: [#10143](https://github.com/ll7/robot_sf_ll7/issues/10143).
+
 ## Counts per disposition
 
 Each finding is counted once under its main disposition (the first one in its row). Pending PR fixes are counted separately from merged fixes.
@@ -239,11 +268,11 @@ Each finding is counted once under its main disposition (the first one in its ro
 | fix pending in an open pull request | 0 |
 | fixed in a merged pull request | 55 |
 | not exposed in the 0.0.8 release | 18 |
-| open release-chain follow-up | 1 |
+| open release-chain follow-up | 2 |
 | partly fixed release-chain follow-up | 1 |
 | process or seed policy | 4 |
 | refuted | 1 |
 | thesis correction / intake | 6 |
-| **total** | **133** |
+| **total** | **134** |
 
-Source groups: 44 original internal-audit findings, 42 original external-review findings, and 47 catch-up findings. No adapter finding is counted twice.
+Source groups: 44 original internal-audit findings, 42 original external-review findings, 47 catch-up findings, and one 2026-10-05 publication-metadata finding. No adapter finding is counted twice.

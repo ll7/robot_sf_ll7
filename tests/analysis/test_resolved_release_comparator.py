@@ -1,6 +1,7 @@
 """Real release identities; runtime resolution is offline and executes no episodes."""
 
 import hashlib
+import importlib.machinery
 import json
 import os
 import subprocess
@@ -63,36 +64,7 @@ def test_real_resolved_identity_admitted_without_relabelling(
     resolved_source, track, template, digest, count
 ):
     root = resolved_source
-    path = root / f"output/release-008/{track}/release_identity.resolved.json"
-    subprocess.run(
-        [
-            sys.executable,
-            str(root / "scripts/tools/resolve_benchmark_release_identity.py"),
-            "generate",
-            "--repository-root",
-            str(root),
-            "--template",
-            "configs/benchmarks/releases/" + template,
-            "--output",
-            str(path),
-            "--source-commit",
-            SOURCE,
-            "--release-tag",
-            f"paper-matrix-v2-h600-s30-2026-10-{SOURCE}",
-            "--concept-doi",
-            "10.5281/zenodo.23150471",
-            "--version-doi",
-            "10.5281/zenodo.23150472",
-            "--determinism-receipt-path",
-            "output/release-008/calibration/determinism-receipt.json",
-            "--determinism-receipt-sha256",
-            RECEIPT,
-        ],
-        cwd=root,
-        env={**os.environ, "PYTHONPATH": str(root) + os.pathsep + str(root / "fast-pysf")},
-        check=True,
-        capture_output=True,
-    )
+    path = _generate_identity(root, track, template)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
     verified = comparator._verified_successor_manifest(path, digest, root, {})
     assert verified["source_commit"] == SOURCE
@@ -125,3 +97,65 @@ def test_real_resolved_identity_admitted_without_relabelling(
             )
     finally:
         path.write_bytes(original)
+
+
+def _generate_identity(root, track, template):
+    path = root / f"output/release-008/{track}/release_identity.resolved.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts/tools/resolve_benchmark_release_identity.py"),
+            "generate",
+            "--repository-root",
+            str(root),
+            "--template",
+            "configs/benchmarks/releases/" + template,
+            "--output",
+            str(path),
+            "--source-commit",
+            SOURCE,
+            "--release-tag",
+            f"paper-matrix-v2-h600-s30-2026-10-{SOURCE}",
+            "--concept-doi",
+            "10.5281/zenodo.23150471",
+            "--version-doi",
+            "10.5281/zenodo.23150472",
+            "--determinism-receipt-path",
+            "output/release-008/calibration/determinism-receipt.json",
+            "--determinism-receipt-sha256",
+            RECEIPT,
+        ],
+        cwd=root,
+        env={**os.environ, "PYTHONPATH": str(root) + os.pathsep + str(root / "fast-pysf")},
+        check=True,
+        capture_output=True,
+    )
+    return path
+
+
+def test_ignored_native_extension_cannot_shadow_frozen_runtime(resolved_source):
+    """An ignored import override in custody must never enter the frozen worker."""
+    root = resolved_source
+    path = _generate_identity(root, "main", "benchmark_data_release_s30_h600.template.yaml")
+    shadow = root / (
+        "robot_sf/benchmark/camera_ready/_util" + importlib.machinery.EXTENSION_SUFFIXES[0]
+    )
+    shadow.write_bytes(b"synthetic invalid native extension; no executable code")
+    try:
+        clean = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert not clean.stdout
+        verified = comparator._verified_successor_manifest(
+            path,
+            hashlib.sha256(path.read_bytes()).hexdigest(),
+            root,
+            {},
+        )
+        assert len(verified["expected_slots"]) == 20160
+        assert verified["source_commit"] == SOURCE
+    finally:
+        shadow.unlink()

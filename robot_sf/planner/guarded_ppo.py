@@ -508,27 +508,6 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
         return robot_pos + positions @ rotation.T, headings + heading, velocities
 
-    def _terminal_obstacle_clearance(self, positions, observation, grid_payload):
-        """Check static braking viability without extending the pedestrian horizon.
-
-        Returns:
-            float: Swept minimum during the terminal coast, or infinity if empty.
-        """
-        minimum = float("inf")
-        previous = positions[0]
-        for point in positions[1:]:
-            swept = self._exact_obstacle_clearance(point, previous=previous)
-            if swept is not None:
-                minimum = min(minimum, swept)
-            minimum = min(
-                minimum,
-                self._min_obstacle_clearance(
-                    point, observation=observation, grid_payload=grid_payload
-                ),
-            )
-            previous = point
-        return minimum
-
     def _evaluate_command(
         self,
         observation: dict[str, Any],
@@ -537,7 +516,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray] | None = None,
         grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> dict[str, float | bool]:
-        """Evaluate a command over a short rollout horizon.
+        """Evaluate command safety through the rollout and any native braking tail.
 
         Returns:
             dict[str, float | bool]: Safety summary including `safe` and clearance metrics.

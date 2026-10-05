@@ -1477,8 +1477,18 @@ _FAST_NODE_IDS = {
 
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
     """Auto-mark non-core tests as slow to keep fast unit runs small."""
-    del config
+    config.addinivalue_line("markers", "affected: test affected by the committed PR diff")
+    affected = set(os.environ.get("ROBOT_SF_AFFECTED_TEST_PATHS", "").splitlines())
+    root = Path(__file__).resolve().parents[1]
     for item in items:
+        item_path = Path(str(item.fspath)).resolve()
+        relative = (
+            item_path.relative_to(root).as_posix()
+            if item_path.is_relative_to(root)
+            else item_path.as_posix()
+        )
+        if relative in affected:
+            item.add_marker(pytest.mark.affected)
         path_str = str(item.fspath)
         if item.nodeid.split("[", maxsplit=1)[0] not in _FAST_NODE_IDS and _should_auto_mark_slow(
             path_str

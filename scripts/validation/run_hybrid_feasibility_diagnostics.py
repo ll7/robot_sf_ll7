@@ -74,10 +74,8 @@ def hybrid_config(scenario, enabled=False, goal_validity=False):
     )
     assert algo == "hybrid_rule_local_planner"
     cfg["debug_candidate_evaluator"] = True
-    if enabled:
-        cfg["physical_static_exclusion_enabled"] = True
-    if goal_validity:
-        cfg["goal_next_validity_enabled"] = True
+    cfg["physical_static_exclusion_enabled"] = bool(enabled)
+    cfg["goal_next_validity_enabled"] = bool(goal_validity)
     return cfg
 
 
@@ -207,7 +205,11 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         enabled=arm in {"static_only", "static_plus_goal_validity"},
         goal_validity=arm == "static_plus_goal_validity",
     )
-    cfg.include_goal_next_valid = bool(hcfg.get("goal_next_validity_enabled", False))
+    if arm == "current_defaults":
+        hcfg.pop("physical_static_exclusion_enabled")
+        hcfg.pop("goal_next_validity_enabled")
+    else:
+        cfg.include_goal_next_valid = bool(hcfg.get("goal_next_validity_enabled", False))
     algo = "orca" if arm == "orca" else "hybrid_rule_local_planner"
     pcfg = (
         yaml.safe_load((ROOT / "configs/algos/orca_release_v0_0_8.yaml").read_text())
@@ -225,7 +227,7 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         policy._planner_bind_env(env)
         policy._planner_reset(seed=seed)
         next_valid_observed = "next_valid" in planner._socnav_fields(obs)[1]
-        if hcfg.get("goal_next_validity_enabled", False) and not next_valid_observed:
+        if planner.config.goal_next_validity_enabled and not next_valid_observed:
             raise RuntimeError("Enabled successor validity did not reach the planner")
         if arm == "orca":
             shadow_policy, _ = _build_policy(
@@ -266,6 +268,15 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
                 "displacement_m": float(np.linalg.norm(end - pre)),
                 "goal_distance_m": float(np.linalg.norm(env.simulator.goal_pos[0] - end)),
                 "collision": contact,
+                "collision_types": [
+                    k
+                    for k in (
+                        "is_pedestrian_collision",
+                        "is_obstacle_collision",
+                        "is_robot_collision",
+                    )
+                    if meta.get(k, False)
+                ],
                 "pedestrian_separation_m": (
                     float(meta["min_distance"])
                     if np.isfinite(meta.get("min_distance", float("nan")))
@@ -307,6 +318,13 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
                 ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
             ).strip(),
             "next_valid_field_observed": next_valid_observed,
+            "effective_switches": {
+                "physical_static_exclusion_enabled": bool(
+                    planner.config.physical_static_exclusion_enabled
+                ),
+                "goal_next_validity_enabled": bool(planner.config.goal_next_validity_enabled),
+                "include_goal_next_valid": bool(cfg.include_goal_next_valid),
+            },
             "scenario": name,
             "seed": seed,
             "arm": arm,

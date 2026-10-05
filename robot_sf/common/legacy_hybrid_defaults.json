@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "configs/algos/guarded_ppo_camera_ready_cpu.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772"
+    },
+    "configs/algos/guarded_ppo_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c"
+    },
+    "configs/algos/orca_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4"
+    },
+    "configs/algos/prediction_planner_camera_ready.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481"
+    },
+    "configs/algos/prediction_planner_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c"
+    },
+    "configs/algos/predictive_mppi_camera_ready.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb"
+    },
+    "configs/algos/predictive_mppi_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "79f13475d9d66f0754c11038f6d52a15b3420965b6f639de7f000c5190ba820b"
+    },
+    "configs/algos/risk_dwa_camera_ready.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c"
+    },
+    "configs/algos/risk_dwa_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "27d0b269e5a65572bdf2f5af069a5e0037eb0728d501ea12438597404e7e1527"
+    },
+    "configs/algos/social_force_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773"
+    },
+    "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35"
+    },
+    "configs/algos/socnav_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "277c57a45caf213fdc4fb2abdb996062669f9ba05fb4e8adf3e47f90f0429b50"
+    },
+    "configs/algos/socnav_sampling_bounded_v2.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "9c52dc30d3894220caabaf1ac80d01561d6c1318d56c50e5ad7fa27d9c7999b3"
+    },
+    "configs/algos/socnav_sampling_release_v0_0_8.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6"
+    },
+    "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41"
+    },
+    "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml": {
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": {
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": {
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml": {
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml": {
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c"
+    },
+    "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
+      },
+      "effective_config_sha256": "bf3838e35c29606a91059afccc25cf8c5ab3002b0f48a0830bbfb595bb3332b7",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd"
+    },
+    "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
+      },
+      "effective_config_sha256": "162aad53d01014f0ad1e7bba2376ad140c1ea7640da554393196264cddaaf7df",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935"
+    },
+    "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab"
+      },
+      "effective_config_sha256": "569bd63d6c5f808bf00681d713ab93af0c0207930230fe94ca1a8007fe82cc4c",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888"
+    },
+    "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab"
+      },
+      "effective_config_sha256": "06cfc1dd8825a3a7ef0401489a004e7e2e9072247396d770b68477b0dd788a3d",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811"
+    },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
+      },
+      "effective_config_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "kind": "release-hybrid",
+      "release": "up-to-0.0.8",
+      "sha256": "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87"
+    },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
+      },
+      "effective_config_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
+    },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab"
+      },
+      "effective_config_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458"
+    },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
+      },
+      "effective_config_sha256": "6e11c2273949a35fb0511a4224cf3c3f8514e0b37d563739eaed9f387f5d4014",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
+    },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml": {
+      "dependencies": {
+        "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab"
+      },
+      "effective_config_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94"
+    },
+    "configs/scenarios/classic_interactions_francis2023.yaml": {
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+    },
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": {
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
+    },
+    "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": {
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778"
+    }
+  }
+}

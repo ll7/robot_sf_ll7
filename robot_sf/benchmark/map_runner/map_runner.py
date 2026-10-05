@@ -237,6 +237,7 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.common.hybrid_defaults import active_default_policy
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
@@ -2613,7 +2614,7 @@ def _run_map_jobs_with_policy_cache(
     """
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     policy_cache: dict[
-        tuple[str, str, str | None, str | None, bool], tuple[Any, dict[str, Any]]
+        tuple[str, str, str | None, str | None, bool, str], tuple[Any, dict[str, Any]]
     ] = {}
 
     def cached_policy_builder(
@@ -2635,6 +2636,7 @@ def _run_map_jobs_with_policy_cache(
             robot_kinematics,
             robot_command_mode,
             bool(adapter_impact_eval),
+            active_default_policy()["default_set"],
         )
         if key not in policy_cache:
             try:

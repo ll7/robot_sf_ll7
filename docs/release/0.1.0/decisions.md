@@ -552,3 +552,15 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 
 
 See 0.0.8 D-080 for the approved decision-record policy; its tooling is a separate later lane.
+
+### D-023: Enable the hybrid planner repairs by default
+- **Date:** 2026-10-05
+- **Question:** Should the three independent hybrid repair switches remain opt-in for 0.1.0?
+- **Choice:** Current inputs default to planner `physical_static_exclusion_enabled: true`, planner `goal_next_validity_enabled: true`, and environment `include_goal_next_valid: true`. Explicit values always win. Registered released/frozen inputs through 0.0.8 retain false fill-in at the typed builders, with unchanged resolved mappings and canonical digests.
+- **Reason:** author decision 2026-10-05.
+- **Decided by:** author for activation; orchestrator (delegated) for the builder-level compatibility registry and provenance ruling in the implementing lane.
+- **Alternatives:** Retain opt-in defaults; edit frozen YAML; add compatibility keys to hash-bound mappings. Frozen YAML and recorded identities remain protected.
+- **Evidence:** #10145, linked #10105 and #9668; [implementation and diagnostic evidence](../../validation/hybrid_defaults/README.md). Development comparisons require every failure classified; they are not release evaluation evidence.
+- **Implemented in:** `robot_sf/common/hybrid_defaults.py`, its explicit source registry, typed planner/environment fill-in, and map-runner source context/provenance. Released learned-policy spaces are covered by the same registry. A later 0.1.0 freeze must explicitly record these new defaults together with the other observation migrations.
+- **Enforced by:** `test_current_defaults_enable_all_three_switches`; `test_each_explicit_switch_overrides_the_selected_defaults`; `test_registered_release_full_dataclasses_and_mapping_match_base`; `test_unknown_frozen_named_config_uses_current_defaults`; `test_release_registry_covers_learned_observation_contract`; `test_release_scenario_environment_dataclasses_match_full_base_dumps`; `test_native_episode_records_legacy_and_current_builder_default_sets` in `tests/planner/test_hybrid_default_compatibility.py`, plus the paired behavior-change comparison gate.
+- **Reopen:** author: can still be discussed in more detail. Reopen the technical compatibility ruling if a reviewer shows it changes any recorded 0.0.8 identity or behavior.

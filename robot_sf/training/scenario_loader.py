@@ -7,6 +7,7 @@ import json
 import math
 import os
 from collections.abc import Iterable, Mapping
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
@@ -15,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 from loguru import logger
+
+from robot_sf.common.hybrid_defaults import defaults_for_source, has_active_default_policy
 
 if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -1726,7 +1729,15 @@ def build_robot_config_from_scenario(
 
     _reject_required_platform_semantic_consumers(scenario)
 
-    config = RobotSimulationConfig()
+    scope = nullcontext() if has_active_default_policy() else defaults_for_source(scenario_path)
+    with scope:
+        config = RobotSimulationConfig()
+    env_overrides = scenario.get("env_overrides", {})
+    if isinstance(env_overrides, Mapping) and "include_goal_next_valid" in env_overrides:
+        value = env_overrides["include_goal_next_valid"]
+        if not isinstance(value, bool):
+            raise ValueError("env_overrides.include_goal_next_valid must be boolean")
+        config.include_goal_next_valid = value
     consumed_inputs: list[dict[str, str]] | None = [] if runtime_input_records is not None else None
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))

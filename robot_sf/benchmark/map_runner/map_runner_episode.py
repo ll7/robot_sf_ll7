@@ -210,6 +210,7 @@ from robot_sf.benchmark.utils import (
     attach_track_metadata,
     normalize_track_field,
 )
+from robot_sf.common.hybrid_defaults import episode_default_policy
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
@@ -5609,6 +5610,7 @@ def _finalize_episode_record(  # noqa: PLR0913
     )
 
 
+@episode_default_policy
 def run_map_episode(  # noqa: PLR0913
     scenario: dict[str, Any],
     seed: int,

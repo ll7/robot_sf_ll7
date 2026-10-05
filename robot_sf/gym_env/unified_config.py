@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
+from robot_sf.common.hybrid_defaults import current_switch_default
 from robot_sf.gym_env.observation_config import (
     ObservationStackSettings,
     sync_observation_stack_settings,
@@ -243,7 +244,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
     predictive_foresight_front_corridor_half_width: float = field(default=1.0)
     # Route waypoint observation for DWA global-route probe (flag-gated, default OFF)
     include_route_waypoints: bool = field(default=False)
-    include_goal_next_valid: bool = field(default=False)
+    include_goal_next_valid: bool = field(default_factory=current_switch_default)
 
     def __post_init__(self):
         """Validate robot-specific configuration.

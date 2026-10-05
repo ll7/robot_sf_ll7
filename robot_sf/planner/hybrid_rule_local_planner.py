@@ -25,13 +25,15 @@ from __future__ import annotations
 
 import copy
 from collections import Counter, deque
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from itertools import pairwise
+from pathlib import Path  # noqa: TC003 - public builder type hints resolve Path
 from typing import Any
 
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 
+from robot_sf.common.hybrid_defaults import current_switch_default, defaults_for_source
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.nav.proxemic_costmap import (
@@ -319,8 +321,8 @@ class HybridRuleLocalPlannerConfig:
     hard_safety_margin: float = 0.05
     static_hard_safety_margin: float = -1.0
     debug_candidate_evaluator: bool = False
-    physical_static_exclusion_enabled: bool = False
-    goal_next_validity_enabled: bool = False
+    physical_static_exclusion_enabled: bool = field(default_factory=current_switch_default)
+    goal_next_validity_enabled: bool = field(default_factory=current_switch_default)
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9
     obstacle_threshold: float = 0.5
@@ -4346,11 +4348,25 @@ def _expand_nested_proxemic_costmap_config(raw: dict[str, Any]) -> dict[str, Any
 
 def build_hybrid_rule_local_planner_config(
     cfg: dict[str, Any] | None,
+    *,
+    source_path: str | Path | None = None,
 ) -> HybridRuleLocalPlannerConfig:
     """Build a typed config from a YAML mapping.
 
     Returns:
         HybridRuleLocalPlannerConfig: Parsed planner config.
+    """
+    if source_path is not None:
+        with defaults_for_source(source_path):
+            return _build_hybrid_rule_config(cfg)
+    return _build_hybrid_rule_config(cfg)
+
+
+def _build_hybrid_rule_config(cfg: dict[str, Any] | None) -> HybridRuleLocalPlannerConfig:
+    """Parse mapping fields after selecting the source-bound typed defaults.
+
+    Returns:
+        Typed configuration with every explicit mapping value preserved.
     """
     if not isinstance(cfg, dict):
         return HybridRuleLocalPlannerConfig()

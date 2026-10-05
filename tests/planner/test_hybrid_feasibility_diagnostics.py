@@ -13,6 +13,8 @@ from tests.planner.test_hybrid_rule_local_planner import _obs
 
 
 def _planner(**extra):
+    extra.setdefault("physical_static_exclusion_enabled", False)
+    extra.setdefault("goal_next_validity_enabled", False)
     cfg = build_hybrid_rule_local_planner_config(
         dict(
             planner_variant="hybrid_rule_v4_clearance_braking",
@@ -291,7 +293,7 @@ def test_sensor_emits_explicit_validity_only_when_opted_in():
     from robot_sf.sensor.socnav_observation import SocNavObservationFusion, socnav_observation_space
     from tests.test_socnav_observation import _build_map_def, _build_socnav_simulator
 
-    cfg = RobotSimulationConfig()
+    cfg = RobotSimulationConfig(include_goal_next_valid=False)
     sim = _build_socnav_simulator([])
     default = SocNavObservationFusion(sim, cfg, 4).next_obs()
     assert "next_valid" not in default["goal"]

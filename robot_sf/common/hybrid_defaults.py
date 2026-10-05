@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from collections.abc import Callable, Iterator  # noqa: TC003 - public runtime type hints
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import cache, wraps
@@ -40,7 +42,7 @@ def source_default_policy(source: str | Path | None) -> dict[str, str]:
     current = {"default_set": "current"}
     if source is None:
         return current
-    path = Path(source).resolve()
+    path = Path(os.path.abspath(source))
     try:
         relative = path.relative_to(ROOT).as_posix()
     except ValueError:
@@ -80,7 +82,7 @@ def current_switch_default() -> bool:
 
 
 @contextmanager
-def defaults_for_source(source: str | Path | None):
+def defaults_for_source(source: str | Path | None) -> Iterator[dict[str, str]]:
     """Scope constructor fill-in to a verified source, restoring it on every exit."""
     policy = source_default_policy(source)
     token = _ACTIVE_POLICY.set(policy)
@@ -90,7 +92,9 @@ def defaults_for_source(source: str | Path | None):
         _ACTIVE_POLICY.reset(token)
 
 
-def episode_default_policy(function):
+def episode_default_policy(
+    function: Callable[..., dict[str, Any]],
+) -> Callable[..., dict[str, Any]]:
     """Carry source identity through episode builders and record it outside config hashes.
 
     Returns:
@@ -98,7 +102,7 @@ def episode_default_policy(function):
     """
 
     @wraps(function)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
         source = kwargs.get("algo_config_path")
         if source is None and not kwargs.get("algo_config"):
             source = kwargs.get("scenario_path")

@@ -1,0 +1,30 @@
+{
+  "base_sha": "303ddac871557ba4350933de54306b83288b437f",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybrid_default_compatibility.py -n 8 -q",
+  "exit_code": 1,
+  "cases_failed": 20,
+  "test_file_sha256": "4d97d7c0d2a10b59eddd8963f0f2b0ccaf67d43cbd08664179f9fa67e5afe9fd",
+  "reason": "Every case fails its current-default witness: false remains false on base; no imports or fixtures fail. Full preservation checks form the other half of the migration contract.",
+  "failed_cases": [
+    "tests/planner/test_hybrid_default_compatibility.py::test_current_defaults_enable_all_three_switches",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_each_explicit_switch_overrides_the_selected_defaults[True-physical_static_exclusion_enabled]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_each_explicit_switch_overrides_the_selected_defaults[False-goal_next_validity_enabled]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_each_explicit_switch_overrides_the_selected_defaults[False-physical_static_exclusion_enabled]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_each_explicit_switch_overrides_the_selected_defaults[True-goal_next_validity_enabled]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_release_scenario_environment_dataclasses_match_full_base_dumps",
+    "tests/planner/test_hybrid_default_compatibility.py::test_each_explicit_switch_overrides_the_selected_defaults[False-include_goal_next_valid]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registry_requires_known_source_and_matching_bytes",
+    "tests/planner/test_hybrid_default_compatibility.py::test_native_episode_records_legacy_and_current_builder_default_sets",
+    "tests/planner/test_hybrid_default_compatibility.py::test_each_explicit_switch_overrides_the_selected_defaults[True-include_goal_next_valid]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_registered_release_full_dataclasses_and_mapping_match_base[configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml]",
+    "tests/planner/test_hybrid_default_compatibility.py::test_release_registry_covers_learned_observation_contract"
+  ]
+}

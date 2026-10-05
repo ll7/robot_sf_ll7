@@ -84,7 +84,7 @@ def test_registered_release_full_dataclasses_and_mapping_match_base(source):
     assert RobotSimulationConfig().include_goal_next_valid is True
 
 
-def test_unknown_frozen_named_config_uses_current_defaults(tmp_path):
+def test_registry_requires_known_source_and_matching_bytes(tmp_path, monkeypatch):
     """A plausible frozen filename cannot grant legacy defaults outside the registry."""
     assert RobotSimulationConfig().include_goal_next_valid is True
     from robot_sf.common.hybrid_defaults import defaults_for_source, source_default_policy
@@ -96,6 +96,14 @@ def test_unknown_frozen_named_config_uses_current_defaults(tmp_path):
         assert all(getattr(cfg, k) is True for k in PLANNER_SWITCHES)
         assert RobotSimulationConfig().include_goal_next_valid is True
     assert source_default_policy(source)["default_set"] == "current"
+    from robot_sf.common import hybrid_defaults
+
+    known = "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml"
+    registry = dict(hybrid_defaults.legacy_default_registry())
+    registry[known] = dict(registry[known], sha256="0" * 64)
+    monkeypatch.setattr(hybrid_defaults, "legacy_default_registry", lambda: registry)
+    with pytest.raises(ValueError, match="Legacy default source identity changed"):
+        source_default_policy(ROOT / known)
 
 
 def test_release_registry_covers_learned_observation_contract():

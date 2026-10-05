@@ -93,7 +93,13 @@ def read_report(root: Path, path: Path, base: str, head: str) -> dict:
         or report.get("base_sha") != _identity(root, f"{base}^{{commit}}")
         or report.get("tree_sha") != _identity(root, f"{head}^{{tree}}")
         or report.get("mode") not in {"full", "unchanged"}
-        or (report.get("mode") == "unchanged" and report.get("changed_paths") != [])
+        or (
+            report.get("mode") == "unchanged"
+            and (
+                report.get("changed_paths") != []
+                or _identity(root, f"{base}^{{tree}}") != _identity(root, f"{head}^{{tree}}")
+            )
+        )
     ):
         raise ValueError("Selection decision is stale or invalid")
     return report

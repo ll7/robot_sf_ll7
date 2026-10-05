@@ -25,7 +25,7 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
 )
-from robot_sf.planner.socnav_base import SocNavPlannerConfig
+from robot_sf.planner.socnav_base import SamplingPlannerAdapter, SocNavPlannerConfig
 from robot_sf.planner.socnav_orca import ORCAPlannerAdapter
 from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
 from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter
@@ -1369,3 +1369,100 @@ def test_static_grid_fallback_refuses_an_unseparated_combined_channel(planner):
             guard._min_obstacle_clearance(np.zeros(2), observation)
         else:
             sampling._ObstacleClearance(guard, observation)
+
+
+@pytest.mark.parametrize("observed_speed", [-0.5, 2.0])
+def test_bounded_sampler_preserves_measured_speed_and_braking_horizon(monkeypatch, observed_speed):
+    """Preferred command bounds cannot erase feasible reverse or overspeed plant state."""
+    config = SocNavPlannerConfig(
+        socnav_sampling_version="bounded_v2",
+        max_linear_speed=1.0,
+        sampling_heading_candidates=1,
+        occupancy_heading_sweep=0.0,
+        sampling_speed_fractions=(1.0,),
+        sampling_horizon_s=0.2,
+        sampling_braking_envelope=True,
+    )
+    settings = DifferentialDriveSettings(
+        max_linear_accel=0.6, max_linear_decel=0.7, max_angular_accel=0.35, allow_backwards=True
+    )
+    adapter = SamplingPlannerAdapter(config)
+    adapter.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(robots=[DifferentialDriveRobot(settings)]),
+            config=SimpleNamespace(robot_config=settings),
+        )
+    )
+    real_rollout = sampling._rollout
+    calls = []
+
+    def check_rollout(*args, **kwargs):
+        points, travelled = real_rollout(*args, **kwargs)
+        drive = DifferentialDriveRobot(settings)
+        drive.state.velocity = (observed_speed, 0.0)
+        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+        env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+        step_dt = args[6]
+        conversion = SimpleNamespace(
+            robot_config=settings, sim_config=SimpleNamespace(time_per_step_in_secs=step_dt)
+        )
+        expected = []
+        for _ in points:
+            action = policy_command_to_env_action(
+                env=env, config=conversion, command=(args[4], 0.0)
+            )
+            drive.apply_action(tuple(action), step_dt)
+            expected.append(drive.pos)
+        np.testing.assert_allclose(points, expected, atol=1e-14, rtol=0.0)
+        stopping_time = abs(observed_speed) / (0.6 if observed_speed < 0 else 0.7)
+        assert len(points) * step_dt >= stopping_time
+        calls.append(points)
+        return points, travelled
+
+    monkeypatch.setattr(sampling, "_rollout", check_rollout)
+    command = adapter.plan(_adapter_residual_observation(speed=observed_speed))
+    assert calls
+    assert 0.0 <= command[0] <= 1.0
+
+
+def test_bounded_sampler_binding_preserves_native_limited_reverse():
+    """A bound reverse forecast must agree with native command execution."""
+    settings = DifferentialDriveSettings(
+        limited_reverse=True,
+        max_reverse_speed=0.5,
+        max_linear_accel=0.6,
+        max_linear_decel=0.7,
+        max_angular_accel=0.35,
+    )
+    drive = DifferentialDriveRobot(settings)
+    adapter = SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(robots=[drive]), config=SimpleNamespace(robot_config=settings)
+    )
+    adapter.bind_env(env)
+    forecast, _ = sampling._rollout(
+        np.zeros(2),
+        0.0,
+        -0.5,
+        0.0,
+        1.0,
+        1.0,
+        0.1,
+        (1.2, 1.0, 0.6, 0.7),
+        settings=adapter._sampling_drive_settings,
+    )
+    drive.state.velocity = (-0.5, 0.0)
+    drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+    config = SimpleNamespace(
+        robot_config=settings, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
+    expected = []
+    for _ in forecast:
+        action = policy_command_to_env_action(env=env, config=config, command=(1.0, 0.0))
+        drive.apply_action(tuple(action), 0.1)
+        expected.append(drive.pos)
+    np.testing.assert_allclose(forecast, expected, atol=1e-14, rtol=0.0)
+    assert adapter._sampling_drive_settings.min_linear_speed == -0.5
+    limits = adapter.diagnostics()["drive_limits"]
+    assert limits["limited_reverse"] is True
+    assert limits["max_reverse_speed"] == 0.5

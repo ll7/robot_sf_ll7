@@ -1645,8 +1645,12 @@ def _assert_v2_scoring_source(manifest):
 
 def _normalise_v2_report_paths(stored, generated):
     """Authenticate scoring content before adopting only producer provenance paths."""
-    stored_provenance = stored["provenance"]
-    generated_provenance = generated["provenance"]
+    if not isinstance(stored, dict) or not isinstance(generated, dict):
+        raise DerivedReleaseError("SNQI-v2 report must be a JSON object")
+    stored_provenance = stored.get("provenance")
+    generated_provenance = generated.get("provenance")
+    if not isinstance(stored_provenance, dict) or not isinstance(generated_provenance, dict):
+        raise DerivedReleaseError("SNQI-v2 report provenance must be an object")
     hashes = {
         key
         for key in generated_provenance
@@ -1761,6 +1765,8 @@ def _verify_publication_v2_reports(  # noqa: C901 - independent immutable scorin
     from robot_sf.benchmark.snqi.v2_spec import parse_v2_json
 
     family = parse_v2_json((reports / "snqi_v2_family.json").read_bytes())
+    if not isinstance(family, dict):
+        raise DerivedReleaseError("SNQI-v2 family report must be a JSON object")
     samples = family.get("bootstrap", {}).get("samples")
     if type(samples) is not int or samples != campaign_config.bootstrap_samples:
         raise DerivedReleaseError("v2 report bootstrap contract mismatch")

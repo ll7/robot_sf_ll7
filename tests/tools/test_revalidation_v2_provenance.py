@@ -187,3 +187,26 @@ def test_independent_validator_rehashes_identity_before_manifest_reconstruction(
     identity.write_text('{"synthetic_identity": "changed after verification"}')
     with pytest.raises(recovery.DerivedReleaseError, match="validator execution failed"):
         recovery._run_exact_validator(**kwargs)
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_malformed_report_provenance_is_a_domain_refusal(projection, missing):
+    """Normalisation must not turn a corrupt report into a raw exception."""
+    path = projection[0] / "reports/snqi_v2_family.json"
+    payload = json.loads(path.read_bytes())
+    if missing:
+        del payload["provenance"]
+    else:
+        payload["provenance"] = None
+    path.write_text(json.dumps(payload))
+    with pytest.raises(recovery.DerivedReleaseError, match="report provenance.*object"):
+        _verify(projection)
+
+
+@pytest.mark.parametrize("name", ["family", "diagnostics"])
+def test_non_object_report_is_a_domain_refusal(projection, name):
+    """A corrupt top-level report must stay inside the CLI rejection contract."""
+    path = projection[0] / f"reports/snqi_v2_{name}.json"
+    path.write_text("null")
+    with pytest.raises(recovery.DerivedReleaseError, match="report.*object"):
+        _verify(projection)

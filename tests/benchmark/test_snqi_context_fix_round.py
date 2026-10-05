@@ -322,7 +322,7 @@ def test_revalidation_refuses_missing_worker_context_before_acceptance(tmp_path,
     row_path = producer / "runs/ppo__differential_drive/episodes.jsonl"
     row_path.parent.mkdir(parents=True)
     write_json(row_path, {"algo": " PPO ", "seed": 1004, "algorithm_metadata": {}}, indent=None)
-    manifest = SimpleNamespace(planner_keys=("ppo",))
+    manifest = SimpleNamespace(planner_keys=("ppo",), source_sha="a" * 40)
     reference_root = tmp_path / "current-reference"
     cfg = SimpleNamespace(
         snqi_v2_binding=complete_context_asset_binding(reference_root),
@@ -342,6 +342,10 @@ def test_revalidation_refuses_missing_worker_context_before_acceptance(tmp_path,
     monkeypatch.setattr(recovery, "_verify_acceptance_campaign_subset", lambda *_a, **_k: {})
     monkeypatch.setattr(recovery, "load_release_manifest", lambda *_a: manifest)
     monkeypatch.setattr(recovery, "load_release_campaign_config", lambda *_a, **_k: cfg)
+    from robot_sf.benchmark.snqi import v2_binding
+
+    # This fixture supplies a bound spec; acquisition is upstream of the context census.
+    monkeypatch.setattr(v2_binding, "bind_acquired_anchors", lambda config, **_kw: config)
     monkeypatch.setattr(
         recovery, "validate_release_manifest", lambda *_a, **_k: {"status": "valid"}
     )

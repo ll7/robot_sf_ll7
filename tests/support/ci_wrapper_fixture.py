@@ -64,6 +64,8 @@ elif args[:2] == ['run', 'pytest']:
         subprocess.run(['git', 'commit', '-qm', 'moved head'], check=True)
     if os.environ.get('DIRTY_AFTER'):
         Path('untracked_after.py').write_text('pass\\n')
+    if os.environ.get('REAL_PYTEST'):
+        sys.exit(subprocess.run([sys.executable, '-m', 'pytest', *args[2:]], check=False).returncode)
     print('2 passed, 1 skipped in 0.01s')
     sys.exit(int(os.environ.get('FAKE_PYTEST_EXIT', '0')))
 else: sys.exit(99)

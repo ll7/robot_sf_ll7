@@ -113,7 +113,7 @@ def test_train_suite_normalizes_partial_environment_and_records_proof(tmp_path, 
     assert call["addopts"] is None and call["shards"] is None
     assert "tests" in args and "fast-pysf/tests" in args
     assert "--maxfail=0" in args and "addopts=" in args
-    assert args[args.index("-p") + 1] == "pytest_timeout" and "--timeout=300" in args
+    assert args[args.index("-p") + 1] == "timeout" and "--timeout=300" in args
     for partial in ("-m", "-k", "--lf", "--splits", "-x", "--failed-first"):
         assert partial not in args
     receipt = json.loads((repo / "output/train.json").read_text())
@@ -177,3 +177,20 @@ def test_train_shards_consume_one_bound_selection_artifact():
     assert download is not None
     assert download["with"]["name"] == "conservative-test-admission"
     assert download["with"]["path"] == "output/ci"
+
+
+@pytest.mark.parametrize("disable_autoload", [False, True])
+def test_wrapper_timeout_works_with_real_pytest_in_both_plugin_modes(tmp_path, disable_autoload):
+    """A real pytest subprocess catches option rejection and duplicate plugin registration."""
+    repo, env = wrapper_repository(tmp_path)
+    env.update(
+        REAL_PYTEST="1",
+        PYTEST_NUM_WORKERS="1",
+        PYTEST_SHARD_COUNT="1",
+        ROBOT_SF_SHARD_INCLUDE_SLOW="1",
+    )
+    env.pop("PYTEST_DISABLE_PLUGIN_AUTOLOAD", None)
+    if disable_autoload:
+        env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    result = run_wrapper(repo, env, "tests", "fast-pysf/tests")
+    assert result.returncode == 0, result.stdout + result.stderr

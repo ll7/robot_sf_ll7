@@ -344,7 +344,7 @@ fi
 # Serial fallback preserves every common option without positional xdist values.
 pytest_common_start=${#cmd[@]}
 # Explicit loading also supports callers that disable plugin autoload.
-cmd+=(-p pytest_timeout --timeout=300)
+cmd+=(-p timeout --timeout=300)
 if [[ "$train_suite" == "1" ]]; then
   cmd+=(--maxfail=0 -o addopts= tests fast-pysf/tests)
 fi

@@ -1115,7 +1115,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     expected_dist = "worksteal" if shard_count > 1 else "load"
     assert f"--dist {expected_dist}" in calls[0]
     assert calls[1].split()[2].startswith("-")
-    assert "-p pytest_timeout --timeout=300" in calls[1]
+    assert "-p timeout --timeout=300" in calls[1]
     assert "tests/dev" in calls[1]
     padded_serial_call = f" {calls[1]} "
     assert " -n " not in padded_serial_call

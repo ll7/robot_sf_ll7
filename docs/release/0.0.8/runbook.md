@@ -21,6 +21,9 @@ from the orchestrator's packet, with all paths under the lane:
 
 ```bash
 export FREEZE_SHA='<named full 40-character SHA>'
+export SOURCE_ROOT='<absolute clean F2 source checkout used by the campaign>'
+# The packet's inputs.snqi_anchors.path, resolved under SOURCE_ROOT.
+export SNQI_ANCHORS="$SOURCE_ROOT/output/release-008/calibration/anchors.v2.0.acquired.json"
 export TAG='<dataset tag ending in that exact full SHA>'
 export ARTIFACT_ROOT='<absolute durable lane artifact directory>'
 export OPS='<clean robot_sf_ll7-private-ops main checkout inside the lane>'
@@ -556,19 +559,19 @@ uv run python scripts/tools/run_benchmark_release.py \
   --label release-008 --campaign-id "$CAMPAIGN_ID" \
   --checkpoint-receipt "$ARTIFACT_ROOT/main-checkpoints.json" \
   --runtime-smoke-receipt "$SMOKE_RESULT" \
-  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json"
+  --snqi-v2-anchors "$SNQI_ANCHORS"
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest output/release-008/doorway/release_identity.resolved.json \
   --label release-008-doorway --campaign-id "$DOORWAY_CAMPAIGN_ID" \
   --checkpoint-receipt "$ARTIFACT_ROOT/doorway-checkpoints.json" \
   --runtime-smoke-receipt "$SMOKE_RESULT" \
-  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json"
+  --snqi-v2-anchors "$SNQI_ANCHORS"
 ```
 
 Existing single-node submission wrapper (canonical admitted packet must own launch):
 
 ```bash
-export ROBOT_SF_SNQI_V2_ANCHORS="$ARTIFACT_ROOT/anchors.v2.0.json"
+export ROBOT_SF_SNQI_V2_ANCHORS="$SNQI_ANCHORS"
 sbatch --cpus-per-task=32 SLURM/submit_release_single_node.sbatch \
   output/release-008/main/release_identity.resolved.json release-008 "$CAMPAIGN_ID" \
   "$ARTIFACT_ROOT/main-checkpoints.json" "$SMOKE_RESULT"
@@ -637,9 +640,7 @@ come from the independently pinned tooling checkout. The comparison receipt
 records the tooling SHA and successor source SHA separately.
 
 ```bash
-# Start here from the clean F2 source checkout used by the sealed campaign.
-export SOURCE_ROOT="$PWD"
-export SNQI_ANCHORS="$SOURCE_ROOT/output/release-008/calibration/anchors.v2.0.acquired.json"
+# Use SOURCE_ROOT and SNQI_ANCHORS from the initial packet inputs above.
 export CAMPAIGN_ROOT="$SOURCE_ROOT/output/benchmarks/camera_ready/$CAMPAIGN_ID"
 export TOOLING_ROOT='<separate clean public-main tooling checkout>'
 export TOOLING_SHA='<full first main SHA containing all three repairs>'
@@ -660,7 +661,8 @@ uv run python scripts/analysis/compare_release_distributions.py \
 
 Use absolute artifact and campaign paths after changing the working directory.
 `SNQI_ANCHORS` must resolve to the exact `packet.inputs.snqi_anchors.path` the
-producing runner received; this release uses the acquired path exported above.
+producing runner received; acquisition, the wrapper and both post-run helpers
+use the single acquired-anchor variable exported with the initial inputs.
 The comparator verifies the real `benchmark-release-resolved-identity.v1` envelope
 with the source resolver; retain its metadata and release-notes receipt beside
 it, plus the paired determinism receipt in source custody. It derives runner and
@@ -686,6 +688,13 @@ required. Revalidation verifies the v2 report pair without creating legacy score
 or changing calibration status. The historical 0.0.7 recovery path is retained.
 
 ```bash
+# Repeat the initial packet inputs so this block also works in a fresh shell.
+export SOURCE_ROOT='<absolute clean F2 source checkout used by the campaign>'
+export SNQI_ANCHORS="$SOURCE_ROOT/output/release-008/calibration/anchors.v2.0.acquired.json"
+export TOOLING_ROOT='<separate clean public-main tooling checkout>'
+export TOOLING_SHA='<full first main SHA containing all three repairs>'
+export ARTIFACT_ROOT='<absolute durable lane artifact directory>'
+export CAMPAIGN_ID='<fresh sealed campaign id>'
 export VALIDATOR_ROOT='<third clean independently reviewed validator checkout>'
 export VALIDATOR_SHA='<full reviewed validator SHA>'
 export PRODUCER_ROOT='<absolute checksum-bound preserved producer root>'

@@ -86,6 +86,7 @@ from robot_sf.benchmark.paired_effect_metric_contract import (
     load_json_rows,
     load_paired_effect_metric_contract,
 )
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
@@ -3164,6 +3165,17 @@ def run_batch(  # noqa: PLR0913
     Returns:
         Summary dictionary with episode counts, failures, and execution metadata.
     """
+    # Resolve and admit all classic jobs before output setup or worker dispatch.
+    scenarios = (
+        load_scenario_matrix(scenarios_or_path)
+        if isinstance(scenarios_or_path, str | Path)
+        else scenarios_or_path
+    )
+    jobs = []
+    if not any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
+        jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
+        for _, seed in jobs:
+            check_simulation_seed(seed, boundary="classic run_batch")
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     retained_metric_contract = (
         load_paired_effect_metric_contract(retained_metric_contract_path)
@@ -3173,7 +3185,7 @@ def run_batch(  # noqa: PLR0913
 
     # Prepare batch setup
     scenarios, out_path, schema = _prepare_batch_setup(
-        scenarios_or_path,
+        scenarios,
         out_path,
         schema_path,
         append,
@@ -3233,9 +3245,6 @@ def run_batch(  # noqa: PLR0913
             retained_metric_contract,
             summary,
         )
-
-    # Expand jobs
-    jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
 
     # Set up fixed parameters
     from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION  # noqa: PLC0415

@@ -43,7 +43,7 @@ def _corridor_config(**overrides) -> ScenarioConfig:
         "length": 12.0,
         "half_width": 2.0,
         "n_pedestrians": 8,
-        "seed": 123,
+        "seed": 1001,
         "n_steps": 20,
     }
     base.update(overrides)

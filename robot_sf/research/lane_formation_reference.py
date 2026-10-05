@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 import pysocialforce as pysf
 
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.research.emergent_phenomena import (
     LITERATURE_CALIBRATION,
     RELEASED_DEFAULT_CALIBRATION,
@@ -344,6 +345,7 @@ def run_native_reference(
         A compact native row.  The trajectory itself remains in memory so raw
         trajectory bytes are not promoted as durable evidence.
     """
+    check_simulation_seed(seed, boundary="run_native_reference")
     protocol.validate()
     _validate_condition(condition)
     strides = _validate_sampling_strides(sampling_strides)
@@ -510,6 +512,8 @@ def run_reference_campaign(
     Returns:
         Payload containing the manifest, metric audit, native rows, and summaries.
     """
+    for seed in seeds:
+        check_simulation_seed(seed, boundary="run_reference_campaign")
     protocol.validate()
     if not seeds or any(isinstance(seed, bool) for seed in seeds):
         raise ValueError("seeds must contain at least one integer")

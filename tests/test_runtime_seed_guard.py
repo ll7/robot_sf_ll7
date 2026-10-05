@@ -27,7 +27,7 @@ def reached(*args, **kwargs):
 
 
 @pytest.mark.parametrize(
-    "boundary", ["reset_rng", "factory", "simulator", "crowd", "dummy", "episode"]
+    "boundary", ["reset_rng", "factory", "simulator", "crowd", "dummy", "episode", "classic"]
 )
 def test_production_refuses_before_rng_or_dispatch(  # noqa: C901 - explicit boundary controls
     forbidden_sentinel, monkeypatch, boundary
@@ -82,6 +82,13 @@ def test_production_refuses_before_rng_or_dispatch(  # noqa: C901 - explicit bou
 
         def invoke(seed=SENTINEL):
             dummy_backend.DummySimulator(map_def=None, seed=seed)
+    elif boundary == "classic":
+        from robot_sf.benchmark import scenario_generator
+
+        monkeypatch.setattr(scenario_generator.np.random, "default_rng", reached)
+
+        def invoke(seed=SENTINEL):
+            scenario_generator.generate_scenario({}, seed)
     else:
         from robot_sf.benchmark.map_runner import map_runner_episode
 
@@ -107,7 +114,7 @@ def test_production_refuses_before_rng_or_dispatch(  # noqa: C901 - explicit bou
         invoke(1001)
 
 
-def test_seedless_classic_dispatch_refuses_retired_fallback(forbidden_sentinel):
+def test_map_seed_dispatch_refuses_retired_fallback(forbidden_sentinel):
     from robot_sf.benchmark.map_runner.map_runner_batch_plan import build_seed_jobs
 
     with pytest.raises(ValueError, match="held-out simulation seed"):
@@ -165,3 +172,60 @@ else:
         [sys.executable, "-c", script], env=env, text=True, capture_output=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_classic_batch_admits_every_expanded_seed_before_output(forbidden_sentinel, monkeypatch):
+    from robot_sf.benchmark import runner
+
+    monkeypatch.setattr(runner, "_prepare_batch_setup", reached)
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        runner.run_batch([{"repeats": 2}], "unused.jsonl", "unused.json", base_seed=1029)
+    with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
+        runner.run_batch([{"repeats": 2}], "unused.jsonl", "unused.json", base_seed=1001)
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "build_bidirectional_corridor",
+        "build_narrow_doorway",
+        "build_high_density_exit",
+        "run_scenario",
+        "run_native_reference",
+        "run_reference_campaign",
+    ],
+)
+def test_research_refuses_before_rng_or_raw_simulator(forbidden_sentinel, monkeypatch, boundary):
+    from robot_sf.research import emergent_phenomena as emergent
+    from robot_sf.research import lane_formation_reference as reference
+
+    if boundary.startswith("build_"):
+        monkeypatch.setattr(emergent.np.random, "default_rng", reached)
+
+        def invoke(seed):
+            getattr(emergent, boundary)(SimpleNamespace(seed=seed), None)
+    elif boundary == "run_scenario":
+        monkeypatch.setitem(emergent._BUILDERS, "bidirectional_corridor", reached)
+
+        def invoke(seed):
+            emergent.run_scenario(SimpleNamespace(seed=seed, name="bidirectional_corridor"), None)
+    elif boundary == "run_native_reference":
+        monkeypatch.setattr(reference, "build_bidirectional_corridor", reached)
+
+        def invoke(seed):
+            reference.run_native_reference(
+                protocol=reference.ReferenceProtocol(),
+                condition="mixed_sustained_flow",
+                seed=seed,
+                calibration=emergent.RELEASED_DEFAULT_CALIBRATION,
+            )
+    else:
+        monkeypatch.setattr(reference, "run_native_reference", reached)
+
+        def invoke(seed):
+            reference.run_reference_campaign(seeds=[1001, seed])
+
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        invoke(SENTINEL)
+    with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
+        invoke(1001)

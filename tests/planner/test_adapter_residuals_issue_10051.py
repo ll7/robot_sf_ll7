@@ -9,6 +9,7 @@ from robot_sf.benchmark.map_runner.map_runner_native_command import (
     NativeCommandStepError,
     _parse_response,
 )
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import policy_command_to_env_action
 from robot_sf.benchmark.runner import _NativeCommandPolicy
 from robot_sf.planner import socnav_sampling_v2 as sampling
 from robot_sf.planner.guarded_ppo import GuardedPPOAdapter, GuardedPPOConfig
@@ -129,14 +130,19 @@ def test_prediction_score_rolls_out_bound_drive_from_observed_velocity(monkeypat
     adapter = PredictionPlannerAdapter(SocNavPlannerConfig(predictive_rollout_dt=rollout_dt))
     settings = DifferentialDriveSettings(max_linear_accel=0.4, max_angular_accel=0.3)
     drive = DifferentialDriveRobot(settings)
-    adapter.bind_env(SimpleNamespace(simulator=SimpleNamespace(robots=[drive])))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+    adapter.bind_env(env)
+    config = SimpleNamespace(
+        robot_config=drive.config, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
     observation = _observation(speed=0.4, angular=0.2)
     drive.state.velocity = (0.4, 0.2)
     drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
     expected = []
     for _ in range(3):
         for _ in range(round(rollout_dt / 0.1)):
-            drive.apply_action(tuple((np.array([1.5, 0.8]) - drive.current_speed) / 0.1), 0.1)
+            action = policy_command_to_env_action(env=env, config=config, command=(1.5, 0.8))
+            drive.apply_action(tuple(action), 0.1)
         expected.append(drive.pos)
 
     def check_progress(*args, robot_traj, **kwargs):
@@ -154,25 +160,38 @@ def test_prediction_score_rolls_out_bound_drive_from_observed_velocity(monkeypat
     )
 
 
-def test_prediction_sequence_rollout_uses_measured_drive_state():
+def test_prediction_sequence_rollout_uses_measured_drive_state(monkeypatch):
     """Sequence search must share the accelerated wheel odometry used by one-action scoring."""
-    adapter = PredictionPlannerAdapter()
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(predictive_rollout_dt=0.1))
     drive = DifferentialDriveRobot(DifferentialDriveSettings(max_angular_accel=0.3))
-    adapter.bind_env(SimpleNamespace(simulator=SimpleNamespace(robots=[drive])))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+    adapter.bind_env(env)
+    config = SimpleNamespace(
+        robot_config=drive.config, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
     drive.state.velocity = (0.4, 0.2)
     drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
     sequence = [(1.5, 0.8), (0.0, -0.5)]
     expected = []
     for command in np.repeat(sequence, 2, axis=0):
-        drive.apply_action(tuple((command - drive.current_speed) / 0.1), 0.1)
+        action = policy_command_to_env_action(env=env, config=config, command=tuple(command))
+        drive.apply_action(tuple(action), 0.1)
         expected.append(drive.pos)
-    positions, _ = adapter._rollout_robot_sequence(
-        sequence=sequence,
-        segment_steps=2,
-        dt=0.1,
+    real_rollout = adapter._rollout_robot_sequence
+
+    def check_rollout(**kwargs):
+        positions, headings = real_rollout(**kwargs)
+        np.testing.assert_allclose(positions, expected, atol=1e-14, rtol=0.0)
+        return positions, headings
+
+    monkeypatch.setattr(adapter, "_rollout_robot_sequence", check_rollout)
+    adapter._score_action_sequence(
         observation=_observation(speed=0.4, angular=0.2),
+        future_peds=np.zeros((0, 4, 2)),
+        mask=np.zeros(0),
+        sequence=sequence,
+        steps=4,
     )
-    np.testing.assert_allclose(positions, expected, atol=1e-14, rtol=0.0)
 
 
 @pytest.mark.parametrize("planner", ["guard", "sampler"])

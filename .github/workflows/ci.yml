@@ -64,6 +64,8 @@ jobs:
       - name: Checkout gate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Elect exact-head full-matrix owner
@@ -178,6 +180,25 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+      - name: Prepare conservative test admission
+        if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/affected_test_selection.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --json-output output/ci/affected-selection.json --format mode
+
+      - name: Upload conservative test admission
+        if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: conservative-test-admission
+          path: output/ci/affected-selection.json
+          if-no-files-found: error
+
   fast-feedback:
     needs: dispatch-ownership
     if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
@@ -201,9 +222,10 @@ jobs:
       PYTEST_XDIST_DIST: worksteal
       PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
-      ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
-      # PRs include slow import and path-pin witnesses affected by this diff.
-      ROBOT_SF_AFFECTED_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      # Keep complete coverage while the next PR installs default admission.
+      ROBOT_SF_SHARD_INCLUDE_SLOW: "1"
+      # Artifact consumption starts in the dependent default-admission PR.
+      ROBOT_SF_AFFECTED_BASE_REF: ""
       ROBOT_SF_PYTEST_COVERAGE: "1"
       COVERAGE_FILE: ${{ format('output/coverage/.coverage.{0}', matrix.shard) }}
       # The release-hydration tests invoke `gh` for a public pinned asset. Use

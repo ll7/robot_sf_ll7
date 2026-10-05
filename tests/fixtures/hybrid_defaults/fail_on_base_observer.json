@@ -1,0 +1,8 @@
+{
+  "base_sha": "303ddac871557ba4350933de54306b83288b437f",
+  "command": "pytest tests/planner/test_hybrid_feasibility_diagnostics.py::test_missing_candidate_probe_skips_initial_goal_stop_without_speed_cap -n 8 -q",
+  "exit_code": 1,
+  "failure": "TypeError: 'NoneType' object is not subscriptable",
+  "restored_component": "scripts/validation/run_hybrid_feasibility_diagnostics.py",
+  "test_file_sha256": "59100f9bad1e48a2610e38ef6bc5d0b7da7b87e87562043a34a5f7facf339d75"
+}

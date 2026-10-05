@@ -37,6 +37,18 @@ def _planner(**extra):
     return planner
 
 
+def test_missing_candidate_probe_skips_initial_goal_stop_without_speed_cap():
+    """A real first goal stop has no speed-cap diagnostics for a counterfactual probe."""
+    from scripts.validation.run_hybrid_feasibility_diagnostics import missing_candidate_probe
+
+    planner = _planner()
+    obs = _obs(robot=(4, 15), goal=(4, 15))
+    command = planner.plan(obs)
+    assert planner.last_decision()["planner_mode"] == "GOAL_STOP"
+    assert planner._last_v4_speed_safety is None
+    assert missing_candidate_probe(planner, obs, planner._extract_state(obs), command) is None
+
+
 def test_debug_forced_stop_reports_the_actual_exclusion_radius():
     """A physical 0.10 m clearance is rejected by a 0.20 m comfort margin."""
     planner = _planner()

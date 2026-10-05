@@ -79,6 +79,13 @@ No environment was reset or stepped during snapshot capture.
 | `test_release_scenario_environment_dataclasses_match_full_base_dumps` | Protect every environment field on the 48 release scenarios; an env migration leaking into legacy fails. | No full before/after constructor comparison. | Actual scenario/env builders, complete fixed dumps; current control fails on base. |
 | `test_native_episode_records_legacy_and_current_builder_default_sets` | Protect runtime propagation and provenance; lost context/source binding fails. | Constructor tests cannot catch missing runner wiring. | Two sequential native one-step episodes on dev1001; current control fails on base. |
 
+The diagnostic observer regression
+`test_missing_candidate_probe_skips_initial_goal_stop_without_speed_cap` catches
+a first goal-stop decision before speed-cap diagnostics exist. It fails on base
+with `TypeError`, then passes after a reporting-only guard. The inputs are fixed
+and it calls the real planner and counterfactual diagnostic; no simulation is
+reset or stepped. Its base-failure receipt is tracked separately.
+
 No production seam was added solely for tests. Preservation assertions naturally
 also hold on base; the same tests include the changed current behavior so the
 migration contract fails on base. Existing evaluator characterizations now pin

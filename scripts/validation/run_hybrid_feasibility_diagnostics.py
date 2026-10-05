@@ -165,6 +165,8 @@ def evaluate_orca_step(shadow, obs, state, command, end):
 
 def missing_candidate_probe(planner, obs, state, command):
     """Find an admissible forward action excluded by the scalar proximity speed cap."""
+    if planner._last_v4_speed_safety is None:
+        return None
     cap = planner._last_v4_speed_safety["speed_cap"]
     _, reachable, _, _ = planner._dynamic_window(
         state["current_speed"], planner._v4_effective_max_speed()

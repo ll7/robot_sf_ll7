@@ -9,6 +9,7 @@ Runs pytest with fail-fast defaults for local triage. Worker counts above one
 use pytest-xdist; `PYTEST_NUM_WORKERS=1` runs pytest in-process without xdist.
 
 Wrapper options:
+  --train-suite    Complete slow-inclusive suite on a clean exact train head
   --fast-fail      Stop on first failure (`-x`) [default]
   --no-fast-fail   Disable fail-fast
   --failed-first   Run previously failed tests first [default]
@@ -67,6 +68,17 @@ unset PR_READY_PR_BODY_FILE
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
+train_suite=0
+if [[ "${1:-}" == "--train-suite" ]]; then
+  train_suite=1
+  shift
+  if [[ $# -ne 0 || -n "$(git status --porcelain --untracked-files=no)" ]]; then
+    echo "Train suite requires a clean tracked tree and no pytest selectors." >&2
+    exit 2
+  fi
+  echo "Complete train suite head: $(git rev-parse HEAD)" >&2
+  export ROBOT_SF_SHARD_INCLUDE_SLOW=1 ROBOT_SF_TEST_LANE=all
+fi
 fast_fail="${PYTEST_FAST_FAIL:-1}"
 default_dist_mode=load
 # Sharded suites have long heterogeneous release-check batches. Let idle workers
@@ -301,6 +313,11 @@ if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
 fi
 
 cmd=(uv run pytest)
+# A hung functional test must identify itself instead of exhausting the job.
+cmd+=(--timeout=300)
+if [[ "$train_suite" == "1" ]]; then
+  cmd+=(tests fast-pysf/tests)
+fi
 if [[ "$pytest_execution_mode" == "xdist" ]]; then
   cmd+=(-n "$worker_spec" --dist "$dist_mode")
 fi

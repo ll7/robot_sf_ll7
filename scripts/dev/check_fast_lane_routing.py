@@ -55,6 +55,8 @@ class FastLanePolicy:
     fast_file_prefixes: tuple[str, ...]
     slow_file_overrides: frozenset[str]
 
+    fast_by_default: bool = False
+
     def is_fast(self, test_path: str) -> bool:
         """Return whether ``tests/conftest.py`` keeps this path out of ``slow``."""
 
@@ -62,6 +64,8 @@ class FastLanePolicy:
         filename = Path(normalized).name
         if filename in self.slow_file_overrides:
             return False
+        if self.fast_by_default:
+            return True
         if filename in self.fast_files:
             return True
         if any(fragment in normalized for fragment in self.fast_path_fragments):
@@ -117,6 +121,7 @@ def load_fast_lane_policy(source: str) -> FastLanePolicy:
 
     assignments = _literal_assignments(source)
     return FastLanePolicy(
+        fast_by_default="_FAST_FILES" not in assignments,
         fast_files=frozenset(str(value) for value in assignments.get("_FAST_FILES", set())),
         fast_path_fragments=tuple(
             str(value) for value in assignments.get("_FAST_PATH_FRAGMENTS", ())

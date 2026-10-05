@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import shutil
+import subprocess
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -1934,6 +1935,25 @@ def test_build_derived_release_successfully_promotes_complete_inventory(  # noqa
         from robot_sf.benchmark.snqi.v2_reports import score_episode, write_v2_reports
         from tests.unit.benchmark.test_snqi_v2 import fixture_spec, records
 
+        scorer_paths = [
+            "robot_sf/benchmark/snqi/v2_reports.py",
+            "robot_sf/benchmark/snqi/v2_spec.py",
+        ]
+        for name in scorer_paths:
+            target = source / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(Path(recovery.__file__).resolve().parents[2] / name, target)
+        for args in (
+            ["init", "-q"],
+            ["config", "user.email", "tests@example.invalid"],
+            ["config", "user.name", "Synthetic fixture"],
+            ["add", *scorer_paths],
+            ["commit", "-qm", "Synthetic scoring source"],
+        ):
+            subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+        scoring_source_sha = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+        ).strip()
         spec = fixture_spec()
         synthetic_rows = records()
         for index, row in enumerate(synthetic_rows):
@@ -1995,6 +2015,7 @@ def test_build_derived_release_successfully_promotes_complete_inventory(  # noqa
         lambda _path: SimpleNamespace(
             canonical_campaign_config_path=config_path,
             snqi_v2_binding={"synthetic": True} if scoring == "v2" else None,
+            source_sha=scoring_source_sha if scoring == "v2" else recovery.FROZEN_SOURCE_SHA,
         ),
     )
     monkeypatch.setattr(
@@ -2112,11 +2133,14 @@ def test_build_derived_release_successfully_promotes_complete_inventory(  # noqa
         forged["episode_count"] = 5
         diagnostic.write_text(json.dumps(forged))
         try:
-            with pytest.raises(recovery.DerivedReleaseError, match="diagnostics report differs"):
+            with (
+                recovery._source_repository_binding(source, scoring_v2=True),
+                pytest.raises(recovery.DerivedReleaseError, match="diagnostics report differs"),
+            ):
                 recovery._verify_publication_v2_reports(
                     final_campaign,
                     SimpleNamespace(snqi_v2_spec=spec, bootstrap_samples=10),
-                    SimpleNamespace(),
+                    SimpleNamespace(source_sha=scoring_source_sha),
                     expected_row_count=4,
                     expected_arm_count=2,
                 )

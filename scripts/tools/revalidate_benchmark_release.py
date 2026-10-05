@@ -1615,6 +1615,82 @@ def _reconcile_publication_snqi_diagnostics(
     }
 
 
+def _assert_v2_scoring_source(manifest):
+    """Require helper scoring blobs and imported bytes to equal the frozen source."""
+    source_root = release_protocol_module.get_repository_root()
+    helper_root = Path(__file__).resolve().parents[2]
+    commit = manifest.source_sha
+    for name in ("v2_reports.py", "v2_spec.py"):
+        relative = f"robot_sf/benchmark/snqi/{name}"
+        frozen = subprocess.run(
+            ["git", "show", f"{commit}:{relative}"],
+            cwd=source_root,
+            capture_output=True,
+            check=False,
+        )
+        helper = subprocess.run(
+            ["git", "show", f"HEAD:{relative}"],
+            cwd=helper_root,
+            capture_output=True,
+            check=False,
+        )
+        if frozen.returncode or helper.returncode:
+            raise DerivedReleaseError(f"cannot verify frozen scoring blob: {relative}")
+        module = sys.modules[f"robot_sf.benchmark.snqi.{name[:-3]}"]
+        if frozen.stdout != helper.stdout or Path(module.__file__).read_bytes() != frozen.stdout:
+            raise DerivedReleaseError(
+                f"scoring implementation differs from frozen source: {relative}"
+            )
+
+
+def _normalise_v2_report_paths(stored, generated):
+    """Authenticate scoring content before adopting only producer provenance paths."""
+    stored_provenance = stored["provenance"]
+    generated_provenance = generated["provenance"]
+    hashes = {
+        key
+        for key in generated_provenance
+        if key.startswith("snqi_v2_") and key.endswith("_sha256")
+    }
+    stored_hashes = {
+        key for key in stored_provenance if key.startswith("snqi_v2_") and key.endswith("_sha256")
+    }
+    for key in sorted(hashes | stored_hashes):
+        if (
+            key not in hashes
+            or key not in stored_hashes
+            or generated_provenance[key] != stored_provenance[key]
+        ):
+            raise DerivedReleaseError(f"SNQI-v2 scoring content hash differs for {key}")
+    for key in generated_provenance:
+        if key.startswith("snqi_v2_") and key.endswith("_path"):
+            if key[:-5] + "_sha256" not in hashes or not isinstance(
+                stored_provenance.get(key), str
+            ):
+                raise DerivedReleaseError(f"SNQI-v2 producer path lacks a content binding: {key}")
+            generated_provenance[key] = stored_provenance[key]
+
+
+def _v2_producer_run_order(campaign_root, paths):
+    """Use the producer's complete run order or refuse a malformed manifest."""
+    try:
+        run_entries = _read_json(campaign_root / "manifest.json")["runs"]
+        if not isinstance(run_entries, list):
+            raise TypeError("runs must be a list")
+        ordered = [
+            campaign_root
+            / "runs"
+            / f"{entry['planner']['key']}__{entry['planner']['kinematics']}"
+            / "episodes.jsonl"
+            for entry in run_entries
+        ]
+    except (KeyError, TypeError) as exc:
+        raise DerivedReleaseError("v2 producer manifest has missing or malformed runs") from exc
+    if len(ordered) != len(set(ordered)) or set(ordered) != set(paths):
+        raise DerivedReleaseError("v2 producer report order does not cover the verified runs")
+    return ordered
+
+
 def _verify_publication_v2_reports(  # noqa: C901 - independent immutable scoring and report checks
     campaign_root,
     campaign_config,
@@ -1629,11 +1705,14 @@ def _verify_publication_v2_reports(  # noqa: C901 - independent immutable scorin
     from robot_sf.benchmark.snqi.v2_reports import (
         _source_scenario_algorithms,
         _validated_v2_record_algorithms,
+        _write_markdown_report,
         compact_report_episode,
         read_episode_files,
         score_episode,
         write_v2_reports,
     )
+
+    _assert_v2_scoring_source(manifest)
 
     if (campaign_root / "reports/snqi_diagnostics.json").exists():
         raise DerivedReleaseError("v2 scoring contract excludes legacy SNQI diagnostics")
@@ -1649,17 +1728,7 @@ def _verify_publication_v2_reports(  # noqa: C901 - independent immutable scorin
     identities = set()
     paths = sorted(campaign_root.glob("runs/*/episodes.jsonl"))
     if planners:
-        run_entries = _read_json(campaign_root / "manifest.json")["runs"]
-        ordered = [
-            campaign_root
-            / "runs"
-            / f"{entry['planner']['key']}__{entry['planner']['kinematics']}"
-            / "episodes.jsonl"
-            for entry in run_entries
-        ]
-        if len(ordered) != len(set(ordered)) or set(ordered) != set(paths):
-            raise DerivedReleaseError("v2 producer report order does not cover the verified runs")
-        paths = ordered
+        paths = _v2_producer_run_order(campaign_root, paths)
     for path in paths:
         records = list(read_episode_files([path]))
         key = path.parent.name.rsplit("__", 1)[0]
@@ -1714,14 +1783,16 @@ def _verify_publication_v2_reports(  # noqa: C901 - independent immutable scorin
             )
         for name in ("family", "diagnostics"):
             path = reports / f"snqi_v2_{name}.json"
-            if parse_v2_json(path.read_bytes()) != parse_v2_json(
-                (generated / path.name).read_bytes()
-            ):
+            stored_payload = parse_v2_json(path.read_bytes())
+            generated_payload = parse_v2_json((generated / path.name).read_bytes())
+            _normalise_v2_report_paths(stored_payload, generated_payload)
+            if stored_payload != generated_payload:
                 raise DerivedReleaseError(
                     f"SNQI-v2 {name} report differs from verified rows and scoring contract"
                 )
             digests[path.name] = sha256_file(path)
             markdown = path.with_suffix(".md")
+            _write_markdown_report(generated / markdown.name, name, generated_payload)
             if markdown.read_bytes() != (generated / markdown.name).read_bytes():
                 raise DerivedReleaseError(f"SNQI-v2 {name} Markdown differs from verified report")
             digests[markdown.name] = sha256_file(markdown)
@@ -1878,7 +1949,9 @@ print(json.dumps({'manifest':dataclasses.asdict(manifest),
         )
     if sha256_file(path) != before:
         raise DerivedReleaseError("resolved identity changed during frozen verification")
-    return json.loads(result.stdout)
+    evidence = json.loads(result.stdout)
+    evidence["identity_sha256"] = before
+    return evidence
 
 
 def _manifest_from_frozen_evidence(evidence):
@@ -1930,6 +2003,9 @@ run_state_module.get_repository_root = lambda: source_root
 import os
 if os.environ.get("ROBOT_SF_FROZEN_MANIFEST_EVIDENCE"):
     evidence=json.loads(os.environ["ROBOT_SF_FROZEN_MANIFEST_EVIDENCE"])
+    import hashlib
+    if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != evidence["identity_sha256"]:
+        raise RuntimeError("identity SHA-256 differs from frozen verification")
     data=evidence["manifest"]
     for field in evidence["path_fields"]: data[field]=Path(data[field])
     for field in evidence["tuple_fields"]: data[field]=tuple(data[field])

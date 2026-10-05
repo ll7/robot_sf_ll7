@@ -66,4 +66,19 @@ def test_refusal_probe_source_has_no_real_sealed_seed():
     assert all(str(seed) not in source for seed in seed_bands.EVAL_SEEDS_0_0_8)
 
 
+@pytest.mark.parametrize(
+    "anchor, alias",
+    [("base: &s 111", "seed: *s"), ("eval: &p {seeds: [111]}", "seed_policy: *p")],
+)
+def test_scalar_and_mapping_aliases_cannot_hide_heldout_seeds(tmp_path, anchor, alias):
+    path = "configs/probe.yaml"
+    target = tmp_path / path
+    target.parent.mkdir()
+    target.write_text(f"{anchor}\nscenario:\n  {alias}\n")
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+  {alias}\n"
+    assert check_diff(diff, tmp_path)
+    target.write_text(f"{anchor.replace('111', '1001')}\nscenario:\n  {alias}\n")
+    assert not check_diff(diff, tmp_path)
+
+
 # seed-holdout: synthetic-fixture end

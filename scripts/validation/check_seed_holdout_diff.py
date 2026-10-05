@@ -515,13 +515,12 @@ def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with c
         if isinstance(node, yaml.MappingNode):
             for key, value in node.value:
                 if key.start_mark.line == number - 1:
-                    if key.tag == "tag:yaml.org,2002:merge" and contains_seed(value, set()):
+                    if contains_seed(value, set()):
                         return True
                     if SEED_FIELD.search(key.value + ":"):
                         resolved = yaml.safe_load(yaml.serialize(value))
-                        if isinstance(resolved, list) and any(
-                            type(seed) is int and seed in HELD_OUT_SEEDS for seed in resolved
-                        ):
+                        values = resolved if isinstance(resolved, list) else [resolved]
+                        if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
                             return True
                 if visit(value, seen):
                     return True

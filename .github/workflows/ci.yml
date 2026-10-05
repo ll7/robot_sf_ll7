@@ -223,6 +223,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
         with:
+          node: "true"
           install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
 
       - name: Prime uv cache metadata for offline software-candidate checks
@@ -483,6 +484,7 @@ jobs:
       - name: Set up matrixed compatibility CI environment
         uses: ./.github/actions/setup-ci-python
         with:
+          node: "true"
           python-version: ${{ matrix.python }}
           # Slim profile (issue #9355): base + viz + maps extras cover the full
           # compat test closure (proven by check_compat_import_profile.py plus a
@@ -649,6 +651,8 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          node: "true"
 
       - name: Run new tests against the base commit (advisory)
         env:

@@ -82,17 +82,52 @@ def test_browser_ci_jobs_install_declared_node_before_tests():
     assert len(node_steps) == 1, "Shared CI setup must install Node"
     node_step = node_steps[0]
     assert node_step["with"]["node-version-file"] == ".nvmrc"
-    assert not node_step.get("if") and not node_step.get("continue-on-error")
+    assert action["inputs"].get("node", {}).get("default") == "false"
+    assert node_step.get("if") == "${{ inputs.node == 'true' }}"
+    assert not node_step.get("continue-on-error")
     version = tuple(int(part) for part in (root / ".nvmrc").read_text().strip().split("."))
     assert len(version) == 3 and version >= (22, 7, 0)
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
-    for job_name in ("fast-feedback", "smoke-artifacts", "new-tests-fail-on-base"):
-        steps = workflow["jobs"][job_name]["steps"]
-        setup_index = next(
-            i
-            for i, step in enumerate(steps)
-            if step.get("uses") == "./.github/actions/setup-ci-python"
-        )
-        assert not steps[setup_index].get("if")
-        assert not steps[setup_index].get("continue-on-error")
-        assert any(step.get("run") for step in steps[setup_index + 1 :])
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SETUP_CALLS = [
+    (path.name, job_name, job)
+    for path in sorted((ROOT / ".github/workflows").glob("*.y*ml"))
+    for job_name, job in yaml.safe_load(path.read_text()).get("jobs", {}).items()
+    if any(step.get("uses") == "./.github/actions/setup-ci-python" for step in job.get("steps", []))
+]
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name", "job"),
+    SETUP_CALLS,
+    ids=[f"{workflow}:{name}" for workflow, name, _ in SETUP_CALLS],
+)
+def test_ci_node_opt_in_matches_browser_test_execution(workflow_name, job_name, job):
+    """Every real action caller opts in exactly when its commands can run browser tests."""
+    # These routes run the suite or changed tests, including browser witnesses.
+    browser_routes = (
+        "scripts/dev/ci_driver.sh test",
+        "scripts/dev/run_tests_parallel.sh",
+        "scripts/dev/run_xdist_race_validation.sh",
+        "scripts/validation/check_new_tests_fail_on_base.py",
+        "tests/render",
+        "tests/test_review_workbench.py",
+    )
+    steps = job["steps"]
+    test_indexes = [
+        i
+        for i, step in enumerate(steps)
+        if any(route in step.get("run", "") for route in browser_routes)
+    ]
+    setup_indexes = [
+        i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/setup-ci-python"
+    ]
+    for index in setup_indexes:
+        setup = steps[index]
+        opted_in = setup.get("with", {}).get("node", "false")
+        expected = "true" if test_indexes else "false"
+        assert opted_in == expected, f"{workflow_name}:{job_name} requires node={expected}"
+        if test_indexes:
+            assert index < min(test_indexes)
+            assert not setup.get("if") and not setup.get("continue-on-error")

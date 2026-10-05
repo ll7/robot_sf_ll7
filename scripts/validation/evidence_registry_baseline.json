@@ -1,12 +1,20 @@
 {
   "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths. The payload also carries an evidence_tree manifest (issue #6839): adding or removing any file under docs/context/evidence/ without refreshing this baseline fails the ratchet on the causing PR, so a stale baseline can never redden main after merge.",
   "evidence_tree": {
-    "count": 2997,
-    "sha256": "128a0d9100e9e26091c12a12262fafe06c8954d83ee0194929e5a74d8b09a7f8"
+    "count": 3017,
+    "sha256": "86c8ef966e4bcd4bafa4890ab908a1b5644951aa0b4872fe20d9e1cc5ccdcb32"
   },
   "findings_by_path": {
     "docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json": {
       "hash_without_artifact_path": 4
+    },
+    "docs/context/evidence/2026-10-05_freeze008_box4_seed_admission/doorway/release_identity.resolved.json": {
+      "hash_without_artifact_path": 16,
+      "uncommitted_artifact_missing_location": 2
+    },
+    "docs/context/evidence/2026-10-05_freeze008_box4_seed_admission/main/release_identity.resolved.json": {
+      "hash_without_artifact_path": 18,
+      "uncommitted_artifact_missing_location": 2
     },
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
       "dangling_commit": 1,
@@ -385,7 +393,7 @@
       "artifact_hash_mismatch": 4
     }
   },
-  "generated_at": "2026-10-04T21:19:01Z",
+  "generated_at": "2026-10-05T04:10:10Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
@@ -394,14 +402,14 @@
       "config_missing_at_commit": 7,
       "dangling_commit": 23,
       "duplicate_campaign_id": 7,
-      "hash_without_artifact_path": 114,
+      "hash_without_artifact_path": 148,
       "invalid_sha256": 1,
       "missing_commit": 27,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
-      "uncommitted_artifact_missing_location": 150
+      "uncommitted_artifact_missing_location": 154
     },
-    "files_with_findings": 102,
-    "total_findings": 454
+    "files_with_findings": 104,
+    "total_findings": 492
   }
 }

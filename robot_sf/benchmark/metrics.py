@@ -181,7 +181,9 @@ def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.nda
     """Evaluate inverse-cubic robot repulsion from aligned positions, without a simulator.
 
     Positions must be force-evaluation inputs, not post-integration snapshots. NaN
-    rows stay NaN. Coincident centers are singular and rejected, as in the model.
+    rows stay NaN. Downstream reductions reject this padding unless the caller
+    supplies an explicit robot_force_presence mask marking absent slots.
+    Coincident centers are singular and rejected, as in the model.
     Per-pedestrian response multipliers, when used, must be supplied explicitly.
 
     Returns:

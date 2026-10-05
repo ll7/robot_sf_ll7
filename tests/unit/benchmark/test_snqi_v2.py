@@ -2882,6 +2882,8 @@ def test_snqifix_scheduled_rows_and_schema_survive_compaction(budget, scenario):
     row["scenario_params"]["run_horizon"] = budget
     row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
     compact = _compact_calibration_record(row, "arm0")
+    assert compact["metrics"]["robot_force_invalid_present_samples"] == 0
+    assert compact["metrics"]["robot_force_pp_equiv_invalid_present_samples"] == 0
     assert compact["horizon"] == budget
     assert compact["metrics"]["metric_schema_version"] == "robot-sf-metrics.v2"
 

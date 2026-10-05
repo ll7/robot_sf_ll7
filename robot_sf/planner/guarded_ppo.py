@@ -479,7 +479,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             point_offset_xy_m=self._point_offset_in_grid_cell(point, meta, row, col),
         )
 
-    def _command_drive_rollout(self, observation, command, robot_pos, heading):
+    def _command_drive_rollout(
+        self, observation, command, robot_pos, heading, *, minimum_forecast_steps=0
+    ):
         """Forecast commands, with native dynamics for surface-clearance guards.
 
         Returns:
@@ -501,6 +503,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         speed = float(self._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
         angular = float(self._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0])
         sequence = np.tile(command, (max(int(self.config.rollout_steps), 1), 1))
+        padding = max(0, minimum_forecast_steps - len(sequence))
+        if padding:
+            # Continue native braking and holding after the command horizon.
+            sequence = np.vstack((sequence, np.zeros((padding, 2))))
         positions, headings, velocities = native_drive_rollout(
             sequence, self._drive_settings, speed, angular, float(self.config.rollout_dt)
         )
@@ -515,6 +521,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         *,
         state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray] | None = None,
         grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+        minimum_forecast_steps: int = 0,
     ) -> dict[str, float | bool]:
         """Evaluate command safety through the rollout and any native braking tail.
 
@@ -535,7 +542,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         min_obs_clear = float("inf")
         min_ttc = float("inf")
 
-        drive_rollout = self._command_drive_rollout(observation, command, robot_pos, heading)
+        drive_rollout = self._command_drive_rollout(
+            observation,
+            command,
+            robot_pos,
+            heading,
+            minimum_forecast_steps=minimum_forecast_steps,
+        )
         previous_x = x.copy()
         command_end = x.copy()
         for step in range(len(drive_rollout[0])):
@@ -1053,8 +1066,30 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy=type(self.fallback_adapter).__name__,
             )
 
+        # Compare executable alternatives on the same pedestrian forecast clock.
+        # A stopped robot keeps holding while the other command finishes braking.
+        common_steps = max(
+            len(
+                self._command_drive_rollout(observation, command, cached_state[0], cached_state[1])[
+                    0
+                ]
+            )
+            for command in (fallback_command, (0.0, 0.0))
+        )
+        if common_steps > max(int(self.config.rollout_steps), 1):
+            fallback_eval = self._evaluate_command(
+                observation,
+                fallback_command,
+                state=cached_state,
+                grid_payload=cached_grid,
+                minimum_forecast_steps=common_steps,
+            )
         stop_eval = self._evaluate_command(
-            observation, (0.0, 0.0), state=cached_state, grid_payload=cached_grid
+            observation,
+            (0.0, 0.0),
+            state=cached_state,
+            grid_payload=cached_grid,
+            minimum_forecast_steps=common_steps,
         )
         if bool(stop_eval["safe"]):
             return self._shield_decision(

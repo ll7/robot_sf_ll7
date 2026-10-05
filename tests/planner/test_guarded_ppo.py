@@ -1466,3 +1466,55 @@ def test_bounded_sampler_binding_preserves_native_limited_reverse():
     limits = adapter.diagnostics()["drive_limits"]
     assert limits["limited_reverse"] is True
     assert limits["max_reverse_speed"] == 0.5
+
+
+def test_bounded_sampler_brakes_before_turning_from_measured_reverse():
+    """The stop fallback cannot treat signed reverse motion as stationary."""
+    adapter = SamplingPlannerAdapter(
+        SocNavPlannerConfig(
+            socnav_sampling_version="bounded_v2",
+            sampling_speed_fractions=(0.0,),
+            sampling_heading_candidates=1,
+            occupancy_heading_sweep=0.0,
+        )
+    )
+    settings = DifferentialDriveSettings(limited_reverse=True, max_reverse_speed=0.5)
+    adapter.bind_env(
+        SimpleNamespace(
+            config=SimpleNamespace(robot_config=settings),
+            simulator=SimpleNamespace(robots=[DifferentialDriveRobot(settings)]),
+        )
+    )
+    observation = _adapter_residual_observation(speed=-0.5)
+    observation["goal"]["current"] = np.array([0.0, 10.0])
+    assert adapter.plan(observation) == (0.0, 0.0)
+    assert adapter._last_sampling_v2["reason"] == "brake_straight"
+    observation["robot"]["speed"] = np.zeros(1)
+    assert adapter.plan(observation) == (0.0, 1.0)
+    assert adapter._last_sampling_v2["reason"] == "turn_in_place"
+
+
+def test_guard_compares_best_effort_commands_on_the_same_braking_clock():
+    """A shorter stopped forecast must not outrank a better moving escape."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=12,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+        ),
+        fallback_adapter=_FallbackAdapter((0.55, 0.0)),
+    )
+    observation = _adapter_residual_observation(speed=0.5)
+    observation["pedestrians"]["positions"] = np.array([[-2.4, 0.0], [1.6, 0.0]])
+    observation["pedestrians"]["velocities"] = np.array([[1.2, 0.0], [0.4, 0.0]])
+    observation["pedestrians"]["count"] = np.array([2])
+    decision = guard.choose_command_decision(observation, (0.6, 0.0))
+    command, label = decision.as_command_result()
+    # The native 0.55 command covers 0.6575 m in 1.2 s, then 0.1525 m braking.
+    # At 1.8 s the rear pedestrian is at -0.24 m: 0.81 + 0.24 - 1.4 = -0.35 m.
+    # Braking immediately ends at 0.125 m, so its same-clock gap is -1.035 m.
+    assert decision.selected_evaluation["min_ped_clear"] == pytest.approx(-0.35)
+    assert command == pytest.approx((0.55, 0.0))
+    assert label == "fallback_best_effort"

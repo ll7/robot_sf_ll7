@@ -703,7 +703,7 @@ def _all_blocked_command(  # noqa: PLR0913
         "penalty": 1.0,
         "all_blocked": True,
     }
-    if speed0 > _STOPPED_SPEED:
+    if abs(speed0) > _STOPPED_SPEED:
         decision["reason"] = "brake_straight"
         adapter._last_sampling_v2 = decision
         return 0.0, 0.0

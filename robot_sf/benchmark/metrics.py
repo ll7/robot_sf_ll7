@@ -173,6 +173,8 @@ class EpisodeData:
     robot_pos_includes_reset: bool = False
     # Frozen reset route; geometric progress must not follow waypoint handoffs.
     route_waypoints: np.ndarray | None = None
+    # Sample cardinality declares presence independently of force validity.
+    robot_force_presence: np.ndarray | None = None
 
 
 def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
@@ -203,9 +205,16 @@ def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.nda
 
 
 def robot_force_reductions(
-    forces: np.ndarray, *, dt: float, reference: float, prefix: str = "robot_force"
+    forces: np.ndarray,
+    *,
+    dt: float,
+    reference: float,
+    prefix: str = "robot_force",
+    presence: np.ndarray | None = None,
 ) -> dict[str, float]:
-    """Reduce model accelerations; absent/despawned NaN rows contribute no exposure.
+    """Reduce model accelerations; explicitly absent NaN rows contribute no exposure.
+
+    Without a mask every slot is present. Nonfinite force cannot imply absence.
 
     Empty exposure gives zero impulse, peak, duration and count; the conditional
     mean and per-exposed-pedestrian impulse are NaN (undefined denominator).
@@ -217,14 +226,24 @@ def robot_force_reductions(
         raise ValueError("robot forces must have shape (T,K,2)")
     if not math.isfinite(dt) or dt <= 0 or not math.isfinite(reference) or reference < 0:
         raise ValueError("dt and force reference must be finite, with dt > 0 and reference >= 0")
-    if np.isinf(forces).any():
-        raise ValueError("infinite robot force sample")
-    magnitude = np.linalg.norm(forces, axis=-1)
-    magnitude = np.where(np.isfinite(magnitude), magnitude, 0.0)
+    presence = np.ones(forces.shape[:2], dtype=bool) if presence is None else np.asarray(presence)
+    if presence.shape != forces.shape[:2] or presence.dtype != np.dtype(bool):
+        raise ValueError("robot force presence must be a boolean array of shape (T,K)")
+    if np.any(presence & ~np.isfinite(forces).all(axis=-1)):
+        raise ValueError(
+            "non-finite (including infinite) robot force sample for present pedestrian"
+        )
+    if np.any(~presence & ~np.isnan(forces).all(axis=-1)):
+        raise ValueError("absent pedestrian force slot must contain only NaN padding")
+    with np.errstate(over="ignore"):
+        magnitude = np.linalg.norm(np.where(presence[..., None], forces, 0.0), axis=-1)
+    if not np.isfinite(magnitude).all():
+        raise ValueError("non-finite robot force magnitude for present pedestrian")
     active = magnitude > 0
     count = int(np.count_nonzero(active.any(axis=0)))
     impulse = float(magnitude.sum() * dt)
     return {
+        f"{prefix}_invalid_present_samples": 0,
         f"{prefix}_impulse_total": impulse,
         f"{prefix}_impulse_per_exposed_ped": impulse / count if count else float("nan"),
         f"{prefix}_peak": float(np.max(magnitude, initial=0)),
@@ -249,7 +268,8 @@ def robot_force_pp_equivalent(data: EpisodeData) -> np.ndarray:
     samples = data.robot_force_samples
     if not samples or len(samples) < 2 or data.social_force_config is None:
         raise ValueError("pp-equivalent requires at least two aligned force-input samples")
-    positions = np.full_like(data.peds_pos, np.nan)
+    shape_source = data.robot_ped_forces if data.robot_ped_forces is not None else data.peds_pos
+    positions = np.full_like(shape_source, np.nan)
     component_count = len(samples[0]["components"])
     for t, sample in enumerate(samples):
         if len(sample["components"]) != component_count:
@@ -305,7 +325,9 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
     posthoc = data.robot_ped_forces is None
     forces = recompute_robot_ped_forces(data, cfg) if posthoc else data.robot_ped_forces
     reference = robot_force_reference(data.social_force_config, cfg["prf_ped_radius_m"])
-    result = robot_force_reductions(forces, dt=data.dt, reference=reference)
+    result = robot_force_reductions(
+        forces, dt=data.dt, reference=reference, presence=data.robot_force_presence
+    )
     result["robot_force_metadata"] = {
         **cfg,
         "source": ROBOT_FORCE_RECORDED_SOURCE,
@@ -327,6 +349,7 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
                 dt=data.dt,
                 reference=reference,
                 prefix="robot_force_pp_equiv",
+                presence=data.robot_force_presence,
             )
         )
         result["robot_force_metadata"]["pp_equiv_status"] = "experimental_counterfactual"

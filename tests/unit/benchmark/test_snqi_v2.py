@@ -167,6 +167,8 @@ def metrics(**overrides):
         "jerk_mean": 0,
         "curvature_mean": 0,
         "snqi": -0.12345678901234567,
+        "robot_force_invalid_present_samples": 0,
+        "robot_force_pp_equiv_invalid_present_samples": 0,
         "robot_force_metadata": _force_metadata(**force_metadata),
         **overrides,
     }

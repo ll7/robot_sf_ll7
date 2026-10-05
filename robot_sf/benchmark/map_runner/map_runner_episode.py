@@ -1759,6 +1759,12 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
                 ],
                 fill_value=np.nan,
             )
+            ep.robot_force_presence = np.zeros(ep.robot_ped_forces.shape[:2], dtype=bool)
+            for t, sample in enumerate(robot_force_samples):
+                count = len(sample["forces"])
+                if count != len(sample["peds_pos"]):
+                    raise ValueError("robot force and input pedestrian cardinality differ")
+                ep.robot_force_presence[t, :count] = True
         metrics_raw = compute_all_metrics(
             ep,
             horizon=horizon_val,

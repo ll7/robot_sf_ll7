@@ -38,7 +38,7 @@ publication:
   version_doi: "{{version_doi}}"
   reservation_status: reserved_unpublished
   metadata_path: benchmark_data_release_s30_h600_zenodo_metadata.template.json
-  metadata_sha256: "cbef0c0ca80ac3b8b25337edecad04456d65c0bd24f5f41744dfa74133cf175f"
+  metadata_sha256: "2f38815e86cb88b0c78876433cef431ebf9a9bd6f9791fdbba57531118a1a671"
   github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
 
 claim_boundary:

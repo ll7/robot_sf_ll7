@@ -1014,6 +1014,8 @@ _FAST_FILES = {
     # derived-only successor path. The revalidation suite exercises the real
     # build/export/cold-audit orchestration with only external seams mocked.
     "test_release_erratum.py",
+    "test_release_008_erratum.py",
+    "test_release_008_metadata_descriptions.py",
     "test_revalidate_benchmark_release.py",
     "test_release_protocol.py",
     "test_release_rehearsal_hardening.py",

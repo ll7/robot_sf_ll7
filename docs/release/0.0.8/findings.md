@@ -248,8 +248,9 @@ F2 draft description independently is not an override route.
 `benchmark-release-erratum.v1` / `derived_publication_metadata_only` successor
 with main's tooling under concept DOI `10.5281/zenodo.23150471`. The thesis cites
 that concept DOI. Preserve scientific source and rows, and keep SNQI advisory
-with no ranking claim. The author rejected Route B's measured 1.715-node-hour
-calibration pair plus complete rebind/re-review. Reopen if the real erratum
+with no ranking claim. The author rejected Route B's 1.715-node-hour
+calibration pair (sacct elapsed of Slurm jobs 21337 (3077 s) and 21339 (3097 s))
+plus complete rebind/re-review. Reopen if the real erratum
 build refuses the actual published predecessor archive. The offline test is
 `tests/benchmark/test_release_008_erratum.py`; no planner or environment steps
 were used.

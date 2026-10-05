@@ -521,6 +521,30 @@ disposition_legend:
     Finding to be fixed in the evidence file itself; not applicable to this refresh because no
     file admitted a trivial, in-repo repair.
 reviewed_files:
+  - path: docs/context/evidence/2026-10-05_freeze008_box4_seed_admission/doorway/release_identity.resolved.json
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      PR #10142 preserves the exact F2-resolved doorway identity. Its 16 hash-locator
+      and two uncommitted-location findings describe source configuration digests
+      and generated files originally staged under ignored output/release-008/.
+      The packet README records the F2 resolver commands, original staging paths,
+      output hashes and separate acquired-calibration custody. Keep the archived
+      identity bytes unchanged rather than rewrite their historical paths or hashes.
+      These entries record diagnostic provenance bookkeeping, not scientific admission,
+      independent review or sealed-seed execution authorization.
+  - path: docs/context/evidence/2026-10-05_freeze008_box4_seed_admission/main/release_identity.resolved.json
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      PR #10142 preserves the exact F2-resolved main identity. Its 18 hash-locator
+      and two uncommitted-location findings describe source configuration digests
+      and generated files originally staged under ignored output/release-008/.
+      The packet README records the F2 resolver commands, original staging paths,
+      output hashes and separate acquired-calibration custody. Keep the archived
+      identity bytes unchanged rather than rewrite their historical paths or hashes.
+      These entries record diagnostic provenance bookkeeping, not scientific admission,
+      independent review or sealed-seed execution authorization.
   - path: docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json
     codes: [hash_without_artifact_path]
     disposition: baseline

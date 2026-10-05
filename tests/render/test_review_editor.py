@@ -23,6 +23,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 from robot_sf.analysis_workbench.audit_store import AuditConflictError, CommitResult
 from robot_sf.analysis_workbench.review_contracts import component_request_from_dict
 from robot_sf.render import review_editor
+from tests.support.browser_runtime import require_node_runtime
 
 FIXTURE_ROOT = (
     Path(__file__).resolve().parents[1] / "fixtures" / "scenario_review" / "review_editor"
@@ -457,6 +458,7 @@ def test_python_storyboard_revision_uses_browser_canonical_token() -> None:
 
 def test_python_generated_model_can_save_storyboard_in_browser_runtime(tmp_path: Path) -> None:
     model = _model(tmp_path)
+    require_node_runtime()
     with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
         session = review_editor.ReviewEditorSession(model, adapter=adapter)
         assert model["storyboard_record_id"] == session.storyboard_record_id()
@@ -662,6 +664,7 @@ def test_verified_annotation_without_a_resolvable_binding_is_unavailable() -> No
 
 def test_node_browser_controller_honours_typing_shortcut_suppression() -> None:
     script = Path(__file__).resolve().parent / "review_editor_runtime.mjs"
+    require_node_runtime()
     completed = subprocess.run(["node", str(script)], check=True, capture_output=True, text=True)
     assert "review_editor_runtime: ok" in completed.stdout
 

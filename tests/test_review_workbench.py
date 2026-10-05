@@ -15,6 +15,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_request_from_dict,
 )
 from robot_sf.render import review_workbench
+from tests.support.browser_runtime import require_node_runtime
 
 _EPISODE_REF = {
     "artifact_id": "trace-0000",
@@ -148,6 +149,7 @@ def test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime(
     tmp_path: Path,
 ) -> None:
     """SREV-15 owns the offline launch while mounting the BA-06 fixture controls."""
+    require_node_runtime()
     _write(tmp_path / "trace-0000.json", {"step": 0})
     _write(tmp_path / "bundle.json", _bundle(tmp_path))
     request = _request(

@@ -24,6 +24,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_request_from_dict,
 )
 from robot_sf.render import review_sessions
+from tests.support.browser_runtime import require_node_runtime
 
 # Hang guard for Event.wait/Thread.join: an Event returns at once when set, so a
 # large bound costs nothing when healthy. It is not a performance assertion.
@@ -1950,6 +1951,7 @@ def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
         / "review_sessions"
         / "review_sessions.js"
     )
+    require_node_runtime()
     text = asset.read_text(encoding="utf-8")
     assert "fetch(" not in text
     assert "WebSocket" not in text

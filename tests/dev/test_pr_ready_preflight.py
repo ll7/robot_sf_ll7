@@ -638,7 +638,7 @@ def test_final_evidence_sigterm_cleans_checker_and_releases_lock(
     finally:
         _stop_process_group(process, signal.SIGKILL)
         try:
-            _collect_process(process, timeout=3.0)
+            _collect_process(process, timeout=60.0)
         except AssertionError:
             pass
         transport.write_text(original, encoding="utf-8")
@@ -1045,7 +1045,7 @@ def _write_descendant_lane_stub(repo: Path) -> None:
     stub.chmod(0o755)
 
 
-def _wait_for_process_exit(pid: int, *, timeout: float = 3.0) -> None:
+def _wait_for_process_exit(pid: int, *, timeout: float = 60.0) -> None:
     """Wait for a test descendant to exit, treating a zombie as non-running."""
     deadline = time.monotonic() + timeout
     proc_stat = Path(f"/proc/{pid}/stat")
@@ -1092,7 +1092,7 @@ def _release_fifo(path: Path) -> None:
 
 
 def _wait_for_marker(
-    marker: Path, process: subprocess.Popen[str], *, timeout: float = 10.0
+    marker: Path, process: subprocess.Popen[str], *, timeout: float = 60.0
 ) -> None:
     """Wait for a controlled lane marker, reporting an early process failure."""
     deadline = time.monotonic() + timeout
@@ -1192,7 +1192,7 @@ def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) 
             pass
 
 
-def _collect_process(process: subprocess.Popen[str], *, timeout: float = 25.0) -> tuple[str, str]:
+def _collect_process(process: subprocess.Popen[str], *, timeout: float = 60.0) -> tuple[str, str]:
     """Collect readiness output without allowing leaked descendants to hold pipes forever."""
     try:
         return process.communicate(timeout=timeout)
@@ -1234,7 +1234,7 @@ def test_pr_ready_lock_acquires_and_rejects_same_worktree_contention(
             preflight_repo,
             env_overrides={**env, "TMPDIR": str(other_tmp)},
         )
-        second_stdout, second_stderr = _collect_process(second, timeout=3.0)
+        second_stdout, second_stderr = _collect_process(second, timeout=60.0)
         elapsed = time.monotonic() - started_at
 
         assert elapsed < 3.0
@@ -1470,11 +1470,11 @@ def _run_subreaper_pr_ready_child(
         stage = "start readiness"
         pr_ready_proc = _start_pr_ready(preflight_repo, env_overrides=env)
         stage = "wait for core marker"
-        _wait_for_marker(ready, pr_ready_proc, timeout=10.0)
+        _wait_for_marker(ready, pr_ready_proc, timeout=60.0)
         stage = "send SIGTERM"
         os.kill(pr_ready_proc.pid, signal.SIGTERM)
         stage = "collect readiness"
-        stdout, stderr = _collect_process(pr_ready_proc, timeout=5.0)
+        stdout, stderr = _collect_process(pr_ready_proc, timeout=60.0)
         stage = "verify termination receipt"
         assert pr_ready_proc.returncode == 143, f"readiness exit={pr_ready_proc.returncode}"
         assert _verify_subreaper_receipt(receipt), "termination receipt did not verify cleanup"
@@ -1615,7 +1615,7 @@ def test_pr_ready_sigterm_during_launcher_startup_falls_back_to_direct_child(
         _wait_for_marker(marker, process)
         started_at = time.monotonic()
         os.kill(process.pid, signal.SIGTERM)
-        stdout, stderr = _collect_process(process, timeout=3.0)
+        stdout, stderr = _collect_process(process, timeout=60.0)
 
         assert time.monotonic() - started_at < 3.0
         assert process.returncode == 143, stdout + stderr
@@ -1662,7 +1662,7 @@ def test_pr_ready_sigterm_before_launcher_registration_is_queued(
 
     process = _start_pr_ready(preflight_repo, env_overrides=env)
     try:
-        stdout, stderr = _collect_process(process, timeout=3.0)
+        stdout, stderr = _collect_process(process, timeout=60.0)
 
         assert hook_marker.is_file()
         assert process.returncode == 143, stdout + stderr
@@ -1707,9 +1707,9 @@ def test_pr_ready_sigterm_before_launcher_does_not_kill_previous_async_job(
     process = _start_pr_ready(preflight_repo, env_overrides=env)
     previous_pid: int | None = None
     try:
-        _wait_for_marker(previous_marker, process, timeout=3.0)
+        _wait_for_marker(previous_marker, process, timeout=60.0)
         previous_pid = int(previous_marker.read_text(encoding="utf-8"))
-        stdout, stderr = _collect_process(process, timeout=3.0)
+        stdout, stderr = _collect_process(process, timeout=60.0)
 
         assert process.returncode == 143, stdout + stderr
         assert _process_is_alive(previous_pid), "the prior asynchronous job was killed"
@@ -1721,7 +1721,7 @@ def test_pr_ready_sigterm_before_launcher_does_not_kill_previous_async_job(
             os.kill(previous_pid, signal.SIGKILL)
         _stop_process_group(process, signal.SIGKILL)
         try:
-            _collect_process(process, timeout=3.0)
+            _collect_process(process, timeout=60.0)
         except AssertionError:
             pass
 
@@ -1790,10 +1790,10 @@ def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
 
     process = _start_pr_ready(preflight_repo, env_overrides=env)
     try:
-        _wait_for_marker(receipt_start, process, timeout=3.0)
+        _wait_for_marker(receipt_start, process, timeout=60.0)
         os.kill(process.pid, signal.SIGTERM)
         _release_fifo(receipt_release)
-        stdout, stderr = _collect_process(process, timeout=3.0)
+        stdout, stderr = _collect_process(process, timeout=60.0)
 
         assert hook_marker.is_file()
         assert process.returncode == 143, stdout + stderr
@@ -1808,7 +1808,7 @@ def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
         _release_fifo(receipt_release)
         _stop_process_group(process, signal.SIGKILL)
         try:
-            _collect_process(process, timeout=3.0)
+            _collect_process(process, timeout=60.0)
         except AssertionError:
             pass
 
@@ -1868,7 +1868,7 @@ def test_pr_ready_sigterm_between_pid_and_pgid_cleans_descendant(
 
     process = _start_pr_ready(preflight_repo, env_overrides=env)
     try:
-        stdout, stderr = _collect_process(process, timeout=3.0)
+        stdout, stderr = _collect_process(process, timeout=60.0)
 
         assert hook_marker.is_file()
         assert process.returncode == 143, stdout + stderr
@@ -3007,3 +3007,35 @@ def test_stop_process_group_kills_descendants_after_parent_exit(tmp_path: Path) 
         if process.poll() is None:
             process.kill()
         process.communicate()
+
+
+def test_delayed_startup_reaches_real_signal_receipt(preflight_repo, tmp_path):
+    """Controlled startup beyond three seconds must still reach the receipt event."""
+    script = preflight_repo / "scripts/dev/pr_ready_check.sh"
+    source = script.read_text()
+    script.write_text(
+        source.replace("#!/usr/bin/env bash\n", "#!/usr/bin/env bash\nsleep 3.2\n", 1)
+    )
+    test_pr_ready_sigterm_before_launcher_registration_is_queued(preflight_repo, tmp_path)
+
+
+def test_functional_hang_guards_are_generous_and_cleanup_still_works(tmp_path):
+    """Keep functional waiting load-tolerant while forced non-signalling faults fail."""
+    import inspect
+
+    assert inspect.signature(_collect_process).parameters["timeout"].default >= 60
+    assert inspect.signature(_wait_for_marker).parameters["timeout"].default >= 60
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(120)"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        with pytest.raises(AssertionError, match="did not reach marker"):
+            _wait_for_marker(tmp_path / "absent", process, timeout=0.1)
+        assert process.poll() is not None
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)

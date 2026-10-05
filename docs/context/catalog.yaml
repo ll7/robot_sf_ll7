@@ -8101,3 +8101,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/2026-10-05_freeze008_box4_seed_admission
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

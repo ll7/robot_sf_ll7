@@ -320,13 +320,19 @@ def _parse_response_payload(
         raise NativeCommandStepError(f"native command returned invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise NativeCommandStepError("native command response must be a JSON object")
+    pairs = (("linear_velocity", "angular_velocity"), ("linear", "angular"), ("v", "omega"))
+    command_keys = set(payload) - {"geometry_consumption"}
+    if command_keys and command_keys not in [set(pair) for pair in pairs]:
+        raise NativeCommandStepError(
+            "native command response has unknown or ambiguous command keys"
+        )
     linear = payload.get(
         "linear_velocity",
-        payload.get("linear", payload.get("v", payload.get("vx"))),
+        payload.get("linear", payload.get("v")),
     )
     angular = payload.get(
         "angular_velocity",
-        payload.get("angular", payload.get("omega", payload.get("vy"))),
+        payload.get("angular", payload.get("omega")),
     )
     try:
         values = (float(linear), float(angular))

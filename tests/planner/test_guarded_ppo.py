@@ -825,10 +825,10 @@ def test_guarded_ppo_obstacle_clearance_helper_branches() -> None:
     meta = {"resolution": [0.5]}
     guard._extract_grid_payload = lambda observation: (grid, meta)  # type: ignore[method-assign]
 
-    guard._preferred_channel = lambda meta: 2  # type: ignore[method-assign]
+    meta["channel_indices"] = [2]
     assert guard._min_obstacle_clearance(point, {}) == float("inf")
 
-    guard._preferred_channel = lambda meta: 0  # type: ignore[method-assign]
+    meta["channel_indices"] = [0]
     guard._world_to_grid = lambda point, meta, grid_shape: None  # type: ignore[method-assign]
     assert guard._min_obstacle_clearance(point, {}) == 0.0
 
@@ -858,8 +858,7 @@ def test_guarded_ppo_obstacle_clearance_requires_observation_without_grid_payloa
         guard._min_obstacle_clearance(point)
 
     grid = np.zeros((1, 5, 5), dtype=float)
-    meta = {"resolution": [0.5]}
-    monkeypatch.setattr(guard, "_preferred_channel", lambda _meta: 0)
+    meta = {"resolution": [0.5], "channel_indices": [0]}
     monkeypatch.setattr(guard, "_world_to_grid", lambda *_args, **_kwargs: None)
     assert guard._min_obstacle_clearance(point, grid_payload=(grid, meta)) == 0.0
 
@@ -1125,10 +1124,10 @@ def test_surface_v2_guard_uses_body_to_body_clearance() -> None:
         (0.0, 0.0),
     )
 
-    # Observed 0.2 m/s brakes to 0.1: trapezoidal displacement is 0.015 m.
-    assert unsafe["min_ped_clear"] == pytest.approx(0.285)
+    # Include both braking steps: trapezoidal stopping displacement is 0.02 m.
+    assert unsafe["min_ped_clear"] == pytest.approx(0.28)
     assert unsafe["safe"] is False
-    assert safe["min_ped_clear"] == pytest.approx(0.785)
+    assert safe["min_ped_clear"] == pytest.approx(0.78)
     assert safe["safe"] is True
 
 

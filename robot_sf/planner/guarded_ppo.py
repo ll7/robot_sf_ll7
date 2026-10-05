@@ -429,7 +429,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         if grid_payload is None:
             return float("inf")
         grid, meta = grid_payload
-        channel = self._preferred_channel(meta)
+        # Pedestrians are forecast separately; combined occupancy is not static geometry.
+        channel = self._grid_channel_index(meta, "obstacles")
+        if channel < 0 and self._grid_channel_index(meta, "combined") >= 0:
+            raise ValueError("A static obstacle channel is required for guarded PPO clearance")
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
 
@@ -481,7 +484,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
         Returns:
             tuple: World positions, headings and endpoint velocities; native
-            forecasts include the terminal static braking tail.
+            forecasts include the terminal braking tail.
         """
         if self.config.clearance_model != "surface_v2" or self._drive_settings is None:
             x, theta = np.array(robot_pos, dtype=float), float(heading)
@@ -555,11 +558,14 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
         drive_rollout = self._command_drive_rollout(observation, command, robot_pos, heading)
         previous_x = x.copy()
-        for step in range(steps):
+        command_end = x.copy()
+        for step in range(len(drive_rollout[0])):
             t = (step + 1) * dt
             x = drive_rollout[0][step]
             theta = float(drive_rollout[1][step])
             speed = float(drive_rollout[2][step, 0])
+            if step == steps - 1:
+                command_end = x.copy()
 
             if ped_pos.size > 0:
                 ped_t = ped_pos + ped_vel * t
@@ -584,34 +590,22 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     rel_speed_sq = np.sum(rel_vel * rel_vel, axis=1)
                     valid = rel_speed_sq > 1e-6
                     if np.any(valid):
-                        if self.config.clearance_model == "surface_v2":
-                            contact_times = [
-                                time_to_circle_contact(
-                                    position,
-                                    velocity,
-                                    combined_radius=(
-                                        float(self.config.robot_radius_m)
-                                        + float(self.config.pedestrian_radius_m)
-                                    ),
-                                )
-                                for position, velocity in zip(
-                                    rel_pos[valid], rel_vel[valid], strict=True
-                                )
-                            ]
-                            # Contact time is relative to this rollout sample;
-                            # report it on the episode's absolute rollout clock.
-                            min_ttc = min(
-                                min_ttc,
-                                t + min(contact_times, default=float("inf")),
+                        contact_radius = (
+                            float(self.config.robot_radius_m)
+                            + float(self.config.pedestrian_radius_m)
+                            if self.config.clearance_model == "surface_v2"
+                            else float(self.config.hard_ped_clearance)
+                        )
+                        contact_times = [
+                            time_to_circle_contact(
+                                position, velocity, combined_radius=contact_radius
                             )
-                        else:
-                            ttc = (
-                                -np.sum(rel_pos[valid] * rel_vel[valid], axis=1)
-                                / rel_speed_sq[valid]
+                            for position, velocity in zip(
+                                rel_pos[valid], rel_vel[valid], strict=True
                             )
-                            ttc = ttc[ttc > 0.0]
-                            if ttc.size > 0:
-                                min_ttc = min(min_ttc, float(np.min(ttc)))
+                        ]
+                        # Contact is relative to this sample, on the rollout clock.
+                        min_ttc = min(min_ttc, t + min(contact_times, default=float("inf")))
             swept = self._exact_obstacle_clearance(x, previous=previous_x)
             if swept is not None:
                 min_obs_clear = min(min_obs_clear, swept)
@@ -621,14 +615,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
             )
 
-        min_obs_clear = min(
-            min_obs_clear,
-            self._terminal_obstacle_clearance(
-                drive_rollout[0][steps - 1 :], observation, grid_payload
-            ),
-        )
-
-        end_dist = float(np.linalg.norm(goal - x))
+        # Braking checks safety beyond the command horizon, not goal progress.
+        end_dist = float(np.linalg.norm(goal - command_end))
         progress = start_dist - end_dist
         safe = (
             min_ped_clear >= float(self.config.hard_ped_clearance)

@@ -109,7 +109,9 @@ class _ObstacleClearance:
             return
         channel = adapter._grid_channel_index(meta, "obstacles")
         if channel < 0:
-            channel = adapter._grid_channel_index(meta, "combined")
+            if adapter._grid_channel_index(meta, "combined") >= 0:
+                raise ValueError("A static obstacle channel is required for sampler clearance")
+            return
         if channel < 0 or channel >= grid.shape[0]:
             return
         resolution = _positive(meta.get("resolution"))

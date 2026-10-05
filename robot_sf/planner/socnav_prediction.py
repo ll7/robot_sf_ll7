@@ -25,6 +25,7 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_observation,
     validate_predictive_runtime_feature_schema,
 )
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
@@ -62,6 +63,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
+        self._prediction_drive_settings: DifferentialDriveSettings | None = None
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
@@ -281,6 +283,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def bind_env(self, env: Any) -> None:
         """Bind static map obstacle geometry from a live Robot SF environment."""
         simulator = getattr(env, "simulator", None)
+        robots = getattr(simulator, "robots", None)
+        settings = getattr(robots[0], "config", None) if robots else None
+        self._prediction_drive_settings = (
+            settings if isinstance(settings, DifferentialDriveSettings) else None
+        )
         map_def = getattr(env, "map_def", None)
         if map_def is None:
             map_def = getattr(simulator, "map_def", None)
@@ -943,15 +950,43 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         # Keep deterministic ordering for stable benchmark outputs.
         return sorted(set(candidates), key=lambda x: (round(x[0], 6), round(x[1], 6)))
 
-    @staticmethod
+    def _bound_drive_rollout(self, commands, dt, observation):
+        """Integrate bound wheel odometry at the observed control clock.
+
+        Returns:
+            tuple: Local positions and headings at each prediction sample.
+        """
+        state, _, _ = self._socnav_fields(observation or {})
+        drive = DifferentialDriveRobot(self._prediction_drive_settings)
+        drive.state.velocity = (
+            float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0]),
+            float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
+        )
+        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+        control_dt = self._simulation_timestep(observation) if observation is not None else dt
+        positions, headings = [], []
+        for command in commands:
+            remaining = dt
+            while remaining > 1e-12:
+                step_dt = min(control_dt, remaining)
+                drive.apply_action(
+                    tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
+                )
+                remaining -= step_dt
+            positions.append(drive.pos)
+            headings.append(drive.pose[1])
+        return np.asarray(positions), np.asarray(headings)
+
     def _rollout_robot(
+        self,
         *,
         v: float,
         w: float,
         dt: float,
         steps: int,
+        observation: dict | None = None,
     ) -> np.ndarray:
-        """Roll out robot trajectory in its local frame under unicycle dynamics.
+        """Forecast the bound differential drive, or an unbound unicycle command.
 
         Returns:
             np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.
@@ -961,6 +996,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         v = float(v)
         w = float(w)
         dt = float(dt)
+        if self._prediction_drive_settings is not None:
+            if steps == 0:
+                return np.zeros((0, 2))
+            positions, _ = self._bound_drive_rollout(
+                np.tile((v, w), (steps, 1)),
+                dt,
+                observation,
+            )
+            return positions
 
         # Closed-form cumulative unicycle integration that reproduces the legacy
         # sequential scalar recurrence (heading is not wrapped here, so the
@@ -1228,7 +1272,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         steps_val = max(1, int(steps))
-        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
 
         valid_idx = np.where(mask > 0.5)[0]
         if valid_idx.size > 0:
@@ -1311,12 +1355,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         sequence: list[tuple[float, float]],
         segment_steps: int,
         dt: float,
+        observation: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Roll out a piecewise-constant action sequence in the robot local frame.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Local positions and headings for rollout steps.
         """
+        if self._prediction_drive_settings is not None and sequence:
+            commands = np.repeat(sequence, max(1, segment_steps), axis=0)
+            return self._bound_drive_rollout(commands, dt, observation)
         pos = np.zeros(2, dtype=float)
         heading = 0.0
         traj = np.zeros((max(1, len(sequence) * max(1, segment_steps)), 2), dtype=float)
@@ -1357,6 +1405,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             sequence=sequence,
             segment_steps=segment_steps,
             dt=dt,
+            observation=observation,
         )
         horizon = min(local_traj.shape[0], int(steps), int(future_peds.shape[1]))
         local_traj = local_traj[:horizon]

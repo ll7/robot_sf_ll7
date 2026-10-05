@@ -202,6 +202,8 @@ jobs:
       PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
       ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
+      # PRs include slow import and path-pin witnesses affected by this diff.
+      ROBOT_SF_AFFECTED_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
       ROBOT_SF_PYTEST_COVERAGE: "1"
       COVERAGE_FILE: ${{ format('output/coverage/.coverage.{0}', matrix.shard) }}
       # The release-hydration tests invoke `gh` for a public pinned asset. Use

@@ -1,0 +1,167 @@
+"""Production refusal before RNG use, without the pytest interception guard."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from robot_sf.benchmark import seed_bands
+
+SENTINEL = 1030
+
+
+@pytest.fixture
+def forbidden_sentinel(monkeypatch):
+    """Use a development seed as synthetic policy input; isolate pytest interception."""
+    from tests.support import seedguard_boundaries
+
+    monkeypatch.setattr(seed_bands, "HELD_OUT_SEEDS", frozenset({SENTINEL}))
+    monkeypatch.setattr(seedguard_boundaries, "_ACTIVE", False)
+    monkeypatch.delenv("ROBOT_SF_PYTEST_SEED_GUARD", raising=False)
+
+
+def reached(*args, **kwargs):
+    raise AssertionError("unguarded RNG or simulation dispatch reached")
+
+
+@pytest.mark.parametrize(
+    "boundary", ["reset_rng", "factory", "simulator", "crowd", "dummy", "episode"]
+)
+def test_production_refuses_before_rng_or_dispatch(  # noqa: C901 - explicit boundary controls
+    forbidden_sentinel, monkeypatch, boundary
+):
+    if boundary == "reset_rng":
+        from robot_sf.gym_env import env_util
+
+        monkeypatch.setattr(env_util.random, "seed", reached)
+
+        def invoke(seed=SENTINEL):
+            with env_util.global_reset_seed(seed):
+                reached()
+    elif boundary == "factory":
+        from robot_sf.gym_env import environment_factory
+
+        monkeypatch.setattr(environment_factory.random, "seed", reached)
+
+        def invoke(seed=SENTINEL):
+            environment_factory._apply_global_seed(seed)
+    elif boundary == "simulator":
+        from robot_sf.sim import simulator
+
+        monkeypatch.setattr(simulator.np.random, "SeedSequence", reached)
+
+        def invoke(seed=SENTINEL):
+            simulator._build_pysf_simulation(
+                map_def=None,
+                config=SimpleNamespace(
+                    pedestrian_seed=seed,
+                    route_spawn_seed=None,
+                    archetype_seed=None,
+                    response_law_seed=None,
+                    desired_speed_seed=None,
+                ),
+                robots=[],
+                peds_have_obstacle_forces=False,
+                robot_pose_provider=lambda: [],
+            )
+    elif boundary == "crowd":
+        from gymnasium import Env
+
+        from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv
+
+        monkeypatch.setattr(Env, "reset", reached)
+
+        def invoke(seed=SENTINEL):
+            CrowdSimEnv.reset(object.__new__(CrowdSimEnv), seed=seed)
+    elif boundary == "dummy":
+        from robot_sf.sim.backends import dummy_backend
+
+        monkeypatch.setattr(dummy_backend.np.random, "default_rng", reached)
+
+        def invoke(seed=SENTINEL):
+            dummy_backend.DummySimulator(map_def=None, seed=seed)
+    else:
+        from robot_sf.benchmark.map_runner import map_runner_episode
+
+        monkeypatch.setattr(map_runner_episode, "_resolve_episode_run_context", reached)
+
+        def invoke(seed=SENTINEL):
+            map_runner_episode.run_map_episode(
+                scenario={},
+                seed=seed,
+                policy_builder=reached,
+                horizon=1,
+                dt=0.1,
+                record_forces=False,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo="social_force",
+                scenario_path=Path("scenarios.yaml"),
+            )
+
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        invoke()
+    with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
+        invoke(1001)
+
+
+def test_seedless_classic_dispatch_refuses_retired_fallback(forbidden_sentinel):
+    from robot_sf.benchmark.map_runner.map_runner_batch_plan import build_seed_jobs
+
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        build_seed_jobs(
+            [{"name": "seedless"}],
+            suite_seeds={"classic_interactions": [SENTINEL]},
+            suite_key="classic_interactions",
+        )
+
+
+def test_direct_campaign_refuses_before_preflight(forbidden_sentinel):
+    from robot_sf.benchmark.camera_ready.campaign import run_campaign
+
+    cfg = SimpleNamespace(
+        seed_policy=SimpleNamespace(mode="fixed-list", seeds=[SENTINEL]),
+        snqi_v2_binding=None,
+        snqi_v2_spec=None,
+    )
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        run_campaign(
+            cfg,
+            prepare_campaign_preflight=reached,
+            run_batch=reached,
+            compute_aggregates_with_ci=reached,
+            export_publication_bundle=reached,
+        )
+
+
+def test_child_factory_cannot_bypass_production_guard(forbidden_sentinel):
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ)
+    env.pop("ROBOT_SF_PYTEST_SEED_GUARD", None)
+    script = """
+import os
+os.environ.pop("ROBOT_SF_PYTEST_SEED_GUARD", None)
+from tests.support import seedguard_boundaries
+seedguard_boundaries._ACTIVE = False
+from robot_sf.benchmark import seed_bands
+from robot_sf.gym_env import environment_factory
+seed_bands.HELD_OUT_SEEDS = frozenset({1030})
+def reached(*args, **kwargs):
+    raise AssertionError("unguarded child RNG reached")
+environment_factory.random.seed = reached
+try:
+    environment_factory._apply_global_seed(1030)
+except ValueError as exc:
+    assert "held-out simulation seed" in str(exc)
+else:
+    raise AssertionError("missing production refusal")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script], env=env, text=True, capture_output=True, check=False
+    )
+    assert result.returncode == 0, result.stderr

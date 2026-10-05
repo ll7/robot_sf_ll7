@@ -6,6 +6,8 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
@@ -92,12 +94,16 @@ def _select_seeds(
     """
     seeds = scenario.get("seeds")
     if isinstance(seeds, list) and seeds:
-        return [int(s) for s in seeds]
-    if suite_seeds.get(suite_key):
-        return list(suite_seeds[suite_key])
-    if suite_seeds.get("default"):
-        return list(suite_seeds["default"])
-    return [0]
+        resolved = list(seeds)
+    elif suite_seeds.get(suite_key):
+        resolved = list(suite_seeds[suite_key])
+    elif suite_seeds.get("default"):
+        resolved = list(suite_seeds["default"])
+    else:
+        resolved = [0]
+    for seed in resolved:
+        check_simulation_seed(seed, boundary="map seed dispatch")
+    return [int(seed) for seed in resolved]
 
 
 def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:

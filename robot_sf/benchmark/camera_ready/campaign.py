@@ -102,6 +102,7 @@ from robot_sf.benchmark.observation_noise import (
     observation_noise_hash,
 )
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.benchmark.seed_variance import build_seed_episode_rows
 from robot_sf.benchmark.snqi.campaign_contract import (
     SNQI_FAILED_WARN_RECOMMENDATION,
@@ -391,6 +392,29 @@ def run_campaign(  # noqa: PLR0913
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
+    from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
+        _load_campaign_scenarios,
+        _resolve_seed_override,
+    )
+    from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
+        _resolve_seed_list,
+        _select_seeds,
+        _suite_key,
+    )
+    from robot_sf.common.artifact_paths import get_repository_root  # noqa: PLC0415
+
+    seed_override = _resolve_seed_override(cfg.seed_policy)
+    if seed_override is not None:
+        for seed in seed_override:
+            check_simulation_seed(seed, boundary="direct campaign")
+    else:
+        suite_seeds = _resolve_seed_list(
+            get_repository_root() / "configs/benchmarks/seed_list_v1.yaml"
+        )
+        for scenario in _load_campaign_scenarios(cfg):
+            _select_seeds(
+                scenario, suite_seeds=suite_seeds, suite_key=_suite_key(cfg.scenario_matrix_path)
+            )
     if allow_pending_snqi_v2:
         from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
             is_development_rehearsal,

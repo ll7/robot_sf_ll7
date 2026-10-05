@@ -420,12 +420,29 @@ def _yaml_bounds_overlap(path: str, text: str, before: list[str], after: list[st
     )
 
 
+RUNTIME_POLICY_LINES = {
+    "robot_sf/benchmark/runtime_seed_guard.py": frozenset(
+        {
+            "if value not in seed_bands.HELD_OUT_SEEDS:",
+            "if value in seed_bands.EVAL_SEEDS_0_0_8 and value in identity.resolved_seeds:",
+        }
+    ),
+    "tests/test_runtime_seed_guard.py": frozenset(
+        {
+            'monkeypatch.setattr(seed_bands, "HELD_OUT_SEEDS", frozenset({SENTINEL}))',
+            "seed_bands.HELD_OUT_SEEDS = frozenset({1030})",
+        }
+    ),
+}
+
+
 def _unallowlisted_sealed_reference(path: str, content: str) -> bool:
     """Named release identities need explicit review outside their static consumers."""
     return bool(
         _eligible(path)
         and SEALED_REFERENCE.search(content)
         and path not in SEALED_REFERENCE_ALLOWLIST
+        and content.strip() not in RUNTIME_POLICY_LINES.get(path, ())
         and not path.startswith("docs/")
     )
 

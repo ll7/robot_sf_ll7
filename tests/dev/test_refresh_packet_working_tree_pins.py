@@ -78,3 +78,28 @@ def test_packet_without_current_tree_pin_is_refused(tmp_path):
     assert result.returncode == 2
     assert "no working_tree_sha256" in result.stderr
     assert packet.read_bytes() == original
+
+
+def test_root_option_cannot_hide_a_release_tree(tmp_path):
+    root = tmp_path / "releases" / "0.0.8"
+    root.mkdir(parents=True)
+    packet, original, _ = packet_fixture(root)
+    result = run(root, packet)
+    assert result.returncode == 2
+    assert "protected packet" in result.stderr
+    assert packet.read_bytes() == original
+
+
+def test_shared_immutable_scalar_is_not_rewritten(tmp_path):
+    packet, original, old = packet_fixture(tmp_path)
+    original = original.replace(
+        ("sha256: " + "a" * 64).encode(), ("sha256: &immutable " + old).encode(), 1
+    )
+    original = original.replace(
+        ("working_tree_sha256: '" + old + "'").encode(), b"working_tree_sha256: *immutable"
+    )
+    packet.write_bytes(original)
+    result = run(tmp_path, packet)
+    assert result.returncode == 2
+    assert "anchored or tagged" in result.stderr
+    assert packet.read_bytes() == original

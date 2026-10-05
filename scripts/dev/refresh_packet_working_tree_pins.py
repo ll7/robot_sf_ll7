@@ -90,7 +90,7 @@ def refreshed_bytes(root: Path, packet: Path) -> tuple[bytes, list[str]]:
     """Plan scalar replacements without serializing or changing other packet fields."""
     packet = repository_path(root, packet)
     relative = packet.relative_to(root)
-    protected = any(part.lower() in _PROTECTED_PARTS for part in relative.parts)
+    protected = any(part.lower() in _PROTECTED_PARTS for part in packet.parts)
     if protected or packet.name.endswith(("_frozen.yaml", "_frozen.yml", "_frozen.json")):
         raise ValueError(f"protected packet: {relative.as_posix()}")
     source = packet.read_bytes().decode("utf-8")

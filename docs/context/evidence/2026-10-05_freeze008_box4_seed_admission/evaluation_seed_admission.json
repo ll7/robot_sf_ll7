@@ -6,6 +6,7 @@
   "determinism_receipt_sha256": "cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464",
   "manifest_sha256": "527f9dc5e9ee3004e93444789472eb25a29438e64741c4c4b7b95a10f0db3e71",
   "public_source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "review_ref": "freeze008-box4-independent-review-2026-10-05",
   "seeds": [
     50036,

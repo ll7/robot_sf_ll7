@@ -9,6 +9,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from robot_sf.evidence.writers import write_json
+
 FREEZE = "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"
 ANCHOR_SOURCE = "527eb2509c4375d6ce81091d7d67260d35844310"
 ANCHOR_PATH = "docs/context/evidence/2026-10-04_freeze008_f2_calibration/anchors.v2.0.acquired.json"
@@ -27,11 +29,6 @@ DIGESTS = {
 def sha(data):
     """Hash exact bytes without rewriting resolver output."""
     return hashlib.sha256(data).hexdigest()
-
-
-def write_json(path, value):
-    """Write deterministic proposal/sidecar JSON."""
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def check_identity(root, source, target, kind, d):

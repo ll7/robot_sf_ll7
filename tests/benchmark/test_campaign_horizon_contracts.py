@@ -17,9 +17,15 @@ from tests.benchmark.campaign_horizon_support import (
     TEMPLATE,
     _scheduled_context,
 )
+from tests.support.pin_inventory import required_pin_inventory
 
 
-@pytest.mark.parametrize("digest", sorted(HISTORICAL_CAMPAIGN_REGISTRY))
+@pytest.mark.parametrize(
+    "digest",
+    required_pin_inventory(
+        sorted(HISTORICAL_CAMPAIGN_REGISTRY), name="historical campaign registry"
+    ),
+)
 def test_every_registered_historical_campaign_digest_matches_disk(digest):
     """Every admitted historical byte identity must still have a tracked campaign."""
     campaigns = {

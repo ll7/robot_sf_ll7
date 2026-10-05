@@ -17,6 +17,9 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     validate_release_manifest,
 )
+from tests.support.pin_inventory import required_pin_inventory
+
+ROOT = Path(__file__).resolve().parents[2]
 
 STRESS_MANIFEST = Path(
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
@@ -25,13 +28,16 @@ STRESS_MANIFEST = Path(
 
 @pytest.mark.parametrize(
     "manifest_path",
-    [
-        path
-        for path in sorted(Path("configs/benchmarks/releases").glob("*.yaml"))
-        if str(yaml.safe_load(path.read_text()).get("schema_version", "")).startswith(
-            "benchmark-release-manifest."
-        )
-    ],
+    required_pin_inventory(
+        [
+            path
+            for path in sorted((ROOT / "configs/benchmarks/releases").glob("*.yaml"))
+            if str(yaml.safe_load(path.read_text()).get("schema_version", "")).startswith(
+                "benchmark-release-manifest."
+            )
+        ],
+        name="release manifests",
+    ),
     ids=lambda path: path.name,
 )
 def test_every_release_manifest_campaign_digest_matches_disk(manifest_path: Path) -> None:

@@ -346,7 +346,7 @@ pytest_common_start=${#cmd[@]}
 # Explicit loading also supports callers that disable plugin autoload.
 cmd+=(-p timeout --timeout=300)
 if [[ "$train_suite" == "1" ]]; then
-  cmd+=(--maxfail=0 -o addopts= tests fast-pysf/tests)
+  cmd+=(--maxfail=0 tests fast-pysf/tests)
 fi
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint

@@ -112,7 +112,7 @@ def test_train_suite_normalizes_partial_environment_and_records_proof(tmp_path, 
     args = call["args"]
     assert call["addopts"] is None and call["shards"] is None
     assert "tests" in args and "fast-pysf/tests" in args
-    assert "--maxfail=0" in args and "addopts=" in args
+    assert "--maxfail=0" in args and "addopts=" not in args
     assert args[args.index("-p") + 1] == "timeout" and "--timeout=300" in args
     for partial in ("-m", "-k", "--lf", "--splits", "-x", "--failed-first"):
         assert partial not in args
@@ -193,4 +193,24 @@ def test_wrapper_timeout_works_with_real_pytest_in_both_plugin_modes(tmp_path, d
     if disable_autoload:
         env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     result = run_wrapper(repo, env, "tests", "fast-pysf/tests")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_train_suite_preserves_project_pytest_configuration(tmp_path):
+    """Complete roots must retain import and strict-config semantics from the commit."""
+    repo, env = wrapper_repository(tmp_path)
+    (repo / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\naddopts = ["--import-mode=importlib", "--strict-markers", "--strict-config", "--durations=10"]\n'
+    )
+    (repo / "tests/test_one.py").write_text(
+        "def test_one(pytestconfig):\n"
+        '    assert pytestconfig.getoption("importmode") == "importlib"\n'
+        '    assert pytestconfig.getoption("strict_markers") is True\n'
+        '    assert pytestconfig.getoption("strict_config") is True\n'
+        '    assert pytestconfig.getoption("durations") == 10\n'
+    )
+    subprocess.run(["git", "add", "pyproject.toml", "tests/test_one.py"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "project pytest configuration"], cwd=repo, check=True)
+    env.update(REAL_PYTEST="1", PYTEST_NUM_WORKERS="1")
+    result = invoke(repo, env)
     assert result.returncode == 0, result.stdout + result.stderr

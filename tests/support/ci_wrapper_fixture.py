@@ -34,7 +34,9 @@ def wrapper_repository(tmp_path):
     (repo / "tests/test_one.py").write_text("def test_one(): assert True\n")
     (repo / "fast-pysf/tests").mkdir(parents=True)
     (repo / "fast-pysf/tests/test_two.py").write_text("def test_two(): assert True\n")
-    (repo / ".gitignore").write_text("/.venv/\n/fake-bin/\n/captured.jsonl\n/output/\n")
+    (repo / ".gitignore").write_text(
+        "/.venv/\n/fake-bin/\n/captured.jsonl\n/output/\n__pycache__/\n.pytest_cache/\n"
+    )
     python = repo / ".venv/bin/python"
     python.parent.mkdir(parents=True)
     python.write_text("#!/bin/sh\nexit 0\n")

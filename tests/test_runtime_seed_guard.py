@@ -269,3 +269,13 @@ def test_research_refuses_nested_desired_speed_seed(forbidden_sentinel, monkeypa
     config.scene_config.desired_speed_seed = 1002
     with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
         invoke()
+
+
+def test_historical_inventory_resolution_does_not_admit_execution(forbidden_sentinel):
+    from robot_sf.benchmark.map_runner.map_runner_batch_plan import build_seed_jobs
+    from robot_sf.benchmark.map_runner.map_runner_identity import _select_seeds
+
+    inventory = {"classic_interactions": [SENTINEL]}
+    assert _select_seeds({}, suite_seeds=inventory, suite_key="classic_interactions") == [SENTINEL]
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        build_seed_jobs([{}], suite_seeds=inventory, suite_key="classic_interactions")

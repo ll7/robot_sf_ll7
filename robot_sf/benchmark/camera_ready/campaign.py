@@ -412,9 +412,11 @@ def run_campaign(  # noqa: PLR0913
             get_repository_root() / "configs/benchmarks/seed_list_v1.yaml"
         )
         for scenario in _load_campaign_scenarios(cfg):
-            _select_seeds(
+            selected = _select_seeds(
                 scenario, suite_seeds=suite_seeds, suite_key=_suite_key(cfg.scenario_matrix_path)
             )
+            for seed in selected:
+                check_simulation_seed(seed, boundary="direct campaign")
     if allow_pending_snqi_v2:
         from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
             is_development_rehearsal,

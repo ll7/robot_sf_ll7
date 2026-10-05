@@ -6,8 +6,6 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
-
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
@@ -87,7 +85,7 @@ def _select_seeds(
     suite_seeds: dict[str, list[int]],
     suite_key: str,
 ) -> list[int]:
-    """Resolve per-scenario seeds with suite and default fallbacks.
+    """Resolve per-scenario inventory for dispatch and historical identity readers.
 
     Returns:
         list[int]: Seeds to run for the scenario.
@@ -101,9 +99,7 @@ def _select_seeds(
         resolved = list(suite_seeds["default"])
     else:
         resolved = [0]
-    for seed in resolved:
-        check_simulation_seed(seed, boundary="map seed dispatch")
-    return [int(seed) for seed in resolved]
+    return resolved
 
 
 def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:

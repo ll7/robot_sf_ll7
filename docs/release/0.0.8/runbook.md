@@ -555,17 +555,20 @@ uv run python scripts/tools/run_benchmark_release.py \
   --manifest output/release-008/main/release_identity.resolved.json \
   --label release-008 --campaign-id "$CAMPAIGN_ID" \
   --checkpoint-receipt "$ARTIFACT_ROOT/main-checkpoints.json" \
-  --runtime-smoke-receipt "$SMOKE_RESULT"
+  --runtime-smoke-receipt "$SMOKE_RESULT" \
+  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json"
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest output/release-008/doorway/release_identity.resolved.json \
   --label release-008-doorway --campaign-id "$DOORWAY_CAMPAIGN_ID" \
   --checkpoint-receipt "$ARTIFACT_ROOT/doorway-checkpoints.json" \
-  --runtime-smoke-receipt "$SMOKE_RESULT"
+  --runtime-smoke-receipt "$SMOKE_RESULT" \
+  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json"
 ```
 
 Existing single-node submission wrapper (canonical admitted packet must own launch):
 
 ```bash
+export ROBOT_SF_SNQI_V2_ANCHORS="$ARTIFACT_ROOT/anchors.v2.0.json"
 sbatch --cpus-per-task=32 SLURM/submit_release_single_node.sbatch \
   output/release-008/main/release_identity.resolved.json release-008 "$CAMPAIGN_ID" \
   "$ARTIFACT_ROOT/main-checkpoints.json" "$SMOKE_RESULT"
@@ -625,13 +628,41 @@ preparation; remote publication remains author-reserved.
 
 ## 6. D-062 comparator against pinned 0.0.7
 
+Post-run analysis uses a separate public-main tooling checkout. Select the first
+main commit containing the comparator, v2 revalidation and runbook repairs;
+record its full SHA as `TOOLING_SHA`. Acquisition, both runners and allocation
+export remain at F2 `66f402ba176b13e45210d0da0b2cf20fcdc0cc02`. The comparator's
+source root stays at that clean F2 checkout while its executing Python modules
+come from the independently pinned tooling checkout. The comparison receipt
+records the tooling SHA and successor source SHA separately.
+
 ```bash
+# Start here from the clean F2 source checkout used by the sealed campaign.
+export SOURCE_ROOT="$PWD"
+export TOOLING_ROOT='<separate clean public-main tooling checkout>'
+export TOOLING_SHA='<full first main SHA containing all three repairs>'
+test "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" = "$FREEZE_SHA"
+test -z "$(git -C "$SOURCE_ROOT" status --porcelain --untracked-files=all)"
+test "$(git -C "$TOOLING_ROOT" rev-parse HEAD)" = "$TOOLING_SHA"
+git -C "$TOOLING_ROOT" merge-base --is-ancestor "$TOOLING_SHA" origin/main
+test -z "$(git -C "$TOOLING_ROOT" status --porcelain --untracked-files=all)"
+cd "$TOOLING_ROOT"
 uv run python scripts/analysis/compare_release_distributions.py \
+  --expected-tooling-commit "$TOOLING_SHA" \
   --baseline-bundle "$BASELINE_007_ARCHIVE" --successor-root "$CAMPAIGN_ROOT" \
-  --successor-manifest output/release-008/main/release_identity.resolved.json \
+  --successor-manifest "$SOURCE_ROOT/output/release-008/main/release_identity.resolved.json" \
   --successor-manifest-sha256 "$MAIN_IDENTITY_SHA256" \
-  --successor-source-root "$PWD" --output-dir "$ARTIFACT_ROOT/comparator"
+  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json" \
+  --successor-source-root "$SOURCE_ROOT" --output-dir "$ARTIFACT_ROOT/comparator"
 ```
+
+Use absolute artifact and campaign paths after changing the working directory.
+The comparator verifies the real `benchmark-release-resolved-identity.v1` envelope
+with the source resolver; retain its metadata and release-notes receipt beside
+it, plus the paired determinism receipt in source custody. It derives runner and
+planner bindings from that verified identity and acquired anchors. Do not rename
+its schema or substitute a hand-authored slot-paired envelope. The paired
+`compare_release_0_0_7_to_0_0_8.py` helper follows the same tooling/source split.
 
 Inputs: checksum-verified immutable baseline above; exact accepted successor
 rows/identity/source. Outputs: JSON/CSV/Markdown comparison, unchanged-definition
@@ -640,12 +671,51 @@ Admission: strict full census, schema/source binding, no paired-seed outcome
 claim, changed definitions excluded, report the D-062 plant/world/seed caveats.
 No `--diagnostic-partial` for the release; development output cannot promote it.
 
+### Independent preserved-row revalidation
+
+Execute the helper from the same pinned main tooling checkout. The validator
+must be a third clean checkout, distinct from both helper and F2 source; pin its
+independently reviewed SHA as `VALIDATOR_SHA`. The v2 derivation receipt records
+the helper SHA separately from the frozen source and validator SHAs. Source
+checks, acquired-anchor proof verification and the learned-context census remain
+required. Revalidation verifies the v2 report pair without creating legacy scores
+or changing calibration status. The historical 0.0.7 recovery path is retained.
+
+```bash
+export VALIDATOR_ROOT='<third clean independently reviewed validator checkout>'
+export VALIDATOR_SHA='<full reviewed validator SHA>'
+export PRODUCER_ROOT='<absolute checksum-bound preserved producer root>'
+export ACCEPTANCE_ROOT='<absolute checksum-bound accepted raw root>'
+export RECOVERY_CONTRACT='<absolute reviewed recovery-contract JSON>'
+test "$(git -C "$VALIDATOR_ROOT" rev-parse HEAD)" = "$VALIDATOR_SHA"
+test -z "$(git -C "$VALIDATOR_ROOT" status --porcelain --untracked-files=all)"
+cd "$TOOLING_ROOT"
+uv run python scripts/tools/revalidate_benchmark_release.py \
+  --expected-helper-commit "$TOOLING_SHA" \
+  --producer-root "$PRODUCER_ROOT" --acceptance-root "$ACCEPTANCE_ROOT" \
+  --source-repository-root "$SOURCE_ROOT" \
+  --manifest "$SOURCE_ROOT/output/release-008/main/release_identity.resolved.json" \
+  --validator-repository-root "$VALIDATOR_ROOT" \
+  --expected-validator-commit "$VALIDATOR_SHA" \
+  --recovery-contract "$RECOVERY_CONTRACT" \
+  --snqi-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json" \
+  --output-root "$ARTIFACT_ROOT/revalidation" --derived-name "${CAMPAIGN_ID}_revalidated"
+```
+
+The reviewed recovery contract binds the actual preserved producer inventory,
+receipt, source, result and row counts; the historical default contract cannot
+be reused for a new campaign. Keep all source/anchor/proof custody intact and
+select a fresh derived output name. Repeat with the independently bound companion
+identity, its raw roots, counts and separate recovery contract. Derived artifacts
+are local preparation and do not confer publication or scientific admission.
+
 ## 7. Tag, publish and DOI — author-reserved, delegated 2026-09-28
 
 Only after all preceding admissions, final comparison/intake/scanner review and
 explicit release authorization; same source, coordinates, notes and bundle digests:
 
 ```bash
+cd "$SOURCE_ROOT"
 git tag -a "$TAG" "$FREEZE_SHA" -m "Robot SF benchmark data 0.0.8"
 git push origin "refs/tags/$TAG:refs/tags/$TAG"
 git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}"

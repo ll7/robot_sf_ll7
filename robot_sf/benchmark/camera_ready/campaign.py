@@ -392,6 +392,8 @@ def run_campaign(  # noqa: PLR0913
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
+    if cfg.snqi_v2_binding and cfg.snqi_v2_spec is None and not allow_pending_snqi_v2:
+        raise ValueError("SNQI-v2 acquisition and anchors are required before campaign execution")
     from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
         _load_campaign_scenarios,
         _resolve_seed_override,
@@ -444,8 +446,6 @@ def run_campaign(  # noqa: PLR0913
             raise ValueError(
                 "pending SNQI-v2 execution differs from the verified rehearsal identity config"
             )
-    if cfg.snqi_v2_binding and cfg.snqi_v2_spec is None and not allow_pending_snqi_v2:
-        raise ValueError("SNQI-v2 acquisition and anchors are required before campaign execution")
     dependencies = _resolve_campaign_runtime_dependencies(
         prepare_campaign_preflight=prepare_campaign_preflight,
         run_batch=run_batch,

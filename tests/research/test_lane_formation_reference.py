@@ -1,3 +1,4 @@
+# robot-sf-test-lane: slow — native simulation integration.
 """Tests for the issue #6969 lane-metric reference diagnostic."""
 
 from __future__ import annotations
@@ -8,9 +9,11 @@ from robot_sf.research.emergent_phenomena import RELEASED_DEFAULT_CALIBRATION
 from robot_sf.research.lane_formation_reference import (
     ReferenceProtocol,
     metric_reference_audit,
+    summarize_reference_rows,
+)
+from robot_sf.research.lane_formation_reference_guarded import (
     run_native_reference,
     run_reference_campaign,
-    summarize_reference_rows,
 )
 
 

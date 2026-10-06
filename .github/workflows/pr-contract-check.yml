@@ -72,6 +72,12 @@ jobs:
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --json
 
+      - name: Enforce evaluation seed holdout
+        run: |
+          set -euo pipefail
+          uv run python scripts/validation/check_seed_holdout_diff.py \
+            --base-ref "origin/${{ github.base_ref }}"
+
       - name: Validate PR body contracts (advisory)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

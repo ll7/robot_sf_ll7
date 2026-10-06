@@ -42,7 +42,7 @@ def test_ppo_baseline_smoke_runs_or_skips():
     # Run for a short horizon
     rec = run_episode(
         scenario_params=scenario,
-        seed=123,
+        seed=1013,
         horizon=20,
         dt=0.1,
         record_forces=False,

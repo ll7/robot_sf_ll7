@@ -6,6 +6,7 @@ the selector does not exist there, or the legacy command shows the defect (see t
 """
 
 import math
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,6 +23,7 @@ from robot_sf.planner.socnav_base import (
 from robot_sf.planner.socnav_sampling_v2 import (
     GoalPathField,
     _ObstacleClearance,
+    _repulsion_direction,
     _rollout,
     braking_speed_limit,
     plan_bounded_v2,
@@ -123,6 +125,24 @@ def test_default_stays_legacy_and_release_config_opts_in() -> None:
     assert SocNavPlannerConfig().sampling_pedestrian_prediction is False
     assert "socnav_sampling_version" not in _adapter().diagnostics()
     assert _adapter("bounded_v2").diagnostics()["socnav_sampling_version"] == "bounded_v2"
+
+
+def test_0_0_8_reference_profile_disables_unpublished_repulsion_vector() -> None:
+    """The v0.8 sampler keeps its path direction when no reference repulsion exists."""
+    path = Path("configs/algos/socnav_sampling_release_v0_0_8.yaml")
+    config = SocNavPlannerConfig(**yaml.safe_load(path.read_text(encoding="utf-8")))
+    direction = _repulsion_direction(
+        config,
+        np.asarray([0.0, 0.0]),
+        np.asarray([1.0, 0.0]),
+        np.asarray([[0.0, 2.0]]),
+        ROBOT_RADIUS,
+        PED_RADIUS,
+    )
+
+    np.testing.assert_allclose(direction, np.asarray([1.0, 0.0]), atol=1e-12, rtol=0.0)
+    assert config.socnav_sampling_version == SOCNAV_SAMPLING_BOUNDED_V2
+    assert config.sampling_braking_envelope is False
 
 
 def test_distant_crowd_keeps_heading_near_goal() -> None:
@@ -237,10 +257,18 @@ def test_braking_helpers_are_consistent() -> None:
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "scenario_id", ["francis2023_crowd_navigation", "francis2023_robot_crowding"]
+    ("scenario_id", "seed"),
+    [("francis2023_crowd_navigation", 1001), ("francis2023_robot_crowding", 1004)],
 )
-def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str) -> None:
-    """Seed 111 of both cells ends in wall contact under legacy_v1 (#9727, #9746)."""
+def test_non_release_goal_zone_entry_v1_bounded_v2_replay_safety(
+    scenario_id: str, seed: int, record_property: Callable[[str, object], None]
+) -> None:
+    """Protect the non-release goal_zone_entry_v1 / bounded_v2 replay cells.
+
+    Legacy_v1 contacts walls in these dev-seed cells (#9727, #9746). Crowding1004
+    may consume its authored budget while moving safely; other cells must finish.
+    This does not exercise the release matrix or socnav_sampling_release_v0_0_8.yaml.
+    """
     from robot_sf.benchmark.classic_interactions_loader import (
         load_classic_matrix,
         select_scenario,
@@ -251,10 +279,11 @@ def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str)
         "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
     )
     scenario = select_scenario(load_classic_matrix(str(scenario_path)), scenario_id)
+    authored_budget = int(scenario["simulation_config"]["max_episode_steps"])
     record = _run_map_episode(
         scenario,
-        111,
-        horizon=600,
+        seed,
+        horizon=authored_budget,
         dt=0.1,
         record_forces=False,
         snqi_weights=None,
@@ -262,9 +291,33 @@ def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str)
         algo="socnav_sampling",
         scenario_path=scenario_path,
         algo_config_path=str(V2_CONFIG),
+        record_simulation_step_trace=True,
     )
     assert record["metrics"]["wall_collisions"] == 0
-    assert record["termination_reason"] == "success"
+    assert record["metrics"]["collisions"] == 0
+    trace = record["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    goal = record["algorithm_metadata"]["paired_effect_native_trace"]["goal_position"]
+    final_distance = math.dist(trace[-1]["robot"]["position"], goal)
+    record_property("sampler_outcome", record["outcome"])
+    record_property("sampler_steps", record["steps"])
+    record_property("sampler_final_distance_to_goal_m", final_distance)
+    # Orchestrator ruling 2026-10-01 and #9999: authored400 is the crowding
+    # safety budget, not the old600 runner horizon. Only this moving timeout
+    # may omit goal completion; keep the ruling's freeze guards executable.
+    if (scenario_id, seed) == ("francis2023_robot_crowding", 1004) and record["outcome"][
+        "timeout_event"
+    ]:
+        assert authored_budget == record["steps"] == 400
+        assert record["termination_reason"] == "terminated"
+        longest_stationary = stationary = 0
+        for step in trace:
+            speed = math.hypot(*step["robot"]["velocity"])
+            stationary = stationary + 1 if speed < 0.05 else 0
+            longest_stationary = max(longest_stationary, stationary)
+        assert longest_stationary <= 50
+        assert math.dist(trace[-151]["robot"]["position"], goal) > final_distance
+    else:
+        assert record["termination_reason"] == "success"
 
 
 def test_obstacle_clearance_handles_frames_and_missing_payloads() -> None:
@@ -305,10 +358,11 @@ def test_rollout_respects_drive_limits() -> None:
     )
     assert points.shape == (20, 2)
     steps = np.diff(np.concatenate(([0.0], travelled)))
-    assert steps[0] == pytest.approx(0.01)
+    assert steps[0] == pytest.approx(0.005)
     assert np.all(np.diff(steps) <= 0.01 + 1e-9)
     _stopped, dist = _rollout(np.zeros(2), 0.0, 2.0, 0.0, 0.0, 3.0, 0.1, (1.0, 1.0, 1.0, 1.0))
-    assert dist[-1] == pytest.approx(sum(max(0.0, 2.0 - 0.1 * k) * 0.1 for k in range(1, 31)))
+    # Native trapezoidal braking from 2 m/s at 1 m/s² covers v²/(2a) = 2 m.
+    assert dist[-1] == pytest.approx(2.0)
 
 
 def test_bind_env_edge_cases() -> None:

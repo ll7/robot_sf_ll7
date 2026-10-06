@@ -88,6 +88,17 @@ def release_campaign_planners() -> tuple[dict[str, Any], ...]:
     return tuple(entries)
 
 
+def release_0_0_8_planners() -> tuple[dict[str, Any], ...]:
+    """Return the actual 0.0.8 release template planner rows.
+
+    Returns:
+        Planner entries from the campaign template.
+    """
+    return tuple(
+        dict(entry) for entry in load_yaml(RELEASE_TEMPLATE_CAMPAIGN.relative_to(ROOT))["planners"]
+    )
+
+
 def is_unfrozen_release_placeholder(algo_config: str | None) -> bool:
     """Return whether ``algo_config`` is an unfrozen release placeholder (issue #9751).
 

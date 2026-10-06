@@ -15,7 +15,7 @@
       "timeout_seconds": 300,
       "output_contract": "json_object",
       "preflight_sha256": "be537be01e3eb044ca14bcbd1a3c1fa97cb1e3a22565fa6c7e371a7d4552722f",
-      "packet_sha256": "81d3adfb2f00ddaea3aa40c681722aa8103d449e831ad09766dff08d4b35d3cf"
+      "packet_sha256": "72c6a637f63ebf96602168283b1c0b809ddaea128e9c2fcbfc5145fc594e480a"
     },
     {
       "packet_id": "issue-5416-sipp-four-geometry-packet",

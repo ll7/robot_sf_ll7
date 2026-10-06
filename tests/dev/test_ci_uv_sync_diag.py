@@ -406,8 +406,8 @@ def test_ci_uv_sync_diag_without_gnu_timeout_preserves_du_output(tmp_path: Path)
     assert len(du_calls.read_text(encoding="utf-8").splitlines()) == 2
 
 
-def test_workflow_uv_cache_is_pruned_by_setup_uv() -> None:
-    """CI must use setup-uv's pruned cache without a second unbounded payload cache.
+def test_workflow_uv_cache_retains_wheels_under_single_setup_uv_owner() -> None:
+    """CI must retain setup-uv's wheels without a second unbounded payload cache.
 
     perf-nightly and pr-promoted-planner-smoke delegate to the shared
     ``setup-ci-python`` composite action, which owns the uv cache contract.
@@ -424,7 +424,16 @@ def test_workflow_uv_cache_is_pruned_by_setup_uv() -> None:
     )
     assert "astral-sh/setup-uv@" in action_text
     assert 'enable-cache: "true"' in action_text
-    assert 'prune-cache: "true"' in action_text
+    setup = next(
+        step
+        for step in yaml.safe_load(action_text)["runs"]["steps"]
+        if step.get("id") == "setup-uv"
+    )
+    # The pinned action includes pruning mode in its key: false selects the
+    # retained-wheel family instead of the old immutable metadata-only cache.
+    assert setup["uses"] == "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9"
+    assert setup["with"]["prune-cache"] == "false"
+    assert setup["with"]["cache-dependency-glob"].splitlines() == ["pyproject.toml", "uv.lock"]
     assert "actions/cache@" not in action_text
     assert "archive-v0" not in action_text
     assert "uv-sync-payloads-" not in action_text

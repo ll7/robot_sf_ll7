@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10007_fxp/observations.jsonl.gz",
+  "artifact_sha256": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

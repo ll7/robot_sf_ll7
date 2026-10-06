@@ -1,3 +1,4 @@
+# robot-sf-test-lane: slow — native simulation integration.
 """Focused tests for the emergent-phenomena demonstration harness (issue #5149).
 
 These tests exercise the substrate-faithful scenario builders, the runner, and

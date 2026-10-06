@@ -1,3 +1,4 @@
+# robot-sf-test-lane: slow — native simulation integration.
 """TODO docstring. Document this module."""
 
 from __future__ import annotations

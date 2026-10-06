@@ -1,3 +1,4 @@
+# robot-sf-test-lane: slow — native simulation integration.
 """Tests for the issue #6969 lane-metric reference diagnostic."""
 
 from __future__ import annotations

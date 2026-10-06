@@ -90,18 +90,18 @@ def test_speed_band_variant_switches_to_bicycle_and_sweeps_max_velocity() -> Non
     variants = _variant_map()
     config = _real_config()
     # Baseline bicycle band at 2.0 m/s.
-    campaign_runner.apply_variant(config, variants["baseline"], seed=111)
+    campaign_runner.apply_variant(config, variants["baseline"], seed=1001)
     assert isinstance(config.robot_config, BicycleDriveSettings)
     assert config.robot_config.max_velocity == pytest.approx(2.0)
     # Nominal bicycle band at 3.0 m/s (the bicycle model's existing ceiling).
     campaign_runner.apply_variant(
-        config, variants["robot_speed_band__bicycle_3_0_mps_nominal"], seed=111
+        config, variants["robot_speed_band__bicycle_3_0_mps_nominal"], seed=1001
     )
     assert isinstance(config.robot_config, BicycleDriveSettings)
     assert config.robot_config.max_velocity == pytest.approx(3.0)
     # Micromobility-direction band at 4.0 m/s (above the differential-drive cap).
     campaign_runner.apply_variant(
-        config, variants["robot_speed_band__bicycle_4_0_mps_micromobility"], seed=111
+        config, variants["robot_speed_band__bicycle_4_0_mps_micromobility"], seed=1001
     )
     assert isinstance(config.robot_config, BicycleDriveSettings)
     assert config.robot_config.max_velocity == pytest.approx(4.0)
@@ -117,7 +117,7 @@ def test_braking_authority_and_stopping_distance_scale_with_speed_band() -> None
         "robot_speed_band__bicycle_3_0_mps_nominal",
         "robot_speed_band__bicycle_4_0_mps_micromobility",
     ):
-        campaign_runner.apply_variant(config, variants[key], seed=111)
+        campaign_runner.apply_variant(config, variants[key], seed=1001)
         envelope = actuation_envelope_from_drive_config(config.robot_config)
         assert envelope is not None, f"actuation envelope missing for {key}"
         # Braking must be distinct from forward acceleration so it is a real
@@ -141,7 +141,7 @@ def test_robot_speed_band_axis_is_independent_of_pedestrian_speed_axis() -> None
     before_ped_radius = config.sim_config.ped_radius
 
     campaign_runner.apply_variant(
-        config, variants["robot_speed_band__bicycle_4_0_mps_micromobility"], seed=111
+        config, variants["robot_speed_band__bicycle_4_0_mps_micromobility"], seed=1001
     )
     # The robot speed band mutated robot_config only.
     assert isinstance(config.robot_config, BicycleDriveSettings)
@@ -155,7 +155,7 @@ def test_robot_speed_band_axis_is_independent_of_pedestrian_speed_axis() -> None
     # robot's resolved speed cap.
     arch_variant = variants["social_force_speed_archetypes__rush_hour"]
     cap_before = campaign_runner._robot_speed_cap(config.robot_config)
-    campaign_runner.apply_variant(config, arch_variant, seed=111)
+    campaign_runner.apply_variant(config, arch_variant, seed=1001)
     assert campaign_runner._robot_speed_cap(config.robot_config) == pytest.approx(cap_before)
     assert isinstance(config.robot_config, BicycleDriveSettings)
 
@@ -190,8 +190,8 @@ def test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path(
 
     variants = _variant_map()
     config = _real_config()
-    campaign_runner.apply_variant(config, variants[variant_key], seed=111)
-    env = make_robot_env(config=config, seed=111, debug=False)
+    campaign_runner.apply_variant(config, variants[variant_key], seed=1001)
+    env = make_robot_env(config=config, seed=1001, debug=False)
     try:
         robot = env.simulator.robots[0]
         assert isinstance(robot, BicycleDriveRobot)
@@ -202,7 +202,7 @@ def test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path(
         assert robot.config.max_steer == pytest.approx(0.78)
         assert config.sim_config.time_per_step_in_secs == pytest.approx(0.1)
 
-        planner = campaign_runner._planner("goal_seek", config, seed=111)
+        planner = campaign_runner._planner("goal_seek", config, seed=1001)
         angular_cap = cap * math.tan(robot.config.max_steer) / robot.config.wheelbase
         assert planner.max_linear_speed == pytest.approx(cap)
         assert planner.max_angular_speed == pytest.approx(angular_cap)
@@ -211,7 +211,7 @@ def test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path(
         # acceleration/braking authority and steering bounds from the real env.
         assert env.action_space.low.tolist() == pytest.approx([-max_decel, -0.78])
         assert env.action_space.high.tolist() == pytest.approx([max_accel, 0.78])
-        env.reset(seed=111)
+        env.reset(seed=1001)
         action = campaign_runner._env_action(env, {"v": cap, "omega": angular_cap})
         assert action.tolist() == pytest.approx([max_accel, 0.78])
 
@@ -245,7 +245,7 @@ def test_differential_drive_speed_band_sweeps_max_linear_speed() -> None:
         observation_noise={},
         runtime_binding="robot_config.drive_speed_cap",
     )
-    campaign_runner.apply_variant(config, variant, seed=111)
+    campaign_runner.apply_variant(config, variant, seed=1001)
     assert isinstance(config.robot_config, DifferentialDriveSettings)
     assert config.robot_config.max_linear_speed == pytest.approx(3.0)
     assert config.robot_config.max_linear_decel == pytest.approx(3.0)
@@ -271,7 +271,7 @@ def test_speed_band_axis_rejects_unsupported_drive_model() -> None:
         runtime_binding="robot_config.drive_speed_cap",
     )
     with pytest.raises(ValueError, match="only supports"):
-        campaign_runner.apply_variant(config, variant, seed=111)
+        campaign_runner.apply_variant(config, variant, seed=1001)
 
 
 def test_run_episode_records_speed_band_metadata_with_actuation_envelope() -> None:
@@ -283,7 +283,7 @@ def test_run_episode_records_speed_band_metadata_with_actuation_envelope() -> No
         scenario_path=SCENARIO_SET,
         variant=variants["robot_speed_band__bicycle_4_0_mps_micromobility"],
         planner_name="goal_seek",
-        seed=111,
+        seed=1001,
         horizon=8,
     )
     assert row["axis"] == "robot_speed_band"

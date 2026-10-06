@@ -24,8 +24,9 @@ by heading error and occupancy):
   keep the full legacy repulsion. Only the far-field sum is capped at
   ``sampling_max_repulsion_ratio``.
 * Like the reference planner, it samples (heading, speed) pairs and rolls each one out
-  over ``sampling_horizon_s`` under the bound drive's limits: current speed, acceleration
-  and braking, maximum speed and turn rate, with the heuristic's own heading controller.
+  over ``sampling_horizon_s`` under the bound drive's limits: current linear/angular
+  speed, acceleration and braking, maximum speed and turn rate, native wheel odometry,
+  with the heuristic's own heading controller.
   The robot footprint (its radius plus ``sampling_footprint_margin``) is swept along each
   rollout against the obstacle grid and against pedestrian discs.  The blocked fraction
   of the rollout is the occupancy penalty.
@@ -50,8 +51,8 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 
 from robot_sf.common.math_utils import wrap_angle_pi_closed
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
-_DEFAULT_DT = 0.1
 _DEFAULT_DECEL = 1.0
 _STOPPED_SPEED = 0.1
 _ESCAPE_HEADINGS = 16
@@ -186,7 +187,7 @@ class _ObstacleClearance:
         return lower, value, cell
 
 
-def _rollout(
+def _rollout(  # noqa: PLR0913
     start: np.ndarray,
     heading: float,
     speed0: float,
@@ -195,30 +196,39 @@ def _rollout(
     horizon_s: float,
     dt: float,
     limits: tuple[float, float, float, float],
+    *,
+    angular_speed0: float = 0.0,
+    settings: DifferentialDriveSettings | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Roll the unicycle forward under the drive's speed, acceleration and turn limits.
+    """Forecast heading feedback through the actual differential drive.
 
-    The heading controller is the heuristic's own (``w = clip(gain * error)``); speed
-    moves from the current speed toward ``target_speed`` at the drive's acceleration or
-    braking limit.
+    Seed both measured velocities and wheel speeds. Each candidate command crosses
+    the same velocity-target to acceleration boundary as map-runner execution, so
+    angular acceleration and trapezoidal wheel odometry agree with the real robot.
 
     Returns:
-        tuple[np.ndarray, np.ndarray]: (N, 2) positions and (N,) cumulative arc length.
+        tuple[np.ndarray, np.ndarray]: Positions and cumulative travelled distance.
     """
     gain, max_turn_rate, accel, decel = limits
+    settings = settings or DifferentialDriveSettings(
+        max_angular_speed=max_turn_rate, max_linear_accel=accel, max_linear_decel=decel
+    )
+    drive = DifferentialDriveRobot(settings)
+    drive.state.pose = ((float(start[0]), float(start[1])), float(heading))
+    drive.state.velocity = (float(speed0), float(angular_speed0))
+    drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
     count = max(1, ceil(horizon_s / dt))
     points = np.empty((count, 2), dtype=float)
     travelled = np.empty(count, dtype=float)
-    x, y, theta, v, s = float(start[0]), float(start[1]), float(heading), float(speed0), 0.0
+    distance = 0.0
     for idx in range(count):
-        v += min(max(target_speed - v, -decel * dt), accel * dt)
-        err = wrap_angle_pi_closed(target_heading - theta)
-        theta += min(max(gain * err, -max_turn_rate), max_turn_rate) * dt
-        x += v * dt * cos(theta)
-        y += v * dt * sin(theta)
-        s += v * dt
-        points[idx] = (x, y)
-        travelled[idx] = s
+        err = wrap_angle_pi_closed(target_heading - drive.pose[1])
+        command = np.array([target_speed, np.clip(gain * err, -max_turn_rate, max_turn_rate)])
+        previous = np.asarray(drive.pos)
+        drive.apply_action(tuple((command - drive.current_speed) / dt), dt)
+        distance += float(np.linalg.norm(np.asarray(drive.pos) - previous))
+        points[idx] = drive.pos
+        travelled[idx] = distance
     return points, travelled
 
 
@@ -478,7 +488,11 @@ def _repulsion_direction(
             near += term
         else:
             far += term
-    weight = float(config.social_force_repulsion_weight)
+    weight = (
+        float(config.social_force_repulsion_weight)
+        if config.sampling_repulsion_weight is None
+        else float(config.sampling_repulsion_weight)
+    )
     far = weight * far
     far_norm = float(np.linalg.norm(far))
     cap = float(config.sampling_max_repulsion_ratio)
@@ -518,6 +532,7 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     Returns:
         tuple[float, float]: Linear and angular velocity command.
     """
+    dt = adapter._simulation_timestep(observation)
     config = adapter.config
     robot_state, goal_state, ped_state = adapter._socnav_fields(observation)
     robot_pos = adapter._as_1d_float(robot_state["position"], pad=2)[:2]
@@ -532,8 +547,6 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     limits = dict(getattr(adapter, "_sampling_drive_limits", {}) or {})
     robot_radius = _positive(robot_state.get("radius")) or limits.get("radius", 0.0)
     ped_radius = _positive(ped_state.get("radius") if ped_state else None) or 0.0
-    sim = observation.get("sim", {}) or {}
-    dt = _positive(sim.get("timestep") if isinstance(sim, dict) else None) or _DEFAULT_DT
     v_cap = min(float(config.max_linear_speed), limits.get("max_linear_speed", inf))
     decel = limits.get("max_linear_decel") or limits.get("max_linear_accel") or _DEFAULT_DECEL
     accel = limits.get("max_linear_accel") or _DEFAULT_DECEL
@@ -557,6 +570,11 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     v_nominal = min(v_cap, distance)
     speed0 = float(adapter._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
     speed0 = min(max(speed0, 0.0), v_cap) if np.isfinite(speed0) else 0.0
+    angular_speed0 = float(
+        adapter._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0]
+    )
+    angular_speed0 = angular_speed0 if np.isfinite(angular_speed0) else 0.0
+    settings = getattr(adapter, "_sampling_drive_settings", None)
     horizon_s = float(config.sampling_horizon_s)
     if braking:
         # Long enough to cover a stop from the drive maximum.
@@ -576,7 +594,16 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
         for fraction in config.sampling_speed_fractions:
             speed = heading_speed * float(fraction)
             points, travelled = _rollout(
-                robot_pos, heading, speed0, target, speed, horizon_s, dt, drive
+                robot_pos,
+                heading,
+                speed0,
+                target,
+                speed,
+                horizon_s,
+                dt,
+                drive,
+                angular_speed0=angular_speed0,
+                settings=settings,
             )
             first = _first_blocked(
                 robot_pos, points, clearance, peds, ped_radius, threshold, ped_vel, dt
@@ -612,7 +639,7 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
             clearance,
             (peds, ped_vel, ped_radius),
             threshold,
-            (horizon_s, dt, drive, v_nominal),
+            (horizon_s, dt, drive, v_nominal, settings),
         )
     linear = best["speed"] * (1.0 - best["penalty"])
     brake_limit = inf
@@ -651,7 +678,9 @@ def _all_blocked_command(  # noqa: PLR0913
     clearance: _ObstacleClearance,
     pedestrians: tuple[np.ndarray, np.ndarray, float],
     threshold: float,
-    rollout: tuple[float, float, tuple[float, float, float, float], float],
+    rollout: tuple[
+        float, float, tuple[float, float, float, float], float, DifferentialDriveSettings | None
+    ],
 ) -> tuple[float, float]:
     """Command when every sample is blocked or the best sample does not move.
 
@@ -674,7 +703,7 @@ def _all_blocked_command(  # noqa: PLR0913
         decision["reason"] = "brake_straight"
         adapter._last_sampling_v2 = decision
         return 0.0, 0.0
-    horizon_s, dt, drive, v_nominal = rollout
+    horizon_s, dt, drive, v_nominal, settings = rollout
     peds, ped_vel, ped_radius = pedestrians
     speed = max(v_nominal, _STOPPED_SPEED) * 0.5
     best_key, best_target = (0, 0.0), None
@@ -683,7 +712,9 @@ def _all_blocked_command(  # noqa: PLR0913
     offsets = sorted(np.linspace(-pi, pi, _ESCAPE_HEADINGS, endpoint=False), key=abs)
     for offset in offsets:
         target = base_angle + float(offset)
-        points, _ = _rollout(robot_pos, target, 0.0, target, speed, horizon_s, dt, drive)
+        points, _ = _rollout(
+            robot_pos, target, 0.0, target, speed, horizon_s, dt, drive, settings=settings
+        )
         first = _first_blocked(
             robot_pos, points, clearance, peds, ped_radius, threshold, ped_vel, dt
         )

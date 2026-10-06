@@ -221,7 +221,7 @@ def test_populate_homogeneous_default_unchanged() -> None:
         max_group_members=3,
         initial_speed=0.5,
         route_spawn_distribution="spread",
-        route_spawn_seed=123,
+        route_spawn_seed=1013,
     )
     ped_states, *_ = populate_ped_routes(cfg, md.ped_routes, get_prepared_obstacles(md))
     assert ped_states.shape[0] > 0
@@ -240,7 +240,7 @@ def test_populate_with_archetypes_scales_per_pedestrian_speed() -> None:
         max_group_members=3,
         initial_speed=base_speed,
         route_spawn_distribution="spread",
-        route_spawn_seed=123,
+        route_spawn_seed=1013,
         archetype_composition=composition,
         archetype_speed_factors=speed_factors,
         archetype_seed=42,
@@ -269,7 +269,7 @@ def test_populate_with_archetypes_is_seed_deterministic() -> None:
         "max_group_members": 3,
         "initial_speed": 0.5,
         "route_spawn_distribution": "spread",
-        "route_spawn_seed": 123,
+        "route_spawn_seed": 1013,
         "archetype_composition": {"cautious": 0.5, "hurried": 0.5},
         "archetype_speed_factors": {"cautious": 0.7, "hurried": 1.4},
         "archetype_seed": 99,

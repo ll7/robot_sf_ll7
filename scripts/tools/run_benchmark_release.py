@@ -27,6 +27,7 @@ from robot_sf.benchmark.artifact_publication import (
     export_publication_bundle,
     verify_publication_bundle_preflight,
 )
+from robot_sf.benchmark.camera_ready._run_state import _campaign_id
 from robot_sf.benchmark.camera_ready_campaign import (
     load_campaign_config,
     prepare_campaign_preflight,
@@ -40,14 +41,18 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
 from robot_sf.benchmark.release_acceptance import (
+    validate_development_rehearsal_acceptance,
     validate_diagnostic_stress_smoke_acceptance,
     validate_full_benchmark_release_acceptance,
 )
+from robot_sf.benchmark.release_notes import gate_manifest
 from robot_sf.benchmark.release_protocol import (
     HISTORICAL_ZENODO_CONCEPT_DOIS,
     build_release_provenance,
     build_resolved_release_manifest,
+    is_development_rehearsal,
     is_diagnostic_stress_smoke,
+    is_doorway_width_slice,
     load_release_campaign_config,
     load_release_manifest,
     parse_release_args,
@@ -64,6 +69,22 @@ from robot_sf.benchmark.release_resume_admission import (
 from robot_sf.benchmark.runtime_smoke_admission import (
     RuntimeSmokeAdmissionError,
     validate_runtime_smoke_result,
+)
+from robot_sf.benchmark.snqi.execution_context import (
+    assert_context_equal,
+    build_execution_context_provenance,
+    episode_context_guard,
+    load_calibration_context,
+    require_calibrated_algorithm,
+    verify_episode_contexts,
+)
+from robot_sf.benchmark.spawn_preflight import (
+    DEFAULT_CLEARANCE_MARGIN_M,
+    DEFAULT_GRID_RESOLUTION_M,
+    DEFAULT_RESPAWN_WINDOW_STEPS,
+    guard_manifest_execution,
+    run_manifest_preflight,
+    write_preflight_reports,
 )
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
@@ -142,6 +163,8 @@ _PUBLIC_RELEASE_ACCEPTANCE_FIELDS = frozenset(
         "source_commits",
         "forbidden_status_counts",
         "blockers",
+        "episodes_excluded",
+        "exclusion_reasons",
     }
 )
 
@@ -305,6 +328,75 @@ def _fixed_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
     if not candidate.is_relative_to(base):
         raise ReleaseResumeAdmissionError("campaign_id resolves outside the campaign output root")
     return candidate
+
+
+def _run_spawn_matrix_preflight(
+    *,
+    manifest: Any,
+    campaign_root: Path,
+    source_commit: str | None,
+    workers: int,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Run the manifest-bound geometry gate and retain both reports with the campaign."""
+    report = run_manifest_preflight(
+        manifest,
+        workers=workers,
+        clearance_margin_m=DEFAULT_CLEARANCE_MARGIN_M,
+        respawn_window_steps=DEFAULT_RESPAWN_WINDOW_STEPS,
+        grid_resolution_m=DEFAULT_GRID_RESOLUTION_M,
+        source_commit=source_commit,
+    )
+    reports_dir = campaign_root / "reports"
+    json_path = reports_dir / "spawn_matrix_preflight.v1.json"
+    markdown_path = reports_dir / "spawn_matrix_preflight.v1.md"
+    json_sha256, markdown_sha256 = write_preflight_reports(
+        report,
+        json_path=json_path,
+        markdown_path=markdown_path,
+    )
+    summary = {
+        "status": report.get("status", "invalid"),
+        "schema_version": report.get("schema_version"),
+        "evidence_class": "preflight_diagnostic_only",
+        "json_path": "reports/spawn_matrix_preflight.v1.json",
+        "json_sha256": json_sha256,
+        "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+        "markdown_sha256": markdown_sha256,
+        "scenario_count": report.get("scenario_count", 0),
+        "seed_count": report.get("seed_count", 0),
+        "cell_count": report.get("cell_count", 0),
+        "blocked_cell_count": report.get("blocked_cell_count", 0),
+        "input_error": report.get("input_error"),
+    }
+    return summary, report
+
+
+def _assert_spawn_preflight_report_identity(campaign_root: Path, summary: dict[str, Any]) -> None:
+    """Fail if retained preflight reports differ from their release-result digests."""
+    for path_key, digest_key, relative_path in (
+        ("json_path", "json_sha256", "reports/spawn_matrix_preflight.v1.json"),
+        ("markdown_path", "markdown_sha256", "reports/spawn_matrix_preflight.v1.md"),
+    ):
+        expected_digest = summary.get(digest_key)
+        if summary.get(path_key) != relative_path or not isinstance(expected_digest, str):
+            raise ReleaseArtifactIdentityError(f"invalid spawn preflight {path_key} identity")
+        try:
+            actual_digest = sha256_file(
+                resolve_campaign_artifact_path(campaign_root, relative_path)
+            )
+        except (OSError, ValueError) as exc:
+            raise ReleaseArtifactIdentityError(
+                f"spawn preflight report is missing or unreadable: {relative_path}"
+            ) from exc
+        if actual_digest != expected_digest:
+            raise ReleaseArtifactIdentityError(
+                f"spawn preflight report digest changed: {relative_path}"
+            )
+
+
+def _assert_publication_spawn_preflight_identity(bundle_dir: Path, summary: dict[str, Any]) -> None:
+    """Read back the copied reports inside the bundle's payload directory."""
+    _assert_spawn_preflight_report_identity(bundle_dir / "payload", summary)
 
 
 def _admit_release_resume(
@@ -513,7 +605,12 @@ def _record_release_acceptance(campaign_root: Path, acceptance: dict[str, Any]) 
     """Persist the full-release gate beside the campaign summary and report."""
     summary_path = _campaign_summary_path(campaign_root)
     summary = _read_json(summary_path)
-    summary["full_release_acceptance"] = acceptance
+    key = (
+        "development_rehearsal_acceptance"
+        if acceptance.get("schema_version") == "benchmark-development-rehearsal-acceptance.v1"
+        else "full_release_acceptance"
+    )
+    summary[key] = acceptance
     _write_json(summary_path, summary)
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
@@ -896,6 +993,10 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
         cfg = (
             load_release_campaign_config(manifest)
             if getattr(manifest, "resolved_identity_path", None) is not None
+            or (
+                getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+                and is_doorway_width_slice(manifest)
+            )
             else load_campaign_config(manifest.canonical_campaign_config_path)
         )
         source_commit = _current_source_commit()
@@ -1125,6 +1226,27 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
     return 0
 
 
+def _snqi_v2_evaluation_seed_receipt(cfg: Any, *, manifest: Any = None) -> dict[str, str]:
+    """Bind release evaluation seeds before any episode can execute.
+
+    Returns:
+        The checked commitment for the release receipt, or no fields without v2.
+    """
+    spec = getattr(cfg, "snqi_v2_spec", None)
+    if spec is None:
+        return {}
+    from robot_sf.benchmark.camera_ready._config import (
+        _load_campaign_scenarios,
+        _resolved_seed_inventory,
+    )
+    from robot_sf.benchmark.snqi.evaluation_seeds import evaluation_seeds_sha256
+
+    seeds = _resolved_seed_inventory(_load_campaign_scenarios(cfg))
+    if not (spec.diagnostic and is_development_rehearsal(manifest)):
+        spec.validate_evaluation_commitment(seeds)
+    return {"snqi_v2_evaluation_seeds_sha256": evaluation_seeds_sha256(seeds)}
+
+
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -1184,9 +1306,68 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     cfg = (
         load_release_campaign_config(manifest)
         if getattr(manifest, "resolved_identity_path", None) is not None
+        or (
+            getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+            and is_doorway_width_slice(manifest)
+        )
         else load_campaign_config(manifest.canonical_campaign_config_path)
     )
+    from robot_sf.benchmark.release_protocol import bind_release_context_asset
+
+    cfg = bind_release_context_asset(manifest, cfg)
     stress_smoke = is_diagnostic_stress_smoke(manifest)
+    development_rehearsal = is_development_rehearsal(manifest)
+    development_smoke = bool(getattr(args, "development_runtime_smoke", False))
+    if development_smoke and (not development_rehearsal or manifest.resolved_seeds != (1001,)):
+        raise ValueError(
+            "development runtime smoke requires a rehearsal identity on dev seed 1001 only"
+        )
+    if args.snqi_v2_anchors is not None or args.snqi_v2_calibration_root is not None:
+        from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors
+
+        if args.snqi_v2_anchors is None:
+            raise ValueError("SNQI-v2 acquisition custody requires frozen anchors")
+        cfg = bind_acquired_anchors(
+            cfg,
+            calibration_root=args.snqi_v2_calibration_root,
+            anchors_path=args.snqi_v2_anchors,
+            source_commit=manifest.source_sha or _current_source_commit(),
+            diagnostic=development_rehearsal,
+        )
+    calibration_context = None
+    if (
+        getattr(cfg, "snqi_v2_binding", None)
+        and cfg.snqi_v2_spec is not None
+        and not cfg.snqi_v2_spec.diagnostic
+    ):
+        try:
+            if args.snqi_v2_anchors is None:
+                raise ValueError("SNQI-v2 calibration context requires acquired anchor custody")
+            calibration_context = load_calibration_context(
+                args.snqi_v2_anchors, cfg.snqi_v2_binding
+            )
+            for planner_key in manifest.planner_keys or ():
+                require_calibrated_algorithm(planner_key)
+            assert_context_equal(build_execution_context_provenance(), calibration_context)
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            reason = (
+                str(exc) if isinstance(exc, ValueError) else "calibration context custody invalid"
+            )
+            print(
+                json.dumps(
+                    {
+                        "mode": args.mode,
+                        "status": "snqi_v2_execution_context_refused",
+                        "status_reason": reason,
+                        "benchmark_success": False,
+                        "campaign_execution_status": "not_started",
+                        "evidence_status": "blocked",
+                        "release_exit_code": 2,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
     runtime_source_commit: str | None = None
     runtime_source_admission: dict[str, Any] = {
         "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
@@ -1295,11 +1476,69 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return 2
     validation = validate_release_manifest(manifest, campaign_config=cfg)
+    if validation["status"] != "valid":
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "invalid_manifest",
+                    "manifest_validation": validation,
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
+    try:
+        guard_manifest_execution(
+            manifest, source_commit=runtime_source_commit, repository_root=get_repository_root()
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "seed_execution_refused",
+                    "status_reason": str(exc),
+                    "manifest_validation": validation,
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
+
+    try:
+        notes_receipt = gate_manifest(manifest, get_repository_root())
+    except (OSError, TypeError, ValueError) as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "release_notes_refused",
+                    "status_reason": str(exc),
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
 
     resolved_manifest_kwargs: dict[str, Any] = {"campaign_config": cfg}
     if runtime_source_commit is not None:
         resolved_manifest_kwargs["source_commit"] = runtime_source_commit
     resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
+    if notes_receipt is not None:
+        resolved_manifest["release_notes_gate"] = notes_receipt
     if args.mode == "preflight":
         checkpoint_admission = _preflight_checkpoint_admission(args, cfg, manifest)
         if checkpoint_admission["status"] == "rejected":
@@ -1329,11 +1568,39 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 "Authoritative staged-checkpoint receipt admitted: submit_safe=true; "
                 "metadata-only checkpoint resolvability remains a diagnostic."
             )
+        campaign_id = args.campaign_id or _campaign_id(cfg, label=args.label)
+        campaign_root = _fixed_campaign_root(
+            output_root=args.output_root,
+            campaign_id=campaign_id,
+        )
+        spawn_preflight_summary, spawn_preflight_report = _run_spawn_matrix_preflight(
+            manifest=manifest,
+            campaign_root=campaign_root,
+            source_commit=runtime_source_commit,
+            workers=4,
+        )
+        if spawn_preflight_report.get("status") != "valid":
+            preflight_payload = {
+                "mode": "preflight",
+                "status": "spawn_matrix_preflight_failed",
+                "status_reason": spawn_preflight_report.get("input_error")
+                or f"{spawn_preflight_summary['blocked_cell_count']} matrix cells are blocked",
+                "benchmark_success": False,
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+                "manifest_validation": validation,
+                "resolved_manifest": resolved_manifest,
+                "campaign_id": campaign_id,
+                "spawn_matrix_preflight": spawn_preflight_summary,
+                "release_exit_code": 2,
+            }
+            print(json.dumps(preflight_payload, indent=2))
+            return 2
         prepared = prepare_campaign_preflight(
             cfg,
             output_root=args.output_root,
             label=args.label,
-            campaign_id=args.campaign_id,
+            campaign_id=campaign_id,
             invoked_command=invoked_command,
             authoritative_checkpoint_admission=authoritative_checkpoint_admission,
         )
@@ -1342,6 +1609,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             "mode": "preflight",
             "manifest_validation": validation,
             "resolved_manifest": resolved_manifest,
+            "spawn_matrix_preflight": spawn_preflight_summary,
             "campaign_id": prepared["campaign_id"],
             "campaign_root": str(prepared["campaign_root"]),
             "validate_config_path": str(prepared["validate_config_path"]),
@@ -1362,6 +1630,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         if stress_smoke:
             preflight_payload["runtime_source_commit"] = runtime_source_commit
             preflight_payload["stress_smoke_runtime_identity"] = runtime_source_admission
+        if spawn_preflight_report.get("status") != "valid":
+            preflight_payload.update(
+                {
+                    "status": "spawn_matrix_preflight_failed",
+                    "status_reason": spawn_preflight_report.get("input_error")
+                    or f"{spawn_preflight_summary['blocked_cell_count']} matrix cells are blocked",
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                }
+            )
+            print(json.dumps(preflight_payload, indent=2))
+            return 2
         print(json.dumps(preflight_payload, indent=2))
         return 0 if validation["status"] == "valid" else 2
 
@@ -1370,6 +1652,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "manifest_validation": validation,
         "resolved_manifest": resolved_manifest,
     }
+    result.update(_snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest))
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"
@@ -1437,7 +1720,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "submit_safe": True,
     }
 
-    if getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2":
+    if (
+        getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+        and not development_smoke
+    ):
         smoke_result_path = getattr(args, "runtime_smoke_receipt", None)
         if smoke_result_path is None:
             result.update(
@@ -1459,6 +1745,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 expected_source_commit=_current_source_commit(),
                 expected_planner_keys=tuple(manifest.planner_keys),
                 max_age_hours=getattr(args, "runtime_smoke_receipt_max_age_hours", 24.0),
+                **({"development_rehearsal": True} if development_rehearsal else {}),
             )
         except (RuntimeSmokeAdmissionError, ValueError) as exc:
             result.update(
@@ -1473,6 +1760,29 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             print(json.dumps(result, indent=2))
             return 2
         result["runtime_smoke_receipt"] = {"path": smoke_path, **smoke_receipt}
+
+        if is_doorway_width_slice(manifest):
+            identity_admission, identities_match = _compare_rehearsal_checkpoint_identities(
+                checkpoint_receipt,
+                smoke_result_path,
+                release_receipt_sha256=sha256_file(args.checkpoint_receipt),
+                runtime_smoke_receipt_sha256=str(
+                    smoke_receipt.get("checkpoint_receipt_sha256") or ""
+                ),
+            )
+            result["checkpoint_identity_admission"] = identity_admission
+            if not identities_match:
+                result.update(
+                    {
+                        "benchmark_success": False,
+                        "status": "checkpoint_identity_mismatch",
+                        "status_reason": "doorway slice and runtime smoke checkpoint identities differ",
+                        "campaign_execution_status": "not_started",
+                        "evidence_status": "blocked",
+                    }
+                )
+                print(json.dumps(result, indent=2))
+                return 2
 
     try:
         resume_receipt = _admit_release_resume(
@@ -1499,15 +1809,100 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         else {"status": "fresh_campaign", "resume_same_campaign": False}
     )
 
-    run_payload = run_campaign(
-        cfg,
+    campaign_id = args.campaign_id or _campaign_id(cfg, label=args.label)
+    campaign_root = _fixed_campaign_root(
         output_root=args.output_root,
-        label=args.label,
-        campaign_id=args.campaign_id,
-        skip_publication_bundle=True,
-        invoked_command=invoked_command,
+        campaign_id=campaign_id,
     )
+    spawn_preflight_summary, spawn_preflight_report = _run_spawn_matrix_preflight(
+        manifest=manifest,
+        campaign_root=campaign_root,
+        source_commit=runtime_source_commit,
+        workers=4,
+    )
+    result["campaign_id"] = campaign_id
+    result["spawn_matrix_preflight"] = spawn_preflight_summary
+    if spawn_preflight_report.get("status") != "valid":
+        reason = spawn_preflight_report.get("input_error") or (
+            f"{spawn_preflight_summary['blocked_cell_count']} matrix cells are blocked"
+        )
+        result.update(
+            {
+                "benchmark_success": False,
+                "release_benchmark_success": False,
+                "status": "spawn_matrix_preflight_failed",
+                "status_reason": reason,
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+                "release_status": "spawn_matrix_preflight_failed",
+                "release_status_reason": reason,
+                "release_exit_code": 2,
+            }
+        )
+        _write_json(campaign_root / "release" / "release_result.json", result)
+        print(json.dumps(result, indent=2))
+        return 2
+
+    try:
+        guard_manifest_execution(
+            manifest, source_commit=runtime_source_commit, repository_root=get_repository_root()
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        result.update(
+            status="seed_execution_refused",
+            status_reason=str(exc),
+            benchmark_success=False,
+            campaign_execution_status="not_started",
+            evidence_status="blocked",
+            release_exit_code=2,
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    if getattr(cfg, "snqi_v2_binding", None) and cfg.snqi_v2_spec is None and not development_smoke:
+        result.update(
+            status="snqi_v2_acquisition_required",
+            benchmark_success=False,
+            status_reason="SNQI-v2 acquisition and anchors are required before campaign execution",
+            release_exit_code=2,
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    campaign_options = (
+        {"allow_pending_snqi_v2": True, "pending_snqi_v2_identity": manifest.resolved_identity_path}
+        if development_smoke
+        else {}
+    )
+    with episode_context_guard(calibration_context):
+        run_payload = run_campaign(
+            cfg,
+            output_root=args.output_root,
+            label=args.label,
+            campaign_id=campaign_id,
+            skip_publication_bundle=True,
+            invoked_command=invoked_command,
+            **campaign_options,
+        )
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
+    if calibration_context is not None:
+        try:
+            verify_episode_contexts(campaign_root, calibration_context, manifest.planner_keys)
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            reason = str(exc) if isinstance(exc, ValueError) else "learned context custody invalid"
+            print(
+                json.dumps(
+                    {
+                        "mode": args.mode,
+                        "status": "snqi_v2_episode_context_refused",
+                        "status_reason": reason,
+                        "benchmark_success": False,
+                        "campaign_execution_status": "completed",
+                        "evidence_status": "blocked",
+                        "release_exit_code": 2,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
     try:
         result.update(_public_campaign_result(run_payload))
     except ReleaseResultPrivacyError:
@@ -1530,6 +1925,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         _write_json(release_dir / "release_result.json", result)
         print(json.dumps(result, indent=2))
         return 2
+
+    result["spawn_matrix_preflight"] = spawn_preflight_summary
 
     post_manifest_validation: dict[str, Any] | None = None
     if stress_smoke:
@@ -1579,6 +1976,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     try:
         _merge_release_provenance(campaign_root, release_provenance)
         _assert_no_historical_release_identity(campaign_root)
+        _assert_spawn_preflight_report_identity(campaign_root, spawn_preflight_summary)
     except ReleaseArtifactIdentityError as exc:
         reason = str(exc)
         result.update(
@@ -1668,7 +2066,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         return int(result["release_exit_code"])
 
     release_acceptance = _public_release_acceptance(
-        validate_full_benchmark_release_acceptance(
+        (
+            validate_development_rehearsal_acceptance
+            if development_rehearsal
+            else validate_full_benchmark_release_acceptance
+        )(
             campaign_root,
             manifest=manifest,
             campaign_config=cfg,
@@ -1699,6 +2101,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         and not full_release_acceptance_failed
     )
     result["release_benchmark_success"] = release_benchmark_success
+    if development_rehearsal:
+        result["release_kind"] = "development_rehearsal"
+        result["release_eligible"] = False
+        result["diagnostic_success"] = release_benchmark_success
+        result["development_runtime_smoke"] = development_smoke
+        result["release_benchmark_success"] = False
+        result["benchmark_success"] = False
     publication_requested = bool(getattr(cfg, "export_publication_bundle", True))
     result["publication_requested"] = publication_requested
     if release_benchmark_success and publication_requested:
@@ -1746,9 +2155,16 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             2 if missing or full_release_acceptance_failed else int(run_payload.get("exit_code", 2))
         )
     )
+    if development_rehearsal and release_benchmark_success:
+        result["release_status"] = "development_rehearsal_passed"
+        result["release_status_reason"] = "diagnostic pipeline passed; never releasable"
 
     if release_benchmark_success and publication_requested:
         try:
+            try:
+                _assert_spawn_preflight_report_identity(campaign_root, spawn_preflight_summary)
+            except ReleaseArtifactIdentityError as exc:
+                raise PublicationPreflightError(str(exc)) from exc
             # The first export discovers the deterministic bundle descriptor.  Then write that
             # descriptor and the final release result into the source campaign before exporting
             # again.  Repeat until the descriptor is stable so the bundle contains the same
@@ -1773,6 +2189,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 )
             result["publication_bundle"] = publication_payload
             _assert_no_historical_release_identity(Path(publication_payload["bundle_dir"]))
+            try:
+                _assert_publication_spawn_preflight_identity(
+                    Path(publication_payload["bundle_dir"]), spawn_preflight_summary
+                )
+            except ReleaseArtifactIdentityError as exc:
+                raise PublicationPreflightError(str(exc)) from exc
             _run_publication_preflight(Path(publication_payload["bundle_dir"]))
         except ReleaseArtifactIdentityError as exc:
             result["publication_bundle"] = None

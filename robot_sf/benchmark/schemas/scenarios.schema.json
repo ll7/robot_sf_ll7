@@ -59,7 +59,7 @@
                 ]
             },
             "groups": {
-                "description": "Fraction of pedestrians in groups (0.0–1.0)",
+                "description": "Large-crowd expected fraction of pedestrians in multi-member groups (0.0–1.0). With small crowds the realised fraction falls below the target because the last group is truncated; this is not exact per-reset allocation. For target 0.5, release low/medium/high group scenarios realised 0.17/0.36/0.44 through the map runner on dev seeds 1001–1030.",
                 "type": "number",
                 "minimum": 0.0,
                 "maximum": 1.0

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Reset-only spawn-clearance preflight over the release scenario matrix (issue #9725).
+"""Run the fail-closed release matrix preflight (issue #9731).
 
-Builds and resets every scenario x seed exactly as the map runner does and fails
-(exit 1) on any reset where the robot footprint overlaps a pedestrian or the static
-map. Run it before a benchmark campaign::
+The command requires the selected release manifest. It does not fall back to the
+development scenario matrix or accept a seed override::
 
-    uv run python scripts/benchmark/preflight_spawn_clearance.py --workers 8 \
-        --output output/preflight/spawn_clearance.json
     uv run python scripts/benchmark/preflight_spawn_clearance.py \
-        --scenario classic_head_on_corridor_low --seeds 116 --step-zero
+        --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
+        --workers 8 \
+        --json-output output/preflight/spawn_matrix.json \
+        --markdown-output output/preflight/spawn_matrix.md
 """
 
 from __future__ import annotations

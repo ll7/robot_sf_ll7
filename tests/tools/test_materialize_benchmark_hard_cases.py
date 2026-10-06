@@ -1796,6 +1796,7 @@ def test_replay_records_episode_checksum_and_row_count(
             "head_changed",
         ),
     ],
+    ids=["dirty", "head-changed"],
 )
 def test_checkout_mutation_during_replay_blocks_exact_match(
     tmp_path: Path,

@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 import yaml
 
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.planner import (
     ForceCoupledPotentialFieldConfig as PublicConfig,
 )
@@ -717,3 +718,22 @@ def test_pedestrian_repulsion_within_observation_contract() -> None:
     pedestrian = np.asarray(planner.diagnostics()["pedestrian_repulsive_force"])
     assert np.allclose(obstacle, [0.0, 0.0])
     assert pedestrian[0] < 0.0
+
+
+@pytest.mark.parametrize("step_degraded", [False, True])
+def test_real_diagnostics_obey_runtime_degraded_gate(step_degraded: bool) -> None:
+    """Clean real planner telemetry passes; a true runtime marker still blocks."""
+    planner = ForceCoupledPotentialFieldPlanner()
+    planner.reset(seed=1001)
+    try:
+        planner.plan(_observation())
+        diagnostics = planner.diagnostics()
+        assert diagnostics["status"] == "ok"
+        assert diagnostics["step_degraded"] is False
+        assert diagnostics["ever_degraded"] is False
+        if step_degraded:
+            diagnostics["step_degraded"] = True
+        expected = ("step_degraded", "true") if step_degraded else None
+        assert runtime_fallback_or_degraded_marker(diagnostics) == expected
+    finally:
+        planner.close()

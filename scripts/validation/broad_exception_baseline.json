@@ -19,11 +19,13 @@
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/simulator_counterfactual_adapter.py": 2,
       "robot_sf/benchmark/snqi/cli.py": 3,
+      "robot_sf/benchmark/spawn_preflight.py": 3,
       "robot_sf/benchmark/typed_snapshot.py": 2,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
       "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py": 2,
       "scripts/analysis/compare_trace_vs_live_replay_issue_2790.py": 1,
+      "scripts/analysis/scan_release_audit.py": 1,
       "scripts/analyze_feature_extractors.py": 2,
       "scripts/benchmark/build_horizon_timestep_ablation_report.py": 1,
       "scripts/benchmark/issue_9759_hybrid_mirror_diagnostic.py": 4,
@@ -98,6 +100,7 @@
       "scripts/validation/check_docstring_todos.py": 1,
       "scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py": 1,
       "scripts/validation/extended_osm_validation.py": 12,
+      "scripts/validation/measure_pedfix_planners.py": 1,
       "scripts/validation/performance_smoke_test.py": 2,
       "scripts/validation/playback_trajectory.py": 1,
       "scripts/validation/run_examples_smoke.py": 1,
@@ -113,7 +116,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 201
+    "total": 206
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -122,7 +125,7 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "e53eb792397aafba",
       "handler": "Exception",
-      "lineno": 601,
+      "lineno": 603,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:  # noqa: BLE001 - campaign fault isolation: failed arm, not crash"
     },
@@ -248,7 +251,7 @@
       "context": "_preflight_policy",
       "fingerprint": "7a3a2d000b9eb0a0",
       "handler": "Exception",
-      "lineno": 910,
+      "lineno": 914,
       "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
@@ -257,7 +260,7 @@
       "context": "_preflight_policy",
       "fingerprint": "e1451027dc4d2b28",
       "handler": "Exception",
-      "lineno": 940,
+      "lineno": 944,
       "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
@@ -505,6 +508,33 @@
       "source": "except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)"
     },
     {
+      "col_offset": 16,
+      "context": "_check_release_scenario",
+      "fingerprint": "13fc7b52e6a3a1a2",
+      "handler": "Exception",
+      "lineno": 887,
+      "path": "robot_sf/benchmark/spawn_preflight.py",
+      "source": "except Exception as exc:  # noqa: BLE001"
+    },
+    {
+      "col_offset": 8,
+      "context": "_check_release_scenario",
+      "fingerprint": "13fc7b52e6a3a1a2",
+      "handler": "Exception",
+      "lineno": 919,
+      "path": "robot_sf/benchmark/spawn_preflight.py",
+      "source": "except Exception as exc:  # noqa: BLE001"
+    },
+    {
+      "col_offset": 4,
+      "context": "run_manifest_preflight",
+      "fingerprint": "8294b89b899cb6f6",
+      "handler": "Exception",
+      "lineno": 1247,
+      "path": "robot_sf/benchmark/spawn_preflight.py",
+      "source": "except Exception as exc:  # noqa: BLE001"
+    },
+    {
       "col_offset": 4,
       "context": "restore_typed_snapshot",
       "fingerprint": "27b48e89c6277225",
@@ -575,6 +605,15 @@
       "lineno": 334,
       "path": "scripts/analysis/compare_trace_vs_live_replay_issue_2790.py",
       "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "main",
+      "fingerprint": "300d8c37e41a3641",
+      "handler": "Exception",
+      "lineno": 131,
+      "path": "scripts/analysis/scan_release_audit.py",
+      "source": "except Exception as error:  # noqa: BLE001 - CLI boundary maps every crash to exit 2."
     },
     {
       "col_offset": 8,
@@ -1745,6 +1784,16 @@
       "lineno": 501,
       "path": "scripts/validation/extended_osm_validation.py",
       "source": "except Exception as e:"
+    },
+    {
+      "col_offset": 12,
+      "context": "<module>",
+      "fingerprint": "46179720ad14c6b4",
+      "handler": "Exception",
+      "lineno": 138,
+      "path": "scripts/validation/measure_pedfix_planners.py",
+      "review_reason": "Diagnostic matrix boundary around heterogeneous planner adapters: record every ordinary failure with traceback and an explicit error row, continue remaining dev-seed cells, and exit 1 if any cell failed. No fallback or success substitution; BaseException (including interruption) propagates. Narrow adapter-specific types would lose later diagnostic cells for unexpected plugin failures.",
+      "source": "except Exception as e:  # noqa: BLE001 - retain each failed matrix cell explicitly"
     },
     {
       "col_offset": 4,

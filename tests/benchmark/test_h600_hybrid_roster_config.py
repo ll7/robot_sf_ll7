@@ -125,8 +125,8 @@ def test_h600_hybrid_roster_uses_exact_verified_four_arm_roster() -> None:
         assert key in comparability["planner_key_mapping"]
 
 
-def test_h600_hybrid_roster_loads_and_keeps_expected_hash() -> None:
-    """Campaign loader accepts the config and resolves the h600 scenario surface."""
+def test_h600_hybrid_roster_loader_detects_authored_source_delta() -> None:
+    """Current authored inputs must not be mistaken for the historical preregistration."""
     cfg = load_campaign_config(CONFIG_PATH)
 
     assert cfg.name == "paper_experiment_matrix_v1_h600_hybrid_roster"
@@ -138,7 +138,51 @@ def test_h600_hybrid_roster_loads_and_keeps_expected_hash() -> None:
 
     scenarios = _load_campaign_scenarios(cfg)
     assert len(scenarios) == 48
-    assert _hash_payload(scenarios) == "c10df617a87c"
+    # The historical digest describes authored inputs + seeds, before the
+    # historical runner-cap accounting. Strip only its two accounting annotations
+    # for the authored-input digest.
+    from copy import deepcopy
+
+    authored_inputs = deepcopy(scenarios)
+    for row in authored_inputs:
+        binding = row["metadata"].pop("scenario_horizon")
+        assert binding["policy"] == "legacy_runner_cap"
+        assert binding["runner_horizon"] == 600
+        assert binding["applied_max_episode_steps"] == min(
+            binding["authored_max_episode_steps"], 600
+        )
+        assert (
+            row["simulation_config"]["max_episode_steps"] == binding["authored_max_episode_steps"]
+        )
+        row["metadata"].pop("campaign_horizon")
+    overtaking = next(
+        row for row in authored_inputs if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    assert overtaking["simulation_config"]["max_episode_steps"] == 600
+    # D-085 adds the speed-envelope caveat and retires stale plausibility metrics.
+    plausibility = overtaking["metadata"]["plausibility"]
+    assert "outside its trained speed range" in plausibility["notes"]
+    assert plausibility["metrics"] is None
+    assert plausibility["metrics_updated_on"] is None
+    # Reconstruct the retained pre-D-085 authored bytes for the historical pin.
+    plausibility["notes"] = None
+    plausibility["metrics"] = {
+        "min_distance": 2.2223542321899186,
+        "mean_distance": 8.737510755793421,
+        "robot_ped_within_5m_frac": 0.28587024062018307,
+        "ped_force_mean": 0.24676126309566468,
+        "force_q95": 1.208259633473192,
+    }
+    plausibility["metrics_updated_on"] = "2026-01-30T14:19:28.225110+01:00"
+    assert _hash_payload(authored_inputs) == "f67349a6d555"
+    # Keep the historical preregistration bytes and prove the authored-budget delta.
+    overtaking["simulation_config"]["max_episode_steps"] = 400
+    assert _hash_payload(authored_inputs) == "c10df617a87c"
+    # The current source identity includes both authored-budget and caveat deltas.
+    assert (
+        _hash_payload(scenarios)
+        != _load_yaml(CONFIG_PATH)["preregistration"]["expected_scenario_matrix_hash"]
+    )
 
 
 def test_h600_hybrid_roster_keeps_hybrid_rule_explicit_opt_in() -> None:

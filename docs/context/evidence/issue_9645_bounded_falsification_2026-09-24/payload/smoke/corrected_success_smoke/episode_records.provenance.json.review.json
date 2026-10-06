@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/episode_records.provenance.json",
+  "artifact_sha256": "f552327092ab693c8cb5ccd11477175af1880a21be1064688cdcf1c26c0b1d4e",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

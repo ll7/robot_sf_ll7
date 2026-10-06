@@ -33,6 +33,10 @@ extensions = ["myst_parser"]
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 master_doc = "index"
 exclude_patterns = ["_build"]
+import json, os
+from pathlib import Path
+if os.environ.get("ROBOT_SF_SPHINX_EXCLUSIONS_FILE"):
+    exclude_patterns = json.loads(Path(os.environ["ROBOT_SF_SPHINX_EXCLUSIONS_FILE"]).read_text())
 """
 
 
@@ -229,3 +233,63 @@ def test_real_curated_strict_build_passes() -> None:
 
     assert result.status == "pass", result.blocking_warnings[:10]
     assert result.blocking_warnings == ()
+
+
+def test_large_exclusion_set_reaches_sphinx_without_oversized_argument(tmp_path: Path) -> None:
+    """A real Sphinx build must exclude a corpus larger than Linux's argument limit."""
+    docs = _make_project(tmp_path, page_body="# Page\n\nBody.\n")
+    expected = []
+    for index in range(700):
+        name = f"{index:04d}_" + "historical_" * 20 + ".md"
+        (docs / name).write_text("# Historical\n\n### Invalid heading\n", encoding="utf-8")
+        expected.append(name)
+    # The old single -D value cannot be transported even by an otherwise tiny command.
+    assert len(("exclude_patterns=" + ",".join(expected)).encode()) > 131072
+    (docs / "capture.py").write_text(
+        "import json\n"
+        "from pathlib import Path\n"
+        "def setup(app):\n"
+        "    def capture(app, config):\n"
+        "        Path(app.outdir).mkdir(parents=True, exist_ok=True)\n"
+        "        Path(app.outdir, 'excluded.json').write_text(json.dumps(config.exclude_patterns))\n"
+        "    app.connect('config-inited', capture)\n",
+        encoding="utf-8",
+    )
+    with (docs / "conf.py").open("a", encoding="utf-8") as conf:
+        conf.write(
+            "\nimport sys\nsys.path.insert(0, str(Path(__file__).parent))\nextensions.append('capture')\n"
+        )
+    output = tmp_path / "out"
+    result = strict_build(docs_dir=docs, output_dir=output)
+    assert result.status == "pass", result.blocking_warnings
+    assert result.excluded_count == 700
+    assert json.loads((output / "excluded.json").read_text()) == sorted(expected)
+    assert (output / "page.html").is_file()
+    assert {path.name for path in output.glob("*.html")} == {
+        "index.html",
+        "page.html",
+        "search.html",
+        "genindex.html",
+    }
+    assert not any((output / Path(name).with_suffix(".html")).exists() for name in expected)
+
+
+def test_real_docs_config_receives_exact_exclusion_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real conf.py must replace defaults with the exact curated complement."""
+    from sphinx.config import Config
+    from sphinx.util.tags import Tags
+
+    curated = set(compute_curated_sources(REAL_DOCS))
+    expected = sorted(
+        path.relative_to(REAL_DOCS).as_posix()
+        for pattern in ("*.md", "*.rst")
+        for path in REAL_DOCS.rglob(pattern)
+        if "_build" not in path.parts and path.resolve() not in curated
+    )
+    payload = tmp_path / "excluded.json"
+    payload.write_text(json.dumps(expected), encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_SPHINX_EXCLUSIONS_FILE", str(payload))
+    config = Config.read(REAL_DOCS, overrides={}, tags=Tags())
+    assert config.exclude_patterns == expected

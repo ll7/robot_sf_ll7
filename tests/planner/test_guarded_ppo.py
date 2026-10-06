@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+import yaml
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
+from robot_sf.planner.goal_target import select_goal_target
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     GuardedPPOConfig,
@@ -13,6 +18,7 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_prior,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
+from robot_sf.planner.socnav_orca import ORCAPlannerAdapter
 
 
 def _obs(
@@ -526,7 +532,7 @@ def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> Non
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
@@ -557,7 +563,7 @@ def test_guarded_ppo_near_field_only_prior_skips_clear_scenes() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
@@ -643,6 +649,27 @@ def test_guarded_ppo_tracks_current_goal_before_next_waypoint() -> None:
     assert decision == "ppo_clear"
 
 
+@pytest.mark.parametrize(
+    "profile",
+    ["guarded_ppo_camera_ready_cpu_goal_v2.yaml", "guarded_ppo_release_v0_0_8.yaml"],
+)
+def test_guarded_ppo_outer_guard_looks_ahead_for_one_waypoint_boundary_step(profile: str) -> None:
+    """The outer guard keeps its own lookahead while the v2 fallback uses current."""
+    release_path = Path(__file__).parents[2] / "configs/algos" / profile
+    release_config = yaml.safe_load(release_path.read_text(encoding="utf-8"))
+    guard = GuardedPPOAdapter(config=build_guarded_ppo_config(release_config))
+    observation = _obs(robot=(8.0, 5.0), goal=(8.0, 5.0), next_goal=(8.0, 8.0))
+    _, _, outer_target, _, _ = guard._extract_state(observation)
+    np.testing.assert_array_equal(outer_target, [8.0, 8.0])
+    fallback_target = select_goal_target(
+        observation["robot"]["position"],
+        observation["goal"]["current"],
+        observation["goal"]["next"],
+        version=release_config["fallback_risk_dwa"]["goal_target_version"],
+    )
+    np.testing.assert_array_equal(fallback_target, [8.0, 5.0])
+
+
 def test_guarded_ppo_honors_array_pedestrian_count_for_padded_rows() -> None:
     """Padded zero pedestrian rows from SocNav observations should not become real blockers."""
     guard = GuardedPPOAdapter(
@@ -671,9 +698,9 @@ def test_guarded_ppo_best_effort_prefers_fallback_when_clearer() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
-            {"safe": False, "min_ped_clear": 0.8},
-            {"safe": False, "min_ped_clear": 0.5},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.8, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.5, "min_obs_clear": float("inf"), "progress": 0.0},
         ]
     )
     guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
@@ -707,6 +734,23 @@ def test_guarded_ppo_handles_malformed_pedestrian_payloads_and_config_builders()
     fallback = build_guarded_ppo_fallback(None)
     assert fallback is not None
     assert build_guarded_ppo_prior(None) is None
+
+
+def test_guarded_ppo_orca_builder_preserves_social_force_kernel_initvar() -> None:
+    """The ORCA config bridge retains the shared config's non-field kernel selector."""
+    prior = build_guarded_ppo_prior(
+        {
+            "prior_policy": "orca",
+            "prior_orca": {
+                "social_force_kernel_version": SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+                "unknown_extension": "ignored",
+            },
+        }
+    )
+
+    assert isinstance(prior, ORCAPlannerAdapter)
+    assert prior.config.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert "unknown_extension" not in prior.config.to_dict()
 
 
 def test_guarded_ppo_reshapes_flattened_pedestrian_payloads() -> None:
@@ -873,9 +917,9 @@ def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.6},
-            {"safe": False, "min_ped_clear": 0.5},
-            {"safe": False, "min_ped_clear": 0.7},
+            {"safe": False, "min_ped_clear": 0.6, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.5, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.7, "min_obs_clear": float("inf"), "progress": 0.0},
         ]
     )
     blocked_guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
@@ -1092,3 +1136,63 @@ def test_guarded_ppo_config_accepts_boundary_values() -> None:
     assert config.prior_blend_weight == 1.0
     assert config.obstacle_threshold == 1.0
     assert config.goal_tolerance == 0.0
+
+
+def test_surface_v2_guard_uses_body_to_body_clearance() -> None:
+    """The candidate guard measures the free gap between the two physical discs."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=1,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+            hard_ped_clearance=0.58,
+            first_step_ped_clearance=0.72,
+        )
+    )
+    unsafe = guard._evaluate_command(
+        _obs(ped_positions=[(1.7, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.0, 0.0),
+    )
+    safe = guard._evaluate_command(
+        _obs(ped_positions=[(2.2, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.0, 0.0),
+    )
+
+    # Observed 0.2 m/s brakes to 0.1: trapezoidal displacement is 0.015 m.
+    assert unsafe["min_ped_clear"] == pytest.approx(0.285)
+    assert unsafe["safe"] is False
+    assert safe["min_ped_clear"] == pytest.approx(0.785)
+    assert safe["safe"] is True
+
+
+def test_surface_v2_guard_reports_ttc_from_rollout_start() -> None:
+    """TTC from each rollout sample includes the elapsed time to that sample."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=1,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+            hard_ped_clearance=0.0,
+            first_step_ped_clearance=0.0,
+        )
+    )
+    result = guard._evaluate_command(
+        _obs(ped_positions=[(3.0, 0.0)], ped_velocities=[(-1.0, 0.0)]),
+        (0.0, 0.0),
+    )
+    # At t=.1, gap=3-.1-.015-1.4=1.485; relative speed=1+.1.
+    assert result["min_ttc"] == pytest.approx(0.1 + 1.485 / 1.1)
+
+
+def test_surface_v2_guard_requires_positive_body_radii() -> None:
+    """Surface geometry cannot silently degrade to center-distance checks."""
+    with pytest.raises(ValueError, match="robot_radius must be finite and positive"):
+        GuardedPPOConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=0.0,
+            pedestrian_radius_m=0.4,
+        )

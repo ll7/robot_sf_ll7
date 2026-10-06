@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.benchmark.fallback_policy import summarize_benchmark_availability
 from robot_sf.benchmark.map_runner.map_runner_batch_runner import _initial_feasibility_totals
 from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
@@ -45,8 +47,8 @@ def _guarded_contract_base() -> dict[str, object]:
     }
 
 
-def test_stop_best_effort_from_earlier_episode_blocks_later_safe_summary() -> None:
-    """Aggregate availability must retain an earlier stop decision."""
+def test_stop_best_effort_from_earlier_episode_is_reported_in_safe_summary() -> None:
+    """Verified native stop telemetry remains numeric, visible and admissible."""
     earlier_stop = _guarded_episode_metadata(
         decision_label="stop_best_effort", stop_count=1, safe_count=0
     )
@@ -66,7 +68,7 @@ def test_stop_best_effort_from_earlier_episode_blocks_later_safe_summary() -> No
 
     availability = summarize_benchmark_availability(summary)
 
-    assert availability.benchmark_success is False
+    assert availability.benchmark_success is True
     assert contract["guard_stats"] == {"stop_best_effort": 1, "fallback_safe": 1}
     assert contract["shield_stats"]["decision_counts"] == {
         "stop_best_effort": 1,
@@ -543,3 +545,110 @@ class TestApplyWorkerMetadataBridge:
             update.runtime_algorithm_contract["planner_kinematics"]["robot_kinematics"]
             == "holonomic"
         )
+
+
+def test_real_summary_contract_matches_guarded_episode_identity() -> None:
+    """The real enrichment and worker bridge agree on guarded PPO's underlying algorithm."""
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+    from robot_sf.benchmark.fallback_policy import is_verified_guarded_ppo
+
+    episode = _guarded_episode_metadata(decision_label="fallback_safe", stop_count=0, safe_count=1)
+    base = enrich_algorithm_metadata(algo="guarded_ppo", metadata={})
+    bridge = apply_worker_metadata_bridge(
+        {"algorithm_metadata": episode},
+        feasibility_totals=_initial_feasibility_totals(),
+        runtime_algorithm_contract=None,
+    )
+    contract = merge_runtime_algorithm_contract(base, bridge.runtime_algorithm_contract)
+    assert contract["algorithm"] == episode["algorithm"] == "ppo"
+    assert is_verified_guarded_ppo(contract, expected_algorithm="guarded_ppo")
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": contract,
+    }
+    assert summarize_benchmark_availability(summary).benchmark_success
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("algorithm", "goal"),
+        ("canonical_algorithm", "ppo"),
+        ("planner_contract", {"planner_id": "goal"}),
+        ("algorithm", None),
+    ],
+)
+@pytest.mark.parametrize("bad_first", [True, False])
+def test_summary_does_not_launder_conflicting_episode_identity(field, value, bad_first) -> None:
+    """A later valid episode cannot erase a mismatched producer identity."""
+    from copy import deepcopy
+
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+    from robot_sf.benchmark.fallback_policy import is_verified_guarded_ppo
+
+    valid = _guarded_episode_metadata(decision_label="fallback_safe", stop_count=0, safe_count=1)
+    invalid = deepcopy(valid)
+    if value is None:
+        invalid.pop(field)
+    else:
+        invalid[field] = value
+    runtime = {}
+    for metadata in [invalid, valid] if bad_first else [valid, invalid]:
+        merge_runtime_algorithm_contract(runtime, metadata)
+    if field == "planner_contract":
+        assert runtime[field]["planner_id"] == "mixed"
+    else:
+        assert runtime[field] == "mixed"
+    contract = merge_runtime_algorithm_contract(
+        enrich_algorithm_metadata(algo="guarded_ppo"), runtime
+    )
+    assert not is_verified_guarded_ppo(contract, expected_algorithm="guarded_ppo")
+    summary = {
+        "status": "ok",
+        "written": 2,
+        "total_jobs": 2,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": contract,
+    }
+    availability = summarize_benchmark_availability(summary)
+    assert not availability.benchmark_success
+    assert "guard_stats.fallback_safe" in availability.availability_reason
+
+
+@pytest.mark.parametrize("bad_first", [True, False])
+def test_summary_rejects_unbound_runtime_only_shield_state(bad_first) -> None:
+    """Static guarded identity must not grant an incomplete producer shield authority."""
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+    from robot_sf.benchmark.fallback_policy import (
+        algorithm_metadata_runtime_marker,
+        is_verified_guarded_ppo,
+    )
+
+    producer = {
+        "planner_runtime": {
+            "last_decision": {
+                "decision_label": "stop_best_effort",
+                "fallback_controller_state": {},
+            }
+        }
+    }
+    valid = _guarded_episode_metadata(decision_label="fallback_safe", stop_count=0, safe_count=1)
+    valid.pop("guard_stats")
+    valid.pop("shield_stats")
+    runtime = {}
+    for metadata in [producer, valid] if bad_first else [valid, producer]:
+        merge_runtime_algorithm_contract(runtime, metadata)
+    contract = merge_runtime_algorithm_contract(
+        enrich_algorithm_metadata(algo="guarded_ppo"), runtime
+    )
+    assert contract["algorithm"] == "mixed"
+    assert not is_verified_guarded_ppo(contract, expected_algorithm="guarded_ppo")
+    assert algorithm_metadata_runtime_marker(contract, expected_algorithm="guarded_ppo") == (
+        "planner_runtime.last_decision.fallback_controller_state",
+        "invalid",
+    )

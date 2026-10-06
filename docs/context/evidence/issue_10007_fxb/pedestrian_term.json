@@ -1,0 +1,44 @@
+{
+  "evidence_status": "diagnostic-only",
+  "release_ped_version": "surface_v3",
+  "legacy_kernel": {
+    "contact_force_at_1mps": [
+      -1.344345421461259,
+      1.344345421461259
+    ],
+    "weighted_contact_force": [
+      -1.0754763371690073,
+      1.0754763371690073
+    ],
+    "standing_ped_at_1_8m_min_clearance": -0.9155625595608836,
+    "first_contact_step": 10,
+    "final_position": [
+      5.799955979247156,
+      0.7232032892504286
+    ],
+    "final_speed": [
+      0.9959796724753739,
+      -0.023087374597680288
+    ]
+  },
+  "surface_v3": {
+    "contact_force_at_1mps": [
+      -6.0,
+      0.0
+    ],
+    "weighted_contact_force": [
+      -4.800000000000001,
+      0.0
+    ],
+    "standing_ped_at_1_8m_min_clearance": 0.3600525711914284,
+    "first_contact_step": null,
+    "final_position": [
+      -0.05024316641258379,
+      -0.02995116325777023
+    ],
+    "final_speed": [
+      0.1,
+      0.5033466666553685
+    ]
+  }
+}

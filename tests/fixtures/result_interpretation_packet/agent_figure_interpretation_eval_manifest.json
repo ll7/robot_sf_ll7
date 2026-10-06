@@ -6,9 +6,9 @@
   "packet": {
     "id": "ch7_visualization_causal_abstention_fixture",
     "path": "v1/ch7_visualization_causal_abstention.json",
-    "sha256": "af9fb7d8592c0bfdf274532c2d0069b2f27e1215ae77a23d130309b6c3cabfca",
-    "source_sha256": "1c14a36202a9ab8146cf577d450ec8899f4d78e0d8246cc3dbe1a019928394d8",
-    "reference_sha256": "af9fb7d8592c0bfdf274532c2d0069b2f27e1215ae77a23d130309b6c3cabfca"
+    "sha256": "3e1328100e2de85d8b6faf4ae69ab2aba91148582a93a0a17c9e81ae7f46281c",
+    "source_sha256": "f20913b1e06faf29deab2c299e0341fca62d902f89fcf4aab0428ff549ab1549",
+    "reference_sha256": "3e1328100e2de85d8b6faf4ae69ab2aba91148582a93a0a17c9e81ae7f46281c"
   },
   "mutations": [
     "clean",

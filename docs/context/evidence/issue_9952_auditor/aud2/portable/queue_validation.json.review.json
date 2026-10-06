@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/portable/queue_validation.json",
+  "artifact_sha256": "51a2e39a4d54dd6ba3a391d7060d921aa32a9531aa396018a49bf56461fd311c",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

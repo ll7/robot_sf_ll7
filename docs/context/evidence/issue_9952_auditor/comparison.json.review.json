@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/comparison.json",
+  "artifact_sha256": "c30bc0fd43191a54ee74001a43bd61a7609e3e84484c63040c65d72887c2e392",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

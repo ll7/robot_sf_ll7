@@ -1,0 +1,8 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json",
+  "artifact_sha256": "f628b79ea0ad1ce0e0378e60c382787e353edfb24f2828d905b54f1d28a7bf79",
+  "integration_note": "Historical matrix locator rebound to exact producer bytes; original matrix digest and scientific outcomes unchanged.",
+  "preserved_exact_bytes": false,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

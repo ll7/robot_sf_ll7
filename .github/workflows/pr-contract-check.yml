@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   pr-contract-check:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -69,6 +70,25 @@ jobs:
             --base-ref "$BASE_REF" \
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --json
+
+      - name: Enforce evaluation seed holdout
+        run: |
+          set -euo pipefail
+          uv run python scripts/validation/check_seed_holdout_diff.py \
+            --base-ref "origin/${{ github.base_ref }}"
+
+      - name: Validate PR body contracts (advisory)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/check_pr_followups.py \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
+            --require-body \
+            --require-substantive-body \
+            --require-open-issues \
+            --advisory
 
       - name: Run PR Contract Check
         env:

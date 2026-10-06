@@ -224,6 +224,11 @@ def socnav_observation_space(
                 {
                     "current": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
                     "next": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                    **(
+                        {"next_valid": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)}
+                        if getattr(env_config, "include_goal_next_valid", False)
+                        else {}
+                    ),
                 },
             ),
             "pedestrians": spaces.Dict(
@@ -976,6 +981,11 @@ class SocNavObservationFusion:
             "goal": {
                 "current": goal_clipped,
                 "next": next_goal_clipped,
+                **(
+                    {"next_valid": np.array([next_goal is not None], dtype=np.float32)}
+                    if getattr(self.env_config, "include_goal_next_valid", False)
+                    else {}
+                ),
             },
             "pedestrians": {
                 "positions": self._buf_ped_positions.copy(),

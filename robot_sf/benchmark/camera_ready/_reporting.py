@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records, read_jsonl
 from robot_sf.benchmark.algorithm_metadata import (
     _KINEMATICS_PROFILE_BY_CANONICAL,
     canonical_algorithm_name,
@@ -37,7 +37,6 @@ from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,
 )
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationProfile,
     not_available_saturation_metrics,
@@ -413,8 +412,8 @@ def _resolve_planner_metrics(
         "min_clearance_m": float("nan"),
         "proxemic_intrusion_rate": _metric_mean(metric_block, "social_proxemic_intrusion_frac"),
     }
-    # Issue #9725: spawn-overlap rows stay in the episode JSONL but not in planner rates.
-    records = [record for record in records or [] if not record_has_spawn_overlap(record)]
+    # Recomputed table fields must use the same evidence cohort as aggregation.
+    records, _excluded = filter_evidence_eligible_records(records or [])
     if not records:
         return resolved_metrics, success_ci, collision_ci, snqi_ci
 
@@ -798,6 +797,8 @@ def _build_planner_row_metadata(  # noqa: PLR0913
         "policy_source": policy_source,
         "status": status,
         "episodes": int(episode_count),
+        "episodes_total": int(summary.get("episodes_total", episode_count)),
+        "episodes_excluded": int(summary.get("episodes_excluded", 0)),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
         "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
         "runtime_sec": _safe_float(summary.get("runtime_sec")),
@@ -849,11 +850,10 @@ def _build_planner_row_base(  # noqa: PLR0913
 ) -> dict[str, Any]:
     """Build the core planner row dict without actuation or feasibility fields.
 
-    Key insertion order mirrors the pre-decomposition literal so serialized
-    artifacts (e.g. ``campaign_summary.json`` planner rows) stay byte-identical:
-    identity metadata, then metric fields, then execution/readiness/contract
-    metadata. CSV columns are unaffected because writers pin an explicit
-    ``headers`` tuple; this only preserves the JSON/object field order.
+    Existing fields retain their pre-decomposition order: identity metadata,
+    then metric fields, then execution/readiness/contract metadata. Cohort
+    counts follow ``episodes`` in serialized planner rows. CSV column order is
+    pinned independently by each writer's explicit ``headers`` tuple.
 
     Returns:
         Flattened planner row dict for CSV/Markdown export.
@@ -894,6 +894,8 @@ def _build_planner_row_base(  # noqa: PLR0913
         "policy_source",
         "status",
         "episodes",
+        "episodes_total",
+        "episodes_excluded",
         "started_at_utc",
         "finished_at_utc",
         "runtime_sec",
@@ -984,6 +986,8 @@ def _planner_report_row(
     status = str(summary.get("status", "unknown"))
     readiness_status = availability.readiness_status
 
+    if records is not None:
+        records = [record for record in records if isinstance(record, dict)]
     resolved_metrics, success_ci, collision_ci, snqi_ci = _resolve_planner_metrics(
         metric_block,
         records,
@@ -991,18 +995,21 @@ def _planner_report_row(
         collision_ci,
         snqi_ci,
     )
-    episode_count = (
-        len(records)
-        if records is not None
-        else int(summary.get("episodes_total", summary.get("written", 0)))
-    )
+    if records is not None:
+        eligible_records, excluded = filter_evidence_eligible_records(records)
+        episode_count = len(eligible_records)
+        episodes_total = len(records)
+    else:
+        episodes_total = int(summary.get("episodes_total", summary.get("written", 0)))
+        excluded = int(summary.get("episodes_excluded", 0))
+        episode_count = episodes_total - excluded
 
     row = _build_planner_row_base(
         planner,
         kinematics,
         status,
         episode_count,
-        summary,
+        {**summary, "episodes_total": episodes_total, "episodes_excluded": excluded},
         resolved_metrics,
         success_ci,
         collision_ci,
@@ -1210,9 +1217,11 @@ def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
         candidate = get_repository_root() / episodes_path
         if not candidate.exists():
             continue
-        for record in read_jsonl(str(candidate)):
-            if not isinstance(record, dict):
-                continue
+        records = [record for record in read_jsonl(str(candidate)) if isinstance(record, dict)]
+        eligible_records, _excluded = filter_evidence_eligible_records(records)
+        eligible_ids = {id(record) for record in eligible_records}
+        for record in records:
+            eligible = id(record) in eligible_ids
             scenario_id = str(record.get("scenario_id", "unknown")).strip()
             declared_family = _record_declared_scenario_family(record)
             family = declared_family or _scenario_family(record, scenario_id=scenario_id)
@@ -1240,6 +1249,8 @@ def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
                     "scenario_family": family,
                     "archetype": archetype,
                     "episodes": 0,
+                    "episodes_total": 0,
+                    "episodes_excluded": 0,
                 },
             )
             family_bucket = per_family.setdefault(
@@ -1250,14 +1261,18 @@ def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
                     "scenario_family": family,
                     "archetype": "",
                     "episodes": 0,
+                    "episodes_total": 0,
+                    "episodes_excluded": 0,
                 },
             )
             if archetype:
                 family_archetypes[family_key].add(archetype)
-            scenario_bucket["episodes"] += 1
-            family_bucket["episodes"] += 1
+            for bucket in (scenario_bucket, family_bucket):
+                bucket["episodes_total"] += 1
+                bucket["episodes"] += int(eligible)
+                bucket["episodes_excluded"] += int(not eligible)
             for metric in _REPORT_METRICS:
-                value = episode_metric_value(record, metric)
+                value = episode_metric_value(record, metric) if eligible else None
                 if value is not None and not math.isfinite(value):
                     value = None
                 _add_metric(scenario_bucket, metric, value)
@@ -1283,7 +1298,8 @@ def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
             values = finalized.pop(metric, [])
             if not isinstance(values, list):
                 values = []
-            finalized[f"{metric}_mean"] = _mean(values)
+            column = "jerk_mean" if metric == "jerk_mean" else f"{metric}_mean"
+            finalized[column] = _mean(values)
         return finalized
 
     scenario_rows = sorted(
@@ -1397,10 +1413,11 @@ def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -
     if not rows:
         lines.append("No planner rows were produced.")
         return
+    table_start = len(lines)
     lines.extend(
         [
-            "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
-            "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | episodes_total | episodes_excluded | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
+            "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in rows:
@@ -1414,6 +1431,8 @@ def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -
             f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
             f"{_escape_markdown_cell(row.get('runtime_sec'))} | "
             f"{_escape_markdown_cell(row.get('episodes'))} | "
+            f"{_escape_markdown_cell(row.get('episodes_total', row.get('episodes')))} | "
+            f"{_escape_markdown_cell(row.get('episodes_excluded', 0))} | "
             f"{_escape_markdown_cell(row.get('episodes_per_second'))} | "
             f"{_escape_markdown_cell(row.get('success_mean'))} | "
             f"{_escape_markdown_cell(row.get('collisions_mean'))} | "
@@ -1421,6 +1440,12 @@ def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -
             f"{_escape_markdown_cell(row.get('projection_rate'))} | "
             f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
         )
+
+    if not any("snqi_mean" in row for row in rows):
+        for index in range(table_start, len(lines)):
+            cells = lines[index].split("|")
+            del cells[12]
+            lines[index] = "|".join(cells)
 
 
 def _write_aggregate_integrity(

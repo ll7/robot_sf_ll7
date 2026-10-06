@@ -39,6 +39,7 @@ from robot_sf.benchmark.camera_ready._config_types import (
     SnqiContractConfig,
     TuningSpec,
 )
+from robot_sf.benchmark.camera_ready._historical_horizons import HISTORICAL_CAMPAIGN_REGISTRY
 from robot_sf.benchmark.camera_ready._util import _repo_relative
 from robot_sf.benchmark.latency.latency_stress import (
     load_latency_stress_profile,
@@ -505,10 +506,92 @@ def _load_scenario_horizon_schedule(path: Path) -> dict[str, dict[str, Any]]:
     return schedule
 
 
+def _validate_horizon_policy(policy: str | None, protocol_version: str | None) -> None:
+    """Fence historical runner caps to identified historical protocols."""
+    if policy is None:
+        return
+    if policy != "legacy_runner_cap":
+        raise ValueError(f"Unknown horizon_policy: {policy!r}")
+    match = re.fullmatch(r"(?:0\.0\.[2-7]|0\.0\.3\.post1)", str(protocol_version))
+    if match is None:
+        raise ValueError(
+            "legacy_runner_cap requires historical protocol_version 0.0.2–0.0.7; "
+            "0.0.8+ and unidentified configs are refused"
+        )
+
+
+def _uses_authored_horizon_protocol(protocol_version: str | None) -> bool:
+    """Return whether the config explicitly declares the 0.0.8+ budget contract."""
+    version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?", str(protocol_version))
+    return version is not None and tuple(map(int, version.groups())) >= (0, 0, 8)
+
+
+def _apply_fixed_campaign_horizon(
+    scenarios: list[dict[str, Any]],
+    *,
+    horizon: int | None,
+    horizon_policy: str | None = None,
+    protocol_version: str | None = None,
+) -> list[dict[str, Any]]:
+    """Bind declared 0.0.8+ budgets; other fixed horizons retain main's runner-only cap.
+
+    Returns:
+        Copied scenarios for admitted bindings, otherwise the untouched scenario list.
+    """
+    _validate_horizon_policy(horizon_policy, protocol_version)
+    legacy = horizon_policy == "legacy_runner_cap"
+    if horizon is None or horizon <= 0:
+        return scenarios
+    current_protocol = _uses_authored_horizon_protocol(protocol_version)
+    if not legacy and not current_protocol:
+        # Older/unidentified campaigns never bound simulator budgets. Keep their
+        # entire payload untouched so historical resume and dedupe IDs survive.
+        return scenarios
+    patched_scenarios = []
+    for scenario in scenarios:
+        patched = deepcopy(scenario)
+        simulation_config = patched.setdefault("simulation_config", {})
+        metadata = patched.setdefault("metadata", {})
+        prior_binding = metadata.get("campaign_horizon", {})
+        authored_limit = prior_binding.get(
+            "authored_max_episode_steps", simulation_config.get("max_episode_steps")
+        )
+        prior_horizon = metadata.get("scenario_horizon")
+        if prior_horizon is not None and not (
+            legacy and prior_horizon.get("policy") == horizon_policy
+        ):
+            raise ValueError("scenario_horizons cannot be combined with fixed horizon")
+        if not legacy and authored_limit is not None and int(authored_limit) < horizon:
+            raise ValueError(
+                f"Scenario '{_campaign_scenario_id(scenario)}' authored limit {authored_limit} "
+                f"is below fixed horizon {horizon}; declare scenario_horizons explicitly"
+            )
+        if not legacy:
+            simulation_config["max_episode_steps"] = int(horizon)
+        metadata["campaign_horizon"] = {
+            "mode": "fixed",
+            "horizon_steps": int(horizon),
+            "authored_max_episode_steps": authored_limit,
+        }
+        if legacy:
+            metadata["scenario_horizon"] = {
+                "policy": horizon_policy,
+                "authored_max_episode_steps": authored_limit,
+                "runner_horizon": int(horizon),
+                "applied_max_episode_steps": min(int(authored_limit), int(horizon))
+                if authored_limit is not None
+                else int(horizon),
+            }
+        patched_scenarios.append(patched)
+    return patched_scenarios
+
+
 def _apply_scenario_horizon_schedule(
     scenarios: list[dict[str, Any]],
     *,
     schedule_path: Path | None,
+    expected_sha256: str | None = None,
+    protocol_version: str | None = None,
 ) -> list[dict[str, Any]]:
     """Apply a scenario-specific horizon schedule to scenario max-step limits.
 
@@ -517,6 +600,10 @@ def _apply_scenario_horizon_schedule(
     """
     if schedule_path is None:
         return scenarios
+
+    schedule_sha256 = hashlib.sha256(schedule_path.read_bytes()).hexdigest()
+    if expected_sha256 is not None and schedule_sha256 != expected_sha256:
+        raise ValueError("scenario_horizons_sha256 differs from schedule bytes")
 
     schedule = _load_scenario_horizon_schedule(schedule_path)
     missing = [
@@ -543,6 +630,16 @@ def _apply_scenario_horizon_schedule(
             raise ValueError(
                 f"Scenario '{scenario_id}' simulation_config must be a mapping for horizon patching"
             )
+        authored_limit = simulation_config.get("max_episode_steps")
+        if (
+            _uses_authored_horizon_protocol(protocol_version)
+            and authored_limit is not None
+            and horizon_steps < int(authored_limit)
+        ):
+            raise ValueError(
+                f"Scenario '{scenario_id}' authored limit {authored_limit} "
+                f"exceeds scheduled horizon {horizon_steps}"
+            )
         simulation_config["max_episode_steps"] = horizon_steps
 
         metadata = patched.setdefault("metadata", {})
@@ -554,6 +651,12 @@ def _apply_scenario_horizon_schedule(
             "status": entry["status"],
             "bucket": entry["bucket"],
         }
+        if _uses_authored_horizon_protocol(protocol_version):
+            # These reserved provenance fields identify an admitted current-protocol
+            # schedule to the runner. Historical schedule payloads stay byte-identical.
+            metadata["scenario_horizon"].update(
+                sha256=schedule_sha256, authored_max_episode_steps=authored_limit
+            )
         patched_scenarios.append(patched)
     return patched_scenarios
 
@@ -587,6 +690,7 @@ def _scenario_horizon_summary(
 
     return {
         "path": _repo_relative(schedule_path),
+        "sha256": hashlib.sha256(schedule_path.read_bytes()).hexdigest(),
         "scenario_count": len(horizons),
         "min_horizon_steps": min(horizons) if horizons else None,
         "max_horizon_steps": max(horizons) if horizons else None,
@@ -735,6 +839,17 @@ def _apply_radius_sweep_binding(
     return patched_scenarios
 
 
+def _refuse_reserved_horizon_metadata(scenario: Mapping[str, Any]) -> None:
+    """Input scenarios cannot supply trusted horizon admission provenance."""
+    metadata = scenario.get("metadata", {})
+    if isinstance(metadata, Mapping) and any(
+        key in metadata for key in ("campaign_horizon", "scenario_horizon")
+    ):
+        raise ValueError(
+            "Input scenario metadata.campaign_horizon and metadata.scenario_horizon are reserved admission keys"
+        )
+
+
 def _load_campaign_scenarios(
     cfg: CampaignConfig, repository_root: Path | None = None
 ) -> list[dict[str, Any]]:
@@ -743,6 +858,7 @@ def _load_campaign_scenarios(
     Returns:
         Scenario list consumable by benchmark runners.
     """
+    _validate_horizon_policy(cfg.horizon_policy, cfg.protocol_version)
     scenarios = load_scenarios(
         cfg.scenario_matrix_path,
         base_dir=cfg.scenario_matrix_path.parent,
@@ -751,6 +867,7 @@ def _load_campaign_scenarios(
     normalized: list[dict[str, Any]] = []
     repo_root = (repository_root or get_repository_root()).resolve()
     for scenario in scenarios:
+        _refuse_reserved_horizon_metadata(scenario)
         patched = dict(scenario)
         map_file = patched.get("map_file")
         if isinstance(map_file, str):
@@ -786,7 +903,22 @@ def _load_campaign_scenarios(
     scenario_dicts = _apply_scenario_horizon_schedule(
         scenario_dicts,
         schedule_path=cfg.scenario_horizons_path,
+        expected_sha256=cfg.scenario_horizons_sha256,
+        protocol_version=cfg.protocol_version,
     )
+    scenario_dicts = _apply_fixed_campaign_horizon(
+        scenario_dicts,
+        horizon=cfg.horizon,
+        horizon_policy=cfg.horizon_policy,
+        protocol_version=cfg.protocol_version,
+    )
+    for planner in (p for p in cfg.planners if p.enabled and p.horizon_override is not None):
+        _apply_fixed_campaign_horizon(
+            scenario_dicts,
+            horizon=planner.horizon_override,
+            horizon_policy=cfg.horizon_policy,
+            protocol_version=cfg.protocol_version,
+        )
     seeds_override = _resolve_seed_override(cfg.seed_policy)
     if seeds_override is not None:
         seeded: list[dict[str, Any]] = []
@@ -840,7 +972,14 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             "Route-clearance certification file not found: "
             f"{cfg.route_clearance_certifications_path}"
         )
+    _validate_horizon_policy(cfg.horizon_policy, cfg.protocol_version)
+    if cfg.horizon_policy is not None and cfg.scenario_horizons_path is not None:
+        raise ValueError("legacy_runner_cap cannot be combined with scenario_horizons")
     if cfg.scenario_horizons_path is not None:
+        if cfg.scenario_horizons_sha256 is not None:
+            observed = hashlib.sha256(cfg.scenario_horizons_path.read_bytes()).hexdigest()
+            if cfg.scenario_horizons_sha256 != observed:
+                raise ValueError("scenario_horizons_sha256 differs from schedule bytes")
         if cfg.horizon is not None:
             raise ValueError("scenario_horizons cannot be combined with fixed horizon")
         planners_with_horizon_override = [
@@ -853,6 +992,8 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError(
                 f"scenario_horizons cannot be combined with per-planner horizon overrides: {names}"
             )
+    elif cfg.scenario_horizons_sha256 is not None:
+        raise ValueError("scenario_horizons_sha256 requires scenario_horizons")
     enforcement = cfg.amv_profile.coverage_enforcement
     if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
         known = ", ".join(sorted(_AMV_COVERAGE_ENFORCEMENT))
@@ -1564,6 +1705,16 @@ def _build_snqi_contract_config(snqi_contract_raw: dict[str, Any]) -> SnqiContra
     )
 
 
+def _load_snqi_acquisition_binding(raw: Any, config_path: Path) -> dict[str, Any] | None:
+    """Retain the source acquisition contract independently of pending scoring.
+
+    Returns:
+        Validated acquisition assets, or None for an immediate/historical spec."""
+    from robot_sf.benchmark.snqi.v2_binding import load_acquisition_binding  # noqa: PLC0415
+
+    return load_acquisition_binding(raw, config_path)
+
+
 def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
     """Resolve explicit versioned assets relative to the campaign config.
 
@@ -1571,6 +1722,10 @@ def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
         Validated result described above.
     """
     if raw is None:
+        return None
+    from robot_sf.benchmark.snqi.v2_binding import load_acquisition_binding  # noqa: PLC0415
+
+    if load_acquisition_binding(raw, config_path) is not None:
         return None
     if not isinstance(raw, dict) or set(raw) != {"weights_path", "anchors_path", "family_path"}:
         raise ValueError("snqi_v2_spec requires exactly weights_path, anchors_path, family_path")
@@ -1581,7 +1736,9 @@ def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
             local = config_path.parent / path
             path = local if local.exists() else get_repository_root() / path
         paths.append(path)
-    return load_snqi_v2_spec(*paths)
+    from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION  # noqa: PLC0415
+
+    return load_snqi_v2_spec(*paths, expected_metric_schema_version=METRIC_SCHEMA_VERSION)
 
 
 def _assemble_campaign_config(
@@ -1605,9 +1762,12 @@ def _assemble_campaign_config(
         scenario_amv_overrides=parsed.scenario_amv_overrides,
         radius_sweep=parsed.radius_sweep,
         scenario_horizons_path=parsed.scenario_horizons_path,
+        scenario_horizons_sha256=payload.get("scenario_horizons_sha256"),
         seed_policy=parsed.seed_policy,
         workers=int(payload.get("workers", 1)),
         horizon=(int(payload["horizon"]) if payload.get("horizon") is not None else None),
+        horizon_policy=payload.get("horizon_policy"),
+        protocol_version=payload.get("protocol_version"),
         dt=(float(payload["dt"]) if payload.get("dt") is not None else None),
         record_forces=bool(payload.get("record_forces", True)),
         record_planner_decision_trace=bool(payload.get("record_planner_decision_trace", False)),
@@ -1624,6 +1784,7 @@ def _assemble_campaign_config(
         snqi_weights_path=parsed.snqi_weights_path,
         snqi_baseline_path=parsed.snqi_baseline_path,
         snqi_v2_spec=_load_snqi_v2_config(payload.get("snqi_v2_spec"), config_path),
+        snqi_v2_binding=_load_snqi_acquisition_binding(payload.get("snqi_v2_spec"), config_path),
         stop_on_failure=bool(payload.get("stop_on_failure", False)),
         export_publication_bundle=bool(payload.get("export_publication_bundle", True)),
         include_videos_in_publication=bool(payload.get("include_videos_in_publication", False)),
@@ -1688,6 +1849,13 @@ def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> 
     payload = yaml.safe_load(source_config_bytes.decode("utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"Campaign config must be a mapping: {config_path}")
+
+    historical = HISTORICAL_CAMPAIGN_REGISTRY.get(hashlib.sha256(source_config_bytes).hexdigest())
+    if historical is not None:
+        payload = {**payload, "protocol_version": historical[0], "horizon_policy": historical[1]}
+    elif payload.get("horizon_policy") is not None:
+        _validate_horizon_policy(payload["horizon_policy"], payload.get("protocol_version"))
+        raise ValueError("legacy_runner_cap requires exact historical content registry admission")
 
     base_dir = config_path.parent
     name = str(payload.get("name") or config_path.stem)
@@ -1771,4 +1939,12 @@ def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> 
         repository_root=repository_root,
     )
     _validate_campaign_config(cfg)
+    if cfg.snqi_v2_spec is not None:
+        scenarios = _load_campaign_scenarios(cfg, repository_root)
+        cfg.snqi_v2_spec.validate_evaluation_schedule(
+            {
+                scenario["name"]: scenario["simulation_config"]["max_episode_steps"]
+                for scenario in scenarios
+            }
+        )
     return cfg

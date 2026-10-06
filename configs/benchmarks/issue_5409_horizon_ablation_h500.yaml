@@ -73,6 +73,7 @@ preregistration:
     Diagnostic-only horizon ablation config. No benchmark, paper, or dissertation
     claim from this config alone. The paired h600 config must use the same roster
     and seed budget; any comparison requires both campaigns to complete.
+  # Historical preregistration pin, not the current authored-input identity (OVTFIX2/D-085).
   expected_scenario_matrix_hash: c10df617a87c
   ablation_role: h500
   counterpart_config: configs/benchmarks/issue_5409_horizon_ablation_h600.yaml

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/empty_world.json",
+  "artifact_sha256": "9bfcccbee22b8d6cae773e3fc35705cf0e27f950c13d53488be8e9bee61494dd",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -2684,10 +2684,12 @@ def test_valid_base_ref_is_used_unchanged(preflight_repo: Path) -> None:
     assert "Attempting git fetch" not in result.stderr
 
 
-def test_final_pr_contract_check_receives_validated_budget_base_sha(
+@pytest.mark.parametrize("behind_base", [False, True])
+def test_final_pr_contract_check_receives_merge_base_budget_sha(
     preflight_repo: Path,
+    behind_base: bool,
 ) -> None:
-    """Final readiness passes its captured immutable base to the budget checker."""
+    """Budget accounting excludes base-only changes when the feature is behind."""
     _make_fake_bin(preflight_repo, fail=False)
     _git(preflight_repo, "update-ref", "refs/heads/preflight-base", "HEAD")
 
@@ -2704,6 +2706,14 @@ def test_final_pr_contract_check_receives_validated_budget_base_sha(
         text=True,
         check=True,
     ).stdout.strip()
+    if behind_base:
+        _git(preflight_repo, "checkout", "-q", "preflight-base")
+        base_only = preflight_repo / "base-only.txt"
+        base_only.write_text("base-only change\n" * 500, encoding="utf-8")
+        _git(preflight_repo, "add", "base-only.txt")
+        _git(preflight_repo, "commit", "-q", "-m", "advance base without feature")
+        _git(preflight_repo, "checkout", "-q", "-")
+
     args_log = preflight_repo / ".home" / "pr-contract-args.log"
     fake_uv = preflight_repo / "bin" / "uv"
     fake_uv.write_text(

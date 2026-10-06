@@ -1,0 +1,2476 @@
+[
+  {
+    "run": "21471-top",
+    "scenario": "classic_t_intersection_low",
+    "seed": 1003,
+    "steps": 117,
+    "horizon": 500,
+    "termination_reason": "collision",
+    "metrics": {
+      "agent_collision_count": 0,
+      "avg_speed": 1.4974082827577633,
+      "clearing_distance_avg": 2.4764074145671207,
+      "clearing_distance_min": 0.9768668100224137,
+      "collisions": 1,
+      "comfort_exposure": 0.0,
+      "curvature_mean": 0.10128846043578175,
+      "deadlock": false,
+      "deadlock_stall": {
+        "interpretation": "Per-episode no-progress-over-window stall detector, parameterized and distinct from timeout/max_steps; additive diagnostic, not a benchmark superiority or safety claim.",
+        "max_no_progress_run": 0,
+        "progress_eps_m": 0.05,
+        "schema_version": "deadlock-stall.v2",
+        "stall_window_count": 0,
+        "status": "ok",
+        "window_steps": 15
+      },
+      "distributional_disruption": {
+        "baseline_condition": "control_run_without_robot",
+        "claim_boundary": "These metrics are diagnostic simulation measures for analyzing per-subgroup displacement and inconvenience distribution in controlled settings. They do not represent real-world ethical outcomes.",
+        "cohort_definitions": {
+          "extreme_speed_tier": "Pedestrians with average control speed > 1.8 m/s",
+          "fast_speed_tier": "Pedestrians with average control speed > 1.0 m/s and <= 1.8 m/s",
+          "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s"
+        },
+        "cohort_metrics": {},
+        "metric_definitions": {
+          "delay_mean_s": {
+            "denominator": "supported pedestrians per cohort",
+            "formula": "max(0, robot_present_path_length - control_path_length) / max(control_mean_speed, 0.1)"
+          },
+          "displacement_mean_m": {
+            "denominator": "matched timesteps per pedestrian, then supported pedestrians per cohort",
+            "formula": "mean_t ||robot_present_position_t - control_position_t||"
+          }
+        },
+        "missing_data": {
+          "extreme_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "fast_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "slow_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          }
+        },
+        "non_claims": "We make no claims regarding real-world fairness, equity, bias, protected attributes, demographic groups, or disparate impact. These measures are diagnostic simulation proxies only.",
+        "schema_version": "distributional-disruption.v1",
+        "support_counts": {
+          "extreme_speed_tier": 0,
+          "fast_speed_tier": 0,
+          "slow_speed_tier": 0
+        },
+        "units": {
+          "delay_mean_s": "seconds",
+          "displacement_mean_m": "meters"
+        }
+      },
+      "energy": 42.92045116173874,
+      "failure_to_progress": 0.0,
+      "force_exceed_events": 0,
+      "force_sample_stats": {
+        "finite_samples": 0,
+        "invalid_samples": 0,
+        "nonzero_force_samples": 0,
+        "raw_samples": 0,
+        "status": "no-pedestrians",
+        "valid_fraction": 0.0,
+        "zero_force_samples": 0
+      },
+      "jerk_mean": 0.5236020954140205,
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "metric_values": {
+        "completion_probability": 0.0,
+        "exact_collision_probability": 1.0,
+        "min_predicted_separation_m": NaN,
+        "near_miss_probability": 0.0
+      },
+      "min_separation_corrupted_m": Infinity,
+      "near_misses": 0,
+      "obstacle_collision_count": 1,
+      "path_efficiency": null,
+      "path_efficiency_reference_violation": false,
+      "ped_collision_count": 0,
+      "robot_force_exposed_ped_count": 0.0,
+      "robot_force_impulse_per_exposed_ped": null,
+      "robot_force_impulse_total": 0.0,
+      "robot_force_invalid_present_samples": 0,
+      "robot_force_mean_active": null,
+      "robot_force_metadata": {
+        "pp_equiv_status": "experimental_counterfactual",
+        "pp_equiv_velocity_rule": "backward_difference_first_forward",
+        "prf_activation_m": 2.0,
+        "prf_active": true,
+        "prf_multiplier": 10.0,
+        "prf_ped_radius_m": 0.35,
+        "prf_robot_radius_m": 1.0,
+        "quantity": "model acceleration, not measured human discomfort",
+        "reference_m_s2": 3.703015433252317,
+        "reference_rule": "social_force_head_on_contact_relative_speed_1m_s_v1",
+        "response_multipliers": [],
+        "robot_components": [
+          {
+            "prf_activation_m": 2.0,
+            "prf_active": true,
+            "prf_multiplier": 10.0,
+            "prf_ped_radius_m": 0.35,
+            "prf_robot_radius_m": 1.0,
+            "response_multipliers": []
+          }
+        ],
+        "sample_timing": "pre_integration",
+        "social_force_config": {
+          "activation_threshold": 20.0,
+          "factor": 5.1,
+          "gamma": 0.35,
+          "kernel_version": "wrapped_v2",
+          "lambda_importance": 2.0,
+          "n": 2,
+          "n_prime": 3
+        },
+        "source": "recorded_robot_pedestrian_social_force"
+      },
+      "robot_force_peak": 0.0,
+      "robot_force_pp_equiv_exposed_ped_count": 0.0,
+      "robot_force_pp_equiv_impulse_per_exposed_ped": null,
+      "robot_force_pp_equiv_impulse_total": 0.0,
+      "robot_force_pp_equiv_invalid_present_samples": 0,
+      "robot_force_pp_equiv_mean_active": null,
+      "robot_force_pp_equiv_peak": 0.0,
+      "robot_force_pp_equiv_time_above_ref_s": 0.0,
+      "robot_force_time_above_ref_s": 0.0,
+      "signal_metrics_denominator": 0,
+      "signal_metrics_evidence": {
+        "exclusion_reason": "signal_state_metadata_absent",
+        "state": "unavailable"
+      },
+      "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+      "signal_red_phase_violations": 0,
+      "signal_stop_line_crossings_under_red": 0,
+      "signal_unavailable_exclusion_count": 1,
+      "social_compliance": {
+        "claim_class": "diagnostic_proxy",
+        "metrics": {
+          "comfort_exposure_person_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrian_steps",
+            "family": "comfort_exposure",
+            "id": "comfort_exposure_person_s",
+            "status": "not_applicable",
+            "support_count": 0,
+            "unavailable_reason": "episode contains no pedestrians",
+            "units": "person_seconds"
+          },
+          "distributional_inconvenience_p90_p50_gap": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_delay_samples",
+            "family": "distributional_inconvenience",
+            "id": "distributional_inconvenience_p90_p50_gap",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "per-pedestrian delay samples are unavailable or under-supported",
+            "units": "seconds"
+          },
+          "flow_disruption_delay_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_reference_arrival",
+            "family": "flow_disruption",
+            "id": "flow_disruption_delay_s",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian arrival baseline is unavailable",
+            "units": "seconds"
+          },
+          "legibility_progress_deficit_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "robot_steps_before_terminal",
+            "family": "legibility_progress",
+            "id": "legibility_progress_deficit_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "reference robot progress profile is unavailable",
+            "units": "meters"
+          },
+          "pedestrian_deviation_mean_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "tracked_pedestrian_steps_with_baseline",
+            "family": "pedestrian_deviation",
+            "id": "pedestrian_deviation_mean_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian reference trajectory is unavailable",
+            "units": "meters"
+          }
+        },
+        "schema_version": "social-compliance-metric-contract.v1"
+      },
+      "social_mini_game": {
+        "interpretation": "Diagnostic Social Mini-Game mechanism metrics. Rows distinguish valid zero values from unavailable or undefined metrics and are not paper-grade evidence by themselves.",
+        "mechanism_family": "unknown",
+        "rows": [
+          {
+            "denominator": "successful episodes with finite ideal-time baseline",
+            "metric": "makespan_ratio",
+            "status": "undefined",
+            "support_count": 0,
+            "unavailable_reason": "episode did not reach the goal with a finite ideal-time baseline",
+            "unit": "ratio"
+          },
+          {
+            "denominator": "robot trajectory length divided by start-goal displacement",
+            "metric": "path_deviation_ratio",
+            "status": "available",
+            "support_count": 1,
+            "unit": "ratio_over_straight_line",
+            "value": -0.22566179909665585
+          },
+          {
+            "denominator": "one episode",
+            "metric": "deadlock_frequency",
+            "status": "available",
+            "support_count": 1,
+            "unit": "events_per_episode",
+            "value": 0.0
+          },
+          {
+            "denominator": "pedestrian arrivals or exits over elapsed scenario time",
+            "metric": "flow_throughput",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "episode data does not carry pedestrian arrival or exit counts",
+            "unit": "pedestrians_per_second"
+          },
+          {
+            "denominator": "matched robot-present and control pedestrian trajectories by cohort",
+            "metric": "distributional_inconvenience",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "control trajectory cohort comparison was unavailable",
+            "unit": "diagnostic_cohort_delta"
+          },
+          {
+            "denominator": "proxemic exposure over robot-pedestrian trajectory samples",
+            "metric": "invasiveness",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "human-interaction proxy metrics were not enabled or lacked support",
+            "unit": "m*s"
+          }
+        ],
+        "schema_version": "social-mini-game-metrics.v1",
+        "status": "diagnostic"
+      },
+      "socnavbench_path_irregularity": 0.7892344878852737,
+      "socnavbench_path_length": 17.439999999999944,
+      "socnavbench_path_length_ratio": 0.7743382009033442,
+      "stalled_time": 0.0,
+      "success": false,
+      "time_to_goal_ideal_ratio_valid": false,
+      "time_to_goal_norm": 1.0,
+      "time_to_goal_success_only_valid": false,
+      "total_collision_count": 1,
+      "tracking_contract_honored": true,
+      "tracking_contract_honored_rate": 1.0,
+      "tracking_target_motp_m": 0.0,
+      "wall_collisions": 1.0
+    },
+    "trace_schema": "simulation-step-trace.v2",
+    "reset": {
+      "collision_at_reset": false,
+      "heading_source": "unavailable: simulator heading state not exposed",
+      "min_surface_clearance_m": null,
+      "pedestrians": [],
+      "robot": {
+        "angular_velocity": 0.0,
+        "heading": -1.560083031654358,
+        "position": [
+          22.214704807640114,
+          35.422859404221384
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "routes": {
+        "owner": "map_def.ped_routes",
+        "reason": "route_objects_not_retained_per_episode",
+        "status": "unavailable"
+      },
+      "spawn": {
+        "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+        "reason": "spawn_sampler_decision_not_retained",
+        "scenario_echo": {},
+        "status": "unavailable"
+      }
+    },
+    "first_3_steps": [
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            22.291822,
+            31.068344
+          ],
+          "next": [
+            22.402615,
+            20.727105
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 16.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 1.9821495141911574e-05,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.214758373098732,
+            35.417859691155456
+          ],
+          "velocity": [
+            0.000535654586180101,
+            -0.049997130659278355
+          ]
+        },
+        "step": 0,
+        "time_s": 0.1
+      },
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            22.291822,
+            31.068344
+          ],
+          "next": [
+            22.402615,
+            20.727105
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.1
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 15.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.020053508518186332,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.214919069474586,
+            35.402860551957666
+          ],
+          "velocity": [
+            0.001606963758540303,
+            -0.14999139197790612
+          ]
+        },
+        "step": 1,
+        "time_s": 0.2
+      },
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            22.291822,
+            31.068344
+          ],
+          "next": [
+            22.402615,
+            20.727105
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.2
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 14.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.04006929580153141,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.215186896767676,
+            35.37786198662801
+          ],
+          "velocity": [
+            0.002678272930900505,
+            -0.24998565329653388
+          ]
+        },
+        "step": 2,
+        "time_s": 0.30000000000000004
+      }
+    ],
+    "last_3_steps": [
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            36.889965,
+            18.784306
+          ],
+          "next": [
+            35.87188652853175,
+            17.513557174644806
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.18174750000000015,
+              "linear_velocity": 1.6
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": -11.634950000000002,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": -0.9817475,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.33641413229638173,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": 0.2029750943183899,
+          "position": [
+            25.03638182659402,
+            20.336412479950067
+          ],
+          "velocity": [
+            1.5692445301316127,
+            0.3122044276624081
+          ]
+        },
+        "step": 114,
+        "time_s": 11.5
+      },
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            36.889965,
+            18.784306
+          ],
+          "next": [
+            35.87188652853175,
+            17.513557174644806
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.08174750000000014,
+              "linear_velocity": 1.6
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": -10.63495,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": -0.9817475,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.333572839474989,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": 0.2061498463153839,
+          "position": [
+            25.193045819805512,
+            20.368914683429672
+          ],
+          "velocity": [
+            1.5666399321149171,
+            0.3250220347960564
+          ]
+        },
+        "step": 115,
+        "time_s": 11.600000000000001
+      },
+      {
+        "collision": {
+          "obstacle": true,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            36.889965,
+            18.784306
+          ],
+          "next": [
+            35.87188652853175,
+            17.513557174644806
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": -0.018252499999999866,
+              "linear_velocity": 1.6
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": -9.63495,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": -0.9817475,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": -4.667556143349027,
+          "terminated": true,
+          "truncated": false
+        },
+        "robot": {
+          "heading": 0.1993245929479599,
+          "position": [
+            25.34976887666505,
+            20.4011308819733
+          ],
+          "velocity": [
+            1.5672305685953702,
+            0.3221619854362956
+          ]
+        },
+        "step": 116,
+        "time_s": 11.700000000000001
+      }
+    ],
+    "outcome": {
+      "collision_event": true,
+      "route_complete": false,
+      "timeout_event": false
+    },
+    "metadata_keys": [
+      "algorithm",
+      "ammv_feasibility",
+      "baseline_category",
+      "canonical_algorithm",
+      "config",
+      "config_hash",
+      "foresight_prediction",
+      "kinematics_feasibility",
+      "learned_checkpoint_observation_contract",
+      "observation_level",
+      "observation_spec",
+      "observation_visibility",
+      "obstacle_force_law",
+      "paired_effect_metric_producer",
+      "paired_effect_native_trace",
+      "planner_contract",
+      "planner_kinematics",
+      "planner_runtime",
+      "policy_semantics",
+      "prediction_mode",
+      "predictive_risk_objective",
+      "predictive_risk_sample_count",
+      "predictive_search_mode",
+      "predictive_uncertainty_mode",
+      "robot_force_samples",
+      "simulation_step_trace",
+      "status",
+      "tracking_precision"
+    ]
+  },
+  {
+    "run": "21471-top",
+    "scenario": "classic_t_intersection_medium",
+    "seed": 1003,
+    "steps": 117,
+    "horizon": 500,
+    "termination_reason": "collision",
+    "metrics": {
+      "agent_collision_count": 0,
+      "avg_speed": 1.4974082827577633,
+      "clearing_distance_avg": 2.4764074145671207,
+      "clearing_distance_min": 0.9768668100224137,
+      "collisions": 1,
+      "comfort_exposure": 0.0,
+      "curvature_mean": 0.10128846043578175,
+      "deadlock": false,
+      "deadlock_stall": {
+        "interpretation": "Per-episode no-progress-over-window stall detector, parameterized and distinct from timeout/max_steps; additive diagnostic, not a benchmark superiority or safety claim.",
+        "max_no_progress_run": 0,
+        "progress_eps_m": 0.05,
+        "schema_version": "deadlock-stall.v2",
+        "stall_window_count": 0,
+        "status": "ok",
+        "window_steps": 15
+      },
+      "distributional_disruption": {
+        "baseline_condition": "control_run_without_robot",
+        "claim_boundary": "These metrics are diagnostic simulation measures for analyzing per-subgroup displacement and inconvenience distribution in controlled settings. They do not represent real-world ethical outcomes.",
+        "cohort_definitions": {
+          "extreme_speed_tier": "Pedestrians with average control speed > 1.8 m/s",
+          "fast_speed_tier": "Pedestrians with average control speed > 1.0 m/s and <= 1.8 m/s",
+          "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s"
+        },
+        "cohort_metrics": {},
+        "metric_definitions": {
+          "delay_mean_s": {
+            "denominator": "supported pedestrians per cohort",
+            "formula": "max(0, robot_present_path_length - control_path_length) / max(control_mean_speed, 0.1)"
+          },
+          "displacement_mean_m": {
+            "denominator": "matched timesteps per pedestrian, then supported pedestrians per cohort",
+            "formula": "mean_t ||robot_present_position_t - control_position_t||"
+          }
+        },
+        "missing_data": {
+          "extreme_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "fast_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "slow_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          }
+        },
+        "non_claims": "We make no claims regarding real-world fairness, equity, bias, protected attributes, demographic groups, or disparate impact. These measures are diagnostic simulation proxies only.",
+        "schema_version": "distributional-disruption.v1",
+        "support_counts": {
+          "extreme_speed_tier": 0,
+          "fast_speed_tier": 0,
+          "slow_speed_tier": 0
+        },
+        "units": {
+          "delay_mean_s": "seconds",
+          "displacement_mean_m": "meters"
+        }
+      },
+      "energy": 42.92045116173874,
+      "failure_to_progress": 0.0,
+      "force_exceed_events": 0,
+      "force_sample_stats": {
+        "finite_samples": 0,
+        "invalid_samples": 0,
+        "nonzero_force_samples": 0,
+        "raw_samples": 0,
+        "status": "no-pedestrians",
+        "valid_fraction": 0.0,
+        "zero_force_samples": 0
+      },
+      "jerk_mean": 0.5236020954140205,
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "metric_values": {
+        "completion_probability": 0.0,
+        "exact_collision_probability": 1.0,
+        "min_predicted_separation_m": NaN,
+        "near_miss_probability": 0.0
+      },
+      "min_separation_corrupted_m": Infinity,
+      "near_misses": 0,
+      "obstacle_collision_count": 1,
+      "path_efficiency": null,
+      "path_efficiency_reference_violation": false,
+      "ped_collision_count": 0,
+      "robot_force_exposed_ped_count": 0.0,
+      "robot_force_impulse_per_exposed_ped": null,
+      "robot_force_impulse_total": 0.0,
+      "robot_force_invalid_present_samples": 0,
+      "robot_force_mean_active": null,
+      "robot_force_metadata": {
+        "pp_equiv_status": "experimental_counterfactual",
+        "pp_equiv_velocity_rule": "backward_difference_first_forward",
+        "prf_activation_m": 2.0,
+        "prf_active": true,
+        "prf_multiplier": 10.0,
+        "prf_ped_radius_m": 0.35,
+        "prf_robot_radius_m": 1.0,
+        "quantity": "model acceleration, not measured human discomfort",
+        "reference_m_s2": 3.703015433252317,
+        "reference_rule": "social_force_head_on_contact_relative_speed_1m_s_v1",
+        "response_multipliers": [],
+        "robot_components": [
+          {
+            "prf_activation_m": 2.0,
+            "prf_active": true,
+            "prf_multiplier": 10.0,
+            "prf_ped_radius_m": 0.35,
+            "prf_robot_radius_m": 1.0,
+            "response_multipliers": []
+          }
+        ],
+        "sample_timing": "pre_integration",
+        "social_force_config": {
+          "activation_threshold": 20.0,
+          "factor": 5.1,
+          "gamma": 0.35,
+          "kernel_version": "wrapped_v2",
+          "lambda_importance": 2.0,
+          "n": 2,
+          "n_prime": 3
+        },
+        "source": "recorded_robot_pedestrian_social_force"
+      },
+      "robot_force_peak": 0.0,
+      "robot_force_pp_equiv_exposed_ped_count": 0.0,
+      "robot_force_pp_equiv_impulse_per_exposed_ped": null,
+      "robot_force_pp_equiv_impulse_total": 0.0,
+      "robot_force_pp_equiv_invalid_present_samples": 0,
+      "robot_force_pp_equiv_mean_active": null,
+      "robot_force_pp_equiv_peak": 0.0,
+      "robot_force_pp_equiv_time_above_ref_s": 0.0,
+      "robot_force_time_above_ref_s": 0.0,
+      "signal_metrics_denominator": 0,
+      "signal_metrics_evidence": {
+        "exclusion_reason": "signal_state_metadata_absent",
+        "state": "unavailable"
+      },
+      "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+      "signal_red_phase_violations": 0,
+      "signal_stop_line_crossings_under_red": 0,
+      "signal_unavailable_exclusion_count": 1,
+      "social_compliance": {
+        "claim_class": "diagnostic_proxy",
+        "metrics": {
+          "comfort_exposure_person_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrian_steps",
+            "family": "comfort_exposure",
+            "id": "comfort_exposure_person_s",
+            "status": "not_applicable",
+            "support_count": 0,
+            "unavailable_reason": "episode contains no pedestrians",
+            "units": "person_seconds"
+          },
+          "distributional_inconvenience_p90_p50_gap": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_delay_samples",
+            "family": "distributional_inconvenience",
+            "id": "distributional_inconvenience_p90_p50_gap",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "per-pedestrian delay samples are unavailable or under-supported",
+            "units": "seconds"
+          },
+          "flow_disruption_delay_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_reference_arrival",
+            "family": "flow_disruption",
+            "id": "flow_disruption_delay_s",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian arrival baseline is unavailable",
+            "units": "seconds"
+          },
+          "legibility_progress_deficit_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "robot_steps_before_terminal",
+            "family": "legibility_progress",
+            "id": "legibility_progress_deficit_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "reference robot progress profile is unavailable",
+            "units": "meters"
+          },
+          "pedestrian_deviation_mean_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "tracked_pedestrian_steps_with_baseline",
+            "family": "pedestrian_deviation",
+            "id": "pedestrian_deviation_mean_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian reference trajectory is unavailable",
+            "units": "meters"
+          }
+        },
+        "schema_version": "social-compliance-metric-contract.v1"
+      },
+      "social_mini_game": {
+        "interpretation": "Diagnostic Social Mini-Game mechanism metrics. Rows distinguish valid zero values from unavailable or undefined metrics and are not paper-grade evidence by themselves.",
+        "mechanism_family": "unknown",
+        "rows": [
+          {
+            "denominator": "successful episodes with finite ideal-time baseline",
+            "metric": "makespan_ratio",
+            "status": "undefined",
+            "support_count": 0,
+            "unavailable_reason": "episode did not reach the goal with a finite ideal-time baseline",
+            "unit": "ratio"
+          },
+          {
+            "denominator": "robot trajectory length divided by start-goal displacement",
+            "metric": "path_deviation_ratio",
+            "status": "available",
+            "support_count": 1,
+            "unit": "ratio_over_straight_line",
+            "value": -0.22566179909665585
+          },
+          {
+            "denominator": "one episode",
+            "metric": "deadlock_frequency",
+            "status": "available",
+            "support_count": 1,
+            "unit": "events_per_episode",
+            "value": 0.0
+          },
+          {
+            "denominator": "pedestrian arrivals or exits over elapsed scenario time",
+            "metric": "flow_throughput",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "episode data does not carry pedestrian arrival or exit counts",
+            "unit": "pedestrians_per_second"
+          },
+          {
+            "denominator": "matched robot-present and control pedestrian trajectories by cohort",
+            "metric": "distributional_inconvenience",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "control trajectory cohort comparison was unavailable",
+            "unit": "diagnostic_cohort_delta"
+          },
+          {
+            "denominator": "proxemic exposure over robot-pedestrian trajectory samples",
+            "metric": "invasiveness",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "human-interaction proxy metrics were not enabled or lacked support",
+            "unit": "m*s"
+          }
+        ],
+        "schema_version": "social-mini-game-metrics.v1",
+        "status": "diagnostic"
+      },
+      "socnavbench_path_irregularity": 0.7892344878852737,
+      "socnavbench_path_length": 17.439999999999944,
+      "socnavbench_path_length_ratio": 0.7743382009033442,
+      "stalled_time": 0.0,
+      "success": false,
+      "time_to_goal_ideal_ratio_valid": false,
+      "time_to_goal_norm": 1.0,
+      "time_to_goal_success_only_valid": false,
+      "total_collision_count": 1,
+      "tracking_contract_honored": true,
+      "tracking_contract_honored_rate": 1.0,
+      "tracking_target_motp_m": 0.0,
+      "wall_collisions": 1.0
+    },
+    "trace_schema": "simulation-step-trace.v2",
+    "reset": {
+      "collision_at_reset": false,
+      "heading_source": "unavailable: simulator heading state not exposed",
+      "min_surface_clearance_m": null,
+      "pedestrians": [],
+      "robot": {
+        "angular_velocity": 0.0,
+        "heading": -1.560083031654358,
+        "position": [
+          22.214704807640114,
+          35.422859404221384
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "routes": {
+        "owner": "map_def.ped_routes",
+        "reason": "route_objects_not_retained_per_episode",
+        "status": "unavailable"
+      },
+      "spawn": {
+        "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+        "reason": "spawn_sampler_decision_not_retained",
+        "scenario_echo": {},
+        "status": "unavailable"
+      }
+    },
+    "first_3_steps": [
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            22.291822,
+            31.068344
+          ],
+          "next": [
+            22.402615,
+            20.727105
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 16.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 1.9821495141911574e-05,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.214758373098732,
+            35.417859691155456
+          ],
+          "velocity": [
+            0.000535654586180101,
+            -0.049997130659278355
+          ]
+        },
+        "step": 0,
+        "time_s": 0.1
+      },
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            22.291822,
+            31.068344
+          ],
+          "next": [
+            22.402615,
+            20.727105
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.1
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 15.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.020053508518186332,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.214919069474586,
+            35.402860551957666
+          ],
+          "velocity": [
+            0.001606963758540303,
+            -0.14999139197790612
+          ]
+        },
+        "step": 1,
+        "time_s": 0.2
+      },
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            22.291822,
+            31.068344
+          ],
+          "next": [
+            22.402615,
+            20.727105
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.2
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 14.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.04006929580153141,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.215186896767676,
+            35.37786198662801
+          ],
+          "velocity": [
+            0.002678272930900505,
+            -0.24998565329653388
+          ]
+        },
+        "step": 2,
+        "time_s": 0.30000000000000004
+      }
+    ],
+    "last_3_steps": [
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            36.889965,
+            18.784306
+          ],
+          "next": [
+            35.87188652853175,
+            17.513557174644806
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.18174750000000015,
+              "linear_velocity": 1.6
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": -11.634950000000002,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": -0.9817475,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.33641413229638173,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": 0.2029750943183899,
+          "position": [
+            25.03638182659402,
+            20.336412479950067
+          ],
+          "velocity": [
+            1.5692445301316127,
+            0.3122044276624081
+          ]
+        },
+        "step": 114,
+        "time_s": 11.5
+      },
+      {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            36.889965,
+            18.784306
+          ],
+          "next": [
+            35.87188652853175,
+            17.513557174644806
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": 0.08174750000000014,
+              "linear_velocity": 1.6
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": -10.63495,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": -0.9817475,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.333572839474989,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": 0.2061498463153839,
+          "position": [
+            25.193045819805512,
+            20.368914683429672
+          ],
+          "velocity": [
+            1.5666399321149171,
+            0.3250220347960564
+          ]
+        },
+        "step": 115,
+        "time_s": 11.600000000000001
+      },
+      {
+        "collision": {
+          "obstacle": true,
+          "pedestrian": false,
+          "robot": false
+        },
+        "goal": {
+          "current": [
+            36.889965,
+            18.784306
+          ],
+          "next": [
+            35.87188652853175,
+            17.513557174644806
+          ]
+        },
+        "pedestrians": [],
+        "planner": {
+          "action_conversion": {
+            "dt_s": 0.1,
+            "input_units": {
+              "angular_velocity": "rad/s",
+              "linear_velocity": "m/s"
+            },
+            "kind": "unicycle_velocity_to_acceleration",
+            "output_units": {
+              "angular_velocity": "rad/s^2",
+              "linear_velocity": "m/s^2"
+            },
+            "pre_step_speed": {
+              "angular_velocity": -0.018252499999999866,
+              "linear_velocity": 1.6
+            },
+            "robot_config_type": "robot_sf.robot.differential_drive.DifferentialDriveSettings",
+            "schema_version": "policy-action-conversion.v1"
+          },
+          "applied_environment_action": {
+            "angular_velocity": -9.63495,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "planner_target_xy": null,
+          "selected_action": {
+            "angular_velocity": -0.9817475,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": -4.667556143349027,
+          "terminated": true,
+          "truncated": false
+        },
+        "robot": {
+          "heading": 0.1993245929479599,
+          "position": [
+            25.34976887666505,
+            20.4011308819733
+          ],
+          "velocity": [
+            1.5672305685953702,
+            0.3221619854362956
+          ]
+        },
+        "step": 116,
+        "time_s": 11.700000000000001
+      }
+    ],
+    "outcome": {
+      "collision_event": true,
+      "route_complete": false,
+      "timeout_event": false
+    },
+    "metadata_keys": [
+      "algorithm",
+      "ammv_feasibility",
+      "baseline_category",
+      "canonical_algorithm",
+      "config",
+      "config_hash",
+      "foresight_prediction",
+      "kinematics_feasibility",
+      "learned_checkpoint_observation_contract",
+      "observation_level",
+      "observation_spec",
+      "observation_visibility",
+      "obstacle_force_law",
+      "paired_effect_metric_producer",
+      "paired_effect_native_trace",
+      "planner_contract",
+      "planner_kinematics",
+      "planner_runtime",
+      "policy_semantics",
+      "prediction_mode",
+      "predictive_risk_objective",
+      "predictive_risk_sample_count",
+      "predictive_search_mode",
+      "predictive_uncertainty_mode",
+      "robot_force_samples",
+      "simulation_step_trace",
+      "status",
+      "tracking_precision"
+    ]
+  },
+  {
+    "run": "21472-baseline",
+    "scenario": "classic_t_intersection_low",
+    "seed": 1003,
+    "steps": 154,
+    "horizon": 600,
+    "termination_reason": "success",
+    "metrics": {
+      "agent_collision_count": 0,
+      "avg_speed": 1.5220798862122593,
+      "clearing_distance_avg": 2.026556744881633,
+      "clearing_distance_min": 1.3537312862076176,
+      "collisions": 0,
+      "comfort_exposure": 0.0,
+      "curvature_mean": 0.07404660102992429,
+      "deadlock": false,
+      "deadlock_stall": {
+        "interpretation": "Per-episode no-progress-over-window stall detector, parameterized and distinct from timeout/max_steps; additive diagnostic, not a benchmark superiority or safety claim.",
+        "max_no_progress_run": 6,
+        "progress_eps_m": 0.05,
+        "schema_version": "deadlock-stall.v1",
+        "stall_window_count": 0,
+        "status": "ok",
+        "window_steps": 15
+      },
+      "distributional_disruption": {
+        "baseline_condition": "control_run_without_robot",
+        "claim_boundary": "These metrics are diagnostic simulation measures for analyzing per-subgroup displacement and inconvenience distribution in controlled settings. They do not represent real-world ethical outcomes.",
+        "cohort_definitions": {
+          "extreme_speed_tier": "Pedestrians with average control speed > 1.8 m/s",
+          "fast_speed_tier": "Pedestrians with average control speed > 1.0 m/s and <= 1.8 m/s",
+          "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s"
+        },
+        "cohort_metrics": {},
+        "metric_definitions": {
+          "delay_mean_s": {
+            "denominator": "supported pedestrians per cohort",
+            "formula": "max(0, robot_present_path_length - control_path_length) / max(control_mean_speed, 0.1)"
+          },
+          "displacement_mean_m": {
+            "denominator": "matched timesteps per pedestrian, then supported pedestrians per cohort",
+            "formula": "mean_t ||robot_present_position_t - control_position_t||"
+          }
+        },
+        "missing_data": {
+          "extreme_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "fast_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "slow_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          }
+        },
+        "non_claims": "We make no claims regarding real-world fairness, equity, bias, protected attributes, demographic groups, or disparate impact. These measures are diagnostic simulation proxies only.",
+        "schema_version": "distributional-disruption.v1",
+        "support_counts": {
+          "extreme_speed_tier": 0,
+          "fast_speed_tier": 0,
+          "slow_speed_tier": 0
+        },
+        "units": {
+          "delay_mean_s": "seconds",
+          "displacement_mean_m": "meters"
+        }
+      },
+      "energy": 43.703747767187394,
+      "failure_to_progress": 0.0,
+      "force_exceed_events": 0,
+      "force_sample_stats": {
+        "finite_samples": 0,
+        "invalid_samples": 0,
+        "nonzero_force_samples": 0,
+        "raw_samples": 0,
+        "status": "no-pedestrians",
+        "valid_fraction": 0.0,
+        "zero_force_samples": 0
+      },
+      "jerk_mean": 0.050059622879852064,
+      "metric_values": {
+        "completion_probability": 1.0,
+        "exact_collision_probability": 0.0,
+        "min_predicted_separation_m": NaN,
+        "near_miss_probability": 0.0
+      },
+      "min_separation_corrupted_m": Infinity,
+      "near_misses": 0,
+      "obstacle_collision_count": 0,
+      "path_efficiency": 0.9765622565877227,
+      "ped_collision_count": 0,
+      "signal_metrics_denominator": 0,
+      "signal_metrics_evidence": {
+        "exclusion_reason": "signal_state_metadata_absent",
+        "state": "unavailable"
+      },
+      "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+      "signal_red_phase_violations": 0,
+      "signal_stop_line_crossings_under_red": 0,
+      "signal_unavailable_exclusion_count": 1,
+      "snqi": 0.14550737710693737,
+      "social_compliance": {
+        "claim_class": "diagnostic_proxy",
+        "metrics": {
+          "comfort_exposure_person_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrian_steps",
+            "family": "comfort_exposure",
+            "id": "comfort_exposure_person_s",
+            "status": "not_applicable",
+            "support_count": 0,
+            "unavailable_reason": "episode contains no pedestrians",
+            "units": "person_seconds"
+          },
+          "distributional_inconvenience_p90_p50_gap": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_delay_samples",
+            "family": "distributional_inconvenience",
+            "id": "distributional_inconvenience_p90_p50_gap",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "per-pedestrian delay samples are unavailable or under-supported",
+            "units": "seconds"
+          },
+          "flow_disruption_delay_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_reference_arrival",
+            "family": "flow_disruption",
+            "id": "flow_disruption_delay_s",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian arrival baseline is unavailable",
+            "units": "seconds"
+          },
+          "legibility_progress_deficit_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "robot_steps_before_terminal",
+            "family": "legibility_progress",
+            "id": "legibility_progress_deficit_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "reference robot progress profile is unavailable",
+            "units": "meters"
+          },
+          "pedestrian_deviation_mean_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "tracked_pedestrian_steps_with_baseline",
+            "family": "pedestrian_deviation",
+            "id": "pedestrian_deviation_mean_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian reference trajectory is unavailable",
+            "units": "meters"
+          }
+        },
+        "schema_version": "social-compliance-metric-contract.v1"
+      },
+      "social_mini_game": {
+        "interpretation": "Diagnostic Social Mini-Game mechanism metrics. Rows distinguish valid zero values from unavailable or undefined metrics and are not paper-grade evidence by themselves.",
+        "mechanism_family": "unknown",
+        "rows": [
+          {
+            "denominator": "successful episodes with finite ideal-time baseline",
+            "metric": "makespan_ratio",
+            "status": "available",
+            "support_count": 1,
+            "unit": "ratio",
+            "value": 1.3416573671689942
+          },
+          {
+            "denominator": "robot trajectory length divided by start-goal displacement",
+            "metric": "path_deviation_ratio",
+            "status": "available",
+            "support_count": 1,
+            "unit": "ratio_over_straight_line",
+            "value": 0.19314065781781276
+          },
+          {
+            "denominator": "one episode",
+            "metric": "deadlock_frequency",
+            "status": "available",
+            "support_count": 1,
+            "unit": "events_per_episode",
+            "value": 0.0
+          },
+          {
+            "denominator": "pedestrian arrivals or exits over elapsed scenario time",
+            "metric": "flow_throughput",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "episode data does not carry pedestrian arrival or exit counts",
+            "unit": "pedestrians_per_second"
+          },
+          {
+            "denominator": "matched robot-present and control pedestrian trajectories by cohort",
+            "metric": "distributional_inconvenience",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "control trajectory cohort comparison was unavailable",
+            "unit": "diagnostic_cohort_delta"
+          },
+          {
+            "denominator": "proxemic exposure over robot-pedestrian trajectory samples",
+            "metric": "invasiveness",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "human-interaction proxy metrics were not enabled or lacked support",
+            "unit": "m*s"
+          }
+        ],
+        "schema_version": "social-mini-game-metrics.v1",
+        "status": "diagnostic"
+      },
+      "socnavbench_path_irregularity": 0.6222850867675442,
+      "socnavbench_path_length": 23.35500000000001,
+      "socnavbench_path_length_ratio": 1.1931406578178128,
+      "stalled_time": 0.0,
+      "success": true,
+      "time_to_goal_ideal_ratio": 1.3416573671689942,
+      "time_to_goal_ideal_ratio_valid": true,
+      "time_to_goal_norm": 0.255,
+      "time_to_goal_norm_success_only": 0.255,
+      "time_to_goal_success_only_valid": true,
+      "total_collision_count": 0,
+      "tracking_contract_honored": true,
+      "tracking_contract_honored_rate": 1.0,
+      "tracking_target_motp_m": 0.0,
+      "wall_collisions": 0.0
+    },
+    "trace_schema": "simulation-step-trace.v1",
+    "reset": {
+      "collision_at_reset": false,
+      "heading_source": "unavailable: simulator heading state not exposed",
+      "min_surface_clearance_m": null,
+      "pedestrians": [],
+      "robot": {
+        "heading": -1.560083031654358,
+        "position": [
+          22.997151192359883,
+          32.26303459577861
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "routes": {
+        "owner": "map_def.ped_routes",
+        "reason": "route_objects_not_retained_per_episode",
+        "status": "unavailable"
+      },
+      "spawn": {
+        "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+        "reason": "spawn_sampler_decision_not_retained",
+        "scenario_echo": {},
+        "status": "unavailable"
+      }
+    },
+    "first_3_steps": [
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 16.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": -0.0004961227256805503,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.9972047578185,
+            32.258034882712685
+          ],
+          "velocity": [
+            0.000535654586180101,
+            -0.049997130659278355
+          ]
+        },
+        "step": 0,
+        "time_s": 0.1
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 15.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.01850354394273502,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.997365454194355,
+            32.243035743514895
+          ],
+          "velocity": [
+            0.001606963758540303,
+            -0.14999139197790612
+          ]
+        },
+        "step": 1,
+        "time_s": 0.2
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 14.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.03747889979462627,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.997633281487445,
+            32.21803717818524
+          ],
+          "velocity": [
+            0.002678272930900505,
+            -0.24998565329653388
+          ]
+        },
+        "step": 2,
+        "time_s": 0.30000000000000004
+      }
+    ],
+    "last_3_steps": [
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": -10.0,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": -1.2,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.3065385024047863,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -0.3050830364227295,
+          "position": [
+            34.67576868983358,
+            19.05897606920137
+          ],
+          "velocity": [
+            1.5320032902364744,
+            -0.46148230594965867
+          ]
+        },
+        "step": 151,
+        "time_s": 15.200000000000001
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": -8.999999999999998,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": -1.2,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.30253354900133106,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -0.3400830328464508,
+          "position": [
+            34.82751584461937,
+            19.00825328325247
+          ],
+          "velocity": [
+            1.5174715478578804,
+            -0.5072278594890278
+          ]
+        },
+        "step": 152,
+        "time_s": 15.3
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": -7.999999999999999,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": -1.2,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 2.2997687576463983,
+          "terminated": true,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -0.38508301973342896,
+          "position": [
+            34.97711324742864,
+            18.95150280243758
+          ],
+          "velocity": [
+            1.4959740280927036,
+            -0.5675048081488754
+          ]
+        },
+        "step": 153,
+        "time_s": 15.4
+      }
+    ],
+    "outcome": {
+      "collision_event": false,
+      "route_complete": true,
+      "timeout_event": false
+    },
+    "metadata_keys": [
+      "algorithm",
+      "ammv_feasibility",
+      "baseline_category",
+      "canonical_algorithm",
+      "config",
+      "config_hash",
+      "foresight_prediction",
+      "kinematics_feasibility",
+      "learned_checkpoint_observation_contract",
+      "observation_level",
+      "observation_spec",
+      "observation_visibility",
+      "obstacle_force_law",
+      "paired_effect_metric_producer",
+      "paired_effect_native_trace",
+      "planner_contract",
+      "planner_kinematics",
+      "planner_runtime",
+      "policy_semantics",
+      "prediction_mode",
+      "predictive_risk_objective",
+      "predictive_risk_sample_count",
+      "predictive_search_mode",
+      "predictive_uncertainty_mode",
+      "simulation_step_trace",
+      "status",
+      "tracking_precision"
+    ]
+  },
+  {
+    "run": "21472-baseline",
+    "scenario": "classic_t_intersection_medium",
+    "seed": 1003,
+    "steps": 154,
+    "horizon": 600,
+    "termination_reason": "success",
+    "metrics": {
+      "agent_collision_count": 0,
+      "avg_speed": 1.5220798862122593,
+      "clearing_distance_avg": 2.026556744881633,
+      "clearing_distance_min": 1.3537312862076176,
+      "collisions": 0,
+      "comfort_exposure": 0.0,
+      "curvature_mean": 0.07404660102992429,
+      "deadlock": false,
+      "deadlock_stall": {
+        "interpretation": "Per-episode no-progress-over-window stall detector, parameterized and distinct from timeout/max_steps; additive diagnostic, not a benchmark superiority or safety claim.",
+        "max_no_progress_run": 6,
+        "progress_eps_m": 0.05,
+        "schema_version": "deadlock-stall.v1",
+        "stall_window_count": 0,
+        "status": "ok",
+        "window_steps": 15
+      },
+      "distributional_disruption": {
+        "baseline_condition": "control_run_without_robot",
+        "claim_boundary": "These metrics are diagnostic simulation measures for analyzing per-subgroup displacement and inconvenience distribution in controlled settings. They do not represent real-world ethical outcomes.",
+        "cohort_definitions": {
+          "extreme_speed_tier": "Pedestrians with average control speed > 1.8 m/s",
+          "fast_speed_tier": "Pedestrians with average control speed > 1.0 m/s and <= 1.8 m/s",
+          "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s"
+        },
+        "cohort_metrics": {},
+        "metric_definitions": {
+          "delay_mean_s": {
+            "denominator": "supported pedestrians per cohort",
+            "formula": "max(0, robot_present_path_length - control_path_length) / max(control_mean_speed, 0.1)"
+          },
+          "displacement_mean_m": {
+            "denominator": "matched timesteps per pedestrian, then supported pedestrians per cohort",
+            "formula": "mean_t ||robot_present_position_t - control_position_t||"
+          }
+        },
+        "missing_data": {
+          "extreme_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "fast_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          },
+          "slow_speed_tier": {
+            "reason": "No control trace provided",
+            "status": "unavailable"
+          }
+        },
+        "non_claims": "We make no claims regarding real-world fairness, equity, bias, protected attributes, demographic groups, or disparate impact. These measures are diagnostic simulation proxies only.",
+        "schema_version": "distributional-disruption.v1",
+        "support_counts": {
+          "extreme_speed_tier": 0,
+          "fast_speed_tier": 0,
+          "slow_speed_tier": 0
+        },
+        "units": {
+          "delay_mean_s": "seconds",
+          "displacement_mean_m": "meters"
+        }
+      },
+      "energy": 43.703747767187394,
+      "failure_to_progress": 0.0,
+      "force_exceed_events": 0,
+      "force_sample_stats": {
+        "finite_samples": 0,
+        "invalid_samples": 0,
+        "nonzero_force_samples": 0,
+        "raw_samples": 0,
+        "status": "no-pedestrians",
+        "valid_fraction": 0.0,
+        "zero_force_samples": 0
+      },
+      "jerk_mean": 0.050059622879852064,
+      "metric_values": {
+        "completion_probability": 1.0,
+        "exact_collision_probability": 0.0,
+        "min_predicted_separation_m": NaN,
+        "near_miss_probability": 0.0
+      },
+      "min_separation_corrupted_m": Infinity,
+      "near_misses": 0,
+      "obstacle_collision_count": 0,
+      "path_efficiency": 0.9765622565877227,
+      "ped_collision_count": 0,
+      "signal_metrics_denominator": 0,
+      "signal_metrics_evidence": {
+        "exclusion_reason": "signal_state_metadata_absent",
+        "state": "unavailable"
+      },
+      "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+      "signal_red_phase_violations": 0,
+      "signal_stop_line_crossings_under_red": 0,
+      "signal_unavailable_exclusion_count": 1,
+      "snqi": 0.14550737710693737,
+      "social_compliance": {
+        "claim_class": "diagnostic_proxy",
+        "metrics": {
+          "comfort_exposure_person_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrian_steps",
+            "family": "comfort_exposure",
+            "id": "comfort_exposure_person_s",
+            "status": "not_applicable",
+            "support_count": 0,
+            "unavailable_reason": "episode contains no pedestrians",
+            "units": "person_seconds"
+          },
+          "distributional_inconvenience_p90_p50_gap": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_delay_samples",
+            "family": "distributional_inconvenience",
+            "id": "distributional_inconvenience_p90_p50_gap",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "per-pedestrian delay samples are unavailable or under-supported",
+            "units": "seconds"
+          },
+          "flow_disruption_delay_s": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "pedestrians_with_reference_arrival",
+            "family": "flow_disruption",
+            "id": "flow_disruption_delay_s",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian arrival baseline is unavailable",
+            "units": "seconds"
+          },
+          "legibility_progress_deficit_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "robot_steps_before_terminal",
+            "family": "legibility_progress",
+            "id": "legibility_progress_deficit_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "reference robot progress profile is unavailable",
+            "units": "meters"
+          },
+          "pedestrian_deviation_mean_m": {
+            "claim_class": "diagnostic_proxy",
+            "denominator": "tracked_pedestrian_steps_with_baseline",
+            "family": "pedestrian_deviation",
+            "id": "pedestrian_deviation_mean_m",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "matched pedestrian reference trajectory is unavailable",
+            "units": "meters"
+          }
+        },
+        "schema_version": "social-compliance-metric-contract.v1"
+      },
+      "social_mini_game": {
+        "interpretation": "Diagnostic Social Mini-Game mechanism metrics. Rows distinguish valid zero values from unavailable or undefined metrics and are not paper-grade evidence by themselves.",
+        "mechanism_family": "unknown",
+        "rows": [
+          {
+            "denominator": "successful episodes with finite ideal-time baseline",
+            "metric": "makespan_ratio",
+            "status": "available",
+            "support_count": 1,
+            "unit": "ratio",
+            "value": 1.3416573671689942
+          },
+          {
+            "denominator": "robot trajectory length divided by start-goal displacement",
+            "metric": "path_deviation_ratio",
+            "status": "available",
+            "support_count": 1,
+            "unit": "ratio_over_straight_line",
+            "value": 0.19314065781781276
+          },
+          {
+            "denominator": "one episode",
+            "metric": "deadlock_frequency",
+            "status": "available",
+            "support_count": 1,
+            "unit": "events_per_episode",
+            "value": 0.0
+          },
+          {
+            "denominator": "pedestrian arrivals or exits over elapsed scenario time",
+            "metric": "flow_throughput",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "episode data does not carry pedestrian arrival or exit counts",
+            "unit": "pedestrians_per_second"
+          },
+          {
+            "denominator": "matched robot-present and control pedestrian trajectories by cohort",
+            "metric": "distributional_inconvenience",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "control trajectory cohort comparison was unavailable",
+            "unit": "diagnostic_cohort_delta"
+          },
+          {
+            "denominator": "proxemic exposure over robot-pedestrian trajectory samples",
+            "metric": "invasiveness",
+            "status": "unavailable",
+            "support_count": 0,
+            "unavailable_reason": "human-interaction proxy metrics were not enabled or lacked support",
+            "unit": "m*s"
+          }
+        ],
+        "schema_version": "social-mini-game-metrics.v1",
+        "status": "diagnostic"
+      },
+      "socnavbench_path_irregularity": 0.6222850867675442,
+      "socnavbench_path_length": 23.35500000000001,
+      "socnavbench_path_length_ratio": 1.1931406578178128,
+      "stalled_time": 0.0,
+      "success": true,
+      "time_to_goal_ideal_ratio": 1.3416573671689942,
+      "time_to_goal_ideal_ratio_valid": true,
+      "time_to_goal_norm": 0.255,
+      "time_to_goal_norm_success_only": 0.255,
+      "time_to_goal_success_only_valid": true,
+      "total_collision_count": 0,
+      "tracking_contract_honored": true,
+      "tracking_contract_honored_rate": 1.0,
+      "tracking_target_motp_m": 0.0,
+      "wall_collisions": 0.0
+    },
+    "trace_schema": "simulation-step-trace.v1",
+    "reset": {
+      "collision_at_reset": false,
+      "heading_source": "unavailable: simulator heading state not exposed",
+      "min_surface_clearance_m": null,
+      "pedestrians": [],
+      "robot": {
+        "heading": -1.560083031654358,
+        "position": [
+          22.997151192359883,
+          32.26303459577861
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "routes": {
+        "owner": "map_def.ped_routes",
+        "reason": "route_objects_not_retained_per_episode",
+        "status": "unavailable"
+      },
+      "spawn": {
+        "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+        "reason": "spawn_sampler_decision_not_retained",
+        "scenario_echo": {},
+        "status": "unavailable"
+      }
+    },
+    "first_3_steps": [
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 16.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": -0.0004961227256805503,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.9972047578185,
+            32.258034882712685
+          ],
+          "velocity": [
+            0.000535654586180101,
+            -0.049997130659278355
+          ]
+        },
+        "step": 0,
+        "time_s": 0.1
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 15.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.01850354394273502,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.997365454194355,
+            32.243035743514895
+          ],
+          "velocity": [
+            0.001606963758540303,
+            -0.14999139197790612
+          ]
+        },
+        "step": 1,
+        "time_s": 0.2
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 14.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.03747889979462627,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -1.560083031654358,
+          "position": [
+            22.997633281487445,
+            32.21803717818524
+          ],
+          "velocity": [
+            0.002678272930900505,
+            -0.24998565329653388
+          ]
+        },
+        "step": 2,
+        "time_s": 0.30000000000000004
+      }
+    ],
+    "last_3_steps": [
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": -10.0,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": -1.2,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.3065385024047863,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -0.3050830364227295,
+          "position": [
+            34.67576868983358,
+            19.05897606920137
+          ],
+          "velocity": [
+            1.5320032902364744,
+            -0.46148230594965867
+          ]
+        },
+        "step": 151,
+        "time_s": 15.200000000000001
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": -8.999999999999998,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": -1.2,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 0.30253354900133106,
+          "terminated": false,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -0.3400830328464508,
+          "position": [
+            34.82751584461937,
+            19.00825328325247
+          ],
+          "velocity": [
+            1.5174715478578804,
+            -0.5072278594890278
+          ]
+        },
+        "step": 152,
+        "time_s": 15.3
+      },
+      {
+        "pedestrians": [],
+        "planner": {
+          "applied_environment_action": {
+            "angular_velocity": -7.999999999999999,
+            "linear_velocity": 0.0
+          },
+          "event": "step",
+          "selected_action": {
+            "angular_velocity": -1.2,
+            "linear_velocity": 1.6
+          }
+        },
+        "rl": {
+          "reward": 2.2997687576463983,
+          "terminated": true,
+          "truncated": false
+        },
+        "robot": {
+          "heading": -0.38508301973342896,
+          "position": [
+            34.97711324742864,
+            18.95150280243758
+          ],
+          "velocity": [
+            1.4959740280927036,
+            -0.5675048081488754
+          ]
+        },
+        "step": 153,
+        "time_s": 15.4
+      }
+    ],
+    "outcome": {
+      "collision_event": false,
+      "route_complete": true,
+      "timeout_event": false
+    },
+    "metadata_keys": [
+      "algorithm",
+      "ammv_feasibility",
+      "baseline_category",
+      "canonical_algorithm",
+      "config",
+      "config_hash",
+      "foresight_prediction",
+      "kinematics_feasibility",
+      "learned_checkpoint_observation_contract",
+      "observation_level",
+      "observation_spec",
+      "observation_visibility",
+      "obstacle_force_law",
+      "paired_effect_metric_producer",
+      "paired_effect_native_trace",
+      "planner_contract",
+      "planner_kinematics",
+      "planner_runtime",
+      "policy_semantics",
+      "prediction_mode",
+      "predictive_risk_objective",
+      "predictive_risk_sample_count",
+      "predictive_search_mode",
+      "predictive_uncertainty_mode",
+      "simulation_step_trace",
+      "status",
+      "tracking_precision"
+    ]
+  }
+]

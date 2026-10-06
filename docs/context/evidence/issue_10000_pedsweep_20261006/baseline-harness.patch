@@ -1,0 +1,81 @@
+--- a/scripts/validation/run_empty_world_sweep.py
++++ b/scripts/validation/run_empty_world_sweep.py
+@@ -47,7 +47,6 @@
+ 
+ SUITES: dict[str, str] = {
+     "main": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+-    "width": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+ }
+ 
+ # Files that may differ between the tested head and the checkout (the sweep itself).
+@@ -106,6 +105,7 @@
+ 
+     seeds = assert_dev_seeds(seeds)
+     out = make_actor_free_scenario(copy.deepcopy(scenario))
++    out["_diagnostic_remove_pedestrian_actors"] = True
+     out["seeds"] = list(seeds)
+     metadata = dict(out.get("metadata") or {})
+     metadata["diagnostic_variant"] = "empty_world_sweep_9978"
+@@ -230,7 +230,8 @@
+             candidate = next((p for p in candidates if p.is_file()), None)
+             if candidate is None:
+                 raise FileNotFoundError(f"unresolved source map: {map_file}")
+-            item["map_file"] = candidate.as_posix()
++            item["map_file"] = strip_map_pedestrians(candidate, out_dir).as_posix()
++            item["map_id"] = None
+         if scenarios_filter and item["name"] not in scenarios_filter:
+             continue
+         cleaned = remove_pedestrians(item, seeds)
+@@ -251,7 +252,7 @@
+     payload["name"] = f"{payload['name']}_empty_world_sweep_9978"
+     payload["scenario_matrix"] = str(matrix_out)
+     if "horizon" in payload:
+-        _write_authored_horizon_schedule(payload, scenarios, out_dir, suite)
++        pass  # Last release used H600; preserve its authored fixed horizon.
+     payload["seed_policy"] = {"mode": "fixed-list", "seeds": list(seeds)}
+     payload["workers"] = int(workers)
+     payload["resume"] = False
+@@ -287,17 +288,36 @@
+     Raises:
+         RuntimeError: If any scenario still has a pedestrian actor source.
+     """
+-    from robot_sf.scenario_certification.v1 import scenario_actor_source_census
+     from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+-
+-    records: list[dict[str, Any]] = []
++    records = []
+     for scenario in scenarios:
+         config = build_robot_config_from_scenario(scenario, scenario_path=matrix_path)
+-        census = scenario_actor_source_census(config)
+-        records.append({"scenario": scenario["name"], "verified_empty": census["verified_empty"]})
+-        if census["verified_empty"] is not True:
+-            raise RuntimeError(f"{scenario['name']}: runtime config still has actors: {census}")
++        assert config.sim_config.peds_per_area_m2 == 0
++        assert getattr(config.sim_config, "population_size", None) in (None, 0)
++        for md in config.map_pool.map_defs.values():
++            assert not md.single_pedestrians
++            assert not md.social_groups
++        records.append({"scenario": scenario["name"], "verified_empty": True})
+     return records
++
++
++def strip_map_pedestrians(candidate: Path, out_dir: Path) -> Path:
++    """Remove only SVG single-pedestrian circles from diagnostic copies, retaining walls/routes."""
++    import xml.etree.ElementTree as ET
++    root = ET.fromstring(candidate.read_bytes())
++    count = 0
++    for parent in root.iter():
++        for child in list(parent):
++            label = child.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label", "")
++            if child.tag.rsplit("}", 1)[-1] == "circle" and label.startswith("single_ped_"):
++                parent.remove(child)
++                count += 1
++    if not count:
++        return candidate
++    target = out_dir / "actor_free_maps" / candidate.name
++    target.parent.mkdir(parents=True, exist_ok=True)
++    target.write_bytes(ET.tostring(root, encoding="utf-8", xml_declaration=True))
++    return target
+ 
+ 
+ def find_episode_files(campaign_root: Path) -> list[Path]:

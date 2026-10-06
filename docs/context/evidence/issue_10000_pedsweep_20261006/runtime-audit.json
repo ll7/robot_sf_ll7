@@ -1,0 +1,315 @@
+{
+  "schema_version": "pedsweep-runtime-audit.v1",
+  "evidence_tier": "diagnostic-only",
+  "method_source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+  "runs": {
+    "top": {
+      "source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+      "production_diff_empty": true,
+      "primary_job_exit_code": 1,
+      "primary_job_exit_scope": "Top job can exit 1 because original width failed; each selected suite must independently reconcile complete. Width repair is a separate pinned-source job.",
+      "suites": {
+        "main": {
+          "expected_rows": 2016,
+          "written_rows": 2016,
+          "missing_duplicate_unexpected_slots": 0,
+          "execution_modes": {
+            "native": 288,
+            "mixed": 144,
+            "adapter": 1584
+          },
+          "outcomes": {
+            "success": 1714,
+            "collision": 203,
+            "timeout": 99
+          },
+          "horizons": {
+            "500": 546,
+            "700": 42,
+            "650": 42,
+            "600": 378,
+            "400": 1008
+          },
+          "runtime_issues": [],
+          "strict_release_metadata_audit_passed": false,
+          "strict_scanner_auxiliary_measurement_markers": {
+            "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 2016
+          },
+          "typed_reset_telemetry_omissions": {
+            "simulation_step_trace.reset.routes:route_objects_not_retained_per_episode": 2016,
+            "simulation_step_trace.reset.spawn:spawn_sampler_decision_not_retained": 2016
+          },
+          "negative_controls_detected": {
+            "fallback_triggered": [
+              "algorithm_metadata.planner_runtime.fallback_triggered=true"
+            ],
+            "status": [
+              "algorithm_metadata.planner_runtime.status=unavailable"
+            ]
+          },
+          "negative_controls_are_metadata_only_not_episodes": true,
+          "runtime_view_exclusion": "Typed paired_effect_metric_producer.v1 auxiliary measurements and exactly reason-tagged reset routes/spawn telemetry omissions only; original strict markers retained; all other metadata including commands and planner runtime rescanned. These omissions do not qualify for release/paper admission; this remains diagnostic-only.",
+          "reset_contact_slots": [],
+          "checkpoint_provenance": [
+            {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_release_robot_b1002_last_20261001"
+            },
+            {
+              "checkpoint_sha256": "a7f9c1b5d4b54173862af75b9606cbead8625a0b526655ad2e8bf32dec31aa96",
+              "fallback_triggered": false,
+              "hash_source": "computed_tensorflow_checkpoint_bundle",
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ga3c_cadrl_iros18",
+              "checkpoint_path_basename": "network_01900000.meta",
+              "checkpoint_path_normalization": "Private materialization prefix omitted; exact raw path remains in archive.",
+              "checkpoint_repo_relative_path": "model/ga3c_cadrl/IROS18/network_01900000.meta"
+            }
+          ],
+          "all_available_velocities_actions_finite": true,
+          "all_traces_complete": true,
+          "all_actor_lists_empty": true,
+          "source_job_id": 21471,
+          "suite_reconciliation_complete": true,
+          "slot_grid_accounted_for": true,
+          "declared_failed_slots": [],
+          "declared_failed_slot_classification": null,
+          "source_job_exit_code": 1,
+          "environment_sha256": "53d5e48d6daf96b64025cad1dd36e827e61788edb59da167b5fc1a9d502ed2f2"
+        },
+        "width": {
+          "expected_rows": 126,
+          "written_rows": 117,
+          "missing_duplicate_unexpected_slots": 0,
+          "execution_modes": {
+            "native": 18,
+            "mixed": 9,
+            "adapter": 90
+          },
+          "outcomes": {
+            "collision": 43,
+            "success": 61,
+            "timeout": 13
+          },
+          "horizons": {
+            "400": 117
+          },
+          "runtime_issues": [],
+          "strict_release_metadata_audit_passed": false,
+          "strict_scanner_auxiliary_measurement_markers": {
+            "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 117
+          },
+          "typed_reset_telemetry_omissions": {
+            "simulation_step_trace.reset.routes:route_objects_not_retained_per_episode": 117,
+            "simulation_step_trace.reset.spawn:spawn_sampler_decision_not_retained": 117
+          },
+          "negative_controls_detected": {
+            "fallback_triggered": [
+              "algorithm_metadata.planner_runtime.fallback_triggered=true"
+            ],
+            "status": [
+              "algorithm_metadata.planner_runtime.status=unavailable"
+            ]
+          },
+          "negative_controls_are_metadata_only_not_episodes": true,
+          "runtime_view_exclusion": "Typed paired_effect_metric_producer.v1 auxiliary measurements and exactly reason-tagged reset routes/spawn telemetry omissions only; original strict markers retained; all other metadata including commands and planner runtime rescanned. These omissions do not qualify for release/paper admission; this remains diagnostic-only.",
+          "reset_contact_slots": [],
+          "checkpoint_provenance": [
+            {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_release_robot_b1002_last_20261001"
+            },
+            {
+              "checkpoint_sha256": "a7f9c1b5d4b54173862af75b9606cbead8625a0b526655ad2e8bf32dec31aa96",
+              "fallback_triggered": false,
+              "hash_source": "computed_tensorflow_checkpoint_bundle",
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ga3c_cadrl_iros18",
+              "checkpoint_path_basename": "network_01900000.meta",
+              "checkpoint_path_normalization": "Private materialization prefix omitted; exact raw path remains in archive.",
+              "checkpoint_repo_relative_path": "model/ga3c_cadrl/IROS18/network_01900000.meta"
+            }
+          ],
+          "all_available_velocities_actions_finite": true,
+          "all_traces_complete": true,
+          "all_actor_lists_empty": true,
+          "source_job_id": 21473,
+          "suite_reconciliation_complete": false,
+          "slot_grid_accounted_for": true,
+          "declared_failed_slots": [
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_2p20",
+              1001
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_2p20",
+              1002
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_2p20",
+              1003
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_2p80",
+              1001
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_2p80",
+              1002
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_2p80",
+              1003
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_3p60",
+              1001
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_3p60",
+              1002
+            ],
+            [
+              "predictive_mppi",
+              "francis2023_narrow_doorway_width_3p60",
+              1003
+            ]
+          ],
+          "declared_failed_slot_classification": "real_defect: protected width MPPI config requests 12 steps but predictor supports 8",
+          "source_job_exit_code": 1,
+          "environment_sha256": "65a6ddd34b86f708c3e19d410fbb0fbac9c8bf74d3076bce95015b780fc0b92b"
+        }
+      },
+      "environment_sha256": "53d5e48d6daf96b64025cad1dd36e827e61788edb59da167b5fc1a9d502ed2f2"
+    },
+    "baseline": {
+      "source_sha": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+      "production_diff_empty": true,
+      "primary_job_exit_code": 0,
+      "primary_job_exit_scope": "Top job can exit 1 because original width failed; each selected suite must independently reconcile complete. Width repair is a separate pinned-source job.",
+      "suites": {
+        "main": {
+          "expected_rows": 2016,
+          "written_rows": 2016,
+          "missing_duplicate_unexpected_slots": 0,
+          "execution_modes": {
+            "native": 288,
+            "mixed": 144,
+            "adapter": 1584
+          },
+          "outcomes": {
+            "success": 1207,
+            "collision": 587,
+            "timeout": 222
+          },
+          "horizons": {
+            "600": 2016
+          },
+          "runtime_issues": [],
+          "strict_release_metadata_audit_passed": false,
+          "strict_scanner_auxiliary_measurement_markers": {
+            "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 2016
+          },
+          "typed_reset_telemetry_omissions": {
+            "simulation_step_trace.reset.routes:route_objects_not_retained_per_episode": 2016,
+            "simulation_step_trace.reset.spawn:spawn_sampler_decision_not_retained": 2016
+          },
+          "negative_controls_detected": {
+            "fallback_triggered": [
+              "algorithm_metadata.planner_runtime.fallback_triggered=true"
+            ],
+            "status": [
+              "algorithm_metadata.planner_runtime.status=unavailable"
+            ]
+          },
+          "negative_controls_are_metadata_only_not_episodes": true,
+          "runtime_view_exclusion": "Typed paired_effect_metric_producer.v1 auxiliary measurements and exactly reason-tagged reset routes/spawn telemetry omissions only; original strict markers retained; all other metadata including commands and planner runtime rescanned. These omissions do not qualify for release/paper admission; this remains diagnostic-only.",
+          "reset_contact_slots": [],
+          "checkpoint_provenance": [
+            {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+            },
+            {
+              "checkpoint_sha256": "a7f9c1b5d4b54173862af75b9606cbead8625a0b526655ad2e8bf32dec31aa96",
+              "fallback_triggered": false,
+              "hash_source": "computed_tensorflow_checkpoint_bundle",
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ga3c_cadrl_iros18",
+              "checkpoint_path_basename": "network_01900000.meta",
+              "checkpoint_path_normalization": "Private materialization prefix omitted; exact raw path remains in archive.",
+              "checkpoint_repo_relative_path": "model/ga3c_cadrl/IROS18/network_01900000.meta"
+            }
+          ],
+          "all_available_velocities_actions_finite": true,
+          "all_traces_complete": true,
+          "all_actor_lists_empty": true,
+          "source_job_id": 21472,
+          "suite_reconciliation_complete": true,
+          "slot_grid_accounted_for": true,
+          "declared_failed_slots": [],
+          "declared_failed_slot_classification": null,
+          "source_job_exit_code": 0,
+          "environment_sha256": "7a2405d44b9fc11310e6ce482b8778c9d603e3ff8eea78379c494fdf1d7a00d8"
+        }
+      },
+      "environment_sha256": "7a2405d44b9fc11310e6ce482b8778c9d603e3ff8eea78379c494fdf1d7a00d8"
+    }
+  }
+}

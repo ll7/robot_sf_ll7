@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-30
+updated_at: 2026-10-06
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -8106,6 +8106,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10000_pedsweep_20261006
   status: evidence
   freshness: evidence
   area: benchmark_evidence

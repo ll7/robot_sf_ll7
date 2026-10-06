@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Issue #10000 pedestrian-stack behaviour gate: source-bound all-arm empty-world
+diagnostics, checked infeasible exception, dev-only pedestrian probes, and the
+active-hold projection refute finding #10178. No model or release admission:
+[pedsweep receipt](evidence/issue_10000_pedsweep_20261006/README.md).
+
 Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
 [issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).

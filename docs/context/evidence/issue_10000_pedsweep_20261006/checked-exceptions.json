@@ -1,0 +1,461 @@
+{
+  "schema_version": "pedsweep-checked-exceptions.v1",
+  "checked": true,
+  "release_denominator_is_not_diagnostic_denominator": true,
+  "diagnostic_expected_probe_slots": 42,
+  "entries": [
+    {
+      "scenario": "francis2023_narrow_doorway",
+      "source_map_sha256": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+      "declaration": {
+        "schema_version": "benchmark-main-grid-infeasibility-probe.v1",
+        "expected_outcome": "timeout",
+        "classification": "infeasible_by_construction",
+        "map_sha256": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+        "opening_width_m": 2.0,
+        "robot_diameter_m": 2.0,
+        "required_width_with_margin_m": 2.2,
+        "safe_failure_metric": {
+          "numerator": "timeout_without_robot_attributable_contact",
+          "denominator": "all_420_probe_episodes",
+          "unresolved_rows": "fail_admission"
+        }
+      },
+      "allowed_failure": "timeout only, zero robot-attributable contact; crashes, missing/fallback/degraded rows and collisions never excepted",
+      "diagnostic_seeds": [
+        1001,
+        1002,
+        1003
+      ]
+    }
+  ],
+  "exception_source": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+  "observed_slots": [
+    {
+      "arm": "goal",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "goal",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "goal",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "guarded_ppo",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "guarded_ppo",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "guarded_ppo",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "orca",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "orca",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "orca",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "ppo",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "ppo",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "ppo",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "prediction_planner",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "prediction_planner",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "prediction_planner",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "predictive_mppi",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "predictive_mppi",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "predictive_mppi",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "risk_dwa",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "risk_dwa",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "risk_dwa",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "sacadrl",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "sacadrl",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "sacadrl",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "collision",
+      "collisions": 1,
+      "allowed_contact_free_timeout": false,
+      "runtime_issues": [],
+      "classification": "real_defect"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "social_force",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "social_force",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "social_force",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "socnav_sampling",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "socnav_sampling",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    },
+    {
+      "arm": "socnav_sampling",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": "timeout",
+      "collisions": 0,
+      "allowed_contact_free_timeout": true,
+      "runtime_issues": [],
+      "classification": "infeasible_by_design"
+    }
+  ],
+  "observed_outcome_counts": {
+    "collision": 12,
+    "timeout": 30
+  },
+  "excepted_rows": 30,
+  "non_excepted_rows": 12
+}

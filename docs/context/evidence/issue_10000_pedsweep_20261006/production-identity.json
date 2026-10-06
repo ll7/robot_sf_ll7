@@ -1,0 +1,133 @@
+{
+  "schema_version": "pedsweep-production-identity.v1",
+  "heads": {
+    "10073": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0",
+    "10075": "6613fd0a976f4bc9904f9ce51ad153904156297f",
+    "10094": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+    "10104": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+  },
+  "merged_main": "2d6b19db8e226a9408e2b504035df8efb8369ce5",
+  "safety_path_comparison": "planner, robot and ped_npc paths identical between merged main and top",
+  "unchanged_safety_path_count": 104,
+  "stack_runtime_changes": [
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/fast-pysf/pysocialforce/contact.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/fast-pysf/pysocialforce/forces.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/fast-pysf/pysocialforce/simulator.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/benchmark/map_runner/map_runner_episode.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/benchmark/runner.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/research/pedestrian_acceptance.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/research/pedestrian_initial_state.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/research/pedestrian_validation.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/sim/obstacle_force_profile.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/sim/sim_config.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/sim/simulator.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/training/scenario_loader.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/calfit_preflight_10074.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/calfit_search_10074.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/calibrate_obstacle_force_10061.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/compare_obstacle_laws_10061.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/evidence_registry_baseline.json",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/evidence_registry_baseline_review.yaml",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/pedcontact_10101.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/pedcontact_fit_10101.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/pedestrian_validation_10074.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/render_pedcontact_round3_evidence.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/replay_pedcontact_round3_evidence.py",
+    "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/run_obstacle_force_preview_10061.py"
+  ],
+  "review_receipts": {
+    "10094": {
+      "reviewed_head": "e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36",
+      "current_head": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+      "paths": [
+        {
+          "reviewed_sha256": "5f3511b9823be5f97251f729c357405f6615bb7648391e0c73f4b51898bb9aa9",
+          "current_sha256": "5f3511b9823be5f97251f729c357405f6615bb7648391e0c73f4b51898bb9aa9",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/5ca040371cbef05c712bb151cdebc558d4247f5a/robot_sf/research/pedestrian_acceptance.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36/robot_sf/research/pedestrian_acceptance.py"
+        },
+        {
+          "reviewed_sha256": "e320ca202dbe3d8d6bb5548c474989b0575bc4ed0c26ab9b3561602a66e23c36",
+          "current_sha256": "e320ca202dbe3d8d6bb5548c474989b0575bc4ed0c26ab9b3561602a66e23c36",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/5ca040371cbef05c712bb151cdebc558d4247f5a/robot_sf/research/pedestrian_initial_state.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36/robot_sf/research/pedestrian_initial_state.py"
+        },
+        {
+          "reviewed_sha256": "3b6378ec8017e2d95028bcb8e3b6b708cf6ff1b6f14e6f745fc0603afced20c8",
+          "current_sha256": "3b6378ec8017e2d95028bcb8e3b6b708cf6ff1b6f14e6f745fc0603afced20c8",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/5ca040371cbef05c712bb151cdebc558d4247f5a/scripts/validation/calfit_preflight_10074.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36/scripts/validation/calfit_preflight_10074.py"
+        },
+        {
+          "reviewed_sha256": "014e0d77c0573f4e932be80ab6ccb17e588da5fdec19d42f930b2b4b45a5906e",
+          "current_sha256": "014e0d77c0573f4e932be80ab6ccb17e588da5fdec19d42f930b2b4b45a5906e",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/5ca040371cbef05c712bb151cdebc558d4247f5a/scripts/validation/calfit_search_10074.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36/scripts/validation/calfit_search_10074.py"
+        },
+        {
+          "reviewed_sha256": "0f1fb546604c5e04f831ba45214b104af7a86f1568124d001d9c9f2909598d28",
+          "current_sha256": "0f1fb546604c5e04f831ba45214b104af7a86f1568124d001d9c9f2909598d28",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/5ca040371cbef05c712bb151cdebc558d4247f5a/scripts/validation/pedestrian_validation_10074.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/e6d52b556e2b0f82ccb0a6efd2c7ac17fffa6e36/scripts/validation/pedestrian_validation_10074.py"
+        }
+      ],
+      "all_identical": true
+    },
+    "10104": {
+      "reviewed_head": "b105a8d3c1985abcaf58b03e7784486663dc7a11",
+      "current_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+      "paths": [
+        {
+          "reviewed_sha256": "8fa0eadc161ed7bad383dd0df54e089e8f6b4dc16248f783ee2575f5a6e2a15c",
+          "current_sha256": "8fa0eadc161ed7bad383dd0df54e089e8f6b4dc16248f783ee2575f5a6e2a15c",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/fast-pysf/pysocialforce/contact.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/b105a8d3c1985abcaf58b03e7784486663dc7a11/fast-pysf/pysocialforce/contact.py"
+        },
+        {
+          "reviewed_sha256": "52e579f2961a644b457c3713155f80accec351cb7d5108972e8ced20bc139640",
+          "current_sha256": "52e579f2961a644b457c3713155f80accec351cb7d5108972e8ced20bc139640",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/fast-pysf/pysocialforce/forces.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/b105a8d3c1985abcaf58b03e7784486663dc7a11/fast-pysf/pysocialforce/forces.py"
+        },
+        {
+          "reviewed_sha256": "470fab5b60fbbbb6961cd82ecab72b9fe84ef4eca368527f5d3b65f1c2180d10",
+          "current_sha256": "470fab5b60fbbbb6961cd82ecab72b9fe84ef4eca368527f5d3b65f1c2180d10",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/research/pedestrian_acceptance.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/b105a8d3c1985abcaf58b03e7784486663dc7a11/robot_sf/research/pedestrian_acceptance.py"
+        },
+        {
+          "reviewed_sha256": "9b13e1772c093bbb8f178c1e807ec58026afc3fe44138b68bbfb52e4ab183c24",
+          "current_sha256": "9b13e1772c093bbb8f178c1e807ec58026afc3fe44138b68bbfb52e4ab183c24",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/robot_sf/research/pedestrian_validation.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/b105a8d3c1985abcaf58b03e7784486663dc7a11/robot_sf/research/pedestrian_validation.py"
+        },
+        {
+          "reviewed_sha256": "03967c8254c1c8c343bc1a8e44ccf684a1791774e5cec15a5e346b9ff160ae0b",
+          "current_sha256": "03967c8254c1c8c343bc1a8e44ccf684a1791774e5cec15a5e346b9ff160ae0b",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/pedcontact_10101.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/b105a8d3c1985abcaf58b03e7784486663dc7a11/scripts/validation/pedcontact_10101.py"
+        },
+        {
+          "reviewed_sha256": "2427a583eb4af1e9ef30c8f6b0480be7a6a17f6a23a25e00420b1ec207231ad4",
+          "current_sha256": "2427a583eb4af1e9ef30c8f6b0480be7a6a17f6a23a25e00420b1ec207231ad4",
+          "identical": true,
+          "current_source_url": "https://github.com/ll7/robot_sf_ll7/blob/52634e854076ad7a1da6be4edf17fa40baf93fd4/scripts/validation/pedcontact_fit_10101.py",
+          "reviewed_source_url": "https://github.com/ll7/robot_sf_ll7/blob/b105a8d3c1985abcaf58b03e7784486663dc7a11/scripts/validation/pedcontact_fit_10101.py"
+        }
+      ],
+      "all_identical": true
+    }
+  },
+  "caveat": "An earlier review plus byte identity does not dispose of new material evidence such as the active-hold projection witness.",
+  "path_representation": "Pinned blob URLs identify stack-only source files that are absent from the bottom receipt branch; SHA-256 values refer to those exact blobs."
+}

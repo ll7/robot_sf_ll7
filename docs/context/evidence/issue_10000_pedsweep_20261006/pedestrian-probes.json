@@ -1,0 +1,880 @@
+{
+  "schema_version": "pedsweep-pedstack-probes.v1",
+  "evidence_tier": "diagnostic-only",
+  "source": "pedstack lane development probes; reported, not rerun by the empty-world sweep",
+  "claim_boundary": "No empirical, model/default, release, planner-safety or pedestrian-interaction correctness admission. Overlap counts, stalls and crossing counts are separate outcomes.",
+  "probes": [
+    {
+      "file": "probe-main-legacy.json",
+      "sha256": "0cc9fa8276beba6bba0fbc054940151e3ca82af5a101551f3e7b28e455c0a914",
+      "data": {
+        "schema": "pedestrian_lane_probe.v1",
+        "source_head": "66df3de197ab1c5416143875b922db2ecbe6a360",
+        "arm": "legacy_v1",
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430490407,
+            "trajectory_sha256": "17da72bc61a838070107c3b4539a3c1682f9d1f38ab5dd45860e708ca025b3bd"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 4.729827682990873,
+            "trajectory_sha256": "4f679b04ed710be2173eab8aadcacf9d878727c69cc84349d3b7f32d39ce3215"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.20410843049596,
+            "trajectory_sha256": "be77927a1a656fc9cd2c502b38629e9053905262b573570e4b8abd7b3c76e682"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.1019166052239235,
+            "trajectory_sha256": "4192d7762f8044f1526c944d3ae6e70614b8a0a95ce90b58387ea637d0de641f"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430799075,
+            "trajectory_sha256": "adcdfb3324a25530e278155ac46e5ab3304a7722bb1f2dcc0555e22fb9905f4a"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 9072,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.481999056607831,
+            "trajectory_sha256": "db5ff51cc619e6b4c871e8f1af363c46737e7f75366e30b9c749bfa2da49413f"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "66df3de197ab1c5416143875b922db2ecbe6a360"
+    },
+    {
+      "file": "probe-10073-legacy.json",
+      "sha256": "c0a6f975bae51e55d5c56258a2650d10f066c1f5611454e1b42512ea12ef2f75",
+      "data": {
+        "schema": "pedestrian_lane_probe.v1",
+        "source_head": "d7a92167a0bb1255a373b5955800bc98f950f652",
+        "arm": "legacy_v1",
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430490407,
+            "trajectory_sha256": "17da72bc61a838070107c3b4539a3c1682f9d1f38ab5dd45860e708ca025b3bd"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 4.729827682990873,
+            "trajectory_sha256": "4f679b04ed710be2173eab8aadcacf9d878727c69cc84349d3b7f32d39ce3215"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.20410843049596,
+            "trajectory_sha256": "be77927a1a656fc9cd2c502b38629e9053905262b573570e4b8abd7b3c76e682"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.1019166052239235,
+            "trajectory_sha256": "4192d7762f8044f1526c944d3ae6e70614b8a0a95ce90b58387ea637d0de641f"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430799075,
+            "trajectory_sha256": "adcdfb3324a25530e278155ac46e5ab3304a7722bb1f2dcc0555e22fb9905f4a"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 9072,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.481999056607831,
+            "trajectory_sha256": "db5ff51cc619e6b4c871e8f1af363c46737e7f75366e30b9c749bfa2da49413f"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0",
+      "six_legacy_digests_identical_to_pedstack_main": true
+    },
+    {
+      "file": "probe-10073-gradient.json",
+      "sha256": "cc42e8367b8a76b55c4415d23c6fa13f7665bcd09af8430388d68fb5545eca06",
+      "data": {
+        "schema": "pedestrian_lane_probe.v1",
+        "source_head": "d7a92167a0bb1255a373b5955800bc98f950f652",
+        "arm": "gradient_v3",
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.0878879165256,
+            "trajectory_sha256": "89bf20540d3d4a66494aaf6b3214d1c19b91d87a3244248f2735336e9e8430e5"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8454,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 14.19436622857312,
+            "trajectory_sha256": "38aec6a690213d08e953eda751c4ba9e921b057db98c6a0eaaa1164b29f100e9"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.087883125094361,
+            "trajectory_sha256": "e629ce89cecfdea5b6fed9ab12ac642322d55e80d6428e7d9194ffdaeeb1290c"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8389,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 16.06107640930677,
+            "trajectory_sha256": "3a2009dc345f9a95b338fe089b13bed41871b5cdb5fec4da86e9e5391d2a4da4"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.087621256285901,
+            "trajectory_sha256": "971d7624476dea66869238a1ea445f5dbfd16980c24c472d4b48bad666db8161"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 6861,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 15.409719010207448,
+            "trajectory_sha256": "3b71270d5bbaeac8f15ba7dd84e8cc4968906c6f1af59235bcb81e803ec356c1"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0"
+    },
+    {
+      "file": "probe-10075-legacy.json",
+      "sha256": "d4866ba73681f6abfbd7e2e17a74c66d9bf1152c0d6f0249b4d4816b6404492e",
+      "data": {
+        "schema": "pedestrian_lane_probe.v1",
+        "source_head": "22e86ee9607034553c8620b52fa75d801e163770",
+        "arm": "legacy_v1",
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430490407,
+            "trajectory_sha256": "17da72bc61a838070107c3b4539a3c1682f9d1f38ab5dd45860e708ca025b3bd"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 4.729827682990873,
+            "trajectory_sha256": "4f679b04ed710be2173eab8aadcacf9d878727c69cc84349d3b7f32d39ce3215"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.20410843049596,
+            "trajectory_sha256": "be77927a1a656fc9cd2c502b38629e9053905262b573570e4b8abd7b3c76e682"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.1019166052239235,
+            "trajectory_sha256": "4192d7762f8044f1526c944d3ae6e70614b8a0a95ce90b58387ea637d0de641f"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430799075,
+            "trajectory_sha256": "adcdfb3324a25530e278155ac46e5ab3304a7722bb1f2dcc0555e22fb9905f4a"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 9072,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.481999056607831,
+            "trajectory_sha256": "db5ff51cc619e6b4c871e8f1af363c46737e7f75366e30b9c749bfa2da49413f"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "6613fd0a976f4bc9904f9ce51ad153904156297f",
+      "six_legacy_digests_identical_to_pedstack_main": true
+    },
+    {
+      "file": "probe-10094-legacy.json",
+      "sha256": "ce944419617152ee7a41f9929f1c547dd4d8d6234f2e8ae60310bbc93fccc098",
+      "data": {
+        "schema": "pedestrian_lane_probe.v1",
+        "source_head": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+        "arm": "legacy_v1",
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430490407,
+            "trajectory_sha256": "17da72bc61a838070107c3b4539a3c1682f9d1f38ab5dd45860e708ca025b3bd"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 4.729827682990873,
+            "trajectory_sha256": "4f679b04ed710be2173eab8aadcacf9d878727c69cc84349d3b7f32d39ce3215"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.20410843049596,
+            "trajectory_sha256": "be77927a1a656fc9cd2c502b38629e9053905262b573570e4b8abd7b3c76e682"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 8784,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.1019166052239235,
+            "trajectory_sha256": "4192d7762f8044f1526c944d3ae6e70614b8a0a95ce90b58387ea637d0de641f"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 5.204108430799075,
+            "trajectory_sha256": "adcdfb3324a25530e278155ac46e5ab3304a7722bb1f2dcc0555e22fb9905f4a"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.4,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 9072,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 5.481999056607831,
+            "trajectory_sha256": "db5ff51cc619e6b4c871e8f1af363c46737e7f75366e30b9c749bfa2da49413f"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+      "six_legacy_digests_identical_to_pedstack_main": true
+    },
+    {
+      "file": "probe-10104-off-calibrated_v2-0.28.json",
+      "sha256": "4de98ef7f9d7ff181899e7438af747646841ea4ffd7bcacb94c10d5bdac354f9",
+      "data": {
+        "schema": "pedestrian_lane_probe.v2",
+        "source_head": "905a00cbcb53efaded836fb8980d1f1e09762484",
+        "arm": "off",
+        "profile": "calibrated_v2",
+        "obstacle_factor": 0.003,
+        "obstacle_threshold": 0.375,
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.04611236548622,
+            "trajectory_sha256": "61de860a4a58b8dc111504e88eeef3bcfd340783db180d33174aea74fcc4106d"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 6160,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 7.446812060821751,
+            "trajectory_sha256": "6c4cd3ecb81a256747bad177c64fd93ebdfafb3cb0cccb7965a5105b7a40591a"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.046102499788482,
+            "trajectory_sha256": "d419edbbeea8798a982150635aa6be398260a31db1f2c2003c58270569f416dd"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 5969,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 14.829418650942877,
+            "trajectory_sha256": "a3683e456ceb1338d996c3e57e0beca4704ee9b06869310a9cdbd3f087017944"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.045562993504433,
+            "trajectory_sha256": "3ffdcfffa1e2f1112b0de6bb52b09bacd6e8fb280372ad7e8840e9a2392315a3"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 6165,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 15.454489305231993,
+            "trajectory_sha256": "3d1d576952417d16f9ac37899b6063df0f33173d92144e90ac1b49a41c0ed43b"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+    },
+    {
+      "file": "probe-10104-both-calibrated_v2-0.28.json",
+      "sha256": "6be16b5ddb63aa56fbf14a0458752fed86f7284f4f49de63c3959c07ee2f07a5",
+      "data": {
+        "schema": "pedestrian_lane_probe.v2",
+        "source_head": "905a00cbcb53efaded836fb8980d1f1e09762484",
+        "arm": "both",
+        "profile": "calibrated_v2",
+        "obstacle_factor": 0.003,
+        "obstacle_threshold": 0.375,
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.117418083473291,
+            "trajectory_sha256": "5d9c194e22d261565ecd528b1fb0e705f078a5b1f2d05c699783f6bbd650289f"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 16.04069736955031,
+            "trajectory_sha256": "7d56af9f9709fe8a217d218a435627f1081036ea3a1d0bdab08ded26136582de"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.117438722724852,
+            "trajectory_sha256": "72ba7de2a408d001194f3e05482f64a83103849eae071bd96629decf5f2182bb"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 16.30004198690455,
+            "trajectory_sha256": "888ab68e13a17e79f0afb190cc43636db9c1b30461f33721ccc42e7cf42d6668"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 1,
+            "lone_pass": true,
+            "final_x_m": 15.11799419236632,
+            "trajectory_sha256": "90b7c1983926a79dfb22394db369f1bd077181ab85d7213a71a471070fe3f0c5"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.28,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 2,
+            "crossed": 18,
+            "lone_pass": null,
+            "final_x_m": 16.00551520532202,
+            "trajectory_sha256": "88aa4e3cd63f4f7f2a6a42c2f35a90bcf0fa219444e2d488e92e55d34d08d3ef"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+    },
+    {
+      "file": "probe-10104-off-legacy_v1-0.35.json",
+      "sha256": "d406e97a01238aba300f1102f2c44137632e791dade8c2388435e1936d4378c1",
+      "data": {
+        "schema": "pedestrian_lane_probe.v2",
+        "source_head": "905a00cbcb53efaded836fb8980d1f1e09762484",
+        "arm": "off",
+        "profile": "legacy_v1",
+        "obstacle_factor": 10.0,
+        "obstacle_threshold": -0.57,
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 6.234415789542186,
+            "trajectory_sha256": "491905bcc1f39d9ea3bd2e2fbcf3daafd60811ef75957493608c406a28abd358"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 10142,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 7.13765070178117,
+            "trajectory_sha256": "5f9ae360784c62c5b809ddc9a109e6219531cbcf79fe21f3ce88eafb405fc8df"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 6.234415798914578,
+            "trajectory_sha256": "483c27dbab711ea5be3bb493ba8db6bee6446f0c6fd7d8b5db94466d247a041b"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 10581,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 7.082716924965375,
+            "trajectory_sha256": "ecf1e10e1706d7f74d86a227a9d9cfa4f9f2c42b224b3578cdaa2006c0796e95"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 6.234415851988184,
+            "trajectory_sha256": "4c5a6d79c7d6c06c20f0210847996d99fc1458eb35b509689083dd604bf950e1"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 10895,
+            "stalls": 0,
+            "crossed": 0,
+            "lone_pass": null,
+            "final_x_m": 6.458529790827418,
+            "trajectory_sha256": "a1eefdb4d0b0a7ddedb916ba3bc623dd229143b4474ed77b7035676fea0509df"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+    },
+    {
+      "file": "probe-10104-both-legacy_v1-0.35.json",
+      "sha256": "77b543c1f27a0805f20fa5b719251234170e226df6078d2a47598b2a45b35e24",
+      "data": {
+        "schema": "pedestrian_lane_probe.v2",
+        "source_head": "905a00cbcb53efaded836fb8980d1f1e09762484",
+        "arm": "both",
+        "profile": "legacy_v1",
+        "obstacle_factor": 10.0,
+        "obstacle_threshold": -0.57,
+        "rows": [
+          {
+            "seed": 1001,
+            "population": 1,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 6.234415789542186,
+            "trajectory_sha256": "491905bcc1f39d9ea3bd2e2fbcf3daafd60811ef75957493608c406a28abd358"
+          },
+          {
+            "seed": 1001,
+            "population": 20,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 14,
+            "lone_pass": null,
+            "final_x_m": 13.920742278483688,
+            "trajectory_sha256": "dd9f7dc939c3a1e29394697dfa895bfaef6f71a3d88d1f8e680af250bd503641"
+          },
+          {
+            "seed": 1002,
+            "population": 1,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 6.234415798914578,
+            "trajectory_sha256": "483c27dbab711ea5be3bb493ba8db6bee6446f0c6fd7d8b5db94466d247a041b"
+          },
+          {
+            "seed": 1002,
+            "population": 20,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 13,
+            "lone_pass": null,
+            "final_x_m": 16.07659964452723,
+            "trajectory_sha256": "fd0e1744f314c467d8e0fe2b42a16c7b214c649ed025120e5723e5891d3bbab1"
+          },
+          {
+            "seed": 1003,
+            "population": 1,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 1,
+            "crossed": 0,
+            "lone_pass": false,
+            "final_x_m": 6.234415851988184,
+            "trajectory_sha256": "4c5a6d79c7d6c06c20f0210847996d99fc1458eb35b509689083dd604bf950e1"
+          },
+          {
+            "seed": 1003,
+            "population": 20,
+            "radius_m": 0.35,
+            "desired_speed_m_s": 1.3,
+            "steps": 1000,
+            "dt_s": 0.1,
+            "overlap_pair_steps": 0,
+            "stalls": 0,
+            "crossed": 12,
+            "lone_pass": null,
+            "final_x_m": 14.950374171628402,
+            "trajectory_sha256": "4bd0421516377455379bae866e2623d35ca500bf64752340f5085638101c2b23"
+          }
+        ]
+      },
+      "runtime_paths_identical_to_current_pr_head": true,
+      "current_pr_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+    }
+  ],
+  "legacy_identity": [
+    {
+      "file": "probe-10075-legacy.json",
+      "six_digests_identical_to_10073_legacy": true
+    },
+    {
+      "file": "probe-10094-legacy.json",
+      "six_digests_identical_to_10073_legacy": true
+    }
+  ],
+  "driver_sha256": {
+    "physics_probe.py": "b74d54225987c63be39c21a8e40ecdd40b6037393140fecce2da6d46544bed2f",
+    "physics_contact_probe.py": "ec1c67d674b5ac9b1a731efd53653569e7f17d69f37a0ce8f4c78625ef3abcd4"
+  }
+}

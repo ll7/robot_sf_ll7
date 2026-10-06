@@ -40,5 +40,6 @@
   ],
   "policy": "Do not cite or depend on local output artifacts as durable evidence beyond the tracked compact manifest until a retrieval pointer and metadata are recorded.",
   "artifact_bytes_retained": false,
-  "path_semantics": "path templates use <scratch-root> as a non-literal caller-supplied root; source bytes are not durably retrievable"
+  "path_semantics": "path templates use <scratch-root> as a non-literal caller-supplied root; source bytes are not durably retrievable",
+  "durable_retrieval_pointer": null
 }

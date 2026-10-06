@@ -278,7 +278,7 @@
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "assert 1 == 0\n +  where 1 = CompletedProcess(args=['BASELINE/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin... resolved\") from exc\\nrobot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved\\n').returncode",
+      "base_failure": "assert 1 == 0\n +  where 1 = CompletedProcess(args=['BASELINE/.venv/bin/python', 'WORKTREE/baselin... resolved\") from exc\\nrobot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved\\n').returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_cli_requires_one_explicit_operation_and_uses_check",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
@@ -611,14 +611,14 @@
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['BASELINE/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
+      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['BASELINE/.venv/bin/python', 'WORKTREE/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/tools/test_lint_evidence_registry.py::test_committed_baseline_reproduces_from_write_baseline",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['BASELINE/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
+      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['BASELINE/.venv/bin/python', 'WORKTREE/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/tools/test_lint_evidence_registry.py::test_ratchet_gate_passes_against_committed_baseline",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"

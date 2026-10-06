@@ -15,7 +15,103 @@ from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec
 from robot_sf.benchmark.checkpoint_staging_receipt import CheckpointStagingReceiptError
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.evidence.writers import write_json
 from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
+from tests.benchmark.test_release_campaign_authority import no_execution as _no_execution
+from tests.benchmark.test_release_development_rehearsal import generate
+from tests.benchmark.test_sealed_source_pins import sealed_repository as _sealed_repository
+
+sealed_repository = _sealed_repository
+
+_ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY = (
+    run_benchmark_release._assert_spawn_preflight_report_identity
+)
+_ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY = (
+    run_benchmark_release._assert_publication_spawn_preflight_identity
+)
+
+
+@pytest.fixture
+def synthetic_execution_admission(monkeypatch):
+    """Only named synthetic CLI tests waive real sealed source admission."""
+    monkeypatch.setattr(run_benchmark_release, "guard_manifest_execution", lambda *_a, **_kw: None)
+
+
+@pytest.fixture(autouse=True)
+def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub spawn/report preflight for synthetic publication/campaign test doubles."""
+    # Execution admission remains active unless a test explicitly requests its stub.
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_campaign_id",
+        lambda *_args, **_kwargs: "fixture-campaign",
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_spawn_matrix_preflight",
+        lambda **_kwargs: (
+            {
+                "status": "valid",
+                "schema_version": "spawn_matrix_preflight.v1",
+                "evidence_class": "preflight_diagnostic_only",
+                "json_path": "reports/spawn_matrix_preflight.v1.json",
+                "json_sha256": "a" * 64,
+                "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+                "markdown_sha256": "b" * 64,
+                "scenario_count": 48,
+                "seed_count": 30,
+                "cell_count": 1440,
+                "blocked_cell_count": 0,
+                "input_error": None,
+            },
+            {"status": "valid", "blocked_cell_count": 0, "input_error": None},
+        ),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_assert_spawn_preflight_report_identity", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_assert_publication_spawn_preflight_identity", lambda *_args: None
+    )
+
+
+@pytest.mark.parametrize("bundle_layout", [False, True])
+@pytest.mark.parametrize("tampered_report", ["json", "markdown"])
+def test_spawn_preflight_report_readback_rejects_tampered_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tampered_report: str, bundle_layout: bool
+) -> None:
+    """A release result cannot retain a valid digest after either report changes."""
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_assert_spawn_preflight_report_identity",
+        _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY,
+    )
+    report_root = tmp_path / "payload" if bundle_layout else tmp_path
+    reports = report_root / "reports"
+    reports.mkdir(parents=True)
+    json_path = reports / "spawn_matrix_preflight.v1.json"
+    markdown_path = reports / "spawn_matrix_preflight.v1.md"
+    json_path.write_text('{"status":"valid"}\n', encoding="utf-8")
+    markdown_path.write_text("# Valid preflight\n", encoding="utf-8")
+    summary = {
+        "json_path": "reports/spawn_matrix_preflight.v1.json",
+        "json_sha256": run_benchmark_release.sha256_file(json_path),
+        "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+        "markdown_sha256": run_benchmark_release.sha256_file(markdown_path),
+    }
+    assert_identity = (
+        _ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY
+        if bundle_layout
+        else _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY
+    )
+    assert_identity(tmp_path, summary)
+
+    path = json_path if tampered_report == "json" else markdown_path
+    path.write_text(path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+    with pytest.raises(
+        run_benchmark_release.ReleaseArtifactIdentityError, match="report digest changed"
+    ):
+        assert_identity(tmp_path, summary)
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -885,6 +981,7 @@ def test_local_stress_run_rejects_dirty_worktree(monkeypatch, capsys, tmp_path: 
     assert json.loads(capsys.readouterr().out)["status"] == "stress_smoke_source_rejected"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_rejects_historical_campaign_artifact_identity(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -946,6 +1043,7 @@ def test_release_run_rejects_historical_campaign_artifact_identity(
     assert "historical release identity" in payload["status_reason"]
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_publication_identity_rejection_does_not_log_campaign_paths(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -1033,6 +1131,7 @@ def test_publication_identity_rejection_does_not_log_campaign_paths(
     assert "campaign_root" not in persisted
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
     """Preflight mode should validate the manifest and emit preflight artifact paths."""
     manifest = SimpleNamespace(
@@ -1109,6 +1208,7 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
     assert payload["campaign_id"] == "cid"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_preflight_admits_staged_receipt_separately_from_metadata_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1200,6 +1300,7 @@ def test_release_preflight_admits_staged_receipt_separately_from_metadata_diagno
     }
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_preflight_rejects_invalid_staged_receipt_before_campaign_setup(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1298,14 +1399,106 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "invalid_manifest"
     assert payload["benchmark_success"] is False
-    assert payload["campaign_execution_status"] == "failed"
-    assert payload["evidence_status"] == "invalid"
-    assert payload["row_status_summary"] == {
-        "successful_evidence_rows": 0,
-        "accepted_unavailable_rows": 0,
-        "unexpected_failed_rows": 0,
-        "fallback_or_degraded_rows": 0,
-    }
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["evidence_status"] == "blocked"
+
+
+@pytest.mark.usefixtures("synthetic_execution_admission")
+def test_release_run_stops_before_campaign_when_spawn_matrix_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """A blocked matrix report is retained and prevents planner campaign execution."""
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=Path("configs/benchmarks/campaign.yaml"),
+        schema_version="benchmark-release-manifest.v0.1",
+    )
+    cfg = SimpleNamespace(name="fixture_campaign", resume=False)
+    receipt_path = tmp_path / "checkpoint.json"
+    receipt_path.write_text("{}\n", encoding="utf-8")
+    called = {"run": False}
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda _path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda _path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda _cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *_args, **_kwargs: {"status": "valid", "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda *_args, **_kwargs: {"release_id": "fixture"},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_required_repo_relative", lambda _path: "receipt.json"
+    )
+    monkeypatch.setattr(run_benchmark_release, "sha256_file", lambda _path: "c" * 64)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *_args, **_kwargs: {
+            "generated_at_utc": "2026-09-01T00:00:00Z",
+            "submit_safe": True,
+            "arms": [],
+        },
+    )
+    monkeypatch.setattr(run_benchmark_release, "_admit_release_resume", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        run_benchmark_release, "_campaign_id", lambda *_args, **_kwargs: "fixture-run"
+    )
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "d" * 40)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_spawn_matrix_preflight",
+        lambda **_kwargs: (
+            {
+                "status": "blocked",
+                "schema_version": "spawn_matrix_preflight.v1",
+                "evidence_class": "preflight_diagnostic_only",
+                "json_path": "reports/spawn_matrix_preflight.v1.json",
+                "json_sha256": "a" * 64,
+                "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+                "markdown_sha256": "b" * 64,
+                "scenario_count": 48,
+                "seed_count": 30,
+                "cell_count": 1440,
+                "blocked_cell_count": 1,
+                "input_error": None,
+            },
+            {"status": "blocked", "blocked_cell_count": 1, "input_error": None},
+        ),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *_args, **_kwargs: called.__setitem__("run", True),
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--checkpoint-receipt",
+            str(receipt_path),
+            "--output-root",
+            str(tmp_path / "campaigns"),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    persisted = json.loads(
+        (tmp_path / "campaigns" / "fixture-run" / "release" / "release_result.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 2
+    assert called["run"] is False
+    assert payload["status"] == "spawn_matrix_preflight_failed"
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["spawn_matrix_preflight"]["blocked_cell_count"] == 1
+    assert persisted["status"] == "spawn_matrix_preflight_failed"
 
 
 def test_release_run_reports_orca_preflight_failure_as_structured_json(
@@ -1360,6 +1553,7 @@ def test_release_run_reports_orca_preflight_failure_as_structured_json(
     assert "rvo2" in payload["release_status_reason"]
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_exports_publication_only_after_benchmark_success(
     monkeypatch,
     capsys,
@@ -1484,6 +1678,7 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     assert publication_preflight_called["value"] is True
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     monkeypatch,
     capsys,
@@ -1593,6 +1788,7 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     assert release_result["release_exit_code"] == 3
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_runtime_smoke_skips_publication_when_config_disables_export(
     monkeypatch,
     capsys,
@@ -1652,6 +1848,7 @@ def test_runtime_smoke_skips_publication_when_config_disables_export(
     assert payload["publication_preflight_status"] == "not_requested"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_diagnostic_stress_success_is_never_release_success(
     monkeypatch,
     capsys,
@@ -1805,6 +2002,7 @@ def test_future_release_rejects_checkout_drift_from_manifest_source(monkeypatch,
     assert payload["release_benchmark_success"] is False
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_full_release_acceptance_failure_blocks_publication(
     monkeypatch,
     capsys,
@@ -2037,3 +2235,335 @@ def test_public_campaign_result_rejects_nested_private_paths() -> None:
                 "warnings": ["diagnostic file: /home/example/private/result.json"],
             }
         )
+
+
+@pytest.mark.parametrize(
+    "gate", ["manifest", "runtime_smoke", "checkpoint_identity", "resume", "privacy"]
+)
+@pytest.mark.usefixtures("synthetic_execution_admission")
+def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_path, gate):
+    """A slice kind cannot bypass any strict runner gate before accepting artifacts."""
+    manifest, cfg, checkpoint, smoke = _rehearsal_fixture(tmp_path)
+    manifest.release_kind = "benchmark-doorway-width-slice.v1"
+    # Supply real valid notes admission so each downstream gate remains reached.
+    import shutil
+
+    from robot_sf.benchmark.release_notes import (
+        CHECKER_PATH,
+        DECISIONS_PATH,
+        NOTES_PATH,
+        RECEIPT_NAME,
+        notes_gate,
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    for relative in (NOTES_PATH, CHECKER_PATH, DECISIONS_PATH):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / relative, target)
+    manifest.resolved_identity_path = tmp_path / "output/release_identity.resolved.json"
+    manifest.resolved_identity_path.parent.mkdir()
+    write_json(
+        manifest.resolved_identity_path.parent / RECEIPT_NAME,
+        notes_gate(tmp_path, source_commit=manifest.source_sha),
+    )
+    cfg.name = "doorway-gate-fixture"
+    cfg.export_publication_bundle = False
+    cfg.resume = False
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda _: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_release_campaign_config", lambda _: cfg)
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **kw: {}
+    )
+    reached = []
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *a, **kw: (
+            reached.append("run")
+            or {
+                "status": "benchmark_success",
+                "benchmark_success": True,
+                "warnings": ["diagnostic path /home/private/result.json"],
+                "campaign_root": str(tmp_path / "campaigns" / "doorway-gate"),
+            }
+        ),
+    )
+    if gate == "manifest":
+        monkeypatch.setattr(
+            run_benchmark_release,
+            "validate_release_manifest",
+            lambda *a, **kw: {
+                "status": "invalid",
+                "problems": ["width binding differs"],
+            },
+        )
+    elif gate == "runtime_smoke":
+
+        def refuse_smoke(*a, **kw):
+            raise run_benchmark_release.RuntimeSmokeAdmissionError("same-source smoke missing")
+
+        monkeypatch.setattr(run_benchmark_release, "validate_runtime_smoke_result", refuse_smoke)
+    elif gate == "checkpoint_identity":
+        runtime_checkpoint = tmp_path / "runtime-receipt.json"
+        payload = run_benchmark_release._read_json(runtime_checkpoint)
+        payload["arms"][0]["checkpoint_sha256"] = "e" * 64
+        _write_json(runtime_checkpoint, payload)
+        payload = run_benchmark_release._read_json(smoke)
+        payload["checkpoint_staging_receipt"]["sha256"] = run_benchmark_release.sha256_file(
+            runtime_checkpoint
+        )
+        _write_json(smoke, payload)
+    elif gate == "resume":
+
+        def refuse_resume(**kw):
+            raise run_benchmark_release.ReleaseResumeAdmissionError("no infrastructure-only ruling")
+
+        monkeypatch.setattr(run_benchmark_release, "_admit_release_resume", refuse_resume)
+    rc = run_benchmark_release.main(
+        [
+            "--manifest",
+            str(manifest.path),
+            "--checkpoint-receipt",
+            str(checkpoint),
+            "--runtime-smoke-receipt",
+            str(smoke),
+            "--campaign-id",
+            "doorway-gate",
+            "--output-root",
+            str(tmp_path / "campaigns"),
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    expected = {
+        "manifest": "invalid_manifest",
+        "runtime_smoke": "runtime_smoke_receipt_rejected",
+        "checkpoint_identity": "checkpoint_identity_mismatch",
+        "resume": "resume_admission_rejected",
+        "privacy": "release_result_privacy_rejected",
+    }
+    assert rc == 2
+    assert payload["status"] == expected[gate]
+    assert reached == (["run"] if gate == "privacy" else [])
+    if gate == "privacy":
+        assert payload["checkpoint_identity_admission"]["status"] == "admitted"
+        assert payload["resume_admission"]["status"] == "fresh_campaign"
+        assert "/home/private" not in json.dumps(payload)
+
+
+def _record_acquired_scoring(monkeypatch):
+    """Stub scoring custody only; retain the real source/manifest admission witnesses."""
+    from dataclasses import replace
+
+    from robot_sf.benchmark.snqi import v2_binding
+    from tests.unit.benchmark.test_snqi_v2 import fixture_spec
+
+    monkeypatch.setattr(
+        v2_binding,
+        "bind_acquired_anchors",
+        lambda cfg, **kw: replace(cfg, snqi_v2_spec=replace(fixture_spec(), diagnostic=True)),
+    )
+
+
+@pytest.mark.parametrize("custody_without_anchors", [False, True])
+def test_pending_release_cli_refuses_before_campaign(
+    sealed_repository, monkeypatch, capsys, custody_without_anchors
+):
+    """The real CLI refuses pending scoring and raw custody without frozen anchors.
+
+    Removing either refusal can start an unscored release; prior binding tests
+    exercised the lower campaign API only. Resolve real D-083 development bytes,
+    stub unrelated operational admissions, and forbid the actual campaign entry.
+    No production seam or episode execution is introduced.
+    """
+    from robot_sf.benchmark import release_protocol
+
+    repo = sealed_repository
+    _no_execution.__wrapped__(monkeypatch)
+    code, identity = generate(repo, "1001,1002,1003")
+    assert code == 0
+    manifest = release_protocol.load_release_manifest(identity, repository_root=repo)
+    cfg = release_protocol.load_release_campaign_config(manifest, repository_root=repo)
+    if not custody_without_anchors:
+        assert getattr(cfg, "snqi_v2_binding", None), "D-083 source has no pending scoring binding"
+    assert cfg.snqi_v2_spec is None
+    capsys.readouterr()
+
+    def marked_json(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(path, payload)
+
+    monkeypatch.setattr(sys.modules[__name__], "_write_json", marked_json)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda _cfg: None)
+    receipt = _admit_checkpoint_receipt(monkeypatch, repo / "output/checkpoints")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+    smoke = repo / "output/smoke.json"
+    write_json(smoke, {})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *_a, **_kw: {"status": "admitted_diagnostic", "release_eligible": False},
+    )
+
+    def forbidden(*_a, **_kw):
+        raise AssertionError("pending scoring reached campaign execution")
+
+    monkeypatch.setattr(run_benchmark_release, "run_campaign", forbidden)
+    args = [
+        "--manifest",
+        str(identity),
+        "--checkpoint-receipt",
+        str(receipt),
+        "--runtime-smoke-receipt",
+        str(smoke),
+    ]
+    if custody_without_anchors:
+        args.extend(["--snqi-v2-calibration-root", str(repo / "output/calibration")])
+        with pytest.raises(ValueError, match="custody requires frozen anchors"):
+            run_benchmark_release.main(args)
+    else:
+        assert run_benchmark_release.main(args) == 2
+        result = json.loads(capsys.readouterr().out)
+        assert result["status"] == "snqi_v2_acquisition_required"
+        assert result["benchmark_success"] is False
+        assert result["release_exit_code"] == 2
+
+
+@pytest.mark.parametrize("smoke_run,accepted", [(True, True), (False, True), (False, False)])
+def test_development_identity_uses_shared_runner_without_release_success(
+    sealed_repository, monkeypatch, smoke_run, accepted
+):
+    """Real D-083 identity reaches common orchestration with recording runtime stubs.
+
+    Test value: catches accidental release promotion or a separate rehearsal runner;
+    existing release tests lack diagnostic identities. Public real-input resolution
+    and recorded common calls make the assertions independent of the branch code.
+    """
+    from robot_sf.benchmark import release_protocol, spawn_preflight
+
+    repo = sealed_repository
+    _no_execution.__wrapped__(monkeypatch)
+
+    def marked_json(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(path, payload)
+
+    monkeypatch.setattr(sys.modules[__name__], "_write_json", marked_json)
+    _record_acquired_scoring(monkeypatch)
+    code, identity = generate(repo, "1001" if smoke_run else "1001,1002,1003")
+    assert code == 0
+    manifest = release_protocol.load_release_manifest(identity, repository_root=repo)
+    campaign_root = _make_campaign_tree(repo / "output/driver")
+    calls = []
+    monkeypatch.setattr(
+        run_benchmark_release, "guard_manifest_execution", spawn_preflight.guard_manifest_execution
+    )
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(run_benchmark_release, "_required_artifacts_missing", lambda *_a: [])
+    receipt = _admit_checkpoint_receipt(monkeypatch, repo / "output/checkpoints")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+    smoke_path = repo / "output/smoke.json"
+    _write_json(smoke_path, {})
+
+    def smoke(*args, **kwargs):
+        calls.append(("smoke", kwargs.get("development_rehearsal")))
+        return {"status": "admitted_diagnostic", "release_eligible": False}
+
+    monkeypatch.setattr(run_benchmark_release, "validate_runtime_smoke_result", smoke)
+
+    def campaign(cfg, **kwargs):
+        calls.append(("campaign", cfg.seed_policy.seeds, kwargs["skip_publication_bundle"]))
+        return {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "campaign_execution_status": "completed",
+            "status": "benchmark_success",
+            "status_reason": "recording runtime completed",
+            "exit_code": 0,
+        }
+
+    monkeypatch.setattr(run_benchmark_release, "run_campaign", campaign)
+
+    def acceptance(root, **kwargs):
+        assert root == campaign_root
+        assert kwargs["manifest"] == manifest
+        calls.append(("acceptance", kwargs["campaign_config"].seed_policy.seeds))
+        return {
+            "schema_version": "benchmark-development-rehearsal-acceptance.v1",
+            "status": "valid" if accepted else "invalid",
+            "benchmark_success": False,
+            "blockers": [] if accepted else ["recording runtime incomplete"],
+        }
+
+    monkeypatch.setattr(
+        run_benchmark_release, "validate_development_rehearsal_acceptance", acceptance
+    )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("development runner attempted full release acceptance")
+
+    monkeypatch.setattr(
+        run_benchmark_release, "validate_full_benchmark_release_acceptance", forbidden
+    )
+    bundle = repo / "output/bundle"
+    bundle.mkdir()
+    descriptor = {
+        "bundle_dir": "output/bundle",
+        "archive_path": "output/bundle.tar.gz",
+        "checksums_path": "output/bundle/checksums.sha256",
+        "manifest_path": "output/bundle/publication_manifest.json",
+        "file_count": 1,
+        "total_bytes": 1,
+    }
+
+    def export(**kwargs):
+        calls.append(("export", kwargs["campaign_root"]))
+        return descriptor
+
+    monkeypatch.setattr(run_benchmark_release, "_build_publication_payload", export)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_publication_preflight",
+        lambda path: calls.append(("bundle-validator", path)),
+    )
+    args = [
+        "--manifest",
+        str(identity),
+        "--checkpoint-receipt",
+        str(receipt),
+        "--runtime-smoke-receipt",
+        "-" if smoke_run else str(smoke_path),
+    ]
+    if not smoke_run:
+        args.extend(
+            [
+                "--snqi-v2-calibration-root",
+                str(repo / "output/calibration"),
+                "--snqi-v2-anchors",
+                str(repo / "output/anchors.json"),
+            ]
+        )
+    if smoke_run:
+        args.append("--development-runtime-smoke")
+    status = run_benchmark_release.main(args)
+    result = json.loads((campaign_root / "release/release_result.json").read_text())
+    assert status == (0 if accepted else 2)
+    assert result["release_eligible"] is False
+    assert result["release_benchmark_success"] is False
+    assert result["benchmark_success"] is False
+    assert result["diagnostic_success"] is accepted
+    assert ("campaign", manifest.resolved_seeds, True) in calls
+    assert ("acceptance", manifest.resolved_seeds) in calls
+    assert any(call[0] == "export" for call in calls) is accepted
+    assert any(call[0] == "bundle-validator" for call in calls) is accepted
+    assert (
+        ("smoke", True) in calls if not smoke_run else not any(call[0] == "smoke" for call in calls)
+    )
+
+
+def test_default_runner_fixture_keeps_execution_guard():
+    """Synthetic report defaults must not waive admission for unrelated tests."""
+    from robot_sf.benchmark.spawn_preflight import guard_manifest_execution
+
+    assert run_benchmark_release.guard_manifest_execution is guard_manifest_execution

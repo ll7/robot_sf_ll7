@@ -18,6 +18,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pysocialforce.config import (
+    SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+)
 
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
@@ -286,36 +290,37 @@ def _requires_rvo2(arm: str) -> None:
         pytest.skip("rvo2 is required for the native ORCA release arm")
 
 
-_BRANCH_CUT_REASON = (
-    "#9733 finding (issue pending): the social-force pair kernel takes "
-    "theta = atan2(interaction) - atan2(difference) without wrapping, so a pair whose "
-    "two angles straddle +/-pi gets |theta| ~ 2 pi and zero force; the release v2 arm "
-    "drops the crossing pedestrian in the +x scene but not in the rotated one"
-)
-
-
 @pytest.mark.parametrize(
     "arm",
-    [
-        pytest.param(
-            "social_force",
-            marks=pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON),
-        ),
-        "orca",
-    ],
+    ["social_force", "orca"],
 )
 def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
-    """Release arms return the transformed trace for y-mirror, x-mirror and a 90-degree turn."""
+    """The corrected social-force successor and ORCA preserve transformed traces."""
     _requires_rvo2(arm)
-    base = run_arm_episode(arm, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
+    kernel_version = SOCIAL_FORCE_KERNEL_WRAPPED_V2 if arm == "social_force" else None
+    base = run_arm_episode(
+        arm,
+        interaction_scene(),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        social_force_kernel_version=kernel_version,
+    )
     assert base.status == "ok"
     assert base.flat_socnav_observation
     assert len(base.commands) >= 20
     without_pedestrian = run_arm_episode(
-        arm, interaction_scene(pedestrian=False), seed=_SEED, max_steps=_ARM_STEPS
+        arm,
+        interaction_scene(pedestrian=False),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        social_force_kernel_version=kernel_version,
     )
     without_obstacle = run_arm_episode(
-        arm, interaction_scene(obstacle=False), seed=_SEED, max_steps=_ARM_STEPS
+        arm,
+        interaction_scene(obstacle=False),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        social_force_kernel_version=kernel_version,
     )
     shared = min(len(base.commands), len(without_pedestrian.commands))
     assert (
@@ -334,7 +339,11 @@ def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
 
     for name, (point_map, _heading_map, _sign) in _TRANSFORMS.items():
         transformed = run_arm_episode(
-            arm, interaction_scene(point_map), seed=_SEED, max_steps=_ARM_STEPS
+            arm,
+            interaction_scene(point_map),
+            seed=_SEED,
+            max_steps=_ARM_STEPS,
+            social_force_kernel_version=kernel_version,
         )
         assert transformed.flat_socnav_observation
         _assert_arm_equivariant(base, transformed, name)
@@ -521,7 +530,6 @@ def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
         _assert_arm_equivariant(base, transformed, name)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON)
 def test_social_force_pair_kernel_is_rotation_equivariant() -> None:
     """Rotating a robot-pedestrian pair rotates its force (release v2 kernel parameters)."""
     config = SocNavPlannerConfig()
@@ -534,11 +542,26 @@ def test_social_force_pair_kernel_is_rotation_equivariant() -> None:
     # A pedestrian 2 m straight ahead of a robot driving along +x, crossing it.
     position_difference = np.asarray([[-2.0, -0.05]])
     velocity_difference = np.asarray([[-1.2, 0.9]])
+    legacy_implicit = _pairwise_social_force_kernel(
+        position_difference,
+        velocity_difference,
+        **parameters,
+    )
+    legacy_explicit = _pairwise_social_force_kernel(
+        position_difference,
+        velocity_difference,
+        kernel_version=SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+        **parameters,
+    )
+    np.testing.assert_array_equal(legacy_implicit, legacy_explicit)
     reference = None
     for angle in (0.0, 0.3, np.pi / 2.0, np.pi, -np.pi / 2.0):
         rotation = np.asarray([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
         force = _pairwise_social_force_kernel(
-            position_difference @ rotation.T, velocity_difference @ rotation.T, **parameters
+            position_difference @ rotation.T,
+            velocity_difference @ rotation.T,
+            kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+            **parameters,
         )
         unrotated = force @ rotation
         if reference is None:

@@ -207,6 +207,18 @@ def test_adapter_builds_network_input_and_agent_states(monkeypatch) -> None:
     )
     assert selected_states[:, -1].tolist() == pytest.approx([1.4, 0.4])
 
+    release_radius_states, release_count = adapter._build_other_agents_states(
+        np.array([[1.4, 0.0]]),
+        np.zeros((1, 2)),
+        np.zeros(2),
+        1.0,
+        0.4,
+        np.array([1.0, 0.0]),
+        np.array([0.0, 1.0]),
+    )
+    assert release_count == 1.0
+    assert release_radius_states[0, -1] == pytest.approx(0.0)
+
 
 def test_network_input_converts_ego_velocity_before_goal_frame_projection() -> None:
     """SA-CADRL's network features use global velocities projected into the goal frame."""
@@ -377,3 +389,20 @@ def test_flat_observation_pedestrian_velocity_converts_to_global_frame() -> None
     np.testing.assert_allclose(captured[0], expected, rtol=0.0, atol=1e-12)
     # A no-op conversion would be indistinguishable at heading 0; guard that too.
     assert not np.allclose(captured[0], ego_velocity, atol=1e-6)
+
+
+@pytest.mark.parametrize(("columns", "slots"), [(19, 2), (40, 5)])
+def test_checkpoint_capacity_rejects_extra_agents_before_tensorflow(columns, slots):
+    """Five robot features plus seven per agent must fit the checkpoint without cropping."""
+    calls = []
+    model = object.__new__(sacadrl._SACADRLModel)
+    model._input_dim = columns
+    model._x = "input"
+    model._softmax = "probabilities"
+    model._sess = SimpleNamespace(run=lambda *a, **k: calls.append(k) or np.array([[0.25, 0.75]]))
+    with pytest.raises(ValueError, match=rf"checkpoint capacity \({slots} agent slots\)"):
+        model.predict(np.ones((1, columns + 7)))
+    assert calls == []
+    np.testing.assert_array_equal(model.predict(np.ones((1, columns))), [[0.25, 0.75]])
+    assert len(calls) == 1
+    assert calls[0]["feed_dict"]["input"].shape == (1, columns)

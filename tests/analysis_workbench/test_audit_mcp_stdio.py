@@ -65,8 +65,10 @@ EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES = 8 * 1024
 def _read_process_stderr(
     stream: BinaryIO,
     buffer: bytearray,
+    *,
+    retention_overlap_bytes: int = 0,
 ) -> tuple[bool, bool]:
-    """Drain one nonblocking stderr chunk and return ``(closed, truncated)``."""
+    """Drain one stderr chunk while retaining bounded overlap for safe redaction."""
 
     try:
         chunk = os.read(stream.fileno(), 4096)
@@ -78,8 +80,9 @@ def _read_process_stderr(
         return True, False
     buffer.extend(chunk)
     truncated = len(buffer) > EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES
-    if truncated:
-        del buffer[:-EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES]
+    retention_limit = EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES + retention_overlap_bytes
+    if len(buffer) > retention_limit:
+        del buffer[:-retention_limit]
     return False, truncated
 
 
@@ -94,7 +97,27 @@ class _ExternalMCPProcessReader:
         self.stderr = process.stderr
         os.set_blocking(self.stdout.fileno(), False)
         os.set_blocking(self.stderr.fileno(), False)
-        self.redactions = redactions
+        encoded_redactions = sorted(
+            {value.encode("utf-8") for value in redactions if value},
+            key=lambda value: (-len(value), value),
+        )
+        redaction_marker = b"<redacted>"
+        self.redaction_patterns = tuple(
+            (
+                value,
+                redaction_marker + b"*" * (len(value) - len(redaction_marker))
+                if len(value) >= len(redaction_marker)
+                else b"*" * len(value),
+            )
+            for value in encoded_redactions
+        )
+        self.stderr_retention_overlap_bytes = (
+            max(
+                (len(value) for value, _ in self.redaction_patterns),
+                default=1,
+            )
+            - 1
+        )
         self.stdout_buffer = bytearray()
         self.stderr_buffer = bytearray()
         self.stdout_closed = False
@@ -119,6 +142,7 @@ class _ExternalMCPProcessReader:
             self.stderr_closed, truncated = _read_process_stderr(
                 self.stderr,
                 self.stderr_buffer,
+                retention_overlap_bytes=self.stderr_retention_overlap_bytes,
             )
             self.stderr_truncated |= truncated
         self._raise_timeout(
@@ -141,6 +165,7 @@ class _ExternalMCPProcessReader:
             self.stderr_closed, truncated = _read_process_stderr(
                 self.stderr,
                 self.stderr_buffer,
+                retention_overlap_bytes=self.stderr_retention_overlap_bytes,
             )
             self.stderr_truncated |= truncated
         return bool(ready)
@@ -152,16 +177,13 @@ class _ExternalMCPProcessReader:
         *,
         stdout_eof: bool,
     ) -> None:
-        if self.redactions:
-            rendered = (
-                f"<suppressed; captured_bytes={len(self.stderr_buffer)}, "
-                f"truncated={self.stderr_truncated}>"
-            )
-        else:
-            diagnostics = bytes(self.stderr_buffer)
-            rendered = diagnostics.decode("utf-8", errors="replace").strip() or "<empty>"
-            if self.stderr_truncated:
-                rendered = "[truncated] " + rendered
+        diagnostics = bytes(self.stderr_buffer)
+        for secret, replacement in self.redaction_patterns:
+            diagnostics = diagnostics.replace(secret, replacement)
+        diagnostics = diagnostics[-EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES:]
+        rendered = diagnostics.decode("utf-8", errors="replace").strip() or "<empty>"
+        if self.stderr_truncated:
+            rendered = "[truncated] " + rendered
         if stdout_eof:
             failure = f"external MCP proxy stdout EOF before delivering a {phase} response"
         else:
@@ -811,19 +833,32 @@ def test_external_mcp_startup_timeout_reports_child_diagnostics() -> None:
             process.wait(timeout=1.0)
 
 
-def test_external_mcp_eof_diagnostics_redact_token_at_tail_boundary() -> None:
-    """EOF fails immediately without exposing a token suffix from the stderr tail."""
+def test_external_mcp_timeout_redacts_token_across_stderr_trim_boundary() -> None:
+    """Useful timeout diagnostics survive while a token straddles the evicted prefix."""
 
-    token = "SESSION_TOKEN_123456789"
-    diagnostics = token + "x" * (EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES - len(token)) + token
+    token = "SESSION_KEY_12345678"
+    token_offset = 4096 - 8
+    trailing_hint = "PROXY_TIMEOUT_HINT: broker closed channel"
+    total_bytes = 3 * 4096
+    # The reader consumes 4096-byte chunks and retains an 8192-byte tail. This
+    # puts eight token bytes before the first eviction and the rest after it;
+    # without overlap, only a token suffix would remain in the retained buffer.
+    diagnostics = (
+        "x" * token_offset
+        + token
+        + "x" * (total_bytes - token_offset - len(token) - len(trailing_hint))
+        + trailing_hint
+    )
+    assert len(diagnostics) == total_bytes
+    assert token_offset < 4096 < token_offset + len(token)
     process = subprocess.Popen(
         [
             sys.executable,
             "-c",
             (
-                "import os, sys, time; "
+                "import sys, time; "
                 f"sys.stderr.write({diagnostics!r}); "
-                "sys.stderr.flush(); os.close(1); time.sleep(60)"
+                "sys.stderr.flush(); time.sleep(60)"
             ),
         ],
         stdin=subprocess.PIPE,
@@ -835,13 +870,18 @@ def test_external_mcp_eof_diagnostics_redact_token_at_tail_boundary() -> None:
     try:
         reader = _ExternalMCPProcessReader(process, redactions=(token,))
         with pytest.raises(AssertionError) as raised:
-            reader.read_response(phase="initialize", timeout_seconds=5.0)
+            reader.read_response(phase="initialize", timeout_seconds=0.5)
         message = str(raised.value)
-        assert "stdout EOF" in message
-        assert "stderr='<suppressed; captured_bytes=" in message
-        assert "truncated=" in message
+        assert "did not deliver a initialize response" in message
+        assert trailing_hint in message
         assert token not in message
         assert token[-7:] not in message
+        assert "[truncated]" in message
+        assert (
+            EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES
+            < len(message)
+            < (EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES + 512)
+        )
         assert time.monotonic() - started < 2.0
     finally:
         if process.stdin is not None:

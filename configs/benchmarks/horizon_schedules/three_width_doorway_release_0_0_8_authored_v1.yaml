@@ -1,0 +1,12 @@
+# Authored 0.0.8 three-width budgets; no evaluation episode was executed.
+schema_version: 1
+scenarios:
+  francis2023_narrow_doorway_width_2p20:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_narrow_doorway_width_2p80:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_narrow_doorway_width_3p60:
+    recommended_horizon_steps: 400
+    status: authored

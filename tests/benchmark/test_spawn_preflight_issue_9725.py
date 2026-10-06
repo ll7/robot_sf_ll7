@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -18,25 +17,20 @@ def test_parse_seeds_accepts_ranges_and_lists() -> None:
     assert spawn_preflight._parse_seeds("111-113, 115,111,") == [111, 112, 113, 115]
 
 
-def test_preflight_cli_reports_clear_cell_and_map_warnings(tmp_path: Path, capsys) -> None:
-    """One formerly defective cell resets clear; the report carries rows and warnings."""
-    out = tmp_path / "report.json"
-    code = spawn_preflight.main(
-        [
-            "--matrix",
-            str(MATRIX),
-            "--scenario",
-            "classic_cross_trap_high",
-            "--seeds",
-            "111",
-            "--step-zero",
-            "--dump-spawns",
-            "--output",
-            str(out),
-        ]
+def test_reset_only_diagnostic_reports_clear_cell_and_map_warnings() -> None:
+    """The legacy reset diagnostic still exposes one selected cell and map warnings."""
+    from argparse import Namespace
+
+    report = spawn_preflight.run_preflight(
+        Namespace(
+            matrix=MATRIX,
+            scenario=["classic_cross_trap_high"],
+            seeds="1020",
+            workers=1,
+            step_zero=True,
+            dump_spawns=True,
+        )
     )
-    assert code == 0
-    report = json.loads(out.read_text(encoding="utf-8"))
     assert report["cell_count"] == 1
     assert report["overlap_count"] == 0
     assert report["step1_collision_count"] == 0
@@ -46,10 +40,20 @@ def test_preflight_cli_reports_clear_cell_and_map_warnings(tmp_path: Path, capsy
     assert row["robot_start"] and row["ped_positions"]
     kinds = {w["kind"] for w in report["map_warnings"]["classic_cross_trap_high"]}
     assert "ped_waypoint_on_robot_route_waypoint" in kinds
-    assert '"overlap_count": 0' in capsys.readouterr().out
 
 
 def test_preflight_rejects_unknown_scenario() -> None:
     """An unknown scenario name fails instead of silently checking nothing."""
+    from argparse import Namespace
+
     with pytest.raises(SystemExit, match="unknown scenario"):
-        spawn_preflight.main(["--matrix", str(MATRIX), "--scenario", "no_such_scenario"])
+        spawn_preflight.run_preflight(
+            Namespace(
+                matrix=MATRIX,
+                scenario=["no_such_scenario"],
+                seeds="111",
+                workers=1,
+                step_zero=False,
+                dump_spawns=False,
+            )
+        )

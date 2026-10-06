@@ -65,13 +65,28 @@ _RUNTIME_STATUS_FIELDS = frozenset(
     {"status", "row_status", "readiness_status", "availability_status", "execution_mode"}
 )
 _RUNTIME_BOOLEAN_MARKERS = frozenset(
-    {"fallback", "degraded", "fallback_triggered", "fallback_or_degraded", "fallback_used"}
+    {
+        "fallback",
+        "degraded",
+        "fallback_triggered",
+        "fallback_or_degraded",
+        "fallback_used",
+        "fallback_applied",
+        "fallback_to_another_checkpoint",
+        "fallback_to_goal_seeking",
+    }
 )
 _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available", "unavailable"})
 _RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 _RUNTIME_STATUS_COUNT_CONTAINERS = frozenset({"proposal_status_counts"})
 _RUNTIME_STATUS_COUNT_MARKERS = frozenset({"degraded", "fallback"})
 _RUNTIME_STOP_BEST_EFFORT = "stop_best_effort"
+_GUARDED_NATIVE_DECISIONS = (
+    "fallback_safe",
+    "fallback_best_effort",
+    "stop_safe",
+    "stop_best_effort",
+)
 _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
     {"config", "planner_contract", "safety_shield_contract"}
 )
@@ -96,6 +111,43 @@ def is_verified_guarded_ppo(metadata: Any, *, expected_algorithm: str | None) ->
     )
 
 
+def _counter_marker(item: Any, item_path: str) -> tuple[str, str] | None:
+    """Validate a runtime counter and report any positive or malformed value.
+
+    Returns:
+        The marker and its path, or None for a finite zero counter.
+    """
+    if not isinstance(item, (int, float)) or isinstance(item, bool):
+        return item_path, "invalid"
+    try:
+        finite = math.isfinite(float(item))
+    except (OverflowError, ValueError):
+        finite = False
+    if not finite or item < 0:
+        return item_path, "invalid"
+    if item > 0:
+        return item_path, str(item)
+    return None
+
+
+def _degraded_status_list_marker(statuses: list[Any], path: str) -> tuple[str, str] | None:
+    """Reject forbidden or malformed entries in the typed degraded status list.
+
+    Returns:
+        The first forbidden status or invalid entry and its path, or None.
+    """
+    for index, status in enumerate(statuses):
+        status_path = f"{path}[{index}]"
+        if not isinstance(status, str):
+            return status_path, "invalid"
+        normalized = status.strip().lower().replace("-", "_")
+        if normalized in _RUNTIME_FORBIDDEN_STATUSES:
+            return status_path, normalized
+        if normalized not in {"ok", "native", "none"}:
+            return status_path, "invalid"
+    return None
+
+
 def runtime_fallback_or_degraded_marker(  # noqa: C901
     payload: Any,
     *,
@@ -107,14 +159,21 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
     status fields (including the predictive-foresight fallback prefix), explicit
-    boolean markers, the exact ``stop_best_effort`` shield label, and positive
-    or malformed fallback/stop-best-effort counters fail closed.  An empty
+    boolean markers and positive or malformed fallback/degraded/stop-best-effort counters
+    fail closed. The native shield decisions are telemetry only for verified
+    guarded PPO; malformed native counters still fail closed.  An empty
     ``fallback_reason`` is tolerated only beside an explicit false
     ``fallback_used`` or ``fallback_triggered`` flag. The shield's typed
     ``fallback_controller_state`` dictionary is traversed as diagnostic state,
     with the same marker checks applied to its contents, only when the caller
     supplies an independently declared guarded algorithm and matching metadata.
-    Unbound shield state fails closed.
+    Unbound shield state fails closed. For other keys containing ``degraded``,
+    booleans are markers (false passes, true blocks); numeric values remain
+    nonnegative finite counters. ``degraded_reason`` accepts only null, empty
+    or ``none`` strings as clean; every other reason blocks. ``degraded_statuses``
+    accepts a list of strings: empty lists and ``ok``/``native``/``none`` entries
+    pass, forbidden statuses block, and unknown statuses or malformed values
+    fail closed. Other degraded strings and containers remain invalid.
 
     Returns:
         ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
@@ -124,28 +183,40 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
         algorithm_metadata, expected_algorithm=expected_algorithm
     )
 
-    def _counter_marker(item: Any, item_path: str) -> tuple[str, str] | None:
-        if not isinstance(item, (int, float)) or isinstance(item, bool):
-            return item_path, "invalid"
-        try:
-            finite = math.isfinite(float(item))
-        except (OverflowError, ValueError):
-            finite = False
-        if not finite or item < 0:
-            return item_path, "invalid"
-        if item > 0:
-            return item_path, str(item)
-        return None
+    def _degraded_marker(key: str, item: Any, item_path: str) -> tuple[str, str] | None:
+        if isinstance(item, bool):
+            return (item_path, "true") if item else None
+        if key == "degraded_reason":
+            if item is None:
+                return None
+            if not isinstance(item, str):
+                return item_path, "invalid"
+            normalized = item.strip().lower().replace("-", "_")
+            return None if normalized in {"", "none"} else (item_path, normalized)
+        if key == "degraded_statuses":
+            if not isinstance(item, list):
+                return item_path, "invalid"
+            return _degraded_status_list_marker(item, item_path)
+        return _counter_marker(item, item_path)
 
     def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901, PLR0912
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             for raw_key, item in value.items():
                 key = str(raw_key)
                 item_path = f"{path}.{key}" if path else key
                 if key == "decision_label":
                     normalized = str(item).strip().lower().replace("-", "_")
-                    if normalized == _RUNTIME_STOP_BEST_EFFORT:
+                    if normalized == _RUNTIME_STOP_BEST_EFFORT and not guarded_ppo_identity:
                         return item_path, normalized
+                native_counter = (
+                    guarded_ppo_identity
+                    and key in _GUARDED_NATIVE_DECISIONS
+                    and path in {"guard_stats", "shield_stats.decision_counts"}
+                )
+                if native_counter:
+                    if not _is_valid_native_counter(item):
+                        return item_path, "invalid"
+                    continue
                 if key in _RUNTIME_STATUS_FIELDS:
                     normalized = str(item).strip().lower().replace("-", "_")
                     if normalized in _RUNTIME_FORBIDDEN_STATUSES or any(
@@ -184,10 +255,17 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
                         return counter_marker
+                elif key == "fallback_diagnostics":
+                    if not isinstance(item, Mapping):
+                        return item_path, "invalid"
                 elif "fallback" in key:
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
                         return counter_marker
+                elif "degraded" in key:
+                    degraded_marker = _degraded_marker(key, item, item_path)
+                    if degraded_marker is not None:
+                        return degraded_marker
                 nested = _visit(item, item_path)
                 if nested is not None:
                     return nested
@@ -209,11 +287,11 @@ def _is_valid_native_counter(value: Any) -> bool:
 def algorithm_metadata_runtime_marker(  # noqa: C901
     metadata: Mapping[str, Any], *, expected_algorithm: str | None = None
 ) -> tuple[str, str] | None:
-    """Scan runtime metadata while honoring the guarded safe-counter exception.
+    """Scan runtime metadata while honoring the verified guarded telemetry contract.
 
-    Guarded PPO's identity-bound ``fallback_safe`` counters are native shield
-    telemetry. Other fallback counters, malformed safe counters, and the
-    exact ``stop_best_effort`` label remain forbidden.
+    The shield's four native fallback/stop decisions and their counters are
+    method telemetry only under independently verified guarded PPO identity.
+    Malformed counters and all other fallback markers remain forbidden.
 
     Returns:
         The first forbidden runtime marker, if present.
@@ -229,10 +307,12 @@ def algorithm_metadata_runtime_marker(  # noqa: C901
         if not isinstance(guard_stats, Mapping):
             return "guard_stats", "invalid"
         guard_view = dict(guard_stats)
-        if "fallback_safe" in guard_view and guarded_ppo_identity:
-            if not _is_valid_native_counter(guard_view["fallback_safe"]):
-                return "guard_stats.fallback_safe", "invalid"
-            del guard_view["fallback_safe"]
+        if guarded_ppo_identity:
+            for key in _GUARDED_NATIVE_DECISIONS:
+                if key in guard_view:
+                    if not _is_valid_native_counter(guard_view[key]):
+                        return f"guard_stats.{key}", "invalid"
+                    del guard_view[key]
         runtime_view["guard_stats"] = guard_view
 
     shield_stats = metadata.get("shield_stats")
@@ -245,10 +325,12 @@ def algorithm_metadata_runtime_marker(  # noqa: C901
             if not isinstance(decision_counts, Mapping):
                 return "shield_stats.decision_counts", "invalid"
             decision_view = dict(decision_counts)
-            if "fallback_safe" in decision_view and guarded_ppo_identity:
-                if not _is_valid_native_counter(decision_view["fallback_safe"]):
-                    return "shield_stats.decision_counts.fallback_safe", "invalid"
-                del decision_view["fallback_safe"]
+            if guarded_ppo_identity:
+                for key in _GUARDED_NATIVE_DECISIONS:
+                    if key in decision_view:
+                        if not _is_valid_native_counter(decision_view[key]):
+                            return f"shield_stats.decision_counts.{key}", "invalid"
+                        del decision_view[key]
             shield_view["decision_counts"] = decision_view
         runtime_view["shield_stats"] = shield_view
 

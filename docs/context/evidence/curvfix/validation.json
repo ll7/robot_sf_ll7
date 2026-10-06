@@ -1,0 +1,87 @@
+{
+  "artifact_output_note": "The executed command additionally wrote a JUnit report to a private local artifact path; this path is omitted.",
+  "command": "uv run pytest -n0 -q tests/analysis_workbench/test_real_trace_validation_contract.py tests/analysis_workbench/test_release_row_anomalies.py tests/benchmark/test_aggregated_time_cooperative.py tests/benchmark/test_ammv_feasibility.py tests/benchmark/test_camera_ready_campaign.py tests/benchmark/test_collision_definition_inventory.py tests/benchmark/test_collision_runtime_termination_metrics.py tests/benchmark/test_cross_benchmark_metrics.py tests/benchmark/test_curvature_v2.py tests/benchmark/test_false_positive_actor_injection_replay.py tests/benchmark/test_fxm2_metrics.py tests/benchmark/test_fxm_metric_definitions.py tests/benchmark/test_group_space_metadata.py tests/benchmark/test_map_runner_batch_runner.py tests/benchmark/test_map_runner_batch_summary.py tests/benchmark/test_map_runner_utils.py tests/benchmark/test_metrics_characterization.py tests/benchmark/test_near_miss_ttc.py tests/benchmark/test_operational_quantities.py tests/benchmark/test_optimized_mode_assert_guards.py tests/benchmark/test_passing_clearance.py tests/benchmark/test_ped_trajectory_quality.py tests/benchmark/test_pedestrian_flow_validation.py tests/benchmark/test_robot_attributable_force.py tests/benchmark/test_runner_native_command_arm.py tests/benchmark/test_signalized_runtime_metadata.py tests/benchmark/test_social_compliance_metrics.py tests/benchmark/test_social_compliance_preflight_smoke.py tests/carla_bridge/test_t0_export.py tests/docs/test_module_doctests.py tests/test_baseline_stats.py tests/test_cli_run_snqi.py tests/test_cli_run_snqi_from.py tests/test_issue_9724_social_force_resolution_independent.py tests/test_metrics.py tests/test_metrics_success_rate.py tests/test_rollover_proxy.py tests/test_snqi_generate_figures_minimal.py tests/test_threshold_sensitivity.py tests/tools/test_rebuild_campaign_reports_from_rows.py tests/tools/test_revalidate_benchmark_release.py tests/unit/benchmark/test_force_sample_stats.py tests/unit/benchmark/test_metrics_post_process.py tests/unit/benchmark/test_snqi_v2.py tests/unit/test_metrics_edge_cases.py tests/unit/test_snqi_weights.py tests/validation/test_check_release_collision_consumers.py tests/validation/test_check_release_snqi_field_consistency.py tests/validation/test_publication_preflight.py --deselect=tests/test_issue_9724_social_force_resolution_independent.py::test_bottleneck_low_without_pedestrians_reaches_goal --deselect=tests/test_issue_9724_social_force_resolution_independent.py::test_release_matrix_bottleneck_low_seed_112_enters_goal_zone --deselect=tests/test_issue_9724_social_force_resolution_independent.py::test_narrow_doorway_seed_111_does_not_spin_in_place",
+  "environment": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  },
+  "excluded_heldout_simulator_nodes": [
+    "tests/test_issue_9724_social_force_resolution_independent.py::test_bottleneck_low_without_pedestrians_reaches_goal",
+    "tests/test_issue_9724_social_force_resolution_independent.py::test_release_matrix_bottleneck_low_seed_112_enters_goal_zone",
+    "tests/test_issue_9724_social_force_resolution_independent.py::test_narrow_doorway_seed_111_does_not_spin_in_place"
+  ],
+  "other_checks": [
+    "uv run ruff check",
+    "uv run ruff format --check",
+    "uv run python scripts/validation/check_seed_holdout_diff.py --base-ref origin/main",
+    "git diff --check"
+  ],
+  "result": {
+    "deselected": 3,
+    "exit": 0,
+    "passed": 1547,
+    "skipped": [
+      {
+        "reason": "requires a distinct reviewed validator checkout",
+        "test": "tests.tools.test_revalidate_benchmark_release::test_exact_validator_subprocess_uses_supplied_checkout"
+      },
+      {
+        "reason": "requires the locally-downloaded 0.0.3 publication bundle (ROBOT_SF_0_0_3_BUNDLE)",
+        "test": "tests.validation.test_check_release_snqi_field_consistency::test_real_0_0_3_bundle_reproduces_issue_5580_drift"
+      }
+    ]
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "start_sha": "ca1217c4f9e0ef0570ae172b26722cfc03338702",
+  "test_files": [
+    "tests/analysis_workbench/test_real_trace_validation_contract.py",
+    "tests/analysis_workbench/test_release_row_anomalies.py",
+    "tests/benchmark/test_aggregated_time_cooperative.py",
+    "tests/benchmark/test_ammv_feasibility.py",
+    "tests/benchmark/test_camera_ready_campaign.py",
+    "tests/benchmark/test_collision_definition_inventory.py",
+    "tests/benchmark/test_collision_runtime_termination_metrics.py",
+    "tests/benchmark/test_cross_benchmark_metrics.py",
+    "tests/benchmark/test_curvature_v2.py",
+    "tests/benchmark/test_false_positive_actor_injection_replay.py",
+    "tests/benchmark/test_fxm2_metrics.py",
+    "tests/benchmark/test_fxm_metric_definitions.py",
+    "tests/benchmark/test_group_space_metadata.py",
+    "tests/benchmark/test_map_runner_batch_runner.py",
+    "tests/benchmark/test_map_runner_batch_summary.py",
+    "tests/benchmark/test_map_runner_utils.py",
+    "tests/benchmark/test_metrics_characterization.py",
+    "tests/benchmark/test_near_miss_ttc.py",
+    "tests/benchmark/test_operational_quantities.py",
+    "tests/benchmark/test_optimized_mode_assert_guards.py",
+    "tests/benchmark/test_passing_clearance.py",
+    "tests/benchmark/test_ped_trajectory_quality.py",
+    "tests/benchmark/test_pedestrian_flow_validation.py",
+    "tests/benchmark/test_robot_attributable_force.py",
+    "tests/benchmark/test_runner_native_command_arm.py",
+    "tests/benchmark/test_signalized_runtime_metadata.py",
+    "tests/benchmark/test_social_compliance_metrics.py",
+    "tests/benchmark/test_social_compliance_preflight_smoke.py",
+    "tests/carla_bridge/test_t0_export.py",
+    "tests/docs/test_module_doctests.py",
+    "tests/test_baseline_stats.py",
+    "tests/test_cli_run_snqi.py",
+    "tests/test_cli_run_snqi_from.py",
+    "tests/test_issue_9724_social_force_resolution_independent.py",
+    "tests/test_metrics.py",
+    "tests/test_metrics_success_rate.py",
+    "tests/test_rollover_proxy.py",
+    "tests/test_snqi_generate_figures_minimal.py",
+    "tests/test_threshold_sensitivity.py",
+    "tests/tools/test_rebuild_campaign_reports_from_rows.py",
+    "tests/tools/test_revalidate_benchmark_release.py",
+    "tests/unit/benchmark/test_force_sample_stats.py",
+    "tests/unit/benchmark/test_metrics_post_process.py",
+    "tests/unit/benchmark/test_snqi_v2.py",
+    "tests/unit/test_metrics_edge_cases.py",
+    "tests/unit/test_snqi_weights.py",
+    "tests/validation/test_check_release_collision_consumers.py",
+    "tests/validation/test_check_release_snqi_field_consistency.py",
+    "tests/validation/test_publication_preflight.py"
+  ]
+}

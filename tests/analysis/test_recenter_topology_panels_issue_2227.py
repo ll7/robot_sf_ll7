@@ -43,7 +43,8 @@ _REAL_DELTA_CLASSIFICATIONS = {
 def _spec(mechanism_id: str, *, horizon: int) -> panels.MechanismSpec:
     """Return the named mechanism spec with a reduced horizon for tests."""
     base = next(spec for spec in panels.MECHANISMS if spec.mechanism_id == mechanism_id)
-    return dataclasses.replace(base, horizon=horizon)
+    dev_seed = {"static_recenter": 1003, "topology_command": 1001}[mechanism_id]
+    return dataclasses.replace(base, seed=dev_seed, horizon=horizon)
 
 
 @pytest.fixture(scope="module")

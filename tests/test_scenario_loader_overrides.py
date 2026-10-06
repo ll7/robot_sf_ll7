@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import (
@@ -228,3 +229,27 @@ def test_simulation_override_rejects_unknown_goal_completion_policy():
 
     with pytest.raises(ValueError, match="Unknown goal_completion_policy"):
         _apply_simulation_overrides(config, {"goal_completion_policy": "zone_entry_v9"})
+
+
+def test_simulation_override_binds_versioned_social_force_kernel():
+    """Scenario overrides expose the corrected pair-kernel selector explicitly."""
+    config = RobotSimulationConfig()
+
+    _apply_simulation_overrides(
+        config,
+        {"social_force_kernel_version": SOCIAL_FORCE_KERNEL_WRAPPED_V2},
+    )
+
+    assert config.sim_config.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert config.sim_config.social_force_kernel_resolution_mode == "explicit"
+
+
+def test_simulation_override_rejects_unknown_social_force_kernel():
+    """Malformed pair-kernel identifiers fail closed during scenario loading."""
+    config = RobotSimulationConfig()
+
+    with pytest.raises(ValueError, match="unsupported social-force kernel version"):
+        _apply_simulation_overrides(
+            config,
+            {"social_force_kernel_version": "unknown_v9"},
+        )

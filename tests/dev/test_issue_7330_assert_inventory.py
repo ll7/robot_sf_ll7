@@ -14,18 +14,27 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = REPO_ROOT / "robot_sf"
 
 
+# Whole-source AST scans take 13–34 s with CI coverage; keep rejection unit coverage fast.
+@pytest.mark.slow
 def test_current_main_residuals_are_complete_and_internal() -> None:
     """Every exact-source residual is reviewed and routes to parent closure."""
     payload = audit_production_asserts.build_inventory(REPO_ROOT, SOURCE_ROOT)
 
     assert payload["schema"] == "production-assert-inventory.v1"
     assert isinstance(payload["source"]["clean"], bool)
-    assert payload["counts"]["assertion_count"] == 40
-    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 40}
+    assert payload["counts"]["assertion_count"] == 52
+    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 52}
     assert payload["counts"]["ownership"] == {
         "completed_historical_review": 14,
-        "unowned_residual": 26,
+        "unowned_residual": 38,
     }
+    bicycle = next(
+        row
+        for row in payload["assertions"]
+        if row["scope"] == "BicycleDriveKinematicsModel.curvature_limit"
+    )
+    assert bicycle["expression"] == "self.max_curvature is not None"
+    assert bicycle["ownership"]["references"] == ["#10093", "PR #10100"]
     assert {
         (row["path"], row["scope"], row["expression"])
         for row in payload["assertions"]
@@ -49,6 +58,7 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
     )
 
 
+@pytest.mark.slow
 def test_json_and_markdown_rendering_is_deterministic() -> None:
     """Two runs over one commit produce byte-identical serialized outputs."""
     first = audit_production_asserts.build_inventory(REPO_ROOT, SOURCE_ROOT)
@@ -62,6 +72,7 @@ def test_json_and_markdown_rendering_is_deterministic() -> None:
     ) == audit_production_asserts.render_markdown(second)
 
 
+@pytest.mark.slow
 def test_detached_source_reports_detached_ref(monkeypatch: pytest.MonkeyPatch) -> None:
     """An exact detached-main snapshot is a supported inventory source."""
     original_run = audit_production_asserts.subprocess.run
@@ -93,6 +104,7 @@ def test_unknown_assertion_fails_closed() -> None:
         audit_production_asserts._reviewed_rows([unknown])
 
 
+@pytest.mark.slow
 def test_cli_writes_both_issue_outputs(tmp_path: Path) -> None:
     """The issue-scoped command emits the required JSON and Markdown packets."""
     json_path = tmp_path / "assert_inventory.json"
@@ -113,7 +125,7 @@ def test_cli_writes_both_issue_outputs(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["counts"]["assertion_count"] == 40
+    assert payload["counts"]["assertion_count"] == 52
     assert "# Production assert inventory (issue #7330)" in markdown_path.read_text(
         encoding="utf-8"
     )

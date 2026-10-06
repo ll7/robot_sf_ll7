@@ -190,8 +190,11 @@ class CampaignConfig:
     radius_sweep: RadiusSweepConfig | None = None
     seed_policy: SeedPolicy = SeedPolicy()
     scenario_horizons_path: Path | None = None
+    scenario_horizons_sha256: str | None = None
     workers: int = 1
     horizon: int | None = None
+    horizon_policy: str | None = None
+    protocol_version: str | None = None
     dt: float | None = None
     record_forces: bool = True
     record_planner_decision_trace: bool = False
@@ -204,6 +207,7 @@ class CampaignConfig:
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     snqi_v2_spec: SnqiV2Spec | None = None
+    snqi_v2_binding: dict[str, Any] | None = None
     stop_on_failure: bool = False
     export_publication_bundle: bool = True
     include_videos_in_publication: bool = False

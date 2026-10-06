@@ -1,0 +1,27 @@
+{
+  "producer_sha": "990dc6f0bfd53c57181990c69e2fefb6489b42a1",
+  "public_sha256": {
+    "bicycle_wrapper_probe_episodes.csv": "6204eeb3947e4b472da45cb7136793ed6551d7b23ca5eb965b8c2ef87ea915c8",
+    "bicycle_wrapper_probe_summary.json": "d6460f2f1fae51d019677c06d369f8f9c81d0d749a3c56510d08bb4fedea1cde"
+  },
+  "raw": {
+    "files": 541,
+    "sha256": "21c889079d6227b24e5494ee00854f3b82e7358d84b8741c49c15b570d45ffe7"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "bicycle-wrapper-probe-provenance.v1",
+  "shared_summarizer_sha256": "f55a62d617d651b501c36540989c6a7d0859c40732e295682b8ae34f8c8841bb",
+  "source_files_sha256": {
+    "configs/robots/t60_bicycle_30deg_v1.yaml": "f2087a2d3ee0afd9713f74322edd8ee44c422e9915b645e08629d643990cacc5",
+    "configs/robots/t60_bicycle_45deg_v1.yaml": "f347e26e31b3078f006b49a18fcb9a9ac95f56236aed52711534afb110c526dd",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "cfe31e136ea65fd20c9a3d44563e3cfb3017b8eed99b8a0e0df75572f1c4af6f",
+    "robot_sf/benchmark/map_runner_policies/map_runner_actions.py": "a17b3ad094ab63fd79f9c7a48d7899cf33c6dbd76e5bbfa62703e06c64c9c89a",
+    "robot_sf/planner/classic_planner_adapter.py": "c7e4d59870962bd04cf21f79481b28c8bf379386863aca136ad1706e1b13b8ff",
+    "robot_sf/planner/kinematics_model.py": "1b1a5f5741e21193d6b1535fbce9bc0f1929eae35973895863e27de775866f50",
+    "robot_sf/robot/bicycle_drive.py": "30fca21ae968e8437cbcb2b31199722478de64ef72f93cdd88346a6ef8059010",
+    "robot_sf/training/scenario_loader.py": "ff4136cce3a0e91d8a35433cea752e75d5e1d6267e30ff2da837f413165496b3",
+    "scripts/validation/bicycle_probe_metrics.py": "c381eef4475f002866b8972b556f8a6c4ef9304d31c00eda84c0a3d2f175569b",
+    "scripts/validation/run_bicycle_probe.py": "33587044dd09f15a6e99bd611fd208f8c7a783e0954f72a99a579b02ccb85eb7"
+  },
+  "summarizer_sha256": "3fef3d94d9deb872bb60db6f248418f4ca5da00ab25539091ba249ece6218b02"
+}

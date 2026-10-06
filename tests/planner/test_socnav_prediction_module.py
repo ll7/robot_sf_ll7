@@ -45,6 +45,39 @@ _UNPATCHED_PREDICTION_CONTRACTS: tuple[Callable[[], None], ...] = (
 )
 
 
+@pytest.mark.parametrize("cached", [False, True], ids=["rollout", "cached-distances"])
+def test_surface_clearance_costs_use_body_gaps_in_both_distance_paths(cached: bool) -> None:
+    """Collision, near-miss, clearance, and TTC costs use surface gaps exactly once."""
+    adapter = prediction.PredictionPlannerAdapter(
+        prediction.SocNavPlannerConfig(
+            predictive_clearance_model="surface_v2",
+            predictive_robot_radius=1.0,
+            predictive_pedestrian_radius=0.4,
+            predictive_rollout_dt=0.2,
+            predictive_safe_distance=0.3,
+            predictive_near_distance=0.8,
+            predictive_ttc_distance=0.5,
+            predictive_speed_clearance_gain=0.0,
+        )
+    )
+    # A stationary robot sees one pedestrian at 1.2 m then 1.6 m. Its body
+    # gaps are -0.2 m and 0.2 m; a padded row at the origin must be ignored.
+    future = np.asarray([[[1.2, 0.0], [1.6, 0.0]], [[0.0, 0.0], [0.0, 0.0]]])
+    kwargs = {
+        "future_peds": future,
+        "mask": np.asarray([1.0, 0.0]),
+        "v": 0.0,
+        "w": 0.0,
+        "steps": 2,
+        "valid_dists": np.asarray([[1.2, 1.6]]) if cached else None,
+    }
+
+    # Shortfalls: collision 0.5 + 0.1; near miss 1.0 + 0.6; TTC 0.7 and 0.3.
+    assert adapter._collision_cost(**kwargs) == pytest.approx((0.6, 1.6))
+    assert adapter._min_clearance(**kwargs) == pytest.approx(-0.2)
+    assert adapter._ttc_penalty(**kwargs) == pytest.approx(0.7 / 0.200001 + 0.3 / 0.400001)
+
+
 def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
     """Lazy public symbols remain visible through facade introspection and wildcard import."""
     for name in _LAZY_NAMES:

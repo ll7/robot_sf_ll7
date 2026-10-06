@@ -56,3 +56,34 @@ def test_bicycle_over_limit_steering_clipped_negative():
     motion.move(state, (0.0, -100.0), 1.0)
     pos_after, _ = state.pose
     assert pos_after[0] > 0.0
+
+
+def test_default_bicycle_identity_and_opt_in_creep():
+    """Default bytes retain main's hash; the real env hash binds enabled creep."""
+    from dataclasses import asdict
+    from types import SimpleNamespace
+
+    from robot_sf.gym_env.robot_env import _stable_config_hash
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+    default = BicycleDriveSettings()
+    off = RobotSimulationConfig(robot_config=default)
+    # Main's seven-field payload, independently fixed here. The complete env
+    # hash includes its map path, so a literal hash from another lane is not portable.
+    main_payload = asdict(off)
+    main_payload["robot_config"] = {
+        "radius": 1.0,
+        "wheelbase": 1.0,
+        "max_steer": 0.78,
+        "max_velocity": 3.0,
+        "max_accel": 1.0,
+        "allow_backwards": False,
+        "max_decel": 1.0,
+    }
+    assert _stable_config_hash(off) == _stable_config_hash(SimpleNamespace(**main_payload))
+    on = RobotSimulationConfig(robot_config=BicycleDriveSettings(creep_speed=0.1))
+    faster = RobotSimulationConfig(robot_config=BicycleDriveSettings(creep_speed=0.2))
+    assert on.robot_config.creep_speed == 0.1
+    assert (
+        len({_stable_config_hash(off), _stable_config_hash(on), _stable_config_hash(faster)}) == 3
+    )

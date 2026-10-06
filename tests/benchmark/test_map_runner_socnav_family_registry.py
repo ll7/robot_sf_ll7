@@ -18,8 +18,15 @@ from dataclasses import fields
 from typing import Any
 
 import pytest
+from pysocialforce.config import (
+    SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+)
 
-from robot_sf.benchmark.map_runner.map_runner import _build_socnav_family_adapter
+from robot_sf.benchmark.map_runner.map_runner import (
+    _build_socnav_config,
+    _build_socnav_family_adapter,
+)
 from robot_sf.benchmark.map_runner_policies.socnav_family import (
     _ORCA_VARIANTS,
     SOCNAV_FAMILY_SPECS,
@@ -452,3 +459,15 @@ class TestConfigBuilderRouting:
             meta={},
         )
         assert captured["default_policy_name"] == "hsfm_new_guo"
+
+    def test_socnav_config_preserves_explicit_social_force_kernel_version(self) -> None:
+        """The real map-runner config boundary carries the opt-in kernel selector."""
+        legacy = _build_socnav_config({})
+        assert str(legacy.social_force_kernel_version) == SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+        assert legacy.social_force_kernel_resolution_mode == "defaulted_missing"
+
+        wrapped = _build_socnav_config(
+            {"social_force_kernel_version": SOCIAL_FORCE_KERNEL_WRAPPED_V2}
+        )
+        assert str(wrapped.social_force_kernel_version) == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+        assert wrapped.social_force_kernel_resolution_mode == "explicit"

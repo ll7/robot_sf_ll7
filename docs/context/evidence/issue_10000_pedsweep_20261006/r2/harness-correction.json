@@ -1,0 +1,16 @@
+{
+  "schema_version": "pedsweep2-harness-correction.v1",
+  "classified": "harness_issue",
+  "cause": "incorrect top protocol_version=0.0.8 retained while selecting baseline fixed H600 scenario contract",
+  "preflight_proof": "crossover-loader-proof/result.json",
+  "episode_reset_or_step_in_proof": false,
+  "corrected_field": "restore original baseline absent protocol_version, not legacy admission relabel",
+  "unchanged": "source heads, planner profiles, maps, scenario/control fields, horizon H600, seeds, thresholds and anchors",
+  "rerun_modes": [
+    "baseline_scenarios",
+    "baseline_both"
+  ],
+  "original_driver_sha256": "19333d92dd117691bac9a8217daf32319c7a84cde8889b2461eb8fea61eb65e6",
+  "corrected_driver_sha256": "025e45cc3d052e5e8db0ed4242ae36c50dc40aa6bfc7779a4ee89b23e2221d30",
+  "original_attempt_preserved": true
+}

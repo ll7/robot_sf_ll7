@@ -1,0 +1,32 @@
+{
+  "schema": "pedsweep2-rectangle-physical-proof.v1",
+  "checks": [
+    {
+      "slot_id": "S022",
+      "first_selected_action_divergence": 98,
+      "identical_physical_prefix_steps": 98,
+      "post_physical_trajectory_matches_current_baseline_inputs_runtime": false,
+      "post_kinematics_actions_sha256": "e91546c5d19e612ecd0adb998f217e8ce378eea24b792accc174518baea90c6c",
+      "current_baseline_inputs_kinematics_actions_sha256": "262be3926fd087d627e8c5d5f08fb12352d783473267a93e91566efb469cddb7",
+      "reset_pose_identical": true
+    },
+    {
+      "slot_id": "S023",
+      "first_selected_action_divergence": 98,
+      "identical_physical_prefix_steps": 98,
+      "post_physical_trajectory_matches_current_baseline_inputs_runtime": false,
+      "post_kinematics_actions_sha256": "e91546c5d19e612ecd0adb998f217e8ce378eea24b792accc174518baea90c6c",
+      "current_baseline_inputs_kinematics_actions_sha256": "262be3926fd087d627e8c5d5f08fb12352d783473267a93e91566efb469cddb7",
+      "reset_pose_identical": true
+    },
+    {
+      "slot_id": "S024",
+      "first_selected_action_divergence": 98,
+      "identical_physical_prefix_steps": 98,
+      "post_physical_trajectory_matches_current_baseline_inputs_runtime": false,
+      "post_kinematics_actions_sha256": "e91546c5d19e612ecd0adb998f217e8ce378eea24b792accc174518baea90c6c",
+      "current_baseline_inputs_kinematics_actions_sha256": "262be3926fd087d627e8c5d5f08fb12352d783473267a93e91566efb469cddb7",
+      "reset_pose_identical": true
+    }
+  ]
+}

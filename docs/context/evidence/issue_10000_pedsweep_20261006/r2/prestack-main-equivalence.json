@@ -1,0 +1,7 @@
+{
+  "comparison": "logical pre-stack main runtime vs newer documentation-only main head",
+  "main_runtime_parent": "66df3de197ab1c5416143875b922db2ecbe6a360",
+  "measured_base_sha": "2d6b19db8e226a9408e2b504035df8efb8369ce5",
+  "all_robot_sf_fast_pysf_diff_empty": true,
+  "no_linear_ancestry_claim": true
+}

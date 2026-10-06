@@ -1,0 +1,50 @@
+{
+  "guarded_ppo": {
+    "slots": 4,
+    "reset_position_changed": 3,
+    "horizon_changed": 2,
+    "metric_label_disagrees_terminal": 0
+  },
+  "hybrid_rule_v4_fast_progress_static_escape": {
+    "slots": 7,
+    "reset_position_changed": 1,
+    "horizon_changed": 6,
+    "metric_label_disagrees_terminal": 0
+  },
+  "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+    "slots": 10,
+    "reset_position_changed": 1,
+    "horizon_changed": 9,
+    "metric_label_disagrees_terminal": 0
+  },
+  "ppo": {
+    "slots": 13,
+    "reset_position_changed": 4,
+    "horizon_changed": 10,
+    "metric_label_disagrees_terminal": 0
+  },
+  "prediction_planner": {
+    "slots": 2,
+    "reset_position_changed": 2,
+    "horizon_changed": 2,
+    "metric_label_disagrees_terminal": 0
+  },
+  "sacadrl": {
+    "slots": 15,
+    "reset_position_changed": 8,
+    "horizon_changed": 15,
+    "metric_label_disagrees_terminal": 0
+  },
+  "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+    "slots": 3,
+    "reset_position_changed": 1,
+    "horizon_changed": 2,
+    "metric_label_disagrees_terminal": 0
+  },
+  "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+    "slots": 3,
+    "reset_position_changed": 1,
+    "horizon_changed": 2,
+    "metric_label_disagrees_terminal": 0
+  }
+}

@@ -2,6 +2,8 @@
 
 `schema_version`: `pedsweep-gate-receipt.v1`
 `evidence_tier`: `diagnostic-only`
+Round 2 at `d90bf243`: [exact held-actor witness and targeted #10180 attribution](r2/README.md). The specific hold refutation is fixed; the historical negative full-gate receipt below remains preserved.
+
 `paper_facing`: `false`
 `benchmark_promotion`: `false`
 

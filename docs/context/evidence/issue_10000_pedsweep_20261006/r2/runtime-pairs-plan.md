@@ -1,0 +1,5 @@
+# Residual runtime isolation, fixed before execution
+
+The 23 labels on 12 slots retained by both baseline-input contrasts are replayed at exact adjacent source revisions: #9739 robot start-clearance implementation b8dccb9c and its parent 9c3452fa (12 slots each), and PPO action-semantics binding c9102a9c and its parent 46809b6b (7 PPO slots each). Total 38 episode rows, seeds 1001–1003 only, original baseline maps/scenarios/profiles/H600, no production patches or fit/tuning. This follows the already executed 570-row exact-event packet; no full sweep.
+
+Assign a retained label to b (robot initial sampling) or c (PPO adapter) only if the exact adjacent pair changes that event from absent to present under identical inputs, the post trace shows the identified mechanism, and the fresh baseline control plus top reproduce the original comparison. Multiple sufficient changes or unresolved interactions remain unexplained. First-divergence observations alone are candidate mechanisms, not proof that they caused a terminal event. Preserve all attempts and raw traces; no release admission.

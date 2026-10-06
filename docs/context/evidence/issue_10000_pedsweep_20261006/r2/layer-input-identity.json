@@ -1,0 +1,62 @@
+[
+  {
+    "mode": "base_main",
+    "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+  },
+  {
+    "mode": "base_main",
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+  },
+  {
+    "mode": "forces_10073",
+    "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+  },
+  {
+    "mode": "forces_10073",
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+  },
+  {
+    "mode": "radius_10075",
+    "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+  },
+  {
+    "mode": "radius_10075",
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+  },
+  {
+    "mode": "initial_10094",
+    "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+  },
+  {
+    "mode": "initial_10094",
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+  },
+  {
+    "mode": "contact_original_10104",
+    "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+  },
+  {
+    "mode": "contact_original_10104",
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+  }
+]

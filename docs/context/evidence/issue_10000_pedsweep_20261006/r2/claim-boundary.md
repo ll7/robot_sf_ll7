@@ -1,0 +1,7 @@
+Diagnostic-only mechanism attribution, not a renewed #10000 full sweep or release/model admission. Empty-world episodes contain no pedestrians; the separate hold witness explicitly contains two pedestrian actors and no robot. Only episode seeds 1001-1003 are used. Event denominator85 counts55success-to-failure plus30new-collision labels on57episodes, with28overlaps.
+
+Every actual replay requires pinned source/input identity, complete step traces, zero pedestrian reset/step lists and finite available kinematics/actions. Planner fallback/degraded/error execution is excluded from valid causal performance proof. Typed unavailable auxiliary measurements and reason-tagged reset telemetry remain in the strict metadata audit; their removal only in a separate diagnostic runtime view never grants release admission.
+
+A causal tie between scenario/map/horizon and planner axes is not a unique class. Under the predeclared rules it remains unexplained in the requested one-class counts, with its measured interaction explicitly reported. Actual simulator terminal outcomes and obstacle-contact flags distinguish physical/progress changes from pure metric relabeling.
+
+All production trees and protected inputs remain unchanged; scenario/map/profile counterfactuals use immutable diagnostic copies of already declared historical release inputs. Harness repairs affect only mismatched protocol metadata and an audit API absent in the exact old source; failed attempts are preserved. No success tuning, model fitting or safety-threshold edits.

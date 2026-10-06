@@ -1,0 +1,206 @@
+{
+  "schema": "pedsweep2-runtime-input-hashes.v1",
+  "files": [
+    {
+      "path": "baseline/campaign.yaml",
+      "sha256": "697cfaa09b815a3c5661fc13cdbb0c070b56d203b1cd3870dcd916a2e81b77f7",
+      "bytes": 4524
+    },
+    {
+      "path": "baseline/maps/classic_cross_trap_high.svg",
+      "sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+      "bytes": 3125
+    },
+    {
+      "path": "baseline/maps/classic_cross_trap_low.svg",
+      "sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+      "bytes": 3125
+    },
+    {
+      "path": "baseline/maps/classic_cross_trap_medium.svg",
+      "sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+      "bytes": 3125
+    },
+    {
+      "path": "baseline/maps/classic_head_on_corridor_low.svg",
+      "sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+      "bytes": 3094
+    },
+    {
+      "path": "baseline/maps/classic_head_on_corridor_medium.svg",
+      "sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+      "bytes": 3094
+    },
+    {
+      "path": "baseline/maps/classic_station_platform_medium.svg",
+      "sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+      "bytes": 2297
+    },
+    {
+      "path": "baseline/maps/classic_t_intersection_low.svg",
+      "sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+      "bytes": 4188
+    },
+    {
+      "path": "baseline/maps/classic_t_intersection_medium.svg",
+      "sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+      "bytes": 4188
+    },
+    {
+      "path": "baseline/maps/francis2023_accompanying_peer.svg",
+      "sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+      "bytes": 1274
+    },
+    {
+      "path": "baseline/maps/francis2023_blind_corner.svg",
+      "sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+      "bytes": 1387
+    },
+    {
+      "path": "baseline/maps/francis2023_circular_crossing.svg",
+      "sha256": "c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a",
+      "bytes": 1451
+    },
+    {
+      "path": "baseline/maps/francis2023_crowd_navigation.svg",
+      "sha256": "90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4",
+      "bytes": 1156
+    },
+    {
+      "path": "baseline/maps/francis2023_down_path.svg",
+      "sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+      "bytes": 1274
+    },
+    {
+      "path": "baseline/maps/francis2023_entering_room.svg",
+      "sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+      "bytes": 1726
+    },
+    {
+      "path": "baseline/maps/francis2023_exiting_room.svg",
+      "sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+      "bytes": 1727
+    },
+    {
+      "path": "baseline/maps/francis2023_following_human.svg",
+      "sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+      "bytes": 1274
+    },
+    {
+      "path": "baseline/maps/francis2023_frontal_approach.svg",
+      "sha256": "365e34e3a5f08c383ce4577c282b5758969fb2073b98df07504eefa82e5e8240",
+      "bytes": 1274
+    },
+    {
+      "path": "baseline/maps/francis2023_intersection_no_gesture.svg",
+      "sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+      "bytes": 1637
+    },
+    {
+      "path": "baseline/maps/francis2023_intersection_proceed.svg",
+      "sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+      "bytes": 1637
+    },
+    {
+      "path": "baseline/maps/francis2023_intersection_wait.svg",
+      "sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+      "bytes": 1637
+    },
+    {
+      "path": "baseline/maps/francis2023_join_group.svg",
+      "sha256": "72eae7b5bee45cf9a1aa1e086aeb4b3d9d1a87d61e69ed5c467908bb67d3fded",
+      "bytes": 1882
+    },
+    {
+      "path": "baseline/maps/francis2023_leading_human.svg",
+      "sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+      "bytes": 1274
+    },
+    {
+      "path": "baseline/maps/francis2023_leave_group.svg",
+      "sha256": "b5d90d5eda27621038087c18b70a4f7872aa256faddf915c4c577768edc2898e",
+      "bytes": 1882
+    },
+    {
+      "path": "baseline/maps/francis2023_narrow_hallway.svg",
+      "sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+      "bytes": 1270
+    },
+    {
+      "path": "baseline/maps/francis2023_parallel_traffic.svg",
+      "sha256": "df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f",
+      "bytes": 1667
+    },
+    {
+      "path": "baseline/maps/francis2023_pedestrian_obstruction.svg",
+      "sha256": "e5c78b7105f2e9535e8b71fd9faf0a98d1fc12f9e12d5d2dd1a59fdb0f887f24",
+      "bytes": 1275
+    },
+    {
+      "path": "baseline/maps/francis2023_pedestrian_overtaking.svg",
+      "sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+      "bytes": 1276
+    },
+    {
+      "path": "baseline/maps/francis2023_perpendicular_traffic.svg",
+      "sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+      "bytes": 1736
+    },
+    {
+      "path": "baseline/maps/francis2023_robot_crowding.svg",
+      "sha256": "202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617",
+      "bytes": 1155
+    },
+    {
+      "path": "baseline/maps/francis2023_robot_overtaking.svg",
+      "sha256": "90bb35d6e579a28f3ab5c6d91f45c9c7e8a6dc5985539bba8901d00853e8cf25",
+      "bytes": 1275
+    },
+    {
+      "path": "baseline/refs/configs/algos/guarded_ppo_camera_ready_cpu.yaml",
+      "sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772",
+      "bytes": 1215
+    },
+    {
+      "path": "baseline/refs/configs/algos/prediction_planner_camera_ready.yaml",
+      "sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481",
+      "bytes": 2375
+    },
+    {
+      "path": "baseline/refs/configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml",
+      "sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
+      "bytes": 1470
+    },
+    {
+      "path": "baseline/refs/configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml",
+      "sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd",
+      "bytes": 2015
+    },
+    {
+      "path": "baseline/refs/configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml",
+      "sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935",
+      "bytes": 1191
+    },
+    {
+      "path": "baseline/refs/configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml",
+      "sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d",
+      "bytes": 1511
+    },
+    {
+      "path": "baseline/refs/configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml",
+      "sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3",
+      "bytes": 1367
+    },
+    {
+      "path": "baseline/scenarios.yaml",
+      "sha256": "fcfd1238508f6ca8c4e02f04c802b0285e7a905cacd916df8b865fb620e250e5",
+      "bytes": 30744
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "24152fd772141aca34d0c497bcbce3c2047a3d3ab8390ed53745fbc8edb494f9",
+      "bytes": 27023
+    }
+  ],
+  "archive_sha256": "f18d9c64f8ad36f0445bee2588a72c3ce04297c29e88d497f68289586e5d64f5"
+}

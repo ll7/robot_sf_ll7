@@ -1,0 +1,682 @@
+{
+  "schema": "pedsweep2-runtime-audit.v1",
+  "evidence_tier": "diagnostic-only",
+  "audit_parser_source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+  "modes": {
+    "radius_10075": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "6613fd0a976f4bc9904f9ce51ad153904156297f"
+    },
+    "base_main": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "2d6b19db8e226a9408e2b504035df8efb8369ce5"
+    },
+    "contact_fixed_10104": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "contact_original_10104": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+    },
+    "initial_10094": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "5ca040371cbef05c712bb151cdebc558d4247f5a"
+    },
+    "forces_10073": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0"
+    },
+    "baseline_scenarios": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "baseline_planners": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "baseline_both": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "baseline_reproduction": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
+    },
+    "spawn_pre": {
+      "written": 12,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 12
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 12,
+        "routes:route_objects_not_retained_per_episode": 12,
+        "spawn:spawn_sampler_decision_not_retained": 12
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 12
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "9c3452face9f361d764a48f1053eee074c809204"
+    },
+    "ppo_post": {
+      "written": 7,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 7
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 7,
+        "routes:route_objects_not_retained_per_episode": 7,
+        "spawn:spawn_sampler_decision_not_retained": 7
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 7
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "c9102a9c81bb60cebb760b2bac94af695bc087a4"
+    },
+    "spawn_post": {
+      "written": 12,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 12
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 12,
+        "routes:route_objects_not_retained_per_episode": 12,
+        "spawn:spawn_sampler_decision_not_retained": 12
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 12
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2"
+    },
+    "ppo_pre": {
+      "written": 7,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 7
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 7,
+        "routes:route_objects_not_retained_per_episode": 7,
+        "spawn:spawn_sampler_decision_not_retained": 7
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 7
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "46809b6bc18caef2a9cd82686e9670c224459c42"
+    },
+    "rectangle_post": {
+      "written": 3,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 3
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 3,
+        "routes:route_objects_not_retained_per_episode": 3,
+        "spawn:spawn_sampler_decision_not_retained": 3
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 3
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "99ff79c339396ac15bcafa8e88e1671914e2e83c"
+    },
+    "rectangle_pre": {
+      "written": 3,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 3
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 3,
+        "routes:route_objects_not_retained_per_episode": 3,
+        "spawn:spawn_sampler_decision_not_retained": 3
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 3
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "be7b1f05dbff966411c8bcaa070acd1676e8c0f8"
+    }
+  },
+  "all_attempts": {
+    "21477-layers/radius_10075": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "6613fd0a976f4bc9904f9ce51ad153904156297f"
+    },
+    "21477-layers/base_main": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "2d6b19db8e226a9408e2b504035df8efb8369ce5"
+    },
+    "21477-layers/contact_fixed_10104": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "21477-layers/contact_original_10104": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4"
+    },
+    "21477-layers/initial_10094": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "5ca040371cbef05c712bb151cdebc558d4247f5a"
+    },
+    "21477-layers/forces_10073": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0"
+    },
+    "21478-crossovers/baseline_scenarios": {
+      "written": 0,
+      "runtime_issues": [],
+      "strict_metadata_markers": {},
+      "typed_auxiliary_and_reset_omissions": {},
+      "all_complete_zero_actor_dev_traces": false,
+      "all_available_kinematics_actions_finite": false,
+      "execution_modes": {},
+      "coverage_complete": false,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "21478-crossovers/baseline_planners": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "21478-crossovers/baseline_both": {
+      "written": 0,
+      "runtime_issues": [],
+      "strict_metadata_markers": {},
+      "typed_auxiliary_and_reset_omissions": {},
+      "all_complete_zero_actor_dev_traces": false,
+      "all_available_kinematics_actions_finite": false,
+      "execution_modes": {},
+      "coverage_complete": false,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "21479-crossovers-v2/baseline_scenarios": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "21479-crossovers-v2/baseline_both": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+    },
+    "21483-baseline-v2/baseline_reproduction": {
+      "written": 57,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 57
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 57,
+        "routes:route_objects_not_retained_per_episode": 57,
+        "spawn:spawn_sampler_decision_not_retained": 57
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 57
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
+    },
+    "21484-runtime-pairs/spawn_pre": {
+      "written": 12,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 12
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 12,
+        "routes:route_objects_not_retained_per_episode": 12,
+        "spawn:spawn_sampler_decision_not_retained": 12
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 12
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "9c3452face9f361d764a48f1053eee074c809204"
+    },
+    "21484-runtime-pairs/ppo_post": {
+      "written": 7,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 7
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 7,
+        "routes:route_objects_not_retained_per_episode": 7,
+        "spawn:spawn_sampler_decision_not_retained": 7
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 7
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "c9102a9c81bb60cebb760b2bac94af695bc087a4"
+    },
+    "21484-runtime-pairs/spawn_post": {
+      "written": 12,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 12
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 12,
+        "routes:route_objects_not_retained_per_episode": 12,
+        "spawn:spawn_sampler_decision_not_retained": 12
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 12
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2"
+    },
+    "21484-runtime-pairs/ppo_pre": {
+      "written": 7,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 7
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 7,
+        "routes:route_objects_not_retained_per_episode": 7,
+        "spawn:spawn_sampler_decision_not_retained": 7
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 7
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "46809b6bc18caef2a9cd82686e9670c224459c42"
+    },
+    "21488-rectangle/rectangle_post": {
+      "written": 3,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 3
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 3,
+        "routes:route_objects_not_retained_per_episode": 3,
+        "spawn:spawn_sampler_decision_not_retained": 3
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 3
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "99ff79c339396ac15bcafa8e88e1671914e2e83c"
+    },
+    "21488-rectangle/rectangle_pre": {
+      "written": 3,
+      "runtime_issues": [],
+      "strict_metadata_markers": {
+        "algorithm_metadata.paired_effect_metric_producer.fields.false_positive_stop_rate.status=unavailable": 3
+      },
+      "typed_auxiliary_and_reset_omissions": {
+        "paired_effect_metric_producer.v1": 3,
+        "routes:route_objects_not_retained_per_episode": 3,
+        "spawn:spawn_sampler_decision_not_retained": 3
+      },
+      "all_complete_zero_actor_dev_traces": true,
+      "all_available_kinematics_actions_finite": true,
+      "execution_modes": {
+        "None": 3
+      },
+      "coverage_complete": true,
+      "strict_release_audit_passed": false,
+      "source_sha": "be7b1f05dbff966411c8bcaa070acd1676e8c0f8"
+    }
+  },
+  "negative_controls_metadata_only": {
+    "fallback_triggered": [
+      "algorithm_metadata.planner_runtime.fallback_triggered=true"
+    ],
+    "status": [
+      "algorithm_metadata.planner_runtime.status=unavailable"
+    ]
+  },
+  "exclusion_scope": "Only exactly typed auxiliary paired_effect producer and reason-tagged reset telemetry omissions removed in separate runtime view; original strict markers retained. All other metadata rescanned. No release gate claimed."
+}

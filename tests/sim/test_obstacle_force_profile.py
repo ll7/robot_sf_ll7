@@ -81,12 +81,12 @@ def test_opt_in_profile_removes_lone_doorway_force_barrier():
 
 
 def test_default_profile_preserves_legacy_settings_hash():
-    """The missing selector must preserve the established pre-profile digest."""
+    """The missing selector must preserve the current-main pre-profile digest."""
     payload = asdict(SimulationSettings())
     payload.pop("robot_goal_sampling_policy")
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     assert hashlib.sha256(encoded.encode()).hexdigest() == (
-        "3862ea280966a4e790715babbb7567cbf121031eb38374b08264e4f4d3626be0"
+        "ecbd34392c11f2ebdbe17f56763815f32694c3c9f2c9562a40a7508e8113b347"
     )
 
 

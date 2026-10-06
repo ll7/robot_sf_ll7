@@ -1,0 +1,32 @@
+{
+  "status": "AI-GENERATED/NEEDS-REVIEW",
+  "actions": {
+    "main": {
+      "ref": "c979e0337da4ad053d59a76225fbb9154140ee73",
+      "sha256": "7fe03833f0ceac1c7fcd818d157fc76b1438d2987a5747313088fbbf38ed04fe",
+      "bytes": 14913
+    },
+    "head": {
+      "ref": "current",
+      "sha256": "7fe03833f0ceac1c7fcd818d157fc76b1438d2987a5747313088fbbf38ed04fe",
+      "bytes": 14913,
+      "runtime_ref": "2280305fab299ca6e19c49e7544ed84560006a0e"
+    }
+  },
+  "observations": {
+    "method": "default observations for absent, valid-origin, real successor; ndarray dtype/shape/raw bytes and ordered default Box/Dict spaces",
+    "witnesses": {
+      "main": {
+        "ref": "c979e0337da4ad053d59a76225fbb9154140ee73",
+        "sha256": "acf07cb0419d68748607ffde4de985a974d6ea5b19274869eba0a22410b011f6",
+        "bytes": 5234
+      },
+      "head": {
+        "ref": "current",
+        "sha256": "acf07cb0419d68748607ffde4de985a974d6ea5b19274869eba0a22410b011f6",
+        "bytes": 5234,
+        "runtime_ref": "2280305fab299ca6e19c49e7544ed84560006a0e"
+      }
+    }
+  }
+}

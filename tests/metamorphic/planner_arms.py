@@ -21,6 +21,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     policy_command_to_env_action,
 )
 from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
+from robot_sf.benchmark.release_parameter_freeze import release_parameter_freeze_blocker
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -75,11 +76,40 @@ def release_campaign_planners() -> tuple[dict[str, Any], ...]:
     seen: set[tuple[str, str, str | None]] = set()
     for campaign in (canonical, RELEASE_TEMPLATE_CAMPAIGN):
         for entry in load_yaml(campaign.relative_to(ROOT))["planners"]:
+            if is_unfrozen_release_placeholder(entry.get("algo_config")):
+                # Issue #9751: the template's v4 slots are unrunnable placeholders
+                # until #9748 freezes them; their unfrozen candidate sources are
+                # audited directly (``HYBRID_V4_RELEASE_TWINS``).
+                continue
             identity = (entry["key"], entry["algo"], entry.get("algo_config"))
             if identity not in seen:
                 seen.add(identity)
                 entries.append(dict(entry))
     return tuple(entries)
+
+
+def release_0_0_8_planners() -> tuple[dict[str, Any], ...]:
+    """Return the actual 0.0.8 release template planner rows.
+
+    Returns:
+        Planner entries from the campaign template.
+    """
+    return tuple(
+        dict(entry) for entry in load_yaml(RELEASE_TEMPLATE_CAMPAIGN.relative_to(ROOT))["planners"]
+    )
+
+
+def is_unfrozen_release_placeholder(algo_config: str | None) -> bool:
+    """Return whether ``algo_config`` is an unfrozen release placeholder (issue #9751).
+
+    Returns:
+        ``True`` when the config declares release parameters that are not frozen.
+    """
+    if not algo_config:
+        return False
+    return (
+        release_parameter_freeze_blocker(load_yaml(algo_config), label=str(algo_config)) is not None
+    )
 
 
 def _load_base_config(config_path: object) -> dict[str, Any]:
@@ -299,6 +329,7 @@ def robot_env_config(
     max_steps: int,
     ped_density: float = 0.0,
     observation_mode: ObservationMode = ObservationMode.SOCNAV_STRUCT,
+    social_force_kernel_version: str | None = None,
 ) -> RobotSimulationConfig:
     """Return the benchmark map-runner env config for one synthetic map.
 
@@ -315,6 +346,7 @@ def robot_env_config(
         ped_density_by_difficulty=[ped_density],
         difficulty=0,
         max_total_pedestrians=12,
+        social_force_kernel_version=social_force_kernel_version,
     )
     config.map_pool = MapDefinitionPool(map_defs={"metamorphic": map_def})
     config.map_id = "metamorphic"
@@ -355,6 +387,7 @@ def run_arm_episode(
     seed: int,
     max_steps: int,
     ped_density: float = 0.0,
+    social_force_kernel_version: str | None = None,
 ) -> ArmEpisode:
     """Drive one release arm through a seeded map-runner-style episode.
 
@@ -365,7 +398,14 @@ def run_arm_episode(
         The robot poses (including the reset pose), commands, env actions, and outcome.
     """
     algo, algo_config = release_arm(arm)
-    config = robot_env_config(map_def, max_steps=max_steps + 1, ped_density=ped_density)
+    if social_force_kernel_version is not None:
+        algo_config["social_force_kernel_version"] = social_force_kernel_version
+    config = robot_env_config(
+        map_def,
+        max_steps=max_steps + 1,
+        ped_density=ped_density,
+        social_force_kernel_version=social_force_kernel_version,
+    )
     env = make_robot_env(config=config, seed=seed)
     policy, meta = build_map_policy(algo, dict(algo_config), robot_kinematics="differential_drive")
     poses: list[tuple[float, float, float]] = []

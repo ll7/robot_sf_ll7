@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
+from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION, metric_schema_version
 from robot_sf.evidence.writers import write_csv, write_json
 from scripts.validation import check_issue_5416_sipp_four_geometry_packet as packet_checker
 
@@ -249,9 +250,16 @@ def _measurement(row: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[st
     if not isinstance(deadlock, bool):
         reasons.append("deadlock signal is missing")
         deadlock = None
-    values = {
-        key: _metric(metrics, key, reasons) for key in ("time_to_goal_norm", "path_efficiency")
-    }
+    try:
+        version = metric_schema_version(row)
+    except ValueError as exc:
+        return None, [str(exc)]
+    values = {"time_to_goal_norm": _metric(metrics, "time_to_goal_norm", reasons)}
+    values["path_efficiency"] = (
+        None
+        if version == METRIC_SCHEMA_VERSION and not success
+        else _metric(metrics, "path_efficiency", reasons)
+    )
     return {
         "success": success,
         "pedestrian_and_static_collision": (

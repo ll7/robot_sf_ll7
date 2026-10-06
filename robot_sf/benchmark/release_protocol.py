@@ -18,23 +18,75 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _load_scenario_horizon_schedule,
+)
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.benchmark.release_notes import RECEIPT_NAME, notes_gate
+from robot_sf.benchmark.release_parameter_freeze import unfrozen_planner_config_blockers
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
     check_canonical_source_tag,
 )
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8, RETIRED_EVAL_SEEDS_0_0_7
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.training.scenario_loader import load_scenarios
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
 RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION = "benchmark-release-identity-template.v1"
 RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION = "benchmark-release-resolved-identity.v1"
 RESOLVED_RELEASE_METADATA_FILENAME = "zenodo_metadata.resolved.json"
+DEVELOPMENT_REHEARSAL_KIND = "development_rehearsal"
+DEVELOPMENT_REHEARSAL_DOIS = ("10.5281/zenodo.99000001", "10.5281/zenodo.99000002")
+
+
+def is_development_rehearsal(manifest: Any) -> bool:
+    """Identify the digest-covered, permanently non-releasable D-070 projection.
+
+    Returns:
+        Whether the manifest is diagnostic development work.
+    """
+    return getattr(manifest, "release_kind", None) == DEVELOPMENT_REHEARSAL_KIND
+
+
+def _validated_development_seeds(seeds: Any) -> tuple[int, ...]:
+    """Validate the opt-in inventory before reading or executing any scenario.
+
+    Returns:
+        Sorted unique development inventory.
+    """
+    if (
+        not isinstance(seeds, (list, tuple))
+        or not seeds
+        or any(type(seed) is not int or not 1001 <= seed <= 1030 for seed in seeds)
+        or len(set(seeds)) != len(seeds)
+    ):
+        raise ValueError("development rehearsal accepts only unique development seeds 1001-1030")
+    return tuple(sorted(seeds))
+
+
+def _development_campaign_config(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Overlay only development seeds and diagnostic scoring on canonical inputs.
+
+    Returns:
+        Canonical configuration with the development overlay when opted in.
+    """
+    if not is_development_rehearsal(manifest):
+        return cfg
+    seeds = _validated_development_seeds(manifest.resolved_seeds)
+    return replace(
+        cfg,
+        seed_policy=replace(cfg.seed_policy, mode="fixed-list", seed_set=None, seeds=seeds),
+        snqi_v2_spec=(replace(cfg.snqi_v2_spec, diagnostic=True) if cfg.snqi_v2_spec else None),
+    )
+
+
 SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS = frozenset(
     {RELEASE_MANIFEST_SCHEMA_VERSION, RELEASE_MANIFEST_SCHEMA_VERSION_V0_2}
 )
@@ -64,7 +116,7 @@ STRESS_SMOKE_CONTRACT_SCHEMA_VERSION = "hybrid-release-stress-smoke.v1"
 STRESS_SMOKE_SOURCE_POLICY = "exact-immutable-worktree-sha-required"
 STRESS_SMOKE_EXPECTED_PLANNER_ARMS = 14
 STRESS_SMOKE_EXPECTED_SCENARIO_COUNT = 5
-STRESS_SMOKE_EXPECTED_SEED = 116
+STRESS_SMOKE_EXPECTED_SEED = 1001
 STRESS_SMOKE_EXPECTED_EPISODE_CELLS = 70
 STRESS_SMOKE_EXPECTED_HORIZON_STEPS = 600
 STRESS_SMOKE_EXPECTED_DT = 0.1
@@ -274,9 +326,13 @@ def _require_source_derived_release_tag(
     release_tag: str,
     source_commit: str,
     allow_existing_exact_tag: bool = False,
+    development_rehearsal: bool = False,
 ) -> None:
     """Require the one canonical ``<prefix>-<full SHA>`` tag representation."""
-    tag_problems = check_canonical_source_tag(release_tag, source_commit)
+    if development_rehearsal and release_tag != f"development-rehearsal-{source_commit}":
+        raise ValueError("development rehearsal requires its reserved diagnostic source label")
+    checked_tag = f"rehearsal-{source_commit}" if development_rehearsal else release_tag
+    tag_problems = check_canonical_source_tag(checked_tag, source_commit)
     if tag_problems:
         raise ValueError(tag_problems[0])
     tag = release_tag
@@ -446,9 +502,12 @@ class BenchmarkReleaseManifest:
     doi: str
     citation_path: Path
     release_checklist_path: Path
+    snqi_v2_binding: dict[str, Any] | None = None
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
     expected_horizon_steps: int | None = None
+    scenario_horizons_path: Path | None = None
+    scenario_horizons_sha256: str | None = None
     publication_channel: str | None = None
     suite_policy_path: Path | None = None
     suite_policy_sha256: str | None = None
@@ -460,6 +519,7 @@ class BenchmarkReleaseManifest:
     concept_doi: str | None = None
     version_doi: str | None = None
     release_kind: str | None = None
+    width_slice_contract: dict[str, Any] | None = None
     source_sha: str | None = None
     planning_base_sha: str | None = None
     metadata_path: Path | None = None
@@ -611,6 +671,44 @@ def _load_manifest_scenario_section(
     if not scenario_matrix_sha256:
         raise ValueError("scenario.matrix_sha256 must be a non-empty string")
     return scenario_matrix_path, scenario_matrix_sha256
+
+
+def _load_manifest_v2_binding(
+    manifest_path: Path, payload: Mapping[str, Any], repository_root: Path | None
+) -> dict[str, Any] | None:
+    """Read explicit source assets; their presence/digests must agree with the campaign.
+
+    Returns:
+        Normalized source asset pins, or None when absent."""
+    from robot_sf.benchmark.snqi.v2_binding import (  # noqa: PLC0415
+        ASSET_NAMES,
+        CONTEXT_ASSET_NAME,
+    )
+
+    raw = payload.get("metrics", {}).get("snqi_v2_binding")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) not in (
+        set(ASSET_NAMES),
+        set(ASSET_NAMES) | {CONTEXT_ASSET_NAME},
+    ):
+        raise ValueError(
+            "metrics.snqi_v2_binding requires weights, anchors, family, acquisition_config and optional determinism_receipt"
+        )
+    result = {}
+    for name, asset in raw.items():
+        if not isinstance(asset, dict) or set(asset) != {"path", "sha256"}:
+            raise ValueError("metrics.snqi_v2_binding asset requires path and sha256")
+        path = _resolve_required_file(
+            manifest_path,
+            asset["path"],
+            f"metrics.snqi_v2_binding.{name}",
+            repository_root=repository_root,
+        )
+        if _sha256_file(path) != asset["sha256"]:
+            raise ValueError(f"metrics.snqi_v2_binding.{name} digest mismatch")
+        result[name] = {"path": path, "sha256": asset["sha256"]}
+    return result
 
 
 def _load_manifest_metrics_section(
@@ -1222,7 +1320,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     }
 
 
-def _load_v02_contract(  # noqa: C901, PLR0912
+def _load_v02_contract(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path,
     payload: dict[str, Any],
     *,
@@ -1239,6 +1337,8 @@ def _load_v02_contract(  # noqa: C901, PLR0912
         "planning_base_sha": None,
         "expected_episode_cells": None,
         "expected_horizon_steps": None,
+        "scenario_horizons_path": None,
+        "scenario_horizons_sha256": None,
         "publication_channel": None,
         "suite_policy_path": None,
         "suite_policy_sha256": None,
@@ -1280,7 +1380,26 @@ def _load_v02_contract(  # noqa: C901, PLR0912
     if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
         raise ValueError("matrix.expected_episode_cells must be an integer")
     horizon_steps = matrix.get("horizon_steps")
-    if not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0:
+    schedule_path = None
+    schedule_sha256 = matrix.get("scenario_horizons_sha256")
+    if matrix.get("scenario_horizons") is not None:
+        if horizon_steps is not None:
+            raise ValueError("matrix.scenario_horizons cannot be combined with horizon_steps")
+        schedule_path = _resolve_required_file(
+            manifest_path,
+            matrix["scenario_horizons"],
+            "matrix.scenario_horizons",
+            repository_root=repository_root,
+        )
+        if not isinstance(schedule_sha256, str) or _SHA256_RE.fullmatch(schedule_sha256) is None:
+            raise ValueError("matrix.scenario_horizons_sha256 must be an exact SHA-256")
+        if _sha256_file(schedule_path) != schedule_sha256:
+            raise ValueError("matrix.scenario_horizons_sha256 differs from schedule bytes")
+    elif schedule_sha256 is not None:
+        raise ValueError("matrix.scenario_horizons_sha256 requires scenario_horizons")
+    elif (
+        not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0
+    ):
         raise ValueError("matrix.horizon_steps must be a positive integer")
     publication = payload.get("publication")
     if not isinstance(publication, dict):
@@ -1342,6 +1461,8 @@ def _load_v02_contract(  # noqa: C901, PLR0912
         "planning_base_sha": planning_base_sha,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
         "expected_horizon_steps": horizon_steps,
+        "scenario_horizons_path": schedule_path,
+        "scenario_horizons_sha256": schedule_sha256,
         "publication_channel": str(publication["channel"]),
         "suite_policy_path": _resolve_required_file(
             manifest_path,
@@ -1490,6 +1611,7 @@ def load_release_manifest(
         scenario_matrix_sha256=scenario_matrix_sha256,
         campaign_config_sha256=config_sha256,
         seed_policy=dict(seed_policy),
+        snqi_v2_binding=_load_manifest_v2_binding(manifest_path, payload, repository_root),
         snqi_weights_path=metrics["snqi_weights_path"],
         snqi_weights_sha256=metrics["snqi_weights_sha256"],
         snqi_baseline_path=metrics["snqi_baseline_path"],
@@ -1502,9 +1624,194 @@ def load_release_manifest(
         citation_path=path_section["citation_path"],
         release_checklist_path=path_section["release_checklist_path"],
         release_kind=release_metadata["release_kind"],
+        width_slice_contract=payload.get("width_slice_contract"),
         **v02_contract,
         **stress_contract,
     )
+
+
+DOORWAY_RELEASE_KIND = "benchmark-doorway-width-slice.v1"
+DOORWAY_RELEASE_KINDS = frozenset({DOORWAY_RELEASE_KIND, "benchmark-width-slice"})
+DOORWAY_RELEASE_CELLS = 1_260
+DOORWAY_RELEASE_HORIZON = 400
+DOORWAY_RELEASE_PLANNERS = (
+    "prediction_planner",
+    "goal",
+    "social_force",
+    "orca",
+    "ppo",
+    "socnav_sampling",
+    "sacadrl",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "hybrid_rule_v4_fast_progress_static_escape",
+    "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "guarded_ppo",
+    "predictive_mppi",
+    "risk_dwa",
+)
+DOORWAY_RELEASE_SCENARIOS = {
+    "francis2023_narrow_doorway_width_2p20": (
+        2.2,
+        "issue_9348_francis2023_narrow_doorway_2p20_v1.svg",
+    ),
+    "francis2023_narrow_doorway_width_2p80": (
+        2.8,
+        "issue_9348_francis2023_narrow_doorway_2p80_v1.svg",
+    ),
+    "francis2023_narrow_doorway_width_3p60": (
+        3.6,
+        "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg",
+    ),
+}
+
+
+def is_doorway_width_slice(manifest: Any) -> bool:
+    """Identify the slice lane; its name alone never grants admission.
+
+    Returns:
+        Whether the manifest names a doorway slice release kind.
+    """
+    return getattr(manifest, "release_kind", None) in DOORWAY_RELEASE_KINDS
+
+
+def _doorway_declared_budget_blockers(manifest: Any) -> list[str]:
+    """Require every declared doorway budget to resolve to H400 without execution.
+
+    Returns:
+        Scenario-named blockers for a missing or differing declared budget.
+    """
+    blockers: list[str] = []
+    schedule_path = getattr(manifest, "scenario_horizons_path", None)
+    fixed_horizon = getattr(manifest, "expected_horizon_steps", None)
+    schedule = {}
+    if schedule_path is not None:
+        try:
+            schedule = _load_scenario_horizon_schedule(Path(schedule_path))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            blockers.append(f"doorway slice schedule cannot be resolved: {exc}")
+    else:
+        # Legacy width-slice declarations request H600 and apply the authored H400 cap.
+        declared_horizon = (
+            DOORWAY_RELEASE_HORIZON if manifest.release_kind == DOORWAY_RELEASE_KIND else 600
+        )
+        if fixed_horizon != declared_horizon:
+            blockers.append(f"doorway slice must declare H{declared_horizon}")
+    for name in DOORWAY_RELEASE_SCENARIOS:
+        budget = (
+            schedule.get(name, {}).get("recommended_horizon_steps")
+            if schedule_path is not None
+            else (
+                min(fixed_horizon, DOORWAY_RELEASE_HORIZON)
+                if manifest.release_kind != DOORWAY_RELEASE_KIND
+                and isinstance(fixed_horizon, int)
+                and not isinstance(fixed_horizon, bool)
+                else fixed_horizon
+            )
+        )
+        if budget != DOORWAY_RELEASE_HORIZON:
+            blockers.append(f"doorway scenario {name} budget is {budget}; must be 400")
+    return blockers
+
+
+def doorway_width_slice_blockers(
+    manifest: Any,
+    scenarios: list[dict[str, Any]],
+    seeds: tuple[int, ...],
+) -> list[str]:
+    """Bind the slice to the authored widths, roster, sealed inventory and H400.
+
+    Returns:
+        Public blockers; this function performs no simulator execution.
+    """
+    blockers: list[str] = []
+    contract = getattr(manifest, "width_slice_contract", None)
+    expected_contract = {
+        "schema_version": DOORWAY_RELEASE_KIND,
+        "widths_m": [2.2, 2.8, 3.6],
+        "planner_arms": 14,
+        "evaluation_seeds": 30,
+        "expected_episode_rows": 1260,
+        "requested_horizon_steps": 600,
+        "scenario_horizon_cap_steps": 400,
+        "dt": 0.1,
+    }
+    if not isinstance(contract, Mapping) or any(
+        (
+            contract.get(key) not in {400, 600}
+            if key == "requested_horizon_steps"
+            else contract.get(key) != value
+        )
+        for key, value in expected_contract.items()
+    ):
+        blockers.append("doorway slice requires the exact benchmark-doorway-width-slice.v1 binding")
+    if tuple(getattr(manifest, "planner_keys", ())) != DOORWAY_RELEASE_PLANNERS:
+        blockers.append("doorway slice requires the exact main-campaign 14-arm roster")
+    if (
+        seeds != EVAL_SEEDS_0_0_8
+        or tuple(getattr(manifest, "resolved_seeds", ())) != EVAL_SEEDS_0_0_8
+    ):
+        blockers.append("doorway slice requires the exact sealed 30-seed inventory")
+    if getattr(manifest, "expected_episode_cells", None) != DOORWAY_RELEASE_CELLS:
+        blockers.append("doorway slice requires exactly 1260 cells")
+    blockers.extend(_doorway_declared_budget_blockers(manifest))
+    names = [str(item.get("name", item.get("id", ""))) for item in scenarios]
+    if len(names) != 3 or set(names) != set(DOORWAY_RELEASE_SCENARIOS):
+        blockers.append("doorway slice requires exactly the authored 2.2/2.8/3.6 m scenarios")
+    for scenario in scenarios:
+        name = str(scenario.get("name", scenario.get("id", "")))
+        expected = DOORWAY_RELEASE_SCENARIOS.get(name)
+        metadata = scenario.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        simulation = scenario.get("simulation_config")
+        simulation = simulation if isinstance(simulation, Mapping) else {}
+        if expected is None or (
+            metadata.get("width_slice_m") != expected[0]
+            or str(scenario.get("map_file", "")) != f"maps/successor_svg_maps/{expected[1]}"
+            or simulation.get("max_episode_steps") != DOORWAY_RELEASE_HORIZON
+        ):
+            blockers.append(
+                "doorway slice scenario width, map or H400 cap differs from its binding"
+            )
+    return blockers
+
+
+def _release_campaign_horizon(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Apply the bound slice's authored cap without modifying tracked config bytes.
+
+    Returns:
+        The effective H400 slice config, or the original configuration.
+    """
+    if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 and is_doorway_width_slice(
+        manifest
+    ):
+        if cfg.scenario_horizons_path is not None:
+            resolve_release_horizon_budgets(manifest, cfg)
+            return cfg
+        if cfg.horizon != 600:
+            raise ValueError(
+                "doorway slice canonical config must request H600 with the authored H400 cap"
+            )
+        return replace(cfg, horizon=DOORWAY_RELEASE_HORIZON)
+    return cfg
+
+
+def bind_release_context_asset(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Attach the identity-pinned post-acquisition receipt without changing source config.
+
+    Returns:
+        A campaign with the receipt pin, when the identity declares it.
+    """
+    asset = (getattr(manifest, "snqi_v2_binding", None) or {}).get("determinism_receipt")
+    if asset is None or not cfg.snqi_v2_binding:
+        return cfg
+    binding = dict(cfg.snqi_v2_binding)
+    for suffix in ("path", "sha256"):
+        key = f"determinism_receipt_{suffix}"
+        if key in binding and binding[key] != asset[suffix]:
+            raise ValueError("SNQI-v2 determinism receipt differs from campaign pin")
+        binding[key] = asset[suffix]
+    return replace(cfg, snqi_v2_binding=binding)
 
 
 def load_release_campaign_config(
@@ -1522,9 +1829,15 @@ def load_release_campaign_config(
         Validated campaign configuration for this release identity.
     """
     if getattr(manifest, "resolved_identity_path", None) is None:
-        return load_campaign_config(
-            manifest.canonical_campaign_config_path,
-            repository_root=repository_root,
+        return bind_release_context_asset(
+            manifest,
+            _release_campaign_horizon(
+                manifest,
+                load_campaign_config(
+                    manifest.canonical_campaign_config_path,
+                    repository_root=repository_root,
+                ),
+            ),
         )
     root = (repository_root or get_repository_root()).resolve()
     resolved_payload = manifest.resolved_manifest_payload
@@ -1540,8 +1853,15 @@ def load_release_campaign_config(
     )
     if _sha256_file(config_path) != manifest.campaign_config_sha256:
         raise ValueError("canonical campaign config hash does not match resolved identity")
-    cfg = load_campaign_config(config_path, repository_root=root)
-    return replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+    cfg = bind_release_context_asset(
+        manifest, load_campaign_config(config_path, repository_root=root)
+    )
+    return _development_campaign_config(
+        manifest,
+        _release_campaign_horizon(
+            manifest, replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+        ),
+    )
 
 
 def validate_release_manifest(
@@ -1584,10 +1904,21 @@ def validate_release_manifest(
         for blocker in branch_coverage["blockers"]:
             problems.append(f"effective algorithm branches: {blocker}")
     _validate_release_campaign_contract(manifest, cfg, problems)
-    _validate_release_seed_policy(manifest, cfg, problems)
+    _validate_release_seed_policy(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_planners(manifest, cfg, problems)
     _validate_v02_contract(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_metadata_contract(manifest, problems)
+    if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 and is_doorway_width_slice(
+        manifest
+    ):
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
+        problems.extend(
+            doorway_width_slice_blockers(
+                manifest,
+                scenarios,
+                tuple(_resolved_seed_inventory(scenarios)),
+            )
+        )
 
     return {
         "manifest_path": _repo_relative(manifest.path, repository_root),
@@ -1714,7 +2045,7 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             )
         resolved_seeds = tuple(_resolved_seed_inventory(scenarios))
         if resolved_seeds != (STRESS_SMOKE_EXPECTED_SEED,):
-            problems.append("stress smoke campaign must resolve exactly seed 116")
+            problems.append("stress smoke campaign must resolve exactly seed 1001")
     except (OSError, TypeError, ValueError, KeyError, yaml.YAMLError) as exc:
         problems.append(f"stress smoke campaign axes cannot be resolved: {exc}")
 
@@ -1837,6 +2168,25 @@ def _validate_release_hashes_and_assets(
     problems: list[str],
 ) -> None:
     """Validate release hashes and asset/path alignment."""
+    cfg = bind_release_context_asset(manifest, cfg)
+    binding = getattr(cfg, "snqi_v2_binding", None)
+    expected_binding = (
+        {
+            name: {"path": binding[f"{name}_path"], "sha256": binding[f"{name}_sha256"]}
+            for name in (
+                "weights",
+                "anchors",
+                "family",
+                "acquisition_config",
+                "determinism_receipt",
+            )
+            if f"{name}_path" in binding
+        }
+        if binding
+        else None
+    )
+    if manifest.snqi_v2_binding != expected_binding:
+        problems.append("metrics.snqi_v2_binding differs from campaign acquisition assets")
     if _sha256_file(manifest.canonical_campaign_config_path) != manifest.campaign_config_sha256:
         problems.append("campaign_config_sha256 does not match canonical_campaign_config")
     if _sha256_file(manifest.scenario_matrix_path) != manifest.scenario_matrix_sha256:
@@ -1909,7 +2259,7 @@ def _validate_release_campaign_contract(  # noqa: C901
         and cfg.holonomic_command_mode != manifest.expected_holonomic_command_mode
     ):
         problems.append("kinematics.holonomic_command_mode does not match campaign config")
-    if manifest.release_kind == "benchmark-data":
+    if manifest.release_kind in {"benchmark-data", DEVELOPMENT_REHEARSAL_KIND}:
         if cfg.checkpoint_provenance_enforcement != "error":
             problems.append(
                 "benchmark-data release requires checkpoint_provenance_enforcement=error"
@@ -1930,10 +2280,252 @@ def _validate_release_campaign_contract(  # noqa: C901
             problems.append("campaign config doi does not match release manifest")
 
 
+# Immutable historical release identities; names/version heuristics never grant an exception.
+HISTORICAL_RELEASE_CONFIG_PINS = frozenset(
+    [
+        (
+            "paper_experiment_matrix_v1_smoke_v0_1_0",
+            "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
+        ),
+        (
+            "paper_experiment_matrix_v1_v0_1_0",
+            "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee",
+        ),
+        (
+            "paper_matrix_v2_h600_s30_2026_08_cd831d7582c1",
+            "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_v0_0_3",
+            "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_v0_0_3_post1",
+            "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2",
+            "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3",
+            "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4",
+        ),
+    ]
+)
+
+
+def _require_sealed_source_inputs(manifest: Any, root: Path, source_commit: str) -> None:
+    """Bind scientific input paths and bytes to the frozen Git source, not manifest hashes."""
+    # Candidate admission imports this module; resolve its closure helper after initialization.
+    from robot_sf.benchmark.release_candidate import (  # noqa: PLC0415
+        _full_release_nested_config_path,
+        _planner_config_paths,
+    )
+
+    config_path = manifest.canonical_campaign_config_path
+    matrix_path = manifest.scenario_matrix_path.resolve()
+    cfg = load_campaign_config(config_path, repository_root=root)
+    seed_path = _safe_repository_file(
+        cfg.seed_policy.seed_sets_path, root, field_name="sealed seed sets"
+    )
+    if seed_path.relative_to(root).as_posix() != "configs/benchmarks/seed_sets_0_0_8.yaml":
+        raise ValueError("sealed seed sets must use their canonical repository path")
+    declared_seeds = _resolve_manifest_side_path(
+        manifest.path, manifest.seed_policy.get("seed_sets_path", "")
+    ).resolve()
+    if declared_seeds != seed_path:
+        raise ValueError("sealed identity must reference its canonical seed sets")
+    if cfg.scenario_matrix_path.resolve() != matrix_path:
+        raise ValueError("sealed campaign must reference its canonical scenario matrix")
+    tracked = {
+        item.decode("utf-8")
+        for item in _git_stdout(root, "ls-files", "-z", "--cached", label="sealed inputs").split(
+            b"\0"
+        )
+        if item
+    }
+    inputs = [
+        (config_path, "sealed campaign config"),
+        (matrix_path, "sealed scenario matrix"),
+        *[
+            (path, "sealed scenario matrix include")
+            for path in sorted(_scenario_matrix_include_paths(matrix_path, repository_root=root))
+        ],
+        (seed_path, "sealed seed sets"),
+        *[
+            (path, f"sealed planner config for {planner['key']}")
+            for planner in _load_mapping(config_path)["planners"]
+            if planner.get("algo_config")
+            for path in sorted(
+                _planner_config_paths(
+                    root,
+                    _full_release_nested_config_path(
+                        planner["algo_config"],
+                        config_anchor=config_path.parent,
+                        source_repository_root=root,
+                        label=f"sealed planner config for {planner['key']}",
+                    ),
+                )
+            )
+        ],
+    ]
+    for path, label in inputs:
+        path = _safe_repository_file(path, root, field_name=label)
+        if path.relative_to(root).as_posix() not in tracked:
+            raise ValueError(f"{label} is not tracked at source_sha")
+        _require_tracked_input_at_source(
+            path, repository_root=root, source_commit=source_commit, label=label
+        )
+
+
+def _is_sealed_runtime_source(path: Path) -> bool:
+    """Ignore compiled Python caches in source and installed package inventories.
+
+    Returns:
+        Whether the relative path belongs in the source comparison.
+    """
+    return "__pycache__" not in path.parts and path.suffix != ".pyc"
+
+
+def _require_sealed_runtime_sources(root: Path, source_commit: str) -> None:
+    """Bind the imported Python packages to the checkout and frozen bundled physics."""
+    import pysocialforce  # noqa: PLC0415
+
+    import robot_sf  # noqa: PLC0415
+
+    remedy = (
+        "rebuild this checkout's venv with `uv sync --all-extras "
+        "--reinstall-package robot-sf` and restart the launch process"
+    )
+    if not Path(robot_sf.__file__).resolve().is_relative_to(root):
+        raise ValueError(f"imported robot_sf is outside the checked repository; {remedy}")
+    package = Path(pysocialforce.__file__).parent.resolve()
+    prefix = "fast-pysf/pysocialforce/"
+    expected = {
+        name.decode("utf-8")[len(prefix) :]
+        for name in _git_stdout(
+            root,
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "-z",
+            source_commit,
+            "--",
+            prefix,
+            label="frozen pysocialforce files",
+        ).split(b"\0")
+        if name
+    }
+    expected = {name for name in expected if _is_sealed_runtime_source(Path(name))}
+    actual = {
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file() and _is_sealed_runtime_source(path.relative_to(package))
+    }
+    if not expected:
+        raise ValueError(f"frozen pysocialforce package has no tracked files; {remedy}")
+    for name in sorted(expected | actual):
+        if name not in actual:
+            problem = "is missing from the imported package"
+        elif name not in expected:
+            problem = "is an extra imported file outside source_sha"
+        elif (package / name).read_bytes() != _git_stdout(
+            root, "show", f"{source_commit}:{prefix}{name}", label=f"frozen pysocialforce {name}"
+        ):
+            problem = "bytes differ from source_sha"
+        else:
+            continue
+        raise ValueError(f"imported pysocialforce/{name} {problem}; {remedy}")
+
+
+def sealed_seed_execution_problem(  # noqa: C901 - independent frozen/diagnostic admission boundaries
+    manifest: Any,
+    seeds: tuple[int, ...],
+    *,
+    source_commit: str | None = None,
+    repository_root: Path | None = None,
+) -> str | None:
+    """Return the D-049 refusal for a sealed release outside its frozen identity.
+
+    The runner supplies its checked-out source; static callers resolve HEAD.
+    A source argument never supplies a missing manifest freeze binding.
+    """
+    if is_development_rehearsal(manifest) and set(seeds).intersection(EVAL_SEEDS_0_0_8):
+        return "development rehearsal cannot be a sealed release"
+    if not set(seeds).intersection(EVAL_SEEDS_0_0_8):
+        return None
+    root = (repository_root or get_repository_root()).resolve()
+    try:
+        config_path = _safe_repository_file(
+            manifest.canonical_campaign_config_path, root, field_name="sealed campaign config"
+        )
+        matrix_path = _safe_repository_file(
+            manifest.scenario_matrix_path, root, field_name="sealed scenario matrix"
+        )
+        config_name = config_path.relative_to(root).as_posix()
+        matrix_name = matrix_path.relative_to(root).as_posix()
+    except (OSError, ValueError) as exc:
+        return f"sealed evaluation input is not at its canonical repository path: {exc}"
+    main_campaign = (
+        manifest.release_kind == "benchmark-data"
+        # D-083 selects one authored-budget release campaign; archives are not admitted.
+        and config_name
+        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        and matrix_name
+        == "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
+    doorway_slice = (
+        is_doorway_width_slice(manifest)
+        and manifest.release_id == "three_width_doorway_0_0_8_v1"
+        and config_name
+        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml"
+        and matrix_name
+        == "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
+    )
+    if seeds != EVAL_SEEDS_0_0_8 or not (main_campaign or doorway_slice):
+        return (
+            "sealed evaluation seeds require the main 0.0.8 campaign or its three-width slice "
+            "at canonical repository paths (D-049)"
+        )
+    declared = getattr(manifest, "source_sha", None)
+    if declared is None:
+        return (
+            "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
+        )
+    try:
+        current = (
+            _git_stdout(root, "rev-parse", "HEAD", label="sealed source HEAD").decode().strip()
+        )
+        if source_commit is not None and source_commit != current:
+            return "sealed evaluation source_sha and runtime source_commit must equal HEAD (D-049)"
+    except ValueError as exc:
+        return f"sealed evaluation source_sha cannot be verified: {exc}"
+    if declared != current:
+        return (
+            "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
+        )
+    if getattr(manifest, "resolved_identity_path", None) is None:
+        return "sealed evaluation seeds require a materialized resolved identity (D-049)"
+    try:
+        _require_clean_exact_checkout(
+            root,
+            source_commit=declared,
+            template_path=getattr(manifest, "identity_template_path", None) or config_path,
+        )
+        _require_sealed_runtime_sources(root, declared)
+        _require_sealed_source_inputs(manifest, root, declared)
+    except (OSError, TypeError, ValueError) as exc:
+        return f"sealed evaluation source admission refused (D-049): {exc}"
+    return None
+
+
 def _validate_release_seed_policy(
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
+    *,
+    repository_root: Path | None = None,
 ) -> None:
     """Validate the configured and manifest seed-policy payloads."""
     cfg_seed_policy = {
@@ -1954,6 +2546,40 @@ def _validate_release_seed_policy(
             else None
         ),
     }
+    try:
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
+        resolved = tuple(_resolved_seed_inventory(scenarios))
+    except (OSError, ValueError) as exc:
+        problems.append(f"release seeds cannot be resolved: {exc}")
+        resolved = ()
+    historical = (
+        manifest.release_id,
+        manifest.campaign_config_sha256,
+    ) in HISTORICAL_RELEASE_CONFIG_PINS
+    if not historical and set(resolved).intersection(RETIRED_EVAL_SEEDS_0_0_7):
+        problems.append(
+            "retired evaluation seeds are forbidden for non-historical releases (D-049)"
+        )
+    if is_development_rehearsal(manifest):
+        try:
+            _validated_development_seeds(resolved)
+        except ValueError as exc:
+            problems.append(str(exc))
+    elif (
+        manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
+        and (
+            "0.0.8" in manifest.release_tag
+            or "0_0_8" in manifest.scenario_matrix_path.name
+            or "0_0_8" in manifest.canonical_campaign_config_path.name
+        )
+        and resolved != EVAL_SEEDS_0_0_8
+    ):
+        problems.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")
+    sealed_problem = sealed_seed_execution_problem(
+        manifest, resolved, repository_root=repository_root
+    )
+    if sealed_problem is not None:
+        problems.append(sealed_problem)
     if cfg_seed_policy != normalized_manifest_seed_policy:
         problems.append("seed_policy does not match campaign config")
 
@@ -2008,6 +2634,8 @@ def validate_release_planner_roster(
         blockers.append("planners.groups does not match campaign config")
     if any(not key or not algorithm for key, algorithm in observed_algorithms.items()):
         blockers.append("enabled planner roster contains an empty key or algorithm")
+    # Issue #9751: an arm bound to an unfrozen release placeholder cannot be admitted.
+    blockers.extend(unfrozen_planner_config_blockers(enabled_planners))
 
     expected_kinematics = tuple(str(value).strip() for value in manifest.expected_kinematics_matrix)
     observed_kinematics = tuple(
@@ -2092,9 +2720,19 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
     cells = len(scenarios) * len(resolved_seeds) * enabled_planners
     if cells != manifest.expected_episode_cells:
         problems.append("matrix.expected_episode_cells does not match resolved matrix")
-    if manifest.expected_horizon_steps is None:
+    effective_horizon = (
+        DOORWAY_RELEASE_HORIZON
+        if is_doorway_width_slice(manifest)
+        else manifest.expected_horizon_steps
+    )
+    if manifest.scenario_horizons_path is not None or cfg.scenario_horizons_path is not None:
+        try:
+            resolve_release_horizon_budgets(manifest, cfg)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            problems.append(f"matrix scenario horizon contract invalid: {exc}")
+    elif manifest.expected_horizon_steps is None:
         problems.append("matrix.horizon_steps is missing")
-    elif cfg.horizon != manifest.expected_horizon_steps:
+    elif cfg.horizon != effective_horizon:
         problems.append("matrix.horizon_steps does not match campaign config")
     else:
         overridden_horizons = {
@@ -2102,7 +2740,7 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
             for planner in cfg.planners
             if planner.enabled
             and planner.horizon_override is not None
-            and planner.horizon_override != manifest.expected_horizon_steps
+            and planner.horizon_override != effective_horizon
         }
         if overridden_horizons:
             problems.append(
@@ -2117,6 +2755,65 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
         problems.append("publication.version_doi must name a fresh Zenodo version")
     if manifest.concept_doi == manifest.version_doi:
         problems.append("publication concept and version DOI must be distinct")
+
+
+def resolve_release_horizon_budgets(manifest: Any, cfg: Any) -> dict[str, int]:
+    """Validate independent manifest/campaign pins against authored scenario budgets.
+
+    Returns:
+        Per producer scenario identifier budget; no environment is constructed.
+    """
+    schedule_path = getattr(manifest, "scenario_horizons_path", None)
+    digest = getattr(manifest, "scenario_horizons_sha256", None)
+    config_path = getattr(cfg, "scenario_horizons_path", None)
+    if schedule_path is None or config_path is None or not digest:
+        raise ValueError("independent manifest scenario horizon schedule and digest required")
+    if (
+        getattr(manifest, "expected_horizon_steps", None) is not None
+        or getattr(cfg, "horizon", None) is not None
+    ):
+        raise ValueError("scheduled release cannot carry a fixed horizon")
+    if getattr(cfg, "horizon_policy", None) is not None:
+        raise ValueError("scheduled release cannot carry legacy horizon policy")
+    if getattr(cfg, "scenario_horizons_sha256", None) != digest:
+        raise ValueError("manifest and campaign scenario horizon digests differ")
+    if _sha256_file(Path(schedule_path)) != digest or _sha256_file(Path(config_path)) != digest:
+        raise ValueError("scenario horizon digest differs from independently bound bytes")
+    if any(
+        getattr(p, "horizon_override", None) is not None
+        for p in cfg.planners
+        if getattr(p, "enabled", True)
+    ):
+        raise ValueError("scheduled release cannot carry planner horizon overrides")
+    schedule = _load_scenario_horizon_schedule(Path(schedule_path))
+    authored = load_scenarios(cfg.scenario_matrix_path, base_dir=cfg.scenario_matrix_path.parent)
+    return _validate_authored_release_budgets(authored, schedule)
+
+
+def _validate_authored_release_budgets(
+    authored: list[Mapping[str, Any]], schedule: dict[str, dict[str, Any]]
+) -> dict[str, int]:
+    """Compare independently loaded source budgets with the bound schedule.
+
+    Returns:
+        Exact scenario-to-budget map after authored parity checks.
+    """
+    budgets = {}
+    for scenario in authored:
+        sid = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
+        budget = scenario.get("simulation_config", {}).get("max_episode_steps")
+        if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+            raise ValueError(f"missing positive authored budget for {sid}")
+        if (
+            sid in budgets
+            or sid not in schedule
+            or schedule[sid]["recommended_horizon_steps"] != budget
+        ):
+            raise ValueError(f"schedule does not match unique authored budget for {sid}")
+        budgets[sid] = budget
+    if set(budgets) != set(schedule):
+        raise ValueError("scenario horizon schedule must match authored matrix exactly")
+    return budgets
 
 
 def _validate_release_metadata_contract(
@@ -2417,6 +3114,7 @@ def build_resolved_release_manifest(
             raise ValueError("campaign config identity does not match resolved release identity")
         return copy.deepcopy(manifest.resolved_manifest_payload)
     cfg = campaign_config or load_release_campaign_config(manifest, repository_root=root)
+    scenarios = _load_campaign_scenarios(cfg, repository_root=root)
     payload = {
         "schema_version": manifest.schema_version,
         "benchmark_protocol_version": manifest.benchmark_protocol_version,
@@ -2486,8 +3184,21 @@ def build_resolved_release_manifest(
             "metadata_sha256": manifest.metadata_sha256,
         },
         "matrix": {
-            "expected_episode_cells": manifest.expected_episode_cells,
-            "horizon_steps": manifest.expected_horizon_steps,
+            "planner_arms": sum(planner.enabled for planner in cfg.planners),
+            "scenarios": len(scenarios),
+            "seeds": len(_resolved_seed_inventory(scenarios)),
+            "expected_episode_cells": manifest.expected_episode_cells
+            if manifest.expected_episode_cells is not None
+            else sum(planner.enabled for planner in cfg.planners)
+            * sum(len(row.get("seeds", ())) for row in scenarios),
+            "horizon_steps": manifest.expected_horizon_steps
+            if manifest.expected_horizon_steps is not None
+            else cfg.horizon,
+            "dt": cfg.dt,
+            "scenario_horizons": _repo_relative(manifest.scenario_horizons_path)
+            if manifest.scenario_horizons_path
+            else None,
+            "scenario_horizons_sha256": manifest.scenario_horizons_sha256,
         },
         "release_contract": {
             "suite_policy_path": (
@@ -2506,6 +3217,11 @@ def build_resolved_release_manifest(
         },
         "release_kind": manifest.release_kind,
     }
+    if manifest.snqi_v2_binding:
+        payload["metrics"]["snqi_v2_binding"] = {
+            name: {"path": str(asset["path"]), "sha256": asset["sha256"]}
+            for name, asset in manifest.snqi_v2_binding.items()
+        }
     source_sha = _resolve_release_source_sha(manifest, source_commit)
     if source_sha is not None:
         # Keep the final source identity at the resolved-manifest root as well
@@ -2609,12 +3325,16 @@ def _identity_template_payload(  # noqa: C901, PLR0912
         )
     if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         raise ValueError("release identity template must describe a v0.2 release manifest")
-    if payload.get("release_kind") != "benchmark-data":
-        raise ValueError("release identity template must describe a benchmark-data release")
-    if payload.get("source_sha") is not None:
-        raise ValueError("tracked release identity template must omit source_sha")
+    kind = payload.get("release_kind")
+    if kind not in {"benchmark-data", *DOORWAY_RELEASE_KINDS}:
+        raise ValueError("release identity template must describe benchmark-data or a width slice")
+    slice_template = kind in DOORWAY_RELEASE_KINDS
+    if payload.get("source_sha") != ("{{source_sha}}" if slice_template else None):
+        raise ValueError(
+            "width slice template must use {{source_sha}}; benchmark-data template must omit it"
+        )
     required_slots = {
-        "release_id": "{{release_tag}}",
+        "release_id": "three_width_doorway_0_0_8_v1" if slice_template else "{{release_tag}}",
         "release_tag": "{{release_tag}}",
         "latest_main_base_commit": "{{latest_main_base_commit}}",
     }
@@ -2628,12 +3348,13 @@ def _identity_template_payload(  # noqa: C901, PLR0912
         repository_root=repository_root,
     )
     campaign_payload = _load_mapping(campaign_template)
-    for field, expected in (
-        ("release_tag", "{{release_tag}}"),
-        ("doi", "{{version_doi}}"),
-    ):
-        if campaign_payload.get(field) != expected:
-            raise ValueError(f"campaign {field} must use the explicit {expected} slot")
+    if not slice_template:
+        for field, expected in (
+            ("release_tag", "{{release_tag}}"),
+            ("doi", "{{version_doi}}"),
+        ):
+            if campaign_payload.get(field) != expected:
+                raise ValueError(f"campaign {field} must use the explicit {expected} slot")
     publication = payload.get("publication")
     provenance = payload.get("provenance")
     if not isinstance(publication, Mapping) or not isinstance(provenance, Mapping):
@@ -2690,6 +3411,56 @@ def _absolute_template_file(
     )
 
 
+def _bind_doorway_template_horizon(payload: dict[str, Any]) -> None:
+    """Validate the declaration before emitting the versioned H400 slice identity."""
+    if payload.get("release_kind") in DOORWAY_RELEASE_KINDS:
+        matrix = payload.get("matrix")
+        template_horizon = (
+            DOORWAY_RELEASE_HORIZON if payload["release_kind"] == DOORWAY_RELEASE_KIND else 600
+        )
+        if isinstance(matrix, dict) and matrix.get("scenario_horizons") is not None:
+            if matrix.get("horizon_steps") is not None:
+                raise ValueError(
+                    "doorway slice template horizon cannot combine schedule and fixed form"
+                )
+            payload["release_kind"] = DOORWAY_RELEASE_KIND
+            return
+        if not isinstance(matrix, dict) or matrix.get("horizon_steps") != template_horizon:
+            raise ValueError(f"doorway slice template horizon must be H{template_horizon}")
+        payload["release_kind"] = DOORWAY_RELEASE_KIND
+        matrix["horizon_steps"] = DOORWAY_RELEASE_HORIZON
+
+
+def _materialize_v2_binding_paths(
+    payload: dict[str, Any], template_path: Path, repository_root: Path
+) -> None:
+    """Project nested source asset paths without editing their tracked templates."""
+    binding = payload.get("metrics", {}).get("snqi_v2_binding")
+    if binding:
+        for name, asset in binding.items():
+            asset["path"] = _absolute_template_file(
+                template_path,
+                asset["path"],
+                repository_root=repository_root,
+                field_name=f"metrics.snqi_v2_binding.{name}",
+            )
+
+
+def _require_v2_source_assets(
+    manifest: BenchmarkReleaseManifest, repository_root: Path, source_commit: str
+) -> None:
+    """Require every v2 source asset at the identity's clean selected source."""
+    for name, asset in (manifest.snqi_v2_binding or {}).items():
+        if name == "determinism_receipt":
+            continue  # Acquisition output is digest-bound, never a frozen source input.
+        _require_tracked_input_at_source(
+            asset["path"],
+            repository_root=repository_root,
+            source_commit=source_commit,
+            label=f"SNQI-v2 {name}",
+        )
+
+
 def _materialize_release_template_payload(  # noqa: PLR0913
     template_payload: Mapping[str, Any],
     *,
@@ -2716,8 +3487,8 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "version_doi": version_doi,
     }
     payload = _replace_identity_tokens(copy.deepcopy(dict(template_payload)), replacements)
+    _bind_doorway_template_horizon(payload)
     payload.pop("identity_resolution", None)
-    payload["release_id"] = release_tag
     payload["release_tag"] = release_tag
     payload["source_sha"] = source_commit
     payload["latest_main_base_commit"] = latest_main_base_commit
@@ -2741,6 +3512,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "scenario": ("matrix_path", "suite_policy_path", "route_certification_path"),
         "seed_policy": ("seed_sets_path",),
         "metrics": ("snqi_weights_path", "snqi_baseline_path"),
+        "matrix": ("scenario_horizons",),
     }
     for section_name, fields in path_fields.items():
         raw_section = template_payload.get(section_name)
@@ -2756,6 +3528,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
                 repository_root=repository_root,
                 field_name=f"{section_name}.{field}",
             )
+    _materialize_v2_binding_paths(payload, template_path, repository_root)
     publication = payload.get("publication")
     if not isinstance(publication, dict):
         raise ValueError("resolved publication identity must be a mapping")
@@ -2790,7 +3563,59 @@ def _require_tracked_input_at_source(
         raise ValueError(f"{label} bytes differ from source_commit")
 
 
-def _build_resolved_release_identity(
+def _development_template_overlay(
+    payload: dict[str, Any], seeds: tuple[int, ...] | None, template: Path, root: Path
+) -> None:
+    """Apply the explicit D-070 seed/marker projection without altering source files."""
+    if seeds is None:
+        return
+    seeds = _validated_development_seeds(seeds)
+    if (
+        template.relative_to(root).as_posix()
+        != "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
+    ):
+        raise ValueError("development rehearsal requires the selected D-083 identity template")
+    payload["release_kind"] = DEVELOPMENT_REHEARSAL_KIND
+    payload["claim_boundary"]["evidence_class_after_full_acceptance"] = (
+        "diagnostic-development-rehearsal"
+    )
+    payload["seed_policy"].update(
+        {
+            "mode": "fixed-list",
+            "seed_set": None,
+            "seeds": list(seeds),
+            "resolved_seeds": list(seeds),
+        }
+    )
+    payload["matrix"].update({"seeds": len(seeds), "expected_episode_cells": 14 * 48 * len(seeds)})
+
+
+def _development_metadata_overlay(payload: dict[str, Any], seeds: tuple[int, ...] | None) -> None:
+    """Make copied deposition metadata unusable by the public DOI publisher."""
+    if seeds is not None:
+        payload["metadata"]["non_releasable_development_rehearsal"] = True
+
+
+def _bind_determinism_receipt(
+    payload: dict[str, Any], asset: Mapping[str, str] | None, repository_root: Path
+) -> None:
+    """Validate a post-acquisition input and add its digest to the resolved spec binding."""
+    if asset is None:
+        return
+    if not isinstance(asset, Mapping) or set(asset) != {"path", "sha256"}:
+        raise ValueError("SNQI-v2 determinism receipt requires path and sha256")
+    path = _safe_repository_file(
+        Path(asset["path"]), repository_root, field_name="determinism receipt"
+    )
+    if _sha256_file(path) != asset["sha256"]:
+        raise ValueError("SNQI-v2 determinism receipt digest mismatch")
+    binding = payload.get("metrics", {}).get("snqi_v2_binding")
+    if not binding:
+        raise ValueError("determinism receipt requires source-bound SNQI-v2 assets")
+    binding["determinism_receipt"] = {"path": str(path), "sha256": asset["sha256"]}
+
+
+def _build_resolved_release_identity(  # noqa: PLR0913
     *,
     template_path: Path,
     output_path: Path,
@@ -2799,6 +3624,8 @@ def _build_resolved_release_identity(
     concept_doi: str,
     version_doi: str,
     repository_root: Path,
+    development_rehearsal_seeds: tuple[int, ...] | None = None,
+    determinism_receipt: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], bytes, BenchmarkReleaseManifest]:
     """Build canonical identity and metadata bytes after all read-only admissions.
 
@@ -2825,6 +3652,7 @@ def _build_resolved_release_identity(
     resolved_metadata = _replace_identity_tokens(metadata_template_payload, replacements)
     if not isinstance(resolved_metadata, dict):  # pragma: no cover - recursive shape guard
         raise ValueError("resolved publication metadata must be a JSON object")
+    _development_metadata_overlay(resolved_metadata, development_rehearsal_seeds)
     metadata_bytes = _canonical_json_bytes(resolved_metadata)
     metadata_sha256 = hashlib.sha256(metadata_bytes).hexdigest()
     final_metadata_path = output_path.parent / RESOLVED_RELEASE_METADATA_FILENAME
@@ -2838,6 +3666,7 @@ def _build_resolved_release_identity(
                 scratch_metadata,
                 expected_source_tag=release_tag,
                 expected_metadata_sha256=metadata_sha256,
+                allow_development_rehearsal=development_rehearsal_seeds is not None,
             )
         except ZenodoPublisherError as exc:
             raise ValueError(f"resolved Zenodo metadata is invalid: {exc}") from exc
@@ -2853,14 +3682,29 @@ def _build_resolved_release_identity(
             version_doi=version_doi,
             repository_root=repository_root,
         )
+        _bind_determinism_receipt(materialized_payload, determinism_receipt, repository_root)
+        _development_template_overlay(
+            materialized_payload, development_rehearsal_seeds, template_path, repository_root
+        )
         materialized_path = scratch_root / "release_manifest.materialized.json"
         materialized_path.write_bytes(_canonical_json_bytes(materialized_payload))
         manifest = load_release_manifest(materialized_path, repository_root=repository_root)
+        # This trusted resolver has materialized the v0.2 inputs. Bind the in-flight
+        # identity before validation; the ignored envelope is written only after all
+        # source, content and metadata checks succeed.
+        manifest = replace(
+            manifest,
+            resolved_identity_path=output_path,
+            identity_template_path=template_path,
+        )
         cfg = load_campaign_config(
             manifest.canonical_campaign_config_path,
             repository_root=repository_root,
         )
-        cfg = replace(cfg, release_tag=release_tag, doi=version_doi)
+        cfg = _release_campaign_horizon(
+            manifest, replace(cfg, release_tag=release_tag, doi=version_doi)
+        )
+        cfg = bind_release_context_asset(manifest, _development_campaign_config(manifest, cfg))
         validation = validate_release_manifest(
             manifest,
             campaign_config=cfg,
@@ -2876,6 +3720,7 @@ def _build_resolved_release_identity(
             repository_root=repository_root,
         )
 
+    _require_v2_source_assets(manifest, repository_root, source_commit)
     tracked_inputs = (
         (template_path, "release identity template"),
         (metadata_template, "publication metadata template"),
@@ -2942,6 +3787,20 @@ def _build_resolved_release_identity(
         "resolved_manifest": resolved_manifest,
         "resolved_manifest_sha256": resolved_manifest_sha256,
     }
+    envelope.update(
+        {
+            "determinism_receipt": _normalize_identity_paths(
+                dict(determinism_receipt), repository_root
+            )
+        }
+        if determinism_receipt is not None
+        else {}
+    )
+    if development_rehearsal_seeds is not None:
+        envelope["development_rehearsal"] = {
+            "seeds": list(development_rehearsal_seeds),
+            "release_eligible": False,
+        }
     manifest = replace(
         manifest,
         path=output_path,
@@ -2990,7 +3849,33 @@ def _rollback_materialized_outputs(
         )
 
 
-def write_resolved_release_identity(
+def _mint_notes_output(root: Path, output: Path, source: str, dev_seeds: Any) -> tuple:
+    """Bind disclosures independently of deterministic campaign identity bytes.
+
+    Returns:
+        Receipt output to materialize atomically with the identity, or no output.
+    """
+    if dev_seeds is not None:
+        return ()
+    for relative in (
+        "docs/release/0.0.8/release_notes.md",
+        "docs/release/0.0.8/decisions.md",
+        "robot_sf/benchmark/release_notes.py",
+    ):
+        _require_tracked_input_at_source(
+            root / relative,
+            repository_root=root,
+            source_commit=source,
+            label="release notes gate input",
+        )
+    receipt = notes_gate(root, source_commit=source)
+    receipt_path = _safe_identity_output(
+        output.parent / RECEIPT_NAME, root, field_name="release notes gate receipt"
+    )
+    return ((receipt_path, _canonical_json_bytes(receipt)),)
+
+
+def write_resolved_release_identity(  # noqa: PLR0913
     *,
     template_path: Path,
     output_path: Path,
@@ -2999,6 +3884,8 @@ def write_resolved_release_identity(
     concept_doi: str,
     version_doi: str,
     repository_root: Path | None = None,
+    development_rehearsal_seeds: tuple[int, ...] | None = None,
+    determinism_receipt: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate one canonical resolved release identity without source edits.
 
@@ -3006,6 +3893,12 @@ def write_resolved_release_identity(
         The canonical identity payload written to ``output_path``.
     """
     root = (repository_root or get_repository_root()).resolve()
+    if development_rehearsal_seeds is not None:
+        development_rehearsal_seeds = _validated_development_seeds(development_rehearsal_seeds)
+        if (concept_doi, version_doi) != DEVELOPMENT_REHEARSAL_DOIS:
+            raise ValueError(
+                "development rehearsal cannot use reserved publication DOIs; use diagnostic coordinates"
+            )
     template = _safe_repository_file(
         Path(template_path), root, field_name="release identity template"
     )
@@ -3026,6 +3919,7 @@ def write_resolved_release_identity(
         root,
         release_tag=release_tag,
         source_commit=normalized_source,
+        development_rehearsal=development_rehearsal_seeds is not None,
     )
     concept_doi, version_doi = _require_publication_coordinates(concept_doi, version_doi)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -3037,6 +3931,8 @@ def write_resolved_release_identity(
         concept_doi=concept_doi,
         version_doi=version_doi,
         repository_root=root,
+        development_rehearsal_seeds=development_rehearsal_seeds,
+        determinism_receipt=determinism_receipt,
     )
     _require_clean_exact_checkout(
         root,
@@ -3045,6 +3941,9 @@ def write_resolved_release_identity(
     )
     identity_bytes = _canonical_json_bytes(envelope)
     materialized_outputs = ((metadata_path, metadata_bytes), (output, identity_bytes))
+    materialized_outputs += _mint_notes_output(
+        root, output, normalized_source, development_rehearsal_seeds
+    )
     originals = {
         path: path.read_bytes() if path.is_file() else None for path, _ in materialized_outputs
     }
@@ -3112,6 +4011,16 @@ def verify_resolved_release_identity(
     )
     source_commit = str(observed.get("source_commit", "")).strip().lower()
     release_tag = str(observed.get("release_tag", "")).strip()
+    rehearsal = observed.get("development_rehearsal")
+    rehearsal_seeds = None
+    if rehearsal is not None:
+        if (
+            not isinstance(rehearsal, dict)
+            or set(rehearsal) != {"seeds", "release_eligible"}
+            or rehearsal["release_eligible"] is not False
+        ):
+            raise ValueError("development rehearsal identity must be explicitly non-releasable")
+        rehearsal_seeds = _validated_development_seeds(rehearsal["seeds"])
     concept_doi, version_doi = _require_publication_coordinates(
         publication.get("concept_doi"),
         publication.get("version_doi"),
@@ -3129,6 +4038,7 @@ def verify_resolved_release_identity(
         release_tag=release_tag,
         source_commit=normalized_source,
         allow_existing_exact_tag=True,
+        development_rehearsal=rehearsal_seeds is not None,
     )
     envelope, metadata_bytes, manifest = _build_resolved_release_identity(
         template_path=template_path,
@@ -3138,6 +4048,8 @@ def verify_resolved_release_identity(
         concept_doi=concept_doi,
         version_doi=version_doi,
         repository_root=root,
+        development_rehearsal_seeds=rehearsal_seeds,
+        determinism_receipt=observed.get("determinism_receipt"),
     )
     _require_clean_exact_checkout(
         root,
@@ -3159,6 +4071,11 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(description="Run a benchmark release workflow.")
+    parser.add_argument(
+        "--development-runtime-smoke",
+        action="store_true",
+        help="Run the full D-083 matrix on dev seed 1001 as a non-releasable smoke receipt.",
+    )
     parser.add_argument("--manifest", type=Path, required=True, help="Benchmark release manifest.")
     parser.add_argument(
         "--output-root",
@@ -3189,6 +4106,16 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
             "An existing fixed-id release campaign is rejected unless --resume-receipt "
             "proves an infrastructure-only interruption with unchanged inputs."
         ),
+    )
+    parser.add_argument(
+        "--snqi-v2-calibration-root",
+        type=Path,
+        help="Complete same-source dev1001/1002 acquisition custody.",
+    )
+    parser.add_argument(
+        "--snqi-v2-anchors",
+        type=Path,
+        help="Frozen anchors rederived from that acquisition before scoring.",
     )
     parser.add_argument(
         "--checkpoint-receipt",

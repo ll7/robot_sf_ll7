@@ -36,7 +36,7 @@ def main() -> None:
     )
 
     env = make_robot_env(config=config, debug=False)
-    obs, _info = env.reset(seed=123)
+    obs, _info = env.reset(seed=1013)
 
     shaped_return = 0.0
     for step_idx in range(20):

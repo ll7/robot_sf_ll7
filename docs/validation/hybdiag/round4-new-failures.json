@@ -1,0 +1,10 @@
+[
+  {
+    "world": "empty",
+    "scenario": "francis2023_narrow_hallway",
+    "seed": 1002,
+    "arm": "static_only",
+    "outcome": "timeout",
+    "final_goal_distance_m": 0.7046544407285579
+  }
+]

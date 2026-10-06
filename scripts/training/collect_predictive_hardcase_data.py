@@ -36,7 +36,7 @@ class Frame:
     robot_speed: np.ndarray
     goal_current: np.ndarray
     ped_positions_world: np.ndarray
-    ped_velocities_world: np.ndarray
+    ped_velocities_ego: np.ndarray
     ped_count: int
 
 
@@ -140,7 +140,7 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
         robot_speed=robot_speed,
         goal_current=goal_current,
         ped_positions_world=ped_positions,
-        ped_velocities_world=ped_velocities,
+        ped_velocities_ego=ped_velocities,
         ped_count=ped_count,
     )
 
@@ -157,17 +157,6 @@ def _world_to_ego(
     x_ego = cos_h * rel[:, 0] + sin_h * rel[:, 1]
     y_ego = -sin_h * rel[:, 0] + cos_h * rel[:, 1]
     return np.stack([x_ego, y_ego], axis=1).astype(np.float32)
-
-
-def _vel_world_to_ego(vectors_world: np.ndarray, robot_heading: float) -> np.ndarray:
-    """Rotate world-frame vectors to ego frame (no translation)."""
-    if vectors_world.size == 0:
-        return np.zeros((0, 2), dtype=np.float32)
-    cos_h = float(np.cos(robot_heading))
-    sin_h = float(np.sin(robot_heading))
-    vx_ego = cos_h * vectors_world[:, 0] + sin_h * vectors_world[:, 1]
-    vy_ego = -sin_h * vectors_world[:, 0] + cos_h * vectors_world[:, 1]
-    return np.stack([vx_ego, vy_ego], axis=1).astype(np.float32)
 
 
 def _nearest_match_indices(
@@ -245,10 +234,9 @@ def _frames_to_samples(
                 frame_t.robot_heading,
             )
             state_base[:c, 0:2] = pos_rel
-            state_base[:c, 2:4] = _vel_world_to_ego(
-                frame_t.ped_velocities_world[:c],
-                frame_t.robot_heading,
-            )
+            # SOCNAV observations already rotate velocities by -robot_heading.
+            # Positions remain world-frame; velocity features are already ego-frame.
+            state_base[:c, 2:4] = frame_t.ped_velocities_ego[:c]
             if base_dim >= 9:
                 goal_rel = _world_to_ego(
                     frame_t.goal_current.reshape(1, 2),

@@ -127,11 +127,15 @@ def write_json(
     path: Path,
     payload: dict[str, Any],
     *,
+    indent: int | None = 2,
     catalog_area: str | None = None,
     catalog_status: str = "evidence",
     catalog_freshness: str = "evidence",
 ) -> None:
     """Write deterministic JSON with review marker.
+
+    ``indent=None`` writes one compact JSON line, suitable for a single-record
+    JSONL fixture. The default preserves the existing two-space formatting.
 
     Paths written under ``docs/context/evidence/`` register their evidence
     bundle automatically in ``docs/context/catalog.yaml`` via
@@ -141,7 +145,9 @@ def write_json(
     """
     # Add review marker at top level
     marked_payload = {"review_marker": review_marker_json(), **payload}
-    path.write_text(json.dumps(marked_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(marked_payload, indent=indent, sort_keys=True) + "\n", encoding="utf-8"
+    )
     _maybe_register(
         path,
         catalog_area=catalog_area,

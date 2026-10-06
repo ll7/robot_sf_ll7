@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
+from robot_sf.benchmark.utils import _config_hash
 
 
 def _fake_aggregates(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -117,6 +118,7 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
                     "seed": seed,
                     "scenario_params": {
                         "algo": algo,
+                        "algo_config_hash": _config_hash({}),
                         "metadata": {"archetype": "crossing"},
                     },
                     "metrics": {
@@ -128,6 +130,8 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
                 }
             )
 
+        for row in missing_rows:
+            row["config_hash"] = _config_hash(row["scenario_params"])
         with output_path.open("a", encoding="utf-8") as handle:
             for row in missing_rows:
                 handle.write(json.dumps(row) + "\n")

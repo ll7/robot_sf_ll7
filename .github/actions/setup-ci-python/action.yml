@@ -38,7 +38,12 @@ runs:
       with:
         version: ${{ inputs.uv-version }}
         enable-cache: "true"
-        prune-cache: "true"
+        # --ci pruning discards downloaded wheels: an exact hit then restores
+        # only ~9 MB of metadata and downloads the ~9 GB environment again.
+        prune-cache: "false"
+        cache-dependency-glob: |
+          pyproject.toml
+          uv.lock
 
     - name: Report uv cache state before sync
       shell: bash

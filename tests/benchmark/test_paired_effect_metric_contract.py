@@ -1598,3 +1598,37 @@ def test_runner_map_dispatch_keeps_lazy_import_seam(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(map_runner, "run_map_batch", lambda *args, **kwargs: expected)
 
     assert runner.run_map_batch("matrix.json", "episodes.jsonl", limit=1) is expected
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_fxm2_trace_readers_accept_matching_versions(version):
+    record = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    record["algorithm_metadata"]["paired_effect_native_trace"]["schema_version"] = (
+        f"paired_effect_native_trace.{version}"
+    )
+    record["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = (
+        f"simulation-step-trace.{version}"
+    )
+    result = evaluate_paired_effect_metric_fields(record)
+    assert result["fields"]["progress_at_timeout"]["status"] == "available"
+
+
+def test_fxm2_trace_readers_reject_mixed_native_simulation_versions():
+    record = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    record["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = (
+        "simulation-step-trace.v2"
+    )
+    result = evaluate_paired_effect_metric_fields(record)
+    assert result["fields"]["progress_at_timeout"]["reason"] == "trace_schema_version_mismatch"
+
+
+def test_fxm2_pair_rejects_mixed_trace_versions():
+    on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    off = _native_record("wrapper_off")
+    for field, prefix in [
+        ("paired_effect_native_trace", "paired_effect_native_trace"),
+        ("simulation_step_trace", "simulation-step-trace"),
+    ]:
+        off["algorithm_metadata"][field]["schema_version"] = f"{prefix}.v2"
+    result = evaluate_paired_effect_metric_fields(on, paired_wrapper_off_record=off)
+    assert result["fields"]["false_positive_stop_rate"]["reason"] == "trace_schema_version_mismatch"

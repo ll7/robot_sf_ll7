@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
+
+from loguru import logger
 
 from scripts.training import train_recurrent_ppo
 
@@ -11,9 +15,13 @@ CONFIG_PATH = Path("configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yam
 
 
 def test_recurrent_ppo_dry_run_writes_manifest(tmp_path: Path) -> None:
-    """Dry-run should validate config and record the true recurrent LSTM contract."""
-    exit_code = train_recurrent_ppo.main(
+    """The real dry-run CLI records its LSTM contract without replacing worker log sinks."""
+    handlers_before = logger._core.handlers.copy()
+    level_before = logger._core.min_level
+    result = subprocess.run(
         [
+            sys.executable,
+            str(Path(train_recurrent_ppo.__file__).resolve()),
             "--config",
             str(CONFIG_PATH),
             "--dry-run",
@@ -23,13 +31,19 @@ def test_recurrent_ppo_dry_run_writes_manifest(tmp_path: Path) -> None:
             str(tmp_path),
             "--log-level",
             "WARNING",
-        ]
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
+
+    assert logger._core.handlers == handlers_before
+    assert logger._core.min_level == level_before
 
     manifest_path = tmp_path / "training_manifest.json"
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    assert exit_code == 0
+    assert result.returncode == 0, result.stderr
     assert payload["schema_version"] == "recurrent-ppo-training-manifest.v2"
     assert payload["issue"] == 7847
     assert payload["algorithm"] == "recurrent_ppo"

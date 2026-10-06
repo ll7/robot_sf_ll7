@@ -4,6 +4,23 @@ This is the canonical task guide for dependency-aware local validation. Match th
 change risk; use the full readiness lane when the change affects scripts, runtime, schemas,
 benchmark semantics, provenance, or publication behavior.
 
+## Hosted draft and ready PR checks
+
+A draft PR push runs only the CI `dispatch-ownership` job (Ruff lint, format, and a small
+CI-helper test subset) and the `ci-draft` feedback job. Other PR jobs skip drafts. The
+`ready_for_review` event starts the full PR checks, including the four fast-feedback
+shards and exact-head changed coverage. Main pushes and merge groups keep the full
+matrix. The separate `pull_request_target` review-bot workflow retains its write
+permission boundary and runs only when the PR is ready.
+
+On ready PRs, `scripts/dev/ci_heavy_paths.py` selects the macOS compatibility
+matrix rows, examples smoke, notebooks smoke, and xdist scratch isolation from
+the complete GitHub PR file list. A missing or invalid list fails the selection
+job. The aggregate `ci` check accepts a skipped heavy job only when the selector
+explicitly marks it irrelevant to that PR; merge groups and main require every
+heavy job. PR body checks share the `pr-contract-check` runner and retain their
+advisory annotations.
+
 ## Dependency profiles
 
 `run_tests_parallel.sh` checks dependencies before resolving workers or starting pytest:

@@ -703,3 +703,11 @@ def test_split_list_config_still_detects_genuine_missing_path(tmp_path: Path) ->
     problems = check_files([note.relative_to(tmp_path).as_posix()], root=tmp_path)
     assert len(problems) == 1
     assert "configs/training/missing_config_file.yaml" in problems[0]
+
+
+def test_repository_catalog_retains_complete_evidence_metadata():
+    """Real catalog unions must retain validated metadata for every evidence entry."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    assert check_files(["docs/context/catalog.yaml"], root=root) == []

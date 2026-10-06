@@ -83,6 +83,7 @@ ALLOWED_EXCLUSION_REASONS = frozenset(
         "unsafe_command",
         "historical_only",
         "superseded",
+        "not_in_approved_execution_scope",
     }
 )
 

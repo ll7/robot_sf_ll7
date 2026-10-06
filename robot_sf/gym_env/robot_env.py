@@ -40,6 +40,7 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
+from robot_sf.nav.map_config import ROBOT_GOAL_SAMPLING_LEGACY_V1
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.prediction.goal_intention import (
@@ -115,8 +116,16 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                key == "goal_completion_policy"
-                and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                key == "pedestrian_seed"
+                or (key == "groups" and item is None)
+                or (
+                    key == "goal_completion_policy"
+                    and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                )
+                or (
+                    key == "robot_goal_sampling_policy"
+                    and (item is None or item == ROBOT_GOAL_SAMPLING_LEGACY_V1)
+                )
             )
         }
     if isinstance(value, list):
@@ -135,6 +144,14 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     """
     try:
         config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
+        sim_config = getattr(cfg, "sim_config", None)
+        selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
+        if callable(selector_overrides):
+            config_payload["sim_config"].update(selector_overrides())
+        robot_config = getattr(cfg, "robot_config", None)
+        robot_overrides = getattr(robot_config, "_config_hash_overrides", None)
+        if callable(robot_overrides):
+            config_payload["robot_config"].update(robot_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,
@@ -626,6 +643,7 @@ class RobotEnv(BaseEnv):
             sensor_adapter,
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
+            episode_step_limit=env_config.sim_config.episode_step_limit,
         )
 
         # Store last action executed by the robot
@@ -634,6 +652,7 @@ class RobotEnv(BaseEnv):
         self._action_latency_queue: deque[tuple[Any, ...]] = deque()
         self._reset_action_latency_queue()
         self.applied_seed: int | None = None
+        self._crowd_established_by_seeded_reset = False
         self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
@@ -648,6 +667,18 @@ class RobotEnv(BaseEnv):
         self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
+
+    def _apply_reset_seed(self, seed: int | None) -> None:
+        """Rebuild private pedestrian streams and population from the episode seed.
+
+        A seeded reset also restores behavior navigators and their RNG streams;
+        callers may freely use the process-global NumPy generator between steps.
+        """
+        if seed is None:
+            return
+        self.applied_seed = int(seed)
+        self.simulator.repopulate_crowd(seed=int(seed))
+        self._crowd_established_by_seeded_reset = True
 
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""
@@ -716,8 +747,7 @@ class RobotEnv(BaseEnv):
                 f"with key '{self._critic_privileged_state_key}'."
             )
         sim_time_limit = float(getattr(env_config.sim_config, "sim_time_in_secs", 0.0) or 0.0)
-        dt = float(getattr(env_config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
-        max_sim_steps = int(np.ceil(sim_time_limit / dt)) if dt > 0.0 else 0
+        max_sim_steps = env_config.sim_config.max_sim_steps
         critic_obs_space = spaces.Dict(dict(self.observation_space.spaces))
         low, high = _asymmetric_critic_state_spec(
             critic_obs_space,
@@ -1206,10 +1236,8 @@ class RobotEnv(BaseEnv):
         Returns:
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
-        if seed is not None:
-            self.applied_seed = int(seed)
-
         with global_reset_seed(seed):
+            self._apply_reset_seed(seed)
             super().reset(seed=seed, options=options)
             self._telemetry_episode_id += 1
             # Reset last_action

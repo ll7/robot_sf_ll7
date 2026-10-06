@@ -31,6 +31,7 @@ from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
     run_manifest_row,
 )
 from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE_LABELS_KEY
+from robot_sf.evidence.writers import review_marker_comment, write_json, write_text
 
 _REPO_ROOT = Path(__file__).parents[2]
 _CLASSIC_CROSSING_MAP = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
@@ -669,20 +670,16 @@ def test_report_cli_stops_before_analysis_when_integration_readiness_is_blocked(
     manifest_path = tmp_path / "manifest.json"
     records_path = tmp_path / "records.jsonl"
     output_dir = tmp_path / "report"
-    manifest_path.write_text(
-        json.dumps(build_mean_matched_harness_manifest(_manifest_config())), encoding="utf-8"
-    )
-    records_path.write_text(
-        json.dumps(
-            {
-                "scenario_id": "classic_density_002",
-                "planner": "goal",
-                "seed": 101,
-                "population_arm": "heterogeneous",
-            }
-        )
-        + "\n",
-        encoding="utf-8",
+    write_json(manifest_path, build_mean_matched_harness_manifest(_manifest_config()))
+    write_json(
+        records_path,
+        {
+            "scenario_id": "classic_density_002",
+            "planner": "goal",
+            "seed": 101,
+            "population_arm": "heterogeneous",
+        },
+        indent=None,
     )
     command = [
         sys.executable,
@@ -823,8 +820,11 @@ def test_matrix_harness_rejects_malformed_raw_entries_before_loader_can_skip_the
     config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
     map_file = str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve())
     matrix_path = tmp_path / "matrix.yaml"
-    matrix_path.write_text(
-        yaml.safe_dump(
+    write_text(
+        matrix_path,
+        review_marker_comment()
+        + "\n"
+        + yaml.safe_dump(
             {
                 "scenarios": [
                     None,
@@ -836,7 +836,6 @@ def test_matrix_harness_rejects_malformed_raw_entries_before_loader_can_skip_the
                 ]
             }
         ),
-        encoding="utf-8",
     )
     config["scenario_matrix"] = str(matrix_path)
 
@@ -867,10 +866,7 @@ def test_matrix_harness_rejects_missing_cell_inputs(
         cell.pop("map_file")
     else:
         cell["simulation_config"].pop("ped_density")
-    matrix_path.write_text(
-        yaml.safe_dump({"scenarios": [cell]}),
-        encoding="utf-8",
-    )
+    write_text(matrix_path, review_marker_comment() + "\n" + yaml.safe_dump({"scenarios": [cell]}))
     config["scenario_matrix"] = str(matrix_path)
 
     with pytest.raises(ValueError, match=error_match):
@@ -896,7 +892,7 @@ def test_matrix_harness_rejects_ambiguous_or_invalid_cells(
 
     config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
     matrix_path = tmp_path / "matrix.yaml"
-    matrix_path.write_text("scenarios: []\n", encoding="utf-8")
+    write_text(matrix_path, review_marker_comment() + "\n" + "scenarios: []\n")
     map_file = str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve())
     cell = {
         "name": "matrix_cell",
@@ -965,7 +961,7 @@ def _run_single_cell_records(tmp_path: Path) -> tuple[dict[str, object], list[di
 
     manifest = build_mean_matched_harness_manifest(_single_cell_manifest_config())
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_json(manifest_path, manifest)
     manifest_rows = manifest["manifest_rows"]
     assert isinstance(manifest_rows, list)
 
@@ -991,7 +987,7 @@ def test_matrix_harness_runs_each_geometry_end_to_end(tmp_path: Path) -> None:
         config_path=str(_MATRIX_HARNESS_CONFIG_PATH),
     )
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_json(manifest_path, manifest)
     rows = manifest["manifest_rows"]
     assert isinstance(rows, list)
 
@@ -1022,8 +1018,11 @@ def test_matrix_harness_aligns_trace_labels_to_each_density_population(tmp_path:
     """
 
     matrix_path = tmp_path / "two_density_matrix.yaml"
-    matrix_path.write_text(
-        yaml.safe_dump(
+    write_text(
+        matrix_path,
+        review_marker_comment()
+        + "\n"
+        + yaml.safe_dump(
             {
                 "scenarios": [
                     {
@@ -1039,14 +1038,13 @@ def test_matrix_harness_aligns_trace_labels_to_each_density_population(tmp_path:
                 ]
             }
         ),
-        encoding="utf-8",
     )
     config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
     config["scenario_matrix"] = str(matrix_path)
     config["scenario_matrix_derivation"]["population_size"] = 12
     manifest = build_mean_matched_harness_manifest(config, config_path=str(matrix_path))
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_json(manifest_path, manifest)
 
     records = [
         run_manifest_row(row, scenario_path=manifest_path, horizon=3)
@@ -1118,7 +1116,7 @@ def test_small_map_low_density_forces_declared_population_and_realizes_mix(
     }
     manifest = build_mean_matched_harness_manifest(config)
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_json(manifest_path, manifest)
 
     heterogeneous_rows = [
         row for row in manifest["manifest_rows"] if row["population_arm"] == "heterogeneous"
@@ -1149,8 +1147,18 @@ def test_small_map_low_density_forces_declared_population_and_realizes_mix(
         # Declared-vs-actual recorded for triage (issue #5666 #3).
         sim_cfg = record["scenario_params"]["simulation_config"]
         assert sim_cfg["population_size"] == 12
-        assert sim_cfg["declared_population_size"] == 12
-        assert sim_cfg["instantiated_population_size"] == 12
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "declared_population_size"
+            ]
+            == 12
+        )
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "instantiated_population_size"
+            ]
+            == 12
+        )
 
         labels = record["scenario_params"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
         assert len(labels) == 12
@@ -1188,8 +1196,18 @@ def test_harness_emits_control_trace_that_clears_readiness_gate(tmp_path: Path) 
         assert trace["near_field_clearance_threshold_m"] == pytest.approx(1.0)
         assert trace["pedestrians"], "trace must carry per-pedestrian rows"
         sim_cfg = record["scenario_params"]["simulation_config"]
-        assert sim_cfg["declared_population_size"] == 6
-        assert sim_cfg["instantiated_population_size"] == 6
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "declared_population_size"
+            ]
+            == 6
+        )
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "instantiated_population_size"
+            ]
+            == 6
+        )
         assert sim_cfg["population_size"] == 6
         for pedestrian in trace["pedestrians"]:
             assert pedestrian["steps"], "each pedestrian must carry per-step rows"

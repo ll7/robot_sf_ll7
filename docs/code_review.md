@@ -19,6 +19,25 @@ Check these in order:
 
 Reject changes that only add code or docs without task-appropriate proof.
 
+## Exact-head Review and Base Freshness
+
+Review evidence remains valid for the same PR head and unchanged final PR
+metadata. A later movement of `main` alone does not invalidate that review or
+require another review cycle. Check base freshness separately from exact-head
+review validity: base-sensitive validation must pass on the current base, and a
+rebase that changes the PR head requires review of the new head. Ordinary PRs
+may use the existing exact-head ordinary-CAS proof and immediate guarded CAS;
+missing base or current-main provenance still fails closed.
+
+Bound one base refresh to each merge attempt. If a base-sensitive PR is still
+stale after that refresh, report `stale_base_churn` with the PR base SHA,
+current `main` SHA, and refresh count, then stop the attempt. Do not cycle
+through another refresh and review in the same attempt. This stop rule does not
+change merge preflight, branch protection, or required checks. Keep the count
+in the active review ledger and pass it to later `pr_loop_policy.py`
+evaluations until that merge attempt ends; missing or unavailable provenance
+continues to fail closed as `stale_merge_base`.
+
 ## Post-Merge Review-Thread Sweep
 
 Merge does not mean "all review findings adjudicated." Inline review threads left unresolved

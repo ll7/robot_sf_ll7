@@ -39,6 +39,12 @@ Environment variables:
   PR_READY_TERMINATION_RECEIPT
                       Optional absolute or worktree-relative path for the bounded
                       receipt written when readiness receives a termination signal.
+  PR_READY_LANE_RECEIPT_DIR
+                      Optional absolute or worktree-relative directory for per-lane
+                      terminal records (default: output/validation/pr_ready).
+  PR_READY_HEARTBEAT_INTERVAL_SECONDS
+                      Heartbeat interval while a readiness lane runs (default 60,
+                      bounded to 1..300 seconds).
 EOF
 }
 
@@ -61,6 +67,13 @@ export PR_READY_MODE="${PR_READY_MODE:-}"
 export PR_READY_SKIP_PREFLIGHT="${PR_READY_SKIP_PREFLIGHT:-0}"
 export PR_READY_PR_BODY_FILE="${PR_READY_PR_BODY_FILE:-}"
 export PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES="${PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES:-1}"
+pr_ready_heartbeat_interval="${PR_READY_HEARTBEAT_INTERVAL_SECONDS:-60}"
+if [[ ! "$pr_ready_heartbeat_interval" =~ ^[0-9]+$ ]] ||
+  (( pr_ready_heartbeat_interval < 1 )); then
+  pr_ready_heartbeat_interval=60
+elif (( pr_ready_heartbeat_interval > 300 )); then
+  pr_ready_heartbeat_interval=300
+fi
 
 pr_ready_phase="startup"
 pr_ready_active_lane="none"
@@ -74,9 +87,16 @@ pr_ready_child_pgid=""
 pr_ready_child_registration_state="not_started"
 pr_ready_child_launch_started=0
 pr_ready_previous_async_pid=""
+pr_ready_heartbeat_pid=""
+pr_ready_lane_started=0
+pr_ready_lane_start_at_utc=""
+pr_ready_lane_start_seconds=0
+pr_ready_lane_source_sha=""
+pr_ready_child_wait_status=""
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_evidence_scope_file=""
+pr_ready_docs_scope_file=""
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
 if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
@@ -84,6 +104,10 @@ if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_receipt+="pr_ready_termination_${pr_ready_termination_stamp}_$$.json"
 elif [[ "$pr_ready_termination_receipt" != /* ]]; then
   pr_ready_termination_receipt="$REPO_ROOT/$pr_ready_termination_receipt"
+fi
+pr_ready_lane_receipt_dir="${PR_READY_LANE_RECEIPT_DIR:-${REPO_ROOT}/output/validation/pr_ready}"
+if [[ "$pr_ready_lane_receipt_dir" != /* ]]; then
+  pr_ready_lane_receipt_dir="$REPO_ROOT/$pr_ready_lane_receipt_dir"
 fi
 
 mark_pr_ready_progress() {
@@ -203,6 +227,14 @@ pr_ready_finalize_group_cleanup() {
   fi
 }
 
+stop_pr_ready_heartbeat_timer() {
+  local timer_pid="$pr_ready_heartbeat_pid"
+  [[ -n "$timer_pid" ]] || return 0
+  kill -TERM "$timer_pid" 2>/dev/null || true
+  wait "$timer_pid" 2>/dev/null || true
+  pr_ready_heartbeat_pid=""
+}
+
 terminate_pr_ready_child() {
   local child_pid="$pr_ready_child_pid"
   local child_pgid="$pr_ready_child_pgid"
@@ -246,8 +278,44 @@ terminate_pr_ready_child() {
   fi
   # Do not turn a failed cleanup into an unbounded signal-path wait.
   if [[ "$pr_ready_cleanup_status" != *"unverified"* ]]; then
-    wait "$child_pid" 2>/dev/null || true
+    if wait "$child_pid" 2>/dev/null; then
+      pr_ready_child_wait_status=0
+    else
+      pr_ready_child_wait_status=$?
+    fi
   fi
+}
+
+write_pr_ready_lane_terminal_receipt() {
+  local exit_status="$1"
+  local supervisor_signal_number="${2:-}"
+  local recorded_at receipt_path receipt_output
+  recorded_at="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
+  receipt_path="${pr_ready_lane_receipt_dir}/pr_ready_lane_${recorded_at}_$$_${pr_ready_active_lane}.json"
+  local -a receipt_args=(
+    --lane-terminal
+    --output "$receipt_path"
+    --lane "$pr_ready_active_lane"
+    --repo-root "$REPO_ROOT"
+    --source-sha "$pr_ready_lane_source_sha"
+    --started-at-utc "$pr_ready_lane_start_at_utc"
+    --elapsed-seconds "$((SECONDS - pr_ready_lane_start_seconds))"
+    --exit-status "$exit_status"
+    --controller-pid "$$"
+    --child-pid "$pr_ready_child_pid"
+    --child-pgid "$pr_ready_child_pgid"
+  )
+  if [[ -n "$supervisor_signal_number" ]]; then
+    receipt_args+=(--supervisor-signal-number "$supervisor_signal_number")
+  fi
+  if receipt_output="$(python3 "$SCRIPT_DIR/pr_ready_termination.py" "${receipt_args[@]}" 2>&1)"; then
+    printf 'PR readiness lane %s terminal record: %s\n' "$pr_ready_active_lane" "$receipt_output" >&2
+  else
+    printf 'PR readiness lane %s could not write its terminal record at %s.\n' \
+      "$pr_ready_active_lane" "$receipt_path" >&2
+    [[ -z "$receipt_output" ]] || printf '%s\n' "$receipt_output" >&2
+  fi
+  return 0
 }
 
 handle_pr_ready_signal() {
@@ -270,7 +338,12 @@ handle_pr_ready_signal() {
   pr_ready_termination_handled=1
   pr_ready_pending_signal_name=""
   pr_ready_pending_signal_number=""
+  stop_pr_ready_heartbeat_timer
   terminate_pr_ready_child
+  if [[ "$pr_ready_lane_started" -eq 1 ]]; then
+    write_pr_ready_lane_terminal_receipt "$pr_ready_child_wait_status" "$signal_number"
+    pr_ready_lane_started=0
+  fi
   local receipt_output=""
   if receipt_output="$(python3 "$SCRIPT_DIR/pr_ready_termination.py" \
     --output "$pr_ready_termination_receipt" \
@@ -326,6 +399,9 @@ pr_ready_exit_without_coverage() {
   fi
   if [[ -n "$pr_ready_evidence_scope_file" ]]; then
     rm -f -- "$pr_ready_evidence_scope_file" || true
+  fi
+  if [[ -n "$pr_ready_docs_scope_file" ]]; then
+    rm -f -- "$pr_ready_docs_scope_file" || true
   fi
   release_pr_ready_lock || true
   return "$exit_code"
@@ -391,35 +467,55 @@ PY
 run_pr_ready_lane() {
   local lane="$1"
   shift
+  pr_ready_lane_started=1
+  pr_ready_lane_start_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+  pr_ready_lane_start_seconds=$SECONDS
+  pr_ready_lane_source_sha="$(git rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)"
+  if [[ ! "$pr_ready_lane_source_sha" =~ ^[0-9a-fA-F]{40}$ &&
+    ! "$pr_ready_lane_source_sha" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    pr_ready_lane_source_sha=""
+  fi
+  pr_ready_child_wait_status=""
   mark_pr_ready_progress "${lane}_lane" "$lane" "starting ${lane} readiness lane"
   start_pr_ready_child "$@"
   mark_pr_ready_progress "${lane}_lane" "$lane" "${lane} readiness lane running"
   local lane_status=0
-  if wait "$pr_ready_child_pid"; then
+  if [[ -n "$pr_ready_pending_signal_number" ]]; then
+    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
+  fi
+  local next_heartbeat_seconds="$pr_ready_heartbeat_interval"
+  while pr_ready_process_alive "$pr_ready_child_pid"; do
+    sleep 1 &
+    pr_ready_heartbeat_pid=$!
+    wait "$pr_ready_heartbeat_pid" 2>/dev/null || true
+    pr_ready_heartbeat_pid=""
+    local elapsed_seconds=$((SECONDS - pr_ready_lane_start_seconds))
+    if (( elapsed_seconds >= next_heartbeat_seconds )); then
+      local heartbeat_at_utc
+      heartbeat_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+      printf '[pr_ready] heartbeat utc=%s lane=%s elapsed_seconds=%d\n' \
+        "$heartbeat_at_utc" "$lane" "$elapsed_seconds" >&2
+      next_heartbeat_seconds=$((elapsed_seconds + pr_ready_heartbeat_interval))
+    fi
+  done
+  if wait "$pr_ready_child_pid" 2>/dev/null; then
     lane_status=0
   else
     lane_status=$?
   fi
-  if [[ -z "$pr_ready_pending_signal_number" ]]; then
-    case "$lane_status" in
-      129) pr_ready_pending_signal_name="SIGHUP"; pr_ready_pending_signal_number=1 ;;
-      130) pr_ready_pending_signal_name="SIGINT"; pr_ready_pending_signal_number=2 ;;
-      131) pr_ready_pending_signal_name="SIGQUIT"; pr_ready_pending_signal_number=3 ;;
-      143) pr_ready_pending_signal_name="SIGTERM"; pr_ready_pending_signal_number=15 ;;
-    esac
-  fi
-  if [[ -n "$pr_ready_pending_signal_number" ]]; then
-    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
-  fi
+  pr_ready_child_wait_status="$lane_status"
   if [[ "$pr_ready_termination_handled" -eq 0 ]]; then
     pr_ready_last_progress="${lane} readiness lane exited with status ${lane_status}"
     pr_ready_last_progress_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+    write_pr_ready_lane_terminal_receipt "$lane_status"
+    pr_ready_lane_started=0
   fi
   pr_ready_child_pid=""
   pr_ready_child_pgid=""
   pr_ready_child_registration_state="not_started"
   pr_ready_child_launch_started=0
   pr_ready_previous_async_pid=""
+  pr_ready_child_wait_status=""
   return "$lane_status"
 }
 
@@ -588,6 +684,43 @@ preflight_check_evidence_registry() {
   run_pr_ready_lane evidence_registry uv run python "$SCRIPT_DIR/evidence_registry_ratchet.py" \
     --check --candidate-head "$candidate_head" --frozen-base "$frozen_base" \
     --report-output output/evidence/ratchet-report.json
+}
+
+preflight_check_docs_evidence_integrity() {
+  [[ "$pr_ready_final" == "1" ]] || return 0
+  mark_pr_ready_progress "docs_evidence_scope" "none" "resolving docs-evidence integrity inputs"
+  local changed_path relevant=0 scope_status=0
+  pr_ready_docs_scope_file="$(mktemp "${TMPDIR:-/tmp}/pr-ready-docs-evidence-scope.XXXXXX")"
+  # NUL framing preserves whitespace and embedded newlines. Disabling rename
+  # detection exposes both paths so moves into or out of a filtered tree trigger
+  # the same checker as the hosted pull_request.paths filters.
+  if git diff --name-only --no-renames -z "$BASE_REF...HEAD" > "$pr_ready_docs_scope_file"; then
+    while IFS= read -r -d '' changed_path; do
+      case "$changed_path" in
+        *.md|*.markdown|docs/*|*.json|*.yaml|*.yml|\
+        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md)
+          relevant=1 ;;
+      esac
+    done < "$pr_ready_docs_scope_file"
+  else
+    scope_status=$?
+  fi
+  rm -f -- "$pr_ready_docs_scope_file"
+  pr_ready_docs_scope_file=""
+  if [[ "$scope_status" -ne 0 ]]; then
+    printf 'Cannot resolve final docs-evidence integrity input scope; refusing to start test lanes.\n' >&2
+    return "$scope_status"
+  fi
+  [[ "$relevant" == "1" ]] || return 0
+
+  if [[ ! -f "$SCRIPT_DIR/check_docs_evidence_integrity.py" ]]; then
+    printf 'Required docs-evidence integrity checker is missing: %s\n' \
+      "$SCRIPT_DIR/check_docs_evidence_integrity.py" >&2
+    return 2
+  fi
+  printf 'Checking docs-evidence integrity before formatting and test lanes.\n' >&2
+  run_pr_ready_lane docs_evidence_integrity uv run python \
+    "$SCRIPT_DIR/check_docs_evidence_integrity.py" --base-ref "$BASE_REF"
 }
 
 is_optional_readiness_path() {
@@ -814,6 +947,7 @@ fi
 mark_pr_ready_progress "base_resolution" "none" "resolving readiness base reference"
 resolve_base_ref
 preflight_check_evidence_registry
+preflight_check_docs_evidence_integrity
 
 if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
   dirty_paths=()
@@ -1140,6 +1274,8 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
     printf 'Extended readiness lane not required: no robot_sf/, configs/, maps/ or uncovered-root change.\n' >&2
   fi
   mark_pr_ready_progress "lane_coverage_summary" "none" "reporting readiness lane coverage"
+  lane_coverage_dir="${REPO_ROOT}/output/validation/pr_ready"
+  mkdir -p "$lane_coverage_dir"
   {
     printf 'Readiness lane coverage summary (issue #9754)\n'
     printf '  core lane:      ran\n'
@@ -1158,7 +1294,7 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
       printf '  NOT COVERED by this readiness run: %s\n' "${pr_ready_uncovered_test_roots[*]}"
       printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
     fi
-  } | tee -a "${REPO_ROOT}/output/validation/pr_ready/lane_coverage.txt" >&2
+  } | tee -a "$lane_coverage_dir/lane_coverage.txt" >&2
 fi
 mark_pr_ready_progress "post_lane_checks" "none" "running post-lane readiness checks"
 "$SCRIPT_DIR/check_changed_coverage.sh"

@@ -22,6 +22,7 @@ maintained entry point; run `uv run python scripts/dev/<script>.py --help`
 | Restore files without losing uncommitted work | `safe_checkout.sh` |
 | Reuse the main checkout environment in a worktree | `run_worktree_shared_venv.sh` |
 | Check worktree disk capacity or reclaim space | `check_worktree_capacity.py` |
+| Report or reclaim stale `/tmp` validation copies | `temp_copy_doctor.py`, `task_temp_registry.py` |
 | Diagnose a worktree or stale CI state | `worktree_hygiene_snapshot.py`, `recover_stale_ci_run.py`, `diagnose_actions_job.py` |
 | Check CI status for a PR | `check_pr_ci_status.py`, `watch_pr_ci_status.py`, `compact_ci_snapshot.py` |
 | Post a Markdown-heavy GitHub comment or review | `gh_comment.sh`, `gh_pr_review_rest.py` |
@@ -176,12 +177,12 @@ helpers (issue #7666):
   uv run python scripts/dev/model_cache_key.py --config <ppo-config.yaml> --machine
   ```
 
-- [`merge_test_durations.py`](merge_test_durations.py) validates and merges the four
+- [`merge_test_durations.py`](merge_test_durations.py) validates and merges the six
   pytest-split duration shard stores:
 
   ```bash
   uv run python scripts/dev/merge_test_durations.py \
-    --artifact-dir .duration-artifacts --output .test_durations
+    --artifact-dir .duration-artifacts --output .test_durations --shard-count 6
   ```
 
 - [`check_ci_needs.py`](check_ci_needs.py) evaluates the aggregate job's required

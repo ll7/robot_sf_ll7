@@ -27,6 +27,8 @@ has its own index so you never fall straight into issue-specific context notes.
   scenario certification, release protocol, provenance discipline.
 - 🧭 **[Feasibility-First Scenario Search](./feasibility_first_scenario_search.md)** — fixture-only
   rejection accounting and deterministic risk-feature ordering for adversarial research.
+- 🧪 **[Adversarial replay gallery](./adversarial_replay_gallery.md)** — materialize, replay-check,
+  and visualize a bounded set of attributed falsification cases.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
 - 📝 **[Scenario review contracts](./scenario_review/README.md)** — versioned review bundles,
@@ -134,6 +136,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 ## 📚 Documentation Index
 
 ### Getting Started
+
+* **[Bicycle Planner Adaptation](./validation/bicycle_planner.md)** - Opt-in T60 disc configs, physical adapter contract, and dev-seed diagnostic probe
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
 * **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
@@ -425,6 +429,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Compute-Window Schema/Reader Inventory](./compute_window_schema_reader_inventory.md)** - Preserve exact output schemas, readers, compatibility metadata, validation commands, and fixture-readability status
 
 ### Architecture & Refactoring
+
+* **[Limited reverse driving](./design/limited_reverse.md)** — Opt-in plant identity, speed caps, planner support, and development comparison scope.
 
 * **[Refactoring Overview](./refactoring/)** - Complete guide to the refactored environment architecture (deployment status, plan, migration guide, summary, automated codebase analysis)
 * **[Subtree Migration Guide](./SUBTREE_MIGRATION.md)** - Git subtree integration for fast-pysf (migration from submodule)

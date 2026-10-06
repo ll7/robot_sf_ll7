@@ -81,8 +81,8 @@ QUEUE_POLICY_FIXED = "fixed"
 QUEUE_POLICY_ACTIVE = "active"
 SCAN_IDENTITY_PRODUCER = "ba01-audit-scan"
 _SCAN_IDENTITY_ADMISSION = object()
-DEFAULT_POLICY_VERSION = "audit-queue.active.v1"
-FIXED_POLICY_VERSION = "audit-queue.fixed.v1"
+DEFAULT_POLICY_VERSION = "audit-queue.active.v1.1"
+FIXED_POLICY_VERSION = "audit-queue.fixed.v1.1"
 
 PRIORITY_BENCHMARK_CONFIG = "benchmark_config_defect"
 PRIORITY_RELEASE_MANUSCRIPT = "release_manuscript_impact"
@@ -124,9 +124,9 @@ CONTROL_STATUSES = frozenset(
 CONTROL_OUTCOMES = frozenset(
     {"success", "failure", "failed", "pass", "fail", "collision", "timeout"}
 )
-_MAX_INPUT_BYTES = 8 * 1024 * 1024
+_MAX_INPUT_BYTES = 2 * 1024**3  # Full retained scan inventory plus detector records.
 _MAX_JSON_DEPTH = 40
-_MAX_JSON_NODES = 100_000
+_MAX_JSON_NODES = 50_000_000
 _MAX_STRING_BYTES = 512 * 1024
 
 FIXED_WEIGHTS: dict[str, float] = {
@@ -1930,6 +1930,7 @@ def _coerce_priority_band(value: Any) -> str | None:
     normalized = value.strip().lower().replace("/", "_").replace("-", "_").replace(" ", "_")
     aliases = {
         "benchmark_defect": PRIORITY_BENCHMARK_CONFIG,
+        "common_mode_failure": PRIORITY_BENCHMARK_CONFIG,
         "configuration_defect": PRIORITY_BENCHMARK_CONFIG,
         "benchmark_configuration_defect": PRIORITY_BENCHMARK_CONFIG,
         "benchmark_config": PRIORITY_BENCHMARK_CONFIG,
@@ -2822,7 +2823,7 @@ class AuditQueue:
             self._load_state_from_disk()
         elif self._pending_path is not None and self._pending_path.exists():
             self._recover_pending_without_state()
-            self._ensure_candidate_first_seen()
+            self._ensure_candidate_first_seen(default_index=0)
         else:
             self._ensure_candidate_first_seen()
 
@@ -2895,26 +2896,30 @@ class AuditQueue:
                     return episode_id
         return packet_id
 
+    def _load_state_from_disk_locked(self) -> QueueState:
+        if self.state_path is None:
+            raise QueueStateError("queue state path is unavailable")
+        if self.state_path.is_symlink():
+            raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
+        try:
+            payload = _read_json(self.state_path)
+            state = QueueState.from_mapping(payload)
+            if state.rng_state:
+                self._rng.setstate(_decode_rng(state.rng_state))
+        except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"cannot resume queue state {self.state_path}: {exc}") from exc
+        self.state = state
+        self._reconcile_pending_locked(state.state_revision)
+        self._persisted_revision = state.state_revision
+        self._stale_inputs = self._compare_input_identity(state)
+        return state
+
     def _load_state_from_disk(self) -> None:
         if self.state_path is None:
             raise QueueStateError("queue state path is unavailable")
         with _state_lock(self.state_path):
-            if self.state_path.is_symlink():
-                raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
-            try:
-                payload = _read_json(self.state_path)
-                state = QueueState.from_mapping(payload)
-                if state.rng_state:
-                    self._rng.setstate(_decode_rng(state.rng_state))
-            except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
-                raise QueueStateError(
-                    f"cannot resume queue state {self.state_path}: {exc}"
-                ) from exc
-            self.state = state
-            self._reconcile_pending_locked(state.state_revision)
+            self._load_state_from_disk_locked()
         self._ensure_candidate_first_seen(default_index=0)
-        self._persisted_revision = state.state_revision
-        self._stale_inputs = self._compare_input_identity(state)
 
     def _ensure_candidate_first_seen(self, *, default_index: int | None = None) -> None:
         first_seen = dict(self.state.candidate_first_seen)
@@ -3228,8 +3233,37 @@ class AuditQueue:
                 pair[0].episode_id,
             )
         )
+        # The review head covers cells before repeating planner views of a
+        # shared failure. Retain every episode after the representative window.
+        representatives = []
+        remaining = []
+        seen_cells = set()
+        for item, explanation in ranked:
+            seed = item.episode.seed
+            cell = (
+                (item.episode.campaign_digest, item.scenario_id, seed)
+                if seed is not None
+                else (item.episode_id,)
+            )
+            if len(representatives) < 100 and cell not in seen_cells:
+                seen_cells.add(cell)
+                representatives.append(
+                    (
+                        item,
+                        replace(
+                            explanation,
+                            reasons=(
+                                *explanation.reasons,
+                                "cell representative in diverse top-100 review window",
+                            ),
+                        ),
+                    )
+                )
+            else:
+                remaining.append((item, explanation))
         return [
-            RankedCandidate(candidate=item, explanation=explanation) for item, explanation in ranked
+            RankedCandidate(candidate=item, explanation=explanation)
+            for item, explanation in (*representatives, *remaining)
         ]
 
     rank = rank_candidates
@@ -4132,6 +4166,11 @@ class AuditQueue:
         if self.state_path is None or self._pending_path is None:
             raise QueueStateError("queue state or pending mutation path is unavailable")
         with _state_lock(self.state_path):
+            if self.state_path.exists():
+                self._load_state_from_disk_locked()
+                return
+            if not self._pending_path.exists():
+                return
             if self._pending_path.is_symlink():
                 raise QueueStateError(
                     f"queue pending mutation path must not be a symlink: {self._pending_path}"

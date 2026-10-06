@@ -1,5 +1,8 @@
 # Context Notes Workflow
 
+* [Issue #9668 Explicit Scenario Budgets](issue_9668_campaign_horizon_authority.md):
+  recorded 0.0.7 budget exposure, real 0.0.8 limits, and the fixed/scheduled contract.
+
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable
 agent handoff, and reusable reasoning that should not be trapped in chat or PR text.
 
@@ -1303,6 +1306,11 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 
 ## Benchmark Run Notes
 
+* [Issue #9656 historical benchmark hard-case mining](issue_9656_hard_case_mining.md)
+  records the checksum-verified Release 0.0.2 source slice, one-row scenario/config inputs, and
+  bounded replay comparisons. It is diagnostic-only; source collision-event/count contradictions,
+  per-metric replay differences, and refreshed unavailable-execution-evidence classifications are
+  preserved, while rendering and #9652 corpus admission remain downstream responsibilities.
 * [Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration](issue_6095_s10_discriminability_calibration.md)
   records the fail-closed, portable preflight for the frozen two-planner S10 (ten-seed) campaign. It is a
   configuration/provenance packet only; full SLURM execution remains required before any benchmark
@@ -1901,3 +1909,5 @@ why a change was made rather than a full issue execution transcript.
   records the assessment-only boundary for an Actor-Critic Model Predictive Control inspired
   learned-MPC local planner, including adapter burden, benchmark claim limits, and a conditional
   design-child recommendation.
+
+The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).

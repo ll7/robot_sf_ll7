@@ -45,6 +45,7 @@ def _write_minimal_baseline(path: Path) -> None:
         path: Output filesystem destination for the baseline JSON.
     """
     baseline = {
+        "_metadata": {"metric_schema_version": "robot-sf-metrics.v2"},
         "collisions": {"med": 0.0, "p95": 1.0},
         "near_misses": {"med": 0.0, "p95": 1.0},
         "force_exceed_events": {"med": 0.0, "p95": 1.0},

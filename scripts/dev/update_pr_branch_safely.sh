@@ -33,8 +33,7 @@
 #     --remote <name>           remote to fetch/push (default: origin)
 #     --no-local-fallback       fail instead of falling back to local rebase/push
 #     --dry-run                 verify and print the plan without mutating
-#     --gate-worktree-path      registered gate worktree path; a vanished worktree
-#                               fails closed before any branch-switch/conflict op
+#     --gate-worktree-path <p>  worktree to preflight; must match the current worktree
 #     --json                    emit machine-readable JSON (default behavior)
 #     -h, --help                print this help and exit 0
 set -euo pipefail
@@ -81,8 +80,7 @@ Options:
     --remote <name>           remote to fetch/push (default: origin)
     --no-local-fallback       fail instead of falling back to local rebase/push
     --dry-run                 verify and print the plan without mutating
-    --gate-worktree-path <p>  registered gate worktree path; a vanished worktree
-                              fails closed before any branch-switch/conflict op
+    --gate-worktree-path <p>  worktree to preflight; must match the current worktree
     --json                    emit machine-readable JSON (default behavior)
     -h, --help                print this help and exit 0
 HELP
@@ -165,31 +163,54 @@ PR="${PR:-$POS_PR}"
 }
 
 emit_result() {
-  # $1 status, $2 updated(bool), $3 error(string), $4 method(string)
+  # $1 status, $2 updated(bool), $3 error(string), $4 method(string),
+  # $5 structured recovery packet JSON (optional).
   local status="$1" updated="$2" error="${3:-}" method="${4:-}"
-  python3 - "$status" "$PR" "$REPO" "$EXPECTED" "$LIVE_HEAD" "$BASE_REF" "$REMOTE" "$method" "$updated" "$error" "$SOURCE_REF_RESTORED" <<'PY'
+  local recovery_packet="${5:-}"
+  python3 - "$status" "$PR" "$REPO" "$EXPECTED" "$LIVE_HEAD" "$BASE_REF" "$REMOTE" "$method" "$updated" "$error" "$SOURCE_REF_RESTORED" "$recovery_packet" <<'PY'
 import json
 import sys
 
-status, pr, repo, expected, live, base, remote, method, updated, error, restored = sys.argv[1:]
-print(
-    json.dumps(
-        {
-            "status": status,
-            "pr": pr,
-            "repo": repo,
-            "expected_head_sha": expected,
-            "live_head_sha": live,
-            "base": base,
-            "remote": remote,
-            "method": method,
-            "updated": updated == "true",
-            "source_ref_restored": restored == "1",
-            "error": error or None,
-        },
-        separators=(",", ":"),
-    )
-)
+status, pr, repo, expected, live, base, remote, method, updated, error, restored, recovery = sys.argv[1:]
+payload = {
+    "status": status,
+    "pr": pr,
+    "repo": repo,
+    "expected_head_sha": expected,
+    "live_head_sha": live,
+    "base": base,
+    "remote": remote,
+    "method": method,
+    "updated": updated == "true",
+    "source_ref_restored": restored == "1",
+    "error": error or None,
+}
+if recovery:
+    payload["recovery_packet"] = json.loads(recovery)
+print(json.dumps(payload, separators=(",", ":")))
+PY
+}
+
+unavailable_recovery_packet() {
+  local worktree_path="$1" reason="$2"
+  python3 - "$worktree_path" "$reason" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "worktree_path": sys.argv[1],
+    "index_lock_path": None,
+    "lock_exists": None,
+    "lock_mtime_utc": None,
+    "lock_age_seconds": None,
+    "lock_size_bytes": None,
+    "dirty_state": "unavailable",
+    "owner_classification": "unavailable",
+    "owner_pids": [],
+    "ownership_error": None,
+    "inspection_error": sys.argv[2],
+    "next_action": "preserve_lock_and_worktree_then_retry_preflight_when_inspection_is_available",
+}, separators=(",", ":")))
 PY
 }
 
@@ -335,66 +356,145 @@ if [[ $REST_RC -eq 0 ]]; then
   exit 0
 fi
 
-# --- gate worktree health check before any local branch-switch ----------------
-# The local fallback performs a git rebase and force-with-lease push inside the
-# registered gate worktree. If that worktree has vanished, fail closed and report
-# the lease cleanup owner rather than dying opaquely with
-# "CreateProcess ... No such file or directory" mid-rebase.
+# --- fallback to local lease-protected rebase/push ----------------------------
+if [[ "$LOCAL_FALLBACK" -eq 0 ]]; then
+  emit_result "error" "false" "gh update-branch unavailable and --no-local-fallback set (${REST_STDERR})" "gh_rest_update_branch"
+  exit 2
+fi
+
+# Resolve and preflight the worktree whose index the local fallback will use.
+# A caller-supplied gate path retains its existence check; without one, resolve
+# the invoking worktree so the preflight cannot be skipped accidentally.
+if [[ ! -f "$GUARD_HELPER" ]]; then
+  PREFLIGHT_RECOVERY="$(unavailable_recovery_packet "${GATE_WORKTREE_PATH:-}" "gate worktree guard helper is missing")"
+  emit_result "error" "false" \
+    "gate worktree guard helper is missing; refusing unguarded local fallback" \
+    "local_fallback" "$PREFLIGHT_RECOVERY"
+  exit 2
+fi
 if [[ -n "$GATE_WORKTREE_PATH" ]]; then
-  if [[ ! -f "$GUARD_HELPER" ]]; then
-    emit_result "error" "false" "gate worktree guard helper is missing; refusing unguarded local fallback" "local_fallback"
+  PREFLIGHT_PATH="$GATE_WORKTREE_PATH"
+else
+  PREFLIGHT_PATH="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$PREFLIGHT_PATH" ]]; then
+    PREFLIGHT_RECOVERY="$(unavailable_recovery_packet "" "could not resolve the current Git worktree")"
+    emit_result "index_lock_preflight_unavailable" "false" \
+      "could not resolve the current Git worktree before local fallback" "local_fallback" "$PREFLIGHT_RECOVERY"
     exit 2
   fi
-  set +e
-  GUARD_JSON="$(python3 "$GUARD_HELPER" verify --path "$GATE_WORKTREE_PATH" --json 2>/dev/null)"
-  GUARD_RC=$?
-  set -e
-  if [[ -z "$GUARD_JSON" ]]; then
-    emit_result "error" "false" "could not verify gate worktree before local fallback" "local_fallback"
-    exit 2
-  fi
-  set +e
-  GUARD_RESULT="$(python3 -c '
+fi
+
+set +e
+PREFLIGHT_JSON="$(python3 "$GUARD_HELPER" preflight --path "$PREFLIGHT_PATH" --json 2>/dev/null)"
+PREFLIGHT_RC=$?
+set -e
+if [[ -z "$PREFLIGHT_JSON" ]]; then
+  PREFLIGHT_RECOVERY="$(unavailable_recovery_packet "$PREFLIGHT_PATH" "gate worktree preflight returned no output")"
+  emit_result "error" "false" \
+    "could not inspect the worktree index lock before local fallback" "local_fallback" "$PREFLIGHT_RECOVERY"
+  exit 2
+fi
+
+set +e
+PREFLIGHT_STATUS="$(python3 -c '
 import json
 import sys
 
 try:
     payload = json.load(sys.stdin)
-    if not isinstance(payload, dict):
-        raise ValueError("guard output must be a JSON object")
-    if payload.get("exists"):
-        print("ok")
-    else:
-        print("missing:" + str(payload.get("cleanup_owner") or "unknown"))
+    if not isinstance(payload, dict) or payload.get("schema") != "gate_worktree_preflight.v1":
+        raise ValueError("unexpected preflight schema")
+    status = payload.get("status")
+    if status not in {"ready", "index_lock_present", "inspection_unavailable", "worktree_missing"}:
+        raise ValueError("unrecognized preflight status")
+    if status == "ready":
+        lock = payload.get("index_lock")
+        if not isinstance(lock, dict) or lock.get("lock_exists") is not False or lock.get("owner_classification") != "absent":
+            raise ValueError("ready status did not prove the index lock absent")
+    elif not isinstance(payload.get("recovery_packet"), dict):
+        raise ValueError("blocked preflight omitted its recovery packet")
+    print(status)
 except Exception:
-    print("error")
+    print("invalid")
     raise SystemExit(2)
-' <<<"$GUARD_JSON")"
-  PARSE_RC=$?
-  set -e
-  if [[ $PARSE_RC -ne 0 ]] || [[ "$GUARD_RESULT" == "error" ]]; then
-    emit_result "error" "false" "could not parse gate worktree guard output before local fallback" "local_fallback"
-    exit 2
+' <<<"$PREFLIGHT_JSON")"
+PARSE_RC=$?
+PREFLIGHT_RECOVERY="$(python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+    packet = payload.get("recovery_packet")
+    if isinstance(packet, dict):
+        print(json.dumps(packet, separators=(",", ":")))
+    else:
+        print("")
+except Exception:
+    print("")
+' <<<"$PREFLIGHT_JSON")"
+PREFLIGHT_ROOT="$(python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+    print(payload["index_lock"]["worktree_path"])
+except Exception:
+    print("")
+' <<<"$PREFLIGHT_JSON")"
+set -e
+
+if [[ $PARSE_RC -ne 0 || "$PREFLIGHT_STATUS" == "invalid" ]]; then
+  if [[ -z "$PREFLIGHT_RECOVERY" ]]; then
+    PREFLIGHT_RECOVERY="$(unavailable_recovery_packet "$PREFLIGHT_PATH" "guard output was malformed or incompatible")"
   fi
-  if [[ "$GUARD_RC" -ne 0 && "$GUARD_RESULT" == "ok" ]]; then
-    emit_result "error" "false" "gate worktree guard failed despite reporting an existing path" "local_fallback"
-    exit 2
-  fi
-  if [[ "$GUARD_RESULT" == missing:* ]]; then
-    CLEANUP_OWNER="${GUARD_RESULT#missing:}"
-    emit_result "gate_worktree_missing" "false" "registered gate worktree vanished before local branch-switch; cleanup owner: ${CLEANUP_OWNER}" "local_fallback"
-    exit 1
-  fi
-  if [[ "$GUARD_RESULT" != "ok" ]]; then
-    emit_result "error" "false" "gate worktree guard returned an unrecognized result" "local_fallback"
-    exit 2
-  fi
+  emit_result "error" "false" \
+    "could not parse gate worktree preflight; refusing local fallback" "local_fallback" "$PREFLIGHT_RECOVERY"
+  exit 2
 fi
 
-# --- fallback to local lease-protected rebase/push ----------------------------
-if [[ "$LOCAL_FALLBACK" -eq 0 ]]; then
-  emit_result "error" "false" "gh update-branch unavailable and --no-local-fallback set (${REST_STDERR})" "gh_rest_update_branch"
+if [[ "$PREFLIGHT_STATUS" == "index_lock_present" ]]; then
+  OWNER_CLASSIFICATION="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["recovery_packet"].get("owner_classification", "unavailable"))' <<<"$PREFLIGHT_JSON")"
+  emit_result "index_lock_present" "false" \
+    "local refresh blocked by an existing Git index.lock (owner classification: ${OWNER_CLASSIFICATION})" \
+    "local_fallback" "$PREFLIGHT_RECOVERY"
+  exit 1
+fi
+if [[ "$PREFLIGHT_STATUS" == "worktree_missing" ]]; then
+  CLEANUP_OWNER="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["worktree_health"].get("cleanup_owner") or "unknown")' <<<"$PREFLIGHT_JSON")"
+  emit_result "gate_worktree_missing" "false" \
+    "registered gate worktree vanished before local branch-switch; cleanup owner: ${CLEANUP_OWNER}" \
+    "local_fallback" "$PREFLIGHT_RECOVERY"
+  exit 1
+fi
+if [[ "$PREFLIGHT_STATUS" == "inspection_unavailable" || "$PREFLIGHT_RC" -ne 0 ]]; then
+  emit_result "index_lock_preflight_unavailable" "false" \
+    "worktree index-lock inspection was unavailable; refusing local fallback" \
+    "local_fallback" "$PREFLIGHT_RECOVERY"
   exit 2
+fi
+
+if [[ -n "$GATE_WORKTREE_PATH" ]]; then
+  CURRENT_WORKTREE_PATH="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$CURRENT_WORKTREE_PATH" || -z "$PREFLIGHT_ROOT" ]] || \
+     ! python3 - "$CURRENT_WORKTREE_PATH" "$PREFLIGHT_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+try:
+    raise SystemExit(0 if Path(sys.argv[1]).resolve() == Path(sys.argv[2]).resolve() else 1)
+except OSError:
+    raise SystemExit(1)
+PY
+  then
+    PREFLIGHT_RECOVERY="$(unavailable_recovery_packet "$CURRENT_WORKTREE_PATH" \
+      "supplied gate worktree does not resolve to the current local fallback worktree")"
+    emit_result "index_lock_preflight_unavailable" "false" \
+      "supplied gate worktree does not resolve to the current local fallback worktree" \
+      "local_fallback" "$PREFLIGHT_RECOVERY"
+    exit 2
+  fi
 fi
 
 echo "info: gh update-branch unavailable (rc=${REST_RC}); falling back to local rebase/push" >&2

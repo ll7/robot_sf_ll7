@@ -1,0 +1,1515 @@
+{
+  "all_inner_infeasible": true,
+  "archives": {
+    "base": {
+      "path": "/home/luttkule/admfix_evidence/inner_base.v2.jsonl.gz",
+      "sha256": "23d577ec15b227e2646d897dcede5fc375c89a4220214f43501b014d1d63a3ee"
+    },
+    "pr": {
+      "path": "/home/luttkule/admfix_evidence/inner_pr.v2.jsonl.gz",
+      "sha256": "4cac32d88b720665f83f90c5081504109a3216a63c8e2803dc879b386ac6a909"
+    }
+  },
+  "before_first_divergence_paired_commands": 4416,
+  "checkpoints": [
+    {
+      "base_command": [
+        1.9,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          20.01563835144043,
+          7.872544765472412
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 138,
+      "observation_sha256": "38a8371f680ab8ee68be9a94101482dc2601dbb150d78d02a3a0f3ef87fb513b",
+      "pr_command": [
+        1.9,
+        0.15463680252432824
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          20.01563835144043,
+          7.872544765472412
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_bottleneck_high",
+      "seed": 1004,
+      "step": 137
+    },
+    {
+      "base_command": [
+        1.799999976158142,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          20.01563835144043,
+          7.872544765472412
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 139,
+      "observation_sha256": "0d2f43991d75da61b621848d7e04dd94eec4ea658e8897d9253c4b8d6e04dc99",
+      "pr_command": [
+        1.799999976158142,
+        0.17236513495445252
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          20.01563835144043,
+          7.872544765472412
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_bottleneck_medium",
+      "seed": 1004,
+      "step": 138
+    },
+    {
+      "base_command": [
+        1.7778506517410277,
+        -0.9
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 4,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 4,
+        "planner_target_xy": [
+          10.6899995803833,
+          21.110000610351562
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 179,
+      "observation_sha256": "e4feb279cec5db379b89e124e734ad64cb6a572808898220f5b9f68fe913a17c",
+      "pr_command": [
+        1.7778506517410277,
+        -1.0
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 4,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 4,
+        "planner_target_xy": [
+          10.6899995803833,
+          21.110000610351562
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_cross_trap_high",
+      "seed": 1002,
+      "step": 178
+    },
+    {
+      "base_command": [
+        1.9,
+        -0.9
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          10.6899995803833,
+          21.110000610351562
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 72,
+      "observation_sha256": "d3ee0d7b579ad0b56ceb2b62d1dddc6c17a74cdff44ebdfe9f3911bb7152e1ba",
+      "pr_command": [
+        0.0,
+        0.0
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          10.6899995803833,
+          21.110000610351562
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_cross_trap_high",
+      "seed": 1004,
+      "step": 71
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 4,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 4,
+        "planner_target_xy": [
+          17.0,
+          12.149999618530273
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 23,
+      "observation_sha256": "abcc28e20c17d52ca86d200b2cd4512f3df30d97f0d12d3ceac6017017383f66",
+      "pr_command": [
+        1.5000000238418578,
+        -0.09999998211860586
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 4,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 4,
+        "planner_target_xy": [
+          17.0,
+          12.149999618530273
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_doorway_high",
+      "seed": 1001,
+      "step": 22
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 13,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 13,
+        "planner_target_xy": [
+          17.0,
+          12.149999618530273
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 36,
+      "observation_sha256": "f239e764a90f4ffd7dcefb71ba72fc4be7d2057f879f281cfbb67598af3c53d0",
+      "pr_command": [
+        0.700000011920929,
+        -0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 13,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 13,
+        "planner_target_xy": [
+          17.0,
+          12.149999618530273
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_doorway_medium",
+      "seed": 1003,
+      "step": 35
+    },
+    {
+      "base_command": [
+        0.3511096179485321,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 15,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 15,
+        "planner_target_xy": [
+          29.627777099609375,
+          20.214111328125
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 354,
+      "observation_sha256": "826b7b1852ec2ac42445632cab106b9e4dadeadc581b8d55bb5d8b9f3eff8a5d",
+      "pr_command": [
+        0.3511096179485321,
+        0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 15,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 15,
+        "planner_target_xy": [
+          29.627777099609375,
+          20.214111328125
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_group_crossing_medium",
+      "seed": 1001,
+      "step": 353
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          19.109220504760742,
+          35.04313659667969
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 83,
+      "observation_sha256": "d61206ecf51d5926832e67752b47c2766e2e6e8f2d1e7e252c036b4cd9a541e0",
+      "pr_command": [
+        1.9,
+        -0.9000000119209289
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          19.109220504760742,
+          35.04313659667969
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "step": 82
+    },
+    {
+      "base_command": [
+        1.9,
+        0.9
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          25.600000381469727,
+          10.800000190734863
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 392,
+      "observation_sha256": "01524bfdf030aa1ea6b3a51fc52d7979a2df30050404e624e9e2d0d76f5cd01c",
+      "pr_command": [
+        1.9,
+        1.0
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          25.600000381469727,
+          10.800000190734863
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_merging_low",
+      "seed": 1002,
+      "step": 391
+    },
+    {
+      "base_command": [
+        1.5202679872512816,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          18.0,
+          22.799999237060547
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 159,
+      "observation_sha256": "baf4e06960a5947949830c220d9f3ed130975a21bd8e0428af5f4786af158306",
+      "pr_command": [
+        1.5202679872512816,
+        -0.05850373432040215
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          18.0,
+          22.799999237060547
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_merging_medium",
+      "seed": 1003,
+      "step": 158
+    },
+    {
+      "base_command": [
+        1.9,
+        0.8999999403953552
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          17.0,
+          15.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 35,
+      "observation_sha256": "b169ea4273bf3c929245a1f807dd09a9d56733559868df2cfa45395c2363e112",
+      "pr_command": [
+        1.9,
+        1.0
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          17.0,
+          15.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "seed": 1002,
+      "step": 34
+    },
+    {
+      "base_command": [
+        0.30000009536743166,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 16,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 16,
+        "planner_target_xy": [
+          23.0,
+          15.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 113,
+      "observation_sha256": "7244d9b1737e0e2a95a1ccd12134556889985dc49e7fd26b6d67395372a549e6",
+      "pr_command": [
+        0.30000009536743166,
+        0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 16,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 16,
+        "planner_target_xy": [
+          23.0,
+          15.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "seed": 1004,
+      "step": 112
+    },
+    {
+      "base_command": [
+        1.887499952316284,
+        0.9
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 22,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 22,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 266,
+      "observation_sha256": "2e2858f4603de9f39e3d186f40256254be70d6f9f0ad027bd39971b57e1852c4",
+      "pr_command": [
+        1.887499952316284,
+        1.0
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 22,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 22,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_station_platform_medium",
+      "seed": 1001,
+      "step": 265
+    },
+    {
+      "base_command": [
+        1.4696959495544433,
+        -0.700000011920929
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 172,
+      "observation_sha256": "9d0fb2da9b84c49b7bc13b1a78ca583c7ea1da1b0c76a2540be9d2293573755b",
+      "pr_command": [
+        1.4696959495544433,
+        -0.9000000119209289
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_station_platform_medium",
+      "seed": 1002,
+      "step": 171
+    },
+    {
+      "base_command": [
+        1.6875000238418578,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 10,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 10,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 612,
+      "observation_sha256": "785ca31b007646e0375c1a077a8bd218db52e5db73d462edf2c8000ae6428d11",
+      "pr_command": [
+        1.6875000238418578,
+        0.12353579923510552
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 10,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 10,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_station_platform_medium",
+      "seed": 1003,
+      "step": 611
+    },
+    {
+      "base_command": [
+        1.799999976158142,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 2,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 2,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 87,
+      "observation_sha256": "5e1fdc8661025fbee405624b39f997984888f99cfcba914af3326a0e9eaf6234",
+      "pr_command": [
+        1.799999976158142,
+        -0.045233546197414404
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 2,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 2,
+        "planner_target_xy": [
+          20.0,
+          4.5
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_station_platform_medium",
+      "seed": 1005,
+      "step": 86
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          39.0,
+          25.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 112,
+      "observation_sha256": "e047048dcf9d5925feadf7cda13ce202d3e348e591adeb1713331cd7a87e0c89",
+      "pr_command": [
+        1.799999976158142,
+        -0.6999110341072082
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          39.0,
+          25.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_urban_crossing_medium",
+      "seed": 1003,
+      "step": 111
+    },
+    {
+      "base_command": [
+        1.9,
+        0.06402900218963622
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          39.0,
+          25.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 69,
+      "observation_sha256": "b30fc24cfb67790ebc096ed394713e5438d763a3be8143d307d95d766c7c72db",
+      "pr_command": [
+        1.9,
+        0.2640290021896362
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          39.0,
+          25.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "classic_urban_crossing_medium",
+      "seed": 1004,
+      "step": 68
+    },
+    {
+      "base_command": [
+        0.3000000059604645,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 17,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 17,
+        "planner_target_xy": [
+          36.49095916748047,
+          2.3646256923675537
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 326,
+      "observation_sha256": "6970259963dda7a9cb8f49df0cf449a90de5ecf9f3092db0933b8e0cc3e12086",
+      "pr_command": [
+        0.3000000059604645,
+        0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 17,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 17,
+        "planner_target_xy": [
+          36.49095916748047,
+          2.3646256923675537
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_accompanying_peer",
+      "seed": 1003,
+      "step": 325
+    },
+    {
+      "base_command": [
+        0.9,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 11,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 11,
+        "planner_target_xy": [
+          27.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 66,
+      "observation_sha256": "936869f140e511f693eb7dd6e6cb6a3712753bef90edf31a437a3362a346182b",
+      "pr_command": [
+        0.9,
+        0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 11,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 11,
+        "planner_target_xy": [
+          27.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "step": 65
+    },
+    {
+      "base_command": [
+        1.9,
+        0.9
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 16,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 16,
+        "planner_target_xy": [
+          7.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 225,
+      "observation_sha256": "f97729754987a8d001e64a30bbc23d50dcfb3e831b83023dabc2f4e505cdb3ee",
+      "pr_command": [
+        0.0,
+        0.0
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 16,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 16,
+        "planner_target_xy": [
+          7.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_crowd_navigation",
+      "seed": 1002,
+      "step": 224
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 9,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 9,
+        "planner_target_xy": [
+          36.49095916748047,
+          2.3646256923675537
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 297,
+      "observation_sha256": "7061b95c20e20c5190a9b877a2549c553381a891fe6b99091edb57cfd370963c",
+      "pr_command": [
+        0.700000011920929,
+        0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 9,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 9,
+        "planner_target_xy": [
+          36.49095916748047,
+          2.3646256923675537
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_down_path",
+      "seed": 1003,
+      "step": 296
+    },
+    {
+      "base_command": [
+        0.3000000059604645,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 16,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 16,
+        "planner_target_xy": [
+          14.5,
+          9.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 39,
+      "observation_sha256": "cd4311f2bd072265df8893b5a1294d9294549ba98ff44fe1d4d1e3acd0c6d59f",
+      "pr_command": [
+        0.3000000059604645,
+        0.1
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 16,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 16,
+        "planner_target_xy": [
+          14.5,
+          9.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_exiting_room",
+      "seed": 1005,
+      "step": 38
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 3,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 3,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 165,
+      "observation_sha256": "f1a6ac832266199551f8cf4789a1dd9eaaf4e1b641d38958d378e2f91a5c3ed3",
+      "pr_command": [
+        1.5000000238418578,
+        -0.08536228854209185
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 3,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 3,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_frontal_approach",
+      "seed": 1002,
+      "step": 164
+    },
+    {
+      "base_command": [
+        1.6000000476837157,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 162,
+      "observation_sha256": "99f7869b87949ea6d50f469c1868bcc6ccb48e29a3ddb4785cfb4772a3b225b2",
+      "pr_command": [
+        1.6000000476837157,
+        -0.18147068321704865
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_frontal_approach",
+      "seed": 1005,
+      "step": 161
+    },
+    {
+      "base_command": [
+        1.9,
+        -0.5445334553718567
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 38,
+      "observation_sha256": "091bbfbdb8910bf96e3eeee3af37e328c0fd915bc5f9af22ac9033baeb65e874",
+      "pr_command": [
+        1.9,
+        -0.7445334553718567
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1002,
+      "step": 37
+    },
+    {
+      "base_command": [
+        0.0,
+        0.0
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          17.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 29,
+      "observation_sha256": "c3d3d168e65a3447d5e68d83b18946b6c4a07a41ba27fbf33e99157906863662",
+      "pr_command": [
+        1.7987544775009154,
+        -0.8444537878036499
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          17.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_robot_crowding",
+      "seed": 1001,
+      "step": 28
+    },
+    {
+      "base_command": [
+        1.836651825904846,
+        -0.700000011920929
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          17.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 27,
+      "observation_sha256": "a887af406b427738057763e5e57fb72de9c17b33bf26bd76323f708597a0f873",
+      "pr_command": [
+        1.836651825904846,
+        -0.9000000119209289
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          17.0,
+          10.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_robot_crowding",
+      "seed": 1004,
+      "step": 26
+    },
+    {
+      "base_command": [
+        1.9,
+        -0.0727738082408905
+      ],
+      "base_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0
+      },
+      "command_prefix_verified": 30,
+      "observation_sha256": "3803a6cd1590383184b12d7c3acb888eb2285e9f4dac5e8070fc227d69bd200e",
+      "pr_command": [
+        1.9,
+        -0.2727738082408905
+      ],
+      "pr_inner": {
+        "last_decision": {
+          "no_admissible_command": true,
+          "no_admissible_command_count": 1,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "recovery_kind": "least_bad_clearance"
+        },
+        "no_admissible_command": true,
+        "no_admissible_command_count": 1,
+        "planner_target_xy": [
+          37.0,
+          5.0
+        ],
+        "planner_type": "RiskDWAPlannerAdapter",
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "recovery_kind": "least_bad_clearance"
+      },
+      "scenario": "francis2023_robot_overtaking",
+      "seed": 1005,
+      "step": 29
+    }
+  ],
+  "jobs": {
+    "successful_replay": 15989,
+    "wrong_dispatch_hook_failure": 15987
+  },
+  "location": "Local /home/luttkule/admfix_evidence and imech192:/home/luttkule/admfix/inner; raw observations not tracked",
+  "observations_canonical_json_bytes_identical": true,
+  "recorded_command_prefix_checks_per_variant": 4445,
+  "retry_disposition": "The failed recorder hooked PPO builder; guarded-PPO has a separate dispatch builder. Corrected dispatch was verified by instrumented-policy log lines before re-running. No held-out episodes.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "same_observations": true,
+  "schema_version": "inner_risk_infeasibility_verification.v1",
+  "sources": {
+    "base": [
+      "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+    ],
+    "pr": [
+      "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+    ]
+  },
+  "verified_cases": 29
+}

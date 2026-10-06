@@ -267,6 +267,33 @@ def writable_headless_caches(
                 os.environ[key] = value
 
 
+@pytest.fixture
+def isolated_ci_wrapper_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let shell-contract fixtures own wrapper inputs instead of the hosting job.
+
+    Keep CI/runner identity intact so hosted-only behavior remains exercised.
+    Each test can set the worker, shard, CUDA and selection inputs it needs.
+    """
+    for key in (
+        "PYTEST_ADDOPTS",
+        "PYTEST_NUM_WORKERS",
+        "PYTEST_XDIST_DIST",
+        "PYTEST_FAST_FAIL",
+        "PYTEST_ORDER_MODE",
+        "PYTEST_SHARD_COUNT",
+        "PYTEST_SHARD_INDEX",
+        "ROBOT_SF_SHARD_INCLUDE_SLOW",
+        "ROBOT_SF_TEST_LANE",
+        "ROBOT_SF_CUDA_RUNTIME_STATUS",
+        "ROBOT_SF_AFFECTED_BASE_REF",
+        "ROBOT_SF_AFFECTED_SELECTION_FILE",
+        "ROBOT_SF_AFFECTED_TEST_PATHS",
+        "ROBOT_SF_PYTEST_COVERAGE",
+        "PR_READY_SERIAL_FALLBACK",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
     """Ensure torch deterministic algorithms aren't forced across the suite."""

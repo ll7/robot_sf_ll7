@@ -49,6 +49,8 @@ from scripts.dev.check_ci_needs import (
 )
 from tests.support.environment_guards import configure_git_identity
 
+pytestmark = pytest.mark.usefixtures("isolated_ci_wrapper_environment")
+
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"

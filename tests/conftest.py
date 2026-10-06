@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Call-scoped planner status contracts use deterministic synthetic observations.
+    "test_risk_dwa_mppi_hybrid.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",
     # Seed inventories and campaign resume planning use deterministic fixtures.

@@ -203,6 +203,7 @@ def test_guarded_ppo_carries_fallback_diagnostics_into_trace_metadata() -> None:
     )
     assert fallback_state["planner_diagnostics"]["status"] == "disabled"
     assert fallback_state["planner_diagnostics"]["reason"] == "disabled_by_config"
+    assert guard.diagnostics()["fallback_diagnostics"]["planner_type"] == "RiskDWAPlannerAdapter"
 
 
 def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:

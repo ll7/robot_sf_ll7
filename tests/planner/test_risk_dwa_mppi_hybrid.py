@@ -1013,3 +1013,19 @@ def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
     assert build.socnav.orca_obstacle_margin == pytest.approx(0.18)
     assert build.mppi.sample_count == 12
     assert build.mppi.max_linear_speed == pytest.approx(1.05)
+
+
+def test_progress_escape_status_tracks_infeasible_recovery_selection(monkeypatch) -> None:
+    """The status reflects the escape chosen by current least-bad recovery ranking."""
+    planner = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(linear_candidates=(0.0,), angular_candidates=(0.0,))
+    )
+    monkeypatch.setattr(planner, "_rollout_score", lambda **kwargs: float("-inf"))
+    monkeypatch.setattr(
+        planner, "_infeasible_command_rank", lambda command, **kwargs: (command[0], 0.0)
+    )
+    command, status = planner.plan_with_diagnostics(_obs(goal=(3.0, 0.0)))
+    assert command == (planner.config.progress_escape_speed, 0.0)
+    assert status["status"] == "selected"
+    assert status["reason"] == "infeasible_recovery_rank_better"
+    assert planner.diagnostics()["recovery_kind"] == "progress_escape"

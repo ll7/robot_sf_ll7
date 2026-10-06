@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/focused-final.txt",
+  "artifact_sha256": "e8b7df75fc17ea4bc88532d828ac3ad260cc8abdcd9f7a028b57d326e837e9bd",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -303,6 +303,36 @@ def test_real_arm_binding_emits_90_receipts_and_88_plus_2_boundary(
         assert len(row["removed_fields"]) == len(ALLOWLISTED_METADATA_FIELDS)
 
 
+def test_real_binding_refuses_v1_v2_pooling_across_source_arms(
+    real_arm_inputs: dict[str, Any],
+) -> None:
+    """Binding actual row files rejects a v2 arm mixed with older arms and cleans staging."""
+    from robot_sf.benchmark.scenario_generation.pipeline import _write_jsonl
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    arm = REAL_REEXPORT_ARMS[-1]
+    root = real_arm_inputs["roots"][arm.key]
+    episodes = root / "runs" / f"{arm.planner}__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episodes.read_text().splitlines()]
+    for row in rows:
+        row["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = (
+            "simulation-step-trace.v2"
+        )
+    _write_jsonl(episodes, rows)
+    write_review_sidecar(episodes)
+    output = real_arm_inputs["tmp_path"] / "mixed-normalized"
+    with pytest.raises(RealReexportBindingError, match="trace_schema_version_mismatch"):
+        bind_real_reexport_arms(
+            real_arm_inputs["roots"],
+            expected_outcomes=real_arm_inputs["release_outcomes"],
+            config_evidence=real_arm_inputs["config_evidence"],
+            request_manifest=real_arm_inputs["request_manifest"],
+            normalized_output_dir=output,
+        )
+    assert not output.exists()
+    assert not list(output.parent.glob(f".{output.name}.staging-*"))
+
+
 def test_real_arm_binding_recovers_null_job_and_invocation_config(
     real_arm_inputs: dict[str, Any],
 ) -> None:

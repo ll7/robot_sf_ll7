@@ -1,0 +1,262 @@
+{
+  "evidence_status": "diagnostic-only",
+  "starting_head": "39d9932efb802e4f340502f6fb8d4acfcab20795",
+  "algorithm": "social_force",
+  "config": {
+    "social_force_planner_version": "resolution_independent_v2"
+  },
+  "runner_horizon": 500,
+  "dt": 0.1,
+  "observation_level": "tracked_agents_no_noise",
+  "source_sha256": {
+    "robot_sf/planner/socnav_occupancy.py": "edfd154c741b7c581df628df343968a59b7b067ed0ed7b59333ecf96dc0a3d3c",
+    "robot_sf/planner/socnav_social_force.py": "1188355afc3ae52f58b3aa1f946d5c7b78e0e9cafbb7285172a21ed32c062f43",
+    "configs/algos/social_force_resolution_independent_v2.yaml": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    "configs/scenarios/archetypes/classic_group_crossing.yaml": "370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8",
+    "configs/scenarios/archetypes/classic_bottleneck.yaml": "74882625aaa863ef6e9d4e9a57f7709e00c57d483344f91025ce79c8b91017ac",
+    "uv.lock": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"
+  },
+  "spin_definition": "linear < 0.05 m/s and abs(angular) > 0.9 rad/s",
+  "flip_definition": "adjacent angular commands with opposite signs and both magnitudes > 0.5 rad/s",
+  "bounds": {
+    "total_spin": 118,
+    "consecutive_spin": 28,
+    "large_flips": 0,
+    "margin": "ceil(1.25 * development maximum) for spin counts; zero tolerance for large flips"
+  },
+  "episodes": [
+    {
+      "scenario_path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": false,
+        "timeout_event": true
+      },
+      "steps": 400,
+      "flips": 0,
+      "spinning": 88,
+      "curvature_mean": 15.925212981991761,
+      "distances": [
+        9.146545115384885,
+        8.6896774702277,
+        7.805430221164171,
+        6.86608292566496,
+        5.899522238752675,
+        4.910427176770103,
+        3.9141027368018575,
+        2.9163204780837004,
+        1.9259970872478094,
+        0.9721127790687725,
+        0.2057129515967545
+      ],
+      "longest_spin": 22,
+      "commands_sha256": "412ddb53e9d468a6be88009eecd90e4aaf6417c20e962a6284f3b96e2f133ecb"
+    },
+    {
+      "scenario_path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1002,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": false,
+        "timeout_event": true
+      },
+      "steps": 400,
+      "flips": 0,
+      "spinning": 67,
+      "curvature_mean": 24.448806670977962,
+      "distances": [
+        8.62757501677506,
+        8.164089986551295,
+        7.2464485711532864,
+        6.268359803254757,
+        5.2770637068788036,
+        4.280472164444704,
+        3.2829128969342403,
+        2.288717948549262,
+        1.3135184132068967,
+        0.43047546400548126,
+        0.18089529061256399
+      ],
+      "longest_spin": 19,
+      "commands_sha256": "97602cb6212129d0830cb484df9c83a616b1cf8b5e0e7878946976b9806843ed"
+    },
+    {
+      "scenario_path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1003,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": false,
+        "timeout_event": true
+      },
+      "steps": 400,
+      "flips": 0,
+      "spinning": 94,
+      "curvature_mean": 5148.89041998284,
+      "distances": [
+        9.34859412841129,
+        8.879086512251195,
+        7.961072631261667,
+        7.004786944786704,
+        6.033584580977629,
+        5.04286771482503,
+        4.04577484851788,
+        3.0482448362685814,
+        2.0567112402416283,
+        1.0962598090433202,
+        0.29301417341555513
+      ],
+      "longest_spin": 17,
+      "commands_sha256": "9be437abb826998dfcfc76e75da6da3827ed90281e5f81fe823c51a13456540f"
+    },
+    {
+      "scenario_path": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "steps": 192,
+      "flips": 0,
+      "spinning": 0,
+      "curvature_mean": 0.15128183205220602,
+      "distances": [
+        16.504983591211516,
+        16.215238993972346,
+        15.662848976970206,
+        15.00088382689769,
+        14.352275379274586,
+        13.711927186306735,
+        12.903469097096766,
+        11.968437456464915,
+        10.986791681217987,
+        9.989647000307881,
+        8.990987983580146
+      ],
+      "longest_spin": 0,
+      "commands_sha256": "32ba8770cb2764a927e7b9079e5603b03925e558a439710dabcabcf5c3818aa4"
+    },
+    {
+      "scenario_path": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1002,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "steps": 186,
+      "flips": 0,
+      "spinning": 0,
+      "curvature_mean": 0.13336115673187143,
+      "distances": [
+        16.47220391178627,
+        16.1867577823634,
+        15.582672310265446,
+        14.87937372986492,
+        14.151644038626912,
+        13.31052094874244,
+        12.364884654634487,
+        11.378842278836563,
+        10.379624996913345,
+        9.38036823882794,
+        8.38155448801798
+      ],
+      "longest_spin": 0,
+      "commands_sha256": "53847691a24e6c30650ba713c433bb8cde4ca8f71648f90b2aa16f60184fa09e"
+    },
+    {
+      "scenario_path": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1003,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "steps": 177,
+      "flips": 0,
+      "spinning": 0,
+      "curvature_mean": 0.11950671345291902,
+      "distances": [
+        15.57868340517083,
+        15.17722350897017,
+        14.450450401953024,
+        13.668018391176725,
+        12.902121698360165,
+        12.11737820842222,
+        11.248516042378276,
+        10.308532470700976,
+        9.335599648564651,
+        8.336008752349365,
+        7.336249499636143
+      ],
+      "longest_spin": 0,
+      "commands_sha256": "63fc30a475665e150d7aff750ae2a44661a65c15a309a0a2d997b9de2f4959e4"
+    },
+    {
+      "scenario_path": "configs/scenarios/archetypes/classic_bottleneck.yaml",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "steps": 220,
+      "flips": 0,
+      "spinning": 0,
+      "curvature_mean": 0.1332375303519709,
+      "distances": [
+        19.57011515622189,
+        19.283917306915107,
+        18.714794022082085,
+        18.015954716965297,
+        17.242175175284608,
+        16.429591943167445,
+        15.499195198872696,
+        14.536440361455636,
+        13.610683479034346,
+        12.654809369882429,
+        11.670934560961783
+      ],
+      "longest_spin": 0,
+      "commands_sha256": "b386e9f1197156ea3ad50acbddc3f5eed770cf4fab19cb3c4353805d14ccd39d"
+    },
+    {
+      "scenario_path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "steps": 221,
+      "flips": 0,
+      "spinning": 0,
+      "curvature_mean": 0.13272450371512257,
+      "distances": [
+        19.66941533255346,
+        19.383244946866114,
+        18.814270830144796,
+        18.115613733520785,
+        17.341942983145923,
+        16.529374722377987,
+        15.59891251207531,
+        14.636065755334329,
+        13.710288871341284,
+        12.754488937264865,
+        11.770694362438713
+      ],
+      "longest_spin": 0,
+      "commands_sha256": "024f0c0e12e4e4c976f2d4d893f4012944db1fce198e76bb77b6edc5ac6c0d2f"
+    }
+  ]
+}

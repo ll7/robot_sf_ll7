@@ -288,7 +288,18 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # runnable-leaf inventory is one smaller without dropping a config file.
     # Issue #7849 keeps the original four candidates and adds four manifest-
     # bound successor leaves for the exact shared evaluation-seed contract.
-    assert len(config_paths) == 143
+    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain) adds four release-robot leaves; their issue-791 parent becomes
+    # a shared intermediate base, so the runnable inventory grows by three.
+    assert len(config_paths) == 146
+    release_robot_leaves = {
+        "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
+        "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",
+        "configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml",
+        "configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml",
+    }
+    assert release_robot_leaves <= {
+        path.relative_to(_REPO_ROOT).as_posix() for path in config_paths
+    }
 
     failures: list[str] = []
     for config_path in config_paths:

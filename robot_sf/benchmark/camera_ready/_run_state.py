@@ -17,6 +17,10 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
+from robot_sf.benchmark.camera_ready._runtime_identity import (
+    expected_runtime_identity,
+    row_runtime_identity_errors,
+)
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
 )
@@ -204,6 +208,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
     resolved_seeds: Sequence[int],
     campaign_root: Path,
     campaign_manifest: Mapping[str, Any],
+    config_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate final arm aggregates without modifying or deduplicating their rows.
 
@@ -216,6 +221,10 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
     """
     expected = _expected_episode_identities(scenarios, resolved_seeds)
     blockers: list[dict[str, Any]] = []
+    scenarios_by_id = {
+        str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
+        for sc in scenarios
+    }
     manifest_git = str(
         (campaign_manifest.get("git") or {}).get("commit")
         if isinstance(campaign_manifest.get("git"), Mapping)
@@ -281,6 +290,8 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
                 for identity in sorted(observed_set - expected, key=_episode_identity_sort_key)
             ],
         }
+        if expected != observed_set:
+            blockers.append(_integrity_blocker(arm, "episode_identity_mismatch", **count_details))
         declared_count: int | None = None
         if declared is not None:
             try:
@@ -294,7 +305,28 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
 
         commits: set[str] = set()
         configs_by_identity: dict[tuple[str, int | str | None], set[str]] = {}
+        runtime_identities: dict[tuple[str, int], tuple[str, str]] = {}
         for record in records:
+            identity = _episode_identity(record)
+            try:
+                scenario = scenarios_by_id[identity[0]]
+                runtime_key = (identity[0], int(identity[1]))
+                if runtime_key not in runtime_identities:
+                    runtime_identities[runtime_key] = expected_runtime_identity(
+                        entry.get("planner") or {},
+                        scenario,
+                        runtime_key[1],
+                        config_root=config_root,
+                    )
+                errors = row_runtime_identity_errors(record, runtime_identities[runtime_key])
+            except (KeyError, TypeError, ValueError, OSError) as exc:
+                errors = {"expected_runtime_identity": str(exc)}
+            if errors:
+                blockers.append(
+                    _integrity_blocker(
+                        arm, "runtime_identity_mismatch", identity=list(identity), mismatches=errors
+                    )
+                )
             result_provenance = record.get("result_provenance")
             result_provenance = result_provenance if isinstance(result_provenance, Mapping) else {}
             row_config = str(

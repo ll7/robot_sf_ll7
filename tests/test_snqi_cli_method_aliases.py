@@ -27,6 +27,37 @@ def _baseline_stats() -> dict[str, dict[str, float]]:
     }
 
 
+def test_v2_cli_baselines_preserve_units_and_normalize_with_independent_anchors() -> None:
+    """Collisions [0,2] give median1/p95=2, so a collision count2 has a unit penalty."""
+    from robot_sf.benchmark.metrics import snqi
+
+    rows = [
+        {"metrics": {"metric_schema_version": "robot-sf-metrics.v2", "collisions": c}}
+        for c in (0, 2)
+    ]
+    stats = snqi_cli._compute_baseline_stats(rows)
+    assert stats["_metadata"] == {"metric_schema_version": "robot-sf-metrics.v2"}
+    assert stats["collisions"] == {"med": 1.0, "p95": 2.0}
+    assert snqi(
+        rows[1]["metrics"],
+        weights={"w_success": 0.0, "w_time": 0.0, "w_collisions": 1.0},
+        baseline_stats=stats,
+    ) == pytest.approx(-1.0)
+
+
+def test_cli_baselines_refuse_pooling_v1_and_v2_units() -> None:
+    """A CLI-derived anchor cannot mix different definitions even when scalar values match."""
+    rows = [
+        {"metrics": {"metric_schema_version": v, "collisions": 1}}
+        for v in (
+            "robot-sf-metrics.v1",
+            "robot-sf-metrics.v2",
+        )
+    ]
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        snqi_cli._compute_baseline_stats(rows)
+
+
 def _episode_records() -> list[dict[str, object]]:
     """Return small episode records with all SNQI inputs represented."""
     return [

@@ -626,6 +626,23 @@ parallel = true
 branch = true
 data_file = "output/coverage/.coverage"
 
+[tool.coverage.paths]
+# Remap workspace roots recorded in shard data files so `coverage combine` works when
+# shards ran on self-hosted runners (/home/runner/_work/...) and are combined on
+# GitHub-hosted runners (/home/runner/work/...). The first entry is the canonical path.
+robot_sf = [
+    "robot_sf/",
+    "*/robot_sf_ll7/robot_sf/",
+    "/home/runner/_work/robot_sf_ll7/robot_sf_ll7/robot_sf/",
+    "/home/runner/work/robot_sf_ll7/robot_sf_ll7/robot_sf/",
+]
+pysocialforce = [
+    "fast-pysf/pysocialforce/",
+    "*/robot_sf_ll7/fast-pysf/pysocialforce/",
+    "/home/runner/_work/robot_sf_ll7/robot_sf_ll7/fast-pysf/pysocialforce/",
+    "/home/runner/work/robot_sf_ll7/robot_sf_ll7/fast-pysf/pysocialforce/",
+]
+
 [tool.coverage.report]
 precision = 2
 show_missing = true
@@ -674,6 +691,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "timeout: marks tests with a timeout expectation",
     "base_sensitive: marks tests that can break when multiple PRs combine against an older main (snapshot, fixture-hash, tuple-shape, or count-ratchet tests)",
+    "new_feature_no_base: exempts a test from the new-tests-fail-on-base check because the base commit lacks the feature; requires reason=...",
 ]
 
 

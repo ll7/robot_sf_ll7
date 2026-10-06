@@ -50,7 +50,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--anchors", type=Path)
     parser.add_argument("--family", type=Path)
-    parser.add_argument("--reports-dir", type=Path)
+    parser.add_argument(
+        "--reports-dir",
+        "--output-dir",
+        dest="reports_dir",
+        type=Path,
+        help="Analyzer output directory; defaults to a sibling of the campaign for legacy analysis",
+    )
     parser.add_argument(
         "--freeze-v2-anchors",
         type=Path,
@@ -497,7 +503,11 @@ def main(argv: list[str] | None = None) -> int:
         "positioning": positioning,
     }
 
-    reports_dir = campaign_root / "reports"
+    reports_dir = (
+        args.reports_dir.resolve()
+        if args.reports_dir
+        else campaign_root.parent / f"{campaign_root.name}_snqi_analysis"
+    )
     output_json = (
         args.output_json.resolve() if args.output_json else reports_dir / "snqi_diagnostics.json"
     )

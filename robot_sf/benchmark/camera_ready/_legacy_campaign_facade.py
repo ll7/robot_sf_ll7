@@ -238,7 +238,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     )
 
 
-def run_campaign(
+def run_campaign(  # noqa: PLR0913 - compatibility facade forwards the runtime contract
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -247,6 +247,8 @@ def run_campaign(
     skip_publication_bundle: bool = False,
     invoked_command: str | None = None,
     arm_isolation: str | None = None,
+    allow_pending_snqi_v2: bool = False,
+    pending_snqi_v2_identity: Path | None = None,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign via the extracted campaign module.
 
@@ -277,6 +279,12 @@ def run_campaign(
         compute_aggregates_with_ci=compute_aggregates_with_ci,
         export_publication_bundle=export_publication_bundle,
         arm_isolation=arm_isolation,
+        allow_pending_snqi_v2=allow_pending_snqi_v2,
+        **(
+            {"pending_snqi_v2_identity": pending_snqi_v2_identity}
+            if pending_snqi_v2_identity is not None
+            else {}
+        ),
     )
 
 

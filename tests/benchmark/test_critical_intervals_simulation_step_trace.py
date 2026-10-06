@@ -110,7 +110,7 @@ def test_adapter_rejects_changing_pedestrian_id_sets() -> None:
 def test_adapter_rejects_unknown_nested_trace_schema() -> None:
     """Nested rows from an unknown schema must not be silently reinterpreted."""
     trace = _nested_trace()
-    trace["schema_version"] = "simulation-step-trace.v2"
+    trace["schema_version"] = "simulation-step-trace.v99"
 
     with pytest.raises(ValueError, match="Unknown schema_version"):
         adapt_simulation_step_trace(trace)
@@ -478,3 +478,12 @@ def test_get_trace_arrays_edge_cases() -> None:
     # Test line 459: invalid dt
     robot_pos, peds_pos, dt = _get_trace_arrays({"dt": -1.0})
     assert dt == 0.1
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_fxm2_trace_adaptation_preserves_version_identity(version):
+    trace = _nested_trace()
+    trace["schema_version"] = f"simulation-step-trace.{version}"
+    adapted = adapt_simulation_step_trace(trace)
+    assert adapted["schema_version"] == trace["schema_version"]
+    assert adapted["robot_pos"] == [step["robot"]["position"] for step in trace["steps"]]

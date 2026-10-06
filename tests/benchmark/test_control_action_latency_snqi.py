@@ -881,8 +881,8 @@ def test_reissue_cli_rejects_raw_rows() -> None:
     not DURABLE_INPUT.exists() or not REISSUED_UNCERTAINTY.exists(),
     reason="committed durable input / re-issued uncertainty not present",
 )
-def test_committed_reissued_uncertainty_reproduces_byte_for_byte() -> None:
-    """The committed re-issued packet regenerates byte-for-byte from the analyzer."""
+def test_committed_reissued_uncertainty_preserves_values_and_current_source_digest() -> None:
+    """Historical values reproduce; generator identity tracks current source bytes."""
     import importlib.util
     import tempfile
 
@@ -906,7 +906,19 @@ def test_committed_reissued_uncertainty_reproduces_byte_for_byte() -> None:
         ]
         rc = module.main(argv)
         assert rc == 0
-        assert out.read_bytes() == REISSUED_UNCERTAINTY.read_bytes()
+        import hashlib
+
+        expected = json.loads(REISSUED_UNCERTAINTY.read_bytes())
+        actual = json.loads(out.read_bytes())
+        generator = expected["provenance"]["generator"]
+        source_digest = hashlib.sha256(
+            (REPO_ROOT / generator["source_rel_path"]).read_bytes()
+        ).hexdigest()
+        assert actual["provenance"]["generator"]["source_sha256"] == source_digest
+        # Only the source identity changes when this module changes. All historical
+        # numbers, input hashes, and provenance fields remain pinned to the artifact.
+        expected["provenance"]["generator"]["source_sha256"] = source_digest
+        assert actual == expected
 
 
 @pytest.mark.skipif(

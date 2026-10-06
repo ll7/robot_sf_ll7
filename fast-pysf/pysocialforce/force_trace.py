@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -37,7 +37,11 @@ def _json_safe(value: Any) -> Any:
         A JSON-compatible representation of ``value``.
     """
     if is_dataclass(value):
-        return _json_safe(asdict(value))
+        payload = {item.name: _json_safe(getattr(value, item.name)) for item in fields(value)}
+        selector_overrides = getattr(value, "_config_hash_overrides", None)
+        if callable(selector_overrides):
+            payload.update(_json_safe(selector_overrides()))
+        return payload
     if isinstance(value, Mapping):
         return {str(key): _json_safe(value[key]) for key in sorted(value, key=str)}
     if isinstance(value, (tuple, list)):

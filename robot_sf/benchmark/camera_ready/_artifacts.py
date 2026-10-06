@@ -433,6 +433,27 @@ def _write_snqi_diagnostics_artifacts(  # noqa: C901
         lines.extend(["", "## Caveats", ""])
         for caveat in caveats:
             lines.append(f"- {_escape_markdown_cell(str(caveat))}")
+    cohort = payload.get("evidence_cohort")
+    if isinstance(cohort, dict):
+        lines.extend(
+            [
+                "",
+                "## Evidence Cohort",
+                "",
+                f"- Eligible episodes: `{cohort.get('episodes_eligible', 0)}`",
+                f"- Total episodes: `{cohort.get('episodes_total', 0)}`",
+                f"- Excluded episodes: `{cohort.get('episodes_excluded', 0)}`",
+                "- Exclusion reasons:",
+            ]
+        )
+        reasons = cohort.get("exclusion_reasons", {})
+        if isinstance(reasons, dict) and reasons:
+            lines.extend(
+                f"  - {reason.replace('_', ' ')}: {count}"
+                for reason, count in sorted(reasons.items())
+            )
+        else:
+            lines.append("  - None")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     calibrated = payload.get("calibrated_weights")

@@ -26,6 +26,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from robot_sf.robot.reverse_drive import reverse_identity
+
 #: Human-readable note explaining how the envelope block should be interpreted.
 ACTUATION_ENVELOPE_INTERPRETATION = (
     "actuation_envelope: enforced acceleration/braking authority and the resulting "
@@ -184,10 +186,16 @@ def actuation_envelope_from_drive_config(robot_config: Any) -> dict[str, Any] | 
     # The differential-drive braking-authority field is the discriminator: only
     # the differential drive exposes ``max_linear_decel``.
     if hasattr(robot_config, "max_linear_decel"):
-        return _resolve_diff_drive_envelope(robot_config)
+        payload = _resolve_diff_drive_envelope(robot_config)
+        if payload is not None:
+            payload.update(reverse_identity(robot_config))
+        return payload
     # The bicycle-drive braking-authority field is the discriminator.
     if hasattr(robot_config, "max_decel") and hasattr(robot_config, "max_velocity"):
-        return _resolve_bicycle_envelope(robot_config)
+        payload = _resolve_bicycle_envelope(robot_config)
+        if payload is not None:
+            payload.update(reverse_identity(robot_config))
+        return payload
     return None
 
 

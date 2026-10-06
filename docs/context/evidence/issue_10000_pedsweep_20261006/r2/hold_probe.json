@@ -1,0 +1,124 @@
+{
+  "seed": 1001,
+  "purpose": "zero-speed-cap pedestrian hold; no robot controller instantiated",
+  "rows": [
+    {
+      "contact_enabled": false,
+      "held_displacement_m": 0.0,
+      "held_velocity_m_s": [
+        -0.0,
+        0.0
+      ],
+      "held_position_after": [
+        0.0,
+        0.0
+      ],
+      "before": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ],
+        [
+          0.57,
+          0.0,
+          -1.0,
+          0.0,
+          -10.0,
+          0.0,
+          0.5
+        ]
+      ],
+      "after": [
+        [
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ],
+        [
+          0.49363536747027564,
+          -0.029635367470275682,
+          -0.7636463252972432,
+          -0.2963536747027568,
+          -10.0,
+          0.0,
+          0.5
+        ]
+      ],
+      "held_speed_cap_before": 0.0,
+      "dt_s": 0.1,
+      "start_delay_remaining_s": 9.9
+    },
+    {
+      "contact_enabled": true,
+      "held_displacement_m": 0.0,
+      "held_velocity_m_s": [
+        0.0,
+        0.0
+      ],
+      "held_position_after": [
+        0.0,
+        0.0
+      ],
+      "before": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ],
+        [
+          0.57,
+          0.0,
+          -1.0,
+          0.0,
+          -10.0,
+          0.0,
+          0.5
+        ]
+      ],
+      "after": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ],
+        [
+          0.5995078395060325,
+          -0.03036999033144419,
+          -0.016929010866652883,
+          -0.3341810326206524,
+          -10.0,
+          0.0,
+          0.5
+        ]
+      ],
+      "held_speed_cap_before": 0.0,
+      "dt_s": 0.1,
+      "start_delay_remaining_s": 9.9
+    }
+  ],
+  "contact_source_sha256": "cae00ef62cba9621eee20deb552ef0b553f9e71282730b269cf90a85d3d330a1",
+  "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+  "witness_sha256": "73dcc5fc2477d4051b6fa2c56d520da6eae682066b7863fe5f62fb7740250602",
+  "installed_pysocialforce_byte_identity": true,
+  "installed_python_files_checked": 17,
+  "evidence_tier": "diagnostic-only",
+  "previous_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+  "previous_projection_displacement_m": 0.05293751034406103
+}

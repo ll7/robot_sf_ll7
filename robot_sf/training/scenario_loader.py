@@ -2982,6 +2982,13 @@ def _normalize_desired_speed_overrides(
         raise ValueError("simulation_config.desired_speed_seed must be a non-negative integer.")
     # Normalize after all fields are assigned so explicit values override the tier.
     config.sim_config._validate_desired_speed_config()
+    if (
+        config.sim_config.desired_speed_std is not None
+        and config.sim_config.desired_speed_mean is None
+    ):
+        raise ValueError(
+            "simulation_config.desired_speed_std requires desired_speed_mean or a pedestrian speed tier."
+        )
 
 
 _SIMULATION_OVERRIDE_ATTRS = (

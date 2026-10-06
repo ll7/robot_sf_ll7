@@ -25,6 +25,7 @@ def _config(name, overrides=None):
     ("overrides", "mean", "std"),
     [
         ({"ped_speed_tier": "Typical", "desired_speed_seed": 1001}, 1.3, 0.2),
+        ({"ped_speed_tier": "typical", "desired_speed_std": 0.0}, 1.3, 0.0),
         (
             {"desired_speed_mean": 1.1, "desired_speed_std": 0.0, "desired_speed_seed": 1001},
             1.1,

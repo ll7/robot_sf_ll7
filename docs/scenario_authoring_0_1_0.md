@@ -18,8 +18,8 @@ p3 pauses at (60, 5.5), outside the stair block, instead of the unreachable (60,
 `desired_speed_seed`. Tier normalization and parameter derivation use the existing simulation
 settings validator after all scenario fields are applied. Explicit mean/std take precedence over
 the tier. Numeric values must be finite and non-negative; the seed must be a non-negative integer.
-Omitting the fields preserves native speeds. Standard deviation alone retains the existing settings
-contract: it needs a mean or tier to select a desired-speed distribution.
+Omitting the fields preserves native speeds. Standard deviation without a mean or tier is rejected rather than accepting an
+unapplied speed distribution setting.
 
 ```yaml
 simulation_config:
@@ -78,18 +78,18 @@ digest. The original issue's byte-identical native/typical behavior is no longer
 
 ## Regression test value and base proof
 
-The five cases in [the regression file](../tests/training/test_scenario_speed_authoring.py) are
+The six cases in [the regression file](../tests/training/test_scenario_speed_authoring.py) are
 seeded or geometry-only and exercise the actual scenario loader, parsed maps and, for speeds,
 the live simulator. No production test seam is added.
 
 | Test | Bug / credible regression caught | Why previous coverage misses it | Deterministic real path |
 | --- | --- | --- | --- |
-| Speed settings (3 cases) | Dropped tier, explicit fields, seed or tier precedence; removal of post-assignment normalization | Speed-tier tests cover mappings, not scenario-to-live-cap wiring | Fixed dev seed; actual loader and simulator; independently computed normal draws |
+| Speed settings (4 cases) | Dropped tier, explicit fields, seed or tier precedence; removal of post-assignment normalization | Speed-tier tests cover mappings, not scenario-to-live-cap wiring | Fixed dev seed; actual loader and simulator; independently computed normal draws |
 | Bottleneck | Lost route density or paths through blocks/wall faces | Loader override tests cover supplied fields, not authored geometry | Parsed successor map and body-clearance path intersections |
 | Platform | Unreachable pause waypoint inside stairs | Trajectory override tests resolve waypoints without checking stair geometry | Parsed map, pause rule and complete trajectory clearance |
 
 Fail-on-base uses the exact loader source from base `66df3de19` and selects the released scenario
-matrix as pre-fix authoring input. All five cases fail: the three speed cases raise
+matrix as pre-fix authoring input. All six cases fail: the four speed cases raise
 `simulation_config contains unknown keys`, bottleneck density is 0 rather than 0.08, and the platform
 path intersects an obstacle. Replacing only base density with 0.08 still fails the marker clearance
 assertion. The fixed cases pass. The existing

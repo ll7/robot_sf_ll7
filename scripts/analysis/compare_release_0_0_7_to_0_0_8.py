@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -443,6 +444,64 @@ def _runtime_successor_identity(
             )
 
 
+@contextmanager
+def _resolved_source_checkout(source_root, commit, identity_path, payload):
+    """Copy only canonical JSON custody into a detached source worktree."""
+    identity_path = identity_path.absolute()
+    with tempfile.TemporaryDirectory(prefix="resolved-successor-source-") as directory:
+        checkout = Path(directory) / "source"
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(source_root),
+                    "worktree",
+                    "add",
+                    "--detach",
+                    str(checkout),
+                    commit,
+                ],
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode:
+                raise ValueError("cannot check out pinned successor source commit")
+            custody = [
+                identity_path,
+                identity_path.parent / "zenodo_metadata.resolved.json",
+                identity_path.parent / "release_notes_gate.v1.json",
+            ]
+            receipt = payload.get("determinism_receipt")
+            if receipt is not None:
+                custody.append(Path(receipt["path"]))
+            for path in custody:
+                source = path if path.is_absolute() else source_root / path
+                if any(parent.is_symlink() for parent in (source, *source.parents)):
+                    raise ValueError("resolved successor custody must not contain symlinks")
+                relative = source.resolve().relative_to(source_root)
+                if relative.suffix != ".json" or relative.parts[0] in {"robot_sf", "fast-pysf"}:
+                    raise ValueError(
+                        "resolved successor custody must be JSON outside runtime packages"
+                    )
+                destination = checkout / relative
+                data = source.read_bytes()
+                if destination.exists() and destination.read_bytes() != data:
+                    raise ValueError(
+                        "resolved successor custody differs from a tracked source file"
+                    )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(data)
+            _require_clean_source(checkout, commit)
+            yield checkout, checkout / identity_path.resolve().relative_to(source_root)
+        finally:
+            subprocess.run(
+                ["git", "-C", str(source_root), "worktree", "remove", "--force", str(checkout)],
+                capture_output=True,
+                check=False,
+            )
+
+
 def _verified_resolved_successor(path, digest, source_root, rows, *, snqi_v2_anchors=None):
     """Verify the canonical envelope with frozen code and derive its runner bindings."""
     source_root = source_root.resolve()
@@ -460,14 +519,16 @@ def _verified_resolved_successor(path, digest, source_root, rows, *, snqi_v2_anc
     }
     if snqi_v2_anchors is not None:
         request["snqi_v2_anchors"] = str(snqi_v2_anchors.resolve())
-    result = subprocess.run(
-        [sys.executable, "-I", str(Path(__file__).with_name("_pinned_successor_runtime.py"))],
-        cwd=source_root,
-        input=json.dumps(request),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    with _resolved_source_checkout(source_root, commit, path, payload) as (checkout, identity):
+        request["resolved_identity_path"] = str(identity)
+        result = subprocess.run(
+            [sys.executable, "-I", str(Path(__file__).with_name("_pinned_successor_runtime.py"))],
+            cwd=checkout,
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     if result.returncode:
         raise ValueError(f"resolved successor verification failed: {result.stderr.strip()}")
     runtime = json.loads(result.stdout)

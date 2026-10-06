@@ -18,8 +18,6 @@ from robot_sf.planner.multimodal_trajectory_arbitrator import (
     MultimodalArbitrationConfig,
     arbitrate_multimodal_trajectories,
     discrete_tail_metrics,
-    evaluate_multimodal_trajectories_base,
-    reorder_multimodal_trajectories,
 )
 from robot_sf.planner.scenario_belief_adapter import (
     IDENTITY_SAFE_PLANNER_INPUT_SCHEMA_VERSION,
@@ -291,7 +289,7 @@ def _evaluate_base(candidates: list[object], forecast: MultimodalPrediction, **k
     route_progress = kwargs.pop("route_progress", None)
     if route_progress is None:
         route_progress = {str(_candidate_id(item)): 0.0 for item in candidates}
-    return evaluate_multimodal_trajectories_base(
+    return arb_module.evaluate_multimodal_trajectories_base(
         candidates,
         joined,
         belief=belief,
@@ -711,7 +709,7 @@ def test_base_evaluation_forces_zero_switch_cost_and_normalizes_invalid_records(
     )
     original_keys = {item.candidate_id: item.decision_key for item in combined.evaluations}
     assert all(item.decision_key == original_keys[item.candidate_id] for item in capped.evaluations)
-    reordered = reorder_multimodal_trajectories(
+    reordered = arb_module.reorder_multimodal_trajectories(
         capped,
         [item.candidate_id for item in capped.evaluations],
         {item.candidate_id: 3.0 for item in capped.evaluations},
@@ -756,7 +754,7 @@ def test_evaluate_once_then_reorder_does_not_recompute_risk_or_verification(
     monkeypatch.setattr(
         arb_module, "_coerce_forecast", lambda *_a, **_k: pytest.fail("forecast rerun")
     )
-    final = reorder_multimodal_trajectories(
+    final = arb_module.reorder_multimodal_trajectories(
         base,
         ["b", "a"],
         {item.candidate_id: float(index) for index, item in enumerate(base.evaluations)},
@@ -773,7 +771,7 @@ def test_reorder_filters_exact_ids_preserves_base_identity_and_inputs() -> None:
     base = _evaluate_base([_action("a"), _action("b")], empty)
     original_evaluations = base.evaluations
     original_order = base.ordered_candidate_ids
-    final = reorder_multimodal_trajectories(
+    final = arb_module.reorder_multimodal_trajectories(
         base,
         ["b"],
         {"a": 4.0, "b": 0.5},
@@ -798,27 +796,31 @@ def test_reorder_rejects_duplicate_unknown_and_incomplete_cost_inputs() -> None:
     complete = {"a": 0.0, "b": 0.0}
 
     with pytest.raises(ValueError, match="unique"):
-        reorder_multimodal_trajectories(base, ["a", "a"], complete, switch_cost_scale=1.0)
+        arb_module.reorder_multimodal_trajectories(
+            base, ["a", "a"], complete, switch_cost_scale=1.0
+        )
     with pytest.raises(ValueError, match="unknown IDs"):
-        reorder_multimodal_trajectories(base, ["missing"], complete, switch_cost_scale=1.0)
+        arb_module.reorder_multimodal_trajectories(
+            base, ["missing"], complete, switch_cost_scale=1.0
+        )
     with pytest.raises(ValueError, match="exactly base evaluation IDs"):
-        reorder_multimodal_trajectories(base, ["a"], {"a": 0.0}, switch_cost_scale=1.0)
+        arb_module.reorder_multimodal_trajectories(base, ["a"], {"a": 0.0}, switch_cost_scale=1.0)
     with pytest.raises(ValueError, match="exactly base evaluation IDs"):
-        reorder_multimodal_trajectories(
+        arb_module.reorder_multimodal_trajectories(
             base,
             ["a"],
             {"a": 0.0, "b": 0.0, "extra": 0.0},
             switch_cost_scale=1.0,
         )
     with pytest.raises(ValueError, match="finite and non-negative"):
-        reorder_multimodal_trajectories(
+        arb_module.reorder_multimodal_trajectories(
             base,
             ["a"],
             {"a": float("nan"), "b": 0.0},
             switch_cost_scale=1.0,
         )
     with pytest.raises(ValueError, match="finite and positive"):
-        reorder_multimodal_trajectories(base, ["a"], complete, switch_cost_scale=0.0)
+        arb_module.reorder_multimodal_trajectories(base, ["a"], complete, switch_cost_scale=0.0)
 
 
 def test_reorder_rejects_switch_cost_scaling_overflow() -> None:
@@ -827,7 +829,7 @@ def test_reorder_rejects_switch_cost_scaling_overflow() -> None:
     base = _evaluate_base([_action("route")], empty)
 
     with pytest.raises(ValueError, match="scaled switch cost must be finite"):
-        reorder_multimodal_trajectories(
+        arb_module.reorder_multimodal_trajectories(
             base,
             ["route"],
             {"route": 1e308},
@@ -840,7 +842,9 @@ def test_reorder_preserves_fail_closed_non_selected_status() -> None:
     empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
     base = _evaluate_base([_action("route")], empty, route_progress={})
     assert base.status == "invalid_route_context"
-    final = reorder_multimodal_trajectories(base, [], {"route": 0.0}, switch_cost_scale=1.0)
+    final = arb_module.reorder_multimodal_trajectories(
+        base, [], {"route": 0.0}, switch_cost_scale=1.0
+    )
     assert final.status == base.status
     assert final.selected_candidate_id is None
     assert final.candidate_count == 0
@@ -869,7 +873,7 @@ def test_reorder_keeps_safety_prefix_ahead_of_switch_cost() -> None:
         evaluations=(safe, risky),
         status="selected",
     )
-    final = reorder_multimodal_trajectories(
+    final = arb_module.reorder_multimodal_trajectories(
         synthetic,
         ["safe", "risky"],
         {"safe": 100.0, "risky": 0.0},
@@ -956,10 +960,10 @@ def test_invalid_forecast_grid_returns_explicit_no_selection() -> None:
     assert result.selected_candidate_id is None
     assert result.no_selection_reason
 
-    base = evaluate_multimodal_trajectories_base(
+    base = arb_module.evaluate_multimodal_trajectories_base(
         [_action("invalid")], invalid, belief=_empty_belief(), risk_config=_risk_config()
     )
-    reordered = reorder_multimodal_trajectories(base, [], {}, switch_cost_scale=1.0)
+    reordered = arb_module.reorder_multimodal_trajectories(base, [], {}, switch_cost_scale=1.0)
     assert reordered.status == "invalid_forecast"
     assert reordered.selected_candidate_id is None
 

@@ -247,7 +247,11 @@ def test_risk_dwa_progress_escape_call_status_and_legacy_plan_output() -> None:
     assert disabled_command == disabled.plan(observation)
     assert disabled_diagnostics["status"] == "disabled"
     assert disabled_diagnostics["reason"] == "disabled_by_config"
-    assert disabled.diagnostics() == {"planner_type": "RiskDWAPlannerAdapter"}
+    retained = disabled.diagnostics()
+    assert retained["planner_type"] == "RiskDWAPlannerAdapter"
+    assert retained["planner_target_xy"] == [3.0, 0.0]
+    assert "status" not in retained
+    assert "candidate_command" not in retained
 
     not_considered = RiskDWAPlannerAdapter(
         RiskDWAPlannerConfig(

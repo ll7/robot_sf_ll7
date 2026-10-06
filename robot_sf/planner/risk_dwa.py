@@ -396,9 +396,6 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
             grid_payload=grid_payload,
         )
-        if self._recovery_kind == "progress_escape":
-            progress_escape["status"] = "selected"
-            progress_escape["reason"] = "infeasible_recovery_rank_better"
         current_clearance = self._min_obstacle_clearance(
             robot_pos, observation=observation, grid_payload=grid_payload
         )
@@ -694,6 +691,11 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if self._recovery_kind == "progress_escape":
             progress_escape["status"] = "selected"
             progress_escape["reason"] = "infeasible_recovery_rank_better"
+        self._record_command_recovery(robot_pos, observation, grid_payload, best_score)
+        return best_cmd, progress_escape
+
+    def _record_command_recovery(self, robot_pos, observation, grid_payload, best_score) -> None:
+        """Retain recovery counters without affecting command arbitration."""
         current_clearance = self._min_obstacle_clearance(
             robot_pos, observation=observation, grid_payload=grid_payload
         )
@@ -703,7 +705,6 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             and np.isfinite(best_score)
         )
         self._recovery_command_count += int(self._recovery_command)
-        return best_cmd, progress_escape
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

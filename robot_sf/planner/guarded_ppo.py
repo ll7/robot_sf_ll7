@@ -1305,7 +1305,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "no_admissible_command": self._no_admissible_command,
             "no_admissible_command_count": self._no_admissible_command_count,
             "recovery_command_count": self._recovery_command_count,
-            "fallback_diagnostics": fallback_diagnostics,
+            "fallback_diagnostics": recovery_diagnostics,
         }
 
 

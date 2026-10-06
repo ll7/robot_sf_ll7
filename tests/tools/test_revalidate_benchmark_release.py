@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import shutil
+import subprocess
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -1903,9 +1904,9 @@ def _configure_boundary_build_routes(monkeypatch: pytest.MonkeyPatch, calls: lis
     )
 
 
-@pytest.mark.parametrize("erratum", [False, True])
-def test_build_derived_release_successfully_promotes_complete_inventory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, erratum: bool
+@pytest.mark.parametrize("erratum,scoring", [(False, "legacy"), (True, "legacy"), (False, "v2")])
+def test_build_derived_release_successfully_promotes_complete_inventory(  # noqa: C901, PLR0915 - build integration covers immutable report projection
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, erratum: bool, scoring: str
 ) -> None:
     """The build path promotes one complete campaign/publication snapshot atomically."""
     producer, _ = _make_verified_retrieval(tmp_path)
@@ -1930,6 +1931,53 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     )
     _write(producer / "reports/campaign_summary.json", json.dumps({"campaign": {}}))
     _write(producer / "reports/campaign_report.md", "# report\n")
+    if scoring == "v2":
+        from robot_sf.benchmark.snqi.v2_reports import score_episode, write_v2_reports
+        from tests.unit.benchmark.test_snqi_v2 import fixture_spec, records
+
+        scorer_paths = [
+            "robot_sf/benchmark/snqi/v2_reports.py",
+            "robot_sf/benchmark/snqi/v2_spec.py",
+        ]
+        for name in scorer_paths:
+            target = source / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(Path(recovery.__file__).resolve().parents[2] / name, target)
+        for args in (
+            ["init", "-q"],
+            ["config", "user.email", "tests@example.invalid"],
+            ["config", "user.name", "Synthetic fixture"],
+            ["add", *scorer_paths],
+            ["commit", "-qm", "Synthetic scoring source"],
+        ):
+            subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+        scoring_source_sha = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+        ).strip()
+        spec = fixture_spec()
+        synthetic_rows = records()
+        for index, row in enumerate(synthetic_rows):
+            row["seed"] = 1001 + index % 2
+            row["metrics"].pop("snqi")
+            row["planner_key"] = row["algo"]
+            row["kinematics"] = "differential_drive"
+        for name in ("goal__differential_drive",):
+            path = producer / "runs" / name / "episodes.jsonl"
+            if path.exists():
+                path.unlink()
+        for arm in ("a", "b"):
+            path = producer / "runs" / f"{arm}__differential_drive" / "episodes.jsonl"
+            _write(
+                path,
+                "".join(
+                    json.dumps(score_episode(row, spec)) + "\n"
+                    for row in synthetic_rows
+                    if row["algo"] == arm
+                ),
+            )
+        write_v2_reports(synthetic_rows, spec, producer / "reports", bootstrap_samples=10)
+        legacy = producer / "reports/snqi_diagnostics.json"
+        legacy.unlink(missing_ok=True)
     fixture_file_map = {
         path.relative_to(producer).as_posix(): {
             "bytes": path.stat().st_size,
@@ -1964,10 +2012,20 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     monkeypatch.setattr(
         recovery,
         "load_release_manifest",
-        lambda _path: SimpleNamespace(canonical_campaign_config_path=config_path),
+        lambda _path: SimpleNamespace(
+            canonical_campaign_config_path=config_path,
+            snqi_v2_binding={"synthetic": True} if scoring == "v2" else None,
+            source_sha=scoring_source_sha if scoring == "v2" else recovery.FROZEN_SOURCE_SHA,
+        ),
     )
     monkeypatch.setattr(
-        recovery, "load_release_campaign_config", lambda *_a, **_k: SimpleNamespace()
+        recovery,
+        "load_release_campaign_config",
+        lambda *_a, **_k: (
+            SimpleNamespace(snqi_v2_spec=spec, snqi_v2_binding=None, bootstrap_samples=10)
+            if scoring == "v2"
+            else SimpleNamespace()
+        ),
     )
     monkeypatch.setattr(
         recovery,
@@ -2006,11 +2064,17 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         "_rebind_publication_sidecars",
         lambda *_a, **_k: {"arm_count": 14, "row_count": 20_160},
     )
-    monkeypatch.setattr(
-        recovery,
-        "_reconcile_publication_snqi_diagnostics",
-        lambda *_a, **_k: {"verified_episode_rows": 20_160},
-    )
+    if scoring == "legacy":
+        monkeypatch.setattr(
+            recovery,
+            "_reconcile_publication_snqi_diagnostics",
+            lambda *_a, **_k: {"verified_episode_rows": 20_160},
+        )
+    else:
+        from dataclasses import replace
+
+        contract = replace(recovery.DEFAULT_RECOVERY_CONTRACT, episode_rows=4, arms=2)
+
     monkeypatch.setattr(recovery, "verify_publication_bundle_preflight", lambda *_a, **_k: {})
 
     def fake_export(run_dir: Path, out_dir: Path, *, bundle_name: str, **_kwargs: object):
@@ -2047,6 +2111,7 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         manifest_path=manifest,
         output_root=output_root,
         derived_name="derived",
+        recovery_contract=contract if scoring == "v2" else recovery.DEFAULT_RECOVERY_CONTRACT,
         erratum_contract=erratum_contract,
         predecessor_archive=predecessor_archive,
         orchestration_repository_root=orchestration_root,
@@ -2054,9 +2119,42 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     final_campaign = output_root / "derived"
     assert result["status"] == "published_to_staging"
     assert final_campaign.is_dir()
+    if scoring == "v2":
+        assert not (final_campaign / "reports/snqi_diagnostics.json").exists()
+        for name in ("family", "diagnostics"):
+            assert (final_campaign / f"reports/snqi_v2_{name}.json").read_bytes() == (
+                producer / f"reports/snqi_v2_{name}.json"
+            ).read_bytes()
+
+    if scoring == "v2":
+        diagnostic = final_campaign / "reports/snqi_v2_diagnostics.json"
+        original = diagnostic.read_bytes()
+        forged = json.loads(original)
+        forged["episode_count"] = 5
+        diagnostic.write_text(json.dumps(forged))
+        try:
+            with (
+                recovery._source_repository_binding(source, scoring_v2=True),
+                pytest.raises(recovery.DerivedReleaseError, match="diagnostics report differs"),
+            ):
+                recovery._verify_publication_v2_reports(
+                    final_campaign,
+                    SimpleNamespace(snqi_v2_spec=spec, bootstrap_samples=10),
+                    SimpleNamespace(source_sha=scoring_source_sha),
+                    expected_row_count=4,
+                    expected_arm_count=2,
+                )
+        finally:
+            diagnostic.write_bytes(original)
     accepted_result = json.loads(
         (final_campaign / "release" / "release_result.json").read_text(encoding="utf-8")
     )
+    if scoring == "v2":
+        assert "calibration failed" not in accepted_result["derivation"]["snqi_claim_boundary"]
+        receipt = json.loads((final_campaign / recovery.DERIVATION_RECEIPT_RELATIVE).read_text())
+        assert receipt["snqi"]["legacy_scores_created"] is False
+        assert "calibration failed" not in receipt["snqi"]["claim_boundary"]
+        assert "snqi_diagnostics" not in receipt["publication_reconciliation"]
     assert accepted_result["publication_preflight_status"] == "pass"
     assert accepted_result["publication_preflight_violations"] == []
     assert (final_campaign / "derived_publication").is_dir()

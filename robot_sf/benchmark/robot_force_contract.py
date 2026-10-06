@@ -61,6 +61,10 @@ def validate_robot_force_provenance(
         A JSON-compatible force producer contract suitable for retaining in scored outputs.
     """
     _validate_selected_source(selected_source)
+    count_key = selected_source.removesuffix("_impulse_total") + "_invalid_present_samples"
+    count = metrics.get(count_key)
+    if type(count) is not int or count != 0:
+        raise ValueError("SNQI-v2 force provenance requires zero invalid present samples")
     metadata = metrics.get("robot_force_metadata")
     if not isinstance(metadata, Mapping):
         raise ValueError("SNQI-v2 force provenance requires robot_force_metadata")

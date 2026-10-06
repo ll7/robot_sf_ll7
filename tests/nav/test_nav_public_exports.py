@@ -80,7 +80,10 @@ GLOBAL_ROUTE_ALL = [
 MAP_CONFIG_ALL = [
     "GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1",
     "GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1",
+    "ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1",
+    "ROBOT_GOAL_SAMPLING_LEGACY_V1",
     "SUPPORTED_GOAL_COMPLETION_POLICIES",
+    "SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES",
     "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
@@ -90,6 +93,7 @@ MAP_CONFIG_ALL = [
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
     "normalize_goal_completion_policy",
+    "normalize_robot_goal_sampling_policy",
     "parse_social_group_definitions",
     "serialize_map",
 ]

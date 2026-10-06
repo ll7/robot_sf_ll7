@@ -1,0 +1,8 @@
+{
+  "details": {},
+  "primary_failure": "invalid_candidate",
+  "reasons": [
+    "no_inflated_collision_free_path: Planning aborted because start/goal is in an invalid cell; resample start/goal and retry.; last error: start at (1.25, 2.75) is in an invalid cell (inflated area); choose a free/start/goal cell."
+  ],
+  "status": "not_evaluated"
+}

@@ -138,6 +138,19 @@
             "type": "object",
             "description": "Metadata about the algorithm/policy used (name, config, status).",
             "properties": {
+                "robot_force_samples": {
+                    "type": "array",
+                    "description": "Pre-integration pedestrian positions, robot component configurations and acceleration vectors per step.",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "peds_pos",
+                            "components",
+                            "forces",
+                            "social_force_config"
+                        ]
+                    }
+                },
                 "algorithm": {
                     "type": "string"
                 },
@@ -516,7 +529,10 @@
                     ],
                     "properties": {
                         "schema_version": {
-                            "const": "deadlock-stall.v1"
+                            "enum": [
+                                "deadlock-stall.v1",
+                                "deadlock-stall.v2"
+                            ]
                         },
                         "window_steps": {
                             "type": "integer",
@@ -1107,6 +1123,16 @@
                     },
                     "additionalProperties": false
                 },
+                "robot_force_invalid_present_samples": {
+                    "type": "integer",
+                    "const": 0,
+                    "description": "Invalid present samples are refused before row emission."
+                },
+                "robot_force_pp_equiv_invalid_present_samples": {
+                    "type": "integer",
+                    "const": 0,
+                    "description": "Invalid present counterfactual samples are refused before row emission."
+                },
                 "robot_force_impulse_total": {
                     "type": [
                         "number",
@@ -1288,6 +1314,24 @@
                             "social_force_config"
                         ]
                     }
+                },
+                "metric_schema_version": {
+                    "type": "string",
+                    "enum": [
+                        "robot-sf-metrics.v1",
+                        "robot-sf-metrics.v2"
+                    ]
+                },
+                "path_efficiency": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "description": "Metric-v2 success-only shortest completion reference / travelled path; null represents undefined (NaN). Unclipped; a success above one flags path_efficiency_reference_violation."
+                },
+                "path_efficiency_reference_violation": {
+                    "type": "boolean",
+                    "description": "True when successful path efficiency exceeds one; retained for reference-integrity review."
                 }
             },
             "additionalProperties": {
@@ -1493,6 +1537,13 @@
                 "renderer"
             ],
             "additionalProperties": true
+        },
+        "metric_schema_version": {
+            "type": "string",
+            "enum": [
+                "robot-sf-metrics.v1",
+                "robot-sf-metrics.v2"
+            ]
         }
     }
 }

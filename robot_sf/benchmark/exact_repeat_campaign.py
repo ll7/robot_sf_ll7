@@ -25,6 +25,7 @@ import platform
 import subprocess
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 import numba
@@ -487,6 +488,21 @@ def _planner_index(planners: Sequence[Any]) -> dict[str, Any]:
     return indexed
 
 
+def _historical_scenario_definition(scenario: dict[str, Any]) -> dict[str, Any]:
+    """Recover schedule metadata as authored at SOURCE_IDENTITY_REVISION.
+
+    Returns:
+        A scenario copy omitting only the later schedule-provenance fields.
+    """
+    historical = deepcopy(scenario)
+    metadata = historical.get("metadata", {})
+    schedule = metadata.get("scenario_horizon")
+    if isinstance(schedule, dict):
+        schedule.pop("sha256", None)
+        schedule.pop("authored_max_episode_steps", None)
+    return historical
+
+
 def _historical_identity_payload(
     scenario: Mapping[str, Any],
     *,
@@ -580,7 +596,12 @@ def resolve_runnable_definitions(  # noqa: C901 - fail-closed recovery validates
             kinematics="differential_drive",
             holonomic_command_mode=cfg.holonomic_command_mode,
         )
-        scenario_params = _scenario_with_episode_seed_defaults(scenario_params, seed=key[2])
+        # This resolver admits only SOURCE_IDENTITY_REVISION, which predates the
+        # new schedule provenance. Recover its exact definitions and hashes;
+        # current campaign intake retains both fields and validates the digest.
+        scenario_params = _historical_scenario_definition(
+            _scenario_with_episode_seed_defaults(scenario_params, seed=key[2])
+        )
         scenario_horizon = scenario_params.get("simulation_config", {}).get("max_episode_steps")
         effective_horizon = (
             planner.horizon_override if planner.horizon_override is not None else cfg.horizon

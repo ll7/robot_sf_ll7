@@ -1,3 +1,4 @@
+# robot-sf-test-lane: slow — native simulation integration.
 """TODO docstring. Document this module."""
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
         scenarios,
         out_path=out_file,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=3,
         dt=0.1,
         record_forces=False,
@@ -57,7 +58,7 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
         scenarios,
         out_path=out_file,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=3,
         dt=0.1,
         record_forces=False,
@@ -101,7 +102,7 @@ def test_run_batch_parallel_writes_output_in_job_order(tmp_path: Path, monkeypat
         scenarios,
         out_path=out_file,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1001,
         horizon=1,
         dt=0.1,
         record_forces=False,

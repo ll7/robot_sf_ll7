@@ -1,0 +1,13 @@
+{
+  "reviewed_head": "2129f53710093d862e0bb4b8024d82ceb5a7879a",
+  "scenario": "classic_doorway_low",
+  "seed": 1001,
+  "capture_method": "Reviewer instrument3.py saved an actual production observation during dev episode candidate scoring. No observation geometry modified; tick was not recorded.",
+  "source_pickle_sha256": "aae6f8d6b74c5537978450175037eb8d54469631e6e4421920f0f8bac91fbd0d",
+  "fixture_sha256": "106bef1df184fa394120a98452b3bc8d2836b8a4a3b403c8e7c5621e1f535b2b",
+  "purpose": "Document missing static-obstacle cost and thin-outline ray aliasing; characterization, not a safety oracle.",
+  "ray_world_angle_degrees": -100,
+  "wall_ray_distance_m": 1.0,
+  "resolution_m": 0.2,
+  "robot_radius_m": 1.0
+}

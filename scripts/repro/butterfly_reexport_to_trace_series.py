@@ -131,6 +131,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.metric_definitions import require_uniform_trace_schema
+
 # ---------------------------------------------------------------------------
 # Pinned-commit re-execution facts (job-13483). These are documented, verified
 # facts about how the source episodes.jsonl was produced -- not re-derived here,
@@ -450,15 +452,17 @@ def build_bundle(
     row = _load_row(episodes_jsonl, seed)
     result_provenance = _validate_source_row(row, arm)
     sst = row["algorithm_metadata"]["simulation_step_trace"]
-    if sst.get("schema_version") != "simulation-step-trace.v1":
+    if sst.get("schema_version") not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}:
         raise ValueError(
             f"unexpected simulation_step_trace schema_version: {sst.get('schema_version')!r}"
         )
+    require_uniform_trace_schema([row])
     frames = sst["steps"]  # already {pedestrians, planner, rl, robot, step, time_s} -- verbatim
     if not isinstance(frames, list) or not frames:
         raise ValueError("simulation_step_trace.steps must be a non-empty array")
     derived_rows = _build_derived_rows(frames)
     metadata = _build_metadata(row, derived_rows, arm, result_provenance)
+    metadata["source_trace_schema_version"] = sst["schema_version"]
 
     trace_series = {
         "schema_version": "butterfly-reexport-trace-series.v1",

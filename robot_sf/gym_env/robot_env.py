@@ -116,7 +116,9 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                (
+                key == "pedestrian_seed"
+                or (key == "groups" and item is None)
+                or (
                     key == "goal_completion_policy"
                     and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
                 )
@@ -146,6 +148,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
         if callable(selector_overrides):
             config_payload["sim_config"].update(selector_overrides())
+        robot_config = getattr(cfg, "robot_config", None)
+        robot_overrides = getattr(robot_config, "_config_hash_overrides", None)
+        if callable(robot_overrides):
+            config_payload["robot_config"].update(robot_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,
@@ -637,6 +643,7 @@ class RobotEnv(BaseEnv):
             sensor_adapter,
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
+            episode_step_limit=env_config.sim_config.episode_step_limit,
         )
 
         # Store last action executed by the robot
@@ -662,23 +669,16 @@ class RobotEnv(BaseEnv):
         self._prime_snqi_proxy_state()
 
     def _apply_reset_seed(self, seed: int | None) -> None:
-        """Record the reset seed and replay directly-constructed crowd sampling (issue #9760).
+        """Rebuild private pedestrian streams and population from the episode seed.
 
-        A directly-constructed env samples its crowd from an unseeded RNG at
-        construction. Its first seeded reset re-runs construction-time
-        population under the seeded context, and subsequent seeded resets repeat
-        that sampling so later reset work consumes the same RNG sequence.
-        Factory-seeded envs (applied_seed already set before reset) keep their
-        construction crowd, preserving legacy replay bytes. Must run inside the
-        seeded RNG context.
+        A seeded reset also restores behavior navigators and their RNG streams;
+        callers may freely use the process-global NumPy generator between steps.
         """
         if seed is None:
             return
-        repopulate_crowd = self.applied_seed is None or self._crowd_established_by_seeded_reset
         self.applied_seed = int(seed)
-        if repopulate_crowd:
-            self.simulator.repopulate_crowd()
-            self._crowd_established_by_seeded_reset = True
+        self.simulator.repopulate_crowd(seed=int(seed))
+        self._crowd_established_by_seeded_reset = True
 
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""
@@ -747,8 +747,7 @@ class RobotEnv(BaseEnv):
                 f"with key '{self._critic_privileged_state_key}'."
             )
         sim_time_limit = float(getattr(env_config.sim_config, "sim_time_in_secs", 0.0) or 0.0)
-        dt = float(getattr(env_config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
-        max_sim_steps = int(np.ceil(sim_time_limit / dt)) if dt > 0.0 else 0
+        max_sim_steps = env_config.sim_config.max_sim_steps
         critic_obs_space = spaces.Dict(dict(self.observation_space.spaces))
         low, high = _asymmetric_critic_state_spec(
             critic_obs_space,

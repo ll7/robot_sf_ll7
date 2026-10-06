@@ -1,0 +1,113 @@
+# Full-roster 0.0.8 doorway width slice; 2.0 m stays in the main grid.
+scenarios:
+- name: francis2023_narrow_doorway_width_2p20
+  map_file: ../../maps/successor_svg_maps/issue_9348_francis2023_narrow_doorway_2p20_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7k
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 5.719522860489053
+        mean_distance: 8.143361921262386
+        robot_ped_within_5m_frac: 0.0
+        ped_force_mean: 0.05848146975193476
+        force_q95: 0.32300781273340784
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    width_slice_m: 2.2
+    width_slice_source: issue_9348_three_width_doorway_v1
+  seeds:
+  - 225
+  - 226
+  - 227
+  map_id: null
+- name: francis2023_narrow_doorway_width_2p80
+  map_file: ../../maps/successor_svg_maps/issue_9348_francis2023_narrow_doorway_2p80_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7k
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 5.719522860489053
+        mean_distance: 8.143361921262386
+        robot_ped_within_5m_frac: 0.0
+        ped_force_mean: 0.05848146975193476
+        force_q95: 0.32300781273340784
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    width_slice_m: 2.8
+    width_slice_source: issue_9348_three_width_doorway_v1
+  seeds:
+  - 225
+  - 226
+  - 227
+  map_id: null
+- name: francis2023_narrow_doorway_width_3p60
+  map_file: ../../maps/successor_svg_maps/issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7k
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 5.719522860489053
+        mean_distance: 8.143361921262386
+        robot_ped_within_5m_frac: 0.0
+        ped_force_mean: 0.05848146975193476
+        force_q95: 0.32300781273340784
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    width_slice_m: 3.6
+    width_slice_source: issue_9348_three_width_doorway_v1
+  seeds:
+  - 225
+  - 226
+  - 227
+  map_id: null

@@ -3223,9 +3223,10 @@ def test_snqifix2_sealed_seed_commitment_validation():
         spec.validate_evaluation_commitment(SEALED_EVALUATION_SEEDS[:-1])
 
 
+@pytest.mark.parametrize("definitions_bound", [True, False])
 @pytest.mark.parametrize("calibration_archive", [{"scheduled": True}], indirect=True)
 def test_snqifix2_protocol_diagnostic_holds_seed_1003_apart(
-    tmp_path, monkeypatch, calibration_archive
+    tmp_path, monkeypatch, calibration_archive, definitions_bound
 ):
     """A seed-1003 K tail cannot leak into the fitted calibration anchor."""
     from copy import deepcopy
@@ -3239,6 +3240,8 @@ def test_snqifix2_protocol_diagnostic_holds_seed_1003_apart(
         raw = [json.loads(line) for line in path.read_text().splitlines()]
         for row in raw:
             row["metrics"].update(collisions=0, comfort_exposure=0)
+            if not definitions_bound:
+                row["metrics"].pop("metric_definitions_sha256")
         held = [deepcopy(row) for row in raw if row["seed"] == 1001]
         for row in held:
             row["seed"] = 1003

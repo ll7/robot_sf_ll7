@@ -2957,8 +2957,39 @@ def _apply_residual_adversary_override(
     config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
 
 
+def _normalize_desired_speed_overrides(
+    config: RobotSimulationConfig, overrides: Mapping[str, Any]
+) -> None:
+    """Validate speed fields together after applying scenario overrides."""
+    speed_fields = {
+        "ped_speed_tier",
+        "desired_speed_mean",
+        "desired_speed_std",
+        "desired_speed_seed",
+    }
+    if not speed_fields.intersection(overrides):
+        return
+    for attr in ("desired_speed_mean", "desired_speed_std"):
+        value = getattr(config.sim_config, attr)
+        if value is not None:
+            setattr(
+                config.sim_config,
+                attr,
+                _coerce_finite_float(value, field_name=f"simulation_config.{attr}"),
+            )
+    seed = config.sim_config.desired_speed_seed
+    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int) or seed < 0):
+        raise ValueError("simulation_config.desired_speed_seed must be a non-negative integer.")
+    # Normalize after all fields are assigned so explicit values override the tier.
+    config.sim_config._validate_desired_speed_config()
+
+
 _SIMULATION_OVERRIDE_ATTRS = (
     "peds_speed_mult",
+    "ped_speed_tier",
+    "desired_speed_mean",
+    "desired_speed_std",
+    "desired_speed_seed",
     "peds_reset_follow_route_at_start",
     "action_latency_steps",
     "action_latency_ms",
@@ -3043,6 +3074,7 @@ def _apply_simulation_overrides(  # noqa: C901
     for attr in _SIMULATION_OVERRIDE_ATTRS:
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)
+    _normalize_desired_speed_overrides(config, overrides)
     # Expose the pedestrian-robot force as a calibration surface (issue #4974):
     # coefficient (force_multiplier), effective radius (robot_radius), activation
     # distance, and active flag can be tuned per-scenario without touching defaults.

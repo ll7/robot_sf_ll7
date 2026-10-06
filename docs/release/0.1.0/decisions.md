@@ -566,3 +566,17 @@ See 0.0.8 D-080 for the approved decision-record policy; its tooling is a separa
 - **Reopen:** author: can still be discussed in more detail. Reopen the technical compatibility ruling if a reviewer shows it changes any recorded 0.0.8 identity or behavior.
 
 Development evidence for D-023: `docs/validation/hybrid_defaults/README.md` records the full 3,084-episode comparison. Empty-world has no new failures; the crowded matrix gains 32 net successes but introduces one pedestrian contact and 35 newly failing cells. These diagnostics require review and do not admit a release.
+
+Review correction for D-023: enabled terminal-goal tracking now waits for actual
+navigator completion; missing validity observations fail closed; both typed
+builders share the source selector, and the released-arm registry covers absent
+algorithm inputs and the older PPO source. The author default choice above is
+unchanged. Additional enforcement: `test_terminal_goal_at_022_m_keeps_tracking_before_environment_success`,
+`test_enabled_validity_rejects_a_missing_sensor_field`,
+`test_new_env_and_planner_share_defaults_on_registered_release_scenario`,
+`test_released_002_ppo_constructor_uses_legacy_sensor_defaults`,
+`test_worker_preserves_absent_algorithm_config_for_release_default_selection`,
+and `test_every_release_arm_keeps_full_base_environment_and_mapping_dumps` in
+`tests/planner/test_hybrid_default_review_regressions.py`. Per-switch evidence
+will support discussion under the existing reopen clause; diagnostic outcomes
+remain distinct from release admission.

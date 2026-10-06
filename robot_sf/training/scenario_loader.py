@@ -7,7 +7,6 @@ import json
 import math
 import os
 from collections.abc import Iterable, Mapping
-from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
@@ -16,8 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 from loguru import logger
-
-from robot_sf.common.hybrid_defaults import defaults_for_source, has_active_default_policy
 
 if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -1729,9 +1726,9 @@ def build_robot_config_from_scenario(
 
     _reject_required_platform_semantic_consumers(scenario)
 
-    scope = nullcontext() if has_active_default_policy() else defaults_for_source(scenario_path)
-    with scope:
-        config = RobotSimulationConfig()
+    # Scenario assets do not choose defaults. Both typed builders use the same
+    # explicit execution-source scope, or current defaults outside that scope.
+    config = RobotSimulationConfig()
     env_overrides = scenario.get("env_overrides", {})
     if isinstance(env_overrides, Mapping) and "include_goal_next_valid" in env_overrides:
         value = env_overrides["include_goal_next_valid"]

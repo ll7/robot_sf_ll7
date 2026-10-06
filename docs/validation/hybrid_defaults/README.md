@@ -21,8 +21,8 @@ refused before execution rather than silently assigned a new contract.
 
 Compatibility lives in typed constructor fill-in. The episode runner selects a
 scoped default set using its original algorithm source path; config-less release
-arms use the registered scenario source. Standalone scenario construction uses
-its scenario source. Direct planner builders can pass `source_path`; direct
+arms use the registered scenario source. Standalone scenario construction uses the current default unless the caller
+explicitly scopes the execution source through the same default selector as the planner. Direct planner builders can pass `source_path`; direct
 constructors can use `defaults_for_source`. Unknown inputs receive current
 defaults. No key is added to the resolved algorithm mapping, and no frozen YAML
 or canonical config digest changes. The recorded/current digest table is in
@@ -208,3 +208,39 @@ The complete planner directory passes after these fixture pins (2,321 passed,
 [latest_main_integration_check.json](latest_main_integration_check.json) records
 the subsequent main integration and verifies no additional comparison-bound
 runtime/input change.
+
+## Review fixes and per-switch reopening evidence
+
+The author choice remains all three on. The review fixes make enabled terminal
+tracking wait for the bound navigator's actual completion (radius or goal zone),
+and require the declared validity sensor. Unbound planners track the terminal
+center. Validity-off inputs retain the legacy tolerance rule. The route guide
+tracks the terminal center with its waypoint tolerance restored after each call.
+
+Scenario assets alone no longer choose a different default for a new planner.
+Both typed builders use the common selector. Released callers explicitly scope
+the registered algorithm source; absent-algorithm batch payloads retain `None`
+so the runner can scope the registered scenario. Explicit empty inline mappings
+remain new inputs. The registry now covers 183 arms in 15 release campaigns,
+including the old PPO source and arms without algorithm files. Four historical
+unfrozen placeholders remain blocked by their existing execution guard; their
+pre-admission typed environment dumps also match. No frozen YAML changed.
+
+[Review regression proof](review_fix_proof.md), [full released-arm comparison](review_fix_proof.json),
+and [release-arm inventory](released_arm_inventory.json) provide the audit trail.
+The older paired evidence above is retained with its original producer identity;
+it predates the terminal tracking fix and cannot substitute for the new measurements.
+
+The per-switch runner measures all-off, static-only, sensor-only, validity with
+its required sensor, and all-on. Literal validity-only is invalid: it fails closed
+because `next_valid` is absent. Compare validity+sensor to sensor-only to isolate
+validity. Every executable arm is checked against its exact flag tuple.
+
+```sh
+scripts/dev/run_worktree_shared_venv.sh -- uv run python -m scripts.validation.run_hybrid_default_comparison --per-switch --output <comparison-folder> --workers 2
+```
+
+This runs 7,200 crowded episodes (48 scenarios × dev1001–1030 × five arms)
+and repeats the 204-episode empty-world gate after the fixes. Full step traces
+support every failure/contact classification; stationary pedestrian contacts
+remain collisions. No released or sealed seed is reset or stepped.

@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "sources": {
+    "configs/algos/guarded_ppo_camera_ready.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "d2b61082f11574b2f03c50a110cf5f945b908053df65968399a5c863e69ee854"
+    },
     "configs/algos/guarded_ppo_camera_ready_cpu.yaml": {
       "kind": "release-algorithm",
       "release": "up-to-0.0.8",
@@ -51,10 +57,22 @@
       "release": "up-to-0.0.8",
       "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773"
     },
+    "configs/algos/social_force_resolution_independent_v2.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d"
+    },
     "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml": {
       "kind": "release-algorithm",
       "release": "up-to-0.0.8",
       "sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35"
+    },
+    "configs/algos/social_force_terminal_goal_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb"
     },
     "configs/algos/socnav_release_v0_0_8.yaml": {
       "kind": "release-algorithm",
@@ -71,6 +89,12 @@
       "release": "up-to-0.0.8",
       "sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6"
     },
+    "configs/baselines/ppo_15m_grid_socnav.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "644b57e451cfc42b6ab5cf56ef6ec20fd6290a3bb9bae1be113a1aa6afb792ca"
+    },
     "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": {
       "kind": "release-algorithm",
       "release": "up-to-0.0.8",
@@ -80,6 +104,36 @@
       "kind": "release-algorithm",
       "release": "up-to-0.0.8",
       "sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a"
+    },
+    "configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7"
+    },
+    "configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "43319acd6b426d9b34de316487a6c1eb3ce3ea9b9c93fd07b6435a0dbc3a4057"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184"
     },
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": {
       "kind": "release-campaign",
@@ -96,10 +150,64 @@
       "release": "up-to-0.0.8",
       "sha256": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5"
     },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "698b4bc44455a3fd4485b5b25b0bca16e47ca7d6ceaf62fd918aaba05df177d4"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "a546df04e8f69896f001792d22931c184dd54d440f2828898049e57bdf92419b"
+    },
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-campaign",
+      "release": "up-to-0.0.8",
+      "sha256": "6471bc36db5806badd527701ca30b2f63f425dd3830d6b2b86cfa00ade1f5c46"
+    },
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml": {
       "kind": "release-campaign",
       "release": "up-to-0.0.8",
       "sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c"
+    },
+    "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "cf2e6844b3c8e8315c31e6cf115f66ea2c7051526ff2e1f9cfe3a1c5a3f23cc4"
+    },
+    "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "3952b569bb8b5dbb2f4f895b393532b5fc58db2954282af7c68c894e04da4507"
     },
     "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
       "dependencies": {
@@ -137,6 +245,12 @@
       "release": "up-to-0.0.8",
       "sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811"
     },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "3129fed61da9b5edf571a76c4024ce18a1cc2b7e1ee2c026e45605531f1a3541"
+    },
     "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml": {
       "dependencies": {
         "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
@@ -164,6 +278,12 @@
       "release": "up-to-0.0.8",
       "sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458"
     },
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe"
+    },
     "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml": {
       "dependencies": {
         "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
@@ -182,6 +302,30 @@
       "release": "up-to-0.0.8",
       "sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94"
     },
+    "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "6c60719a8b59a4eef1651dc94779cffa754c392dcf8641de31f96b9a7f675694"
+    },
+    "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "4812a9cecf2a75c9d4b82ad9cf377f4e9406aa09dcd15897caa43932309d2887"
+    },
+    "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "bfee5ca060ca8c00e5d84b46c1b7b183e66eb9f372a84486042d0d0b21e7d2ef"
+    },
+    "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-algorithm",
+      "release": "up-to-0.0.8",
+      "sha256": "7c5b4b1a51f7622368cd35926f2452cde0bdc6bac43b0c0d0bde1b45069acb65"
+    },
     "configs/scenarios/classic_interactions_francis2023.yaml": {
       "kind": "release-scenario",
       "release": "up-to-0.0.8",
@@ -196,6 +340,30 @@
       "kind": "release-scenario",
       "release": "up-to-0.0.8",
       "sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778"
+    },
+    "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9"
+    },
+    "configs/scenarios/single/francis2023_blind_corner.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb"
+    },
+    "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca"
+    },
+    "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": {
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "kind": "release-scenario",
+      "release": "up-to-0.0.8",
+      "sha256": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785"
     }
   }
 }

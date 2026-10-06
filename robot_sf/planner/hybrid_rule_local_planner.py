@@ -516,6 +516,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         self._last_v4_speed_safety: dict[str, Any] | None = None
         self._v4_bound_timestep: float | None = None
+        self._terminal_goal_navigator: Any | None = None
         self._v4_state_sources: dict[str, str] = {}
         self._route_guide = (
             GridRoutePlannerAdapter(
@@ -585,6 +586,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             self._drive_limits = _resolve_drive_limits(env)
             self._v4_bound_timestep = _bound_timestep(env)
         simulator = getattr(env, "simulator", None)
+        navigators = getattr(simulator, "robot_navs", ())
+        self._terminal_goal_navigator = navigators[0] if navigators else None
         map_def = getattr(simulator, "map_def", None)
         get_obstacle_lines = getattr(simulator, "get_obstacle_lines", None)
         if map_def is None or not callable(get_obstacle_lines):
@@ -639,6 +642,49 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._v4_angular_estimate = 0.0
         self._v4_last_dt = float(self.config.rollout_dt)
 
+    def _is_terminal_goal(self, goal_state: dict[str, Any]) -> bool:
+        """Require the enabled validity sensor and identify the v4 terminal sentinel.
+
+        Returns:
+            Whether v4 should track the terminal goal instead of its successor.
+        """
+        if not self.config.goal_next_validity_enabled:
+            return False
+        if "next_valid" not in goal_state:
+            raise ValueError(
+                "goal_next_validity_enabled requires observation next_valid; "
+                "enable include_goal_next_valid on the environment"
+            )
+        return self._v4_clearance_braking and not bool(
+            self._as_1d_float(goal_state["next_valid"], pad=1)[0]
+        )
+
+    def _terminal_goal_reached(self, state: dict[str, Any], goal_distance: float) -> bool:
+        """Use environment completion for terminal tracking, preserving the legacy rule.
+
+        Returns:
+            Whether the command should stop because the selected goal is complete.
+        """
+        if not state["terminal_goal"]:
+            return goal_distance <= float(self.config.goal_tolerance)
+        if self._terminal_goal_navigator is not None:
+            return bool(self._terminal_goal_navigator.reached_destination)
+        return goal_distance <= _EPS
+
+    def _route_guide_command(self, state: dict[str, Any]) -> tuple[float, float]:
+        """Track terminal goals to their center while the environment owns completion.
+
+        Returns:
+            The route guide command with its configured waypoint tolerance restored.
+        """
+        guide_tolerance = self._route_guide.config.goal_tolerance
+        if state.get("terminal_goal", False):
+            self._route_guide.config.goal_tolerance = 0.0
+        try:
+            return self._route_guide.plan(state["observation"])
+        finally:
+            self._route_guide.config.goal_tolerance = guide_tolerance
+
     def _extract_state(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Extract the structured planner state from map-runner observations.
 
@@ -661,13 +707,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         goal_next = self._as_1d_float(goal_state.get("next", goal_current), pad=2)[:2]
         current_dist = float(np.linalg.norm(goal_current - robot_pos))
         next_dist = float(np.linalg.norm(goal_next - robot_pos))
-        if (
-            self._v4_clearance_braking
-            and self.config.goal_next_validity_enabled
-            and not bool(self._as_1d_float(goal_state.get("next_valid", [1]), pad=1)[0])
-        ):
-            # SocNav encodes an absent terminal successor as [0, 0], in world
-            # coordinates. Distance from the robot does not establish validity.
+        terminal_goal = self._is_terminal_goal(goal_state)
+        if terminal_goal:
+            # The terminal successor sentinel is not a target in world coordinates.
             next_dist = 0.0
         if next_dist > 1e-6 and current_dist <= float(self.config.waypoint_switch_distance):
             goal = goal_next
@@ -729,6 +771,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "heading": heading,
             "current_speed": current_speed,
             "goal": goal,
+            "terminal_goal": terminal_goal,
             "ped_pos": ped_pos,
             "ped_vel": ped_vel,
             "robot_radius": robot_radius,
@@ -2014,7 +2057,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
 
         if self._route_guide is not None:
-            route_linear, route_angular = self._route_guide.plan(state["observation"])
+            route_linear, route_angular = self._route_guide_command(state)
             candidates.append(
                 HybridRuleCandidate(
                     float(np.clip(route_linear, 0.0, speed_cap)),
@@ -3952,7 +3995,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         current_time = float(self._step_index) * float(state["dt"])
         self._progress_history.append((current_time, goal_distance))
         progress_windows = self._progress_windows(current_time, goal_distance)
-        if goal_distance <= float(self.config.goal_tolerance):
+        goal_reached = self._terminal_goal_reached(state, goal_distance)
+        if goal_reached:
             command = (0.0, 0.0)
             self._record_decision(
                 mode="GOAL_STOP",

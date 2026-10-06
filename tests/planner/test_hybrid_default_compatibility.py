@@ -154,6 +154,7 @@ def test_release_scenario_environment_dataclasses_match_full_base_dumps():
     """All 48 registered release scenarios retain every environment field from base."""
     assert RobotSimulationConfig().include_goal_next_valid is True
     from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+    from robot_sf.common.hybrid_defaults import defaults_for_source
     from robot_sf.training.scenario_loader import load_scenarios
 
     matrix = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
@@ -165,7 +166,8 @@ def test_release_scenario_environment_dataclasses_match_full_base_dumps():
     scenarios = load_scenarios(matrix)
     assert {s["name"] for s in scenarios} == set(baseline)
     for scenario in scenarios:
-        config = build_env_config(scenario, scenario_path=matrix)
+        with defaults_for_source(matrix):
+            config = build_env_config(scenario, scenario_path=matrix)
         full_dump = json.dumps(_json_ready(asdict(config)), sort_keys=True).replace(
             str(ROOT), "<repo>"
         )

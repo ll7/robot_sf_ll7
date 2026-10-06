@@ -52,6 +52,15 @@ TARGETS = (
     "classic_t_intersection_medium",
     "francis2023_narrow_doorway_width_2p20",
 )
+ARM_SWITCHES = {
+    "off": (False, False, False),
+    "static_only": (True, False, False),
+    "sensor_only": (False, False, True),
+    "goal_validity_with_sensor": (False, True, True),
+    "static_plus_goal_validity": (True, True, True),
+    "current_defaults": (True, True, True),
+    "orca": (False, False, False),
+}
 
 
 def load_cells(names):
@@ -206,16 +215,17 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         scenario.get("simulation_config") or {}, max_episode_steps=horizon
     )
     cfg = _build_env_config(scenario, scenario_path=matrix)
+    static, validity, sensor = ARM_SWITCHES[arm]
     hcfg = hybrid_config(
         scenario,
-        enabled=arm in {"static_only", "static_plus_goal_validity"},
-        goal_validity=arm == "static_plus_goal_validity",
+        enabled=static,
+        goal_validity=validity,
     )
     if arm == "current_defaults":
         hcfg.pop("physical_static_exclusion_enabled")
         hcfg.pop("goal_next_validity_enabled")
     else:
-        cfg.include_goal_next_valid = bool(hcfg.get("goal_next_validity_enabled", False))
+        cfg.include_goal_next_valid = sensor
     algo = "orca" if arm == "orca" else "hybrid_rule_local_planner"
     pcfg = (
         yaml.safe_load((ROOT / "configs/algos/orca_release_v0_0_8.yaml").read_text())

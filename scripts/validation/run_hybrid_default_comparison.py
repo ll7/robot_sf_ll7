@@ -14,7 +14,7 @@ import json
 import subprocess
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from importlib.metadata import distributions
 from pathlib import Path
 
@@ -24,6 +24,7 @@ from robot_sf.common.hybrid_defaults import defaults_for_source
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_empty_world_sweep import assert_dev_seeds
 from scripts.validation.run_hybrid_feasibility_diagnostics import (
+    ARM_SWITCHES,
     CANDIDATE,
     MAIN_MATRIX,
     ROOT,
@@ -36,6 +37,19 @@ from scripts.validation.run_policy_search_candidate import (
     load_candidate_definition,
 )
 
+PER_SWITCH_ARMS = (
+    "off",
+    "static_only",
+    "sensor_only",
+    "goal_validity_with_sensor",
+    "current_defaults",
+)
+SWITCH_NAMES = (
+    "physical_static_exclusion_enabled",
+    "goal_next_validity_enabled",
+    "include_goal_next_valid",
+)
+
 
 def run_pair_cell(task):
     """Run the real diagnostic episode with current fill-in and explicit old controls.
@@ -45,10 +59,13 @@ def run_pair_cell(task):
     """
     with defaults_for_source(None):
         result = run_cell(task)
-    expected = task[2] == "current_defaults"
-    if set(result["effective_switches"].values()) != {expected}:
+    expected = dict(zip(SWITCH_NAMES, ARM_SWITCHES[task[2]], strict=True))
+    if result["effective_switches"] != expected:
         raise RuntimeError("Executed switch values differ from the admitted arm")
-    result["default_policy"] = {"default_set": "current", "explicit_old_overrides": not expected}
+    result["default_policy"] = {
+        "default_set": "current",
+        "explicit_switch_overrides": task[2] != "current_defaults",
+    }
     return result
 
 
@@ -81,7 +98,7 @@ def classify(result, output):
         category = "low_progress_or_livelock_timeout"
     else:
         category = "horizon_exhausted_with_moving_candidates"
-    return {
+    evidence = {
         "classification": category,
         "contacts": contacts,
         "last_feasible_moving_count": evaluated[-1]["feasible_moving_count"] if evaluated else None,
@@ -92,6 +109,99 @@ def classify(result, output):
         "no_feasible_moving_s": result["metrics"]["no_feasible_moving_s"],
         "stopped_time_fraction": result["metrics"]["stopped_time_fraction"],
     }
+    if contacts:
+        contact_index = next(i for i, row in enumerate(rows) if row["collision_types"])
+        contact_row = rows[contact_index]
+        stationary = contact_row["displacement_m"] <= 1e-6
+        stopped_steps = 0
+        for row in reversed(rows[: contact_index + 1]):
+            if row["displacement_m"] > 1e-6:
+                break
+            stopped_steps += 1
+        contact_class = {
+            "is_pedestrian_collision": (
+                "pedestrian_contact_while_robot_stationary"
+                if stationary
+                else "pedestrian_contact_while_robot_moving"
+            ),
+            "is_obstacle_collision": "obstacle_contact",
+            "is_robot_collision": "robot_contact",
+        }
+        evidence["contact_class"] = (
+            "mixed_contact" if len(contacts) > 1 else contact_class[contacts[0]]
+        )
+        evidence["contact_time_s"] = (contact_row["step"] + 1) * 0.1
+        evidence["robot_displacement_on_contact_m"] = contact_row["displacement_m"]
+        evidence["stationary_before_contact_s"] = stopped_steps * 0.1
+    return evidence
+
+
+def summarize_per_switch(results, output):
+    """Compare each executable switch configuration per scenario and against all-off.
+
+    Returns:
+        Complete arm accounting, paired times, scenario rows and all failed cells.
+    """
+
+    def counts(values):
+        times = [r["duration_s"] for r in values if r["outcome"] == "success"]
+        return {
+            "episodes": len(values),
+            "successes": sum(r["outcome"] == "success" for r in values),
+            "collisions": sum(r["outcome"] == "collision" for r in values),
+            "timeouts": sum(r["outcome"] == "timeout" for r in values),
+            "mean_success_time_s": sum(times) / len(times) if times else None,
+        }
+
+    crowd = [r for r in results if not r["empty"]]
+    cells = {(r["scenario"], r["seed"], r["arm"]): r for r in crowd}
+    summary = {
+        "evidence_status": "diagnostic-only",
+        "switches": {
+            a: dict(zip(SWITCH_NAMES, ARM_SWITCHES[a], strict=True)) for a in PER_SWITCH_ARMS
+        },
+        "invalid_combination": {
+            "switches": dict(zip(SWITCH_NAMES, (False, True, False), strict=True)),
+            "status": "invalid_observation_contract",
+            "reason": "Goal validity requires next_valid; literal goal-only fails closed. The executable validity arm includes its required sensor, compared separately with sensor-only.",
+        },
+        "arms": {},
+        "per_scenario": {},
+        "failures": [],
+    }
+    for arm in PER_SWITCH_ARMS:
+        values = [r for r in crowd if r["arm"] == arm]
+        record = counts(values)
+        deltas = [
+            r["duration_s"] - cells[(r["scenario"], r["seed"], "off")]["duration_s"]
+            for r in values
+            if r["outcome"] == "success"
+            and cells[(r["scenario"], r["seed"], "off")]["outcome"] == "success"
+        ]
+        record["paired_successes_with_off"] = len(deltas)
+        record["paired_mean_time_delta_s"] = sum(deltas) / len(deltas) if deltas else None
+        record["new_failures_against_off"] = [
+            {"scenario": r["scenario"], "seed": r["seed"], "outcome": r["outcome"]}
+            for r in values
+            if r["outcome"] != "success"
+            and cells[(r["scenario"], r["seed"], "off")]["outcome"] == "success"
+        ]
+        summary["arms"][arm] = record
+    for scenario in sorted({r["scenario"] for r in crowd}):
+        summary["per_scenario"][scenario] = {
+            arm: counts([r for r in crowd if r["scenario"] == scenario and r["arm"] == arm])
+            for arm in PER_SWITCH_ARMS
+        }
+    for result in results:
+        failure = classify(result, output)
+        if failure:
+            summary["failures"].append(
+                {k: result[k] for k in ("scenario", "seed", "arm", "empty", "outcome")} | failure
+            )
+    summary["empty_world"] = summarize([r for r in results if r["empty"]], output)["comparisons"][
+        "empty"
+    ]
+    return summary
 
 
 def summarize(results, output):
@@ -149,15 +259,51 @@ def summarize(results, output):
     return summary
 
 
-def main():  # noqa: C901 - one bounded experiment orchestration path
+def run_pending(pending, workers, already_complete, total):
+    """Keep only the admitted number of simulations in flight.
+
+    Returns:
+        Completed native results; any failed future aborts without a queued campaign.
+    """
+    results = []
+    start = time.monotonic()
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        remaining = iter(pending)
+        futures = {}
+        for task in [next(remaining, None) for _ in range(workers)]:
+            if task is not None:
+                futures[pool.submit(run_pair_cell, task)] = task
+        while futures:
+            completed, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for future in completed:
+                del futures[future]
+                results.append(future.result())
+                print(
+                    f"completed {already_complete + len(results)}/{total} elapsed_s={time.monotonic() - start:.1f}",
+                    flush=True,
+                )
+                task = next(remaining, None)
+                if task is not None:
+                    futures[pool.submit(run_pair_cell, task)] = task
+    return results
+
+
+def main():
     """Resolve the development-only experiment and run no more than two simulations."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--workers", type=int, choices=(1, 2), default=2)
     parser.add_argument(
-        "--probe", action="store_true", help="First two standard scenarios at seed 1001 only"
+        "--probe",
+        action="store_true",
+        help="Small development canary (four highlighted scenarios with --per-switch)",
     )
     parser.add_argument("--summarize-only", action="store_true")
+    parser.add_argument(
+        "--per-switch",
+        action="store_true",
+        help="Five executable arms, with the validity sensor dependency explicit",
+    )
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     names = [s["name"] for s in load_scenarios(MAIN_MATRIX)]
@@ -168,11 +314,27 @@ def main():  # noqa: C901 - one bounded experiment orchestration path
         selected = names + widths if empty else names
         seeds = assert_dev_seeds([1001, 1002] if empty else list(range(1001, 1031)))
         if args.probe:
-            selected, seeds = names[:2], [1001]
+            selected, seeds = (
+                (
+                    [
+                        "francis2023_narrow_hallway",
+                        "francis2023_robot_crowding",
+                        "classic_bottleneck_high",
+                        "francis2023_exiting_room",
+                    ],
+                    [1001] if empty else [1001, 1013, 1020],
+                )
+                if args.per_switch
+                else (names[:2], [1001])
+            )
         for name in selected:
             horizon = int(cells[name][0]["simulation_config"]["max_episode_steps"])
             for seed in seeds:
-                for arm in ("off", "current_defaults"):
+                for arm in (
+                    PER_SWITCH_ARMS
+                    if args.per_switch and not empty
+                    else ("off", "current_defaults")
+                ):
                     tasks.append((name, seed, arm, empty, str(args.output), horizon))
     files = [
         Path(__file__),
@@ -213,6 +375,10 @@ def main():  # noqa: C901 - one bounded experiment orchestration path
         "seeds": list(range(1001, 1031)),
         "empty_seeds": [1001, 1002],
         "workers": args.workers,
+        "per_switch": args.per_switch,
+        "executable_arms": list(PER_SWITCH_ARMS)
+        if args.per_switch
+        else ["off", "current_defaults"],
         "expected_episodes": len(tasks),
         "standard_scenarios": names,
         "empty_width_scenarios": widths,
@@ -235,20 +401,16 @@ def main():  # noqa: C901 - one bounded experiment orchestration path
             pending.append(task)
     if pending and args.summarize_only:
         raise RuntimeError(f"Incomplete comparison: {len(pending)} missing episodes")
-    start = time.monotonic()
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(run_pair_cell, t): t for t in pending}
-        for future in as_completed(futures):
-            results.append(future.result())
-            print(
-                f"completed {len(results)}/{len(tasks)} elapsed_s={time.monotonic() - start:.1f}",
-                flush=True,
-            )
-    summary = summarize(results, args.output)
+    results.extend(run_pending(pending, args.workers, len(results), len(tasks)))
+    summary = (
+        summarize_per_switch(results, args.output)
+        if args.per_switch
+        else summarize(results, args.output)
+    )
     summary["manifest"] = manifest
     summary["complete"] = len(results) == len(tasks)
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(json.dumps(summary["comparisons"], indent=2))
+    print(json.dumps(summary["arms"] if args.per_switch else summary["comparisons"], indent=2))
 
 
 if __name__ == "__main__":

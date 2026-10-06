@@ -87,7 +87,9 @@ def build_worker_fixed_params(  # noqa: PLR0913
         "snqi_weights": snqi_weights,
         "snqi_baseline": snqi_baseline,
         "algo": algo,
-        "algo_config": raw_policy_cfg,
+        # Parsing no algorithm file yields {}, but the worker must retain that
+        # the input was absent. An explicit inline mapping remains distinct.
+        "algo_config": None if algo_config_path is None and not raw_policy_cfg else raw_policy_cfg,
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),

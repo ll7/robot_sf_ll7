@@ -64,7 +64,7 @@ def active_default_policy() -> dict[str, str]:
 
 
 def has_active_default_policy() -> bool:
-    """Tell scenario builders whether an episode already selected its source identity.
+    """Tell callers whether typed constructors inherit an explicit source policy.
 
     Returns:
         Whether a source policy is already scoped.

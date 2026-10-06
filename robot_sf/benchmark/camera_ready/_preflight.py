@@ -30,7 +30,11 @@ from robot_sf.benchmark.camera_ready._route_clearance import (
     _load_route_clearance_certifications,
     _route_clearance_warning_summary,
 )
-from robot_sf.benchmark.camera_ready._run_state import _git_context, _resolve_campaign_id
+from robot_sf.benchmark.camera_ready._run_state import (
+    _git_context,
+    _resolve_campaign_id,
+    _resolve_campaign_root,
+)
 from robot_sf.benchmark.camera_ready._summaries import (
     _build_amv_coverage_summary,
     _build_comparability_summary,
@@ -69,7 +73,6 @@ from robot_sf.benchmark.tuning_run_provenance import (
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
-    get_artifact_category_path,
     get_repository_root,
 )
 
@@ -589,12 +592,7 @@ def _setup_campaign_directories(
     """
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
-    base_dir = (
-        output_root.resolve()
-        if output_root
-        else (get_artifact_category_path("benchmarks") / "camera_ready")
-    )
-    campaign_root = (base_dir / campaign_id).resolve()
+    campaign_root = _resolve_campaign_root(output_root=output_root, campaign_id=campaign_id)
     reports_dir = campaign_root / "reports"
     preflight_dir = campaign_root / "preflight"
     reports_dir.mkdir(parents=True, exist_ok=True)

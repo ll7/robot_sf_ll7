@@ -316,3 +316,30 @@ def test_torch_213_cuda_seed_is_reproducible_across_calls():
     b = torch.randn(4, 4, device="cuda")
 
     assert torch.equal(a, b)
+
+
+def test_startup_probe_overrides_inherited_thread_counts(monkeypatch):
+    """The child starts bounded even when the parent allows eight BLAS threads."""
+    thread_names = (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    )
+    for name in thread_names:
+        monkeypatch.setenv(name, "8")
+    monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: object())
+    calls = []
+
+    def capture_probe(args, **kwargs):
+        calls.append(args)
+        child_env = kwargs.get("env", os.environ)
+        assert {name: child_env[name] for name in thread_names} == dict.fromkeys(thread_names, "1")
+        assert kwargs["timeout"] == 60
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", capture_probe)
+    test_model_package_preloads_torch_runtime_before_direct_ppo_import()
+    assert len(calls) == 1
+    assert "model.policy.optimizer is not None" in calls[0][2]

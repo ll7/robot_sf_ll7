@@ -101,6 +101,7 @@ Legacy Markdown contract.
     assert followups.status == "ok"
     assert not any("PR contract v2" in blocker for blocker in blockers)
 
+
 # GitHub's compare endpoint returns changed-file records on its first page, up to
 # 300 files for the whole comparison. A response containing exactly 300 rows may
 # be capped and cannot prove the complete historical file set.
@@ -3090,6 +3091,25 @@ def test_regression_last_20_merged_prs() -> None:
                 "github-closing-parity" in blocker and f"#{issue}" in blocker
                 for blocker in blockers
             ), f"PR #{number} no longer exposes its known historical parity hit"
+        # Older merged bodies may fail a newly enforced parser rule. Require
+        # that exact canonical rejection; every unrelated blocker still fails.
+        parsed_contract = parse_pr_contract_v2(body, source="historical parity")
+        expected_v2_blockers = (
+            [
+                f"BLOCKER: {parsed_contract.message}; "
+                "v1 fallback is disabled when a v2 marker is present."
+            ]
+            if parsed_contract.status == "malformed"
+            else []
+        )
+        observed_v2_blockers = [
+            blocker
+            for blocker in blockers
+            if blocker.startswith("BLOCKER: Malformed pr-contract:v2:")
+        ]
+        assert observed_v2_blockers == expected_v2_blockers, (
+            f"PR #{number} has different standalone and canonical v2 validation"
+        )
         unexpected_blockers = [
             blocker
             for blocker in blockers
@@ -3099,7 +3119,7 @@ def test_regression_last_20_merged_prs() -> None:
                 for issue in expected_parity_issues
             )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
-            and not _is_expected_historical_malformed_v2_blocker(historical_evidence, body, blocker)
+            and blocker not in expected_v2_blockers
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"

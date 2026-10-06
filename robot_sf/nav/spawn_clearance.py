@@ -156,6 +156,18 @@ def _wall_geometry(map_def: MapDefinition) -> PreparedGeometry:
     return cached
 
 
+@dataclass(frozen=True, kw_only=True)
+class PedestrianRelocationOptions:
+    """Select movable rows and an optional route-heading preference for relocation.
+
+    rows limits which pedestrians can move. route_goals prefers a candidate whose
+    new heading does not close on a robot; it never weakens either clearance margin.
+    """
+
+    rows: Sequence[int] | None = None
+    route_goals: Sequence[Vec2D] | None = None
+
+
 def relocate_overlapping_pedestrians(
     ped_xy: Sequence[Vec2D],
     ped_radius: float,
@@ -163,17 +175,24 @@ def relocate_overlapping_pedestrians(
     map_def: MapDefinition,
     margin: float = SPAWN_CLEARANCE_MARGIN_M,
     *,
-    rows: Sequence[int] | None = None,
+    robot_margin: float | None = None,
+    reaction_clearance_m: Sequence[float] | None = None,
+    options: PedestrianRelocationOptions | None = None,
 ) -> PedestrianRelocationReport:
     """Find clear positions for pedestrians that overlap a robot footprint.
 
-    A pedestrian overlaps when its centre is closer than
-    ``robot_radius + ped_radius + margin`` to a robot centre. Each such pedestrian is
+    The robot exclusion radius adds the larger of the scalar robot margin and
+    ``margin + reaction_clearance_m[row]`` to the two agent radii. Each selected
+    pedestrian inside that radius is
     moved along the ray from the robot through its current position, to the
     nearest point on the exclusion circle; if that point is blocked (walls, other
     pedestrians with margin, other robots, or a wall between the old and new
-    position), rotated rays and slightly larger radii are tried in a fixed order. No random numbers are drawn, so the global RNG stream and
-    every non-overlapping spawn stay unchanged.
+    position), paired rotated rays and slightly larger radii are tried. Clear
+    candidates in each pair are ranked by geometric clearance, without preferring
+    a handed direction. Route-following pairs preserve the original goal heading,
+    and route-following pedestrians prefer a clear candidate whose
+    route velocity does not close on a robot. No random numbers are drawn, so the
+    global RNG stream and every non-overlapping spawn stay unchanged.
 
     Args:
         ped_xy: Current pedestrian positions.
@@ -181,38 +200,70 @@ def relocate_overlapping_pedestrians(
         robots: ``((x, y), radius)`` for each robot.
         map_def: Map providing walls and bounds.
         margin: Extra surface clearance to keep.
-        rows: Optional subset of rows that may be moved (defaults to all rows).
+        robot_margin: Robot surface buffer; defaults to margin. Pedestrian-to-pedestrian
+            spacing still uses margin, so a reaction buffer does not inflate crowd spacing.
+        reaction_clearance_m: Extra robot surface clearance per row, beyond margin.
+        options: Movable-row selection and optional non-closing route-heading preference.
+            Both clearance margins still apply when every candidate closes on a robot.
 
     Returns:
         Report with ``row -> (old, new)`` moves and the rows left unresolved.
     """
+    options = options or PedestrianRelocationOptions()
+    rows, route_goals = options.rows, options.route_goals
     report = PedestrianRelocationReport()
     positions: list[Vec2D] = [(float(p[0]), float(p[1])) for p in ped_xy]
     movable = set(range(len(positions)) if rows is None else rows)
     blocked = _pedestrian_blocked_geometry(map_def, ped_radius)
     walls = _wall_geometry(map_def)
+    base_robot_margin = margin if robot_margin is None else robot_margin
     for row in range(len(positions)):
-        hit = _overlapping_robot(positions[row], robots, ped_radius, margin)
+        robot_margin = max(
+            base_robot_margin,
+            margin + (reaction_clearance_m[row] if reaction_clearance_m is not None else 0.0),
+        )
+        hit = _overlapping_robot(positions[row], robots, ped_radius, robot_margin)
         if hit is None:
             continue
         if row not in movable:
             report.unresolved.append(row)
             continue
+        clear_candidates = [
+            candidate
+            for pair in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
+            for candidate in _rank_relocation_pair(
+                [
+                    point
+                    for point in pair
+                    if _is_clear(
+                        point,
+                        row,
+                        positions,
+                        robots,
+                        ped_radius,
+                        margin,
+                        (blocked, walls),
+                        robot_margin=robot_margin,
+                    )
+                ],
+                blocked,
+                [point for other, point in enumerate(positions) if other != row],
+                robots,
+                ped_radius,
+                route=(positions[row], route_goals[row]) if route_goals is not None else None,
+            )
+        ]
+        # Prefer a non-closing route heading. A goal inside a robot footprint
+        # makes that impossible: retain the full reaction buffer and route heading
+        # instead of leaving the pedestrian at an overlapping original position.
         new_xy = next(
             (
                 candidate
-                for candidate in _relocation_candidates(positions[row], hit, ped_radius, margin)
-                if _is_clear(
-                    candidate,
-                    row,
-                    positions,
-                    robots,
-                    ped_radius,
-                    margin,
-                    (blocked, walls),
-                )
+                for candidate in clear_candidates
+                if route_goals is None
+                or _route_heading_clears_robots(candidate, route_goals[row], robots)
             ),
-            None,
+            clear_candidates[0] if clear_candidates else None,
         )
         if new_xy is None:
             report.unresolved.append(row)
@@ -240,11 +291,11 @@ def _relocation_candidates(
     robot: tuple[Vec2D, float],
     ped_radius: float,
     margin: float,
-) -> Iterator[Vec2D]:
-    """Yield candidate positions on and just beyond a robot exclusion circle.
+) -> Iterator[tuple[Vec2D, ...]]:
+    """Yield paired positions on and just beyond a robot exclusion circle.
 
     The ray through the current position comes first, then rays rotated in 15 degree
-    steps alternating sides, then the same sweep at slightly larger radii.
+    steps on both sides together, then the same sweep at slightly larger radii.
     """
     robot_xy, robot_radius = robot
     dx, dy = point[0] - robot_xy[0], point[1] - robot_xy[1]
@@ -255,9 +306,65 @@ def _relocation_candidates(
         radius = base_radius + extra
         for k in range(half_turn_steps + 1):
             signs = (1.0, -1.0) if 0 < k < half_turn_steps else (1.0,)
-            for sign in signs:
-                angle = base_angle + sign * k * _RELOCATION_ANGLE_STEP_RAD
-                yield (robot_xy[0] + radius * cos(angle), robot_xy[1] + radius * sin(angle))
+            yield tuple(
+                (
+                    robot_xy[0] + radius * cos(base_angle + sign * k * _RELOCATION_ANGLE_STEP_RAD),
+                    robot_xy[1] + radius * sin(base_angle + sign * k * _RELOCATION_ANGLE_STEP_RAD),
+                )
+                for sign in signs
+            )
+
+
+def _rank_relocation_pair(
+    candidates: list[Vec2D],
+    blocked: PreparedGeometry,
+    neighbors: Sequence[Vec2D],
+    robots: Sequence[tuple[Vec2D, float]],
+    ped_radius: float,
+    *,
+    route: tuple[Vec2D, Vec2D] | None = None,
+) -> list[Vec2D]:
+    """Rank a clear pair by distances that commute with mirrors and rotations.
+
+    For route followers, first preserve the intended heading toward their goal:
+    prefer the smaller change from the original heading. Then prefer the largest
+    minimum surface clearance and the sorted clearances to every feature. All
+    scores use only dot products and distances, so transforming the whole scene
+    transforms the chosen candidate. Nanometre rounding prevents noise from choosing
+    a handed side. If the geometry cannot distinguish a pair, skip it: choosing
+    either side in an exactly symmetric scene would break reflection symmetry.
+
+    Returns:
+        Distinguishable candidates in descending clearance order, or no candidates
+        for an exact tie. The axial rays remain available later in the sweep.
+    """
+    if len(candidates) < 2:
+        return candidates
+
+    def score(candidate: Vec2D) -> tuple[float, ...]:
+        clearances = [blocked.context.distance(Point(candidate))]
+        clearances.extend(dist(candidate, other) - 2 * ped_radius for other in neighbors)
+        clearances.extend(
+            dist(candidate, robot_xy) - radius - ped_radius for robot_xy, radius in robots
+        )
+        ordered = sorted(round(clearance, 9) for clearance in clearances)
+        if route is None:
+            return tuple(ordered)
+        start, goal = route
+        original = (goal[0] - start[0], goal[1] - start[1])
+        redirected = (goal[0] - candidate[0], goal[1] - candidate[1])
+        length = hypot(*original) * hypot(*redirected)
+        alignment = (
+            (original[0] * redirected[0] + original[1] * redirected[1]) / length
+            if length > 1e-12
+            else 1.0
+        )
+        return (round(alignment, 9), *ordered)
+
+    ranked = sorted(((score(candidate), candidate) for candidate in candidates), reverse=True)
+    if ranked[0][0] == ranked[1][0]:
+        return []
+    return [candidate for _score, candidate in ranked]
 
 
 def _is_clear(
@@ -268,6 +375,8 @@ def _is_clear(
     ped_radius: float,
     margin: float,
     geometry: tuple[PreparedGeometry, PreparedGeometry],
+    *,
+    robot_margin: float | None = None,
 ) -> bool:
     """Return whether a relocation candidate is a clear, reachable position.
 
@@ -277,7 +386,12 @@ def _is_clear(
     crossing a wall (so a pedestrian is never moved through a wall).
     """
     blocked, walls = geometry
-    if _overlapping_robot(candidate, robots, ped_radius, margin) is not None:
+    if (
+        _overlapping_robot(
+            candidate, robots, ped_radius, margin if robot_margin is None else robot_margin
+        )
+        is not None
+    ):
         return False
     if blocked.intersects(Point(candidate)):
         return False
@@ -288,6 +402,20 @@ def _is_clear(
         other == row or dist(candidate, other_xy) >= spacing
         for other, other_xy in enumerate(positions)
     )
+
+
+def _route_heading_clears_robots(
+    point: Vec2D,
+    goal: Vec2D,
+    robots: Sequence[tuple[Vec2D, float]],
+) -> bool:
+    """Check the route heading at relocation.
+
+    Returns:
+        Whether a velocity toward the goal is non-closing on every robot.
+    """
+    vx, vy = goal[0] - point[0], goal[1] - point[1]
+    return all(vx * (point[0] - xy[0]) + vy * (point[1] - xy[1]) >= -1e-9 for xy, _ in robots)
 
 
 __all__ = [

@@ -6,6 +6,7 @@ import os
 from dataclasses import fields
 
 import numpy as np
+import pytest
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 import pygame
@@ -212,3 +213,23 @@ def test_prepare_frame_executes_background_fill_with_overrides():
 
     pixels = pygame.surfarray.array3d(view.screen)
     assert (np.all(pixels == (11, 12, 13), axis=2)).any()
+
+
+@pytest.mark.parametrize("helper", ["legend", "title"])
+def test_render_helpers_initialize_fonts_independently(helper: str) -> None:
+    """Each public helper renders real surfaces from an uninitialized font subsystem."""
+    was_initialized = pygame.font.get_init()
+    pygame.font.quit()
+    try:
+        for _ in range(2):
+            if helper == "legend":
+                surface, bounds = render_legend_panel()
+            else:
+                surface, bounds = render_title_block(["Standalone title"], 640, 480)
+            assert pygame.font.get_init()
+            assert surface.get_width() > 0
+            assert bounds
+    finally:
+        pygame.font.quit()
+        if was_initialized:
+            pygame.font.init()

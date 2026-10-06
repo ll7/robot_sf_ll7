@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "campaign-table-row.v2",
+  "title": "Campaign table episode cohort counts",
+  "description": "episodes is eligible N used by means; total includes all object episode rows, excluded is total minus eligible. Historical absent markers remain eligible.",
+  "type": "object",
+  "required": [
+    "episodes",
+    "episodes_total",
+    "episodes_excluded"
+  ],
+  "properties": {
+    "episodes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Evidence-eligible episode N, matching the metric cohort."
+    },
+    "episodes_total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "All object episode rows run, before eligibility filtering."
+    },
+    "episodes_excluded": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total minus eligible N."
+    }
+  },
+  "additionalProperties": true
+}

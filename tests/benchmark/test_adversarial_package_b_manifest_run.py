@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.adversarial.config import SearchConfig
 from robot_sf.benchmark.adversarial.adversarial_package_b_confirmation import (
     build_package_b_confirmation_sidecar,
     validate_package_b_confirmation,
@@ -20,6 +21,7 @@ from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
     preflight_package_b_manifest,
 )
 from robot_sf.benchmark.adversarial.adversarial_package_b_report import validate_package_b_report
+from robot_sf.evidence.writers import write_text
 from scripts.tools.compare_adversarial_samplers import (
     SamplerComparisonRow,
     build_comparison_payload,
@@ -32,6 +34,74 @@ from scripts.tools.run_adversarial_package_b import main as run_package_b_main
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_MANIFEST = REPO_ROOT / "configs/adversarial/issue_3079_package_b_budget_matched.yaml"
 ISSUE_5326_MANIFEST = REPO_ROOT / "configs/adversarial/issue_5326_objective_comparison.yaml"
+
+
+def _development_search_space(source: Path, destination: Path) -> Path:
+    """Keep candidate geometry bounds while constraining real episodes to development seeds."""
+    payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+    payload["variables"]["scenario_seed"] = {"min": 1001, "max": 1030}
+    write_text(destination, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(payload))
+    return destination
+
+
+EMPIRICAL_ROOT_SEED = 1003
+# TODO: import the canonical bands from robot_sf.benchmark.seed_bands when it
+# lands on main. These are the retired and sealed 0.0.8 evaluation seeds.
+_HELD_OUT_RETIRED = frozenset(range(111, 141))
+_HELD_OUT_0_0_8 = frozenset(
+    {
+        50036,
+        50140,
+        50331,
+        50403,
+        50813,
+        51339,
+        51709,
+        51767,
+        52094,
+        52175,
+        52257,
+        52671,
+        52850,
+        52971,
+        53020,
+        53198,
+        53239,
+        53636,
+        53671,
+        53779,
+        55022,
+        55379,
+        55568,
+        56170,
+        56966,
+        57077,
+        57113,
+        57494,
+        57943,
+        59019,
+    }
+)
+
+
+def _assert_empirical_candidate_seeds_safe(
+    config: SearchConfig, objectives: tuple[str, ...], root_seed: int
+) -> None:
+    """Check actual sampler draws without stepping before empirical evaluation."""
+    rows = run_sampler_comparison(
+        config=replace(config, output_dir=config.output_dir / "seed-preview"),
+        sampler_names=("random",),
+        objective_names=objectives,
+        synthetic=True,
+        budgets=(16,),
+        seeds=(root_seed,),
+    )
+    for row in rows:
+        candidates = json.loads(Path(row.manifest_path).read_text(encoding="utf-8"))["candidates"]
+        assert len(candidates) == 16
+        candidate_seeds = [item["candidate"]["scenario_seed"] for item in candidates]
+        forbidden = sorted(set(candidate_seeds) & (_HELD_OUT_RETIRED | _HELD_OUT_0_0_8))
+        assert not forbidden, f"held-out scenario seeds drawn before empirical run: {forbidden}"
 
 
 def _copy_pipeline_fixture(tmp_path: Path) -> Path:
@@ -571,19 +641,28 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
     scaled up. Prior cheap-lane workers BLOCKED on a false "requires Slurm/GPU" premise; the
     executor here verifies that premise against the actual code path.
 
-    Seed 1105 replaces 1101 (issue #9725): the only certified failure under seed 1101 was a
-    pedestrian placed on the robot at reset (collision at step 1), a spawn defect the
-    simulator now prevents. Seed 1105 yields a certified collision at step 10.
+    Private pedestrian streams change the old global-RNG realization. Episodes
+    stay restricted to development seeds 1001..1030, and synthetic preview checks
+    both held-out bands before empirical evaluation.
     """
     config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
-    config = replace(config, output_dir=tmp_path / "comparison")
+    development_space = _development_search_space(
+        config.search_space_path, tmp_path / "development_space.yaml"
+    )
+    config = replace(
+        config,
+        output_dir=tmp_path / "comparison",
+        search_space_path=development_space,
+        search_space=type(config.search_space).from_file(development_space),
+    )
+    _assert_empirical_candidate_seeds_safe(config, objectives, EMPIRICAL_ROOT_SEED)
     rows = run_sampler_comparison(
         config=config,
         sampler_names=("random",),
         objective_names=objectives,
         synthetic=False,
         budgets=(16,),
-        seeds=(1105,),
+        seeds=(EMPIRICAL_ROOT_SEED,),
     )
     assert len(rows) == 1
     row = rows[0]
@@ -626,15 +705,18 @@ def test_package_b_orchestrator_empirical_flag_runs_real_evaluator(tmp_path: Pat
     Slurm/GPU-only; the full 27-cell empirical campaign is the same driver scaled up.
     """
     manifest = _copy_pipeline_fixture(tmp_path)
+    space = tmp_path / "configs/adversarial/crossing_ttc_space.yaml"
+    _development_search_space(space, space)
     # Shrink the matrix so the CPU empirical run stays fast under test. The compare CLI does
     # not enforce the preflight's fixed 27-cell contract, so a reduced manifest runs here.
     payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     payload["budget_grid"] = [16]
-    # Seed 1105, not 1101: seed 1101's only certified failure was a reset spawn overlap
-    # that issue #9725 removed (see the evaluator test above).
-    payload["repeated_seeds"] = [1105]
+    # Use the same synthetic-checked dev root as the direct evaluator test.
+    payload["repeated_seeds"] = [EMPIRICAL_ROOT_SEED]
     payload["samplers"] = ["random"]
     manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    config, objectives, *_ = load_package_b_manifest(manifest, repo_root=tmp_path)
+    _assert_empirical_candidate_seeds_safe(config, objectives, EMPIRICAL_ROOT_SEED)
 
     report_json = tmp_path / "report.json"
     table_md = tmp_path / "comparison_table.md"

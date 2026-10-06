@@ -1,0 +1,9 @@
+{
+  "source_member": "payload/runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield__differential_drive/episodes.jsonl",
+  "line_number": 1336,
+  "line_sha256": "90ea695061ba3066e2e9fd737c075cd57bf8db42511598097a6e9ad92fa64dcf",
+  "bundle_sha256": "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f",
+  "member_sha256": "fa8e028a2a8dff4e92f82c626b71e9836fb4a42070f7d0661354228ddc6d2f61",
+  "source_commit": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "claim_boundary": "Recorded public row; diagnostic catcher regression only, no planner execution or causal defect claim."
+}

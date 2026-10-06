@@ -177,12 +177,12 @@ helpers (issue #7666):
   uv run python scripts/dev/model_cache_key.py --config <ppo-config.yaml> --machine
   ```
 
-- [`merge_test_durations.py`](merge_test_durations.py) validates and merges the four
+- [`merge_test_durations.py`](merge_test_durations.py) validates and merges the six
   pytest-split duration shard stores:
 
   ```bash
   uv run python scripts/dev/merge_test_durations.py \
-    --artifact-dir .duration-artifacts --output .test_durations
+    --artifact-dir .duration-artifacts --output .test_durations --shard-count 6
   ```
 
 - [`check_ci_needs.py`](check_ci_needs.py) evaluates the aggregate job's required

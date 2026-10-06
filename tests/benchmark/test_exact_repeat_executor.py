@@ -23,6 +23,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     _classify_repeat_failure,
     _compute_trajectory_hash,
     _get_environment_fingerprint,
+    _historical_identity_payload,
     _record_is_degraded,
     _record_is_isolation_failure,
     _safe_json_value,
@@ -32,6 +33,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     verify_host_report,
 )
 from robot_sf.benchmark.runner import run_episode
+from robot_sf.benchmark.utils import _config_hash
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = (
@@ -68,6 +70,72 @@ def manifest() -> dict[str, Any]:
 def resolved_bundle(manifest: dict[str, Any]) -> dict[str, Any]:
     """Resolve the runnable definitions used by executor tests."""
     return resolve_runnable_definitions(manifest, CAMPAIGN_CONFIG)
+
+
+@pytest.fixture(scope="module")
+def development_ppo_bundle(resolved_bundle):
+    """Derive a dev-seed runtime proof; retain the historical recovery fixture.
+
+    #10063: the archived target uses retired evaluation seed 111. Native runtime
+    tests must use dev seed 1001, including its embedded route RNG seed. This
+    is a distinct derived identity, never a re-execution of the archived target.
+    """
+    bundle = copy.deepcopy(resolved_bundle)
+    bundle.pop("bundle_sha256")
+    target = next(t for t in bundle["targets"] if t["planner"] == "ppo")
+    scenario = bundle["scenario_definitions"][target["scenario_definition_id"]]
+    scenario["seeds"] = [1001]
+    scenario.pop("seed", None)
+    for key in list(scenario.get("simulation_config", {})):
+        if key.endswith("_seed"):
+            scenario["simulation_config"][key] = 1001
+    target["seed"] = 1001
+    target["scenario_definition_id"] = f"{target['scenario_id']}--dev-1001"
+    planner = bundle["planner_definitions"][target["planner_definition_id"]]
+    identity = _historical_identity_payload(
+        scenario,
+        target=target,
+        algo=planner["algo"],
+        algo_config=planner["planner_config"],
+        record_forces=bool(scenario.get("record_forces", False)),
+        record_simulation_step_trace=bool(scenario.get("record_simulation_step_trace", False)),
+        dt=0.1,
+        horizon=target["horizon"],
+    )
+    target["source_config_hash"] = target["computed_config_hash"] = _config_hash(identity)
+    bundle["targets"] = [target]
+    bundle["scenario_definitions"] = {target["scenario_definition_id"]: scenario}
+    bundle["planner_definitions"] = {target["planner_definition_id"]: planner}
+    bundle["claim_boundary"] = "development seed 1001 runtime proof; no archived target replay"
+    bundle["source"]["derived_from_bundle_sha256"] = resolved_bundle["bundle_sha256"]
+    bundle["source"]["historical_identity_contract"] += ":development_seed_variant"
+    bundle["summary"] = {"n_targets": 1, "n_cells": 1, "all_source_config_hashes_match": True}
+    bundle["manifest_sha256"] = canonical_sha256(
+        {
+            "targets": bundle["targets"],
+            "execution_contract": bundle["execution_contract"],
+            "claim_boundary": bundle["claim_boundary"],
+        }
+    )
+    bundle["bundle_sha256"] = canonical_sha256(bundle)
+    return bundle
+
+
+def test_development_ppo_bundle_has_dev_seed_and_a_distinct_identity(
+    development_ppo_bundle, resolved_bundle
+):
+    """The runtime seed and route RNG agree without mutating archived definitions."""
+    target = development_ppo_bundle["targets"][0]
+    scenario = development_ppo_bundle["scenario_definitions"][target["scenario_definition_id"]]
+    assert target["seed"] == 1001
+    assert scenario["seeds"] == [1001]
+    assert scenario["simulation_config"]["route_spawn_seed"] == 1001
+    assert development_ppo_bundle["manifest_sha256"] != resolved_bundle["manifest_sha256"]
+    assert next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")["seed"] == 111
+    assert (
+        development_ppo_bundle["source"]["derived_from_bundle_sha256"]
+        == resolved_bundle["bundle_sha256"]
+    )
 
 
 # --- _safe_json_value -------------------------------------------------------
@@ -1024,7 +1092,7 @@ def test_execute_campaign_prefers_isolation_over_degradation(tmp_path, manifest,
 
 
 def test_native_ppo_target_runs_deterministically_with_real_runner(
-    tmp_path, resolved_bundle, monkeypatch
+    tmp_path, development_ppo_bundle, monkeypatch
 ):
     """Native PPO executes through run_episode and is bitwise-identical across repeats.
 
@@ -1055,10 +1123,7 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(
     # behavior with deliberately small budgets.
     monkeypatch.setattr("robot_sf.benchmark.runner.POLICY_STEP_TIMEOUT_SECS", 2.0)
 
-    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
-    ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
-    ppo_bundle["targets"] = [ppo_target]
-    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+    ppo_bundle = development_ppo_bundle
 
     host_result = execute_campaign(
         ppo_bundle, output_dir=tmp_path / "native_ppo_deterministic", run_episode=run_episode
@@ -1121,7 +1186,9 @@ def test_native_runner_preflights_before_repeats_and_blocks_late_downloads(
 
 
 @pytest.mark.slow
-def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle, monkeypatch):
+def test_native_ppo_runs_offline_after_model_preflight(
+    tmp_path, development_ppo_bundle, monkeypatch
+):
     """After preflight seeds the model, the exact-repeat PPO path runs with networking disabled.
 
     Issue #6189: the native-PPO arm's config enables the predictive-foresight
@@ -1163,10 +1230,7 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     from robot_sf.models import registry as model_registry
     from robot_sf.models.preflight import ModelPreflightError
 
-    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
-    ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
-    ppo_bundle["targets"] = [ppo_target]
-    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+    ppo_bundle = development_ppo_bundle
 
     # 1) Preflight: resolve + checksum-verify EVERY model the PPO arm resolves at
     #    runtime (its own policy checkpoint AND, because the config enables the

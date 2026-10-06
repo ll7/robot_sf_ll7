@@ -64,6 +64,8 @@ jobs:
       - name: Checkout gate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Elect exact-head full-matrix owner
@@ -148,6 +150,55 @@ jobs:
           fi
         if: github.event_name != 'pull_request' || !github.event.pull_request.draft
 
+      - name: Restore test durations for pytest-split balancing
+        if: steps.decision.outputs.run_full_ci == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .test_durations
+            .pytest_cache/test_durations_metadata.json
+          key: test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-
+            test-durations-v2-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Freeze matrix duration input
+        id: freeze-durations
+        if: steps.decision.outputs.run_full_ci == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/dev/merge_test_durations.py \
+            --snapshot-input .test_durations --output .test_durations
+
+      - name: Upload frozen test durations
+        if: steps.decision.outputs.run_full_ci == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-duration-snapshot
+          path: .test_durations
+          include-hidden-files: true
+          if-no-files-found: error
+
+      - name: Prepare conservative test admission
+        if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/affected_test_selection.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --json-output output/ci/affected-selection.json --format mode
+
+      - name: Upload conservative test admission
+        if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: conservative-test-admission
+          path: output/ci/affected-selection.json
+          if-no-files-found: error
+
   fast-feedback:
     needs: dispatch-ownership
     if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
@@ -157,18 +208,24 @@ jobs:
     runs-on: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
+      actions: read
     timeout-minutes: 45
-    # Split every event across four runners. Pull requests retain their fast-only
+    # Split every event across six runners. Pull requests retain their fast-only
     # shards; all events publish unique coverage data so the exact-head changed-
     # coverage gate can prove the final PR head before merge admission.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
-      PYTEST_SHARD_COUNT: 4
+      # Redistribute queued release-validation checks instead of stranding a tail.
+      PYTEST_XDIST_DIST: worksteal
+      PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
-      ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
+      # Keep complete coverage while the next PR installs default admission.
+      ROBOT_SF_SHARD_INCLUDE_SLOW: "1"
+      # Artifact consumption starts in the dependent default-admission PR.
+      ROBOT_SF_AFFECTED_BASE_REF: ""
       ROBOT_SF_PYTEST_COVERAGE: "1"
       COVERAGE_FILE: ${{ format('output/coverage/.coverage.{0}', matrix.shard) }}
       # The release-hydration tests invoke `gh` for a public pinned asset. Use
@@ -224,17 +281,16 @@ jobs:
           restore-keys: |
             pytest-${{ runner.os }}-
 
-      - name: Restore test durations for pytest-split balancing
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Download frozen test durations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: .test_durations
-          key: test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          name: test-duration-snapshot
+          path: .
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
 
       # Lint and typecheck are shard-independent; run them once (shard 1 only)
-      # to avoid quadruplicated annotations on pull-request shard matrices.
+      # to avoid duplicated annotations on pull-request shard matrices.
       - name: Lint
         if: ${{ matrix.shard == 1 }}
         run: scripts/dev/ci_driver.sh lint
@@ -585,6 +641,12 @@ jobs:
           uv run python scripts/validation/check_scenario_archetype_geometry.py
           --fail-on-violation
           --waiver-file configs/scenarios/archetype_validation_waivers.yaml
+
+      - name: Enforce release endpoint separation
+        run: >-
+          uv run python scripts/validation/check_scenario_archetype_geometry.py
+          --release-zones
+          --waiver-file configs/scenarios/release_0_0_8_endpoint_dispositions.yaml
 
       - name: Enforce pinned parameter contract
         run: >-
@@ -1031,25 +1093,34 @@ jobs:
         run: echo "Draft lint and small helper tests passed; full CI starts on ready_for_review."
 
       - name: Download test-duration shards
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: pytest-durations-*
           path: .duration-artifacts
 
+      # Duration hints survive failed/cancelled siblings; the CI verdict above
+      # remains mandatory. Empty, malformed and overlapping artifacts cannot save.
       - name: Merge test durations
         id: merge-test-durations
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
+        env:
+          FAST_FEEDBACK_RESULT: ${{ needs.fast-feedback.result }}
+          DURATION_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DURATION_CACHE_KEY: test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           python scripts/dev/merge_test_durations.py \
-            --artifact-dir .duration-artifacts --output .test_durations
+            --artifact-dir .duration-artifacts --output .test_durations \
+            --allow-partial --shard-count 6 --metadata-output .pytest_cache/test_durations_metadata.json
 
       - name: Save merged test durations
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .test_durations
-          key: test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .test_durations
+            .pytest_cache/test_durations_metadata.json
+          key: test-durations-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}

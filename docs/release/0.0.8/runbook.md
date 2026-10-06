@@ -1,0 +1,1037 @@
+# 0.0.8 freeze → tag runbook
+
+This is an ordered admission runbook, checked against public main
+`c979e0337da4ad053d59a76225fbb9154140ee73` on 2026-10-03 and the private-ops
+main `dba879cbe5fc5390c6c06af82daa739fc9b855b5` files read through `gh`. Commands below use existing tools. A missing
+input or an explicitly blocked admission is a stop for that stage. This
+preparation lane does not select/move a freeze, acquire sealed episodes, mint
+an admitted packet, publish, tag or perform a DOI action.
+
+The orchestrator names the freeze. Publish, tag and DOI remain **author-reserved**;
+their execution was **delegated on 2026-09-28**. Delegation is not approval,
+scientific admission, permission supplied by this document, or evidence that an
+action happened. Calibration uses dev 1001/1002 only. Development/rehearsal
+uses 1001–1030; retired 111–140 and the sealed 0.0.8 tuple must never reset or
+step outside the separately admitted campaign. A refusal before reset is
+recorded and work continues. Static resolved identity generation is safe.
+
+Use a clean source checkout and a durable output root **inside the task's lane**.
+Do not reuse stale identities or override guards. Set these concrete inputs
+from the orchestrator's packet, with all paths under the lane:
+
+```bash
+export FREEZE_SHA='<named full 40-character SHA>'
+export SOURCE_ROOT='<absolute clean F2 source checkout used by the campaign>'
+# The packet's inputs.snqi_anchors.path, resolved under SOURCE_ROOT.
+export SNQI_ANCHORS="$SOURCE_ROOT/output/release-008/calibration/anchors.v2.0.acquired.json"
+export TAG='<dataset tag ending in that exact full SHA>'
+export ARTIFACT_ROOT='<absolute durable lane artifact directory>'
+export OPS='<clean robot_sf_ll7-private-ops main checkout inside the lane>'
+export CALIBRATION_ID='<fresh development calibration campaign id>'
+export CAMPAIGN_ID='<fresh sealed campaign id>'
+export DOORWAY_CAMPAIGN_ID='<fresh companion campaign id>'
+export SMOKE_ID='<fresh admitted development runtime smoke id>'
+# Publication plan selects a fresh main bundle basename; use a distinct companion name.
+export BUNDLE_NAME="${CAMPAIGN_ID}_publication_bundle"
+# Hydrate this immutable 0.0.7 archive from the release identified in README.md:48-50.
+export BASELINE_007_ARCHIVE="$ARTIFACT_ROOT/baseline/issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_bundle.tar.gz"
+# Bound to the generated and verified main identity by sha256sum in step 3a.
+export MAIN_IDENTITY_SHA256='<not usable until step 3a binds the digest>'
+export MINT_DATE='<fresh YYYYMMDD suffix from the preparation packet>'
+export OPS_RUNTIME='<reviewed detached private-ops runtime checkout inside the lane>'
+export CONCEPT_DOI='<actual reserved concept DOI>'
+export VERSION_DOI='<actual reserved unpublished version DOI>'
+export ZENODO_STATE='<operator-owned reservation state file>'
+export ZENODO_METADATA='<concrete operator-reviewed Zenodo metadata JSON>'
+export RESERVATION_METADATA="$ARTIFACT_ROOT/zenodo-reservation-metadata.json"
+export TOKEN_FILE='<operator-owned token file; never log its contents>'
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+```
+
+`<...>` denotes required input, never a usable placeholder. Baseline input is
+`issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_bundle.tar.gz`,
+SHA-256 `684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`,
+source `07f7e8d43084de748915e1b1eb8b2a1603357c6e`. The archive must exist at
+`BASELINE_007_ARCHIVE` and match that SHA-256 before step 6; the [root README](../../../README.md)
+identifies its release/tag and the immutable baseline provenance. `BUNDLE_NAME`
+is an export input chosen from the fresh campaign identity, not an exporter
+receipt. Preserve all 0.0.7 artifacts.
+
+Execution order under the 2026-10-04 ruling below: 1 freeze → 3a preparatory
+row mint/admission → 2 calibration and acquired-anchor freeze. Authentic DOI
+reservation and 3a resolved identities may follow acquisition when the author
+token is available. Identities and independent scientific review must complete
+before 3b same-source smoke → 3c final campaign mint → 4 sealed campaign →
+5 export/preflight → 6 comparator → 7 tag/publication/DOI. No final mint runs
+before smoke.
+
+**Orchestrator ruling, 2026-10-03:** [#10112](https://github.com/ll7/robot_sf_ll7/issues/10112)
+**blocks the freeze**: D-083 SNQI-v2 binding, the smoke contract and mint ordering
+require release-source fixes, and SNQI v2 is a reported 0.0.8 number.
+[#10110](https://github.com/ll7/robot_sf_ll7/issues/10110) **must also land before
+the freeze**: the mint/preflight release-notes gate is source that the resolved
+identity binds. Complete and review both fixes before naming/moving the final
+freeze; then reprove its source and identity. This supersedes the earlier
+mint/publication-only classification; this documentation is not the fixes.
+
+## Freeze record — F2, 2026-10-04
+
+The orchestrator fast-forwarded `release/0.0.8-freeze`, without force, from
+`3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6` to
+`66f402ba176b13e45210d0da0b2cf20fcdc0cc02`; remote readback matched.
+The former freeze is **superseded**. F2 was assembled from that former freeze
+using these five merges' first-parent net deltas, in order:
+
+| Input | Merge commit |
+| --- | --- |
+| #10126 calibration evidence | `ab3f2840ed061d2879f79be69116663c2aace16e` |
+| #10131 DOI draft tooling | `dfd1c78564756efbcb98a247d7ff894f6b69ea76` |
+| #10133 learned-stack version capture and evidence wording | `eaa3cc8fc4eca8bcebeb2a008a1b2b072adf72f6` |
+| #10132 sealed execution-context gate | `ca9aeece4d6091627a95d088ecc48a0c61e2c8d1` |
+| #10134 mandatory reference fields, learned aliases and selector refusal | `cf0f74a13ff7f44022b71b7612a12faa9aa43085` |
+
+F2 also restores the calibration-before-DOI runbook and placeholder regression
+pin from main `cf0f74a13ff7f44022b71b7612a12faa9aa43085` (R12's documented
+docs/test exception). The independent candidate audit found no behavior change.
+The move was necessary because DOI draft tooling and the sealed execution-context
+gate must execute from the frozen tree; merging them only on main was insufficient.
+
+The [F2 acquisition evidence](../../context/evidence/2026-10-04_freeze008_f2_calibration/README.md)
+proves 21331 = A21337 = B21339: **1,344/1,344** raw metric/metric_values/steps/status
+hashes match in each comparison. F/J/K remain exactly
+78.44270546210876 / 1.957837635866961 / 0.5160654761904677.
+Acquired anchor SHA-256:
+`8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349`;
+determinism receipt SHA-256:
+`cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464`.
+Historical evidence and its `12503fbf…` anchor remain preserved separately.
+
+The protected-input rehash covers its explicit `PROTECTED_PATHS` only. The complete
+11-file delta from `git diff --name-only 3e73b04b 66f402ba -- robot_sf` is below;
+**none** of these files is in `PROTECTED_PATHS`.
+
+| Changed file | Role |
+| --- | --- |
+| `robot_sf/_execution_context.py` | recording: shared execution-context fields |
+| `robot_sf/benchmark/_runtime_smoke_planner_keys.py` | admission: shared learned-checkpoint roster |
+| `robot_sf/benchmark/map_runner/map_runner_episode.py` | recording/admission: worker context observations and pre-reset gate |
+| `robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py` | admission/refusal: selector and learned-policy resolution |
+| `robot_sf/benchmark/release_protocol.py` | release tooling/admission: identity and calibration-context bindings |
+| `robot_sf/benchmark/result_provenance.py` | recording: non-importing Torch/SB3 version capture |
+| `robot_sf/benchmark/runtime_smoke_admission.py` | admission: shared checkpoint-roster import |
+| `robot_sf/benchmark/snqi/execution_context.py` | admission/refusal: calibrated execution-context equality |
+| `robot_sf/benchmark/snqi/v2_binding.py` | admission: determinism-receipt asset binding |
+| `robot_sf/benchmark/zenodo_publisher.py` | release/DOI tooling: draft metadata update |
+| `robot_sf/release_cli.py` | release/DOI tooling: draft reservation and metadata commands |
+
+Their neutrality on this grid rests on the **measured 1,344-row comparison**,
+not on the protected-input claim. Release/DOI tooling is not recording code
+([#10138](https://github.com/ll7/robot_sf_ll7/issues/10138)).
+
+The [independent #10137 review](https://github.com/ll7/robot_sf_ll7/pull/10137#issuecomment-5984099933)
+accepted head `e02d17e08c83b04a9299c6a54086fbf3fb3cc569`: MERGE, scientific
+boxes 1=PASS and 2=PASS for F2. This records that external review without ticking
+boxes here. The later doorway test (Slurm 21364) returned INCONCLUSIVE. The
+2026-10-05 ruling resolves box 3 by the [companion claim scope exclusion](doorway_claim_scope.md),
+not by a PASS; its checkbox remains unticked. Boxes 4–6, scientific trust pins,
+authentic DOI reservation, resolved identities, smoke, final mint, sealed execution
+and publication retain their separate gates. No DOI has been reserved.
+
+### Superseded initial freeze record — 2026-10-03
+
+The authorized `release/0.0.8-freeze` ref was fast-forwarded, without force,
+from `5c27a404beb51f8b0207f726dcef49b143364d99` to clean main
+`3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6`; remote readback matched.
+Private preparation source: `c857a30b77fbd82b73fe4f72b71c045aae9c4d10`.
+The fresh native-dependency/open-PR audit found no outstanding measured P1
+freeze correction. #10063/#10078 are implemented despite open issue state;
+#10112's source changes are in #10115 and private #423. Drafts #10104,
+#10094, #10075, #10073, #10003 and #9984 remain next-release/optional work,
+not required corrections for this freeze.
+
+The full including-slow suite ran once at that SHA with eight workers:
+42,701 passed, eight failed, 69 skipped and seven xfailed. All eight failures
+were existing temporary-path guards refusing a test `basetemp` outside
+`TMPDIR`; no release, identity, scoring or planner failure was observed.
+Moving the targeted rerun's `basetemp` below `TMPDIR` passed all eight nodes
+and nine related controls (17 passed). No source, skip, xfail or timeout changed.
+All 42,784 collected nodes have JUnit outcomes; one additional module-level
+docs dependency skip explains the 42,785 outcome census. Broad-exception,
+seed-diff and fast-routing checks passed; strict curated Sphinx passed after
+installing the repository's separate docs dependency group.
+
+**2026-10-03 preparation snapshot:** resolved identities, the concrete doorway
+successor and acquired anchors did not exist; authentic DOI custody and
+canonical preparatory-row admission were pending. The tracked anchor file
+remained `pending_calibration`. No smoke, final mint, sealed execution or
+publication occurred, and the six scientific-review boxes and private Git-blob
+trust pins remained untouched. The following ruling supersedes DOI custody as
+a calibration prerequisite.
+
+### Reorder ruling — 2026-10-04
+
+The orchestrator authorizes calibration **before DOI reservation and identity
+generation**, accepting `rr424`'s **Reorder: SAFE** reasoning from the independent
+exact-head **MERGE** review of private preparatory PR #424 at
+`33d56b4ef539d44d67d2bba4234532f9229b9cc9` (public freeze-record PR #10123 was
+also accepted at `269c26ef0d866b78eb7c140f3eb29c4d92b301fe`). The DOI waits for
+the author's token. This is operational admission, not the later scientific review.
+
+At freeze `3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6`, calibration file bytes
+and the parsed `campaign_config_hash` bind the literal `release_tag` and `doi`
+fields at lines 67–68. Preserve them exactly:
+
+```yaml
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+```
+
+The [identity resolver](../../../robot_sf/benchmark/release_protocol.py) writes
+Git-ignored outputs, refuses tracked output paths, and checks a clean exact
+source before and after writing. DOI reservation and later output-only identity
+generation cannot change the acquisition configuration. Calibration preflight
+accepts the literals: `export_publication_bundle: false` and the launcher's
+`--skip-publication-bundle` disable the only DOI-consuming export. These fields
+remain recorded verbatim in acquisition provenance; they must never be resolved
+in place, because doing so invalidates the acquired anchors' configuration binding.
+
+Mint and admit the preparatory rows using the accepted exact-head review
+reference. The orchestrator merges that PR; only then may the canonical-main
+owner dry-run/upsert the rows through the guarded writer and submit a separate
+queue PR. After its merge and a fresh resume, dispatch **only** dev1001/1002
+calibration through the canonical driver, verify all 1,344 rows, and freeze the
+separate acquired anchor artifact. Stop for the six independent scientific
+checks and Git-blob pins. Step 3a then uses the order **minimal metadata → one
+reservation → DOI-bound identity generation → draft metadata update**; never
+reserve using the old 0.0.7 metadata or the unresolved publication template.
+DOI-dependent identities, smoke, final mint, sealed
+execution and publication retain their separate later gates. Reopen this reorder
+ruling if the resolver can mutate acquisition inputs or calibration preflight
+begins requiring resolved publication metadata.
+
+### Acquired calibration — 2026-10-04
+
+After private queue PR #425 merged at
+`bda7c268b3c32acac18a08936ccf565d64668e64`, the canonical driver submitted only
+the admitted calibration row. Job 21331 completed in 00:51:35 with exit 0;
+the producer finalizer reported complete custody, zero campaign/sync errors,
+and a verified checksum manifest. Public source remained the clean named freeze
+`3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6`; private runtime remained
+`c857a30b77fbd82b73fe4f72b71c045aae9c4d10`.
+
+The [acquisition evidence](../../context/evidence/2026-10-04_freeze008_calibration/README.md)
+records all 1,344 unique 14×48×2 dev1001/1002 cells, 96 per arm. Execution has
+zero fallback, degraded, failed or unavailable arms/rows. Goal and PPO are
+native, guarded PPO is mixed, and the other eleven arms use their declared
+adapters. Force provenance declares recorded model acceleration sampled before
+integration; 28 authored zero-pedestrian baseline cells are explicitly separate
+from 1,316 finite sampled cells, with no missing-value imputation.
+
+The repository freezer and independent scalar recomputation agree:
+F=78.44270546210876, J=1.957837635866961, K=0.5160654761904677; T=3 and N=0.25.
+F's preregistered rho is 0.60110908310645, selecting `robot_force_impulse_total`.
+F and K equal the d56092ed rehearsal; J rises by 0.018161933593934476 (0.93634%).
+The evidence identifies its actual p95 order statistics and `changed_source_paths`.
+rr10126 independently found these changes behaviourally inert for this grid:
+bicycle-only behaviour, default-off flags and diagnostic metadata. The two
+acquisitions do not isolate a causal effect of a particular runtime change.
+The fixed-environment repeat, job 21333, completed successfully with the original
+node identity, CPU/software/thread context, 16 workers and wrapper unchanged.
+All 1,344 metric-column/steps/status hashes match job 21331 exactly (class a),
+and F/J/K recompute bit-identically. Keep the point anchor. The
+[determinism receipt](../../context/evidence/2026-10-04_freeze008_calibration/determinism-receipt.json)
+retains every paired hash and all 178 rehearsal differences (PPO 96, guarded PPO 82),
+including 40 changed step counts and 7 navigation statuses. The recovered rehearsal
+raw inputs match all 14 previously committed file hashes. Rehearsal and acquisition
+CPU, node, kernel and glibc differ while recorded package versions/thread limits match.
+This is measured environment sensitivity: J +0.9363386659249961%, F/K delta zero,
+consistent with documented machine/compiler-conditional dynamics sensitivity. The
+repeat establishes fixed-environment reproducibility without isolating a pedestrian
+fast-math or PPO arithmetic mechanism. The rehearsal p95 is interpolated between
+raw jerk values; the unchanged hybrid tie moves into the p95 bracket as the PPO-arm
+distribution changes. Per-arm guard arbitration totals accompany mode counts; the
+unknown development pedestrian model writer is deferred to 0.0.9 in #10127.
+
+The literal acquisition YAML remains byte-identical, SHA-256
+`fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3`.
+
+The separate [acquired anchors](../../context/evidence/2026-10-04_freeze008_calibration/anchors.v2.0.acquired.json)
+have SHA-256 `12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2`.
+Raw-custody and artifact-only attachment to the unchanged candidate pass without
+reset/step; these checks grant no scientific authority. W&B artifact
+`ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_3e73b04b43_20261003:v0`
+is COMMITTED. All 117 preserved source members pass cold stored/decoded SHA-256
+and independent local checksum-snapshot comparison, manifest digest
+`sha256:691d21210c5f0e73da560fc81749fa0346c121d95d73f1bdb0b909aef54414c9`.
+
+**Stop for independent review.** The six scientific boxes and private Git-blob
+trust sources remain untouched. The tracked pending-anchor asset and named freeze
+do not move. Authentic DOI custody, both resolved release identities and the
+concrete doorway manifest remain later inputs. The smoke row was not submitted;
+no smoke, final mint, sealed execution or publication occurred. Preserve acquisition
+bytes; the stale config comment remains tracked in #10124.
+
+
+### F2 re-acquisition and same-environment repeat — 2026-10-04
+
+The orchestrator accepted the immutable tooling/evidence candidate
+`66f402ba176b13e45210d0da0b2cf20fcdc0cc02`. The
+[F2 evidence](../../context/evidence/2026-10-04_freeze008_f2_calibration/README.md)
+binds development acquisition A (job 21337) and its same-environment repeat B
+(job 21339), each 14×48×2 cells using only dev1001/1002. Both match every one
+of the 1,344 metric/metric_values/steps/status hashes from historical job 21331,
+and A/B match each other (class a). No degraded/fallback/unavailable/imputed
+execution was accepted. F/J/K remain exactly 78.44270546210876 /
+1.957837635866961 / 0.5160654761904677. The config SHA256 remains `fe55f5ef…`.
+
+The F2 anchor SHA256 is
+`8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349`;
+the A/B determinism receipt SHA256 is
+`cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464`.
+Original/repeat contexts now record Torch 2.13.0+cu130 and stable-baselines3 2.9.0,
+with the same CPU/kernel/glibc/Python/NumPy/Numba and thread limits of one.
+Every learned row and run metadata context matches; B's complete 283-package
+allocated inventory equals A. Frozen all-extras dependencies were used.
+A's 153 preserved files and B's 140 pass independent snapshot and full cold
+readback hashes. The separate historical-to-F2 neutrality receipt rehashes the
+protected inputs and raw paired rows; it does not extend rr10126's historical
+rehearsal-to-3e73b04b source audit to F2. The rehearsal Torch/SB3 versions remain
+unobserved. Historical anchor `12503fbf…` and its complete evidence stay intact.
+
+R16 permits a bounded publication-builder/test exception. The builder retains
+the historical source guard and admits only this F2 with a hash-bound historical
+proof, historical-to-A raw equality, A/B class-a repeat and unchanged config/lock/
+protected inputs. It imports acquisition code from the exact producer checkout;
+publication tooling on main does not alter the immutable F2 tree. **Stop for
+independent scientific review** of the new source/custody/context bindings.
+The freeze reference remains at 3e73b04b. No scientific box, trust pin, DOI,
+identity, smoke, sealed execution or final mint is advanced by this evidence.
+
+## 1. Move the freeze branch — orchestrator only
+
+```bash
+git fetch origin main release/0.0.8-freeze
+git merge-base --is-ancestor origin/release/0.0.8-freeze "$FREEZE_SHA"
+git push origin "$FREEZE_SHA:refs/heads/release/0.0.8-freeze"
+git ls-remote origin refs/heads/release/0.0.8-freeze
+git switch --detach "$FREEZE_SHA"
+uv sync --all-extras --reinstall-package robot-sf
+```
+
+Inputs: named candidate, exact-head test/audit/rehearsal/intake evidence and
+current remote freeze ref. Output: remote freeze points to the named SHA;
+clean detached checkout and rebuilt installed physics. Admission: full suite,
+pin/seed/identity witnesses classified, hosted CI checked, all measured P1
+blockers closed, #10112 and #10110 source fixes landed and reviewed under the
+2026-10-03 ruling, D-070 intake disposition recorded; verify the remote SHA by
+readback. Check ancestry of the train commits and #10081/#10045/#10103/#10108.
+If non-fast-forward, stop for the orchestrator; never force. See
+[freeze_audit.md](freeze_audit.md) for the candidate, which is not a ruling.
+The guard compares actual imported `robot_sf` and all non-cache
+`pysocialforce` files with source blobs. A stale installed copy is a refusal.
+
+## 2. Acquire SNQI-v2 calibration and freeze the anchor artifact
+
+Run acquisition inside one Slurm allocation of at most 32 CPUs, not a login
+node. Stage before execution; do not pass staging options to run mode.
+
+```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml \
+  --stage --json --report-path "$ARTIFACT_ROOT/calibration-checkpoints.json"
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml \
+  --output-root "$ARTIFACT_ROOT/calibration" --campaign-id "$CALIBRATION_ID" \
+  --arm-isolation subprocess
+uv run python scripts/tools/analyze_snqi_contract.py \
+  --campaign-root "$ARTIFACT_ROOT/calibration/$CALIBRATION_ID" \
+  --freeze-v2-anchors "$ARTIFACT_ROOT/anchors.v2.0.json"
+```
+
+Inputs: exact named source, authored schedule, 14 configs/models, 48 scenarios,
+seeds **1001/1002** (1,344 cells), staged checksums. Outputs: raw per-arm
+JSONL/sidecars, manifest/preview/summary and atomic frozen anchors with custody,
+command-mode census, schema/sealed-seed commitment and force-source decision.
+Admission: print the resolved dev seeds before dispatch; exact 14×48×2 census,
+zero fallback/degraded rows, no imputation, actual F/J/K p95, T=3/N=0.25 and
+strict calibration binding. A 3-seed rehearsal is not calibration custody.
+
+**Post-freeze scientific stop:** D-083 and both current templates now bind the
+weights, family, pending anchors and scheduled dev1001/1002 acquisition inputs.
+The source anchor file stays `pending_calibration`. Freeze a separate acquired
+artifact at the named source; do not edit tracked anchors or move the source
+between acquisition and campaign. The public runner's strict loader checks its
+source/configuration identity; complete raw custody can additionally be rederived.
+Private scientific trust pins remain empty until independent review of actual
+acquisition and sealed-source ruling. Use the checklist below before final mint.
+
+## 3. Two-phase preparation and final mint
+
+### 3a. Preparatory row mint and resolved identities
+
+For resolved identity generation, DOI coordinates must already be authentic
+reserved-unpublished coordinates; they are not a preparatory mint or calibration
+prerequisite under the 2026-10-04 ruling.
+If absent, the **author-reserved delegated DOI operator** creates minimal
+pre-reservation metadata and reserves exactly once before identity generation.
+The minimal form retains the dataset/license/creator/source-tag and SNQI claim
+boundary, but makes no DOI-bound provenance assertion. It is draft input only:
+
+```bash
+uv run python - "$TAG" "$RESERVATION_METADATA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+metadata = json.loads(Path(
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json"
+).read_text())["metadata"]
+metadata["description"] = (
+    "Unpublished benchmark-data DOI reservation. SNQI is advisory only; "
+    "this reservation makes no SNQI ranking claim."
+)
+metadata["related_identifiers"] = [{
+    "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/" + sys.argv[1],
+    "relation": "isSupplementTo", "scheme": "url",
+}]
+output = Path(sys.argv[2])
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps({"metadata": metadata}, indent=2) + "\n")
+PY
+uv run robot-sf release zenodo reserve --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$RESERVATION_METADATA"
+read -r CONCEPT_DOI VERSION_DOI < <(uv run python - "$ZENODO_STATE" <<'PY'
+import sys
+from robot_sf.benchmark.zenodo_publisher import load_state
+state = load_state(sys.argv[1])
+print("10.5281/zenodo." + state["concept_record_id"], state["doi"])
+PY
+)
+export CONCEPT_DOI VERSION_DOI
+```
+
+An existing state path or `<state>.reserve-attempt` marker (including a dangling
+symlink) refuses before any reservation POST. The attempt marker is created
+exclusively immediately before POST and removed only after state persistence
+succeeds. An interruption before POST, a failed response validation, or a failed
+state write leaves it in place and requires human reconciliation. Recover the
+one deposition with the authorized operator; never delete the marker or state
+to retry reservation. If the operator confirms no POST occurred, handling that
+attempt remains a human decision, not an automatic reservation retry.
+
+For both the main and the fixed H400 2.2/2.8/3.6 m companion:
+
+```bash
+uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
+  --template configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml \
+  --output output/release-008/main/release_identity.resolved.json \
+  --source-commit "$FREEZE_SHA" --release-tag "$TAG" \
+  --concept-doi "$CONCEPT_DOI" --version-doi "$VERSION_DOI"
+uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
+  --template configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml \
+  --output output/release-008/doorway/release_identity.resolved.json \
+  --source-commit "$FREEZE_SHA" --release-tag "$TAG" \
+  --concept-doi "$CONCEPT_DOI" --version-doi "$VERSION_DOI"
+uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
+  --identity output/release-008/main/release_identity.resolved.json
+uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
+  --identity output/release-008/doorway/release_identity.resolved.json
+sha256sum output/release-008/{main,doorway}/release_identity.resolved.json
+export MAIN_IDENTITY_SHA256="$(sha256sum output/release-008/main/release_identity.resolved.json | awk '{print $1}')"
+export ZENODO_METADATA="$PWD/output/release-008/main/zenodo_metadata.resolved.json"
+uv run robot-sf release zenodo update-draft-metadata --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+```
+
+Review the generated metadata before updating. This draft-only step binds the
+main identity's exact metadata file/hash and DOI pair to the reserved state,
+checks the same unpublished deposition before PUT, and checks both PUT and GET
+readback. Description and source identifiers must match exactly; only the existing
+Zenodo license alias and null creator-affiliation normalization are permitted.
+It preserves file inventory and invalidates any old verification receipt. On a
+readback failure state is unchanged, but the remote PUT may have taken effect:
+inspect and retry the update against the same draft, never reserve a new one.
+Both tracks share the one reserved concept/version DOI; only the main
+zenodo_metadata.resolved.json is ever PUT, verified and published. The companion
+identity binds its own campaign and bundle — never reserve a second DOI for it.
+
+Mint preparation rows with the existing private-ops tool (not the final campaign
+mint, and not submission):
+
+```bash
+"$OPS/.venv/bin/python" "$OPS/ops/jobs/scripts/mint_snqi_v2_release_rows.py" \
+  --public-root "$PWD" --public-sha "$FREEZE_SHA" --date "$MINT_DATE" \
+  --private-ops-root "$OPS" --private-ops-runtime-worktree "$OPS_RUNTIME" \
+  --out-dir "$ARTIFACT_ROOT/preparatory-rows"
+```
+
+Inputs: clean named public source, clean reviewed private runtime, fresh suffix,
+reserved coordinates and calibration/smoke source contracts. Outputs: proposed
+calibration/smoke rows and packets, plus both verified resolved identities;
+`MAIN_IDENTITY_SHA256` is the actual main identity digest consumed in step 6.
+Admission: inspect the proposed rows and complete independent queue/packet
+admission before any smoke dispatch; no `--admit` or diagnostic output grants
+release authority. The completed step-2 calibration custody remains mandatory.
+
+### 3b. Same-source runtime smoke before final mint
+
+The existing ordinary release runner command is:
+
+```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config "$SMOKE_CONFIG" --stage --json --report-path "$ARTIFACT_ROOT/smoke-checkpoints.json"
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest "$SMOKE_MANIFEST" --label runtime-smoke-008 --campaign-id "$SMOKE_ID" \
+  --checkpoint-receipt "$ARTIFACT_ROOT/smoke-checkpoints.json"
+```
+
+Inputs `SMOKE_CONFIG`/`SMOKE_MANIFEST`: a reviewed tracked same-source 0.0.8
+successor, full 14-arm roster, dev **1003**, same learned-model fingerprints,
+authored horizon/kinematics contract, exact imported runtime; allocation ≤32 CPUs.
+Bind the produced receipt only after successful smoke and admission:
+
+```bash
+export SMOKE_RESULT="$PWD/output/benchmarks/camera_ready/$SMOKE_ID/release/release_result.json"
+test -f "$SMOKE_RESULT"
+```
+
+Output: that release result, raw rows and separately authenticated environment receipt. `CAMPAIGN_ROOT` and the companion root are the respective `output/benchmarks/camera_ready/<id>` directories; `BUNDLE_DIR`/`BUNDLE_ARCHIVE` come from the exporter receipt, not an invented file name.
+Admission: every arm successful/native, source/model bindings equal campaign,
+result and staging age ≤24 h, independently accepted environment/stress receipt.
+Record CPU model; learned episodes/resume must stay on the same node (D-072).
+
+**Current reviewed-source contract:** use the tracked v0_6 config/manifest,
+all 14 current D-083 keys, dev seed **1003**, dt=0.1, differential drive and the
+authored blind-corner **H400**. The public validator selects this successor;
+v0_2 and v0_5 remain historical bytes. Same-source native success plus authentic
+separate environment/stress/staging/cold-custody receipts is still required.
+D-086 all-roster development smoke remains permanently diagnostic and is
+explicitly refused as ordinary release admission. A source contract is not an
+admission receipt.
+
+### 3c. Final campaign mint after admitted smoke
+
+Public main has an identity resolver, **no production queue mint**. The existing
+private-ops main production mint is:
+
+```bash
+"$OPS/.venv/bin/python" "$OPS/ops/jobs/scripts/mint_snqi_v2_full_campaign.py" \
+  --request "$ARTIFACT_ROOT/full-mint-request.json" \
+  --out-dir "$ARTIFACT_ROOT/full-mint" --report "$ARTIFACT_ROOT/full-mint-report.json"
+```
+
+Inputs: request matching `private-ops:docs/full_campaign_mint.md` and
+`docs/post_freeze_release_chain.md`, clean public/private source SHAs, reserved
+DOIs, both verified identities, independently pinned scientific anchors and
+seed admission, both staged checkpoint receipts, authentic smoke result and
+separate environment admission, stress/cold-custody receipts, fresh identities
+and immutable preservation destination. Request `cpus=32` for this lane.
+Stage main and companion checkpoint receipts with `preflight_campaign_checkpoints.py --config <each exact resolved campaign config path> --stage --json --report-path <main-checkpoints.json or doorway-checkpoints.json>`; resolve those campaign config paths from the verified identities.
+Outputs: atomic **proposed, go=false, non-dispatchable** queue/packet pair and
+mint report; no submission or authority grant. Admission: exact sealed tuple,
+20,160 main +1,260 companion cells, disjoint cell identities, shared source/DOIs,
+strict source/model/hash closure and independently reviewed trust pins; release
+notes gate [#10110](https://github.com/ll7/robot_sf_ll7/issues/10110) must already
+be implemented in the freeze-bound source and pass. Stop unless stage 3b produced
+the authenticated `SMOKE_RESULT` and separate environment admission; supply
+those exact receipts in `full-mint-request.json`.
+
+**Ordering stop retained:** existing main cannot execute literal final mint →
+first smoke: full mint requires a successful smoke already. Stage 3a is the
+different preparatory-row tool, stage 3b must produce and admit that same-source
+receipt, and only then can stage 3c run. The #10112 public/private successors
+must land before freeze naming. Do not omit smoke inputs or use diagnostic
+receipts as admission. The private executor forwards the reviewed `snqi_anchors`
+artifact to both public runners; raw custody is an optional additional public
+rederivation input, never an independent scientific trust grant.
+
+## 4. Sealed campaign and fixed companion
+
+After independent queue/packet/scientific admission, the canonical private driver
+submits the minted row; do not bypass its environment/allocation/smoke/stress
+checks. Read the row's actual canonical driver argv and read back job identity.
+The existing public runner invocation inside that admitted allocation is:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest output/release-008/main/release_identity.resolved.json \
+  --label release-008 --campaign-id "$CAMPAIGN_ID" \
+  --checkpoint-receipt "$ARTIFACT_ROOT/main-checkpoints.json" \
+  --runtime-smoke-receipt "$SMOKE_RESULT" \
+  --snqi-v2-anchors "$SNQI_ANCHORS"
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest output/release-008/doorway/release_identity.resolved.json \
+  --label release-008-doorway --campaign-id "$DOORWAY_CAMPAIGN_ID" \
+  --checkpoint-receipt "$ARTIFACT_ROOT/doorway-checkpoints.json" \
+  --runtime-smoke-receipt "$SMOKE_RESULT" \
+  --snqi-v2-anchors "$SNQI_ANCHORS"
+```
+
+Existing single-node submission wrapper (canonical admitted packet must own launch):
+
+```bash
+export ROBOT_SF_SNQI_V2_ANCHORS="$SNQI_ANCHORS"
+sbatch --cpus-per-task=32 SLURM/submit_release_single_node.sbatch \
+  output/release-008/main/release_identity.resolved.json release-008 "$CAMPAIGN_ID" \
+  "$ARTIFACT_ROOT/main-checkpoints.json" "$SMOKE_RESULT"
+```
+
+For the two-track path, the existing canonical driver is
+`ops/jobs/scripts/submit_via_canonical_driver.sh`; it delegates to
+`submit_and_record.sh` from clean private-ops main. Supply the reviewed minted
+row's complete `submit_args` and bound packet, with `cpus=32`; admission/promotion
+must precede submission. The guarded `submit_s30_h600_release.sh` then runs this
+exact executor command inside the allocation:
+
+```bash
+"$PYTHON_PATH" "$OPS/ops/jobs/scripts/execute_release_chain.py" \
+  --packet "$ADMITTED_PACKET" --out-dir "$RESULT_ROOT/release_chain"
+```
+
+`PYTHON_PATH`, `ADMITTED_PACKET` and `RESULT_ROOT` are authenticated wrapper
+inputs. The wrapper supplies `RELEASE_CHAIN_VALIDATED_PACKET_SHA256` only after
+its startup/admission checks; never set it manually to bypass the driver.
+The executor retains both sequential runner calls in one allocation. Do not
+replace this chain with two independent unbound submissions.
+Outputs: separate raw roots, strict main/companion acceptance, both bundles and
+terminal chain receipt. Admission: 20,160/1,260 exact cells, no duplicate/missing/
+unexpected identities, no overlap, fixed widths/H400, same source/DOIs, native
+execution and all five strict runner gates. #10081 now implements the public
+companion contract. An infrastructure resume needs an immutable receipt, the
+same source/config/CPU node and a classified interruption; code defects require
+a corrected source/fresh ID, not resubmission. No step in FREEZEPREP executes this.
+
+## 5. Publication export and preflight — local preparation
+
+The main Zenodo draft already carries the DOI-bound metadata from step 3a.
+Keep that generated metadata unchanged through upload, draft verify, publish,
+and published verify in step 7; no second reservation occurs here.
+
+The release runner exports through the common exporter. If explicitly exporting
+its accepted raw root, use the existing command (no overwrite of earlier custody):
+
+```bash
+uv run python scripts/tools/benchmark_publication_bundle.py export \
+  --run-dir "$CAMPAIGN_ROOT" --out-dir "$ARTIFACT_ROOT/publication" \
+  --bundle-name "$BUNDLE_NAME" --release-tag "$TAG" --doi "$VERSION_DOI"
+uv run python scripts/tools/publication_preflight.py \
+  --bundle-dir "$BUNDLE_DIR" --output "$ARTIFACT_ROOT/publication-preflight.json"
+sha256sum "$BUNDLE_ARCHIVE"
+```
+
+Inputs: admitted main and companion outputs; repeat per track with distinct names.
+Outputs: checksummed bundle directories/archives, inventories, strict preflight receipts.
+Admission: actual files=manifest=checksums, roles/source/SNQI bound, strict
+release_result/campaign-summary reconciliation, no private paths, complete chain
+containment, recorded archive size/SHA, independent cold readback/preservation,
+zero unresolved publication scanner findings and disclosure gate green.
+`--no-require-release-reconciliation` is not release admission. Export is local
+preparation; remote publication remains author-reserved.
+
+## 6. D-062 comparator against pinned 0.0.7
+
+Post-run analysis uses a separate public-main tooling checkout. Select the first
+main commit containing the comparator, v2 revalidation and runbook repairs;
+record its full SHA as `TOOLING_SHA`. Acquisition, both runners and allocation
+export remain at F2 `66f402ba176b13e45210d0da0b2cf20fcdc0cc02`. The comparator's
+source root stays at that clean F2 checkout while its executing Python modules
+come from the independently pinned tooling checkout. The comparison receipt
+records the tooling SHA and successor source SHA separately.
+
+```bash
+# Use SOURCE_ROOT and SNQI_ANCHORS from the initial packet inputs above.
+export CAMPAIGN_ROOT="$SOURCE_ROOT/output/benchmarks/camera_ready/$CAMPAIGN_ID"
+export TOOLING_ROOT='<separate clean public-main tooling checkout>'
+export TOOLING_SHA='<full first main SHA containing all three repairs>'
+test "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" = "$FREEZE_SHA"
+test -z "$(git -C "$SOURCE_ROOT" status --porcelain --untracked-files=all)"
+test "$(git -C "$TOOLING_ROOT" rev-parse HEAD)" = "$TOOLING_SHA"
+git -C "$TOOLING_ROOT" merge-base --is-ancestor "$TOOLING_SHA" origin/main
+test -z "$(git -C "$TOOLING_ROOT" status --porcelain --untracked-files=all)"
+cd "$TOOLING_ROOT"
+uv run python scripts/analysis/compare_release_distributions.py \
+  --expected-tooling-commit "$TOOLING_SHA" \
+  --baseline-bundle "$BASELINE_007_ARCHIVE" --successor-root "$CAMPAIGN_ROOT" \
+  --successor-manifest "$SOURCE_ROOT/output/release-008/main/release_identity.resolved.json" \
+  --successor-manifest-sha256 "$MAIN_IDENTITY_SHA256" \
+  --snqi-v2-anchors "$SNQI_ANCHORS" \
+  --successor-source-root "$SOURCE_ROOT" --output-dir "$ARTIFACT_ROOT/comparator"
+```
+
+Use absolute artifact and campaign paths after changing the working directory.
+`SNQI_ANCHORS` must resolve to the exact `packet.inputs.snqi_anchors.path` the
+producing runner received; acquisition, the wrapper and both post-run helpers
+use the single acquired-anchor variable exported with the initial inputs.
+The comparator verifies the real `benchmark-release-resolved-identity.v1` envelope
+with the source resolver; retain its metadata and release-notes receipt beside
+it, plus the paired determinism receipt in source custody. It derives runner and
+planner bindings from that verified identity and acquired anchors. Do not rename
+its schema or substitute a hand-authored slot-paired envelope. The paired
+`compare_release_0_0_7_to_0_0_8.py` helper follows the same tooling/source split.
+
+Inputs: checksum-verified immutable baseline above; exact accepted successor
+rows/identity/source. Outputs: JSON/CSV/Markdown comparison, unchanged-definition
+contrasts, Holm primary/separate BH exploratory family, supported-success census.
+Admission: strict full census, schema/source binding, no paired-seed outcome
+claim, changed definitions excluded, report the D-062 plant/world/seed caveats.
+No `--diagnostic-partial` for the release; development output cannot promote it.
+
+### Independent preserved-row revalidation
+
+Execute the helper from the same pinned main tooling checkout. The validator
+must be a third clean checkout, distinct from both helper and F2 source; pin its
+independently reviewed SHA as `VALIDATOR_SHA`. The v2 derivation receipt records
+the helper SHA separately from the frozen source and validator SHAs. Source
+checks, acquired-anchor proof verification and the learned-context census remain
+required. Revalidation verifies the v2 report pair without creating legacy scores
+or changing calibration status. The historical 0.0.7 recovery path is retained.
+
+```bash
+# Repeat the initial packet inputs so this block also works in a fresh shell.
+export SOURCE_ROOT='<absolute clean F2 source checkout used by the campaign>'
+export SNQI_ANCHORS="$SOURCE_ROOT/output/release-008/calibration/anchors.v2.0.acquired.json"
+export TOOLING_ROOT='<separate clean public-main tooling checkout>'
+export TOOLING_SHA='<full first main SHA containing all three repairs>'
+export ARTIFACT_ROOT='<absolute durable lane artifact directory>'
+export CAMPAIGN_ID='<fresh sealed campaign id>'
+export VALIDATOR_ROOT='<third clean independently reviewed validator checkout>'
+export VALIDATOR_SHA='<full reviewed validator SHA>'
+export PRODUCER_ROOT='<absolute checksum-bound preserved producer root>'
+export ACCEPTANCE_ROOT='<absolute checksum-bound accepted raw root>'
+export RECOVERY_CONTRACT='<absolute reviewed recovery-contract JSON>'
+test "$(git -C "$VALIDATOR_ROOT" rev-parse HEAD)" = "$VALIDATOR_SHA"
+test -z "$(git -C "$VALIDATOR_ROOT" status --porcelain --untracked-files=all)"
+cd "$TOOLING_ROOT"
+uv run python scripts/tools/revalidate_benchmark_release.py \
+  --expected-helper-commit "$TOOLING_SHA" \
+  --producer-root "$PRODUCER_ROOT" --acceptance-root "$ACCEPTANCE_ROOT" \
+  --source-repository-root "$SOURCE_ROOT" \
+  --manifest "$SOURCE_ROOT/output/release-008/main/release_identity.resolved.json" \
+  --validator-repository-root "$VALIDATOR_ROOT" \
+  --expected-validator-commit "$VALIDATOR_SHA" \
+  --recovery-contract "$RECOVERY_CONTRACT" \
+  --snqi-v2-anchors "$SNQI_ANCHORS" \
+  --output-root "$ARTIFACT_ROOT/revalidation" --derived-name "${CAMPAIGN_ID}_revalidated"
+```
+
+The reviewed recovery contract binds the actual preserved producer inventory,
+receipt, source, result and row counts; the historical default contract cannot
+be reused for a new campaign. Keep all source/anchor/proof custody intact and
+select a fresh derived output name. Repeat with the independently bound companion
+identity, its raw roots, counts and separate recovery contract. Derived artifacts
+are local preparation and do not confer publication or scientific admission.
+
+## 7. Tag, publish and DOI — author-reserved, delegated 2026-09-28
+
+Only after all preceding admissions, final comparison/intake/scanner review and
+explicit release authorization; same source, coordinates, notes and bundle digests:
+
+```bash
+cd "$SOURCE_ROOT"
+git tag -a "$TAG" "$FREEZE_SHA" -m "Robot SF benchmark data 0.0.8"
+git push origin "refs/tags/$TAG:refs/tags/$TAG"
+git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}"
+uv run python scripts/tools/publish_camera_ready_release.py \
+  --campaign-root "$CAMPAIGN_ROOT" --repo ll7/robot_sf_ll7 --tag "$TAG" \
+  --expected-source-sha "$FREEZE_SHA" --create-draft --execute-upload \
+  --output-json "$ARTIFACT_ROOT/github-publication-custody.json"
+uv run robot-sf release zenodo upload --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --manifest output/release-008/main/release_identity.resolved.json \
+  "$BUNDLE_ARCHIVE"
+uv run robot-sf release zenodo verify --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+gh release edit "$TAG" --repo ll7/robot_sf_ll7 --draft=false
+uv run robot-sf release zenodo publish --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+uv run robot-sf release zenodo verify --token-file "$TOKEN_FILE" \
+  --state "$ZENODO_STATE" --metadata "$ZENODO_METADATA" \
+  --manifest output/release-008/main/release_identity.resolved.json
+```
+
+Outputs: exact-source annotated tag, remotely verified dataset assets, publication
+custody and published DOI. Admission: reserved state/metadata/manifest agree;
+both-track publication containment admitted, versioned notes linked, GitHub-to-
+Zenodo webhook disabled, remote readback matches local digests. Repeat upload
+for all admitted assets in the reviewed two-track publication plan; a main-only
+upload does not satisfy companion custody. No reservation reuse or second DOI.
+If a tag already exists, verify target and stop on mismatch; never replace it.
+
+## CHAIN-4 gap readback G01–G12
+
+Read with `gh` on 2026-10-03: private-ops `docs/reviews/0.0.8/lanes/runbook_report.md`,
+`docs/post_freeze_release_chain.md`, `docs/full_campaign_mint.md`, and merged
+[#421](https://github.com/ll7/robot_sf_ll7-private-ops/pull/421). The historical
+report is dated 2026-10-01; statuses below reconcile source changes, not new
+production receipts. Access succeeded; no inaccessible gap is guessed closed.
+
+| Gap | Current status and evidence |
+|---|---|
+| G01 integrated whole-roster rehearsal | Packaging completed by #10103 / D-086 on `b8d5e970…`, 672 smoke +2,016 development cells. Candidate `c979e033…` includes later #10108 hardening; exact-candidate intake/rehearsal acceptance still belongs to orchestrator. |
+| G02 calibration custody | Open: acquire exact 1,344 dev 1001/1002 cells; 2,016 rehearsal rows cannot be relabelled as calibration. #10045 supplies strict freeze validator. |
+| G03 v2 assets and manifest binding | **Blocks freeze** until #10112 lands. #10112 binds pending acquisition/spec/assets to both templates; land reviewed successors before freeze. Real acquired anchors and independent scientific review remain post-freeze inputs. |
+| G04 calibration versus frozen-source trust | **Blocks freeze** until the #10112 same-source acquisition/trust contract lands; actual acquisition/review follow the named freeze. #10112 requires same-source acquisition/configuration custody; private scientific trust set remains empty until independent review of actual acquired anchors and sealed ruling. |
+| G05 authored-horizon mint and bounded diagnostic | Tooling fixed by merged private #421; static dev diagnostics non-dispatchable, production CPUs 32–60. Not proof production inputs are admitted. |
+| G06 doorway H600 versus H400 | Fixed: #9999 authored slice schedule and #10081 strict companion acceptance; static source-pin witnesses bind H400. |
+| G07 same-node two-track chain | Tooling fixed in private #421: distinct identities/checkpoints, shared source/DOI and sequential runners. Final reconciliation/preservation remain G12. |
+| G08 preparation seeds | #10112/private successor selects scheduled dev1001/1002 acquisition and tracked v0_6 dev1003 smoke; historical v0_5 remains seed103. |
+| G09 exact-freeze smoke/stress/staging/cold custody | #10112 selects v0_6/current keys/authored H400 and preparatory mint → smoke → final mint. Authentic same-freeze environment/stress/staging/preservation/cold receipts remain required. |
+| G10 comparator end-to-end | Development path verified in #10103, correct relative source binding and release-mode refusal. Strict full sealed-census comparison still due after execution. |
+| G11 DOI reservation order | Documented/fixed in private #421: reserve unpublished before identity/mint, publish last. Authentic reservation receipt remains operator input; none performed here. |
+| G12 full publication chain | Public doorway-runner seam fixed by #10081. The 2026-10-05 [companion claim scope exclusion](doorway_claim_scope.md), based on the INCONCLUSIVE Slurm 21364 evidence, resolves the box 3 scope decision without a PASS: fixed H400 widths 2.2/2.8/3.6 m are reported with raw metrics only; SNQI v2 diagnostics are retained but not admitted as results, ranked or compared. Verify this exclusion at publication. Two-bundle/result/projection reconciliation, scanner/cold preservation, intake and final authorization remain open; not supplied by a diagnostic mint/rehearsal. |
+
+## Release-notes admission before mint and publication
+
+### Companion claim admission — ruling of 2026-10-05
+
+The fixed H400 2.2/2.8/3.6 m doorway companion is reported with raw metrics only
+in 0.0.8 (success, collision, time and the other unscored metrics). SNQI v2
+applicability to this slice was not established. The box 3 scope exclusion is
+not a PASS; reopening requires a newly predeclared 0.0.9 test under
+[issue #10140](https://github.com/ll7/robot_sf_ll7/issues/10140).
+
+Before publication, include this ruling in the companion release-notes addendum,
+publication README and dataset README/data dictionary, using the
+[claim scope addendum](doorway_claim_scope.md). Every retained SNQI v2 diagnostic
+column must carry the publication-layer label
+**"not validated for this slice (box 3 inconclusive, 2026-10-05)"**. These values
+remain in the raw companion data but are not admitted as results, ranked or
+compared, including across widths or against the main campaign. Do not strip or
+rewrite raw values, refit anchors, or change the frozen computation to implement
+this disclosure. The observed U/D counts below 7/14 are facts without an
+applicability claim; no expansion to dev seeds 1006–1030 is authorized.
+
+Keep the F2 configuration, template, campaign code, source-bound release notes
+and their admission receipts unchanged. Publish this addendum as supplemental
+claim/publication text, alongside the exact-source notes required below. It is
+not an input to the sealed or companion runner and does not replace the existing
+release-notes digest gate. The release body must link both the exact-source notes
+and this addendum at its reviewed publication commit.
+
+### Exact-source disclosure admission
+
+The versioned [release notes](release_notes.md) state the adopted limitations by
+content. `write_resolved_release_identity` (the production identity generator)
+checks complete required paragraphs in named sections, and atomically retains
+`release_notes_gate.v1.json` beside the identity and metadata. The receipt binds
+the notes digest, checker digest, decision-register digest and exact source commit;
+it is separate from the resolved sealed identity bytes. The production runner
+rechecks it before spawn preflight or execution. The existing private production mint calls the public resolver `verify`
+command, which now rechecks the same receipt and returns it in its verifier
+output. Retain the receipt with the release packet.
+
+Publication export retains `release_metadata/release_notes.md` and the mint
+receipt. Bundle preflight repeats the same gate on those bytes; the direct
+publication CLI repeats it against the source notes before creating an
+authenticated client. A missing receipt, missing statement, wrong section or
+changed digest refuses admission. This is disclosure admission, not release
+approval.
+
+These notes contain no sealed-campaign outcome numbers. If outcome numbers are
+added before mint, mark unavailable values as `PLACEHOLDER_SEALED_<FIELD_NAME>`.
+Mint allows placeholders; publication refuses them (also TODO, TBD and template
+markers). Fill them before the final production mint: editing notes after mint
+requires a new receipt and packet at the selected exact source. The short GitHub
+release body must link to the notes at that source commit.
+
+The issue's group-truncation and notes-location content maps to D-063 and D-076
+in the public register, in addition to its named D-065 and D-075. The public
+register has no adopted straight-force-forecast disclosure; this gate does not
+invent one.
+
+### Historical derived-metadata erratum exemption
+
+`release zenodo publish --manifest <erratum-contract>` is exempt from the 0.0.8
+release-notes gate only when the input validates as the derived-metadata erratum
+contract. Its immutable historical predecessor predates the notes receipt; the
+erratum validator binds the predecessor and forbids a new campaign or scientific
+claims. Ordinary release manifests, including the independent doorway-width slice,
+repeat the notes gate before publish. This exemption does not admit a new 0.0.8
+campaign or replace its mint receipt.
+
+## Development packaging reference
+
+D-086 identities use resolver `generate --development-rehearsal
+--development-seeds 1001` (smoke) and `1001,1002,1003` (2,016-cell rehearsal),
+fixed diagnostic DOIs `10.5281/zenodo.99000001` / `10.5281/zenodo.99000002`,
+`development-rehearsal-<full SHA>` tag and the same D-083 authored template.
+The Slurm wrapper's `ROBOT_SF_DEVELOPMENT_RUNTIME_SMOKE=1` uses fifth argument
+`-`; subsequent development campaign consumes that exact-source smoke result.
+The native campaign entry also requires the verified rehearsal identity path,
+matching complete campaign configuration and fixed-list development seeds
+before `allow_pending_snqi_v2` can take effect; the facade keyword alone refuses.
+These outputs retain `release_eligible: false`; comparator requires
+`--diagnostic-partial`. Preserve the complete raw custody and diagnostic bundle;
+they are never substitutes for steps 3–7 production admission.
+
+## Before the freeze: #10112 source contract
+
+[#10112](https://github.com/ll7/robot_sf_ll7/issues/10112) **blocks the freeze**.
+Its scoring, smoke and ordering changes must land on main before the orchestrator
+names the freeze commit. This ruling supersedes the earlier preparation audit's
+classification of #10112 as a mint-only blocker. Historical manifests remain
+unchanged; regenerate every identity/packet at the newly named clean source.
+
+D-083 now declares `snqi_v2_spec` with the weights, family, pending anchor asset,
+and `calibration.dev1001_1002_scheduled_acquisition.yaml`, each hash-bound.
+Both v0.2 templates pin those same assets. The source anchor file remains
+`pending_calibration`; loading a configuration is permitted for identity and
+checkpoint preparation, but executing an unscored bound campaign refuses.
+The doorway template selects its v2 campaign successor; its original v1 config
+and concrete manifest remain historical bytes. **Before any doorway execution,
+regenerate its concrete manifest from the v0.2 doorway template at the named
+freeze**, selecting the v2 campaign and four v2 assets with reviewed acquired
+anchors. The checked-in `three_width_doorway_release_0_0_8_v1.yaml` still names
+the historical v1 campaign/legacy v3 weights; it is not an executable current
+0.0.8 packet. Its fail-closed source-pin test remains mandatory.
+
+Acquisition freezes a separate artifact after the freeze, without editing the
+tracked pending file or moving the named source. The release runner accepts
+`--snqi-v2-anchors <artifact>` and checks the strict frozen loader, dev1001/1002
+split, calibration source and exact acquisition configuration identity. Supply
+`--snqi-v2-calibration-root <complete raw root>` to additionally rederive and
+compare the anchors from every producer row/sidecar. Independent scientific
+pins remain mandatory in production; these checks confer no scientific authority.
+
+## F2 re-acquisition and execution-context admission
+
+The orchestrator's successor plan is F2 = `3e73b04b` plus reviewed tooling/evidence
+commits only, with no metric, planner, model, physics or authored-budget change.
+The orchestrator must name the full F2 SHA before acquisition; this runbook does
+not move the freeze. Run the complete 14×48×2 dev1001/1002 calibration acquisition
+**and a full same-node repeat at F2 on the calibration node**, each with fresh
+campaign IDs and preserved raw custody. Both `run_meta.json` execution contexts
+must record CPU/platform/Python/NumPy/Numba, the complete numerical thread
+environment, **`torch_version` and `stable_baselines3_version`**. The production
+context builder observes learned-stack versions without importing either runtime:
+loaded versions take precedence, followed by installed metadata and Torch's literal
+build tag from `version.py` (with metadata fallback). Missing distributions omit their keys;
+F2 acquisition for these learned arms must have both dependencies installed and
+both versions recorded. Do not stamp today's versions onto older producer rows.
+Production and preserved-row revalidation refuse a reference whose original
+context omits either version. Historical receipts remain readable by the
+acquisition/determinism analysis tools; they cannot admit a sealed run.
+
+Freeze a new acquired anchor artifact whose `calibration.source_commit` is F2.
+Compare every `metrics`, `metric_values`, `steps` and `status` value against the
+prior acquisition using the determinism builder's binary float row hashes;
+require identical metric values and identical anchor values. Provenance commit
+fields and timestamps change, so raw episode/calibration digests and the acquired
+anchor SHA change. Rebind the new anchor identity to F2; preserve the historical
+anchor file and calibration evidence unchanged.
+
+Rebuild `determinism-receipt.json` and its paired acquisition proof with
+`scripts/dev/build_snqi_v2_acquisition_evidence.py`, using the F2 acquisition,
+F2 repeat and preserved rehearsal roots and their verified preservation/snapshot/
+cold inputs. The builder carries the original producer's Torch/SB3 versions into
+`execution_contexts.original`. Require classification `a`, equal recorded
+original/repeat contexts, 1,344 identical rows and zero differing rows. Retain the
+receipt digest and new anchor digest in the independent review packet.
+
+The asset vocabulary accepts `determinism_receipt_path` and
+`determinism_receipt_sha256` in `snqi_v2_spec`; the manifest's matching
+`metrics.snqi_v2_binding.determinism_receipt` asset has `path` and `sha256`.
+Both loaders validate these bytes like the weights/anchors/family assets. The
+receipt is acquired after F2 and need not be a Git blob at F2. Preparation may
+omit it; production context admission refuses an absent pin. Supply the reviewed
+post-acquisition pin to each final identity resolver invocation:
+
+```bash
+# Add these to the existing resolve_benchmark_release_identity.py generate command:
+--determinism-receipt-path output/release-008/calibration/determinism-receipt.json \
+--determinism-receipt-sha256 "$DETERMINISM_RECEIPT_SHA256"
+```
+
+The resolver binds that asset into the generated spec/manifest and reproduces
+it during `verify`, without changing the tracked source configuration. Keep the
+delivered receipt under ignored output in the selected source checkout, with
+reviewed bytes/digest and its paired acquired anchors/proof. Rehashing both
+custody files cannot substitute for the independently pinned receipt.
+
+Run the **live-context preflight inside the target allocation**, immediately
+before the sealed chain: a preflight on the submitting host cannot attest the
+workers. Worker admission uses the resolved, normalized algorithm before any
+environment/planner construction or reset. It covers the runtime-smoke
+checkpoint roster, `sa_cadrl`, `drl`, `sonic` and `socnav_sampling`; learned-stack
+fields recorded by the reference are mandatory and must match. Before acceptance,
+all learned rows must match and every manifest learned arm must be present.
+Independent preserved-row revalidation repeats this census; pass its
+`--snqi-v2-anchors` custody input too. Scientific/source/sealed admission and the
+six independent review boxes below remain required.
+
+## Independent scientific review required before production mint
+
+Leave these boxes unchecked here. An independent reviewer completes them after
+actual acquisition; this integration and a rehearsal cannot fill the trust set.
+
+- [ ] Review the complete dev1001/1002 14×48×2 acquisition custody, actual producer
+  hashes/sidecars, native/adapter/mixed census, absence of fallback/degraded rows,
+  force-source decision, schema/zero anchors, T=3, N=0.25 and real positive F/J/K p95.
+- [ ] Bind the calibration source to the named freeze. Verify zero metric/runtime,
+  planner/model, physics, schema and authored-budget drift between acquisition and
+  campaign; keep the sealed seed commitment and the D-084 overtaking H600.
+  Require every learned-policy episode's worker execution context to equal
+  `determinism-receipt.json` `execution_contexts.original`: CPU model, platform
+  (including kernel/glibc), Python, NumPy, Numba and the complete recorded thread
+  environment, Torch and stable-baselines3 versions. The production reference
+  must record both learned-stack versions. A node pin is an operational way to
+  obtain equality, never a
+  substitute for it. Keep the historical missing learned-stack provenance visible; F2 acquisition
+  and its same-node repeat must record Torch/SB3.
+  The source-bound release entrypoint refuses missing/hash-mismatched paired
+  acquisition/determinism proofs, a receipt differing from the spec-pinned
+  calibration reference, or a different live context; it checks each learned
+  worker before environment/planner construction or reset, and refuses missing or
+  differing recorded row contexts before release acceptance/publication.
+  Learned/checkpoint family aliases come from the canonical readiness catalog.
+  `planner_selector_v2` / `planner_selector_v2_diagnostic` are refused in calibrated
+  production before selector context preparation or child adapter construction:
+  the gate has no calibrated per-child admission contract. Ungated diagnostic
+  selector resolution remains available. Do not include selectors in the sealed chain.
+  This gate is runtime code, not a main-only mint helper. The canonical executor
+  invokes the release entrypoint from its pinned public source: the old freeze
+  lacks this gate. Run live-context preflight inside the intended allocation; the
+  submitting host context is not an attestation of the workers.
+  An independent freeze decision must precede sealed execution;
+  merging the gate on main alone does not activate it at the existing freeze.
+- [ ] Independently verify the [companion claim scope exclusion](doorway_claim_scope.md)
+  at publication (CHAIN-4 G12): the fixed H400 2.2/2.8/3.6 m companion is reported
+  with raw metrics only; SNQI v2 applicability was not established. Retained SNQI
+  diagnostics carry "not validated for this slice (box 3 inconclusive, 2026-10-05)"
+  and are not admitted as results, ranked or compared. The 2026-10-05 ruling
+  resolves box 3 by scope exclusion, not a PASS or a checked review box. Reopen
+  only via a newly predeclared 0.0.9 test under
+  [#10140](https://github.com/ll7/robot_sf_ll7/issues/10140); no dev1006–1030 expansion.
+- [ ] Review the sealed evaluation ruling binding the freeze, concrete main and
+  companion manifests/configs, canonical acquired anchor digest, exact sealed
+  tuple and review reference. No request-created receipt can authenticate it.
+- [ ] In a separate reviewed private code change, add the actual
+  `REVIEWED_SCIENTIFIC_SOURCES` entry: `freeze_sha`, `review_ref`, and both
+  `snqi_anchors` / `evaluation_seed_admission` sources, each with repository,
+  relative path, full source commit and SHA-256. Test positive controls on the
+  actual pinned Git blobs and negative controls on changed bytes/source/splits.
+- [ ] Re-run production mint's strict loader and all scientific/source/custody
+  gates at the exact admitted public/private revisions. The trust set is empty
+  until that independently reviewed change lands; retain the refusal meanwhile.
+
+## Rehearsing acquisition and scored packaging (D-086)
+
+At a clean rehearsal source, use the same acquisition file on dev1001/1002,
+freeze anchors into ignored output, then generate the D-086 seed-1001 preparatory
+smoke and seed-1001/1002/1003 campaign identities described above. The preparatory
+D-086 smoke may remain unscored and is permanently diagnostic. Before the scored
+campaign wrapper, set `ROBOT_SF_SNQI_V2_ANCHORS=<artifact>` and
+`ROBOT_SF_SNQI_V2_CALIBRATION_ROOT=<complete acquisition root>`; the wrapper forwards
+both as explicit runner inputs. The runner revalidates acquisition custody,
+computes `snqi_v2`/terms and exports the shared diagnostic bundle. Inspect the
+actual 2,016 scored rows and bundle, retaining `release_eligible: false`.
+Development anchors/receipts never admit a later source or a sealed campaign.
+
+SNQI v2 enrichment retains the actual per-episode algorithm. The two reviewed
+scenario-adaptive hybrid arms use their frozen ORCA branch on
+`francis2023_leave_group`; they remain single configured arms in the paired
+reports. Enrichment reads these declarations from the source planner config and
+rejects an algorithm swap outside its declared scenario. It does not infer
+permitted routing from observed rows or relax fallback/degraded checks.

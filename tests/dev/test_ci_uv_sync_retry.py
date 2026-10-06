@@ -18,6 +18,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 def _script_path() -> Path:
@@ -324,11 +325,20 @@ def test_setup_ci_python_uses_uv_sync_retry_wrapper() -> None:
     assert "uv sync --all-extras --frozen\n" not in action_text
 
 
-def test_setup_ci_python_uses_pruned_setup_uv_cache() -> None:
-    """Use setup-uv's pruned cache, never the unbounded duplicate payload cache."""
+def test_setup_ci_python_uses_retained_wheel_setup_uv_cache() -> None:
+    """Retain locked wheels in setup-uv's distinct cache family without a duplicate payload cache."""
     action_text = _action_path().read_text(encoding="utf-8")
     assert 'enable-cache: "true"' in action_text
-    assert 'prune-cache: "true"' in action_text
+    setup = next(
+        step
+        for step in yaml.safe_load(action_text)["runs"]["steps"]
+        if step.get("id") == "setup-uv"
+    )
+    # The pinned action includes pruning mode in its key: false selects the
+    # retained-wheel family instead of the old immutable metadata-only cache.
+    assert setup["uses"] == "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9"
+    assert setup["with"]["prune-cache"] == "false"
+    assert setup["with"]["cache-dependency-glob"].splitlines() == ["pyproject.toml", "uv.lock"]
     assert "actions/cache@" not in action_text
     assert "archive-v0" not in action_text
     assert "uv-sync-payloads-" not in action_text

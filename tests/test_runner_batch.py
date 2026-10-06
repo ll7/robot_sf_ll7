@@ -36,7 +36,7 @@ def test_run_batch_to_tmp(tmp_path: Path):
         scenarios,
         out_path=out_file,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=10,
         dt=0.1,
         record_forces=False,

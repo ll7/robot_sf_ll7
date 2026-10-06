@@ -1,5 +1,7 @@
 """Focused coverage for the extracted SocialForce planner-family module."""
 
+import hashlib
+import json
 from dataclasses import asdict
 
 import numpy as np
@@ -26,6 +28,20 @@ def test_social_force_adapter_importable_and_instantiable() -> None:
     assert isinstance(adapter, sf.SamplingPlannerAdapter)
     assert adapter.config is not None
     assert adapter.config.social_force_repulsion_weight == 0.8
+
+
+def test_predictive_surface_mode_requires_positive_body_radii() -> None:
+    """Predictive surface distances cannot use zero-valued placeholder bodies."""
+    import pytest
+
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    with pytest.raises(ValueError, match="robot_radius must be finite and positive"):
+        SocNavPlannerConfig(
+            predictive_clearance_model="surface_v2",
+            predictive_robot_radius=0.0,
+            predictive_pedestrian_radius=0.4,
+        )
 
 
 def test_factory_produces_policy_with_correct_adapter_type() -> None:
@@ -98,3 +114,27 @@ def test_socnav_kernel_selector_preserves_default_serialization_and_explicit_ide
     assert wrapped.to_dict()["social_force_kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
     assert SocNavPlannerConfig(**wrapped.to_dict()) == wrapped
     assert stable_config_hash(legacy_default.to_dict()) != stable_config_hash(wrapped.to_dict())
+
+
+def test_issue_9750_clearance_opt_ins_preserve_legacy_config_bytes() -> None:
+    """New v0.8 geometry and sampling selectors stay out of v1 defaults."""
+    default = sf.SocNavPlannerConfig()
+    payload = default.to_dict()
+    encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+
+    assert "predictive_clearance_model" not in asdict(default)
+    assert "predictive_clearance_model" not in payload
+    assert "sampling_repulsion_weight" not in asdict(default)
+    assert "sampling_repulsion_weight" not in payload
+    assert hashlib.sha256(encoded).hexdigest() == (
+        "51c9ab100f7165ef1438acc8a545bc0fe31a0e079db3b1796fca874c5cb0e1d2"
+    )
+
+    selected = sf.SocNavPlannerConfig(
+        predictive_clearance_model="surface_v2",
+        sampling_repulsion_weight=0.0,
+    )
+    selected_payload = selected.to_dict()
+    assert selected_payload["predictive_clearance_model"] == "surface_v2"
+    assert selected_payload["sampling_repulsion_weight"] == 0.0
+    assert sf.SocNavPlannerConfig(**selected_payload) == selected

@@ -77,7 +77,7 @@ No environment was reset or stepped during snapshot capture.
 | `test_registry_requires_known_source_and_matching_bytes` | Reject filename-only compatibility; a guessed legacy assignment fails. | No prior registry boundary. | Real scoped constructors, fixed temporary input; current control fails on base. |
 | `test_release_registry_covers_learned_observation_contract` | Protect released spaces while exposing the current validity field; a missing learned source binding fails. | Prior optional-field tests do not cover released model paths. | Actual space builder, fixed map and bounds; current control fails on base. |
 | `test_release_scenario_environment_dataclasses_match_full_base_dumps` | Protect every environment field on the 48 release scenarios; an env migration leaking into legacy fails. | No full before/after constructor comparison. | Actual scenario/env builders, complete fixed dumps; current control fails on base. |
-| `test_native_episode_records_legacy_and_current_builder_default_sets` | Protect runtime propagation and provenance; lost context/source binding fails. | Constructor tests cannot catch missing runner wiring. | Two sequential native one-step episodes on dev1001; current control fails on base. |
+| `test_native_episode_records_legacy_and_current_builder_default_sets` | Protect runtime propagation and provenance; lost context/source binding fails. | Constructor tests cannot catch missing runner wiring. | Three sequential native one-step episodes on dev1001; current control fails on base. |
 
 The diagnostic observer regression
 `test_missing_candidate_probe_skips_initial_goal_stop_without_speed_cap` catches
@@ -87,6 +87,14 @@ and it calls the real planner and counterfactual diagnostic; no simulation is
 reset or stepped. Existing probe tests start with speed diagnostics already
 available and miss this initial goal-stop path. No test-only production seam is
 needed. Its base-failure receipt is tracked separately.
+
+The native provenance test also exercises an explicitly empty inline mapping on
+a registered release scenario. Before the final dispatch correction it fails
+with `assert 'legacy-0.0.8' == 'current'`; the corrected code treats `{}` as
+current and reserves scenario fallback for missing or `None` inline config.
+Existing source-based tests skipped the explicit-empty case. This uses the same
+real runner at dev1001, with no additional test-only seam. All twenty migration
+cases were rerun on immutable base and still fail their intended default witness.
 
 No production seam was added solely for tests. Preservation assertions naturally
 also hold on base; the same tests include the changed current behavior so the
@@ -173,3 +181,13 @@ The raw traces remain under the owned lane's comparison directory; preserve
 that directory during handoff. The tracked complete episode results, failure
 classifications, source manifest and trace identities are durable review
 artifacts; the command above reproduces the complete development matrix.
+
+Final source review: [post_comparison_source_review.json](post_comparison_source_review.json)
+records a subsequent change to the episode decorator's source-dispatch
+condition, with strict AST comparison. The direct diagnostic comparator never
+calls that decorator and scopes its current defaults explicitly. All constructor
+fill-in, registry checks and native diagnostic control are unchanged. The ignored
+generated `_version.py` also changes when the editable package rebuilds after
+rebase; it contains informational version constants. The other 1,426 bound
+files match. The complete measured results remain applicable; the original
+producer identities and hashes are preserved.

@@ -3,7 +3,7 @@
   "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybrid_default_compatibility.py -n 8 -q",
   "exit_code": 1,
   "cases_failed": 20,
-  "test_file_sha256": "4d97d7c0d2a10b59eddd8963f0f2b0ccaf67d43cbd08664179f9fa67e5afe9fd",
+  "test_file_sha256": "7a1eb14483c93c8f0c812d9e5fd133d0a925f77efd3679e5ef3ca6bdaf78cae0",
   "reason": "Every case fails its current-default witness: false remains false on base; no imports or fixtures fail. Full preservation checks form the other half of the migration contract.",
   "failed_cases": [
     "tests/planner/test_hybrid_default_compatibility.py::test_current_defaults_enable_all_three_switches",

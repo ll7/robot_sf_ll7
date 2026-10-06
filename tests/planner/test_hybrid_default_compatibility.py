@@ -173,6 +173,7 @@ def test_native_episode_records_legacy_and_current_builder_default_sets():
     for expected, inputs in (
         ("legacy-0.0.8", {"algo_config_path": source}),
         ("current", {"algo_config": raw}),
+        ("current", {"algo_config": {}}),
     ):
         record = run_map_episode(
             scenario,

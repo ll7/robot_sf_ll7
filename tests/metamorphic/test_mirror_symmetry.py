@@ -366,12 +366,12 @@ def test_release_scenario_orca_override_trace_is_rotation_equivariant(arm: str) 
     assert effective_config["orca_head_on_bias"] == pytest.approx(0.30)
 
     base = run_arm_episode(
-        arm, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS, scenario=scenario
+        arm, interaction_scene(), seed=1001, max_steps=_ARM_STEPS, scenario=scenario
     )
     rotated = run_arm_episode(
         arm,
         interaction_scene(rotate_90),
-        seed=_SEED,
+        seed=1001,
         max_steps=_ARM_STEPS,
         scenario=scenario,
     )
@@ -384,9 +384,9 @@ def test_release_scenario_orca_override_trace_is_rotation_equivariant(arm: str) 
 
 def test_risk_dwa_flat_release_trace_is_rotation_equivariant() -> None:
     """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
-    base = run_arm_episode("risk_dwa", interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
+    base = run_arm_episode("risk_dwa", interaction_scene(), seed=1001, max_steps=_ARM_STEPS)
     rotated = run_arm_episode(
-        "risk_dwa", interaction_scene(rotate_90), seed=_SEED, max_steps=_ARM_STEPS
+        "risk_dwa", interaction_scene(rotate_90), seed=1001, max_steps=_ARM_STEPS
     )
 
     assert base.status == rotated.status == "ok"

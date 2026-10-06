@@ -24,6 +24,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    # Resolve this checkout before any other editable installation.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev import issue_state_taxonomy as taxonomy
 from scripts.dev._gh_rest import run_gh_api
 
@@ -61,11 +65,10 @@ def classify_labels(labels: list[str]) -> dict[str, Any]:
 
 def _fetch_live_labels(repo: str) -> list[str]:
     """Read the live repository label inventory through the GitHub API."""
-    payload = run_gh_api(
-        ["repos", repo, "labels", "--paginate", "--jq", ".[].name"],
-        parse_json=False,
-    )
-    text = payload if isinstance(payload, str) else str(payload)
+    result = run_gh_api(f"repos/{repo}/labels", extra_args=["--paginate", "--jq", ".[].name"])
+    if result.returncode != 0:
+        raise RuntimeError(f"label inventory read failed (exit {result.returncode})")
+    text = result.stdout
     return [line.strip().strip('"') for line in text.splitlines() if line.strip()]
 
 
@@ -92,12 +95,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Emit JSON only.")
     args = parser.parse_args(argv)
 
-    if args.labels_file:
-        labels = _read_labels_file(args.labels_file)
-        source = "labels_file"
-    else:
-        labels = _fetch_live_labels(args.repo)
-        source = "github_api"
+    source = "labels_file" if args.labels_file else "github_api"
+    try:
+        labels = (
+            _read_labels_file(args.labels_file)
+            if args.labels_file
+            else _fetch_live_labels(args.repo)
+        )
+    except (OSError, ValueError, RuntimeError) as exc:
+        result = {
+            "schema": SCHEMA,
+            "source": source,
+            "repo": args.repo,
+            "ok": False,
+            "error": str(exc),
+        }
+        print(json.dumps(result, sort_keys=True) if args.json else f"FAIL: {exc}")
+        return 2
 
     result = classify_labels(labels)
     result["source"] = source

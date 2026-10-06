@@ -690,6 +690,24 @@ def test_get_issue_metadata_uses_rest_issue_endpoint(mock_api_get: MagicMock) ->
     mock_api_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/8414", timeout=10)
 
 
+@pytest.mark.parametrize("body", (None, ""))
+def test_closing_metadata_survives_graphql_quota_exhaustion(body: str | None) -> None:
+    """An empty issue stays readable through REST when GraphQL is unavailable."""
+    with (
+        patch("scripts.ci.pr_contract_check.gh_api_metadata_get", create=True) as rest_get,
+        patch("scripts.ci.pr_contract_check.subprocess.run") as graphql_run,
+    ):
+        rest_get.return_value = MagicMock(
+            returncode=0, stdout=json.dumps({"labels": [], "body": body})
+        )
+        graphql_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="GraphQL API rate limit exceeded"
+        )
+        assert pr_contract_check.get_issue_metadata("9715", "ll7/robot_sf_ll7") == ([], "")
+        rest_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/9715", timeout=10)
+        graphql_run.assert_not_called()
+
+
 @pytest.mark.parametrize("returncode", (1, 124))
 @patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
 def test_get_issue_metadata_fails_closed_on_rest_error(

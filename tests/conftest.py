@@ -413,6 +413,14 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Runtime refusal, source-pin and static caller contracts do not simulate episodes.
+    "test_camera_ready_campaign.py",
+    "test_refresh_packet_working_tree_pins.py",
+    "test_reference_guard_exemptions.py",
+    "test_reference_guarded_imports.py",
+    "test_runtime_seed_guard.py",
+    "test_run_camera_ready_benchmark.py",
+    "test_scenario_thumbnails.py",
     "test_ecosystem_contract.py",
     "test_snqi_context_reference_policy_fields.py",
     "test_snqi_execution_context.py",
@@ -1306,6 +1314,10 @@ _FAST_FILES = {
     "test_trace_viewer.py",
 }
 _SLOW_FILE_OVERRIDES = {
+    # Native research episodes and parallel resume integration run in the full lane.
+    "test_emergent_phenomena.py",
+    "test_lane_formation_reference.py",
+    "test_runner_resume_parallel.py",
     "test_edge_cases_recording.py",
     "test_runner_video.py",
 }

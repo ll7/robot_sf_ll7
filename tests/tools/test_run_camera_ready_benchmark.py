@@ -338,6 +338,8 @@ class TestRunModeOrcaPreflightIntegration:
         """Run mode should translate typed ORCA preflight failures into structured JSON."""
         config_path = tmp_path / "config.yaml"
         _write_config(config_path, algo="orca")
+        with config_path.open("a", encoding="utf-8") as config:
+            config.write("seed_policy: {mode: fixed-list, seeds: [1001]}\n")
 
         with _rvo2_missing():
             exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])

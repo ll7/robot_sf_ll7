@@ -86,6 +86,7 @@ from robot_sf.benchmark.paired_effect_metric_contract import (
     load_json_rows,
     load_paired_effect_metric_contract,
 )
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
@@ -2324,7 +2325,7 @@ def _build_lightweight_analysis_steps(
     return steps
 
 
-def run_episode(  # noqa: PLR0913
+def run_episode(  # noqa: PLR0913, PLR0915 - admission precedes existing episode setup
     scenario_params: dict[str, Any],
     seed: int,
     *,
@@ -2354,6 +2355,7 @@ def run_episode(  # noqa: PLR0913
     Returns:
         Episode record dictionary with metrics, trajectories, and metadata.
     """
+    check_simulation_seed(seed, boundary="run_episode")
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
     ts_start = datetime.now(UTC).isoformat()
@@ -3164,6 +3166,17 @@ def run_batch(  # noqa: PLR0913
     Returns:
         Summary dictionary with episode counts, failures, and execution metadata.
     """
+    # Resolve and admit all classic jobs before output setup or worker dispatch.
+    scenarios = (
+        load_scenario_matrix(scenarios_or_path)
+        if isinstance(scenarios_or_path, str | Path)
+        else scenarios_or_path
+    )
+    if not any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
+        for _, seed in _expand_jobs(
+            scenarios, base_seed=base_seed, repeats_override=repeats_override
+        ):
+            check_simulation_seed(seed, boundary="classic run_batch")
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     retained_metric_contract = (
         load_paired_effect_metric_contract(retained_metric_contract_path)
@@ -3173,7 +3186,7 @@ def run_batch(  # noqa: PLR0913
 
     # Prepare batch setup
     scenarios, out_path, schema = _prepare_batch_setup(
-        scenarios_or_path,
+        scenarios,
         out_path,
         schema_path,
         append,
@@ -3234,7 +3247,7 @@ def run_batch(  # noqa: PLR0913
             summary,
         )
 
-    # Expand jobs
+    # Expand after track metadata is attached; admission above precedes output setup.
     jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
 
     # Set up fixed parameters

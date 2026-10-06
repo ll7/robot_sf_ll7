@@ -29,6 +29,7 @@ from robot_sf.benchmark.map_runner.map_runner import (
     _scenario_with_episode_seed_defaults,
 )
 from robot_sf.benchmark.termination_reason import route_complete_success
+from robot_sf.common.hybrid_defaults import active_default_policy
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
 from robot_sf.training.scenario_loader import load_scenarios
@@ -330,6 +331,10 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         if runtime.get("fallback_count", 0) or runtime.get("degraded_count", 0):
             raise RuntimeError(f"Fallback/degraded execution: {runtime}")
         result = {
+            "default_policy": {
+                **active_default_policy(),
+                "explicit_switch_overrides": arm != "current_defaults",
+            },
             "execution_head": subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
             ).strip(),
@@ -372,12 +377,14 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     finally:
         env.close()
     path = Path(output) / f"{name}__{seed}__{arm}__{'empty' if empty else 'crowd'}"
-    with gzip.open(path.with_suffix(".jsonl.gz"), "wt") as stream:
+    trace_tmp = path.with_suffix(".jsonl.gz.tmp")
+    with gzip.open(trace_tmp, "wt") as stream:
         for row in rows:
             stream.write(json.dumps(_json_ready(row), allow_nan=False) + "\n")
-    path.with_suffix(".json").write_text(
-        json.dumps(_json_ready(result), indent=2, allow_nan=False) + "\n"
-    )
+    trace_tmp.replace(path.with_suffix(".jsonl.gz"))
+    result_tmp = path.with_suffix(".json.tmp")
+    result_tmp.write_text(json.dumps(_json_ready(result), indent=2, allow_nan=False) + "\n")
+    result_tmp.replace(path.with_suffix(".json"))
     print(f"{name} {seed} {arm} {result['outcome']}", flush=True)
     return result
 

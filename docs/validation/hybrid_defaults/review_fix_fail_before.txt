@@ -1,47 +1,12 @@
-Shared-venv scratch preflight passed: path=/tmp available=48832284KiB required=1048576KiB
+Shared-venv scratch preflight passed: path=/tmp available=68117580KiB required=1048576KiB
 Shared-venv selection gate acquired: <local>/git/robot_sf_ll7/.git/robot-sf-venv-selection-5fed8962e881.lockdir
 Shared-venv project package freshness preflight passed: package=pysocialforce venv=<repo>/.venv
-Shared-venv tool freshness preflight skipped: tool=pytest reason=interpreter-or-shell elapsed_ms=276 venv=<repo>/.venv
+Shared-venv tool freshness preflight skipped: tool=pytest reason=interpreter-or-shell elapsed_ms=300 venv=<repo>/.venv
 bringing up nodes...
 bringing up nodes...
 
 FFFFFFFFF                                                                [100%]
 =================================== FAILURES ===================================
-_ test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[zone] __
-[gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
-
-completion = 'zone'
-
-    @pytest.mark.parametrize("completion", ("unbound", "radius", "zone"))
-    def test_terminal_goal_at_022_m_keeps_tracking_before_environment_success(completion):
-        """An invalid successor cannot park the robot outside the actual terminal criterion."""
-        planner = _validity_planner()
-        observation = _obs(robot=(3.78, 4.0), goal=(4.0, 4.0))
-        observation["goal"]["next"] = np.array([0.0, 0.0])
-        observation["goal"]["next_valid"] = np.array([0.0])
-        if completion != "unbound":
-            extra = (
-                {
-                    "completion_policy": "goal_zone_entry_v1",
-                    "goal_zone": ((3.8, 3.8), (4.2, 3.8), (4.2, 4.2)),
-                }
-                if completion == "zone"
-                else {}
-            )
-            navigator = RouteNavigator(
-                waypoints=[(3.0, 4.0), (4.0, 4.0)],
-                waypoint_id=1,
-                proximity_threshold=0.2,
-                pos=(3.78, 4.0),
-                **extra,
-            )
-            assert navigator.reached_destination is False
-            planner.bind_env(SimpleNamespace(simulator=SimpleNamespace(robot_navs=[navigator])))
-        linear, _ = planner.plan(observation)
->       assert planner.last_decision()["planner_mode"] != "GOAL_STOP"
-E       AssertionError: assert 'GOAL_STOP' != 'GOAL_STOP'
-
-tests/planner/test_hybrid_default_review_regressions.py:76: AssertionError
 _ test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[unbound] _
 [gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
 
@@ -76,7 +41,42 @@ completion = 'unbound'
 >       assert planner.last_decision()["planner_mode"] != "GOAL_STOP"
 E       AssertionError: assert 'GOAL_STOP' != 'GOAL_STOP'
 
-tests/planner/test_hybrid_default_review_regressions.py:76: AssertionError
+tests/planner/test_hybrid_default_review_regressions.py:80: AssertionError
+_ test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[zone] __
+[gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
+
+completion = 'zone'
+
+    @pytest.mark.parametrize("completion", ("unbound", "radius", "zone"))
+    def test_terminal_goal_at_022_m_keeps_tracking_before_environment_success(completion):
+        """An invalid successor cannot park the robot outside the actual terminal criterion."""
+        planner = _validity_planner()
+        observation = _obs(robot=(3.78, 4.0), goal=(4.0, 4.0))
+        observation["goal"]["next"] = np.array([0.0, 0.0])
+        observation["goal"]["next_valid"] = np.array([0.0])
+        if completion != "unbound":
+            extra = (
+                {
+                    "completion_policy": "goal_zone_entry_v1",
+                    "goal_zone": ((3.8, 3.8), (4.2, 3.8), (4.2, 4.2)),
+                }
+                if completion == "zone"
+                else {}
+            )
+            navigator = RouteNavigator(
+                waypoints=[(3.0, 4.0), (4.0, 4.0)],
+                waypoint_id=1,
+                proximity_threshold=0.2,
+                pos=(3.78, 4.0),
+                **extra,
+            )
+            assert navigator.reached_destination is False
+            planner.bind_env(SimpleNamespace(simulator=SimpleNamespace(robot_navs=[navigator])))
+        linear, _ = planner.plan(observation)
+>       assert planner.last_decision()["planner_mode"] != "GOAL_STOP"
+E       AssertionError: assert 'GOAL_STOP' != 'GOAL_STOP'
+
+tests/planner/test_hybrid_default_review_regressions.py:80: AssertionError
 _ test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[radius] _
 [gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
 
@@ -111,7 +111,7 @@ completion = 'radius'
 >       assert planner.last_decision()["planner_mode"] != "GOAL_STOP"
 E       AssertionError: assert 'GOAL_STOP' != 'GOAL_STOP'
 
-tests/planner/test_hybrid_default_review_regressions.py:76: AssertionError
+tests/planner/test_hybrid_default_review_regressions.py:80: AssertionError
 _________ test_enabled_validity_rejects_a_missing_sensor_field[False] __________
 [gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
 
@@ -130,9 +130,9 @@ flattened = False
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       Failed: DID NOT RAISE ValueError
 
-tests/planner/test_hybrid_default_review_regressions.py:104: Failed
+tests/planner/test_hybrid_default_review_regressions.py:107: Failed
 __________ test_enabled_validity_rejects_a_missing_sensor_field[True] __________
-[gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
+[gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
 
 flattened = True
 
@@ -149,7 +149,90 @@ flattened = True
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       Failed: DID NOT RAISE ValueError
 
-tests/planner/test_hybrid_default_review_regressions.py:104: Failed
+tests/planner/test_hybrid_default_review_regressions.py:107: Failed
+________ test_released_002_ppo_constructor_uses_legacy_sensor_defaults _________
+[gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
+
+    def test_released_002_ppo_constructor_uses_legacy_sensor_defaults():
+        """The recorded 0.0.2 PPO source keeps its missing sensor field off."""
+        with defaults_for_source(ROOT / "configs/baselines/ppo_15m_grid_socnav.yaml"):
+>           assert RobotSimulationConfig().include_goal_next_valid is False
+E           AssertionError: assert True is False
+E            +  where True = RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions',...h=3.0, predictive_foresight_front_corridor_half_width=1.0, include_route_waypoints=False, include_goal_next_valid=True).include_goal_next_valid
+E            +    where RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions',...h=3.0, predictive_foresight_front_corridor_half_width=1.0, include_route_waypoints=False, include_goal_next_valid=True) = RobotSimulationConfig()
+
+tests/planner/test_hybrid_default_review_regressions.py:122: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 11:02:03.496 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.496 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.497 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.497 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.497 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.500 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.500 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.500 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.502 | WARNING  | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' obstacle path id=obstacle_13 produced invalid polygon (valid=False, empty=False): Self-intersection[75.7000552528187 18.8097175859757]
+2026-10-06 11:02:03.502 | INFO     | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' repaired invalid obstacle path id=obstacle_13 via make_valid (area=1589.039, polygons=2).
+2026-10-06 11:02:03.504 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.504 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.504 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.504 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+____ test_new_env_and_planner_share_defaults_on_registered_release_scenario ____
+[gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
+
+    def test_new_env_and_planner_share_defaults_on_registered_release_scenario():
+        """A scenario asset alone cannot silently select legacy sensor defaults for new inputs."""
+        scenario = load_scenarios(MATRIX)[0]
+        env = build_env_config(scenario, scenario_path=MATRIX)
+        planner = build_hybrid_rule_local_planner_config({})
+>       assert env.include_goal_next_valid is planner.goal_next_validity_enabled is True
+E       AssertionError: assert False is True
+E        +  where False = RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions',...=3.0, predictive_foresight_front_corridor_half_width=1.0, include_route_waypoints=False, include_goal_next_valid=False).include_goal_next_valid
+E        +  and   True = HybridRuleLocalPlannerConfig(planner_variant='hybrid_rule_v0_minimal', max_linear_speed=2.0, max_angular_speed=1.2, ma...tion_max_linear_decel=2.5, actuation_max_yaw_rate=1.2, actuation_max_angular_accel=4.0, actuation_clip_risk_weight=0.0).goal_next_validity_enabled
+
+tests/planner/test_hybrid_default_review_regressions.py:116: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 11:02:03.497 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml' configured map_search_paths: <repo>/maps/svg_maps, <repo>/maps/successor_svg_maps
+2026-10-06 11:02:03.498 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml' configured map_search_paths: <repo>/maps/svg_maps, <repo>/maps/successor_svg_maps
+2026-10-06 11:02:03.502 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml' configured map_search_paths: <repo>/maps/svg_maps, <repo>/maps/successor_svg_maps
+2026-10-06 11:02:03.502 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.503 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.503 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.503 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.615 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.640 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_low' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' defines both map_id and map_file; map_id will be used.
+2026-10-06 11:02:03.641 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_medium' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' defines both map_id and map_file; map_id will be used.
+2026-10-06 11:02:03.641 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_high' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' defines both map_id and map_file; map_id will be used.
+2026-10-06 11:02:03.642 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_low' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' defines both map_id and map_file; map_id will be used.
+2026-10-06 11:02:03.642 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_medium' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' defines both map_id and map_file; map_id will be used.
+2026-10-06 11:02:03.642 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_high' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' defines both map_id and map_file; map_id will be used.
+2026-10-06 11:02:03.653 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.653 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.654 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.654 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.654 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.657 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.657 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.657 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.658 | WARNING  | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' obstacle path id=obstacle_13 produced invalid polygon (valid=False, empty=False): Self-intersection[75.7000552528187 18.8097175859757]
+2026-10-06 11:02:03.659 | INFO     | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' repaired invalid obstacle path id=obstacle_13 via make_valid (area=1589.039, polygons=2).
+2026-10-06 11:02:03.661 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.661 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.661 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.661 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.661 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg" to MapDefinition object.
+2026-10-06 11:02:03.661 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 2 paths in the SVG file
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 12 rects in the SVG file
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 2 circles in the SVG file
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 2 paths in the SVG file
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 12 rects in the SVG file
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 2 circles in the SVG file
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_log_map_warnings:1597 - No crowded zones found in the SVG file (optional)
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg converted: robot_routes=1 ped_routes=1 spawn_zones=1 goal_zones=1
+2026-10-06 11:02:03.662 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
 _ test_worker_preserves_absent_algorithm_config_for_release_default_selection __
 [gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
 
@@ -185,90 +268,9 @@ _ test_worker_preserves_absent_algorithm_config_for_release_default_selection __
 >       assert params["algo_config"] is None
 E       assert {} is None
 
-tests/planner/test_hybrid_default_review_regressions.py:151: AssertionError
-____ test_new_env_and_planner_share_defaults_on_registered_release_scenario ____
-[gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
-
-    def test_new_env_and_planner_share_defaults_on_registered_release_scenario():
-        """A scenario asset alone cannot silently select legacy sensor defaults for new inputs."""
-        scenario = load_scenarios(MATRIX)[0]
-        env = build_env_config(scenario, scenario_path=MATRIX)
-        planner = build_hybrid_rule_local_planner_config({})
->       assert env.include_goal_next_valid is planner.goal_next_validity_enabled is True
-E       AssertionError: assert False is True
-E        +  where False = RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions',...=3.0, predictive_foresight_front_corridor_half_width=1.0, include_route_waypoints=False, include_goal_next_valid=False).include_goal_next_valid
-E        +  and   True = HybridRuleLocalPlannerConfig(planner_variant='hybrid_rule_v0_minimal', max_linear_speed=2.0, max_angular_speed=1.2, ma...tion_max_linear_decel=2.5, actuation_max_yaw_rate=1.2, actuation_max_angular_accel=4.0, actuation_clip_risk_weight=0.0).goal_next_validity_enabled
-
-tests/planner/test_hybrid_default_review_regressions.py:113: AssertionError
------------------------------ Captured stderr call -----------------------------
-2026-10-06 10:33:49.491 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml' configured map_search_paths: <repo>/maps/svg_maps, <repo>/maps/successor_svg_maps
-2026-10-06 10:33:49.492 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml' configured map_search_paths: <repo>/maps/svg_maps, <repo>/maps/successor_svg_maps
-2026-10-06 10:33:49.497 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml' configured map_search_paths: <repo>/maps/svg_maps, <repo>/maps/successor_svg_maps
-2026-10-06 10:33:49.497 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.498 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.498 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.498 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.613 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.639 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_low' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' defines both map_id and map_file; map_id will be used.
-2026-10-06 10:33:49.639 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_medium' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' defines both map_id and map_file; map_id will be used.
-2026-10-06 10:33:49.639 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_high' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml' defines both map_id and map_file; map_id will be used.
-2026-10-06 10:33:49.641 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_low' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' defines both map_id and map_file; map_id will be used.
-2026-10-06 10:33:49.641 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_medium' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' defines both map_id and map_file; map_id will be used.
-2026-10-06 10:33:49.641 | WARNING  | robot_sf.training.scenario_loader:_validate_map_reference:1266 - Scenario 'classic_cross_trap_high' in '<repo>/configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml' defines both map_id and map_file; map_id will be used.
-2026-10-06 10:33:49.653 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.653 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.653 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.653 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.653 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.657 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.657 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.657 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.658 | WARNING  | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' obstacle path id=obstacle_13 produced invalid polygon (valid=False, empty=False): Self-intersection[75.7000552528187 18.8097175859757]
-2026-10-06 10:33:49.659 | INFO     | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' repaired invalid obstacle path id=obstacle_13 via make_valid (area=1589.039, polygons=2).
-2026-10-06 10:33:49.661 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.661 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.661 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.661 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg" to MapDefinition object.
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 2 paths in the SVG file
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 12 rects in the SVG file
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 2 circles in the SVG file
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 2 paths in the SVG file
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 12 rects in the SVG file
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 2 circles in the SVG file
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_log_map_warnings:1597 - No crowded zones found in the SVG file (optional)
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.662 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg converted: robot_routes=1 ped_routes=1 spawn_zones=1 goal_zones=1
-2026-10-06 10:33:49.663 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-________ test_released_002_ppo_constructor_uses_legacy_sensor_defaults _________
-[gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
-
-    def test_released_002_ppo_constructor_uses_legacy_sensor_defaults():
-        """The recorded 0.0.2 PPO source keeps its missing sensor field off."""
-        with defaults_for_source(ROOT / "configs/baselines/ppo_15m_grid_socnav.yaml"):
->           assert RobotSimulationConfig().include_goal_next_valid is False
-E           AssertionError: assert True is False
-E            +  where True = RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions',...h=3.0, predictive_foresight_front_corridor_half_width=1.0, include_route_waypoints=False, include_goal_next_valid=True).include_goal_next_valid
-E            +    where RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions',...h=3.0, predictive_foresight_front_corridor_half_width=1.0, include_route_waypoints=False, include_goal_next_valid=True) = RobotSimulationConfig()
-
-tests/planner/test_hybrid_default_review_regressions.py:119: AssertionError
------------------------------ Captured stderr call -----------------------------
-2026-10-06 10:33:49.669 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.669 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.670 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.670 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.670 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.674 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.674 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.674 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.678 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.678 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.678 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.678 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+tests/planner/test_hybrid_default_review_regressions.py:154: AssertionError
 _____ test_every_release_arm_keeps_full_base_environment_and_mapping_dumps _____
-[gw1] linux -- Python 3.13.13 <repo>/.venv/bin/python3
+[gw0] linux -- Python 3.13.13 <repo>/.venv/bin/python3
 
     def test_every_release_arm_keeps_full_base_environment_and_mapping_dumps():
         """Every catalogued arm retains full typed values, including absent algorithm inputs."""
@@ -297,557 +299,555 @@ E                 Differing items:
 E                 {'include_goal_next_valid': True} != {'include_goal_next_valid': False}
 E                 Use -v to get more diff
 
-tests/planner/test_hybrid_default_review_regressions.py:173: AssertionError
+tests/planner/test_hybrid_default_review_regressions.py:181: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-2026-10-06 10:33:49.540 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.541 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.659 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.687 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.687 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.688 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.688 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.688 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.691 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.691 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.691 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.693 | WARNING  | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' obstacle path id=obstacle_13 produced invalid polygon (valid=False, empty=False): Self-intersection[75.7000552528187 18.8097175859757]
-2026-10-06 10:33:49.693 | INFO     | robot_sf.nav.svg_map_parser:_log_obstacle_path_event_once:104 - SVG file 'uni_campus_big.svg' repaired invalid obstacle path id=obstacle_13 via make_valid (area=1589.039, polygons=2).
-2026-10-06 10:33:49.696 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.696 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.696 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.696 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.704 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.704 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.708 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.708 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.708 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.711 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/maps/svg_maps/classic_bottleneck.svg" to MapDefinition object.
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/maps/svg_maps/classic_bottleneck.svg
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 2 paths in the SVG file
-2026-10-06 10:33:49.712 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 12 rects in the SVG file
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 2 circles in the SVG file
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 2 paths in the SVG file
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 12 rects in the SVG file
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 2 circles in the SVG file
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_log_map_warnings:1597 - No crowded zones found in the SVG file (optional)
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/maps/svg_maps/classic_bottleneck.svg converted: robot_routes=1 ped_routes=1 spawn_zones=1 goal_zones=1
-2026-10-06 10:33:49.713 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:49.717 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.718 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.741 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.767 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.767 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.768 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.768 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.768 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.771 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.771 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.771 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.774 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.775 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.775 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.775 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.783 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.783 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.783 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.783 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.783 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.786 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.786 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.786 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.790 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.790 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.790 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.790 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.790 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:49.792 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.792 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.815 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.842 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.842 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.842 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.842 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.842 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.847 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.847 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.847 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.851 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.851 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.851 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.851 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.860 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.860 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.860 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.860 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.860 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.863 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.863 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.863 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.867 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.867 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.867 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.867 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.867 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:49.869 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.869 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.892 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.918 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.918 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.919 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.919 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.919 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.922 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.922 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.922 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.926 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.926 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.926 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.926 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.934 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.934 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.934 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.934 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.934 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.937 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.937 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.937 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.941 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.941 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.941 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.941 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:49.941 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:49.943 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.943 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.964 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:49.990 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:49.990 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:49.990 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:49.991 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:49.991 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:49.994 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:49.994 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:49.994 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:49.997 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:49.997 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:49.997 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:49.997 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.006 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.006 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.006 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.007 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.007 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.010 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.010 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.010 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.013 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.013 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.013 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.013 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.014 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.016 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.016 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.037 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.063 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.063 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.064 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.064 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.064 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.067 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.067 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.067 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.070 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.070 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.070 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.070 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.078 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.078 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.079 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.079 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.079 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.082 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.082 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.082 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.085 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.085 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.085 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.085 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.086 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.087 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.088 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.109 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.135 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.135 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.136 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.136 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.136 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.139 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.139 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.139 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.142 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.142 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.142 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.143 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.150 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.150 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.151 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.151 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.151 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.154 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.154 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.154 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.157 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.157 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.157 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.157 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.158 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.159 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.159 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.181 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.207 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.207 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.207 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.207 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.207 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.211 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.211 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.211 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.214 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.214 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.214 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.214 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.222 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.222 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.223 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.223 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.223 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.226 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.226 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.226 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.229 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.229 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.229 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.229 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.229 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.233 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.234 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.255 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.280 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.280 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.280 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.280 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.280 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.283 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.283 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.283 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.287 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.287 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.287 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.287 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.295 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.295 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.295 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.295 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.295 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.298 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.298 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.298 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.301 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.301 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.302 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.302 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.302 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.306 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.306 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.327 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.353 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.354 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.354 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.354 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.354 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.357 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.357 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.357 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.361 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.361 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.361 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.361 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.368 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.369 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.369 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.369 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.369 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.372 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.372 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.372 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.375 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.376 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.376 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.376 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.376 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.380 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.380 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.401 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.428 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.428 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.428 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.428 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.428 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.431 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.432 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.432 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.435 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.435 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.435 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.435 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.443 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.443 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.443 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.443 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.443 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.446 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.446 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.446 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.450 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.450 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.450 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.450 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.450 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.454 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.455 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.477 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.503 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.503 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.504 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.504 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.504 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.507 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.507 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.507 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.510 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.511 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.511 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.511 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.519 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.519 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.519 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.519 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.519 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.522 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.522 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.522 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.525 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.526 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.526 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.526 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.526 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.528 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.529 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.550 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.576 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.576 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.577 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.577 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.577 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.580 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.580 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.580 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.583 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.583 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.583 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.583 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.591 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.591 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.592 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.592 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.592 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.595 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.595 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.595 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.598 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.598 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.598 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.598 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.599 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.602 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.602 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.624 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.650 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.650 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.650 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.650 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.650 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.654 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.654 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.654 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.657 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.657 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.657 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.657 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.665 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.665 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.665 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.666 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.666 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.669 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.669 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.669 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.672 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.672 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.672 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.672 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.673 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.675 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.675 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.697 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.723 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.723 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.723 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.723 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.723 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.727 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.727 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.727 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.730 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.730 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.730 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.730 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.738 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.738 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.738 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.738 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.738 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.741 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.741 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.741 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.745 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.745 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.745 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.745 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.745 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.748 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.749 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.770 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.796 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.796 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.796 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.796 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.796 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.799 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.799 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.799 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.803 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.803 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.803 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.803 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.811 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.811 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.811 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.811 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.811 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.814 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.814 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.814 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.817 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.817 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.818 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.818 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.818 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.819 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.820 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.841 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.867 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.867 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.867 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.868 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.868 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.871 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.871 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.871 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.874 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.874 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.874 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.874 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.882 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.882 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.882 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.882 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.882 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.885 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.886 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.886 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.889 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.889 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.889 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.889 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.889 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.890 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.891 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.912 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.938 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.938 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.938 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.938 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.938 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.941 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.942 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.942 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.945 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.945 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.945 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.945 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.953 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:50.953 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:50.953 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:50.953 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:50.953 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:50.956 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:50.956 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:50.956 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:50.959 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:50.959 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:50.959 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:50.960 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
-2026-10-06 10:33:50.960 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
-2026-10-06 10:33:50.961 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.962 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:50.983 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
-2026-10-06 10:33:51.008 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
-2026-10-06 10:33:51.008 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
-2026-10-06 10:33:51.009 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
-2026-10-06 10:33:51.009 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
-2026-10-06 10:33:51.009 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
-2026-10-06 10:33:51.012 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
-2026-10-06 10:33:51.012 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
-2026-10-06 10:33:51.012 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
-2026-10-06 10:33:51.015 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
-2026-10-06 10:33:51.015 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
-2026-10-06 10:33:51.015 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
-2026-10-06 10:33:51.015 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.542 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.543 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.657 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.683 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.683 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.683 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.683 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.683 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.687 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.687 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.687 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.690 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.690 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.690 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.690 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.698 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.698 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.698 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.698 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.698 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.701 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.701 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.701 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.704 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.704 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/maps/svg_maps/classic_bottleneck.svg" to MapDefinition object.
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/maps/svg_maps/classic_bottleneck.svg
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 2 paths in the SVG file
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 12 rects in the SVG file
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 2 circles in the SVG file
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 2 paths in the SVG file
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 12 rects in the SVG file
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 2 circles in the SVG file
+2026-10-06 11:02:03.705 | DEBUG    | robot_sf.nav.svg_map_parser:_log_map_warnings:1597 - No crowded zones found in the SVG file (optional)
+2026-10-06 11:02:03.706 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.706 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.706 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/maps/svg_maps/classic_bottleneck.svg converted: robot_routes=1 ped_routes=1 spawn_zones=1 goal_zones=1
+2026-10-06 11:02:03.706 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:03.709 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.709 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.730 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.756 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.756 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.756 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.756 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.756 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.760 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.760 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.760 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.763 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.763 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.763 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.763 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.771 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.771 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.771 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.771 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.771 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.775 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.775 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.775 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.778 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.778 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.778 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.778 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.778 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:03.780 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.780 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.802 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.828 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.828 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.828 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.828 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.828 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.832 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.832 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.832 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.835 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.835 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.835 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.835 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.843 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.843 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.843 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.844 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.844 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.847 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.847 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.847 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.850 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.850 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.850 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.850 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.851 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:03.852 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.853 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.874 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.900 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.900 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.900 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.900 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.900 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.903 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.903 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.903 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.907 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.907 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.907 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.907 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.915 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.915 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.915 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.915 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.915 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.919 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.919 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.919 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.922 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.922 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.922 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.922 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.922 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:03.924 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.924 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.945 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.970 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.971 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.971 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.971 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.971 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.974 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.974 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.974 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.977 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.977 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.977 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.978 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.985 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:03.986 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:03.986 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:03.986 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:03.986 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:03.989 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:03.989 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:03.989 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:03.993 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:03.993 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:03.993 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:03.993 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:03.993 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:03.995 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:03.996 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.018 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.044 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.044 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.044 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.044 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.044 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.048 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.048 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.048 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.051 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.051 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.051 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.051 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.059 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.059 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.060 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.060 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.060 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.063 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.063 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.063 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.066 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.066 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.066 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.067 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.067 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.068 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.069 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.091 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.117 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.117 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.117 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.117 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.117 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.120 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.120 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.120 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.123 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.124 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.124 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.124 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.131 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.131 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.132 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.132 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.132 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.135 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.135 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.135 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.138 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.138 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.138 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.138 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.139 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.140 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.141 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.161 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.187 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.187 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.187 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.187 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.187 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.190 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.190 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.190 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.193 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.194 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.194 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.194 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.201 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.201 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.202 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.202 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.202 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.205 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.205 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.205 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.208 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.208 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.208 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.208 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.209 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.212 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.213 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.233 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.259 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.259 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.259 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.259 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.259 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.263 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.263 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.263 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.266 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.266 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.266 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.266 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.274 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.274 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.274 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.274 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.274 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.277 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.277 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.277 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.280 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.280 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.280 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.281 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.281 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.285 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.285 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.306 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.331 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.331 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.332 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.332 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.332 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.335 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.335 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.335 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.338 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.338 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.338 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.338 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.346 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.346 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.346 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.346 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.346 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.349 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.350 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.350 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.353 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.353 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.353 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.353 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.353 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.357 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.358 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.379 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.405 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.405 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.405 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.405 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.405 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.408 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.408 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.408 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.412 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.412 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.412 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.412 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.420 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.420 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.420 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.420 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.420 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.423 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.423 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.423 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.427 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.427 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.427 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.427 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.427 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.431 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.432 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.452 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.478 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.478 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.478 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.478 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.478 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.481 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.482 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.482 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.485 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.485 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.485 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.485 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.493 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.493 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.493 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.493 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.493 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.496 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.496 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.496 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.499 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.499 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.499 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.499 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.500 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.502 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.502 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.523 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.548 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.549 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.549 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.549 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.549 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.552 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.552 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.552 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.555 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.555 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.555 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.555 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.563 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.563 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.564 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.564 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.564 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.567 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.567 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.567 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.570 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.570 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.570 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.570 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.571 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.573 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.574 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.594 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.620 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.620 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.620 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.620 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.620 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.623 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.623 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.623 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.627 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.627 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.627 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.627 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.635 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.635 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.635 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.635 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.635 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.638 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.638 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.638 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.641 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.641 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.641 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.641 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.642 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.644 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.644 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.665 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.691 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.691 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.691 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.691 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.691 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.695 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.695 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.695 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.698 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.698 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.698 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.698 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.706 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.706 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.706 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.706 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.706 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.709 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.709 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.709 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.713 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.713 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.713 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.713 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.713 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.716 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.716 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.737 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.763 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.763 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.763 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.763 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.763 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.766 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.766 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.766 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.770 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.770 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.770 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.770 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.777 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.778 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.778 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.778 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.778 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.781 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.781 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.781 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.784 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.784 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.784 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.784 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.785 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.786 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.787 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.807 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.833 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.833 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.833 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.833 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.833 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.837 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.837 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.837 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.840 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.840 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.840 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.840 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.848 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.848 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.848 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.848 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.848 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.851 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.851 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.851 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.854 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.854 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.855 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.855 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.855 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.856 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.857 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.877 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.902 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.902 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.903 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.903 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.903 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.906 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.906 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.906 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.909 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.909 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.909 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.909 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.917 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.917 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.917 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.917 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.917 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.920 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.920 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.921 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.924 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.924 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.924 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.924 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
+2026-10-06 11:02:04.924 | DEBUG    | robot_sf.nav.occupancy_grid:__post_init__:214 - GridConfig initialized: resolution=0.2, size=(32.0x32.0), channels=['obstacles', 'pedestrians', 'combined']
+2026-10-06 11:02:04.925 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions_francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.926 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/classic_interactions.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.946 | INFO     | robot_sf.training.scenario_loader:_load_scenario_manifest:187 - Scenario manifest '<repo>/configs/scenarios/francis2023.yaml' configured map_search_paths: <repo>/maps/svg_maps
+2026-10-06 11:02:04.972 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2010 - Converting SVG map "<repo>/robot_sf/maps/uni_campus_big.svg" to MapDefinition object.
+2026-10-06 11:02:04.972 | DEBUG    | robot_sf.nav.svg_map_parser:_load_svg_root:205 - Loading the root of the SVG file: <repo>/robot_sf/maps/uni_campus_big.svg
+2026-10-06 11:02:04.972 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1021 - Found 63 paths in the SVG file
+2026-10-06 11:02:04.972 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1023 - Found 42 rects in the SVG file
+2026-10-06 11:02:04.972 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1025 - Found 0 circles in the SVG file
+2026-10-06 11:02:04.975 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1033 - Parsed 63 paths in the SVG file
+2026-10-06 11:02:04.975 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1035 - Parsed 42 rects in the SVG file
+2026-10-06 11:02:04.975 | DEBUG    | robot_sf.nav.svg_map_parser:_get_svg_info:1037 - Parsed 0 circles in the SVG file
+2026-10-06 11:02:04.978 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1914 - Creating MapDefinition object
+2026-10-06 11:02:04.978 | DEBUG    | robot_sf.nav.svg_map_parser:_info_to_mapdefintion:1933 - MapDefinition object created: <class 'robot_sf.nav.map_config.MapDefinition'>
+2026-10-06 11:02:04.978 | DEBUG    | robot_sf.nav.svg_map_parser:convert_map:2021 - SVG map <repo>/robot_sf/maps/uni_campus_big.svg converted: robot_routes=16 ped_routes=12 spawn_zones=11 goal_zones=11
+2026-10-06 11:02:04.979 | DEBUG    | robot_sf.nav.map_config:_load_map_definitions_from_folder:1243 - Loaded SVG map 'uni_campus_big' from '<repo>/robot_sf/maps/uni_campus_big.svg'
 ============================= slowest 10 durations =============================
-1.51s call     tests/planner/test_hybrid_default_review_regressions.py::test_every_release_arm_keeps_full_base_environment_and_mapping_dumps
-0.18s call     tests/planner/test_hybrid_default_review_regressions.py::test_new_env_and_planner_share_defaults_on_registered_release_scenario
+1.47s call     tests/planner/test_hybrid_default_review_regressions.py::test_every_release_arm_keeps_full_base_environment_and_mapping_dumps
+0.17s call     tests/planner/test_hybrid_default_review_regressions.py::test_new_env_and_planner_share_defaults_on_registered_release_scenario
 0.02s call     tests/planner/test_hybrid_default_review_regressions.py::test_released_002_ppo_constructor_uses_legacy_sensor_defaults
-0.01s call     tests/planner/test_hybrid_default_review_regressions.py::test_enabled_validity_rejects_a_missing_sensor_field[False]
 0.01s call     tests/planner/test_hybrid_default_review_regressions.py::test_enabled_validity_rejects_a_missing_sensor_field[True]
+0.01s call     tests/planner/test_hybrid_default_review_regressions.py::test_enabled_validity_rejects_a_missing_sensor_field[False]
 
 (5 durations < 0.005s hidden.  Use -vv to show these durations.)
 =========================== short test summary info ============================
-FAILED tests/planner/test_hybrid_default_review_regressions.py::test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[zone]
 FAILED tests/planner/test_hybrid_default_review_regressions.py::test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[unbound]
+FAILED tests/planner/test_hybrid_default_review_regressions.py::test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[zone]
 FAILED tests/planner/test_hybrid_default_review_regressions.py::test_terminal_goal_at_022_m_keeps_tracking_before_environment_success[radius]
 FAILED tests/planner/test_hybrid_default_review_regressions.py::test_enabled_validity_rejects_a_missing_sensor_field[False]
 FAILED tests/planner/test_hybrid_default_review_regressions.py::test_enabled_validity_rejects_a_missing_sensor_field[True]
-FAILED tests/planner/test_hybrid_default_review_regressions.py::test_worker_preserves_absent_algorithm_config_for_release_default_selection
-FAILED tests/planner/test_hybrid_default_review_regressions.py::test_new_env_and_planner_share_defaults_on_registered_release_scenario
 FAILED tests/planner/test_hybrid_default_review_regressions.py::test_released_002_ppo_constructor_uses_legacy_sensor_defaults
+FAILED tests/planner/test_hybrid_default_review_regressions.py::test_new_env_and_planner_share_defaults_on_registered_release_scenario
+FAILED tests/planner/test_hybrid_default_review_regressions.py::test_worker_preserves_absent_algorithm_config_for_release_default_selection
 FAILED tests/planner/test_hybrid_default_review_regressions.py::test_every_release_arm_keeps_full_base_environment_and_mapping_dumps
-9 failed in 9.45s
+9 failed in 8.95s

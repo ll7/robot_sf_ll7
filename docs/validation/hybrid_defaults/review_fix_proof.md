@@ -10,10 +10,11 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybr
 ```
 
 With the changed production files restored to the reviewed head, the same nine
-cases fail for their intended bugs: **9 failed in 9.45s**. Full output:
+cases fail for their intended bugs: **9 failed in 8.95s**. Full output:
 [review_fix_fail_before.txt](review_fix_fail_before.txt). With fixed production
-bytes: **9 passed in 19.81s**. No test-only production seam was added.
-All inputs are fixed; builder checks do not reset or step an environment.
+bytes: **9 passed in 26.20s**. No test-only production seam was added.
+All inputs are fixed. The worker-provenance case runs one native step at dev1001;
+other new cases do not reset or step an environment.
 
 | Test (cases) | Behavior / credible bug | Why existing coverage misses it | Before-fix witness; deterministic real path |
 | --- | --- | --- | --- |
@@ -21,7 +22,7 @@ All inputs are fixed; builder checks do not reset or step an environment.
 | `test_enabled_validity_rejects_a_missing_sensor_field` (2) | Fail closed on absent nested/flat validity; an implicit valid default silently ignores the contract. | Prior sensor tests exercise present fields or opt-out. | `DID NOT RAISE`; real planner observation extraction, fixed fields. |
 | `test_new_env_and_planner_share_defaults_on_registered_release_scenario` | New inputs use one current default source; inferring env defaults from scenario assets produces incompatible pairs. | Prior runtime test scopes both inside the runner. | Env false versus planner true; actual separate builders on the released matrix, no reset/step. |
 | `test_released_002_ppo_constructor_uses_legacy_sensor_defaults` | Preserve the omitted sensor in the older PPO config; missing registry entry changes its space. | Prior learned-space coverage checks only 0.0.8 learned sources. | True versus false; real scoped constructor and exact released source hash. |
-| `test_worker_preserves_absent_algorithm_config_for_release_default_selection` | Preserve missing config provenance through batch payloads; serializing absence as explicit `{}` loses legacy selection. | Prior one-episode provenance test passes `None` directly and skips batch serialization. | `{}` is not `None`; real worker payload builder with absent input. |
+| `test_worker_preserves_absent_algorithm_config_for_release_default_selection` | Preserve missing config provenance through batch payloads; serializing absence as explicit `{}` loses legacy selection. | Prior one-episode provenance test passes `None` directly and skips batch serialization. | `{}` is not `None`; real worker payload builder, then real worker/episode dispatch, dev1001 horizon 1. |
 | `test_every_release_arm_keeps_full_base_environment_and_mapping_dumps` | Preserve all fields and identities for every catalogued arm, including config-less arms; a registry omission changes released env fill-in. | Earlier fixture covers only hybrid/learned sources and one scenario suite. | Missing old PPO changes constructor dump; real resolver, env builder and policy overrides for all 183 arms. Full dumps, not only hashes; four existing unfrozen guards remain blocking. |
 
 The last test loops all arms as one preservation contract: already-correct arms
@@ -40,3 +41,24 @@ test explicitly scopes its release source, as a caller of released behavior must
 otherwise it intentionally describes new-input construction. No new seam or RNG.
 The related three planner/default files pass **95 cases in 20.36s**; the final
 nine-case run additionally checks restored guide tolerance and actual goal completion.
+
+Additional existing fixture corrections: the v4 speed/closed-loop fixtures,
+proxemic-costmap and decomposition characterizations, and two map-runner selector
+routing tests declare a valid successor field. The bridge's explicit sensor-less
+case removes that key before flattening; it still tests both omission and retained
+validity. Their speed limits, contact criteria, golden commands, frame conversion,
+routing diagnostics and preservation assertions are unchanged.
+
+| Changed fixture/test family | Behavior / credible regression | Existing gap | Seam / determinism / real path |
+| --- | --- | --- | --- |
+| Speed/braking and closed-loop v3/v4 tests | Keep their physical speed/contact/frame witnesses; weakening braking or converting v3 flat velocities must still fail. | Their historical fixtures predate the required sensor and would raise before the witness. | No production seam; fixed valid field, original deterministic real planners and drive integration. |
+| Proxemic and decomposition characterizations | Preserve gate ordering, cost fields and golden commands; changed gates or scores still fail. | Sparse observations skip the new sensor contract. | No seam; fixed sensor value, unchanged real planner assertions. |
+| Two selector-routing tests | Preserve selected planner and diagnostics; wrong dispatch still fails. | Inline sparse observations omit validity. | No seam; fixed field, real policy/selector/hybrid path. |
+| Optional bridge test | Preserve omission and validity value through flattening; dropping the optional key still fails. | The shared fixture now includes the current sensor, so omission must be explicit. | No seam; fixed payload, real flatten/normalize functions. |
+
+Before declaration corrections, the speed/characterization/proxemic files fail
+23 cases at the new missing-sensor guard; after correction all 62 pass. The
+dispatch group initially exposes two selector-fixture omissions and the bridge
+fixture assumption; after correction all 193 pass. These existing tests preserve
+old witnesses and are not presented as new fail-on-base bug tests. The nine new
+bug cases still fail on the reviewed head for the defects described above.

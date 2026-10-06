@@ -380,7 +380,11 @@ def test_v4_decision_and_episode_metadata_record_speed_safety() -> None:
                 "speed": np.array([0.5]),
                 "radius": np.array([ROBOT_RADIUS]),
             },
-            "goal": {"current": np.array([10.0, 0.0]), "next": np.array([10.0, 0.0])},
+            "goal": {
+                "current": np.array([10.0, 0.0]),
+                "next": np.array([10.0, 0.0]),
+                "next_valid": np.array([1.0]),
+            },
             "pedestrians": {
                 "positions": np.array([[3.0, 0.0]]),
                 "velocities": np.array([[0.0, 0.0]]),
@@ -435,6 +439,7 @@ def _flat_obs(
         "robot_radius": np.array([ROBOT_RADIUS], dtype=np.float32),
         "goal_current": (ahead * 20.0).astype(np.float32),
         "goal_next": (ahead * 20.0).astype(np.float32),
+        "goal_next_valid": np.array([1.0], dtype=np.float32),
         "pedestrians_positions": np.array([ped], dtype=np.float32),
         "pedestrians_velocities": np.array([ego], dtype=np.float32),
         "pedestrians_count": np.array([1.0], dtype=np.float32),

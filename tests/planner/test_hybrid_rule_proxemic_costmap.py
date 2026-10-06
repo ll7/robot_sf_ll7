@@ -30,6 +30,7 @@ def _obs(
         "goal": {
             "current": np.asarray([2.0, 0.0], dtype=float),
             "next": np.asarray([2.0, 0.0], dtype=float),
+            "next_valid": np.asarray([1.0], dtype=np.float32),
         },
         "pedestrians": {
             "positions": np.asarray(ped_positions, dtype=float),

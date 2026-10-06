@@ -59,13 +59,37 @@ def run_pair_cell(task):
     """
     with defaults_for_source(None):
         result = run_cell(task)
-    expected = dict(zip(SWITCH_NAMES, ARM_SWITCHES[task[2]], strict=True))
+    validate_result(result, task)
+    return result
+
+
+def validate_result(result, task):
+    """Reject a completed record with a different admitted cell or default contract."""
+    name, seed, arm, empty, _, _ = task
+    if (result["scenario"], result["seed"], result["arm"], result["empty"]) != (
+        name,
+        seed,
+        arm,
+        empty,
+    ):
+        raise RuntimeError("Completed record has a different scenario/seed/arm identity")
+    expected = dict(zip(SWITCH_NAMES, ARM_SWITCHES[arm], strict=True))
     if result["effective_switches"] != expected:
         raise RuntimeError("Executed switch values differ from the admitted arm")
-    result["default_policy"] = {
-        "default_set": "current",
-        "explicit_switch_overrides": task[2] != "current_defaults",
-    }
+    if result["default_policy"]["default_set"] != "current":
+        raise RuntimeError("Comparison did not apply the admitted current default set")
+
+
+def load_completed_result(path, task, producer_head):
+    """Read a completed record only when its cell and producer identity match.
+
+    Returns:
+        A verified native record eligible for continuation of this same campaign.
+    """
+    result = json.loads(path.read_text())
+    validate_result(result, task)
+    if result["execution_head"] != producer_head:
+        raise RuntimeError("Completed record has a different producer revision")
     return result
 
 
@@ -396,7 +420,7 @@ def main():
         n, s, a, e, _, _ = task
         path = args.output / f"{n}__{s}__{a}__{'empty' if e else 'crowd'}.json"
         if path.exists():
-            results.append(json.loads(path.read_text()))
+            results.append(load_completed_result(path, task, manifest["head"]))
         else:
             pending.append(task)
     if pending and args.summarize_only:

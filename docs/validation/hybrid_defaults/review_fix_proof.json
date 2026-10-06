@@ -2027,6 +2027,7 @@
   ],
   "red_command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybrid_default_review_regressions.py -n 2 -q",
   "red_runtime": "Changed robot_sf files temporarily restored from reviewed head, new tests and independent snapshots retained, all restored in finally; no simulation campaign active.",
-  "red_result": "9 failed in 9.45s, intended assertions; no import/fixture error",
-  "green_result": "9 passed in 19.81s; related planner/builder files: 95 passed in 20.36s before the added terminal-completion/off-path assertions, which the final nine-case run covers."
+  "red_result": "9 failed in 8.95s, intended assertions; no import/fixture error",
+  "green_result": "9 passed in 26.20s (including one real serialized worker episode at dev1001); related dispatch/diagnostic tests: 193 passed in 25.56s; restored characterization fixtures: 62 passed in 37.98s.",
+  "native_regression": "The absent-algorithm test checks serialization then executes the real worker/episode path for a config-less released goal arm at dev1001, horizon 1, proving legacy runtime provenance. No performance claim."
 }

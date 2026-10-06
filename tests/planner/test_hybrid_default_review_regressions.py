@@ -4,17 +4,21 @@ import gzip
 import hashlib
 import json
 from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.benchmark.map_runner.map_runner_batch_plan import build_worker_fixed_params
 from robot_sf.benchmark.map_runner.map_runner_env import (
     apply_policy_env_observation_overrides,
     build_env_config,
 )
+from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+from robot_sf.benchmark.map_runner.map_runner_worker import execute_map_job
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
     _resolve_policy_search_candidate_runtime,
 )
@@ -34,13 +38,13 @@ ROOT = Path(__file__).resolve().parents[2]
 MATRIX = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 
 
-def _validity_planner():
+def _validity_planner(enabled=True):
     return HybridRuleLocalPlannerAdapter(
         build_hybrid_rule_local_planner_config(
             {
                 "planner_variant": "hybrid_rule_v4_clearance_braking",
                 "physical_static_exclusion_enabled": False,
-                "goal_next_validity_enabled": True,
+                "goal_next_validity_enabled": enabled,
                 "route_guide_enabled": True,
             }
         )
@@ -84,8 +88,7 @@ def test_terminal_goal_at_022_m_keeps_tracking_before_environment_success(comple
         observation["robot"]["position"] = np.array([3.81, 4.0])
     assert planner.plan(observation) == (0.0, 0.0)
     assert planner.last_decision()["planner_mode"] == "GOAL_STOP"
-    legacy = _validity_planner()
-    legacy.config.goal_next_validity_enabled = False
+    legacy = _validity_planner(enabled=False)
     old_observation = _obs(robot=(3.78, 4.0), goal=(4.0, 4.0))
     old_observation["goal"]["next"] = np.array([4.0, 4.0])
     assert legacy.plan(old_observation) == (0.0, 0.0)
@@ -149,6 +152,11 @@ def test_worker_preserves_absent_algorithm_config_for_release_default_selection(
         record_simulation_step_trace=False,
     )
     assert params["algo_config"] is None
+    record = execute_map_job(
+        (load_scenarios(MATRIX)[0], 1001, params),
+        run_map_episode=partial(run_map_episode, policy_builder=_build_policy),
+    )
+    assert record["algorithm_metadata"]["hybrid_default_policy"]["default_set"] == "legacy-0.0.8"
 
 
 def test_every_release_arm_keeps_full_base_environment_and_mapping_dumps():

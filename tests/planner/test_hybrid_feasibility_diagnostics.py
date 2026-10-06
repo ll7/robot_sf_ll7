@@ -429,7 +429,9 @@ def test_map_observation_bridge_preserves_optional_successor_validity():
     from robot_sf.benchmark.map_runner.map_runner_observations import normalize_map_observation
     from robot_sf.gym_env.robot_env import _flatten_nested_dict_obs
 
-    default = _flatten_nested_dict_obs(_obs())
+    observation = _obs()
+    observation["goal"].pop("next_valid", None)
+    default = _flatten_nested_dict_obs(observation)
     assert "next_valid" not in normalize_map_observation(default)["goal"]
     default["goal_next_valid"] = np.array([0], dtype=np.float32)
     normalized = normalize_map_observation(default)

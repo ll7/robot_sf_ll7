@@ -17,6 +17,16 @@ from scripts.tools import run_urgent_packet_preflight as tool
 NOW = datetime(2026, 9, 12, 12, 0, 0, tzinfo=UTC)
 REGISTRY_ID = "fixture-urgent-packets"
 
+
+def test_tracked_issue_5409_packet_digest_matches_registry() -> None:
+    """The urgent registry identifies the regenerated packet, including its byte pins."""
+    root = Path(__file__).resolve().parents[2]
+    registry = json.loads((root / "scripts/tools/urgent_packet_registry.v1.json").read_text())
+    entry = next(item for item in registry["entries"] if item["issue"] == 5409)
+    packet = root / "configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml"
+    assert entry["packet_sha256"] == hashlib.sha256(packet.read_bytes()).hexdigest()
+
+
 _OK = """
 import json
 print(json.dumps({"status": "ok", "argv": __import__("sys").argv[1:]}))

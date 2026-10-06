@@ -1,0 +1,48 @@
+{
+  "status": "AI-GENERATED/NEEDS-REVIEW; dev-only",
+  "method": "Closest exact-map segment to the terminal robot pose; distance independently recomputed by summarize_hybdiag.py",
+  "episodes": [
+    {
+      "scenario": "classic_cross_trap_high",
+      "seed": 1021,
+      "arm": "platform",
+      "position": [
+        10.946572110765386,
+        21.565889888703634
+      ],
+      "closest_wall": [
+        28.0,
+        21.0,
+        12.0,
+        21.0
+      ],
+      "center_distance_m": 1.1958016908979119,
+      "physical_radius_m": 1.0,
+      "legacy_hard_radius_m": 1.2,
+      "map": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+      "classification": "artificial geometric infeasibility",
+      "evidence": "Physical body clear; legacy comfort margin rejects all66 candidates at rest. Next step is supplied static flag, not physical limit."
+    },
+    {
+      "scenario": "classic_cross_trap_high",
+      "seed": 1023,
+      "arm": "platform",
+      "position": [
+        18.198413828285652,
+        28.88534474891619
+      ],
+      "closest_wall": [
+        21.0,
+        28.0,
+        19.0,
+        28.0
+      ],
+      "center_distance_m": 1.1943097232783189,
+      "physical_radius_m": 1.0,
+      "legacy_hard_radius_m": 1.2,
+      "map": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+      "classification": "artificial geometric infeasibility",
+      "evidence": "Physical body clear; legacy comfort margin rejects all moving candidates at rest. Next step is supplied static flag, not physical limit."
+    }
+  ]
+}

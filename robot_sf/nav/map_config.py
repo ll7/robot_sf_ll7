@@ -35,6 +35,32 @@ SUPPORTED_GOAL_COMPLETION_POLICIES = frozenset(
     }
 )
 
+# Goal-target sampling is versioned separately from the success predicate. The
+# centre-only default preserves historical maps/configs; the corrected policy
+# rejects target centres whose robot footprint is too close to a wall or bound.
+ROBOT_GOAL_SAMPLING_LEGACY_V1 = "centre_only_v1"
+ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1 = "footprint_clearance_v1"
+SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES = frozenset(
+    {ROBOT_GOAL_SAMPLING_LEGACY_V1, ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1}
+)
+
+
+def normalize_robot_goal_sampling_policy(value: object | None) -> str:
+    """Return a known versioned robot-goal policy, failing closed on unknown values."""
+    if value is None:
+        return ROBOT_GOAL_SAMPLING_LEGACY_V1
+    if not isinstance(value, str):
+        raise ValueError(
+            f"robot_goal_sampling_policy must be a versioned string identifier; got {value!r}"
+        )
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES:
+        raise ValueError(
+            "Unknown robot_goal_sampling_policy "
+            f"{value!r}; supported policies are {sorted(SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES)}"
+        )
+    return normalized
+
 
 def normalize_goal_completion_policy(value: object | None) -> str:
     """Validate and normalize a versioned goal-completion policy identifier.
@@ -1688,7 +1714,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 __all__ = [
     "GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1",
     "GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1",
+    "ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1",
+    "ROBOT_GOAL_SAMPLING_LEGACY_V1",
     "SUPPORTED_GOAL_COMPLETION_POLICIES",
+    "SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES",
     "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
@@ -1698,6 +1727,7 @@ __all__ = [
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
     "normalize_goal_completion_policy",
+    "normalize_robot_goal_sampling_policy",
     "parse_social_group_definitions",
     "serialize_map",
 ]

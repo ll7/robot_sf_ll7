@@ -458,7 +458,7 @@ def test_native_command_smoke_produces_schema_valid_row(tmp_path: Path) -> None:
         "    flow: none\n"
         "    purpose: native_command_smoke\n"
         "  seeds:\n"
-        "  - 111\n",
+        "  - 1001\n",
         encoding="utf-8",
     )
     out_path = tmp_path / "episodes.jsonl"

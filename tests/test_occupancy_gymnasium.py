@@ -391,8 +391,8 @@ class TestEnvironmentResetWithGrid:
         obs1, _info1 = env.reset(seed=42)
         grid1 = obs1["occupancy_grid"]
 
-        # Reset with seed 123
-        obs2, _info2 = env.reset(seed=123)
+        # Reset with seed 1013
+        obs2, _info2 = env.reset(seed=1013)
         grid2 = obs2["occupancy_grid"]
 
         # Grids should potentially differ (different pedestrian positions)
@@ -447,7 +447,7 @@ class TestEnvironmentStepWithGridUpdate:
             env._get_static_grid_obstacles()
             assert normalize_calls == 2
 
-            env.reset(seed=123)
+            env.reset(seed=1013)
             assert normalize_calls == 3
         finally:
             env.close()

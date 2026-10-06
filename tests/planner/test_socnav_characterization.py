@@ -177,6 +177,9 @@ def test_factory_default_config_matches_socnav_planner_config() -> None:
 # ===========================================================================
 
 
+# PR #10011 projects world velocity onto the forward axis. A lateral goal
+# turns with zero translation; HRVO head-on keeps its angular command and
+# translates at the forward component 2.3699999918043613 (not vector norm).
 # --- ORCA heuristic fallback (always available, pure Python) ---------------
 
 
@@ -186,7 +189,7 @@ def test_factory_default_config_matches_socnav_planner_config() -> None:
         ("open_ahead", _OBS_OPEN_AHEAD, (3.0, 0.0)),
         ("near_goal", _OBS_NEAR_GOAL, (3.0, 0.0)),
         ("head_on", _OBS_HEAD_ON, (pytest.approx(0.09166666616996129), 0.0)),
-        ("goal_left", _OBS_GOAL_LEFT, (2.4000000000000004, 1.0)),
+        ("goal_left", _OBS_GOAL_LEFT, (pytest.approx(0.0, abs=1e-12), 1.0)),
     ],
 )
 def test_orca_heuristic_plan_golden(label, observation, golden) -> None:
@@ -207,8 +210,8 @@ def test_orca_heuristic_plan_golden(label, observation, golden) -> None:
     [
         ("open_ahead", _OBS_OPEN_AHEAD, (3.0, 0.0)),
         ("near_goal", _OBS_NEAR_GOAL, (3.0, 0.0)),
-        ("head_on", _OBS_HEAD_ON, (2.6795521968903904, -0.7281393895749115)),
-        ("goal_left", _OBS_GOAL_LEFT, (2.4000000000000004, 1.0)),
+        ("head_on", _OBS_HEAD_ON, (2.3699999918043613, -0.7281393895749115)),
+        ("goal_left", _OBS_GOAL_LEFT, (pytest.approx(0.0, abs=1e-12), 1.0)),
     ],
 )
 def test_hrvo_plan_golden(label, observation, golden) -> None:
@@ -280,7 +283,7 @@ skipif_no_rvo2 = pytest.mark.skipif(
         # The head-on case resolves through the rvo2 C++ solver; allow a small
         # tolerance for platform float-ordering differences.
         ("head_on", _OBS_HEAD_ON, (pytest.approx(0.09166666865348816), 0.0)),
-        ("goal_left", _OBS_GOAL_LEFT, (2.4000000000000004, 1.0)),
+        ("goal_left", _OBS_GOAL_LEFT, (pytest.approx(0.0, abs=1e-12), 1.0)),
     ],
 )
 def test_orca_rvo2_plan_golden(label, observation, golden) -> None:
@@ -453,13 +456,13 @@ def test_characterization_is_deterministic_across_instances() -> None:
             "hrvo_head_on",
             lambda: HRVOPlannerAdapter(SocNavPlannerConfig()),
             _OBS_HEAD_ON,
-            (2.6795521968903904, -0.7281393895749115),
+            (2.3699999918043613, -0.7281393895749115),
         ),
         (
             "hrvo_goal_left",
             lambda: HRVOPlannerAdapter(SocNavPlannerConfig()),
             _OBS_GOAL_LEFT,
-            (2.4000000000000004, 1.0),
+            (pytest.approx(0.0, abs=1e-12), 1.0),
         ),
         (
             "trivial_open",

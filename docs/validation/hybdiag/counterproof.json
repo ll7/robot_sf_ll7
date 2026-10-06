@@ -1,0 +1,30 @@
+{
+  "head": "14c1adf46436fc7b9e051b44981900acf525b9b2",
+  "modules": {
+    "robot_sf/planner/socnav_occupancy.py": "edfd154c741b7c581df628df343968a59b7b067ed0ed7b59333ecf96dc0a3d3c",
+    "robot_sf/planner/grid_route.py": "d00f5008cc9432714c66a7c6b7a86cc6c1aed4b9a1b607251fe455647377018a",
+    "robot_sf/planner/hybrid_rule_local_planner.py": "c91a16c4abfd5d98f3febba1b79eb6a949cdb1d987fbee6c948ac6b0b84112dd",
+    "robot_sf/sensor/socnav_observation.py": "4e9d5b16e96bf75244199ab829981129578471afed7013cfd1e965493b24d471",
+    "robot_sf/benchmark/map_runner/map_runner_observations.py": "6fd165d5435aa726ddd78118593bdf96c3fbe482ea2985f3311ca096f8279ff9"
+  },
+  "test_sha256": "8075c98c17d8421a6ceca63682acea5bd2eaa2a91756bb41fe47c81bd9a107de",
+  "exit": 1,
+  "argv": [
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_platform_speed_preference_does_not_saturate_at_comfort_cap",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_platform_injected_speeds_preserve_nearest_pedestrian_braking_bound",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_platform_checks_wall_stopping_distance_beyond_rollout_horizon",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_successor_validity_is_independent_and_preserves_legitimate_origin",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_sensor_emits_explicit_validity_only_when_opted_in",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_debug_unknown_rejection_reason_is_observable_without_crashing",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_physical_sweep_conservatively_covers_grazing_turn_arc",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_grid_route_successor_validity_survives_config_builder",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_physical_flag_keeps_explicitly_valid_origin_waypoint",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_goal_validity_survives_real_observation_flattening",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_map_observation_bridge_preserves_optional_successor_validity",
+    "-n",
+    "0",
+    "-q"
+  ],
+  "intended_reasons_verified": true,
+  "missing_reasons": []
+}

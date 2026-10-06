@@ -1,5 +1,30 @@
 # Context Retrieval Index
 
+Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
+real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
+[issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).
+
+
+Issue #10007 FXS: SA-CADRL release speed and 19-agent inputs, documented heading
+saturation, and native sampling drive forecasts; dev-only before/after diagnostics:
+[issue_10007_fxs_sacadrl_sampling.md](issue_10007_fxs_sacadrl_sampling.md).
+
+Issue #10007 FXB baseline controller corrections: real map-runner timestep
+resolution, ORCA forward projection, explicit release speed binding, and
+development-only before/after probes with test-value evidence:
+[FXB diagnostic report](evidence/issue_10007_fxb/README.md).
+
+Issue #10007 prediction planner hunt lane FXP: collector velocity frame, static-obstacle limitation,
+model-horizon rejection, distinct turn candidates, and checkpoint/retraining provenance.
+Dev-only scorer diagnostics; no retraining or release claim:
+[issue_10007_fxp_prediction_defects.md](issue_10007_fxp_prediction_defects.md).
+
+Issue #9750 per-arm physical-faithfulness audit against the actual 0.0.7 roster:
+release-bundle identity, resolved configuration inheritance, cited method, correctness or
+enhancement classification, and deterministic oracle-test anchors. Unit tests only; no campaign
+or safety claim:
+[issue_9750_baseline_physical_faithfulness.md](issue_9750_baseline_physical_faithfulness.md).
+
 Issue #9667 Social Navigation Quality Index version 2 (SNQI-v2): declared weights,
 safety strata, development-only calibration, mandatory weight-family diagnostics,
 and the boundary against human-comfort or deployment claims:
@@ -19,6 +44,16 @@ inconsistency, and four revision-divergent replay comparisons. Diagnostic-only; 
 safety claim or corpus admission:
 [issue_9656_hard_case_mining.md](issue_9656_hard_case_mining.md),
 [compact evidence](evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json).
+
+Issue #9645 bounded falsification pilot: the four native Random/TPE runs completed 64
+distinct candidates but found no critical case and made no best-so-far progress. This is a
+diagnostic-only **NO-GO for scaling #9648 under the tested fixed-seed domain**, not a claim that
+the search cannot find counterexamples. A tracked #1501 collision was regenerated and replayed
+twice at its recorded source revision `58e516aa4f69ff3098bf518199f483006589758c`; this was not a
+replay under the current source. Task feasibility remains unknown without a successful reference
+planner. See the [pilot receipt](evidence/issue_9645_bounded_falsification_2026-09-24/payload/report.md),
+[convergence report](evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.md),
+and [machine-readable evidence bundle](evidence/issue_9645_bounded_falsification_2026-09-24/evidence_bundle_manifest.json).
 
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA
@@ -51,6 +86,12 @@ separates the fast-pysf segment kernel from the vectorized planner point site, a
 opt-in, domain-gated runtime correction boundary. This is a compatibility and implementation-context
 note only; it does not establish physical, safety, benchmark, or paper-facing evidence:
 [issue_8222_obstacle_force_compatibility.md](issue_8222_obstacle_force_compatibility.md).
+
+Issue #9764 social-force pair-kernel versioning: preserve the unwrapped historical default, expose
+the wrapped successor explicitly, and keep the bounded paired-run results diagnostic-only until the
+Issue #9668 release-row equivalence gate passes. Raw run files remain in private host custody under a
+logical bundle key; they are not a published evidence bundle:
+[issue_9764_social_force_kernel_versioning.md](issue_9764_social_force_kernel_versioning.md).
 
 Scenario-window preparation packet (RW-01—RW-08): source-contract repairs, typed native
 continuation snapshot inventory, deterministic relevance-window selector, explicit unsafe-crop
@@ -192,7 +233,7 @@ scientific evidence:
 Issue #7086 trace dossier representative selection: deterministic majority,
 weaker-label, median-order, and seed-identity selection for one campaign cell,
 plus the shared `robot_sf.research.representative_selection` rule that the
-emergent-phenomena campaign, its figures, and its replay videos all call
+historical emergent-phenomena campaign (affected by #10056), its figures, and its replay videos all call
 instead of carrying private copies, plus the diagnostic h600 trace pin for
 retained trace-series conversion, without evidence admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
@@ -227,11 +268,11 @@ Issue #6792 package portfolio references to the tracked source config, preservin
 release-cell-only claim boundary:
 [issue_7047_ch7_portfolio_companion_binding.md](issue_7047_ch7_portfolio_companion_binding.md).
 
-Issue #6969 lane-formation reference and Stage A diagnostic: the lane metric separates known
-mixed/separated controls, while 8 frozen space-filling parameter profiles plus released and
-literature anchors produced no robust clear-hit regime across three seeds; no default or tuning
-claim follows:
-[issue_6969_lane_formation_reference/README.md](evidence/issue_6969_lane_formation_reference/README.md).
+Issue #6969 historical lane-formation reference and Stage A diagnostic: affected by the
+wall-order defect #10056. Retained for comparison; use the
+[corrected-wall replay](evidence/issue_10056_wall_order_2026-09/README.md) for current
+geometry diagnostics. The [historical README](evidence/issue_6969_lane_formation_reference/README.md)
+contains the original measurements; no default or tuning claim follows.
 
 Issue #6972 analysis-trace overhead repair: reuses the episode commit hash and
 trace builder digest on the opt-in path, with action-sequence regression proof
@@ -515,11 +556,14 @@ stop rules without authorizing campaign execution:
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 
-Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:
+Historical emergent-phenomena demonstration at released + literature speed: affected and superseded by #10056; retained for comparison:
 [README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
 
-Multi-seed measured emergent-phenomena campaign (10 seeds per scenario x calibration, per-seed run records, aggregate statistics, full provenance manifest) elevating the pinned single-seed exhibit to measured face-validity evidence:
-[README.md](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
+Historical multi-seed emergent-phenomena campaign (10 seeds per scenario x calibration): affected and superseded by #10056; its misplaced-wall measurements are not current face-validity evidence:
+[supersession manifest](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/supersession_manifest.json) and [historical README](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
+
+Current corrected-wall diagnostics for #5149, #6962 sensitivity, and #6969 reference/Stage A:
+[issue_10056_wall_order_2026-09/README.md](evidence/issue_10056_wall_order_2026-09/README.md).
 
 Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
 [issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).
@@ -831,3 +875,5 @@ it as a repeatable workflow.
   conclusions.
 - Repomix: recommended for static, reproducible context packs. Generated packs are disposable
   `output/` artifacts, not source-of-truth documentation.
+
+The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).

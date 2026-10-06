@@ -128,7 +128,9 @@ def test_source_digest_drift_fails_closed() -> None:
         validate_preregistration_config(packet, config_path=PACKET)
 
 
-@pytest.mark.parametrize("source_path", [str(SUMMARY), "../summary.json"])
+@pytest.mark.parametrize(
+    "source_path", [str(SUMMARY), "../summary.json"], ids=["absolute", "parent"]
+)
 def test_non_relative_source_path_fails_closed(source_path: str) -> None:
     """The source contract cannot escape the repository-relative path boundary."""
     packet = copy.deepcopy(_packet())

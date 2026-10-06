@@ -53,7 +53,7 @@ Benchmark release versioning is independent from `pyproject.toml`.
 While the release process is still evolving, benchmark releases remain in the
 `0.x.y` line.
 
-## Current Canonical Release Unit
+## Historical 0.0.7 Canonical Release Unit
 
 The approved S30/H600 benchmark-data campaign is:
 
@@ -98,7 +98,7 @@ The publication-grade manifest uses
 `schema_version: benchmark-release-manifest.v0.2`. In addition to the fields
 above, it pins the exact latest-green base commit, expected 20,160 episode
 identities, suite policy and route-certification hashes, resolved seeds
-`111..140`, the `advisory_no_ranking` SNQI claim policy, direct Zenodo dataset
+`EVAL_SEEDS_0_0_8` for 0.0.8 (`release_eval_0_0_8`; D-049), the `advisory_no_ranking` SNQI claim policy, direct Zenodo dataset
 channel, and distinct fresh concept/version DOIs. `provenance.doi` must equal
 the reserved version DOI.
 
@@ -256,16 +256,33 @@ The release entrypoint:
 The matrix setup gate uses the release manifest's checksummed matrix and seed set without
 development-matrix or seed overrides. It requires 0.10 m surface clearance and checks the robot
 footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
-robot stationary for 20 steps to catch early route-end respawn overlap. JSON and Markdown reports
+robot stationary for 20 steps to catch early route-end respawn overlap. A conservative grid block
+can be cleared only by a continuous-geometry proof. There are two proofs. The buffered proof
+buffers obstacles and insets map bounds by the robot radius plus the clearance margin, then
+requires every ordered route leg to share free space. The exact straight-segment certificate is
+tried first and is what clears the 2.2 m doorway, where the buffered free space has no area. It
+passes only if every
+straight leg between waypoints keeps at least the robot radius plus the 0.10 m margin from the
+full wall geometry and stays inside the inset map bounds. The distance to the walls is computed
+exactly, with a 1e-12 m rounding allowance only. In both cases the report retains the failed grid
+check and certifies only the required opening-width lower bound; it does not infer a route length
+or a measured opening width. JSON and
+Markdown reports
 are retained under
 `<campaign_root>/reports/spawn_matrix_preflight.v1.{json,md}`. A blocked row stops the release
 before planner execution. Their recorded SHA-256 digests are checked again after the campaign and
 in the publication bundle. These reports are setup diagnostics; they are not planner-performance,
 navigation-success, or release-success evidence. A declared
-`expected_outcome: infeasible_safe_hold` is labelled as an infeasibility probe only when the
-separate, checksummed manifest has `release_kind: benchmark-infeasibility-probe`. Its report
-remains blocked for release admission. The nominal benchmark-data manifest rejects that
-declaration even when geometry is infeasible; it needs a versioned feasible successor.
+`expected_outcome: infeasible_safe_hold` is admitted as an infeasibility probe in two ways. A
+separate, checksummed manifest with `release_kind: benchmark-infeasibility-probe` may declare it.
+The nominal 48-scenario main-grid manifest admits it for one scenario only,
+`francis2023_narrow_doorway` (the pinned 2.0 m doorway). The scenario must carry the exact
+`benchmark-main-grid-infeasibility-probe.v1` declaration, must have no `map_id`, and must load the
+map file whose SHA-256 is pinned in the code. Any other declaration, scenario, or map bytes is
+rejected. The preflight must also confirm by the continuous proof that the route is infeasible. Such
+a row is labelled `infeasibility_probe`, not `valid`, and the probe is not release-success
+evidence. Any other scenario with this declaration in a nominal manifest is rejected; it needs a
+versioned feasible successor.
 
 To inspect the same manifest gate directly, use the manifest-bound command and provide both report
 paths:
@@ -367,3 +384,23 @@ The campaign summary now carries benchmark-release provenance:
 - `docs/benchmark_artifact_publication.md`
 - `docs/benchmark_release_reproducibility.md`
 - `docs/RELEASE.md`
+
+Historical 0.0.7 manifests retain `paper_eval_s30` (111..140). Both that retired
+band and the fresh 0.0.8 list remain sealed for development and calibration.
+See the [0.0.8 runbook](release/0.0.8/runbook.md).
+
+## Bound doorway width slice
+
+The v0.2 strict runner also accepts `benchmark-doorway-width-slice.v1`. The unchanged
+`benchmark-width-slice` template spelling requires the same explicit v1 width contract.
+This gate binds the main campaign's exact 14-arm roster and sealed 30-seed inventory to
+the authored 2.2, 2.8 and 3.6 m doorway scenarios: 1,260 unique cells. The tracked
+width-slice contract requests 400 steps. The matrix declares a null fixed horizon,
+`scenario_horizons` and its digest, binding
+`configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml`.
+The schedule supplies 400 steps for each width; acceptance checks the effective
+episode budgets and their provenance. A 0.0.8 main release refuses a fixed horizon
+and takes its 400–700 step budgets from the authored schedule. The main gate still
+requires 20,160 cells and 48 scenarios. Runtime smoke, checkpoint identity, resume,
+manifest and result privacy admissions remain mandatory; a development projection cannot be
+admitted as the sealed release.

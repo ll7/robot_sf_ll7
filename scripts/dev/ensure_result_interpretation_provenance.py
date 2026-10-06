@@ -11,6 +11,7 @@ running the tests.  An unavailable commit remains a hard failure.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -85,8 +86,17 @@ def _commit_exists(commit: str) -> bool:
 
 
 def _fetch_commits(commits: list[str]) -> subprocess.CompletedProcess[str]:
+    command = ["git", "-C", str(ROOT)]
+    if os.environ.get("GH_TOKEN"):
+        # CI provides GH_TOKEN but checkout does not persist Git credentials.
+        # Let gh answer Git's credential request without placing a token in
+        # command arguments, the Git config, or the captured diagnostic.
+        command.extend(
+            ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
+        )
+    command.extend(["fetch", "--no-tags", "origin", *commits])
     return subprocess.run(
-        ["git", "-C", str(ROOT), "fetch", "--no-tags", "origin", *commits],
+        command,
         check=False,
         capture_output=True,
         text=True,

@@ -15,9 +15,11 @@ import math
 import re
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from robot_sf.analysis_workbench.audit_contracts import (
     AuditContractError,
@@ -33,9 +35,12 @@ from robot_sf.analysis_workbench.audit_detectors import (
 )
 from robot_sf.analysis_workbench.audit_store import AuditStore, BatchCommitResult, CommitResult
 from robot_sf.analysis_workbench.release_row_bundle import load_release_rows
+from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 
 SCHEMA_VERSION = "release-row-anomalies.v1"
 DETECTOR_VERSION = "1.0.1"
+COLLISION_DETECTOR_VERSION = "1.1.0"
+ORBIT_DETECTOR_VERSION = "1.1.0"
 DEFAULT_CONFIG: dict[str, Any] = {
     "short_collision_max_steps": 20,
     "same_step_max_steps": 20,
@@ -77,11 +82,56 @@ DETECTOR_IDS = (
     "universal_failure_unannotated",
     "invalid_run_preflight_mismatch",
 )
+COLLISION_DETECTOR_ID = "collision_metric_inconsistent"
 RELEASE_TERMINAL_STATUSES = frozenset({"success", "collision", "failure"})
+COLLISION_METRIC_FIELDS = (
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "agent_collision_count",
+    "total_collision_count",
+    "collisions",
+)
+COLLISION_COUNT_TOLERANCE = 0.0
+# Floats above this bound cannot represent every adjacent integer. Keep large
+# JSON integer counts exact, but reject large float counts in the strict gate.
+MAX_EXACT_FLOAT_COLLISION_COUNT = 2**53 - 1
+COLLISION_CONFIG_KEYS = frozenset(
+    {"collision_metric_contract", "collision_roster_status", "collision_expected_arm_count"}
+)
+RELEASE_0_0_8_ROSTER_SOURCE = (
+    Path(__file__).resolve().parents[2]
+    / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+)
 
 
 class ReleaseRowError(ValueError):
     """Malformed release rows, configuration, or accounting inputs."""
+
+
+def _release_0_0_8_roster() -> set[str] | None:
+    """Read the #9751 arm identities from the committed campaign template.
+
+    Returns:
+        The 14-arm roster, or None when the source is unavailable or invalid.
+    """
+
+    try:
+        campaign = yaml.safe_load(RELEASE_0_0_8_ROSTER_SOURCE.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(campaign, dict) or not isinstance(campaign.get("planners"), list):
+        return None
+    planners = campaign["planners"]
+    if len(planners) != 14 or any(
+        not isinstance(planner, dict)
+        or planner.get("enabled", True) is not True
+        or not isinstance(planner.get("key"), str)
+        or not planner["key"].strip()
+        for planner in planners
+    ):
+        return None
+    roster = {planner["key"] for planner in planners}
+    return roster if len(roster) == 14 else None
 
 
 def _finite(value: object) -> float | None:
@@ -113,6 +163,27 @@ def _unique_string_ids(value: object, name: str) -> list[str]:
     return list(value)
 
 
+def _validate_collision_contract_settings(settings: Mapping[str, Any]) -> None:
+    """Validate the explicit legacy or 0.0.8 collision-roster contract."""
+
+    contract = settings.get("collision_metric_contract", "legacy_diagnostic")
+    roster_status = settings.get("collision_roster_status", "legacy_diagnostic")
+    expected_arm_count = settings.get("collision_expected_arm_count")
+    if contract not in {"legacy_diagnostic", "release_0_0_8"}:
+        raise ReleaseRowError(
+            "collision_metric_contract must be legacy_diagnostic or release_0_0_8"
+        )
+    if contract == "legacy_diagnostic":
+        if roster_status != "legacy_diagnostic" or expected_arm_count is not None:
+            raise ReleaseRowError(
+                "legacy collision metric contract cannot declare a candidate roster"
+            )
+    elif roster_status not in {"unfrozen_template", "frozen"}:
+        raise ReleaseRowError("0.0.8 collision roster must be unfrozen_template or frozen")
+    else:
+        _positive_integer(expected_arm_count, "collision_expected_arm_count", minimum=1)
+
+
 def _release_row_admission(row: Mapping[str, Any]) -> tuple[str, str] | None:
     """Apply shared execution admission while preserving valid terminal outcomes.
 
@@ -142,7 +213,7 @@ def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C9
         supplied = config
     else:
         raise ReleaseRowError("config must be an object")
-    unknown = set(supplied) - set(DEFAULT_CONFIG)
+    unknown = set(supplied) - (set(DEFAULT_CONFIG) | COLLISION_CONFIG_KEYS)
     if unknown:
         raise ReleaseRowError(f"unknown config keys: {', '.join(sorted(unknown))}")
     result = {**DEFAULT_CONFIG, **supplied}
@@ -185,6 +256,7 @@ def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C9
         raise ReleaseRowError("pedestrian_aware_planners must not include baseline_planner")
     if type(result["require_preflight"]) is not bool:
         raise ReleaseRowError("require_preflight must be a boolean")
+    _validate_collision_contract_settings(result)
     return result
 
 
@@ -336,6 +408,90 @@ def _invalid_run(row: Mapping[str, Any]) -> bool | None:
         return None
     value = exact.get("invalid_run")
     return value if type(value) is bool else None
+
+
+def _collision_integer_count(value: object) -> tuple[int | None, str | None]:
+    """Validate a sampled count without rounding an integer through float.
+
+    Returns:
+        The exact nonnegative integer count or a named domain problem.
+    """
+
+    if type(value) is int:
+        return (value, None) if value >= 0 else (None, "invalid_count_domain")
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None, "missing_or_nonfinite"
+        if value < 0 or not value.is_integer() or value > MAX_EXACT_FLOAT_COLLISION_COUNT:
+            return None, "invalid_count_domain"
+        return int(value), None
+    return None, "missing_or_nonfinite"
+
+
+def _typed_ledger_collision_problems(row: Mapping[str, Any], total: int | None) -> list[str]:
+    """Check equivalent typed-ledger fields without counting exact events.
+
+    Returns:
+        Named reconciliation and schema problems, if a typed ledger is present.
+    """
+
+    ledger = row.get("event_ledger")
+    if not isinstance(ledger, Mapping) or "schema_version" not in ledger:
+        return []
+    if ledger["schema_version"] != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
+        return ["unsupported_event_ledger_schema"]
+    problems: list[str] = []
+    reconciliation = ledger.get("reconciliation")
+    exact = ledger.get("exact_events")
+    if not isinstance(reconciliation, Mapping):
+        problems.append("missing_collision_reconciliation")
+    else:
+        ledger_value, _ = _collision_integer_count(reconciliation.get("collision_metric_value"))
+        if ledger_value is None:
+            problems.append("missing_ledger_collision_metric_value")
+        elif total is not None and ledger_value != total:
+            problems.append("ledger_collision_metric_mismatch")
+        if reconciliation.get("collision_metric_source") != "metrics.total_collision_count":
+            problems.append("ledger_collision_metric_source_mismatch")
+    if not isinstance(exact, Mapping) or type(exact.get("collision")) is not bool:
+        problems.append("missing_exact_collision_event")
+    elif exact["collision"] is not row["outcome"]["collision_event"]:
+        problems.append("exact_collision_event_mismatch")
+    return problems
+
+
+def _collision_metric_problems(row: Mapping[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """Check sampled collision arithmetic and typed-ledger identity.
+
+    Returns:
+        Named contract problems and measured values for an episode row.
+    """
+
+    metrics = row["metrics"]
+    values: dict[str, int | None] = {}
+    problems: list[str] = []
+    for field in COLLISION_METRIC_FIELDS:
+        values[field], problem = _collision_integer_count(metrics.get(field))
+        if problem is not None:
+            problems.append(f"{problem}_{field}")
+    total = values["total_collision_count"]
+    alias = values["collisions"]
+    components = [values[field] for field in COLLISION_METRIC_FIELDS[:3]]
+    component_sum = sum(components) if all(value is not None for value in components) else None
+    if total is not None and alias is not None and total != alias:
+        problems.append("collision_alias_mismatch")
+    if total is not None and component_sum is not None and total != component_sum:
+        problems.append("collision_component_sum_mismatch")
+
+    problems.extend(_typed_ledger_collision_problems(row, total))
+    ledger = row.get("event_ledger")
+    return problems, {
+        "metrics": values,
+        "component_sum": component_sum,
+        "event_ledger_schema": ledger.get("schema_version")
+        if isinstance(ledger, Mapping)
+        else None,
+    }
 
 
 def _displacement(row: Mapping[str, Any]) -> tuple[float | None, str | None]:
@@ -499,7 +655,13 @@ def _new_finding(  # noqa: PLR0913
     return {
         "finding_id": _finding_id(detector_id, scope, source),
         "detector_id": detector_id,
-        "detector_version": DETECTOR_VERSION,
+        "detector_version": (
+            COLLISION_DETECTOR_VERSION
+            if detector_id == COLLISION_DETECTOR_ID
+            else ORBIT_DETECTOR_VERSION
+            if detector_id == "orbit_zero_progress"
+            else DETECTOR_VERSION
+        ),
         "reason_code": reason,
         "scenario_id": scenario_id,
         "seed": seed,
@@ -517,7 +679,7 @@ def _signal(finding: Mapping[str, Any], source: Mapping[str, Any]) -> dict[str, 
     signal = Signal(
         signal_id=finding["finding_id"],
         detector_id=finding["detector_id"],
-        detector_version=DETECTOR_VERSION,
+        detector_version=finding["detector_version"],
         status="flagged",
         reason_code=finding["reason_code"],
         episode_id=finding["episode_ids"][0] if len(finding["episode_ids"]) == 1 else "",
@@ -554,10 +716,13 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
         "same_step_all_planners": "All complete planner arms fail one cell at the same early step.",
         "short_collision": "A collision terminates within the configured step bound.",
         "impossible_contact_speed": "Recorded relative contact speed exceeds a physical limit.",
-        "orbit_zero_progress": "Recorded curvature, displacement, progress, or deadlock indicates a stall.",
+        "orbit_zero_progress": "Recorded curvature, displacement, progress, or deadlock_stall windows indicate a stall.",
         "pedestrian_free_baseline_regression": "Paired pedestrian-free success is worse than blind goal.",
         "universal_failure_unannotated": "Every planner fails a cell without root-cause annotation.",
         "invalid_run_preflight_mismatch": "Episode invalid_run differs from scenario-seed preflight.",
+        "collision_metric_inconsistent": (
+            "Canonical collision counts, alias, or typed-ledger reconciliation disagree."
+        ),
     }
     parameters = {
         "same_step_all_planners": ("same_step_max_steps", "min_planners_per_cell"),
@@ -578,13 +743,25 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
         ),
         "universal_failure_unannotated": ("min_planners_per_cell",),
         "invalid_run_preflight_mismatch": (),
+        "collision_metric_inconsistent": (),
     }
+    detector_ids = (
+        (*DETECTOR_IDS, COLLISION_DETECTOR_ID)
+        if settings.get("collision_metric_contract", "legacy_diagnostic") == "release_0_0_8"
+        else DETECTOR_IDS
+    )
     specs = tuple(
         DetectorSpec(
             detector_id=detector_id,
             family="release_row_anomaly",
             description=descriptions[detector_id],
-            version=DETECTOR_VERSION,
+            version=(
+                COLLISION_DETECTOR_VERSION
+                if detector_id == COLLISION_DETECTOR_ID
+                else ORBIT_DETECTOR_VERSION
+                if detector_id == "orbit_zero_progress"
+                else DETECTOR_VERSION
+            ),
             required_capabilities=("episode",),
             cohort_definition={"kind": "release_cell", "key": ["scenario_id", "seed"]},
             parameters={key: settings[key] for key in parameters[detector_id]},
@@ -595,7 +772,7 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
                 "evidence_boundary": "diagnostic_only",
             },
         )
-        for detector_id in sorted(DETECTOR_IDS)
+        for detector_id in sorted(detector_ids)
     )
     return DetectorRegistry(version="release-row-detector-registry.v1", detectors=specs)
 
@@ -615,12 +792,29 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     """
 
     settings = _configured(config)
-    registry = release_row_registry(settings)
     records, observed_planners = _rows(rows)
+    # Source manifests declare the denominator; legacy defaults describe only
+    # the historical pedestrian comparison cohort.
+    if (
+        source
+        and "planner_ids" in source
+        and (config is None or "pedestrian_aware_planners" not in config)
+    ):
+        roster = sorted(_unique_string_ids(source["planner_ids"], "source.planner_ids"))
+        settings["pedestrian_aware_planners"] = [
+            planner for planner in roster if planner != settings["baseline_planner"]
+        ]
+    registry = release_row_registry(settings)
     try:
         source_info = json.loads(canonical_json(dict(source or {})))
     except (AuditContractError, TypeError, ValueError, RecursionError) as error:
         raise ReleaseRowError("source identity must be strict JSON") from error
+    if (
+        source
+        and "planner_ids" in source
+        and (config is None or "pedestrian_aware_planners" not in config)
+    ):
+        source_info["cohort_source"] = "manifest_planner_ids"
     source_info["detector_registry_digest"] = registry.digest
     expected_planners = source_info.get("planner_ids", observed_planners)
     if (
@@ -638,6 +832,24 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         configured_roster.add(settings["baseline_planner"])
         configured_roster.update(settings["pedestrian_aware_planners"])
     coverage_planners = set(configured_roster)
+    collision_roster_reasons: list[str] = []
+    if settings.get("collision_metric_contract", "legacy_diagnostic") == "release_0_0_8":
+        if settings.get("collision_roster_status", "legacy_diagnostic") != "frozen":
+            collision_roster_reasons.append("collision_roster_unfrozen_template")
+        if len(expected_planners) != settings.get("collision_expected_arm_count") or set(
+            expected_planners
+        ) != {settings["baseline_planner"], *settings["pedestrian_aware_planners"]}:
+            collision_roster_reasons.append("collision_roster_manifest_mismatch")
+        frozen_roster = _release_0_0_8_roster()
+        if frozen_roster is None:
+            collision_roster_reasons.append("collision_roster_source_unavailable")
+        elif (
+            settings.get("collision_expected_arm_count") != len(frozen_roster)
+            or set(expected_planners) != frozen_roster
+            or {settings["baseline_planner"], *settings["pedestrian_aware_planners"]}
+            != frozen_roster
+        ):
+            collision_roster_reasons.append("collision_roster_source_mismatch")
     source_info.setdefault("row_count", len(records))
     annotation_entries = _annotation_entries(annotations)
     preflight_map = _preflight_cells(preflight)
@@ -746,6 +958,36 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     )
         for row in cell:
             planner = row["_release_arm"]
+            if settings.get(
+                "collision_metric_contract", "legacy_diagnostic"
+            ) == "release_0_0_8" and not isinstance(row.get("event_ledger"), Mapping):
+                missingness["typed_collision_ledger_unavailable"] += 1
+            elif settings.get(
+                "collision_metric_contract", "legacy_diagnostic"
+            ) == "release_0_0_8" and not row["event_ledger"].get("schema_version"):
+                missingness["typed_collision_ledger_unavailable"] += 1
+            collision_problems, collision_measured = (
+                _collision_metric_problems(row)
+                if settings.get("collision_metric_contract", "legacy_diagnostic") == "release_0_0_8"
+                else ([], {})
+            )
+            if collision_problems:
+                append(
+                    _new_finding(
+                        "collision_metric_inconsistent",
+                        scenario_id=scenario,
+                        seed=seed,
+                        planner_id=planner,
+                        rows=[row],
+                        measured={**collision_measured, "problems": collision_problems},
+                        threshold={
+                            "required_fields": list(COLLISION_METRIC_FIELDS),
+                            "absolute_tolerance": COLLISION_COUNT_TOLERANCE,
+                        },
+                        reason="collision_metric_contract_violated",
+                        source=source_info,
+                    )
+                )
             if (
                 row["outcome"]["collision_event"]
                 and row["steps"] <= settings["short_collision_max_steps"]
@@ -789,17 +1031,22 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
             path_length = _finite(metrics.get("socnavbench_path_length"))
             displacement, displacement_source = _displacement(row)
             progress_ratio = _progress_ratio(row)
-            deadlock = metrics.get("deadlock")
-            if deadlock is not None and type(deadlock) is not bool:
-                raise ReleaseRowError("metrics.deadlock must be a boolean when present")
+            stall = metrics.get("deadlock_stall")
+            stall_count = None
+            if isinstance(stall, Mapping) and stall.get("status") == "ok":
+                stall_count = _finite(stall.get("stall_window_count"))
+                if stall_count is None or stall_count < 0 or not stall_count.is_integer():
+                    raise ReleaseRowError(
+                        "deadlock_stall.stall_window_count must be a nonnegative integer"
+                    )
             if curvature is None:
                 missingness["curvature_unavailable"] += 1
             if path_length is None:
                 missingness["path_length_unavailable"] += 1
             if displacement is None:
                 missingness["displacement_unavailable"] += 1
-            if deadlock is None:
-                missingness["deadlock_unavailable"] += 1
+            if stall_count is None:
+                missingness["deadlock_stall_unavailable"] += 1
             if progress_ratio is None:
                 missingness["progress_ratio_unavailable"] += 1
             orbit = (
@@ -820,7 +1067,10 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                 and progress_ratio <= settings["max_progress_ratio"]
                 and path_length >= settings["min_orbit_path_length_m"]
             )
-            if orbit or zero_progress or low_progress_ratio or deadlock is True:
+            deadlock_stall = (
+                stall_count is not None and stall_count > 0 and not row["outcome"]["route_complete"]
+            )
+            if orbit or zero_progress or low_progress_ratio or deadlock_stall:
                 append(
                     _new_finding(
                         "orbit_zero_progress",
@@ -834,14 +1084,14 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                             "displacement_m": displacement,
                             "displacement_source": displacement_source,
                             "progress_ratio": progress_ratio,
-                            "deadlock": deadlock,
+                            "deadlock_stall_window_count": stall_count,
                             "signatures": [
                                 name
                                 for name, active in (
                                     ("high_curvature", orbit),
                                     ("low_displacement", zero_progress),
                                     ("low_progress_ratio", low_progress_ratio),
-                                    ("deadlock", deadlock is True),
+                                    ("deadlock_stall", deadlock_stall),
                                 )
                                 if active
                             ],
@@ -997,6 +1247,9 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     counts = dict(sorted(Counter(item["detector_id"] for item in findings).items()))
     if counts.get("invalid_run_preflight_mismatch", 0):
         reasons.append("invalid_run_preflight_mismatch")
+    if counts.get("collision_metric_inconsistent", 0):
+        reasons.append("collision_metric_inconsistent")
+    reasons.extend(collision_roster_reasons)
     if admission_counts.get("unavailable", 0) or admission_counts.get("error", 0):
         reasons.append("execution_admission_incomplete")
     if missingness.get("pedestrian_aware_planner_missing", 0):
@@ -1054,11 +1307,11 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     }
 
 
-def _validated_release_registry(report: Mapping[str, Any]) -> str:
+def _validated_release_registry(report: Mapping[str, Any]) -> tuple[str, frozenset[str]]:
     """Validate the aggregate detector registry.
 
     Returns:
-        The verified detector-registry digest.
+        The verified detector-registry digest and IDs allowed by its config.
     """
     registry_payload = report.get("detector_registry")
     registry_digest = report.get("detector_registry_digest")
@@ -1072,6 +1325,15 @@ def _validated_release_registry(report: Mapping[str, Any]) -> str:
         raise ReleaseRowError("release-row detector registry is malformed") from error
     if observed_registry_digest != registry_digest:
         raise ReleaseRowError("release-row detector registry digest does not match")
+    try:
+        expected_registry = release_row_registry(report.get("config"))
+    except (ReleaseRowError, TypeError, ValueError) as error:
+        raise ReleaseRowError("release-row report config is invalid") from error
+    if (
+        registry_payload != expected_registry.to_dict()
+        or registry_digest != expected_registry.digest
+    ):
+        raise ReleaseRowError("release-row detector registry does not match report config")
     registry_detectors = registry_payload.get("detectors")
     detector_ids = (
         [item.get("detector_id") for item in registry_detectors if isinstance(item, Mapping)]
@@ -1079,12 +1341,12 @@ def _validated_release_registry(report: Mapping[str, Any]) -> str:
         else []
     )
     if (
-        len(detector_ids) != len(DETECTOR_IDS)
+        len(detector_ids) != len(expected_registry.ids)
         or any(not isinstance(item, str) for item in detector_ids)
-        or set(detector_ids) != set(DETECTOR_IDS)
+        or set(detector_ids) != set(expected_registry.ids)
     ):
         raise ReleaseRowError("release-row detector registry has an invalid detector set")
-    return registry_digest
+    return registry_digest, frozenset(expected_registry.ids)
 
 
 def _validated_release_source(report: Mapping[str, Any], registry_digest: str) -> Mapping[str, Any]:
@@ -1120,7 +1382,9 @@ def _validated_release_source(report: Mapping[str, Any], registry_digest: str) -
     return source
 
 
-def _typed_release_signal(index: int, payload: Any) -> Signal:
+def _typed_release_signal(
+    index: int, payload: Any, *, allowed_detector_ids: Collection[str] = DETECTOR_IDS
+) -> Signal:
     """Deserialize and validate one canonical BA-03 release candidate signal.
 
     Returns:
@@ -1134,14 +1398,20 @@ def _typed_release_signal(index: int, payload: Any) -> Signal:
         raise ReleaseRowError(f"release-row signal {index} is malformed") from error
     if not isinstance(signal, Signal):
         raise ReleaseRowError(f"release-row signal {index} is not a BA-03 Signal")
-    if signal.detector_id not in DETECTOR_IDS or signal.status != "flagged":
+    if signal.detector_id not in allowed_detector_ids or signal.status != "flagged":
         raise ReleaseRowError(f"release-row signal {index} is outside the candidate contract")
     if record_to_dict(signal) != dict(payload):
         raise ReleaseRowError(f"release-row signal {index} is not canonically serialized")
     return signal
 
 
-def _expected_release_signal(index: int, finding: Any, source: Mapping[str, Any]) -> Signal:
+def _expected_release_signal(
+    index: int,
+    finding: Any,
+    source: Mapping[str, Any],
+    *,
+    allowed_detector_ids: Collection[str] = DETECTOR_IDS,
+) -> Signal:
     """Construct a typed BA-03 signal from one report finding.
 
     Returns:
@@ -1171,7 +1441,9 @@ def _expected_release_signal(index: int, finding: Any, source: Mapping[str, Any]
         }
         if finding.get("finding_id") != _finding_id(finding["detector_id"], scope, source):
             raise ReleaseRowError(f"release-row finding {index} does not match its source identity")
-        return _typed_release_signal(index, _signal(finding, source))
+        return _typed_release_signal(
+            index, _signal(finding, source), allowed_detector_ids=allowed_detector_ids
+        )
     except ReleaseRowError:
         raise
     except (AuditContractError, KeyError, TypeError, ValueError, RecursionError) as error:
@@ -1179,7 +1451,10 @@ def _expected_release_signal(index: int, finding: Any, source: Mapping[str, Any]
 
 
 def _expected_release_signals(
-    finding_payloads: list[Any], source: Mapping[str, Any]
+    finding_payloads: list[Any],
+    source: Mapping[str, Any],
+    *,
+    allowed_detector_ids: Collection[str] = DETECTOR_IDS,
 ) -> dict[str, dict[str, Any]]:
     """Index canonical BA-03 projections by source-bound finding IDs.
 
@@ -1189,14 +1464,21 @@ def _expected_release_signals(
 
     expected: dict[str, dict[str, Any]] = {}
     for index, finding in enumerate(finding_payloads):
-        expected_signal = _expected_release_signal(index, finding, source)
+        expected_signal = _expected_release_signal(
+            index, finding, source, allowed_detector_ids=allowed_detector_ids
+        )
         if expected_signal.signal_id in expected:
             raise ReleaseRowError(f"release-row finding {index} duplicates a finding ID")
         expected[expected_signal.signal_id] = record_to_dict(expected_signal)
     return expected
 
 
-def _release_signal_records(report: Mapping[str, Any], source: Mapping[str, Any]) -> list[Signal]:
+def _release_signal_records(
+    report: Mapping[str, Any],
+    source: Mapping[str, Any],
+    *,
+    allowed_detector_ids: Collection[str] = DETECTOR_IDS,
+) -> list[Signal]:
     """Validate that typed signals exactly project the report findings.
 
     Returns:
@@ -1206,7 +1488,9 @@ def _release_signal_records(report: Mapping[str, Any], source: Mapping[str, Any]
     finding_payloads = report.get("findings")
     if not isinstance(finding_payloads, list):
         raise ReleaseRowError("release-row report findings must be an array")
-    expected = _expected_release_signals(finding_payloads, source)
+    expected = _expected_release_signals(
+        finding_payloads, source, allowed_detector_ids=allowed_detector_ids
+    )
 
     signal_payloads = report.get("signals")
     if not isinstance(signal_payloads, list):
@@ -1214,7 +1498,7 @@ def _release_signal_records(report: Mapping[str, Any], source: Mapping[str, Any]
     signals: list[Signal] = []
     seen_signal_ids: set[str] = set()
     for index, payload in enumerate(signal_payloads):
-        signal = _typed_release_signal(index, payload)
+        signal = _typed_release_signal(index, payload, allowed_detector_ids=allowed_detector_ids)
         if signal.signal_id in seen_signal_ids:
             raise ReleaseRowError(f"release-row signal {index} duplicates a signal ID")
         seen_signal_ids.add(signal.signal_id)
@@ -1241,9 +1525,9 @@ def handoff_release_row_signals(
 
     if not isinstance(report, Mapping) or report.get("schema_version") != SCHEMA_VERSION:
         raise ReleaseRowError("release-row report has an unsupported schema")
-    registry_digest = _validated_release_registry(report)
+    registry_digest, allowed_detector_ids = _validated_release_registry(report)
     source = _validated_release_source(report, registry_digest)
-    signals = _release_signal_records(report, source)
+    signals = _release_signal_records(report, source, allowed_detector_ids=allowed_detector_ids)
     if not signals:
         return None
     try:

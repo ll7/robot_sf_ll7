@@ -20,6 +20,7 @@ handed (staged files at commit time), plus the whole tracked tree under ``--all`
 import argparse
 import hashlib
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -60,11 +61,26 @@ LEGACY_EVIDENCE_ALLOWLIST = frozenset(
     }
 )
 
-# A few verbatim recovered campaign artifacts are byte-exact copies of the original campaign
-# summaries/manifests. Their embedded absolute paths are historical execution provenance and cannot
-# be rewritten without breaking the recovery checksums. Keep this exception byte-exact: any change to
-# any pinned file stops matching here and restores the normal absolute-path scan.
+# Verbatim evidence sources may retain absolute paths only when the exact producer bytes are
+# separately bound and a portable normalized copy is retained. These exceptions are file- and
+# digest-specific: any change to a pinned file restores the normal absolute-path scan.
 PINNED_VERBATIM_EVIDENCE_SHA256 = {
+    # TRAIN2: exact producer bytes, with portable copies and full checksum custody
+    # in docs/context/evidence/issue_10007_train2_custody/path_custody.json.
+    "docs/context/evidence/issue_10056_wall_order_2026-09/doorway_plausibility.json": "f6c70b91be024f5ea8023baa4c4aa8602853d42c011e4470dff14ccd523ab254",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/changed_outcomes.json": "caa70860aa3b9133a9f66b1653fb4ce2c5eaf977c4e3afcc11ac0e68e79f8794",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/empty_world.json": "c85204242a7ab45cfa594019e942ccfa84aa420d8ff959c200ae6f93cba07d03",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/inner_checkpoints.json": "83e1dd9cd0cc56b6c6c8c94b2c7897a1509187af96481d1f637d10dc24ddecd2",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/paired_analysis.json": "e260334d0e073cc59e41ebd379ec8609877781e5ec739b11996763611c9b4b5e",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/reproduce.txt": "32418fb811b79c23d375faba6866ea0a97ef3dcd63a43bed1968d121a43d2e51",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/trace_samples.json": "ed825c26c993548d8027d64e6206d0c60e4918e0647e58cc7afe76e32948ca06",
+    "docs/context/evidence/issue_10064_no_admissible_recovery/validation.json": "3122a83a4304ac39f083be560150d0ea32d80652484ddb904011f121238c10c8",
+    "docs/context/evidence/issue_9952_auditor/aud2/focused.txt": "d5a065f1c009951360857891e59477f3bfb733df4ba03a959c4c17640b14a971",
+    "docs/context/evidence/issue_9952_auditor/aud2/green.txt": "af4ec8eb7ec387e0ab9bfd9fc406e5b44822ebefafc1c03e9b84f2a671be1a09",
+    "docs/context/evidence/issue_9952_auditor/aud2/queue_validation.json": "0b9aa55142bbc5a3749f5f5c0507f629acb49b6ffbe4977c839362508ab59646",
+    "docs/context/evidence/issue_9952_auditor/aud2/test_value.md": "2ed1fd10dd93c1946847e5cb298a77db70e0933d756c6e4ecec938dca0222987",
+    "docs/context/evidence/issue_9952_auditor/focused-final.txt": "e8b7df75fc17ea4bc88532d828ac3ad260cc8abdcd9f7a028b57d326e837e9bd",
+    "docs/context/evidence/issue_9952_auditor/parent-failures-final.txt": "3f56728356c531dd33397565fee182726fd9d2a0dd0d1d7f5fa26afc4a67103d",
     (
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
         "source_reports/13268/campaign_summary.json"
@@ -116,16 +132,46 @@ def _is_grandfathered_evidence(path: Path) -> bool:
     return False
 
 
+def _repo_relative_path(path: Path) -> str | None:
+    """Normalize a lexical path relative to its repository root, or the test cwd.
+
+    Git supplies repo-relative paths to ``--all``; tests and direct callers may supply
+    absolute paths. Normalize ``.`` and ``..`` without resolving symlinks, so an alias to
+    a pinned source remains a different path. Looking for the nearest ``.git`` marker
+    keeps both forms tied to the actual repository/worktree root. Temporary test roots
+    without Git metadata use their current working directory.
+    """
+    try:
+        lexical_absolute = Path(os.path.abspath(path.expanduser()))
+    except (OSError, RuntimeError, TypeError):
+        return None
+
+    for parent in (lexical_absolute.parent, *lexical_absolute.parent.parents):
+        if (parent / ".git").exists():
+            try:
+                return lexical_absolute.relative_to(parent).as_posix()
+            except ValueError:
+                return None
+
+    try:
+        cwd = Path(os.path.abspath(Path.cwd()))
+        return lexical_absolute.relative_to(cwd).as_posix()
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
 def _is_pinned_verbatim_evidence(path: Path) -> bool:
     """Return whether ``path`` is an exact pinned recovery artifact.
 
-    The path match accepts repository-relative and absolute caller paths. The digest match makes
-    the exception fail closed if a recovered artifact is edited or replaced.
+    The lexical path must match the exact repository-relative key. The digest match makes the
+    exception fail closed if a recovered artifact is edited or replaced.
     """
 
-    normalized = path.as_posix()
+    normalized = _repo_relative_path(path)
+    if normalized is None:
+        return False
     for repo_path, expected_sha256 in PINNED_VERBATIM_EVIDENCE_SHA256.items():
-        if normalized != repo_path and not normalized.endswith(f"/{repo_path}"):
+        if normalized != repo_path:
             continue
         try:
             hasher = hashlib.sha256()

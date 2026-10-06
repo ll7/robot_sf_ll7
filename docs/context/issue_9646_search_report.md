@@ -13,7 +13,7 @@ uv run python scripts/tools/report_falsification_search.py \
 ```
 
 The command writes `falsification_report.json`, `falsification_report.md`, and one static PNG per
-objective under report schema `adversarial-search-convergence-report.v2`. The JSON retains every
+objective under report schema `adversarial-search-convergence-report.v3`. The JSON retains every
 per-candidate outcome and evaluation order, both raw and
 analysis-eligible best-so-far values, budget membership, artifact/config digests, source revision
 status, per-run counts, and matched Random-versus-TPE seed summaries. It preserves execution mode,
@@ -77,6 +77,17 @@ removed. Per-run and aggregate accounting distinguish missing evaluations inside
 comparison-indexed budget from all missing slots across the larger of the comparison and manifest
 budgets; an index/manifest budget mismatch therefore cannot inflate the within-budget missing
 count.
+
+Criticality is tri-state. `criticality_status` and the `critical`/`observed_critical` fields preserve
+`unknown` when candidate evidence cannot establish whether a critical event occurred; unknown is
+not counted as a negative result. An attributed `primary_failure` label does not override missing or
+conflicting episode evidence; the report uses it as criticality evidence only when candidate details
+corroborate the failure. The collision/severe-intrusion tier is reported separately for each
+candidate and run. It is `not_critical` only when both collision and severe intrusion have
+explicit, consistent negative evidence. A missing, malformed, or contradictory component keeps the
+tier `unknown`. Execution `analysis_eligibility` does not establish objective or safety-tier
+completeness. Run and aggregate tables report known critical, known non-critical, and unknown counts
+separately.
 
 Search curves maximize the objective recorded by the runner and carry the prior best score across
 invalid, failed, or scoreless attempts. Solid curves summarize only candidates whose explicit

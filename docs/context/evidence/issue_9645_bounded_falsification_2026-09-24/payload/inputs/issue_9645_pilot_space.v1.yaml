@@ -1,0 +1,29 @@
+schema_version: adversarial-search-space.v1
+description: >-
+  Issue #9645 paired Random/TPE pilot derived from the crossing/TTC source bounds.
+  Only candidate-effective dimensions vary; pedestrian timing controls are omitted
+  because the crossing template has no bound pedestrian ID. The lower start/goal
+  bounds are clipped to 2.5 m after the original 1.0/2.0 m search bounds produced
+  an obstacle-inflated start. The simulator scenario seed is fixed to 123 so sampler
+  proposal seeds do not change the environment.
+variables:
+  start_x:
+    min: 2.5
+    max: 3.0
+  start_y:
+    min: 2.5
+    max: 4.0
+  goal_x:
+    min: 7.0
+    max: 9.0
+  goal_y:
+    min: 2.5
+    max: 4.0
+  pedestrian_speed_mps:
+    min: 0.8
+    max: 1.4
+  scenario_seed:
+    min: 123
+    max: 123
+constraints:
+  min_start_goal_distance_m: 2.0

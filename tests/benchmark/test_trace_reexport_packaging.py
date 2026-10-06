@@ -337,6 +337,40 @@ def _tree_digests(root: Path) -> dict[str, str]:
     }
 
 
+def test_row_index_refuses_mixed_v2_trace_meanings_within_and_across_rows() -> None:
+    """Uniform v2 rows index normally; incompatible trace meanings never get pooled."""
+    from robot_sf.benchmark.trace_reexport_packaging import _index_rows
+
+    v2 = _rerun_row("ppo", "dev", 1001)
+    v2["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = "simulation-step-trace.v2"
+    assert set(_index_rows([v2])) == {("ppo", "dev", 1001)}
+    v1 = _rerun_row("ppo", "dev", 1002)
+    with pytest.raises(TraceReexportPackagingError, match="trace_schema_version_mismatch"):
+        _index_rows([v1, v2])
+    v2["algorithm_metadata"]["paired_effect_native_trace"] = {
+        "schema_version": "paired_effect_native_trace.v1"
+    }
+    with pytest.raises(TraceReexportPackagingError, match="trace_schema_version_mismatch"):
+        _index_rows([v2])
+
+
+def test_package_refuses_mixed_v2_meanings_between_rerun_arms(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    """Individually uniform arms cannot form a package with mixed metric definitions."""
+    rows = synthetic_inputs.output_rows("ppo")
+    for row in rows:
+        row["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = (
+            "simulation-step-trace.v2"
+        )
+    synthetic_inputs.write_output_rows("ppo", rows)
+    output = synthetic_inputs.root / "mixed-package"
+    with pytest.raises(TraceReexportPackagingError, match="trace_schema_version_mismatch"):
+        package_trace_reexport(**synthetic_inputs.kwargs(output))
+    assert not output.exists()
+    assert not list(output.parent.glob(f".{output.name}.staging-*"))
+
+
 def _input_digests(synthetic_inputs: SyntheticInputs) -> dict[str, Any]:
     return {
         "release_bundle": _sha256_file(synthetic_inputs.release_bundle),

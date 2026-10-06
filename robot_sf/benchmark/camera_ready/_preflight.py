@@ -58,6 +58,10 @@ from robot_sf.benchmark.observation_noise import (
     observation_noise_hash,
 )
 from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
+from robot_sf.benchmark.release_parameter_freeze import (
+    UnfrozenReleaseParametersError,
+    unfrozen_planner_config_blockers,
+)
 from robot_sf.benchmark.tuning_run_provenance import (
     aggregate_tuning_records,
     build_launch_records,
@@ -614,6 +618,8 @@ def _validate_and_setup_campaign(
     Returns:
         Tuple of ``(checkpoint_report, campaign_id, campaign_root, reports_dir, preflight_dir)``.
     """
+    # Issue #9751: refuse unfrozen release placeholders before any other check or directory.
+    _assert_release_parameters_frozen_preflight(cfg)
     ckpt_report = _run_preflight_checks(
         cfg,
         checkpoint_preflight_mode=checkpoint_preflight_mode,
@@ -1238,8 +1244,12 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
         Complete JSON-serializable campaign manifest payload.
     """
     if getattr(cfg, "snqi_v2_spec", None) is not None:
-        cfg.snqi_v2_spec.validate_evaluation_seeds(metadata["resolved_seeds"])
+        if not cfg.snqi_v2_spec.diagnostic:
+            cfg.snqi_v2_spec.validate_evaluation_seeds(metadata["resolved_seeds"])
+            if cfg.snqi_v2_spec.hashes:
+                cfg.snqi_v2_spec.validate_evaluation_commitment(metadata["resolved_seeds"])
     return {
+        **({"legacy_snqi": "excluded"} if cfg.snqi_weights_path is None else {}),
         **(
             {"metrics": cfg.snqi_v2_spec.provenance()} if getattr(cfg, "snqi_v2_spec", None) else {}
         ),
@@ -1362,6 +1372,19 @@ def _finalize_campaign_preflight(  # noqa: PLR0913
     }
 
 
+def _assert_release_parameters_frozen_preflight(cfg: CampaignConfig) -> None:
+    """Refuse a campaign whose enabled arms bind unfrozen release placeholders (#9751).
+
+    Raises:
+        UnfrozenReleaseParametersError: If any enabled planner config is not frozen.
+    """
+    blockers = unfrozen_planner_config_blockers(cfg.planners)
+    if blockers:
+        raise UnfrozenReleaseParametersError(
+            "campaign preflight refused unfrozen release parameters: " + "; ".join(blockers)
+        )
+
+
 def prepare_campaign_preflight(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
@@ -1382,8 +1405,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         Paths and metadata required by preflight-only workflows and full runs.
 
     ``authoritative_checkpoint_admission`` is set only when the caller has separately validated
-    a fresh, configuration-bound staged-checkpoint receipt. It keeps the metadata-only diagnostic
-    in the campaign artifacts while preventing that diagnostic from contradicting the receipt.
+    a fresh staged-checkpoint receipt, retaining the metadata-only diagnostic in artifacts.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415

@@ -1097,3 +1097,47 @@ def test_reset_env_aligns_dict_observation_to_loaded_policy_space() -> None:
     )
 
     assert set(obs) == {"robot_speed", "goal_current"}
+
+
+def test_episode_record_uses_reset_geometry_and_zone_reference(monkeypatch) -> None:
+    """A two-metre reset-to-zone rollout uses its frozen goal set and reset segment."""
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+    trajectory = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([1.0, 0.0]), np.array([2.0, 0.0])],
+        ped_positions=[np.zeros((0, 2)), np.zeros((0, 2))],
+        ped_forces=[np.zeros((0, 2)), np.zeros((0, 2))],
+    )
+    # Attribute assignment keeps this regression executable on the pre-fix dataclass.
+    trajectory.initial_robot_pos = np.array([0.0, 0.0])
+    trajectory.route_waypoints = np.array([[0.0, 0.0], [2.0, 0.0]])
+    trajectory.goal_zone = np.array([[1.8, -0.2], [2.2, -0.2], [2.2, 0.2], [1.8, 0.2]])
+    trajectory.completion_policy = "goal_zone_entry_v1"
+    map_def = SimpleNamespace(obstacles=[], bounds=[(-1.0, 3.0, -1.0, 1.0)])
+    record = policy_analysis_run._build_episode_record(
+        {"id": "zone-dev"},
+        seed=1001,
+        policy_name="goal",
+        map_def=map_def,
+        goal_vec=np.array([2.0, 0.0]),
+        trajectory=trajectory,
+        reached_goal_step=1,
+        wall_time=0.1,
+        max_steps=10,
+        dt=1.0,
+        robot_max_speed=1.0,
+        robot_radius=0.1,
+        ped_radius=0.1,
+        ts_start="2026-09-30T00:00:00+00:00",
+        video_path=None,
+        terminated=True,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": True}},
+        reached_max_steps=False,
+    )
+    metrics = record["metrics"]
+    assert metrics["metric_schema_version"] == "robot-sf-metrics.v2"
+    assert metrics["shortest_path_len"] == pytest.approx(1.8)
+    assert metrics["path_efficiency"] == pytest.approx(0.9)
+    assert metrics["socnavbench_path_length"] == pytest.approx(2.0)
+    assert metrics["time_to_goal_norm_success_only"] == pytest.approx(0.2)

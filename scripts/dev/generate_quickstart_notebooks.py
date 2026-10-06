@@ -347,7 +347,7 @@ def build_notebook_02() -> nbf.notebooknode:
             | `collisions` | Number of pedestrian/obstacle collisions in the episode |
             | `avg_speed` | Mean robot speed (m/s) |
             | `socnavbench_path_length` | Total path length travelled (m) |
-            | `path_efficiency` | Ratio of straight-line to actual path (1.0 = perfectly direct) |
+            | `path_efficiency` | Completion reference distance divided by actual path; N/A for unsuccessful episodes |
             """
         ),
         _code(
@@ -356,7 +356,13 @@ def build_notebook_02() -> nbf.notebooknode:
             metric_labels = ["Collisions", "Avg speed (m/s)", "Path length (m)", "Path efficiency"]
 
             values = np.array(
-                [[float(records[a]["metrics"][k]) for k in metric_keys] for a in PLANNERS],
+                [
+                    [
+                        float(value) if value is not None else np.nan
+                        for value in (records[a]["metrics"][k] for k in metric_keys)
+                    ]
+                    for a in PLANNERS
+                ],
                 dtype=float,
             )
 
@@ -370,7 +376,13 @@ def build_notebook_02() -> nbf.notebooknode:
                 ax.set_title(label)
                 ax.grid(True, axis="y", alpha=0.3)
                 for xi, vi in zip(x, values[:, j]):
-                    ax.text(xi, vi, f"{vi:.2f}", ha="center", va="bottom", fontsize=9)
+                    if np.isfinite(vi):
+                        ax.text(xi, vi, f"{vi:.2f}", ha="center", va="bottom", fontsize=9)
+                    else:
+                        ax.text(
+                            xi, 0.0, "N/A", transform=ax.get_xaxis_transform(),
+                            ha="center", va="bottom", fontsize=9,
+                        )
             fig.suptitle(f"Two planners on the same scenario (seed={SEED}, horizon={HORIZON})", y=1.04)
             fig.tight_layout()
             plot_path = OUTPUT_DIR / "planner_comparison.png"

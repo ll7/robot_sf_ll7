@@ -1,0 +1,107 @@
+# Diagnostic guard input: legacy sampled goals and 2 m doorway; no planner steps.
+schema_version: benchmark-release-manifest.v0.1
+benchmark_protocol_version: 0.1.0
+release_id: issue_9860_unsafe_probe_diagnostic_v1
+release_tag: diagnostic-only-unpublished
+maturity: pre-1.0
+canonical_campaign_config: ../paper_experiment_matrix_v1.yaml
+campaign_config_sha256: 0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: baseline-ready-core
+scenario:
+  matrix_path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml
+  matrix_sha256: 8a8aa9adb2b098f039a3e92a4849e16eb8d3665e928211f08e0c689584c9f389
+seed_policy:
+  mode: seed-set
+  seed_set: paper_eval_s30
+  seeds: []
+  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+  seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  resolved_seeds:
+  - 111
+  - 112
+  - 113
+  - 114
+  - 115
+  - 116
+  - 117
+  - 118
+  - 119
+  - 120
+  - 121
+  - 122
+  - 123
+  - 124
+  - 125
+  - 126
+  - 127
+  - 128
+  - 129
+  - 130
+  - 131
+  - 132
+  - 133
+  - 134
+  - 135
+  - 136
+  - 137
+  - 138
+  - 139
+  - 140
+metrics:
+  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
+  snqi_weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
+  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
+  snqi_baseline_sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
+planners:
+  keys:
+  - prediction_planner
+  - goal
+  - social_force
+  - orca
+  - ppo
+  - socnav_sampling
+  - sacadrl
+  - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+  - scenario_adaptive_hybrid_orca_v2_collision_guard
+  - hybrid_rule_v3_fast_progress_static_escape
+  - hybrid_rule_v3_fast_progress_static_escape_continuous
+  - guarded_ppo
+  - predictive_mppi
+  - risk_dwa
+  groups:
+    prediction_planner: diagnostic
+    goal: diagnostic
+    social_force: diagnostic
+    orca: diagnostic
+    ppo: diagnostic
+    socnav_sampling: diagnostic
+    sacadrl: diagnostic
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield: diagnostic
+    scenario_adaptive_hybrid_orca_v2_collision_guard: diagnostic
+    hybrid_rule_v3_fast_progress_static_escape: diagnostic
+    hybrid_rule_v3_fast_progress_static_escape_continuous: diagnostic
+    guarded_ppo: diagnostic
+    predictive_mppi: diagnostic
+    risk_dwa: diagnostic
+kinematics:
+  matrix:
+  - differential_drive
+artifacts:
+  required_paths:
+  - campaign_manifest.json
+  - manifest.json
+  - run_meta.json
+  - preflight/validate_config.json
+  - preflight/preview_scenarios.json
+  - reports/campaign_summary.json
+  - reports/campaign_report.md
+  - reports/matrix_summary.json
+  - reports/campaign_table.md
+  - reports/snqi_diagnostics.json
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: diagnostic-only-unpublished
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../docs/RELEASE.md
+release_kind: diagnostic-preflight

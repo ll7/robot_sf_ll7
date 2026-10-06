@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,12 @@ from scripts.ci import pr_contract_check
 from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# GitHub's compare endpoint returns changed-file records on its first page, up to
+# 300 files for the whole comparison. A response containing exactly 300 rows may
+# be capped and cannot prove the complete historical file set.
+MAX_HISTORICAL_COMPARE_FILE_ROWS = 300
+MAX_HISTORICAL_PR_FILE_ROWS = 3000
 
 # PR #8440 is the known pre-guard regression: its merge reference closed the
 # incident in #8414 before the two-green reconciler criterion was established.
@@ -181,7 +188,7 @@ def _is_expected_historical_budget_blocker(
     )
 
 
-def _fetch_historical_pr_identity(number: int, repo: str) -> tuple[str, str, str] | None:
+def _fetch_historical_pr_identity(number: int, repo: str) -> tuple[str, str, str, int] | None:
     """Read and validate the immutable revision identity of a merged PR."""
     try:
         metadata_response = subprocess.run(
@@ -203,13 +210,23 @@ def _fetch_historical_pr_identity(number: int, repo: str) -> tuple[str, str, str
         base_sha = base.get("sha") if isinstance(base, dict) else None
         head_sha = head.get("sha") if isinstance(head, dict) else None
         merge_commit_sha = metadata.get("merge_commit_sha")
+        changed_files = metadata.get("changed_files")
         sha_values = (base_sha, head_sha, merge_commit_sha)
         if any(
             not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha)
             for sha in sha_values
+        ) or (
+            isinstance(changed_files, bool)
+            or not isinstance(changed_files, int)
+            or changed_files < 1
         ):
             return None
-        return tuple(sha.lower() for sha in sha_values)  # type: ignore[return-value]
+        return (
+            base_sha.lower(),
+            head_sha.lower(),
+            merge_commit_sha.lower(),
+            changed_files,
+        )
     except (subprocess.SubprocessError, OSError, ValueError, TypeError):
         return None
 
@@ -271,25 +288,68 @@ def _historical_compare_reaches_target(
     return isinstance(last_compare_commit, dict) and last_compare_commit.get("sha") == target_sha
 
 
-def _fetch_historical_compare(
-    repo: str, base_sha: str, head_sha: str
-) -> tuple[tuple[str, ...], pr_contract_check.HistoricalNumstatEvidence] | None:
-    """Read file statistics from a compare addressed by full commit IDs."""
-    try:
-        compare_response = subprocess.run(
-            ["gh", "api", f"repos/{repo}/compare/{base_sha}...{head_sha}?per_page=100"],
+def _read_historical_compare_pages(repo: str, base_sha: str, target_sha: str) -> object:
+    """Read every commit page while retaining the first page's complete file stats."""
+    endpoint = f"repos/{repo}/compare/{base_sha}...{target_sha}?per_page=100"
+    response = subprocess.run(
+        ["gh", "api", endpoint], capture_output=True, text=True, timeout=15, check=True
+    )
+    comparison = json.loads(response.stdout)
+    if not isinstance(comparison, dict):
+        return comparison
+    total = comparison.get("total_commits")
+    commits = comparison.get("commits")
+    if isinstance(total, bool) or not isinstance(total, int) or not isinstance(commits, list):
+        return comparison
+    page = 1
+    while len(commits) < total:
+        if len(commits) != page * 100:
+            return None
+        page += 1
+        response = subprocess.run(
+            ["gh", "api", f"{endpoint}&page={page}"],
             capture_output=True,
             text=True,
             timeout=15,
             check=True,
         )
-        comparison = json.loads(compare_response.stdout)
+        continuation = json.loads(response.stdout)
+        if not isinstance(continuation, dict) or any(
+            continuation.get(key) != comparison.get(key)
+            for key in ("base_commit", "merge_base_commit", "total_commits")
+        ):
+            return None
+        more = continuation.get("commits")
+        if not isinstance(more, list) or len(more) != min(100, total - len(commits)):
+            return None
+        commits.extend(more)
+    return comparison
+
+
+def _fetch_historical_compare(
+    repo: str, base_sha: str, head_sha: str, *, expected_file_count: int
+) -> tuple[tuple[str, ...], pr_contract_check.HistoricalNumstatEvidence] | None:
+    """Read complete file stats from a compare addressed by full commit IDs."""
+    if (
+        isinstance(expected_file_count, bool)
+        or not isinstance(expected_file_count, int)
+        or expected_file_count < 1
+        or expected_file_count >= MAX_HISTORICAL_COMPARE_FILE_ROWS
+    ):
+        return None
+    try:
+        comparison = _read_historical_compare_pages(repo, base_sha, head_sha)
         if not isinstance(comparison, dict):
             return None
         if not _historical_compare_reaches_target(comparison, base_sha, head_sha):
             return None
         files = comparison.get("files")
-        if not isinstance(files, list) or not files or len(files) >= 100:
+        if (
+            not isinstance(files, list)
+            or not files
+            or len(files) >= MAX_HISTORICAL_COMPARE_FILE_ROWS
+            or len(files) != expected_file_count
+        ):
             return None
         rows: list[tuple[str, int, int]] = []
         seen_filenames: set[str] = set()
@@ -326,6 +386,87 @@ def _fetch_historical_compare(
         return None
 
 
+def _parse_historical_git_numstat(raw: str) -> pr_contract_check.HistoricalNumstatEvidence:
+    """Convert complete NUL-delimited Git rows into validated immutable statistics."""
+    if not raw.endswith("\0"):
+        raise RuntimeError("historical Git numstat is truncated")
+    fields = iter(raw[:-1].split("\0"))
+    rows = []
+    for field in fields:
+        added, deleted, filename = field.split("\t", 2)
+        if not filename:
+            # -z rename records carry old and new paths separately. The
+            # PR files API also identifies a rename by its destination.
+            old_filename = next(fields)
+            filename = next(fields)
+            if not old_filename or any(
+                unicodedata.category(character) == "Cc" for character in old_filename
+            ):
+                raise ValueError("invalid historical rename source")
+        rows.append(f"{added}\t{deleted}\t{filename}\n")
+    return pr_contract_check.HistoricalNumstatEvidence.from_numstat("".join(rows))
+
+
+def _fetch_historical_git_diff(
+    repo: str, base_sha: str, head_sha: str, *, expected_file_count: int
+) -> tuple[tuple[str, ...], pr_contract_check.HistoricalNumstatEvidence]:
+    """Compute complete large-PR statistics from verified immutable Git objects."""
+    if expected_file_count > MAX_HISTORICAL_PR_FILE_ROWS:
+        raise RuntimeError("historical PR exceeds the 3000-file limit")
+
+    def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(ROOT), *args],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=check,
+        )
+
+    try:
+        for sha in (base_sha, head_sha):
+            resolved = git("rev-parse", "--verify", f"{sha}^{{commit}}", check=False)
+            if resolved.returncode != 0:
+                # Fetch only recorded full IDs, never a moving branch or PR ref.
+                git(
+                    "fetch",
+                    "--no-tags",
+                    "--no-write-fetch-head",
+                    f"https://github.com/{repo}.git",
+                    sha,
+                )
+                resolved = git("rev-parse", "--verify", f"{sha}^{{commit}}")
+            if resolved.stdout.strip() != sha:
+                raise RuntimeError("historical Git commit identity mismatch")
+        # A shallow checkout cannot prove the merge base. Fail closed rather
+        # than substituting a two-dot diff with different semantics.
+        merge_base = git("merge-base", base_sha, head_sha).stdout.strip()
+        if re.fullmatch(r"[0-9a-f]{40}", merge_base) is None:
+            raise RuntimeError("historical Git merge base unavailable")
+        raw = git(
+            "-c",
+            "diff.renameLimit=0",
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--find-renames=50%",
+            "--numstat",
+            "-z",
+            f"{base_sha}...{head_sha}",
+        ).stdout
+        evidence = _parse_historical_git_numstat(raw)
+        if evidence.files != expected_file_count:
+            raise RuntimeError(
+                f"historical Git file count mismatch: expected {expected_file_count}, "
+                f"received {evidence.files}"
+            )
+        return evidence.changed_files, evidence
+    except (subprocess.SubprocessError, OSError) as error:
+        raise RuntimeError("historical Git commit unavailable or diff failed") from error
+    except (ValueError, StopIteration) as error:
+        raise RuntimeError("historical Git numstat malformed or truncated") from error
+
+
 def _fetch_historical_merge_binding(
     repo: str, base_sha: str, merge_commit_sha: str
 ) -> tuple[tuple[str, ...], str] | None:
@@ -358,14 +499,7 @@ def _fetch_historical_merge_binding(
         # binds the same base -> merge target. Squash/rebase merges may have a
         # different direct parent, so the compare's merge-base is the relation
         # checked here instead of assuming base is a direct merge parent.
-        merge_compare_response = subprocess.run(
-            ["gh", "api", f"repos/{repo}/compare/{base_sha}...{merge_commit_sha}?per_page=100"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=True,
-        )
-        merge_comparison = json.loads(merge_compare_response.stdout)
+        merge_comparison = _read_historical_compare_pages(repo, base_sha, merge_commit_sha)
         if not _historical_compare_reaches_target(
             merge_comparison,
             base_sha,
@@ -381,12 +515,19 @@ def _fetch_historical_merge_binding(
 def _fetch_historical_pr_evidence(
     number: int, repo: str = "ll7/robot_sf_ll7"
 ) -> HistoricalPREvidence | None:
-    """Fetch file stats from a SHA-bound compare for one merged PR."""
+    """Fetch complete SHA-bound file stats and merge identity for one merged PR."""
     identity = _fetch_historical_pr_identity(number, repo)
     if identity is None:
         return None
-    base_sha, head_sha, merge_commit_sha = identity
-    comparison = _fetch_historical_compare(repo, base_sha, head_sha)
+    base_sha, head_sha, merge_commit_sha, expected_file_count = identity
+    if expected_file_count >= MAX_HISTORICAL_COMPARE_FILE_ROWS:
+        comparison = _fetch_historical_git_diff(
+            repo, base_sha, head_sha, expected_file_count=expected_file_count
+        )
+    else:
+        comparison = _fetch_historical_compare(
+            repo, base_sha, head_sha, expected_file_count=expected_file_count
+        )
     if comparison is None:
         return None
     merge_binding = _fetch_historical_merge_binding(repo, base_sha, merge_commit_sha)
@@ -1071,6 +1212,130 @@ def test_historical_compare_requires_merge_base_and_unique_commits() -> None:
     assert not _historical_compare_reaches_target(duplicate_commits, base_sha, target_sha)
 
 
+def _historical_compare_payload(
+    base_sha: str, head_sha: str, *, file_count: int, commit_count: int
+) -> dict[str, object]:
+    """Build a complete GitHub compare response with exact commit and file counts."""
+    preceding_commits = [f"{index:040x}" for index in range(1, commit_count)]
+    commit_shas = [*preceding_commits, head_sha]
+    return {
+        "base_commit": {"sha": base_sha},
+        "merge_base_commit": {"sha": base_sha},
+        "total_commits": commit_count,
+        "commits": [{"sha": commit_sha} for commit_sha in commit_shas],
+        "files": [
+            {
+                "filename": f"configs/historical/file_{index:03}.yaml",
+                "additions": index + 1,
+                "deletions": index % 2,
+            }
+            for index in range(file_count)
+        ],
+    }
+
+
+@patch("subprocess.run")
+def test_fetch_historical_compare_accepts_complete_107_file_response(
+    mock_run: MagicMock,
+) -> None:
+    """A complete below-cap PR #9899-shaped response remains usable evidence."""
+    base_sha = "ff12c03ceccc97a1ea93d13dcbba83b2cc6bf62c"
+    head_sha = "7a56a5160cc1df7c10b6287b24bf1d8a6380047d"
+    payload = _historical_compare_payload(base_sha, head_sha, file_count=107, commit_count=33)
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload))
+
+    comparison = _fetch_historical_compare(
+        "ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=107
+    )
+
+    assert comparison is not None
+    changed_files, numstat = comparison
+    assert len(changed_files) == 107
+    assert changed_files[0] == "configs/historical/file_000.yaml"
+    assert changed_files[-1] == "configs/historical/file_106.yaml"
+    assert numstat.files == 107
+    assert numstat.added == sum(range(1, 108))
+    mock_run.assert_called_once_with(
+        [
+            "gh",
+            "api",
+            f"repos/ll7/robot_sf_ll7/compare/{base_sha}...{head_sha}?per_page=100",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=True,
+    )
+
+
+@patch("subprocess.run")
+def test_fetch_historical_compare_accepts_299_files_below_cap(
+    mock_run: MagicMock,
+) -> None:
+    """A unique file set one row below GitHub's cap is still complete evidence."""
+    base_sha = "a" * 40
+    head_sha = "b" * 40
+    payload = _historical_compare_payload(base_sha, head_sha, file_count=299, commit_count=1)
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload))
+
+    comparison = _fetch_historical_compare(
+        "ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=299
+    )
+
+    assert comparison is not None
+    assert comparison[1].files == 299
+
+
+@patch("subprocess.run")
+def test_fetch_historical_compare_rejects_300_file_capped_response(
+    mock_run: MagicMock,
+) -> None:
+    """A full 300-row compare page cannot prove that no files were omitted."""
+    base_sha = "a" * 40
+    head_sha = "b" * 40
+    payload = _historical_compare_payload(base_sha, head_sha, file_count=300, commit_count=1)
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload))
+
+    assert (
+        _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=299)
+        is None
+    )
+    mock_run.assert_called_once()
+
+
+@patch("subprocess.run")
+def test_fetch_historical_compare_rejects_metadata_at_300_file_cap(
+    mock_run: MagicMock,
+) -> None:
+    """PR metadata at the compare endpoint cap is incomplete by definition."""
+    base_sha = "a" * 40
+    head_sha = "b" * 40
+    payload = _historical_compare_payload(base_sha, head_sha, file_count=300, commit_count=1)
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload))
+
+    assert (
+        _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=300)
+        is None
+    )
+    mock_run.assert_not_called()
+
+
+@patch("subprocess.run")
+def test_fetch_historical_compare_rejects_file_count_mismatch(
+    mock_run: MagicMock,
+) -> None:
+    """A below-cap file list must match the immutable PR metadata count exactly."""
+    base_sha = "a" * 40
+    head_sha = "b" * 40
+    payload = _historical_compare_payload(base_sha, head_sha, file_count=107, commit_count=1)
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload))
+
+    assert (
+        _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=108)
+        is None
+    )
+
+
 @patch("subprocess.run")
 def test_fetch_historical_compare_rejects_duplicate_files(mock_run: MagicMock) -> None:
     """Repeated filenames cannot become repeated numstat rows."""
@@ -1092,7 +1357,10 @@ def test_fetch_historical_compare_rejects_duplicate_files(mock_run: MagicMock) -
         ),
     )
 
-    assert _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha) is None
+    assert (
+        _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=2)
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -1114,6 +1382,30 @@ def test_fetch_historical_pr_identity_rejects_malformed_merged_at(
                 "base": {"sha": "a" * 40},
                 "head": {"sha": "b" * 40},
                 "merge_commit_sha": "c" * 40,
+            }
+        ),
+    )
+
+    assert _fetch_historical_pr_identity(9122, "ll7/robot_sf_ll7") is None
+
+
+@pytest.mark.parametrize("changed_files", [None, True, "1", 0, -1])
+@patch("subprocess.run")
+def test_fetch_historical_pr_identity_rejects_invalid_changed_file_count(
+    mock_run: MagicMock, changed_files: object
+) -> None:
+    """Malformed API counts cannot serve as the expected complete file-set size."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "state": "closed",
+                "merged": True,
+                "merged_at": "2026-09-01T00:00:00Z",
+                "base": {"sha": "a" * 40},
+                "head": {"sha": "b" * 40},
+                "merge_commit_sha": "c" * 40,
+                "changed_files": changed_files,
             }
         ),
     )
@@ -1227,7 +1519,167 @@ def test_fetch_historical_compare_rejects_control_character_filenames(
         ),
     )
 
-    assert _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha) is None
+    assert (
+        _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=1)
+        is None
+    )
+
+
+@pytest.fixture
+def large_historical_pr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Provide real immutable Git bytes and mocked GitHub merge metadata."""
+    repo = tmp_path / "history"
+    repo.mkdir()
+    real_run = subprocess.run
+
+    def git(*args: str) -> str:
+        return real_run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    git("init", "-q")
+    configure_git_identity(repo)
+    git("commit", "--allow-empty", "-qm", "base")
+    base_sha = git("rev-parse", "HEAD")
+    for index in range(480):
+        (repo / f"file_{index:03}.txt").write_text("one\ntwo\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "480 files")
+    head_sha = git("rev-parse", "HEAD")
+    metadata = {
+        "state": "closed",
+        "merged": True,
+        "merged_at": "2026-10-01T00:00:00Z",
+        "base": {"sha": base_sha},
+        "head": {"sha": head_sha},
+        "merge_commit_sha": "c" * 40,
+        "changed_files": 480,
+    }
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command[0] != "gh":
+            return real_run(command, **kwargs)
+        endpoint = command[2]
+        if endpoint.endswith("pulls/10080"):
+            payload = metadata
+        elif endpoint.endswith("commits/" + "c" * 40):
+            # Squash identity deliberately has no original head merge parent.
+            payload = {"sha": "c" * 40, "parents": [{"sha": base_sha}]}
+        elif f"compare/{base_sha}...{'c' * 40}" in endpoint:
+            payload = _historical_compare_payload(base_sha, "c" * 40, file_count=1, commit_count=1)
+        else:
+            raise AssertionError(f"Unexpected GitHub request: {endpoint}")
+        return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", repo)
+    return metadata, calls
+
+
+def test_large_historical_pr_builds_complete_480_file_evidence(large_historical_pr) -> None:
+    """A merge train exceeding compare's cap retains all SHA-bound file stats."""
+    metadata, calls = large_historical_pr
+    evidence = _fetch_historical_pr_evidence(10080)
+    assert evidence is not None, "480-file immutable diff evidence must be available"
+    assert evidence.head_sha == metadata["head"]["sha"]
+    assert evidence.numstat.files == 480
+    assert evidence.numstat.added == 960
+    assert evidence.numstat.deleted == 0
+    assert evidence.changed_files == tuple(f"file_{index:03}.txt" for index in range(480))
+    assert any(command[0] == "git" and "diff" in command for command in calls)
+
+
+@pytest.mark.parametrize(
+    "corruption, message",
+    [
+        ("count", "file count mismatch"),
+        ("head", "commit identity mismatch"),
+        ("missing", "commit unavailable"),
+        ("truncated", "numstat is truncated"),
+        ("limit", "3000-file limit"),
+    ],
+)
+def test_large_historical_pr_fails_closed(large_historical_pr, corruption, message) -> None:
+    """Incomplete files, unavailable recorded heads, and oversized PRs are errors."""
+    metadata, _ = large_historical_pr
+    if corruption == "count":
+        metadata["changed_files"] = 481
+    elif corruption in {"head", "missing"}:
+        metadata["head"]["sha"] = "d" * 40
+    elif corruption == "limit":
+        metadata["changed_files"] = 3001
+    # No network in this unit test: an unavailable object stays unavailable.
+    real_run = subprocess.run
+
+    def run(command, **kwargs):
+        if command[0] == "git" and "fetch" in command:
+            raise subprocess.CalledProcessError(1, command)
+        if (
+            corruption == "head"
+            and "rev-parse" in command
+            and command[-1] == "d" * 40 + "^{commit}"
+        ):
+            return subprocess.CompletedProcess(command, 0, "e" * 40 + "\n", "")
+        result = real_run(command, **kwargs)
+        if corruption == "truncated" and "diff" in command:
+            result.stdout = result.stdout.removesuffix("\0")
+        return result
+
+    with patch("subprocess.run", side_effect=run):
+        with pytest.raises(RuntimeError, match=message):
+            _fetch_historical_pr_evidence(10080)
+
+
+def test_large_historical_git_fetches_missing_recorded_objects(
+    large_historical_pr, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty checkout fetches the full recorded IDs without updating a branch."""
+    metadata, calls = large_historical_pr
+    source = ROOT
+    destination = tmp_path / "empty"
+    destination.mkdir()
+    subprocess.run(["git", "-C", str(destination), "init", "-q"], check=True)
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", destination)
+    real_run = subprocess.run
+
+    def run(command, **kwargs):
+        if command[0] == "git" and "fetch" in command:
+            assert command[-2] == "https://github.com/ll7/robot_sf_ll7.git"
+            assert command[-1] in {metadata["base"]["sha"], metadata["head"]["sha"]}
+            command = [*command[:-2], str(source), command[-1]]
+        return real_run(command, **kwargs)
+
+    with patch("subprocess.run", side_effect=run):
+        evidence = _fetch_historical_pr_evidence(10080)
+    assert evidence is not None
+    assert evidence.numstat.files == 480
+    assert sum("fetch" in command for command in calls) == 2
+    assert (
+        subprocess.run(
+            ["git", "-C", str(destination), "show-ref"], capture_output=True, check=False
+        ).returncode
+        == 1
+    )
+
+
+def test_historical_git_diff_preserves_rename_and_binary_rows(large_historical_pr) -> None:
+    """NUL-delimited Git stats retain rename destinations and binary file counts."""
+    metadata, _ = large_historical_pr
+    subprocess.run(["git", "-C", str(ROOT), "mv", "file_000.txt", "renamed café.txt"], check=True)
+    (ROOT / "binary.dat").write_bytes(b"\0\xff")
+    subprocess.run(["git", "-C", str(ROOT), "add", "binary.dat"], check=True)
+    subprocess.run(["git", "-C", str(ROOT), "commit", "-qm", "rename and binary"], check=True)
+    head = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    files, evidence = _fetch_historical_git_diff(
+        "ll7/robot_sf_ll7", metadata["head"]["sha"], head, expected_file_count=2
+    )
+    assert files == ("binary.dat", "renamed café.txt")
+    assert evidence.numstat == "-\t-\tbinary.dat\n0\t0\trenamed café.txt\n"
+    assert evidence.added == evidence.deleted == 0
 
 
 @patch("subprocess.run")
@@ -1246,6 +1698,7 @@ def test_fetch_historical_pr_evidence_renders_authoritative_numstat(
                     "base": {"sha": "a" * 40},
                     "head": {"sha": "b" * 40},
                     "merge_commit_sha": "c" * 40,
+                    "changed_files": 1,
                 }
             ),
         ),
@@ -1296,6 +1749,47 @@ def test_fetch_historical_pr_evidence_renders_authoritative_numstat(
     assert f"compare/{'a' * 40}...{'c' * 40}" in mock_run.call_args_list[3].args[0][2]
 
 
+@pytest.mark.parametrize("corruption", [None, "base", "merge_base", "total", "duplicate", "empty"])
+@patch("subprocess.run")
+def test_historical_compare_reads_all_merge_train_commit_pages(mock_run, corruption):
+    """Train #10046 exceeds 100 commits; complete identities remain mandatory."""
+    base_sha, head_sha = "a" * 40, "b" * 40
+    first = {
+        "base_commit": {"sha": base_sha},
+        "merge_base_commit": {"sha": base_sha},
+        "total_commits": 101,
+        "commits": [{"sha": f"{index:040x}"} for index in range(100)],
+        "files": [{"filename": "a.py", "additions": 4, "deletions": 1}],
+    }
+    last = {**first, "commits": [{"sha": head_sha}], "files": []}
+    if corruption == "base":
+        last["base_commit"] = {"sha": "c" * 40}
+    elif corruption == "merge_base":
+        last["merge_base_commit"] = {"sha": "c" * 40}
+    elif corruption == "total":
+        last["total_commits"] = 102
+    elif corruption == "duplicate":
+        last["commits"] = [first["commits"][0]]
+    elif corruption == "empty":
+        last["commits"] = []
+    mock_run.side_effect = [
+        MagicMock(stdout=json.dumps(first)),
+        MagicMock(stdout=json.dumps(last)),
+    ]
+
+    evidence = _fetch_historical_compare(
+        "ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=1
+    )
+
+    if corruption is not None:
+        assert evidence is None
+    else:
+        assert evidence is not None
+        assert evidence[0] == ("a.py",)
+        assert evidence[1].numstat == "4\t1\ta.py\n"
+        assert "&page=2" in mock_run.call_args_list[1].args[0][2]
+
+
 @patch("subprocess.run")
 def test_fetch_historical_pr_evidence_returns_none_for_malformed_stats(
     mock_run: MagicMock,
@@ -1312,6 +1806,7 @@ def test_fetch_historical_pr_evidence_returns_none_for_malformed_stats(
                     "base": {"sha": "a" * 40},
                     "head": {"sha": "b" * 40},
                     "merge_commit_sha": "c" * 40,
+                    "changed_files": 1,
                 }
             ),
         ),
@@ -1372,6 +1867,7 @@ def test_fetch_historical_pr_evidence_rejects_mutated_compare_identity(
                     "base": {"sha": "a" * 40},
                     "head": {"sha": "b" * 40},
                     "merge_commit_sha": "c" * 40,
+                    "changed_files": 1,
                 }
             ),
         ),
@@ -1426,6 +1922,7 @@ def test_fetch_historical_pr_evidence_rejects_unbound_merge_commit(
                     "base": {"sha": "a" * 40},
                     "head": {"sha": "b" * 40},
                     "merge_commit_sha": "c" * 40,
+                    "changed_files": 1,
                 }
             ),
         ),
@@ -1495,6 +1992,7 @@ def test_fetch_historical_pr_evidence_rejects_mutated_merge_compare_identity(
                     "base": {"sha": "a" * 40},
                     "head": {"sha": "b" * 40},
                     "merge_commit_sha": "c" * 40,
+                    "changed_files": 1,
                 }
             ),
         ),
@@ -2291,7 +2789,10 @@ def test_regression_last_20_merged_prs() -> None:
         assert isinstance(title, str)
         assert isinstance(body, str)
         assert isinstance(number, int)
-        historical_evidence = _fetch_historical_pr_evidence(number)
+        try:
+            historical_evidence = _fetch_historical_pr_evidence(number)
+        except RuntimeError as error:
+            pytest.fail(f"Immutable diff evidence unavailable for PR #{number}: {error}")
         if historical_evidence is None:
             pytest.fail(
                 "Cannot prove the live PR regression sweep: immutable diff evidence unavailable "

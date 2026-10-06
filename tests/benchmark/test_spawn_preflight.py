@@ -8,12 +8,13 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
 
 from robot_sf.benchmark import spawn_preflight
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.nav.svg_map_parser import SvgMapConverter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_MANIFEST = REPO_ROOT / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
@@ -152,10 +153,10 @@ def _doorway_fixture(*, expected_outcome: str | None = None):
             LineString([(0.0, 6.0), (0.0, 0.0)]),
         ]
     )
-    robot = SimpleNamespace(pose=((1.0, 3.0), 0.0), config=SimpleNamespace(radius=1.0))
+    robot = SimpleNamespace(pose=((1.5, 3.0), 0.0), config=SimpleNamespace(radius=1.0))
     simulator = SimpleNamespace(
         robots=[robot],
-        robot_navs=[SimpleNamespace(waypoints=[(5.0, 3.0)])],
+        robot_navs=[SimpleNamespace(waypoints=[(4.5, 3.0)])],
     )
     env = SimpleNamespace(simulator=simulator)
     analysis = {
@@ -163,6 +164,7 @@ def _doorway_fixture(*, expected_outcome: str | None = None):
         "inflated": inflated,
         "origin": (0.0, 0.0),
         "resolution": 0.1,
+        "map_bounds": (0.0, 6.0, 0.0, 6.0),
         "wall_geometry": wall_geometry,
     }
     scenario = {"name": "francis2023_narrow_doorway"}
@@ -183,6 +185,9 @@ def test_issue_9728_undeclared_doorway_fails_reachability_and_width() -> None:
 
     assert reachability["status"] == "fail"
     assert reachability["reason"] == "no_collision_free_footprint_path"
+    assert reachability["continuous_oracle"]["reason"] == (
+        "ordered_route_segment_disconnected_in_continuous_free_space"
+    )
     assert passage["status"] == "fail"
     assert 1.8 <= passage["minimum_opening_width_estimate_m"] < 2.2
     assert passage["required_opening_width_m"] == pytest.approx(2.2)
@@ -240,7 +245,7 @@ def test_probe_declaration_requires_observed_infeasibility() -> None:
     )
     assert reachability["status"] == "invalid"
     assert passage["status"] == "invalid"
-    assert reachability["reason"] == "declared_infeasibility_not_observed"
+    assert reachability["reason"] == "declared_infeasibility_not_confirmed_by_continuous_oracle"
 
 
 def test_footprint_path_checks_required_intermediate_waypoints_in_order() -> None:
@@ -277,6 +282,345 @@ def test_footprint_path_checks_required_intermediate_waypoints_in_order() -> Non
     assert passage["status"] == "pass"
 
 
+def test_continuous_margin_oracle_recovers_safe_grid_blocked_endpoint() -> None:
+    """A conservative endpoint cell cannot block a continuously safe route."""
+    occupancy = np.zeros((100, 100), dtype=bool)
+    inflated = occupancy.copy()
+    inflated[50, 88] = True
+    robot = SimpleNamespace(pose=((2.0, 5.0), 0.0), config=SimpleNamespace(radius=1.0))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(
+            robots=[robot], robot_navs=[SimpleNamespace(waypoints=[(8.85, 5.0)])]
+        )
+    )
+    analysis = {
+        "occupancy": occupancy,
+        "inflated": inflated,
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(0.0, 0.0), (0.0, 10.0)]),
+    }
+
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "safe_endpoint"}, margin_m=0.1
+    )
+
+    assert reachability["status"] == passage["status"] == "pass"
+    assert reachability["grid_status"] == "fail"
+    assert reachability["continuous_oracle"]["status"] == "pass"
+    assert reachability["path_length_m"] is None
+    assert passage["measurement_path"] == "continuous_clearance_component"
+    assert passage["minimum_opening_width_estimate_m"] is None
+    assert passage["minimum_opening_width_certified_lower_bound_m"] == pytest.approx(2.2)
+
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario={"name": "safe_endpoint", "expected_outcome": "infeasible_safe_hold"},
+        margin_m=0.1,
+        probe_manifest=True,
+    )
+    assert reachability["status"] == passage["status"] == "invalid"
+    assert reachability["reason"] == "declared_infeasibility_not_confirmed_by_continuous_oracle"
+
+    del analysis["map_bounds"]
+    reachability, _passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "missing_geometry"}, margin_m=0.1
+    )
+    assert reachability["status"] == "fail"
+    assert reachability["continuous_oracle"]["reason"] == "continuous_geometry_unavailable"
+
+
+def test_continuous_margin_oracle_keeps_the_exact_boundary_conservative() -> None:
+    """The buffer approximation guard cannot admit a point below the required margin."""
+    analysis = {
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(0.0, 0.0), (0.0, 10.0)]),
+    }
+    safe = spawn_preflight._continuous_margin_route(
+        analysis, [(2.0, 5.0), (8.899, 5.0)], required_radius_m=1.1
+    )
+    unsafe = spawn_preflight._continuous_margin_route(
+        analysis, [(2.0, 5.0), (8.901, 5.0)], required_radius_m=1.1
+    )
+    assert safe["status"] == "pass"
+    assert unsafe["status"] == "fail"
+    assert unsafe["first_unsafe_route_point_index"] == 1
+
+
+def test_continuous_margin_oracle_rejects_unsafe_goal_and_disconnected_leg() -> None:
+    """The fallback must keep exact margin failures and ordered route cuts blocked."""
+    occupancy = np.zeros((100, 100), dtype=bool)
+    inflated = occupancy.copy()
+    inflated[50, 90] = True
+    robot = SimpleNamespace(pose=((2.0, 5.0), 0.0), config=SimpleNamespace(radius=1.0))
+    navigator = SimpleNamespace(waypoints=[(9.05, 5.0)])
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot], robot_navs=[navigator]))
+    analysis = {
+        "occupancy": occupancy,
+        "inflated": inflated,
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(0.0, 0.0), (0.0, 10.0)]),
+    }
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "unsafe_goal"}, margin_m=0.1
+    )
+    assert reachability["status"] == "fail"
+    assert reachability["continuous_oracle"]["reason"] == (
+        "required_route_point_below_continuous_margin"
+    )
+    assert reachability["continuous_oracle"]["first_unsafe_route_point_index"] == 1
+    assert passage["status"] == "pass"
+
+    occupancy[:, 50] = True
+    inflated[:, 50] = True
+    navigator.waypoints = [(8.0, 5.0), (2.0, 5.0)]
+    analysis["wall_geometry"] = LineString([(5.0, 0.0), (5.0, 10.0)])
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "disconnected_waypoint"}, margin_m=0.1
+    )
+    assert reachability["status"] == passage["status"] == "fail"
+    assert reachability["continuous_oracle"]["reason"] == (
+        "ordered_route_segment_disconnected_in_continuous_free_space"
+    )
+    assert reachability["continuous_oracle"]["first_blocked_segment_index"] == 0
+
+
+def test_known_unsafe_sampled_goals_stay_blocked_on_dev_seeds() -> None:
+    """The exact-margin fallback cannot admit the observed unsafe nominal goals."""
+    matrix = (
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+    )
+    scenario = next(
+        dict(row)
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "classic_t_intersection_low"
+    )
+    unsafe_seeds = (1009, 1011, 1023, 1027, 1030)
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), unsafe_seeds, 0.1, 20, 0.1, False)
+    )
+
+    assert [row["seed"] for row in result["rows"]] == list(unsafe_seeds)
+    for row in result["rows"]:
+        assert row["overall_status"] == "blocked", row
+        assert row["footprint_reachability"]["status"] == "fail", row
+        assert row["footprint_reachability"]["continuous_oracle"]["reason"] == (
+            "required_route_point_below_continuous_margin"
+        ), row
+
+
+def test_station_platform_successor_separates_the_respawn_zone_from_robot_spawns() -> None:
+    """Pin the authored respawn fix even when live exclusion sampling avoids contact."""
+    matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = next(
+        row
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "classic_station_platform_medium"
+    )
+    corrected = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), (1001,), 0.1, 20, 0.1, False)
+    )["rows"][0]
+    assert corrected["overall_status"] == "valid"
+    assert corrected["respawn_safety"]["status"] == "pass"
+
+    def rectangle(zone):
+        a, b, c = zone
+        return Polygon((a, b, c, (a[0] + c[0] - b[0], a[1] + c[1] - b[1])))
+
+    successor_path = (matrix.parent / scenario["map_file"]).resolve()
+    successor = SvgMapConverter(str(successor_path)).get_map_definition()
+    historical = SvgMapConverter(
+        str(REPO_ROOT / "maps/svg_maps/classic_station_platform.svg")
+    ).get_map_definition()
+    successor_respawn = rectangle(successor.ped_routes[0].spawn_zone)
+    successor_robot = rectangle(successor.robot_spawn_zones[0])
+    historical_respawn = rectangle(historical.ped_routes[0].spawn_zone)
+    historical_robot = rectangle(historical.robot_spawn_zones[0])
+    # The original 4 x 3 m respawn rectangle coincides with the robot spawn
+    # rectangle. The successor moves it 7 m north, leaving a 4 m surface gap.
+    assert historical_respawn.intersection(historical_robot).area == pytest.approx(12.0)
+    assert successor_respawn.distance(successor_robot) == pytest.approx(4.0)
+    assert successor_respawn.disjoint(successor_robot.buffer(1.0 + 0.4 + 0.75))
+
+
+def _reset_free_release_geometry(name: str):
+    """Load real release geometry without constructing, resetting, or stepping an env."""
+    from robot_sf.gym_env.robot_env import RobotEnv
+
+    matrix = (
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+    )
+    scenario = next(
+        dict(row) for row in spawn_preflight._load_matrix(matrix) if row["name"] == name
+    )
+    config = spawn_preflight.build_env_config(scenario, scenario_path=matrix)
+    assert len(config.map_pool.map_defs) == 1
+    map_def = next(iter(config.map_pool.map_defs.values()))
+    route = map_def.robot_routes[0]
+    geometry = RobotEnv._normalize_obstacles_for_grid(map_def.obstacles, map_def.bounds)
+    robot = SimpleNamespace(pose=(route.waypoints[0], 0.0), config=config.robot_config)
+    navigator = SimpleNamespace(waypoints=list(route.waypoints[1:]))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(map_def=map_def, robots=[robot], robot_navs=[navigator]),
+        _get_static_grid_obstacles=lambda: geometry,
+    )
+    analysis = spawn_preflight._build_occupancy_analysis(
+        env,
+        robot_radius_m=config.robot_config.radius,
+        margin_m=0.1,
+        resolution_m=0.1,
+    )
+    return env, analysis, scenario, route
+
+
+def test_unsafe_release_goal_zone_corner_stays_blocked_without_reset() -> None:
+    """The real nominal goal zone contains an unsafe goal; no held-out sample is drawn."""
+    env, analysis, scenario, route = _reset_free_release_geometry("classic_t_intersection_low")
+    # The authored corner, rather than a random episode outcome, pins this geometry defect.
+    env.simulator.robot_navs[0].waypoints = [route.goal_zone[2]]
+    reachability, _passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario=scenario,
+        margin_m=0.1,
+    )
+    assert reachability["status"] == "fail", reachability
+    assert (
+        reachability["continuous_oracle"]["reason"]
+        == "required_route_point_below_continuous_margin"
+    )
+    assert reachability["continuous_oracle"]["first_unsafe_route_point_index"] == 1
+
+
+def test_historical_narrow_doorway_probe_stays_blocked_without_reset() -> None:
+    """A probe declaration cannot admit the real 2 m doorway to the nominal matrix."""
+    env, analysis, scenario, _route = _reset_free_release_geometry("francis2023_narrow_doorway")
+    scenario["expected_outcome"] = "infeasible_safe_hold"
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario=scenario,
+        margin_m=0.1,
+    )
+    assert reachability["status"] == "invalid", reachability
+    assert reachability["reason"] == "infeasibility_probe_requires_separate_manifest", reachability
+    assert reachability["observed_status"] == "fail", reachability
+    assert passage["observed_status"] == "fail", passage
+
+
+def test_main_grid_doorway_probe_requires_pinned_map_and_oracle() -> None:
+    matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = next(
+        row
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "francis2023_narrow_doorway"
+    )
+    assert spawn_preflight._verified_main_grid_probe(scenario, matrix)
+    changed = dict(scenario)
+    changed["map_file"] = (
+        "../../maps/successor_svg_maps/issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg"
+    )
+    assert not spawn_preflight._verified_main_grid_probe(changed, matrix)
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), (1001, 1009), 0.1, 20, 0.1, True)
+    )
+    assert [row["overall_status"] for row in result["rows"]] == [
+        "infeasibility_probe",
+        "infeasibility_probe",
+    ]
+    assert all(
+        row["footprint_reachability"]["continuous_oracle"]["status"] == "fail"
+        for row in result["rows"]
+    )
+
+
+def test_station_platform_respawn_defect_geometry_is_removed_by_successor_map() -> None:
+    """The release successor removes the route-end respawn point inside the robot zone."""
+    matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = next(
+        row
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "classic_station_platform_medium"
+    )
+
+    def warnings_for(row):
+        config = spawn_preflight.build_env_config(row, scenario_path=matrix)
+        assert len(config.map_pool.map_defs) == 1
+        map_def = next(iter(config.map_pool.map_defs.values()))
+        return spawn_preflight._static_map_warnings(
+            SimpleNamespace(
+                map_def=map_def,
+                robots=[SimpleNamespace(config=config.robot_config)],
+                config=config.sim_config,
+            )
+        )
+
+    corrected = warnings_for(scenario)
+    historical = warnings_for(
+        dict(
+            scenario,
+            map_file="../../maps/svg_maps/classic_station_platform.svg",
+        )
+    )
+    bad_respawn_points = [
+        warning for warning in historical if warning["kind"] == "ped_waypoint_in_robot_spawn_zone"
+    ]
+    assert len(bad_respawn_points) == 1
+    assert bad_respawn_points[0]["waypoint"] == [6.0, 4.5]
+    assert not any(warning["kind"] == "ped_waypoint_in_robot_spawn_zone" for warning in corrected)
+
+
+def test_boundary_width_straight_route_requires_full_margin() -> None:
+    _, analysis, _ = _doorway_fixture()
+    analysis["wall_geometry"] = unary_union(
+        [
+            LineString([(3.0, 0.0), (3.0, 1.9)]),
+            LineString([(3.0, 4.1), (3.0, 6.0)]),
+        ]
+    )
+    route = [(1.5, 3.0), (4.5, 3.0)]
+    assert (
+        spawn_preflight._continuous_margin_route(analysis, route, required_radius_m=1.1)["status"]
+        == "pass"
+    )
+    assert (
+        spawn_preflight._continuous_margin_route(analysis, route, required_radius_m=1.100001)[
+            "status"
+        ]
+        == "fail"
+    )
+
+
+def test_continuous_margin_oracle_replaces_narrow_raw_grid_witness() -> None:
+    """A narrow sampled grid witness does not disprove a safe route around an obstacle."""
+    occupancy = np.zeros((100, 100), dtype=bool)
+    robot = SimpleNamespace(pose=((2.0, 5.0), 0.0), config=SimpleNamespace(radius=1.0))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(
+            robots=[robot], robot_navs=[SimpleNamespace(waypoints=[(8.0, 5.0)])]
+        )
+    )
+    analysis = {
+        "occupancy": occupancy,
+        "inflated": occupancy.copy(),
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(5.0, 4.0), (5.0, 6.0)]),
+    }
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "detour"}, margin_m=0.1
+    )
+    assert reachability["status"] == passage["status"] == "pass"
+    assert passage["grid_status"] == "fail"
+    assert passage["grid_minimum_opening_width_estimate_m"] < 2.2
+    assert passage["minimum_opening_width_certified_lower_bound_m"] == pytest.approx(2.2)
+
+
 def test_release_input_resolver_uses_manifest_matrix_and_seed_set() -> None:
     """The current release identities resolve to all 48 scenarios and seeds 111-140."""
     manifest = load_release_manifest(RELEASE_MANIFEST)
@@ -290,6 +634,43 @@ def test_release_input_resolver_uses_manifest_matrix_and_seed_set() -> None:
     assert len(scenarios) == 48
     assert seeds == tuple(range(111, 141))
     assert identity["seed_set"] == "paper_eval_s30"
+
+
+def _manifest_with_seed_policy(seed_policy: dict[str, object]):
+    manifest = load_release_manifest(RELEASE_MANIFEST)
+    fields = {name: getattr(manifest, name) for name in dir(manifest) if not name.startswith("_")}
+    fields["seed_policy"] = seed_policy
+    return SimpleNamespace(**fields)
+
+
+def test_release_input_resolver_rejects_fixed_list_that_differs_from_resolved_seeds() -> None:
+    """A fixed list of [111] cannot stand in for the resolved 111-140 evaluation seeds."""
+    manifest = _manifest_with_seed_policy(
+        {"mode": "fixed-list", "seeds": [111]}  # seed-holdout: synthetic-fixture
+    )
+
+    with pytest.raises(ValueError, match="do not match seed_policy.seeds"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
+def test_release_input_resolver_rejects_fixed_list_without_a_seed_list() -> None:
+    manifest = _manifest_with_seed_policy({"mode": "fixed-list"})
+
+    with pytest.raises(ValueError, match="requires seed_policy.seeds"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
+@pytest.mark.parametrize("mode", ["seedset", "", None, "range"])
+def test_release_input_resolver_rejects_unknown_seed_mode(mode: object) -> None:
+    """An unknown mode must not skip the named seed-set check."""
+    manifest = _manifest_with_seed_policy(
+        # seed-holdout: synthetic-fixture begin
+        {"mode": mode, "seed_set": "paper_eval_s30", "seeds": list(range(111, 141))}
+        # seed-holdout: synthetic-fixture end
+    )
+
+    with pytest.raises(ValueError, match="unsupported seed_policy mode"):
+        spawn_preflight._release_manifest_inputs(manifest)
 
 
 def test_matrix_only_cli_input_cannot_be_mistaken_for_release_preflight(
@@ -665,7 +1046,7 @@ def test_manifest_runner_returns_complete_diagnostic_for_small_valid_matrix(
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"name": "fixture"}], (111,)),
+        lambda _manifest: (identity, [{"name": "fixture"}], (1001,)),
     )
     monkeypatch.setattr(
         spawn_preflight,
@@ -714,7 +1095,7 @@ def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"name": "doorway"}], (111,)),
+        lambda _manifest: (identity, [{"name": "doorway"}], (1001,)),
     )
 
     def check_probe_job(job):
@@ -725,7 +1106,7 @@ def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
             "rows": [
                 {
                     "scenario": "doorway",
-                    "seed": 111,
+                    "seed": 1001,
                     "overall_status": "infeasibility_probe",
                     "footprint_reachability": {"status": "exempt_expected_outcome"},
                     "passage_width": {"status": "exempt_expected_outcome"},
@@ -747,7 +1128,7 @@ def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
         lambda job: {
             "scenario": job[0]["name"],
             "map_warnings": [],
-            "rows": [{"scenario": "doorway", "seed": 111, "overall_status": "valid"}],
+            "rows": [{"scenario": "doorway", "seed": 1001, "overall_status": "valid"}],
         },
     )
     feasible_probe = spawn_preflight.run_manifest_preflight(manifest)
@@ -769,7 +1150,7 @@ def test_manifest_runner_preserves_cells_when_worker_fails(tmp_path: Path, monke
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"scenario_id": "broken"}], (111, 112)),
+        lambda _manifest: (identity, [{"scenario_id": "broken"}], (1001, 1002)),
     )
     monkeypatch.setattr(
         spawn_preflight,
@@ -802,7 +1183,7 @@ def test_manifest_runner_marks_changed_inputs_and_invalid_options(
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"name": "fixture"}], (111,)),
+        lambda _manifest: (identity, [{"name": "fixture"}], (1001,)),
     )
     monkeypatch.setattr(
         spawn_preflight,
@@ -810,7 +1191,7 @@ def test_manifest_runner_marks_changed_inputs_and_invalid_options(
         lambda _job: {
             "scenario": "fixture",
             "map_warnings": [],
-            "rows": [{"scenario": "fixture", "seed": 111, "overall_status": "valid"}],
+            "rows": [{"scenario": "fixture", "seed": 1001, "overall_status": "valid"}],
         },
     )
     with pytest.raises(ValueError, match="workers"):

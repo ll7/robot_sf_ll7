@@ -33,7 +33,7 @@ class _Cfg:
         self.batch_size = 3
         self.algo = "ppo"
         self.workers = 1
-        self.master_seed = 123
+        self.master_seed = 1013
         self.smoke = over.get("smoke", False)
         self.disable_videos = over.get("disable_videos", False)
         self.max_videos = over.get("max_videos", 2)

@@ -311,7 +311,7 @@ def adapt_simulation_step_trace(  # noqa: C901, PLR0912, PLR0915
 
     steps = trace.get("steps")
     schema_version = trace.get("schema_version")
-    if schema_version != SIMULATION_STEP_TRACE_SCHEMA_VERSION:
+    if schema_version not in {SIMULATION_STEP_TRACE_SCHEMA_VERSION, "simulation-step-trace.v2"}:
         if isinstance(steps, list):
             raise ValueError(
                 f"Unknown schema_version {schema_version!r}; expected "

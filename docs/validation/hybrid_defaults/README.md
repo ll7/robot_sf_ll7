@@ -52,9 +52,9 @@ flag matching their training contract.
 
 ## Tests and base proof
 
-`tests/planner/test_hybrid_default_compatibility.py` contains twenty cases. The
-same file reports twenty failures on base `303ddac871557ba4350933de54306b83288b437f`,
-all at old-default assertions, then twenty passes after implementation. Commands:
+`tests/planner/test_hybrid_default_compatibility.py` contains twenty-three cases. The
+same file reports twenty-three failures on base `303ddac871557ba4350933de54306b83288b437f`,
+all at old-default assertions, then twenty-three passes after implementation. Commands:
 
 ```sh
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybrid_default_compatibility.py -n 8 -q
@@ -73,6 +73,7 @@ No environment was reset or stepped during snapshot capture.
 | --- | --- | --- | --- |
 | `test_current_defaults_enable_all_three_switches` | Protect missing-field activation; a restored false default fails. | Earlier tests exercise opt-in repairs. | Typed constructors; no random inputs; false-on-base assertion. |
 | `test_each_explicit_switch_overrides_the_selected_defaults` | Protect independent explicit on/off values; a coupled toggle or ignored value fails. | Earlier parsing tests omit the other current defaults. | Real parser/constructor, six deterministic cases; omitted companion remains false on base. |
+| `test_scenario_validity_override_wins_or_rejects_non_boolean` | Protect source-scoped scenario overrides: ignored booleans or accepted strings break the sensor contract. | Constructor override tests do not exercise the scenario loader. | Real native environment builder on a fixed released scenario; three fixed values, no reset/step; current control fails on base. |
 | `test_registered_release_full_dataclasses_and_mapping_match_base` | Protect current activation alongside release identity and full typed parity; applying current defaults to releases fails. | Freeze tests hash raw maps and omit typed fill-in. | Real resolver/builder, fixed base dumps, nine cases; current control fails on base. |
 | `test_registry_requires_known_source_and_matching_bytes` | Reject filename-only compatibility; a guessed legacy assignment fails. | No prior registry boundary. | Real scoped constructors, fixed temporary input; current control fails on base. |
 | `test_release_registry_covers_learned_observation_contract` | Protect released spaces while exposing the current validity field; a missing learned source binding fails. | Prior optional-field tests do not cover released model paths. | Actual space builder, fixed map and bounds; current control fails on base. |
@@ -93,7 +94,7 @@ a registered release scenario. Before the final dispatch correction it fails
 with `assert 'legacy-0.0.8' == 'current'`; the corrected code treats `{}` as
 current and reserves scenario fallback for missing or `None` inline config.
 Existing source-based tests skipped the explicit-empty case. This uses the same
-real runner at dev1001, with no additional test-only seam. All twenty migration
+real runner at dev1001, with no additional test-only seam. All twenty-three migration
 cases were rerun on immutable base and still fail their intended default witness.
 
 No production seam was added solely for tests. Preservation assertions naturally

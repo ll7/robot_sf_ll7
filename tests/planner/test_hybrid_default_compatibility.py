@@ -44,6 +44,24 @@ def test_each_explicit_switch_overrides_the_selected_defaults(switch, value):
         assert getattr(cfg, other) is True
 
 
+@pytest.mark.parametrize("value", (False, True, "true"))
+def test_scenario_validity_override_wins_or_rejects_non_boolean(value):
+    """The native scenario builder honors sensor overrides and rejects mistyped values."""
+    assert RobotSimulationConfig().include_goal_next_valid is True
+    from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+    from robot_sf.common.hybrid_defaults import defaults_for_source
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    matrix = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = dict(load_scenarios(matrix)[0], env_overrides={"include_goal_next_valid": value})
+    with defaults_for_source(matrix):
+        if isinstance(value, bool):
+            assert build_env_config(scenario, scenario_path=matrix).include_goal_next_valid is value
+        else:
+            with pytest.raises(ValueError, match="include_goal_next_valid must be boolean"):
+                build_env_config(scenario, scenario_path=matrix)
+
+
 @pytest.mark.parametrize("source", sorted(k for k in SNAPSHOTS if k != "environment"))
 def test_registered_release_full_dataclasses_and_mapping_match_base(source):
     """Current defaults differ, but registered release dumps and raw identities do not."""

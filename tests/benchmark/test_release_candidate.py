@@ -23,6 +23,7 @@ from robot_sf.benchmark.release_candidate import (
     verify_prepublication_candidate_after_preflight,
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 SOURCE_ROOT = Path(__file__).parents[2]
@@ -51,9 +52,9 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
     rows = [dict(row) for row in scenarios.scenarios]
     seed_policy = {
         "mode": "seed-set",
-        "seed_set": "paper_eval_s30",
-        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
-        "resolved_seeds": list(range(111, 141)),
+        "seed_set": "release_eval_0_0_8",
+        "seed_sets_path": "configs/benchmarks/seed_sets_0_0_8.yaml",
+        "resolved_seeds": list(EVAL_SEEDS_0_0_8),
     }
     inputs = {
         "suite_policy_path": SUITE_POLICY,
@@ -103,7 +104,12 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
         },
         "planners": {"keys": [row["key"] for row in config["planners"]]},
         "seed_policy": seed_policy,
-        "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
+        "matrix": {
+            "expected_episode_cells": 20160,
+            "horizon_mode": "scenario_horizons",
+            "scenario_horizons": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+            "scenario_horizons_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
+        },
         "inputs": inputs,
         "sha256_files": pins,
     }
@@ -117,12 +123,96 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
     candidate = load_prepublication_candidate(path, repository_root=root)
     assert load_preflight_input(path, repository_root=root) == candidate
     assert candidate.release_id == payload["candidate_id"]
+    assert candidate.expected_horizon_steps is None
+    assert payload["matrix"]["horizon_mode"] == "scenario_horizons"
+    schedule_path = root / payload["matrix"]["scenario_horizons"]
+    assert (
+        dict(candidate.pinned_files)[schedule_path] == payload["matrix"]["scenario_horizons_sha256"]
+    )
     assert len(candidate.planner_keys) == 14
     assert len(candidate.scenario_identities) == 48
-    assert candidate.resolved_seeds == tuple(range(111, 141))
+    assert candidate.resolved_seeds == EVAL_SEEDS_0_0_8
     assert candidate.expected_episode_cells == 20160
     with pytest.raises(ValueError, match="schema_version"):
         load_release_manifest(path, repository_root=root)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message", "protocol"),
+    [
+        ("fixed", None, None),
+        ("fixed_current_conflict", "authored limit.*below fixed horizon", "0.0.8"),
+        ("fixed_wrong_budget", "campaign horizon differs from candidate H600 contract", "0.0.8"),
+        ("mixed", "scenario_horizons cannot be combined with fixed horizon", "0.0.8"),
+        ("missing_pin", "candidate requires scenario_horizons_sha256", "0.0.8"),
+        ("extended_schedule", "candidate scenario_horizons must preserve authored limits", "0.0.8"),
+        ("matrix", "candidate matrix differs from declared campaign budget contract", "0.0.8"),
+    ],
+)
+def test_candidate_budget_contract_rechecks_mutated_real_inputs(
+    candidate_repo, mutation, message, protocol
+):
+    """Admitted real scheduled bytes are the positive control for each budget mutation."""
+    from robot_sf.evidence.writers import write_json, write_text
+
+    root, path, payload = candidate_repo
+    control = load_prepublication_candidate(path, repository_root=root)
+    assert control.expected_horizon_steps is None
+    assert control.expected_episode_cells == 20160
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text())
+    # The fixed positive control is unidentified: main's runner-only cap remains valid.
+    config["protocol_version"] = protocol
+    if mutation.startswith("fixed"):
+        config.pop("scenario_horizons")
+        config.pop("scenario_horizons_sha256")
+        config["horizon"] = 599 if mutation == "fixed_wrong_budget" else 600
+        payload["matrix"] = {"expected_episode_cells": 20160, "horizon_steps": 600}
+        # Fixed admission has a smaller closure, including no schedule sidecar.
+        for item, _digest in control.pinned_files:
+            if item.name == "release_0_0_8_authored_v1.yaml":
+                payload["sha256_files"].pop(item.relative_to(root).as_posix())
+    elif mutation == "mixed":
+        config["horizon"] = 600
+    elif mutation == "missing_pin":
+        config.pop("scenario_horizons_sha256")
+    elif mutation == "extended_schedule":
+        schedule_path = root / config["scenario_horizons"]
+        schedule = yaml.safe_load(schedule_path.read_text())
+        schedule["scenarios"]["francis2023_blind_corner"]["recommended_horizon_steps"] = 401
+        write_text(schedule_path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(schedule))
+        digest = hashlib.sha256(schedule_path.read_bytes()).hexdigest()
+        config["scenario_horizons_sha256"] = digest
+        payload["matrix"]["scenario_horizons_sha256"] = digest
+        payload["sha256_files"][config["scenario_horizons"]] = digest
+    else:
+        payload["matrix"]["expected_episode_cells"] = 20159
+    if mutation != "matrix":
+        write_text(config_path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(config))
+        payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+            config_path.read_bytes()
+        ).hexdigest()
+        _git(root, "add", payload["canonical_campaign_config"])
+        if mutation == "extended_schedule":
+            _git(root, "add", config["scenario_horizons"])
+        _git(
+            root,
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            mutation,
+        )
+        payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    write_json(path, payload)
+    if message is None:
+        candidate = load_prepublication_candidate(path, repository_root=root)
+        assert candidate.expected_horizon_steps == 600
+    else:
+        with pytest.raises(ValueError, match=message):
+            load_prepublication_candidate(path, repository_root=root)
 
 
 def _replace_campaign_algorithm(candidate_repo, arm: str) -> dict:
@@ -675,59 +765,85 @@ def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) 
         )
 
 
-@pytest.mark.parametrize("change_during_run", [False, True])
-def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
+def test_preflight_cli_refuses_sealed_candidate_before_workers(
     candidate_repo,
     monkeypatch: pytest.MonkeyPatch,
-    change_during_run: bool,
 ) -> None:
-    root, path, payload = candidate_repo
-    original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    root, path, _payload = candidate_repo
     monkeypatch.setattr(release_candidate, "get_repository_root", lambda: root)
     monkeypatch.setattr(spawn_preflight, "get_repository_root", lambda: root)
-    observed: dict[str, object] = {"changed": False}
+    reached = []
 
-    def diagnostic_scenario(job):
+    def record(job):
         scenario, _matrix, seeds, *_checks = job
-        if change_during_run and not observed["changed"]:
-            payload["candidate_id"] = "changed-during-preflight"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            observed["changed"] = True
-        name = scenario["name"]
+        reached.append(job)
         return {
-            "scenario": name,
+            "scenario": scenario["name"],
+            "map_warnings": [],
             "rows": [
-                {
-                    "scenario": name,
-                    "seed": seed,
-                    "overall_status": "valid",
-                }
+                {"scenario": scenario["name"], "seed": seed, "overall_status": "valid"}
                 for seed in seeds
             ],
-            "map_warnings": [],
         }
 
-    monkeypatch.setattr(spawn_preflight, "_check_release_scenario", diagnostic_scenario)
+    monkeypatch.setattr(spawn_preflight, "_check_release_scenario", record)
+
+    def abort(*_a, **_kw):
+        pytest.fail("candidate witness attempted environment creation")
+
+    monkeypatch.setattr(spawn_preflight, "make_robot_env", abort)
+    monkeypatch.setattr("robot_sf.gym_env.environment_factory.make_robot_env", abort)
     json_output = root / "report.json"
-    result = spawn_preflight.main(
-        [
-            "--manifest",
-            str(path),
-            "--json-output",
-            str(json_output),
-            "--markdown-output",
-            str(root / "report.md"),
-        ]
+    assert (
+        spawn_preflight.main(
+            [
+                "--manifest",
+                str(path),
+                "--workers",
+                "1",
+                "--json-output",
+                str(json_output),
+                "--markdown-output",
+                str(root / "report.md"),
+            ]
+        )
+        == 2
     )
-    report = json.loads(json_output.read_text(encoding="utf-8"))
-    assert result == (2 if change_during_run else 0)
-    assert report["source_commit"] == payload["source_commit"]
-    assert report["release_inputs"]["manifest_sha256"] == original_digest
-    assert report["expected_cell_count"] == report["cell_count"] == 1440
-    if change_during_run:
-        assert report["status"] == "invalid"
-        assert "candidate_input_drift" in report["input_error"]
-        assert "release manifest changed" in report["input_error"]
-    else:
-        assert report["status"] == "valid"
-        assert report["input_error"] is None
+    report = json.loads(json_output.read_text())
+    assert "sealed evaluation seeds require" in report["input_error"]
+    assert reached == []
+
+
+def test_cmpfix_candidate_refuses_nonhybrid_scenario_algo_override(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = CONFIG.relative_to(SOURCE_ROOT).as_posix()
+    campaign_path = root / config_path
+    campaign = yaml.safe_load(campaign_path.read_text())
+    planner = next(row for row in campaign["planners"] if row["key"] == "social_force")
+    planner_path = planner["algo_config"]
+    manifest_path = root / planner_path
+    manifest = {
+        "scenario_algo_overrides": {
+            "francis2023_leave_group": {
+                "algo": "orca",
+                "base_config_path": "configs/algos/issue707_orca_tuned.yaml",
+            }
+        }
+    }
+    manifest_path.write_text(yaml.safe_dump(manifest))
+    payload["sha256_files"][planner_path] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    _git(root, "add", planner_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "counterexample",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="unapproved scenario algorithm override"):
+        load_prepublication_candidate(path, repository_root=root)

@@ -318,3 +318,20 @@ def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
     assert "make_sacadrl_policy" in socnav.__all__
     assert socnav.SACADRLPlannerAdapter is sacadrl.SACADRLPlannerAdapter
     assert socnav.make_sacadrl_policy is sacadrl.make_sacadrl_policy
+
+
+@pytest.mark.parametrize(("columns", "slots"), [(19, 2), (40, 5)])
+def test_checkpoint_capacity_rejects_extra_agents_before_tensorflow(columns, slots):
+    """Five robot features plus seven per agent must fit the checkpoint without cropping."""
+    calls = []
+    model = object.__new__(sacadrl._SACADRLModel)
+    model._input_dim = columns
+    model._x = "input"
+    model._softmax = "probabilities"
+    model._sess = SimpleNamespace(run=lambda *a, **k: calls.append(k) or np.array([[0.25, 0.75]]))
+    with pytest.raises(ValueError, match=rf"checkpoint capacity \({slots} agent slots\)"):
+        model.predict(np.ones((1, columns + 7)))
+    assert calls == []
+    np.testing.assert_array_equal(model.predict(np.ones((1, columns))), [[0.25, 0.75]])
+    assert len(calls) == 1
+    assert calls[0]["feed_dict"]["input"].shape == (1, columns)

@@ -321,6 +321,7 @@ from robot_sf.planner.socnav import (  # noqa: F401 - registry re-export.
 )
 from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter  # noqa: F401
+from robot_sf.robot.reverse_drive import bound_drive_settings
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
@@ -1296,6 +1297,8 @@ def _attach_guard_decision_stats(
                         "recovery_command_count",
                     ):
                         runtime["last_decision"][key] = runtime[key]
+                    if "recovery_kind" in runtime:
+                        runtime["last_decision"]["recovery_kind"] = runtime["recovery_kind"]
         fallback_target = getattr(guard_adapter, "last_fallback_target_xy", None)
         if fallback_target is not None:
             runtime["planner_target_xy"] = [float(fallback_target[0]), float(fallback_target[1])]
@@ -2153,7 +2156,24 @@ def _build_common_adapter_policy(  # noqa: C901
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
     if planner_bind_env is not None:
-        _policy._planner_bind_env = planner_bind_env
+        original_bind_env = planner_bind_env
+
+        def _bind_live_env(env: Any) -> None:
+            """Keep SocNav projection limits in sync with the opt-in bound plant."""
+            nonlocal adapter_kinematics_model
+            original_bind_env(env)
+            drive = bound_drive_settings(env, adapter=adapter)
+            limits = dict(algo_config)
+            if getattr(drive, "limited_reverse", False):
+                limits.update(limited_reverse=True, max_reverse_speed=drive.max_reverse_speed)
+                if algo_key in {"hrvo", "socnav_hrvo"}:
+                    adapter.bind_env(env)
+            adapter_kinematics_model = resolve_benchmark_kinematics_model(
+                robot_kinematics=robot_kinematics, command_limits=limits
+            )
+            _policy._kinematics_model = adapter_kinematics_model
+
+        _policy._planner_bind_env = _bind_live_env
     adapter_diagnostics = getattr(adapter, "diagnostics", None)
     foresight_diagnostics = getattr(adapter, "foresight_diagnostics", None)
     if callable(adapter_diagnostics) or callable(foresight_diagnostics):
@@ -3294,17 +3314,12 @@ def _compute_resume_identity_payload(
         Identity payload dict used to compute the episode ID for deduplication.
     """
     identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
-    identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
+    identity_algo, identity_cfg = _policy_resolution.resolve_episode_policy_runtime(
         default_algo=ctx.algo,
         algo_config_path=ctx.algo_config_path,
         algo_config=ctx.raw_policy_cfg,
         scenario=identity_scenario,
-    )
-    identity_cfg = _apply_planner_selector_v2_context(
-        identity_algo, identity_cfg, scenario=identity_scenario, seed=int(seed)
-    )
-    identity_cfg = _apply_scenario_uncertainty_envelope_config(
-        identity_algo, identity_cfg, identity_scenario
+        seed=int(seed),
     )
     identity_observation_contract = resolve_learned_checkpoint_observation_contract(
         identity_algo,

@@ -1244,8 +1244,12 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
         Complete JSON-serializable campaign manifest payload.
     """
     if getattr(cfg, "snqi_v2_spec", None) is not None:
-        cfg.snqi_v2_spec.validate_evaluation_seeds(metadata["resolved_seeds"])
+        if not cfg.snqi_v2_spec.diagnostic:
+            cfg.snqi_v2_spec.validate_evaluation_seeds(metadata["resolved_seeds"])
+            if cfg.snqi_v2_spec.hashes:
+                cfg.snqi_v2_spec.validate_evaluation_commitment(metadata["resolved_seeds"])
     return {
+        **({"legacy_snqi": "excluded"} if cfg.snqi_weights_path is None else {}),
         **(
             {"metrics": cfg.snqi_v2_spec.provenance()} if getattr(cfg, "snqi_v2_spec", None) else {}
         ),
@@ -1401,8 +1405,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         Paths and metadata required by preflight-only workflows and full runs.
 
     ``authoritative_checkpoint_admission`` is set only when the caller has separately validated
-    a fresh, configuration-bound staged-checkpoint receipt. It keeps the metadata-only diagnostic
-    in the campaign artifacts while preventing that diagnostic from contradicting the receipt.
+    a fresh staged-checkpoint receipt, retaining the metadata-only diagnostic in artifacts.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415

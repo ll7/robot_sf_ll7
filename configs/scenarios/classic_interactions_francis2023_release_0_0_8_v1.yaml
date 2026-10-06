@@ -23,6 +23,10 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   classic_station_platform_medium:
+    # #10063: route bend x=74 clears the goal even with +/-1.5 m x/y spawn jitter.
+    # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   classic_cross_trap_low:
@@ -86,6 +90,23 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_pedestrian_overtaking:
+    # #10063: spawn y=4..4.5 and h1 lane y=6.6 are separated across full rectangles.
+    # h1 starts behind at x=1.5: initial speed 0.8, effective SFM target 1.04 m/s.
+    # A slower robot makes
+    # the pedestrian overtake rather than lose ground; 600 steps covers the
+    # unchanged 34 m robot trip at the 0.7 m/s cap plus acceleration/interaction.
+    # Author 2026-10-02: inherit the 600-step budget from the single scenario.
+    # OVTFIX2: h1 passes along y=6.6 before exiting up/back to (20,9.9).
+    # Parking retreats behind the final approach; perfect tracking has no range cutoff.
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg
+    single_pedestrians:
+    - id: h1
+      speed_m_s: 0.8
+      goal: null
+      trajectory_poi: [poi_h1_pass, poi_h1_goal]
+    robot_config:
+      max_linear_speed: 0.7
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_robot_overtaking:
@@ -167,5 +188,10 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_robot_crowding:
+    # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg
     simulation_config:
+      # 112 m2 * 0.21 -> 24 pedestrians, retaining the original crowd count.
+      ped_density: 0.21
       robot_goal_sampling_policy: footprint_clearance_v1

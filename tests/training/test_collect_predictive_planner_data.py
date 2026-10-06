@@ -41,7 +41,7 @@ def _frame(
         robot_velocity_xy=velocity_xy,
         goal_current=np.asarray(goal_current, dtype=np.float32),
         ped_positions_world=positions,
-        ped_velocities_world=velocities,
+        ped_velocities_ego=velocities,
         ped_count=int(positions.shape[0]),
     )
 

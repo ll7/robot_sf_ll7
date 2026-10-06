@@ -1,0 +1,115 @@
+pytest tests/unit/benchmark/test_snqi_v2.py::test_scenario_routes_refuse_untrusted_config_paths -n0 -q (pre-fix d56092ed + e0ee944c)
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       TypeError: unsupported operand type(s) for /: 'PosixPath' and 'int'
+E       Failed: DID NOT RAISE ValueError
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_scenario_routes_refuse_untrusted_config_paths[absolute]
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_scenario_routes_refuse_untrusted_config_paths[traversal]
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_scenario_routes_refuse_untrusted_config_paths[symlink]
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_scenario_routes_refuse_untrusted_config_paths[non_string]
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_scenario_routes_refuse_untrusted_config_paths[sidecar_mismatch]
+5 failed in 2.92s
+
+pytest test_d083_snqi_enrichment_retains_declared_scenario_algorithm_routes[wrong_cell-*] (explicit two node ids); BOTH guards replaced with if False
+E           Failed: DID NOT RAISE ValueError
+E           Failed: DID NOT RAISE ValueError
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_d083_snqi_enrichment_retains_declared_scenario_algorithm_routes[wrong_cell-scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4]
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_d083_snqi_enrichment_retains_declared_scenario_algorithm_routes[wrong_cell-scenario_adaptive_hybrid_orca_v2_collision_guard_v4]
+2 failed in 2.49s
+
+pytest pending_permission_requires_rehearsal_identity_before_execution (pre-fix)
+E       Failed: pending keyword bypassed identity admission
+E       Failed: pending keyword bypassed identity admission
+E           TypeError: run_campaign() got an unexpected keyword argument 'pending_snqi_v2_identity'
+E           TypeError: run_campaign() got an unexpected keyword argument 'pending_snqi_v2_identity'
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_requires_rehearsal_identity_before_execution[None-native]
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_requires_rehearsal_identity_before_execution[None-facade]
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_requires_rehearsal_identity_before_execution[not-an-identity.json-native]
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_requires_rehearsal_identity_before_execution[not-an-identity.json-facade]
+9 failed in 7.12s
+
+pytest explicit original binding nodes at base 0cf028e
+E       Failed: unscored authored campaign reached execution
+E       TypeError: run_campaign() got an unexpected keyword argument 'allow_pending_snqi_v2'
+E       TypeError: run_campaign() got an unexpected keyword argument 'allow_pending_snqi_v2'
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097f53000>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097f53000> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097ee98c0>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097ee98c0> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097ebf740>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097ebf740> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097e2c700>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097e2c700> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097e2f740>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097e2f740> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097e9a140>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097e9a140> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097ea6240>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097ea6240> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097eae5c0>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097eae5c0> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097ec2900>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097ec2900> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097ef77c0>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097ef77c0> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097e96680>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097e96680> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+E       AssertionError: D-083 authored source has no SNQI-v2 binding
+E       assert None is not None
+E        +  where None = <built-in method get of dict object at 0x7f7097e1e580>('snqi_v2_spec')
+E        +    where <built-in method get of dict object at 0x7f7097e1e580> = {'name': 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored', 'paper_facing': True, 'paper_... 'paper-matrix-v1', 'scenario_matrix': 'configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml', ...}.get
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_campaign_cannot_execute
+FAILED tests/benchmark/test_mintorder_binding.py::test_rehearsal_option_reaches_campaign_implementation[False]
+FAILED tests/benchmark/test_mintorder_binding.py::test_rehearsal_option_reaches_campaign_implementation[True]
+FAILED tests/benchmark/test_mintorder_binding.py::test_binding_refuses_incomplete_or_changed_source_assets[missing]
+FAILED tests/benchmark/test_mintorder_binding.py::test_binding_refuses_incomplete_or_changed_source_assets[digest]
+FAILED tests/benchmark/test_mintorder_binding.py::test_binding_refuses_incomplete_or_changed_source_assets[rule]
+FAILED tests/benchmark/test_mintorder_binding.py::test_binding_refuses_incomplete_or_changed_source_assets[status]
+FAILED tests/benchmark/test_mintorder_binding.py::test_acquired_anchors_are_bound_before_scoring[none]
+FAILED tests/benchmark/test_mintorder_binding.py::test_acquired_anchors_are_bound_before_scoring[source]
+FAILED tests/benchmark/test_mintorder_binding.py::test_acquired_anchors_are_bound_before_scoring[seeds]
+FAILED tests/benchmark/test_mintorder_binding.py::test_acquired_anchors_are_bound_before_scoring[anchors]
+FAILED tests/benchmark/test_mintorder_binding.py::test_acquired_anchors_are_bound_before_scoring[acquisition]
+FAILED tests/benchmark/test_mintorder_binding.py::test_reviewed_artifact_route_still_requires_exact_acquisition_identity[none]
+FAILED tests/benchmark/test_mintorder_binding.py::test_reviewed_artifact_route_still_requires_exact_acquisition_identity[source]
+FAILED tests/benchmark/test_mintorder_binding.py::test_reviewed_artifact_route_still_requires_exact_acquisition_identity[configuration]
+15 failed in 3.56s
+
+pytest test_pending_permission_matches_verified_identity_config; native identity/seed/config guard removed
+E           Failed: DID NOT RAISE ValueError
+E           Failed: DID NOT RAISE ValueError
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_matches_verified_identity_config[seeds1]
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_matches_verified_identity_config[seeds2]
+2 failed, 1 passed in 2.33s
+
+pytest pending_permission_matches_verified_identity_config; identity/seed/config guard removed (final cases)
+E           Failed: DID NOT RAISE ValueError
+E           Failed: DID NOT RAISE ValueError
+E           Failed: DID NOT RAISE ValueError
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_matches_verified_identity_config[non_dev]
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_matches_verified_identity_config[mixed_seeds]
+FAILED tests/benchmark/test_mintorder_binding.py::test_pending_permission_matches_verified_identity_config[changed_config]
+3 failed, 1 passed in 2.82s

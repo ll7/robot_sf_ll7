@@ -211,6 +211,7 @@ def render_legend_panel(
         ``(surface, [(label, rect), ...])`` for clipping assertions.
     """
     pygame = _require_pygame()
+    pygame.font.init()
     font = pygame.font.Font(None, style.legend_font_px)
     rows = legend_entries(style)
     row_height = style.legend_font_px + 12
@@ -265,6 +266,7 @@ def render_title_block(
         ``(surface, [rect, ...])``; all rects must fit inside ``width`` x ``height``.
     """
     pygame = _require_pygame()
+    pygame.font.init()
     overlay = pygame.Surface((width, height), pygame.SRCALPHA)
     rects: list[tuple[int, int, int, int]] = []
     y = 16

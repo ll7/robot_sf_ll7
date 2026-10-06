@@ -475,13 +475,16 @@ def test_orca_velocity_projection_records_optional_adapter_trace():
     assert record["executed_command_vw"] == pytest.approx([v, w])
     assert record["executed_speed_mps"] == pytest.approx(v)
     assert record["angle_error_rad"] == pytest.approx(np.pi / 4)
-    assert record["speed_delta_mps"] == pytest.approx(0.0)
+    # The forward projection of [0.6, 0.6] is 0.6 m/s; the planned
+    # magnitude is sqrt(0.72), so the diagnostic records the lost component.
+    assert record["executed_speed_mps"] == pytest.approx(0.6)
+    assert record["speed_delta_mps"] == pytest.approx(-0.24852813742385693)
 
     summary = diagnostics["adapter_trace_summary"]
     assert summary["schema_version"] == "orca_adapter_trace.v1"
     assert summary["sample_count"] == 1
     assert summary["angle_error_rad_mean"] == pytest.approx(np.pi / 4)
-    assert summary["speed_delta_mps_mean"] == pytest.approx(0.0)
+    assert summary["speed_delta_mps_mean"] == pytest.approx(-0.24852813742385693)
 
 
 def test_orca_velocity_projection_trace_rejects_nonfinite_values():

@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,7 @@ from robot_sf.benchmark.infeasible_probe_safe_failure import (
     PROBE_SCENARIO_IDS,
     classify_probe_slots,
 )
+from robot_sf.benchmark.metric_definitions import changed_metric_field, metric_schema_version
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
@@ -82,6 +84,7 @@ SUMMARY_COLUMNS = (
     "mean_0_0_7",
     "mean_0_0_8",
     "mean_paired_delta",
+    "metric_comparability",
     "only_0_0_7",
     "only_0_0_8",
 )
@@ -109,7 +112,7 @@ def _slot(row: Mapping[str, Any], run_name: str) -> tuple[str, str, str, int, st
     return planner, kinematics, scenario, seed, track or ""
 
 
-def _insert_rows(
+def _insert_rows(  # noqa: C901 - independent row admission and compaction guards
     rows: dict[tuple[str, str, str, int, str], dict[str, Any]],
     raw_lines: Any,
     run_name: str,
@@ -128,14 +131,30 @@ def _insert_rows(
         key = _slot(row, run_name)
         if not isinstance(row.get("outcome"), dict) or not isinstance(row.get("metrics"), dict):
             raise ValueError(f"{source}:{line_number}: outcome and metrics must be objects")
+        schema = metric_schema_version(row)
+        # Discard bulky evidence before retaining a row (one JSON line at a time).
+        for container in (row, row.get("algorithm_metadata", {})):
+            for name in ("simulation_step_trace", "planner_decision_trace"):
+                container.pop(name, None)
+        row["metrics"].pop("robot_force_samples", None)
         # The published bundle is hundreds of MB uncompressed. Keep only the
         # compared values and a checked source identity for each slot.
         compact = {
             "outcome": row["outcome"],
-            "metrics": row["metrics"],
+            # Historical trace rows stored this series among scalar reductions.
+            "metrics": {
+                key: value for key, value in row["metrics"].items() if key != "robot_force_samples"
+            },
             "termination_reason": row.get("termination_reason"),
             "integrity": row.get("integrity"),
+            "metric_schema_version": schema,
             "_source_commit": _row_source_commit(row),
+            "_definition": {
+                "scenario": row.get("scenario_params", {}),
+                "algo_config_hash": row.get("scenario_params", {}).get("algo_config_hash"),
+                "steps": row.get("steps"),
+                "horizon": row.get("horizon"),
+            },
         }
         if retain_provenance:
             compact["_provenance"] = {
@@ -154,6 +173,15 @@ def _insert_rows(
                     "config_hash",
                 )
             }
+            # Identity validation needs only these fields, never diagnostic
+            # arrays (simulation, planner, native-pair or force traces).
+            metadata = row.get("algorithm_metadata")
+            if isinstance(metadata, dict):
+                compact["_provenance"]["algorithm_metadata"] = {
+                    name: metadata[name]
+                    for name in ("algorithm", "canonical_algorithm", "config", "config_hash")
+                    if name in metadata
+                }
         if key in rows:
             if duplicate_counts is None:
                 raise ValueError(f"duplicate slot {key} at {source}:{line_number}")
@@ -347,6 +375,9 @@ def _runtime_successor_identity(
     commit: str,
     config_path: str,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
+    *,
+    publication_identity: Mapping[str, str] | None = None,
+    development_rehearsal_seeds: tuple[int, ...] | None = None,
 ) -> tuple[
     str,
     str,
@@ -375,6 +406,10 @@ def _runtime_successor_identity(
                     for slot, row in rows.items()
                 ],
             }
+            if publication_identity is not None:
+                request["publication_identity"] = dict(publication_identity)
+            if development_rehearsal_seeds is not None:
+                request["development_rehearsal_seeds"] = list(development_rehearsal_seeds)
             resolved = subprocess.run(
                 [sys.executable, "-I", str(worker)],
                 input=json.dumps(request),
@@ -409,16 +444,183 @@ def _runtime_successor_identity(
             )
 
 
+@contextmanager
+def _resolved_source_checkout(source_root, commit, identity_path, payload):
+    """Copy only canonical JSON custody into a detached source worktree."""
+    identity_path = identity_path.absolute()
+    with tempfile.TemporaryDirectory(prefix="resolved-successor-source-") as directory:
+        checkout = Path(directory) / "source"
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(source_root),
+                    "worktree",
+                    "add",
+                    "--detach",
+                    str(checkout),
+                    commit,
+                ],
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode:
+                raise ValueError("cannot check out pinned successor source commit")
+            custody = [
+                identity_path,
+                identity_path.parent / "zenodo_metadata.resolved.json",
+                identity_path.parent / "release_notes_gate.v1.json",
+            ]
+            receipt = payload.get("determinism_receipt")
+            if receipt is not None:
+                custody.append(Path(receipt["path"]))
+            for path in custody:
+                source = path if path.is_absolute() else source_root / path
+                if any(parent.is_symlink() for parent in (source, *source.parents)):
+                    raise ValueError("resolved successor custody must not contain symlinks")
+                relative = source.resolve().relative_to(source_root)
+                if relative.suffix != ".json" or relative.parts[0] in {"robot_sf", "fast-pysf"}:
+                    raise ValueError(
+                        "resolved successor custody must be JSON outside runtime packages"
+                    )
+                destination = checkout / relative
+                data = source.read_bytes()
+                if destination.exists() and destination.read_bytes() != data:
+                    raise ValueError(
+                        "resolved successor custody differs from a tracked source file"
+                    )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(data)
+            _require_clean_source(checkout, commit)
+            yield checkout, checkout / identity_path.resolve().relative_to(source_root)
+        finally:
+            subprocess.run(
+                ["git", "-C", str(source_root), "worktree", "remove", "--force", str(checkout)],
+                capture_output=True,
+                check=False,
+            )
+
+
+def _verified_resolved_successor(path, digest, source_root, rows, *, snqi_v2_anchors=None):
+    """Verify the canonical envelope with frozen code and derive its runner bindings."""
+    source_root = source_root.resolve()
+    payload = json.loads(path.read_bytes())
+    commit = payload["source_commit"]
+    _require_clean_source(source_root, commit)
+    request = {
+        "resolved_identity_path": str(path.resolve()),
+        "source_commit": commit,
+        "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
+        "rows": [
+            {"slot": slot, "scenario_params": row["_provenance"]["scenario_params"]}
+            for slot, row in rows.items()
+        ],
+    }
+    if snqi_v2_anchors is not None:
+        request["snqi_v2_anchors"] = str(snqi_v2_anchors.resolve())
+    with _resolved_source_checkout(source_root, commit, path, payload) as (checkout, identity):
+        request["resolved_identity_path"] = str(identity)
+        result = subprocess.run(
+            [sys.executable, "-I", str(Path(__file__).with_name("_pinned_successor_runtime.py"))],
+            cwd=checkout,
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if result.returncode:
+        raise ValueError(f"resolved successor verification failed: {result.stderr.strip()}")
+    runtime = json.loads(result.stdout)
+    _verify_sha256(path, digest, label="successor manifest SHA-256")
+    _require_clean_source(source_root, commit)
+    resolved = payload["resolved_manifest"]
+    for binding in resolved["planners"]["config_identities"]:
+        if (
+            binding.get("path") is not None
+            and hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
+            != binding["sha256"]
+        ):
+            raise ValueError("resolved successor planner Git blob mismatch")
+    config_path = resolved["canonical_campaign_config"]
+    scenario_path = resolved["scenario"]["matrix_path"]
+    for name, expected in (
+        (config_path, resolved["canonical_campaign_config_sha256"]),
+        (scenario_path, resolved["scenario"]["matrix_sha256"]),
+    ):
+        if hashlib.sha256(_source_bytes(source_root, commit, name)).hexdigest() != expected:
+            raise ValueError("resolved successor input Git blob mismatch")
+    return {
+        "source_commit": commit,
+        "campaign_config": {
+            "path": config_path,
+            "sha256": resolved["canonical_campaign_config_sha256"],
+            "runtime_hash": runtime["config_hash"],
+        },
+        "scenario_matrix": {
+            "path": scenario_path,
+            "sha256": resolved["scenario"]["matrix_sha256"],
+            "runtime_hash": runtime["scenario_hash"],
+        },
+        "planner_keys": resolved["planners"]["keys"],
+        "runtime_rows": {tuple(item.pop("slot")): item for item in runtime["rows"]},
+        "scoped_hashes": {
+            (item["planner"], item["kinematics"]): item["hash"] for item in runtime["scoped_hashes"]
+        },
+        "expected_slots": {tuple(item) for item in runtime["expected_slots"]},
+        "manifest_sha256": digest,
+    }
+
+
+def _require_clean_source(root, commit):
+    """The successor checkout must remain clean at the identity's exact source."""
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    dirty = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if head != commit or dirty:
+        raise ValueError("successor source checkout must be clean at the resolved source commit")
+
+
+def _tooling_identity(expected_commit=None):
+    """Record the executing helper revision independently of the acquired source."""
+    root = Path(__file__).resolve().parents[2]
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if expected_commit is not None:
+        _require_clean_source(root, expected_commit)
+    return {
+        "commit": commit,
+        "file": "scripts/analysis/compare_release_0_0_7_to_0_0_8.py",
+        "file_sha256": _sha256(Path(__file__)),
+    }
+
+
 def _verified_successor_manifest(  # noqa: C901, PLR0912
     path: Path,
     digest: str,
     source_root: Path,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
+    *,
+    snqi_v2_anchors: Path | None = None,
 ) -> dict[str, Any]:
     _verify_sha256(
         path, _hex_digest(digest, "successor manifest digest"), label="successor manifest SHA-256"
     )
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        isinstance(manifest, dict)
+        and manifest.get("schema_version") == "benchmark-release-resolved-identity.v1"
+    ):
+        return _verified_resolved_successor(
+            path, digest, source_root, rows, snqi_v2_anchors=snqi_v2_anchors
+        )
     if (
         not isinstance(manifest, dict)
         or manifest.get("schema_version") != "slot-paired-successor.v1"
@@ -472,8 +674,20 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
         actual = hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
         if actual != expected:
             raise ValueError(f"successor planner binding SHA-256 mismatch: {key}")
+    publication = manifest["campaign_config"].get("publication_identity")
+    if "publication_identity" in manifest["campaign_config"] and (
+        not isinstance(publication, dict)
+        or set(publication) != {"release_tag", "doi"}
+        or any(not isinstance(value, str) or not value.strip() for value in publication.values())
+    ):
+        raise ValueError(
+            "publication_identity requires only release_tag and doi as nonempty strings"
+        )
+    runtime_kwargs = {"publication_identity": publication} if publication is not None else {}
     config_hash, scenario_hash, runtime_rows, scoped_hashes, expected_slots = (
-        _runtime_successor_identity(source_root, commit, manifest["campaign_config"]["path"], rows)
+        _runtime_successor_identity(
+            source_root, commit, manifest["campaign_config"]["path"], rows, **runtime_kwargs
+        )
     )
     for key, actual in (("campaign_config", config_hash), ("scenario_matrix", scenario_hash)):
         if manifest[key]["runtime_hash"] != actual:
@@ -494,7 +708,12 @@ def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
     git = manifest.get("git")
     source = git.get("commit") if isinstance(git, dict) else None
     campaign_id = manifest.get("campaign_id")
-    if campaign_id != expected["campaign_id"] or source != expected["source_commit"]:
+    if (
+        not isinstance(campaign_id, str)
+        or not campaign_id
+        or ("campaign_id" in expected and campaign_id != expected["campaign_id"])
+        or source != expected["source_commit"]
+    ):
         raise ValueError("0.0.8 campaign ID/source differs from verified successor manifest")
     checks = {
         "config_hash": expected["campaign_config"]["runtime_hash"],
@@ -511,16 +730,6 @@ def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
         "scenario_matrix_hash": str(manifest.get("scenario_matrix_hash", "")),
         "config_hash": str(manifest.get("config_hash", "")),
     }
-
-
-def _matches_config_path(observed: Any, expected: str | None) -> bool:
-    if expected is None:
-        return observed is None
-    if not isinstance(observed, str) or not observed:
-        return False
-    observed_parts = Path(observed).parts
-    expected_parts = Path(expected).parts
-    return observed_parts[-len(expected_parts) :] == expected_parts
 
 
 def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail independently
@@ -556,7 +765,9 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
             field not in scenario or scenario[field] != expected
         ):
             raise ValueError(f"0.0.8 row {field} differs from pinned scenario at {slot}")
-    if scenario.get("seed") != slot[3]:
+    # Camera-ready identity payloads omit seed; the row slot and pinned seed
+    # inventory bind it. A legacy explicit seed must still agree.
+    if "seed" in scenario and scenario["seed"] != slot[3]:
         raise ValueError(f"0.0.8 row seed differs from pinned slot at {slot}")
     controls = planner["controls"]
     control_fields = {
@@ -594,13 +805,17 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
             raise ValueError(f"0.0.8 row {field} differs from pinned episode controls at {slot}")
     if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
         raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")
-    if metadata.get("algorithm") != planner["algo"]:
+    if metadata.get("algorithm") != planner["metadata_algorithm"]:
         raise ValueError(f"0.0.8 row algorithm metadata differs from configured planner at {slot}")
-    if recorded["planner_key"] is not None and recorded["planner_key"] != slot[0]:
+    if ("canonical_algorithm" in metadata or planner["algo"] == "guarded_ppo") and metadata.get(
+        "canonical_algorithm"
+    ) != planner["algo"]:
+        raise ValueError(f"0.0.8 row canonical algorithm differs from configured planner at {slot}")
+    if recorded.get("planner_key") is not None and recorded["planner_key"] != slot[0]:
         raise ValueError(f"0.0.8 row planner_key differs from run directory at {slot}")
     if (
-        metadata.get("config") != planner["config"]
-        or metadata.get("config_hash") != planner["config_hash"]
+        metadata.get("config") != planner["metadata_config"]
+        or metadata.get("config_hash") != planner["metadata_config_hash"]
     ):
         raise ValueError(f"0.0.8 row effective planner config differs from pinned source at {slot}")
     if recorded["config_hash"] != planner["scenario_config_hash"]:
@@ -611,33 +826,34 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
         raise ValueError(
             f"0.0.8 row scenario planner config hash differs from pinned source at {slot}"
         )
-    if not isinstance(provenance, dict) or provenance.get("commit_hash") != source_commit:
+    if not isinstance(provenance, dict) or provenance.get("git_hash") != source_commit:
         raise ValueError(f"0.0.8 row run provenance source differs from campaign at {slot}")
-    identity = provenance.get("config_identity")
-    if (
-        not isinstance(identity, dict)
-        or identity.get("algo") != planner["algo"]
-        or not _matches_config_path(identity.get("algo_config_path"), planner["path"])
-    ):
-        raise ValueError(f"0.0.8 row run provenance differs from configured planner at {slot}")
 
 
 def _validate_row_runner_hashes(
-    slot: tuple[str, str, str, int, str],
-    row: Mapping[str, Any],
-    scoped_hash: str,
-    campaign_config_hash: str,
+    slot: tuple[str, str, str, int, str], row: Mapping[str, Any]
 ) -> None:
-    """Bind every row in a configured arm to its pinned runner scope."""
-    provenance = row["_provenance"]["provenance"]
-    identity = provenance.get("config_identity") if isinstance(provenance, dict) else None
-    if not isinstance(identity, dict) or identity.get("scenario_matrix_hash") != scoped_hash:
+    """Verify camera-ready episode provenance against its effective scenario.
+
+    The map runner records a scenario config_hash and git_hash, not the classic
+    runner's config_identity. Campaign/matrix hashes are verified on the pinned
+    campaign manifest; expected slots and effective controls bind rows to that
+    scope in _validate_successor_row.
+    """
+    from robot_sf.benchmark.utils import _config_hash
+
+    recorded = row["_provenance"]
+    provenance = recorded["provenance"]
+    scenario = recorded["scenario_params"]
+    if (
+        not isinstance(provenance, dict)
+        or not isinstance(scenario, dict)
+        or provenance.get("config_hash") != recorded["config_hash"]
+        or provenance.get("config_hash") != _config_hash(scenario)
+    ):
         raise ValueError(
-            f"0.0.8 row scenario_matrix_hash differs from pinned scoped runner at {slot}"
+            f"0.0.8 row provenance config_hash differs from effective scenario at {slot}"
         )
-    for field in ("campaign_config_hash", "config_hash"):
-        if field in identity and identity[field] != campaign_config_hash:
-            raise ValueError(f"0.0.8 row {field} differs from pinned campaign config at {slot}")
 
 
 def _fields(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -887,6 +1103,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     successor_manifest: Path,
     successor_manifest_sha256: str,
     successor_source_root: Path,
+    snqi_v2_anchors: Path | None = None,
     baseline_root: Path | None = None,
     classification_file: Path | None = None,
     baseline_sha256: str = BASELINE_SHA256,
@@ -929,7 +1146,11 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         raise ValueError(f"0.0.7 scenario identity mismatch: {scenario_identity} != {expected}")
     new, duplicates, duplicate_rows = _root_rows(successor_root)
     verified_successor = _verified_successor_manifest(
-        successor_manifest, successor_manifest_sha256, successor_source_root, new
+        successor_manifest,
+        successor_manifest_sha256,
+        successor_source_root,
+        new,
+        snqi_v2_anchors=snqi_v2_anchors,
     )
     successor_identity = _root_identity(successor_root, verified_successor)
     expected_slots = verified_successor["expected_slots"]
@@ -948,7 +1169,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
         scoped_hash = verified_successor["scoped_hashes"].get(key[:2])
         if scoped_hash is not None:
-            _validate_row_runner_hashes(key, row, scoped_hash, successor_identity["config_hash"])
+            _validate_row_runner_hashes(key, row)
         if key in extra_slots:
             continue
         _validate_successor_row(
@@ -989,6 +1210,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "mean_0_0_7": None,
                 "mean_0_0_8": None,
                 "mean_paired_delta": None,
+                "metric_comparability": "compatible",
                 "only_0_0_7": 0,
                 "only_0_0_8": 0,
                 "_old": [],
@@ -1050,6 +1272,18 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "rule_id": "",
             }
         )
+        if (
+            slot in old
+            and slot in new
+            and changed_metric_field(field)
+            and metric_schema_version(old[slot]) != metric_schema_version(new[slot])
+        ):
+            finding.update(
+                classification="metric_definition_change",
+                delta_0_0_8_minus_0_0_7=None,
+                issue="10007",
+                explanation="F4/F5/F7/F8 changed metric definitions; recompute both releases from traces before interpreting a paired effect.",
+            )
         findings.append(finding)
 
     for slot in sorted(missing_slots):
@@ -1080,16 +1314,22 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             old_value = old_fields.get(field, MISSING)
             new_value = new_fields.get(field, MISSING)
             item = summary(slot, field)
+            incompatible = changed_metric_field(field) and metric_schema_version(
+                old_row
+            ) != metric_schema_version(new_row)
+            if incompatible:
+                item["metric_comparability"] = "incompatible_definitions"
             if old_value is not MISSING and new_value is not MISSING:
                 item["paired_count"] += 1
                 a, b = _number(old_value), _number(new_value)
                 if a is not None and b is not None:
                     item["_old"].append(a)
                     item["_new"].append(b)
-                    item["_delta"].append(b - a)
+                    if not incompatible:
+                        item["_delta"].append(b - a)
             else:
                 item["only_0_0_7" if new_value is MISSING else "only_0_0_8"] += 1
-            if _different(old_value, new_value):
+            if incompatible or _different(old_value, new_value):
                 item["changed_count"] += 1
                 add_finding(slot, "paired", field, old_value, new_value)
 
@@ -1101,9 +1341,17 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         ):
             values = item.pop(private)
             item[public] = sum(values) / len(values) if values else None
+        if item["metric_comparability"] == "incompatible_definitions":
+            item["mean_paired_delta"] = None
     rule_coverage = []
     rule_matches = [
-        [finding for finding in findings if _rule_matches(rule, finding)] for rule in rules
+        [
+            finding
+            for finding in findings
+            if finding["classification"] != "metric_definition_change"
+            and _rule_matches(rule, finding)
+        ]
+        for rule in rules
     ]
     over_limit_findings = {
         finding["finding_id"]
@@ -1141,6 +1389,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     unexplained = sum(finding["classification"] == "unexplained" for finding in findings)
     return {
         "schema_version": "slot-paired-release-diff.v1",
+        "tooling": _tooling_identity(),
         "baseline": {"release": "0.0.7", **baseline_identity},
         "successor": {
             "release": "0.0.8",
@@ -1148,6 +1397,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "verified_manifest_sha256": successor_manifest_sha256,
             **successor_identity,
         },
+        "metric_definition_policy": "Unmarked 0.0.7 rows use robot-sf-metrics.v1; v2 changes F4/F5/F7/F8. Changed fields have no paired delta across schemas; old/new means are diagnostic only. Outcomes retain their definitions.",
         "slot_columns": list(SLOT_COLUMNS),
         "v4_slot_replacements": V4_SLOT_REPLACEMENTS,
         "numeric_tolerance_absolute": TOLERANCE,
@@ -1221,6 +1471,7 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         "",
         "See `findings.csv` for every changed field and release-only row, and",
         "`planner_scenario_metrics.csv` for paired means and differences.",
+        report["metric_definition_policy"],
         "",
     ]
     (output_dir / "summary.md").write_text("\n".join(lines), encoding="utf-8")
@@ -1233,6 +1484,8 @@ def main() -> int:
     baseline.add_argument("--baseline-bundle", type=Path)
     baseline.add_argument("--baseline-root", type=Path)
     parser.add_argument("--successor-root", required=True, type=Path)
+    parser.add_argument("--expected-tooling-commit", help="Exact clean main tooling checkout SHA")
+    parser.add_argument("--snqi-v2-anchors", type=Path)
     parser.add_argument("--successor-manifest", required=True, type=Path)
     parser.add_argument("--successor-manifest-sha256", required=True)
     parser.add_argument("--successor-source-root", required=True, type=Path)
@@ -1241,12 +1494,14 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     try:
+        _tooling_identity(args.expected_tooling_commit)
         report = compare(
             args.baseline_bundle,
             args.successor_root,
             successor_manifest=args.successor_manifest,
             successor_manifest_sha256=args.successor_manifest_sha256,
             successor_source_root=args.successor_source_root,
+            snqi_v2_anchors=args.snqi_v2_anchors,
             baseline_root=args.baseline_root,
             classification_file=args.classification_file,
             broad_rule_bound_threshold=args.broad_rule_bound_threshold,

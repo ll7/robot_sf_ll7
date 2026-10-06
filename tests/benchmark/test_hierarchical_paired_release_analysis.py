@@ -631,3 +631,11 @@ def test_fail_closed_analysis_from_manifest_reports_blocked_analysis_not_run() -
     conformance = {row["id"]: row["status"] for row in report["protocol_conformance"]}
     assert set(conformance.values()) == {"declared_pending_analysis"}
     assert report["semantics"]["claim_promotion"] == "none"
+
+
+def test_mixed_metric_definitions_cannot_pool_distance_exposure():
+    """Ledger exposure inherits path-length meaning across release adapters."""
+    rows = _two_arm_rows()
+    rows[0]["metric_schema_version"] = "robot-sf-metrics.v2"
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))

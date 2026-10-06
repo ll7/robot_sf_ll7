@@ -107,6 +107,8 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
             self.pose = new_pose
 
     sim = object.__new__(simulator_module.PedSimulator)
+    sim.config = SimpleNamespace(pedestrian_seed=1001)
+    sim._ego_rng = SimpleNamespace(integers=lambda size: 0)
     sim.robots = [SimpleNamespace()]
     sim.robot_navs = [SimpleNamespace(reached_waypoint=True, reached_destination=False)]
     sim.spawn_near_robot = False
@@ -124,8 +126,7 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
     sim.ego_ped = _EgoPedStub()
     sim._sync_ego_ped_social_force_state = lambda: None
 
-    monkeypatch.setattr(simulator_module, "sample", lambda population, k: [population[0]])
-    monkeypatch.setattr(simulator_module, "sample_zone", lambda zone, count: [(9.0, 9.0)])
+    monkeypatch.setattr(simulator_module, "sample_zone", lambda zone, count, *, rng: [(9.0, 9.0)])
 
     simulator_module.PedSimulator.reset_state(sim)
 
@@ -147,6 +148,8 @@ def test_ped_simulator_reset_requires_spawn_zone_when_spawn_near_robot_disabled(
             raise AssertionError(f"unexpected reset_state call: {new_pose}")
 
     sim = object.__new__(simulator_module.PedSimulator)
+    sim.config = SimpleNamespace(pedestrian_seed=1001)
+    sim._ego_rng = SimpleNamespace(integers=lambda size: 0)
     sim.robots = [SimpleNamespace()]
     sim.robot_navs = [SimpleNamespace(reached_waypoint=True, reached_destination=False)]
     sim.spawn_near_robot = False

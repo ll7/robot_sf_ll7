@@ -270,3 +270,71 @@ def test_base_contact_table_keeps_guard_fields_na() -> None:
     assert table_row["final_guard_label"] == "NA"
     assert table_row["final_guard_intervened"] == "NA"
     assert table_row["final_guard_override_applied"] == "NA"
+
+
+@pytest.mark.parametrize("arm", [GUARDED_ARM, BASE_ARM])
+def test_arm_passes_pinned_runtime_identity_to_integrity(tmp_path, monkeypatch, arm):
+    """The published-arm caller must admit a coherent dev row at its integrity boundary."""
+    import json
+
+    import scripts.analysis.analyze_guarded_ppo_obstacle_trade_issue_9480 as analyzer
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+        resolve_episode_policy_runtime,
+    )
+    from robot_sf.benchmark.utils import _config_hash
+
+    expected = EXPECTED_ARMS[arm]
+    scenario = {"name": "dev", "seeds": [1001]}
+    algo, config = resolve_episode_policy_runtime(
+        default_algo=expected["algo"],
+        algo_config_path=expected["config_path"],
+        scenario=scenario,
+        seed=1001,
+    )
+    # Independent pinned digests come from the published analyzer contract.
+    assert _config_hash(config) == expected["scenario_config_hash"]
+    params = {"algo": algo, "algo_config_hash": expected["scenario_config_hash"]}
+    row = {
+        "scenario_id": "dev",
+        "seed": 1001,
+        "algo": algo,
+        "scenario_params": params,
+        "config_hash": _config_hash(params),
+        "git_hash": "dev-commit",
+    }
+    path = tmp_path / "payload/runs" / arm / "episodes.jsonl"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(row) + "\n")
+    summary = {
+        "total_jobs": 1440,
+        "written": 1440,
+        "successful_jobs": 1440,
+        "failed_jobs": 0,
+        "skipped_jobs": 0,
+        "failures": [],
+        "algorithm_metadata_contract": {"status": "ok"},
+        "preflight": {"status": "ok"},
+    }
+    monkeypatch.setattr(
+        analyzer, "_read_json", lambda p: summary if p.name == "summary.json" else {}
+    )
+    monkeypatch.setattr(analyzer, "EXPECTED_SEEDS", (1001,))
+    original = analyzer._require_equal
+
+    class IntegrityBoundaryReached(Exception):
+        pass
+
+    def check_boundary(actual, wanted, label):
+        original(actual, wanted, label)
+        if label == f"{arm} canonical campaign integrity":
+            raise IntegrityBoundaryReached
+
+    # Stop after the real checker accepts, before unrelated full-release provenance checks.
+    monkeypatch.setattr(analyzer, "_require_equal", check_boundary)
+    with pytest.raises(IntegrityBoundaryReached):
+        analyzer._validate_arm(
+            tmp_path,
+            arm=arm,
+            scenarios=[scenario],
+            campaign_manifest={"git": {"commit": "dev-commit"}},
+        )

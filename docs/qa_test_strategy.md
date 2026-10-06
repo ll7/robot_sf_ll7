@@ -119,6 +119,12 @@ Contributors must run validation commands matching their change class. The repos
 
 ---
 
+Fast-feedback uses six full-suite shards on main (fast-only on PRs), preserving runner worker limits. The shell driver selects pytest-split `least_duration`: greedy assignment spreads missing-duration nodes instead of preserving a contiguous unmeasured prefix. The dispatch job freezes one validated cache (or one empty cold input) in one fixed-name artifact shared by every shard, including retries. Each shard downloads it using an explicit run ID and read-only Actions token, so delivery is independent of runner cache compression and workflow attempt. Invalid historical hints warn and normalize to one empty cold input; snapshot download is mandatory. This prevents staggered jobs restoring different latest caches. Cache hits change placement only; the shard union must equal the complete selected lane.
+
+Fast-feedback shards use xdist `worksteal`, so idle workers can take queued release checks from a busy worker. Unsharded local runs retain `load`; `PYTEST_XDIST_DIST` remains an explicit override. No test or coverage selection changes with this scheduler.
+
+The aggregate job publishes nonempty, validated duration hints even when a sibling shard fails or is cancelled. The versioned cache includes source/run/key provenance and explicitly records incomplete matrices; these hints never establish a test or release verdict. OS/architecture-scoped restore fallbacks survive dependency-key changes. CI retains downloaded uv wheels rather than pruning them into a metadata-only cache; frozen dependency sync still verifies the lock.
+
 ## Failure Classification & Rerun Boundaries
 
 To preserve benchmark credibility and prevent wasted CI compute, test failures must be triaged according to their root cause. **Rerunning CI jobs is strictly governed by failure class.**
@@ -156,3 +162,12 @@ When presenting test results, contributors and AI agents must adhere to the foll
 - **[Glossary](./glossary.md)** — Canonical definitions of repository terms (VRU, AMV, SNQI, ODD, etc.).
 - **[CI Reproducibility & Flaky Policy](./context/issue_1436_reproducibility_flaky_acceptance.md)** — Detailed CI lane mapping and flaky failure triage rules.
 - **[Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** — Fail-closed requirements for benchmark evaluation.
+
+
+CI setup contracts for uv install, cache diagnostics and sync retries are registered in
+`tests/conftest.py` so pull-request fast feedback executes them. A small `_FAST_NODE_IDS`
+allowlist also admits the serial-fallback shell contract and all its parameter cases; the
+rest of that large script-contract file retains its full-suite classification. Duration
+caches affect shard assignment and ordering, while `not slow` affects selection: a green
+PR fast suite does not establish a passing complete suite. Verify setup/driver changes
+with their explicit contracts and the complete suite before release-path handoff.

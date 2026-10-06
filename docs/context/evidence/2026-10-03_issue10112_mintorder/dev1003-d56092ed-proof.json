@@ -1,0 +1,26 @@
+{
+  "actual_rows": 14,
+  "actual_seeds": [
+    1003
+  ],
+  "config_path_note": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml",
+  "config_sha256": "6471bc36db5806badd527701ca30b2f63f425dd3830d6b2b86cfa00ade1f5c46",
+  "files_preserved": 93,
+  "public_contract": {
+    "campaign_id_note": "mintorder-v06-dev1003-d56092ed9d4b",
+    "checkpoint_receipt_sha256": "a597b802a5e32ec82aae3f0a27769773ede265b1d4a4af4765189c590f7c1fa2",
+    "episode_cells": 14,
+    "episodes_excluded": 0,
+    "exclusion_reasons": {},
+    "fallback_or_degraded_rows": 0,
+    "finished_at_utc": "2026-10-03T12:09:50.799553Z",
+    "planner_arms": 14,
+    "producer_commit_note": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "result_sha256": "abb263b4f46f78acaca0d0aa22df205ce3a6368d451b1bf95bc3ba928e022fca",
+    "schema_version": "benchmark-runtime-smoke-admission.v1",
+    "status": "admitted"
+  },
+  "raw_sidecars_byte_verified": true,
+  "scientific_admission": false,
+  "source": "d56092ed9d4b442f9dfb99e31010a9f5a8666547"
+}

@@ -1,0 +1,11 @@
+{
+  "head": "6fd6d463c0422367802787c3c1ae2cb28347ad5d",
+  "files": {
+    "robot_sf/planner/socnav_occupancy.py": "1f2b764cffa6f328a72273d346e18805f7e12c069a8c36de7fca5cfeda09a930",
+    "robot_sf/planner/socnav_orca.py": "de5b625c15ae158af2dd3131033f5970ee80c4623838bbeedb4d5c19dcf2df4e",
+    "robot_sf/planner/socnav_sacadrl.py": "cbe98b68599852e721c0c6faf9f0083fb5d66be3188e799c31c9ae6ab6726b90",
+    "robot_sf/planner/socnav_sampling_v2.py": "03211c15bc78cef68ee4626a0656c74243b6d76c0a4716cbf419ed8f87ddd1ef",
+    "robot_sf/planner/socnav_social_force.py": "1188355afc3ae52f58b3aa1f946d5c7b78e0e9cafbb7285172a21ed32c062f43",
+    "configs/algos/orca_release_v0_0_8.yaml": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4"
+  }
+}

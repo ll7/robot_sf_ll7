@@ -13,6 +13,22 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
+from robot_sf.planner.clearance_geometry import (
+    CENTER_CLEARANCE_V1,
+    least_bad_clearance_rank,
+    obstacle_rollout_admissible,
+    occupied_cell_clearance,
+    pedestrian_clearance,
+    surface_search_radius_cells,
+    time_to_circle_contact,
+    validate_clearance_model,
+    validate_surface_clearance_radii,
+)
+from robot_sf.planner.goal_target import (
+    LEGACY_NEXT_GOAL_V1,
+    select_goal_target,
+    validate_goal_target_version,
+)
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
@@ -54,6 +70,7 @@ class RiskDWAPlannerConfig:
     rollout_dt: float = 0.2
     rollout_steps: int = 8
     goal_tolerance: float = 0.25
+    goal_target_version: str = LEGACY_NEXT_GOAL_V1
 
     linear_candidates: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)
     angular_candidates: tuple[float, ...] = (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2)
@@ -78,14 +95,83 @@ class RiskDWAPlannerConfig:
     progress_escape_distance: float = 1.0
     progress_escape_speed: float = 0.45
     progress_escape_heading_gain: float = 1.4
+    clearance_model: str = CENTER_CLEARANCE_V1
+    robot_radius_m: float = 1.0
+    pedestrian_radius_m: float = 0.4
+    hard_obstacle_clearance: float = 0.30
+    dynamic_window_version: str = "fixed_v1"
+    dynamic_window_dt: float = 0.1
+    max_linear_accel: float = 1.0
+    max_linear_decel: float = 1.0
+    max_angular_accel: float = 1.0
+
+    def __post_init__(self) -> None:
+        """Validate route selection and physical geometry before execution."""
+        validate_goal_target_version(self.goal_target_version)
+        validate_clearance_model(self.clearance_model)
+        validate_surface_clearance_radii(
+            self.clearance_model,
+            robot_radius=self.robot_radius_m,
+            pedestrian_radius=self.pedestrian_radius_m,
+        )
+        for field_name in ("robot_radius_m", "pedestrian_radius_m", "hard_obstacle_clearance"):
+            value = float(getattr(self, field_name))
+            if not np.isfinite(value) or value < 0.0:
+                raise ValueError(f"{field_name} must be finite and non-negative")
+        if self.dynamic_window_version not in {"fixed_v1", "drive_limited_v2"}:
+            raise ValueError("dynamic_window_version must be fixed_v1 or drive_limited_v2")
+        for field_name in (
+            "dynamic_window_dt",
+            "max_linear_accel",
+            "max_linear_decel",
+            "max_angular_accel",
+        ):
+            value = float(getattr(self, field_name))
+            if not np.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{field_name} must be finite and positive")
 
 
 class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     """Deterministic, non-learning dynamic-window style planner."""
 
+    # Observational only: the target chosen by the last ``plan`` call (world x, y).
+    _last_target_xy: tuple[float, float] | None = None
+
     def __init__(self, config: RiskDWAPlannerConfig | None = None) -> None:
         """Initialize adapter with an optional config override."""
         self.config = config or RiskDWAPlannerConfig()
+        self._no_admissible_command = False
+        self._no_admissible_command_count = 0
+        self._recovery_command_count = 0
+        self._recovery_command = False
+
+    def bind_env(self, env: Any) -> None:
+        """Bind the episode's original static grid geometry."""
+        self._bind_static_obstacles(env)
+
+    def _dynamic_window(
+        self, observation: dict[str, Any], current_speed: float, speed_cap: float
+    ) -> tuple[float, float, float, float]:
+        """Return reachable velocity bounds over one drive control step."""
+        if self.config.dynamic_window_version == "fixed_v1":
+            return 0.0, speed_cap, -self.config.max_angular_speed, self.config.max_angular_speed
+        robot_state = self._socnav_fields(observation)[0]
+        angular_speed = float(
+            self._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0]
+        )
+        dt = float(self.config.dynamic_window_dt)
+        linear_min = max(0.0, current_speed - self.config.max_linear_decel * dt)
+        linear_max = min(
+            self.config.max_linear_speed, current_speed + self.config.max_linear_accel * dt
+        )
+        linear_max = max(linear_min, min(linear_max, speed_cap))
+        angular_min = max(
+            -self.config.max_angular_speed, angular_speed - self.config.max_angular_accel * dt
+        )
+        angular_max = min(
+            self.config.max_angular_speed, angular_speed + self.config.max_angular_accel * dt
+        )
+        return linear_min, linear_max, angular_min, angular_max
 
     def _extract_robot_goal_ped(
         self, observation: dict[str, Any]
@@ -103,7 +189,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > 1e-6 else goal_current
+        goal = select_goal_target(
+            robot_pos, goal_current, goal_next, version=self.config.goal_target_version
+        )
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")
@@ -170,6 +258,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Clearance in meters (`inf` when unavailable/no nearby obstacle).
         """
+        exact = self._exact_obstacle_clearance(point)
+        if exact is not None:
+            return exact
         if grid_payload is None:
             if observation is None:
                 raise ValueError(
@@ -185,14 +276,31 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         rc = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
         if rc is None:
-            return 0.0
+            return (
+                -float(self.config.robot_radius_m)
+                if self.config.clearance_model == "surface_v2"
+                else 0.0
+            )
         row, col = rc
         channel_grid = np.asarray(grid[channel], dtype=float)
         threshold = float(self.config.obstacle_threshold)
-        if channel_grid[row, col] >= threshold:
+        if channel_grid[row, col] >= threshold and self.config.clearance_model != "surface_v2":
             return 0.0
 
-        radius = max(int(self.config.obstacle_search_cells), 1)
+        resolution = max(float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0]), 1e-6)
+        radius = (
+            surface_search_radius_cells(
+                self.config.robot_radius_m,
+                max(
+                    self.config.hard_obstacle_clearance,
+                    self.config.safe_distance,
+                    self.config.near_distance,
+                ),
+                resolution,
+            )
+            if self.config.clearance_model == "surface_v2"
+            else max(int(self.config.obstacle_search_cells), 1)
+        )
         r0 = max(0, row - radius)
         r1 = min(channel_grid.shape[0], row + radius + 1)
         c0 = max(0, col - radius)
@@ -204,9 +312,14 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        cell_dist = np.sqrt(dr.astype(float) ** 2 + dc.astype(float) ** 2)
-        resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(cell_dist) * max(resolution, 1e-6))
+        return occupied_cell_clearance(
+            dr,
+            dc,
+            resolution=resolution,
+            model=self.config.clearance_model,
+            robot_radius=self.config.robot_radius_m,
+            point_offset_xy_m=self._point_offset_in_grid_cell(point, meta, row, col),
+        )
 
     def _ttc_proxy(
         self,
@@ -231,6 +344,18 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         valid = rel_speed_sq > 1e-6
         if not np.any(valid):
             return float("inf")
+        if self.config.clearance_model == "surface_v2":
+            contact_times = [
+                time_to_circle_contact(
+                    rel_pos,
+                    rel_vel,
+                    combined_radius=(
+                        float(self.config.robot_radius_m) + float(self.config.pedestrian_radius_m)
+                    ),
+                )
+                for rel_pos, rel_vel in zip(rel_pos[valid], rel_vel[valid], strict=True)
+            ]
+            return float(min(contact_times, default=float("inf")))
         ttc = -np.sum(rel_pos[valid] * rel_vel[valid], axis=1) / rel_speed_sq[valid]
         ttc = ttc[ttc > 0.0]
         if ttc.size == 0:
@@ -271,6 +396,24 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
             grid_payload=grid_payload,
         )
+        current_clearance = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        previous = robot_pos
+        for point in trajectory:
+            swept = self._exact_obstacle_clearance(point, previous=previous)
+            if swept is not None:
+                min_obs_clear = min(min_obs_clear, swept)
+            previous = point
+        if self.config.clearance_model == "surface_v2" and (
+            min_ped_clear < float(self.config.safe_distance)
+            or not obstacle_rollout_admissible(
+                current_clearance if self._static_recovery_available() else float("inf"),
+                min_obs_clear,
+                float(self.config.hard_obstacle_clearance),
+            )
+        ):
+            return float("-inf")
         x = trajectory[-1]
 
         end_dist = float(np.linalg.norm(goal - x))
@@ -355,6 +498,13 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             k = np.arange(1, steps + 1, dtype=float)
             forecast = ped_pos[None, :, :] + ped_vel[None, :, :] * (k[:, None, None] * dt)
             ped_dist = np.linalg.norm(forecast - positions[:, None, :], axis=-1)
+            ped_dist = pedestrian_clearance(
+                ped_dist,
+                model=self.config.clearance_model,
+                robot_radius=self.config.robot_radius_m,
+                pedestrian_radius=self.config.pedestrian_radius_m,
+            )
+            assert isinstance(ped_dist, np.ndarray)
             min_ped_clear = float(np.min(ped_dist))
 
         min_obs_clear = float("inf")
@@ -369,14 +519,51 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         return min_ped_clear, min_obs_clear
 
+    def _infeasible_command_rank(
+        self, command, *, robot_pos, heading, goal, ped_pos, ped_vel, observation, grid_payload
+    ) -> tuple[float, float]:
+        """Evaluate rejected commands with the same rollout and swept geometry.
+
+        Returns:
+            tuple: Worst clearance margin and goal progress, in metres.
+        """
+        steps = max(int(self.config.rollout_steps), 1)
+        trajectory, _ = self._rollout_trajectory(
+            robot_pos=robot_pos, heading=heading, command=command, steps=steps
+        )
+        ped_clear, obs_clear = self._rollout_min_clearance(
+            positions=trajectory,
+            steps=steps,
+            ped_pos=ped_pos,
+            ped_vel=ped_vel,
+            observation=observation,
+            grid_payload=grid_payload,
+        )
+        previous = robot_pos
+        for point in trajectory:
+            swept = self._exact_obstacle_clearance(point, previous=previous)
+            if swept is not None:
+                obs_clear = min(obs_clear, swept)
+            previous = point
+        return least_bad_clearance_rank(
+            ped_clear,
+            obs_clear,
+            ped_threshold=float(self.config.safe_distance),
+            obstacle_threshold=float(self.config.hard_obstacle_clearance),
+            progress=float(
+                np.linalg.norm(goal - robot_pos) - np.linalg.norm(goal - trajectory[-1])
+            ),
+        )
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
+        self._no_admissible_command = False
+        self._recovery_kind = None
+        self._recovery_command = False
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
+        self._last_target_xy = (float(goal[0]), float(goal[1]))
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
-        if to_goal <= float(self.config.goal_tolerance):
-            return 0.0, 0.0
-
         current_speed = float(
             self._as_1d_float(self._socnav_fields(observation)[0].get("speed", [0.0]), pad=1)[0]
         )
@@ -386,15 +573,29 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             float(self.config.max_linear_speed),
             float(self.config.max_linear_speed) * density_scale,
         )
+        linear_min, linear_max, angular_min, angular_max = self._dynamic_window(
+            observation, current_speed, speed_cap
+        )
+        braking_cmd = (
+            float(np.clip(0.0, linear_min, linear_max)),
+            float(np.clip(0.0, angular_min, angular_max)),
+        )
+        if to_goal <= float(self.config.goal_tolerance):
+            return braking_cmd
         best_score = float("-inf")
-        best_cmd = (0.0, 0.0)
+        best_cmd = braking_cmd
 
-        for v_raw in self.config.linear_candidates:
-            v = float(np.clip(v_raw, 0.0, speed_cap))
-            for w_raw in self.config.angular_candidates:
-                w = float(
-                    np.clip(w_raw, -self.config.max_angular_speed, self.config.max_angular_speed)
-                )
+        linear_candidates = self.config.linear_candidates
+        angular_candidates = self.config.angular_candidates
+        if self.config.dynamic_window_version == "drive_limited_v2":
+            linear_candidates = (*linear_candidates, linear_min, linear_max)
+            angular_candidates = (*angular_candidates, angular_min, angular_max)
+        recovery_candidates = [(braking_cmd, "brake")]
+        for v_raw in linear_candidates:
+            v = float(np.clip(v_raw, linear_min, linear_max))
+            for w_raw in angular_candidates:
+                w = float(np.clip(w_raw, angular_min, angular_max))
+                recovery_candidates.append(((v, w), "least_bad_clearance"))
                 score = self._rollout_score(
                     robot_pos=robot_pos,
                     heading=heading,
@@ -411,20 +612,21 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     best_cmd = (v, w)
 
         if bool(self.config.progress_escape_enabled):
-            if (
-                to_goal > float(self.config.progress_escape_distance)
-                and best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
+            if to_goal > float(self.config.progress_escape_distance) and (
+                best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
+                or best_score == float("-inf")
             ):
                 goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
                 heading_err = _wrap_angle(goal_heading - heading)
-                escape_v = float(np.clip(self.config.progress_escape_speed, 0.0, speed_cap))
+                escape_v = float(np.clip(self.config.progress_escape_speed, linear_min, linear_max))
                 escape_w = float(
                     np.clip(
                         heading_err * float(self.config.progress_escape_heading_gain),
-                        -float(self.config.max_angular_speed),
-                        float(self.config.max_angular_speed),
+                        angular_min,
+                        angular_max,
                     )
                 )
+                recovery_candidates.append(((escape_v, escape_w), "progress_escape"))
                 escape_score = self._rollout_score(
                     robot_pos=robot_pos,
                     heading=heading,
@@ -439,11 +641,54 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                 if escape_score > best_score:
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
+        # Keep finite-score arbitration unchanged. Rank only the infeasible state.
+        if best_score == float("-inf"):
+            self._no_admissible_command = True
+            self._no_admissible_command_count += 1
+            best_cmd, self._recovery_kind = max(
+                recovery_candidates,
+                key=lambda item: self._infeasible_command_rank(
+                    item[0],
+                    robot_pos=robot_pos,
+                    heading=heading,
+                    goal=goal,
+                    ped_pos=ped_pos,
+                    ped_vel=ped_vel,
+                    observation=observation,
+                    grid_payload=grid_payload,
+                ),
+            )
+        current_clearance = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        self._recovery_command = bool(
+            self.config.clearance_model == "surface_v2"
+            and 0.0 < current_clearance < float(self.config.hard_obstacle_clearance)
+            and np.isfinite(best_score)
+        )
+        self._recovery_command_count += int(self._recovery_command)
         return best_cmd
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "RiskDWAPlannerAdapter"}
+        decision = {
+            "recovery_kind": getattr(self, "_recovery_kind", None),
+            "recovery_command": self._recovery_command,
+            "recovery_command_count": self._recovery_command_count,
+            "no_admissible_command": getattr(self, "_no_admissible_command", False),
+            "no_admissible_command_count": getattr(self, "_no_admissible_command_count", 0),
+        }
+        return {
+            "planner_type": "RiskDWAPlannerAdapter",
+            **decision,
+            "last_decision": decision,
+            "planner_target_xy": list(self._last_target_xy) if self._last_target_xy else None,
+        }
+
+    @property
+    def last_target_xy(self) -> tuple[float, float] | None:
+        """Return the navigation target selected by the last ``plan`` call."""
+        return self._last_target_xy
 
 
 def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
@@ -474,6 +719,7 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         rollout_dt=float(cfg.get("rollout_dt", 0.2)),
         rollout_steps=int(cfg.get("rollout_steps", 8)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
+        goal_target_version=str(cfg.get("goal_target_version", LEGACY_NEXT_GOAL_V1)),
         linear_candidates=linear_candidates,
         angular_candidates=angular_candidates,
         goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),
@@ -495,6 +741,15 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         progress_escape_distance=float(cfg.get("progress_escape_distance", 1.0)),
         progress_escape_speed=float(cfg.get("progress_escape_speed", 0.45)),
         progress_escape_heading_gain=float(cfg.get("progress_escape_heading_gain", 1.4)),
+        clearance_model=str(cfg.get("clearance_model", CENTER_CLEARANCE_V1)),
+        robot_radius_m=float(cfg.get("robot_radius_m", 1.0)),
+        pedestrian_radius_m=float(cfg.get("pedestrian_radius_m", 0.4)),
+        hard_obstacle_clearance=float(cfg.get("hard_obstacle_clearance", 0.30)),
+        dynamic_window_version=str(cfg.get("dynamic_window_version", "fixed_v1")),
+        dynamic_window_dt=float(cfg.get("dynamic_window_dt", 0.1)),
+        max_linear_accel=float(cfg.get("max_linear_accel", 1.0)),
+        max_linear_decel=float(cfg.get("max_linear_decel", 1.0)),
+        max_angular_accel=float(cfg.get("max_angular_accel", 1.0)),
     )
 
 

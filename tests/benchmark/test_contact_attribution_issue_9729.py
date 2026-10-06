@@ -219,7 +219,9 @@ def test_versioned_scenario_marker_saves_measured_contact_row(
             return None
 
     config = SimpleNamespace(
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, robot_radius=0.5, ped_radius=0.4),
+        sim_config=SimpleNamespace(
+            max_sim_steps=600, time_per_step_in_secs=0.1, robot_radius=0.5, ped_radius=0.4
+        ),
         robot_config=SimpleNamespace(radius=0.5),
     )
     monkeypatch.setattr(map_runner_episode, "_build_env_config", lambda *_args, **_kwargs: config)

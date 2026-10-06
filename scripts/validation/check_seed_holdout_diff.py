@@ -8,6 +8,13 @@ JSON lists, non-literal or aliased seed generation (including dynamic ``range``
 bounds), and seeds passed through environment variables need exact-head review.
 Literal Python ``range`` calls and nearby episode loops are checked across common
 wrappers and line breaks; unknown syntax remains an exact-head review obligation.
+
+Markers: ``# seed-holdout: setup-only`` and ``synthetic-fixture`` (line or
+``begin``/``end`` block) exempt fixtures anywhere. ``release-evaluation`` (line
+or block) exempts the evaluation seed list of a release manifest and is valid
+only under ``configs/benchmarks/releases/`` and
+``configs/benchmarks/paper_experiment_matrix_*``; elsewhere it is reported as an
+error. Unpaired or mismatched blocks exempt nothing.
 """
 
 from __future__ import annotations
@@ -21,23 +28,72 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
+from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
+
 RELEASE_CONFIGS = frozenset(
     {
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml",
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
     }
 )
-MARKER = re.compile(r"#\s*seed-holdout:\s*(?:setup-only|synthetic-fixture)\b")
-BLOCK_MARKER = re.compile(r"\s*#\s*seed-holdout:\s*(setup-only|synthetic-fixture)\s+(begin|end)\s*")
-SEED = re.compile(
-    r"(?<![\w.])(?:11[1-9]|12\d|13\d|140)(?![\w.])"  # seed-holdout: synthetic-fixture
+# Explicit consumers of release identities. New executable consumers require review.
+SEALED_REFERENCE_ALLOWLIST = frozenset(
+    [
+        "robot_sf/benchmark/seed_bands.py",
+        "robot_sf/benchmark/release_protocol.py",
+        "robot_sf/benchmark/spawn_preflight.py",
+        "robot_sf/benchmark/release_acceptance.py",
+        "robot_sf/benchmark/release_candidate.py",
+        "scripts/validation/check_seed_holdout_diff.py",
+        "scripts/validation/check_issue_9748_dev_split.py",
+        "scripts/benchmark/run_issue_9748_v4_tuning.py",
+        "configs/benchmarks/seed_sets_0_0_8.yaml",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+        # #10112 successor retains the sealed guard; only its static source inventory is allowed.
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
+        "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
+        "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml",
+        "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+        "tests/analysis/test_pinned_successor_lineage.py",
+        "tests/analysis/test_compare_issue_9431_release.py",
+        "tests/validation/test_check_seed_holdout_diff.py",
+        "tests/benchmark/test_newseeds.py",
+        "tests/benchmark/test_release_campaign_authority.py",
+        "tests/benchmark/test_release_candidate.py",
+        "tests/benchmark/test_release_resolved_identity.py",
+        "tests/benchmark/test_sealed_source_pins.py",
+        "tests/benchmark/test_sealed_runtime_sources.py",
+        "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
+        # Reviewed guard policy and refusal witnesses (#10053; 2026-10-01 ruling).
+    ]
 )
+SEALED_REFERENCE = re.compile(
+    r"\b(?:release_eval_0_0_8|seed_sets_0_0_8\.yaml|EVAL_SEEDS_0_0_8|"
+    r"EVAL_SEED_SET_0_0_8|HELD_OUT_SEEDS|RETIRED_EVAL_SEEDS_0_0_7|paper_eval_s30)\b"
+)
+
+MARKER_KINDS = "setup-only|synthetic-fixture|release-evaluation"
+MARKER = re.compile(rf"#\s*seed-holdout:\s*(?P<kind>{MARKER_KINDS})\b")
+BLOCK_MARKER = re.compile(rf"\s*#\s*seed-holdout:\s*({MARKER_KINDS})\s+(begin|end)\s*")
+# The release-evaluation marker is valid only in release evaluation manifests,
+# where sealed evaluation seeds are the intended release set. Anywhere
+# else it is an error, so it cannot become a blanket escape.
+RELEASE_EVALUATION_KIND = "release-evaluation"
+RELEASE_EVALUATION_PREFIXES = (
+    "configs/benchmarks/releases/",
+    "configs/benchmarks/paper_experiment_matrix_",
+)
+SEALED_SEED_PATTERN = "(?:" + "|".join(map(str, sorted(HELD_OUT_SEEDS))) + ")"
+SEED = re.compile(rf"(?<![\w.]){SEALED_SEED_PATTERN}(?![\w.])")
 SEED_FIELD = re.compile(
-    r"(?i)(?:^|[\s,({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
+    r"(?i)(?:^|[\s,.({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
     r"eval_seeds|evaluation_seeds|pilot_seeds|diagnostic_seeds|base_seed|"
     r"master_seed|episode_seed|scenario_seed|simulator_seed|simulation_seed|"
     r"environment_seed|env_seed|world_seed|run_seed|rollout_seed|task_seed|"
-    r"map_seed|spawn_seed)['\"]?\s*[:=]"
+    r"map_seed|spawn_seed|pedestrian_seed|desired_speed_seed|route_spawn_seed|archetype_seed|response_law_seed)['\"]?\s*[:=]"
 )
 SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
 EPISODE_SEED_LOOP = re.compile(
@@ -80,11 +136,29 @@ class Finding:
     text: str
 
 
+def _release_evaluation_path(path: str) -> bool:
+    return path.startswith(RELEASE_EVALUATION_PREFIXES)
+
+
+def _marker_allowed(path: str, kind: str) -> bool:
+    return kind != RELEASE_EVALUATION_KIND or _release_evaluation_path(path)
+
+
+def _line_marker_exempts(path: str, content: str) -> bool:
+    return any(_marker_allowed(path, match.group("kind")) for match in MARKER.finditer(content))
+
+
+def _misplaced_release_marker(path: str, content: str) -> bool:
+    return not _release_evaluation_path(path) and any(
+        match.group("kind") == RELEASE_EVALUATION_KIND for match in MARKER.finditer(content)
+    )
+
+
 def _eligible(path: str) -> bool:
     if path.startswith("tests/analysis/fixtures/") and path.endswith(".jsonl"):
         return False
     return path.startswith(
-        ("configs/", "tests/", "scripts/", "docs/plan/", "docs/context/evidence/")
+        ("robot_sf/", "configs/", "tests/", "scripts/", "docs/plan/", "docs/context/evidence/")
     )
 
 
@@ -184,15 +258,8 @@ def _range_overlaps_holdout(text: str) -> bool:
             start = first
         if step == 0:
             continue
-        if step > 0:
-            candidate = start + max(0, (111 - start + step - 1) // step) * step
-            if 111 <= candidate <= 140 and candidate < stop:
-                return True
-        else:
-            magnitude = -step
-            candidate = start - max(0, (start - 140 + magnitude - 1) // magnitude) * magnitude
-            if 111 <= candidate <= 140 and candidate > stop:
-                return True
+        if any(seed in range(start, stop, step) for seed in HELD_OUT_SEEDS):
+            return True
     return False
 
 
@@ -222,8 +289,11 @@ def _episode_range_context(text: str, before: list[str], after: list[str]) -> bo
     )
 
 
-def _marked_block_lines(lines: list[str]) -> set[int]:
-    """Only complete, matching marker pairs exempt their enclosed lines."""
+def _marked_block_lines(lines: list[str], path: str = "") -> set[int]:
+    """Only complete, matching marker pairs exempt their enclosed lines.
+
+    A release-evaluation pair exempts lines only inside release manifests.
+    """
     marked: set[int] = set()
     opened: tuple[str, int] | None = None
     for number, line in enumerate(lines, 1):
@@ -231,6 +301,8 @@ def _marked_block_lines(lines: list[str]) -> set[int]:
         if marker is None:
             continue
         kind, boundary = marker.groups()
+        if not _marker_allowed(path, kind):
+            continue
         if boundary == "begin":
             opened = (kind, number) if opened is None else None
         elif opened is not None and opened[0] == kind:
@@ -273,6 +345,10 @@ def _yaml_seed_range_bound(path: str, text: str, before: list[str]) -> bool:
 def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> bool:
     if CLI_SEED.search(text):
         return True
+    # Every value in a seed inventory is a seed, irrespective of the set name
+    # or whether YAML uses a flow list or a block list.
+    if path.startswith("configs/") and re.fullmatch(r"seed_(?:set|list).*\.ya?ml", Path(path).name):
+        return True
     if path.startswith("docs/") or _non_episode_seed(path, text, before, after):
         return False
     if (
@@ -289,11 +365,9 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     # YAML block lists and multiline pytest parametrizations put the value on
     # a separate line from the seed key. Use the closest enclosing declaration.
     if re.match(
-        r"^\s*(?:-\s*)?\[?\s*(?:11[1-9]|12\d|13\d|140)(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
+        rf"^\s*(?:-\s*)?\[?\s*{SEALED_SEED_PATTERN}(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
         text,
     ):
-        if path == "configs/benchmarks/seed_list_v1.yaml":
-            return True
         if any("parametrize" in line for line in before[-12:]) and any(
             re.search(r"['\"]seed['\"]", line) for line in before[-12:]
         ):
@@ -309,6 +383,180 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     return False
 
 
+def _normalize_integer_spellings(text: str) -> str:
+    """Normalize whole integer tokens, leaving floats and identifiers alone."""
+    pattern = rf"(?<![\w.])(?:{PYTHON_INT_LITERAL})(?![\w.])"
+    return re.sub(pattern, lambda m: str(_parse_python_int_literal(m[0])), text)
+
+
+def _yaml_bounds_overlap(path: str, text: str, before: list[str], after: list[str]) -> bool:
+    """Join bounds inside one YAML seed mapping, including unchanged diff context."""
+    if not path.startswith("configs/") or not path.endswith((".yaml", ".yml")):
+        return False
+    if SEED_FIELD.search(text) and "{" in text:
+        block = text
+    elif _yaml_seed_range_bound(path, text, before):
+        indentation = len(text) - len(text.lstrip())
+        siblings = [text]
+        for lines in (reversed(before), iter(after)):
+            for line in lines:
+                if not line.strip() or line.lstrip().startswith("#"):
+                    continue
+                if len(line) - len(line.lstrip()) < indentation:
+                    break
+                if len(line) - len(line.lstrip()) == indentation:
+                    siblings.append(line)
+        block = "\n".join(siblings)
+    else:
+        return False
+    bounds = dict(re.findall(rf"\b(min|max|low|high)\s*:\s*({PYTHON_INT_LITERAL})(?![\w.])", block))
+    lower = bounds.get("min", bounds.get("low"))
+    upper = bounds.get("max", bounds.get("high"))
+    if lower is None or upper is None:
+        return False
+    low, high = _parse_python_int_literal(lower), _parse_python_int_literal(upper)
+    return (
+        low is not None and high is not None and any(low <= seed <= high for seed in HELD_OUT_SEEDS)
+    )
+
+
+RUNTIME_POLICY_LINES = {
+    "robot_sf/benchmark/runtime_seed_guard.py": frozenset(
+        [
+            "if value not in seed_bands.HELD_OUT_SEEDS:",
+            "if value in seed_bands.EVAL_SEEDS_0_0_8 and value in identity.resolved_seeds:",
+        ]
+    ),
+    "tests/test_runtime_seed_guard.py": frozenset(
+        [
+            'monkeypatch.setattr(seed_bands, "HELD_OUT_SEEDS", frozenset({SENTINEL}))',
+            "seed_bands.HELD_OUT_SEEDS = frozenset({1030})",
+            # These reviewed policy doubles use development seeds and never execute episodes.
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (SENTINEL,))',
+            'monkeypatch.setattr(protocol, "EVAL_SEEDS_0_0_8", (SENTINEL,))',
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (1001,))',
+        ]
+    ),
+    "tests/support/seedguard_boundaries.py": frozenset(
+        [
+            "FALLBACK_HELD_OUT_SEEDS = frozenset(range(111, 141)) | frozenset(",
+            "HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+            "global HELD_OUT_SEEDS, _POLICY_RESOLVED  # seed-holdout: setup-only (guard policy metadata)",
+            "HELD_OUT_SEEDS as canonical,  # seed-holdout: setup-only (guard policy metadata)",
+            "HELD_OUT_SEEDS = frozenset(",
+            "return HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+            "if value in FALLBACK_HELD_OUT_SEEDS and module.__name__ not in _LEGACY_RESTORE_STATES:",
+            "if _LEGACY_SEEDS.get(name) in FALLBACK_HELD_OUT_SEEDS:",
+            "from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+        ]
+    ),
+    "tests/test_heldout_seed_guard.py": frozenset(
+        [
+            '"guard.HELD_OUT_SEEDS = frozenset({1030})\\n"',
+            '"guard.FALLBACK_HELD_OUT_SEEDS = frozenset({1030})\\n"',
+            'monkeypatch.setattr(guard, "HELD_OUT_SEEDS", guard.resolve_held_out_seeds() | {SENTINEL})',
+            'guard, "FALLBACK_HELD_OUT_SEEDS", guard.FALLBACK_HELD_OUT_SEEDS | {SENTINEL}',
+            "guard.HELD_OUT_SEEDS = frozenset({SENTINEL})",
+            "guard.FALLBACK_HELD_OUT_SEEDS = frozenset({SENTINEL})",
+            "assert seedguard_boundaries.resolve_held_out_seeds() == frozenset(policy.HELD_OUT_SEEDS)",
+            "assert seedguard_boundaries.HELD_OUT_SEEDS == frozenset(policy.HELD_OUT_SEEDS)",
+            "from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+        ]
+    ),
+    "tests/validation/test_seed_hardening.py": frozenset(
+        [
+            'text = "for seed in EVAL_SEEDS_0_0_8:\\n    env.reset(seed=seed)\\n"',
+            '"from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",',
+            "assert all(str(seed) not in source for seed in seed_bands.EVAL_SEEDS_0_0_8)",
+        ]
+    ),
+}
+
+
+def _unallowlisted_sealed_reference(path: str, content: str) -> bool:
+    """Named release identities need explicit review outside their static consumers."""
+    return bool(
+        _eligible(path)
+        and SEALED_REFERENCE.search(content)
+        and path not in SEALED_REFERENCE_ALLOWLIST
+        and content.strip() not in RUNTIME_POLICY_LINES.get(path, ())
+        and not path.startswith("docs/")
+    )
+
+
+def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with cycle guards
+    path: str, number: int, content: str, lines: list[str]
+) -> bool:
+    """Inspect the resolved value of an added YAML merge or seed alias."""
+    if not path.endswith((".yaml", ".yml")) or "*" not in content:
+        return False
+    try:
+        root = yaml.compose("\n".join(lines), Loader=yaml.SafeLoader)
+    except yaml.YAMLError:
+        return bool("<<:" in content or SEED_FIELD.search(content))
+
+    def contains_seed(node, seen):
+        if id(node) in seen:
+            return False
+        seen = seen | {id(node)}
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                if SEED_FIELD.search(key.value + ":"):
+                    resolved = yaml.safe_load(yaml.serialize(value))
+                    values = resolved if isinstance(resolved, list) else [resolved]
+                    if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
+                        return True
+                if contains_seed(value, seen):
+                    return True
+        elif isinstance(node, yaml.SequenceNode):
+            return any(contains_seed(value, seen) for value in node.value)
+        return False
+
+    def visit(node, seen):
+        if id(node) in seen:
+            return False
+        seen = seen | {id(node)}
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                if key.start_mark.line == number - 1:
+                    if contains_seed(value, set()):
+                        return True
+                    if SEED_FIELD.search(key.value + ":"):
+                        resolved = yaml.safe_load(yaml.serialize(value))
+                        values = resolved if isinstance(resolved, list) else [resolved]
+                        if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
+                            return True
+                if visit(value, seen):
+                    return True
+        elif isinstance(node, yaml.SequenceNode):
+            return any(visit(value, seen) for value in node.value)
+        return False
+
+    return visit(root, set()) if root is not None else False
+
+
+def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
+    """Read full context so unchanged seed bounds participate in the gate."""
+    file_path = root / path
+    lines = file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
+    return lines, _marked_block_lines(lines, path)
+
+
+def _reference_finding(path: str, number: int, content: str, lines: list[str]) -> Finding | None:
+    """Report misplaced markers and unreviewed named release-seed consumers."""
+    if _eligible(path) and _misplaced_release_marker(path, content):
+        return Finding(
+            path,
+            number,
+            f"{content.strip()}  [release-evaluation marker outside release manifests]",
+        )
+    if _unallowlisted_sealed_reference(path, content) or _yaml_alias_holdout(
+        path, number, content, lines
+    ):
+        return Finding(path, number, content.strip())
+    return None
+
+
 def check_diff(diff: str, root: Path) -> list[Finding]:
     """Return violations on added lines; root supplies complete file context."""
     findings: list[Finding] = []
@@ -320,11 +568,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
     for row in diff.splitlines():
         if row.startswith("+++ b/"):
             path = row[6:]
-            file_path = root / path
-            file_lines = (
-                file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
-            )
-            marked_block_lines = _marked_block_lines(file_lines)
+            file_lines, marked_block_lines = _diff_file_context(root, path)
             before = []
         elif row.startswith("@@ "):
             match = HUNK.match(row)
@@ -334,17 +578,23 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                     before = file_lines[: line_number - 1]
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
-            if (
+            reference = _reference_finding(path, line_number, content, file_lines)
+            if reference is not None:
+                findings.append(reference)
+            elif (
                 _eligible(path)
                 and path not in RELEASE_CONFIGS
                 and line_number not in marked_block_lines
-                and not MARKER.search(content)
+                and not _line_marker_exempts(path, content)
                 and (
-                    SEED.search(RANGE.sub("", content))
+                    SEED.search(_normalize_integer_spellings(RANGE.sub("", content)))
                     or _range_overlaps_holdout(content)
                     or _episode_range_context(content, before, file_lines[line_number:])
+                    or _yaml_bounds_overlap(path, content, before, file_lines[line_number:])
                 )
-                and _seed_context(path, content, before, file_lines[line_number:])
+                and _seed_context(
+                    path, _normalize_integer_spellings(content), before, file_lines[line_number:]
+                )
             ):
                 findings.append(Finding(path, line_number, content.strip()))
             before.append(content)
@@ -371,6 +621,7 @@ def main() -> int:
         args.base_ref,
         args.head_ref,
         "--",
+        "robot_sf/",
         "configs/",
         "tests/",
         "scripts/",
@@ -385,7 +636,12 @@ def main() -> int:
         )
     if findings:
         print(
-            "Use dev seeds 1001-1030 for tests/tuning; calibration 101-102 and diagnostics 103-105 are reserved for their registered roles. Mark setup-only or synthetic fixtures explicitly.",
+            "Use dev seeds 1001-1030 for tests/tuning; calibration 101-102 and diagnostics 103-105 are reserved for their registered roles. Mark setup-only or synthetic fixtures explicitly "
+            "(# seed-holdout: setup-only|synthetic-fixture, line or begin/end block). "
+            "Release evaluation manifests under configs/benchmarks/releases/ and "
+            "configs/benchmarks/paper_experiment_matrix_* may mark their evaluation seed "
+            "lists in a seed-holdout release-evaluation begin/end block (see the module "
+            "docstring); that marker kind is an error in any other path.",
             file=sys.stderr,
         )
         return 1

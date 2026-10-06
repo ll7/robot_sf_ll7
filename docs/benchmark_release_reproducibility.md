@@ -16,7 +16,7 @@ Current S30/H600 campaign config:
 
 Bounded 14-arm runtime-smoke manifest:
 
-- `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
+- `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml`
 
 Publication-grade release manifest plus the frozen September 2026 erratum successor:
 
@@ -29,7 +29,7 @@ Publication-grade release manifest plus the frozen September 2026 erratum succes
   derivation receipt.
 
 The smoke keeps `workers: 1`, `horizon: 600`, differential-drive kinematics,
-one scenario, and seed `111`. It checks runtime compatibility only; it is not
+one scenario, and seed `103`. It checks runtime compatibility only; it is not
 full benchmark evidence and does not authorize planner ranking.
 
 ## Reproduce From a Tag
@@ -45,7 +45,7 @@ uv sync --all-extras
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --mode preflight
 ```
 
@@ -53,11 +53,11 @@ uv run python scripts/tools/run_benchmark_release.py \
 
 ```bash
 uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
-  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --stage \
   --report-path output/release/checkpoints/runtime_smoke_staging_receipt.json
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --label runtime-smoke \
   --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
@@ -78,8 +78,8 @@ Comparable benchmark releases must keep these surfaces stable:
 - SNQI assets
 - required artifact bundle contents
 
-For the current release, the frozen identity additionally includes 14 arms,
-48 scenarios, 30 seeds (`paper_eval_s30`), H600, and differential-drive
+For 0.0.8, the identity additionally includes 14 arms,
+48 scenarios, 30 fresh sealed seeds (`release_eval_0_0_8`; D-049), H600, and differential-drive
 kinematics. SNQI remains advisory/no-ranking even when its assets are present;
 report raw and component metrics separately if calibration does not support a
 composite interpretation.
@@ -319,7 +319,7 @@ For CI and local release-tool validation of the current contract, use the
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml
 ```
 
 This preserves the current S30/H600 release contract shape while avoiding a

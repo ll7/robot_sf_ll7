@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from robot_sf import release_cli
+from robot_sf.evidence.writers import write_text
 
 SOURCE_SHA = "5" * 40
 PREDECESSOR_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
@@ -58,13 +60,14 @@ def test_release_cli_dispatches_each_zenodo_mode(
         "load_state",
         lambda path: state,
     )
-    monkeypatch.setattr(
-        release_cli.zenodo_publisher,
-        "reserve",
-        lambda session, metadata, api_base, **kwargs: (
-            calls.append(("reserve", {"api_base": api_base, **kwargs})) or state
-        ),
-    )
+
+    def fake_reserve(session, metadata, api_base, **kwargs):
+        calls.append(("reserve", {"api_base": api_base, **kwargs}))
+        path = kwargs["state_path"]
+        write_text(path.with_name(path.name + ".reserve-attempt"), "", issue_ref="zenodraft")
+        return state
+
+    monkeypatch.setattr(release_cli.zenodo_publisher, "reserve", fake_reserve)
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "upload",
@@ -119,6 +122,7 @@ def test_release_cli_dispatches_each_zenodo_mode(
         ]
     elif mode == "reserve":
         assert metadata_calls == [{}]
+        assert not args.state.with_name(args.state.name + ".reserve-attempt").exists()
     else:
         assert metadata_calls == []
     assert "secret" not in capsys.readouterr().out
@@ -535,3 +539,78 @@ def test_release_cli_doctor_propagates_report_status(
     assert release_cli.handle(args) == (0 if status == "pass" else 2)
     assert captured["expected_campaign_id"] == "campaign-1"
     assert status in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("module_name", "function_name"),
+    [
+        ("robot_sf.benchmark.release_doctor", "collect_release_doctor_report"),
+        (
+            "robot_sf.benchmark.post_execution_release_doctor",
+            "collect_post_execution_release_doctor_report",
+        ),
+    ],
+)
+def test_lazy_doctor_dispatch_resolves_current_collector(module_name, function_name, monkeypatch):
+    """The lazy wrapper imports the active collector at invocation and forwards all inputs."""
+    diagnostics = importlib.import_module(module_name)
+    observed = []
+    expected = {"status": "blocked", "findings": [{"code": "missing_receipt"}]}
+
+    def collect(**kwargs):
+        observed.append(kwargs)
+        return expected
+
+    monkeypatch.setattr(diagnostics, function_name, collect)
+    inputs = {
+        "repo": Path(__file__).resolve().parents[2],
+        "manifest_path": Path("fixture-manifest.yaml"),
+    }
+    if function_name == "collect_release_doctor_report":
+        inputs.update(
+            expected_release_sha="5" * 40,
+            expected_base_sha="6" * 40,
+            tag="fixture-tag",
+            checkpoint_receipt=None,
+            private_launch_packet=None,
+            dissertation=None,
+            token_file=None,
+        )
+    else:
+        inputs.update(
+            derived_revalidation_receipt=None,
+            publication_bundle=None,
+            publication_archive=None,
+            publication_preflight=None,
+            private_queue=None,
+            private_jobs=None,
+        )
+    assert getattr(release_cli, function_name)(**inputs) is expected
+    assert observed == [inputs]
+
+
+@pytest.mark.parametrize("erratum", [False, True], ids=["ordinary-manifest", "historical-erratum"])
+def test_publish_only_erratum_contract_bypasses_notes_gate(monkeypatch, tmp_path, capsys, erratum):
+    """Only the validated erratum branch may return before notes admission."""
+    args = _args("publish", tmp_path)
+    args.manifest = ERRATUM_CONTRACT_PATH if erratum else RELEASE_MANIFEST_PATH
+    args.metadata = None
+    reached = []
+
+    def refuse(_manifest):
+        raise release_cli.zenodo_publisher.ZenodoPublisherError("notes gate reached")
+
+    monkeypatch.setattr(release_cli, "_publication_notes_gate", refuse)
+    publisher = release_cli.zenodo_publisher
+    monkeypatch.setattr(
+        publisher, "build_session", lambda _path: reached.append("session") or object()
+    )
+    monkeypatch.setattr(publisher, "load_state", lambda _path: {})
+    monkeypatch.setattr(publisher, "load_dataset_metadata", lambda *_a, **_kw: {})
+    monkeypatch.setattr(publisher, "publish", lambda *_a, **_kw: reached.append("publish") or {})
+    monkeypatch.setattr(publisher, "write_state", lambda *_a: None)
+    assert release_cli.handle(args) == (0 if erratum else 2)
+    assert reached == (["session", "publish"] if erratum else [])
+    result = json.loads(capsys.readouterr().out)
+    if not erratum:
+        assert result == {"status": "blocked", "reason": "notes gate reached"}

@@ -167,7 +167,14 @@ class MultiRobotEnv(MultiAgentEnv):
         for sim in self.simulators:
             occupancies, sensors = init_collision_and_sensors(sim, env_config, orig_obs_space)
             states = [
-                RobotState(nav, occ, sen, d_t, max_ep_time)
+                RobotState(
+                    nav,
+                    occ,
+                    sen,
+                    d_t,
+                    max_ep_time,
+                    episode_step_limit=env_config.sim_config.episode_step_limit,
+                )
                 for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors, strict=False)
             ]
             self.states.extend(states)
@@ -249,6 +256,10 @@ class MultiRobotEnv(MultiAgentEnv):
         """
         with global_reset_seed(seed):
             super().reset(seed=seed, options=options)
+            if seed is not None:
+                self.applied_seed = int(seed)
+                for sim in self.simulators:
+                    sim.repopulate_crowd(seed=int(seed))
             self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
             for state in self.states:
                 reset_episode_counter_for_seed(state, seed)

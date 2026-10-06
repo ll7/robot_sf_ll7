@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,11 +19,14 @@ def _assert_pinned_modules(checkout: Path) -> None:
         "robot_sf.benchmark.camera_ready._config",
         "robot_sf.benchmark.camera_ready._preflight",
         "robot_sf.benchmark.runner",
+        "robot_sf.baselines.ppo",
+        "robot_sf.benchmark.map_runner.map_runner",
         "robot_sf.benchmark.map_runner.map_runner_identity",
         "robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution",
         "robot_sf.benchmark.utils",
         "robot_sf.benchmark.algorithm_metadata",
         "robot_sf.benchmark.observation_noise",
+        "robot_sf.benchmark.release_candidate",
         "robot_sf.benchmark.release_parameter_freeze",
         "pysocialforce",
     ):
@@ -41,17 +45,20 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
 
     import pysocialforce  # noqa: F401 - assert its origin with the project modules below
 
+    from robot_sf.baselines.ppo import PPOPlanner
     from robot_sf.benchmark.algorithm_metadata import (
         enrich_algorithm_metadata,
         resolve_learned_checkpoint_observation_contract,
     )
     from robot_sf.benchmark.camera_ready import _util
     from robot_sf.benchmark.camera_ready._config import (
+        _apply_fixed_campaign_horizon,
         _load_campaign_scenarios,
         _scenario_with_kinematics,
         load_campaign_config,
     )
     from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash
+    from robot_sf.benchmark.map_runner.map_runner import _ppo_planner_config
     from robot_sf.benchmark.map_runner.map_runner_identity import (
         _resolve_seed_list,
         _scenario_identity_payload,
@@ -70,6 +77,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         normalize_observation_noise_spec,
         observation_noise_hash,
     )
+    from robot_sf.benchmark.release_candidate import (
+        _APPROVED_008_HYBRID_ALGO_OVERRIDES as APPROVED_008_HYBRID_ALGO_OVERRIDES,
+    )
     from robot_sf.benchmark.release_parameter_freeze import (
         ARM_SLOTS_0_0_7_TO_0_0_8,
         V4_HYBRID_VARIANT,
@@ -81,7 +91,57 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
 
     request = json.load(sys.stdin)
     with patch.object(_util, "get_repository_root", return_value=checkout):
-        cfg = load_campaign_config(checkout / request["config_path"], repository_root=checkout)
+        if "resolved_identity_path" in request:
+            from robot_sf.benchmark.release_notes import gate_manifest
+            from robot_sf.benchmark.release_protocol import (
+                load_release_campaign_config,
+                load_release_manifest,
+            )
+
+            manifest = load_release_manifest(
+                request["resolved_identity_path"], repository_root=checkout
+            )
+            gate_manifest(manifest, repository_root=checkout)
+            cfg = load_release_campaign_config(manifest, repository_root=checkout)
+            if request.get("snqi_v2_anchors"):
+                from robot_sf.benchmark.snqi.v2_binding import bind_acquired_anchors
+
+                cfg = bind_acquired_anchors(
+                    cfg,
+                    anchors_path=Path(request["snqi_v2_anchors"]),
+                    calibration_root=None,
+                    source_commit=manifest.source_sha,
+                    diagnostic=False,
+                )
+        else:
+            cfg = load_campaign_config(checkout / request["config_path"], repository_root=checkout)
+        publication = request.get("publication_identity")
+        if publication is not None:
+            if (
+                not isinstance(publication, dict)
+                or set(publication) != {"release_tag", "doi"}
+                or any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in publication.values()
+                )
+            ):
+                raise ValueError(
+                    "publication_identity requires only release_tag and doi as nonempty strings"
+                )
+            # Match load_release_campaign_config: scientific inputs stay source-bound.
+            cfg = replace(cfg, **publication)
+        if "development_rehearsal_seeds" in request:
+            from types import SimpleNamespace
+
+            from robot_sf.benchmark.release_protocol import _development_campaign_config
+
+            cfg = _development_campaign_config(
+                SimpleNamespace(
+                    release_kind="development_rehearsal",
+                    resolved_seeds=request["development_rehearsal_seeds"],
+                ),
+                cfg,
+            )
         for path in (cfg.source_config_path, cfg.scenario_matrix_path):
             if path is None or not path.resolve().is_relative_to(checkout):
                 raise ValueError("successor config source escapes pinned checkout")
@@ -166,12 +226,17 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 != planners[planner.key]["path"]
                 or template_freeze.get("status") != "frozen"
                 or template_freeze.get("implementation_family") != V4_HYBRID_VARIANT
-                or template_freeze.get("replaces_0_0_7_slot") != reviewed_slots[planner.key]
+                # Release slot lineage belongs to the source-pinned arm map;
+                # frozen parameter bytes need not repeat it. Any declaration
+                # present in either config must still agree with that map.
+                or template_freeze.get("replaces_0_0_7_slot", reviewed_slots[planner.key])
+                != reviewed_slots[planner.key]
                 or freeze.get("status") != "frozen"
                 or "unfrozen_candidate" in freeze
                 or freeze.get("implementation_family")
                 != template_freeze.get("implementation_family")
-                or freeze.get("replaces_0_0_7_slot") != template_freeze.get("replaces_0_0_7_slot")
+                or freeze.get("replaces_0_0_7_slot", reviewed_slots[planner.key])
+                != reviewed_slots[planner.key]
             ):
                 raise ValueError(
                     f"successor planner binding lacks reviewed v4 lineage: {planner.key}"
@@ -209,8 +274,17 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             for scenario in scoped:
                 scenario["telemetry"] = dict(cfg.telemetry)
         for key, planner in planners.items():
+            spec = planner["spec"]
+            arm_horizon = (
+                spec.horizon_override if spec.horizon_override is not None else cfg.horizon
+            )
             runner_scenarios = _apply_track_metadata_to_scenarios(
-                scoped,
+                _apply_fixed_campaign_horizon(
+                    scoped,
+                    horizon=arm_horizon,
+                    horizon_policy=cfg.horizon_policy,
+                    protocol_version=cfg.protocol_version,
+                ),
                 observation_mode=planner["observation_mode"],
                 observation_level=None,
                 benchmark_track=None,
@@ -260,9 +334,29 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         )
         effective = _apply_scenario_uncertainty_envelope_config(algo, effective, scoped_scenario)
         if slot[0] in versioned_keys:
-            if algo != planner["algo"]:
+            overrides = planner["config"].get("scenario_algo_overrides") or {}
+            override = overrides.get(slot[2]) if isinstance(overrides, dict) else None
+            approved = APPROVED_008_HYBRID_ALGO_OVERRIDES.get(slot[0], {}).get(slot[2])
+            # Exempt only the reviewed planner/scenario/algorithm/base tuple.
+            # Checking the effective algorithm alone would admit arbitrary ORCA
+            # bases, and checking the declaration alone would trust wrong resolution.
+            approved_handoff = (
+                approved is not None
+                and isinstance(override, dict)
+                and (override.get("algo"), override.get("base_config_path")) == approved
+                and algo == approved[0]
+                and _resolve_config_path(
+                    Path(planner["absolute_path"]).parent, override["base_config_path"]
+                )
+                == (checkout / approved[1]).resolve()
+            )
+            if algo != planner["algo"] and not approved_handoff:
                 raise ValueError(f"successor v4 slot resolves wrong algorithm: {slot}")
-            if effective.get("planner_variant") != V4_HYBRID_VARIANT:
+            if override is not None and not approved_handoff:
+                raise ValueError(
+                    f"successor v4 slot has unapproved algorithm/base override: {slot}"
+                )
+            if not approved_handoff and effective.get("planner_variant") != V4_HYBRID_VARIANT:
                 raise ValueError(f"successor planner row resolves non-v4 config: {slot}")
         spec = planner["spec"]
         effective_dt = spec.dt_override if spec.dt_override is not None else cfg.dt
@@ -283,8 +377,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         safety_wrapper = (
             spec.safety_wrapper if spec.safety_wrapper is not None else cfg.safety_wrapper
         )
+        seeded_scenario = _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3])
         controls = _scenario_identity_payload(
-            _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3]),
+            seeded_scenario,
             algo=algo,
             algo_config=effective,
             horizon=spec.horizon_override if spec.horizon_override is not None else cfg.horizon,
@@ -326,14 +421,24 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             "benchmark_track",
             "track_schema_version",
         )
+        metadata_config = effective
+        if algo in {"ppo", "guarded_ppo"}:
+            # Reproduce the producer's typed PPO metadata without loading a model
+            # or stepping a policy/environment. The full guard/adapter config
+            # remains bound separately by scenario.algo_config_hash.
+            deferred = PPOPlanner(_ppo_planner_config(effective), defer_model_loading=True)
+            metadata_config = deferred.get_metadata()["config"]
         runtime_rows.append(
             {
                 "slot": slot,
                 "algo": algo,
                 "config": effective,
                 "config_hash": _config_hash(effective),
-                "scenario_config_hash": _config_hash(scenario),
-                "scenario": scoped_scenario,
+                "metadata_algorithm": metadata["algorithm"],
+                "metadata_config": metadata_config,
+                "metadata_config_hash": _config_hash(metadata_config),
+                "scenario_config_hash": _config_hash(controls),
+                "scenario": seeded_scenario,
                 "path": planner["path"],
                 "controls": {key: controls[key] for key in control_fields if key in controls},
                 "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),

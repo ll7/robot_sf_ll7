@@ -64,6 +64,7 @@ class _EpisodeEnv:
 def _config() -> SimpleNamespace:
     return SimpleNamespace(
         sim_config=SimpleNamespace(
+            max_sim_steps=600,
             time_per_step_in_secs=0.1,
             robot_radius=0.1,
             ped_radius=0.1,

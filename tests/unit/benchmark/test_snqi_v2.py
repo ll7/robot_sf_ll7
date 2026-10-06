@@ -1,5 +1,8 @@
 """SNQI-v2 contract properties, strict assets and campaign/offline parity."""
 
+# evidence-writer-exempt: writes target temporary test fixtures, including deliberately
+# malformed JSON and exact-byte anchor copies; committed evidence is read-only here.
+
 from __future__ import annotations
 
 import hashlib

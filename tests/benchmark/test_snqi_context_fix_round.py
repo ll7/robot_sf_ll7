@@ -30,6 +30,7 @@ from tests.benchmark.test_snqi_execution_context import (
     EVIDENCE,
     complete_context_asset_binding,
 )
+from tests.tools.test_run_benchmark_release import synthetic_execution_admission  # noqa: F401
 from tests.unit.benchmark.test_snqi_v2 import spec_files as _spec_files
 
 spec_files = _spec_files
@@ -39,6 +40,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_post_freeze_external_receipt_admits_same_source_through_release_cli(
     tmp_path, monkeypatch, capsys, spec_files
 ):
@@ -223,6 +225,7 @@ def test_gate_uses_resolved_algorithm_before_environment_or_policy(monkeypatch):
 @pytest.mark.parametrize(
     "missing_arm", ["guarded_ppo", "prediction_planner", "predictive_mppi", "socnav_sampling"]
 )
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_production_release_census_refuses_a_missing_manifest_learned_arm(
     tmp_path, monkeypatch, capsys, missing_arm
 ):
@@ -432,6 +435,7 @@ def test_identity_resolver_pins_untracked_receipt_without_requiring_a_source_blo
         protocol.verify_resolved_release_identity(second, repository_root=repo)
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_census_normalizes_recorded_algorithm(tmp_path, monkeypatch, capsys):
     import tests.benchmark.test_snqi_execution_context as support
 

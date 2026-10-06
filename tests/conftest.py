@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Seed inventories and campaign resume planning use deterministic fixtures.
+    "test_camera_ready_resume_jobs.py",
+    "test_seed_hardening.py",
     # Runtime refusal, source-pin and static caller contracts do not simulate episodes.
     "test_camera_ready_campaign.py",
     "test_refresh_packet_working_tree_pins.py",

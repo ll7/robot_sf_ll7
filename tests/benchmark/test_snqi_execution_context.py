@@ -12,6 +12,7 @@ import pytest
 from robot_sf.benchmark.map_runner import map_runner_episode as episode
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 from robot_sf.evidence.writers import write_json, write_review_sidecar
+from tests.tools.test_run_benchmark_release import synthetic_execution_admission  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "docs/context/evidence/2026-10-04_freeze008_calibration"
@@ -313,6 +314,7 @@ def test_malformed_worker_reference_refuses(monkeypatch):
 
 
 @pytest.mark.parametrize("context_rows", ["missing", "different", "equal"])
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_recorded_context_gate_precedes_full_release_acceptance(
     monkeypatch,
     capsys,

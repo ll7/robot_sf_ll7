@@ -436,7 +436,9 @@ def verified_authorization(forbidden_sentinel, monkeypatch, tmp_path):
 
     monkeypatch.setattr(release_protocol, "verify_resolved_release_identity", verify)
     monkeypatch.setattr(release_protocol, "sealed_seed_execution_problem", policy)
+    # seed-holdout: synthetic-fixture begin
     monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (SENTINEL,))
+    # seed-holdout: synthetic-fixture end
     return runtime_seed_guard, release_protocol, identity, path, verified_paths, policy_calls
 
 
@@ -456,7 +458,9 @@ def test_authorization_preserves_real_release_policy_refusal(verified_authorizat
     """A frozen-source claim cannot override the real development-release refusal."""
     guard, protocol, identity, path, verified_paths, policy_calls = verified_authorization
     identity.release_kind = "development_rehearsal"
+    # seed-holdout: synthetic-fixture begin
     monkeypatch.setattr(protocol, "EVAL_SEEDS_0_0_8", (SENTINEL,))
+    # seed-holdout: synthetic-fixture end
     with pytest.raises(ValueError, match="development rehearsal cannot be a sealed release"):
         guard.check_simulation_seed(SENTINEL, boundary="policy admission", authorization=path)
     assert verified_paths == [path]
@@ -488,7 +492,9 @@ def test_authorization_requires_both_seed_bindings(
     """Even a valid source/policy needs both evaluation and identity membership."""
     guard, _, identity, path, verified_paths, policy_calls = verified_authorization
     if missing_binding == "evaluation_band":
+        # seed-holdout: synthetic-fixture begin
         monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (1001,))
+        # seed-holdout: synthetic-fixture end
     else:
         identity.resolved_seeds = [1001]
     with pytest.raises(ValueError, match="held-out simulation seed"):

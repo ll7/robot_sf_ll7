@@ -1349,3 +1349,40 @@ def test_fallback_brake_without_predicates_is_still_hard_invalid(
     assert any(
         "fallback_brake without violated predicates" in reason for reason in evaluation.hard_reasons
     )
+
+
+@pytest.mark.parametrize(
+    ("allowed", "costs", "scale", "error", "message"),
+    [
+        ("a", {"a": 0.0}, 1.0, TypeError, "iterable of candidate IDs"),
+        (None, {"a": 0.0}, 1.0, TypeError, "must be iterable"),
+        ([None], {"a": 0.0}, 1.0, ValueError, "non-empty strings"),
+        (["a"], [], 1.0, TypeError, "must be a mapping"),
+        (["a"], {None: 0.0}, 1.0, ValueError, "non-empty candidate ID strings"),
+        (["a"], {"a": True}, 1.0, ValueError, "finite and non-negative"),
+        (["a"], {"a": "invalid"}, 1.0, ValueError, "finite and non-negative"),
+        (["a"], {"a": 0.0}, True, ValueError, "finite and positive"),
+        (["a"], {"a": 0.0}, "invalid", ValueError, "finite and positive"),
+    ],
+)
+def test_reorder_rejects_malformed_identity_and_numeric_inputs(
+    allowed, costs, scale, error, message
+) -> None:
+    """Public reorder rejects malformed caller values before creating a decision key."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("a")], empty)
+    with pytest.raises(error, match=message):
+        arb_module.reorder_multimodal_trajectories(base, allowed, costs, switch_cost_scale=scale)
+
+
+def test_reorder_empty_allowed_set_cannot_retain_a_selected_command() -> None:
+    """Filtering every safe command out removes the prior selection and gives its reason."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("a")], empty)
+    assert base.status == "selected"
+    final = arb_module.reorder_multimodal_trajectories(base, [], {"a": 0.0}, switch_cost_scale=1.0)
+    assert final.status == "no_candidates"
+    assert final.selected_candidate_id is None
+    assert final.no_selection_reason == "allowed candidate set is empty"
+    assert final.evaluations == ()
+    assert base.selected_candidate_id == "a"

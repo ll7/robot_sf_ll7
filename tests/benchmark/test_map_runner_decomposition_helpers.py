@@ -937,3 +937,51 @@ class TestFinalizeEpisodeRecord:
         assert "algorithm_metadata" in record
         assert "result_provenance" in record
         assert record["result_provenance"]["schema_version"] == "benchmark_row_provenance.v1"
+
+
+def test_metric_goal_survives_terminal_waypoint_change(monkeypatch):
+    """Freeze the sampled goal even when navigation changes on the terminal step."""
+    import robot_sf.benchmark.map_runner.map_runner_episode as mod
+
+    class HandoffEnv(_StepLoopDummyEnv):
+        def __init__(self):
+            super().__init__()
+            self.simulator.robot_navs = [SimpleNamespace(waypoints=[(2.0, 0.0), (12.0, 3.0)])]
+
+        def step(self, action):
+            self.simulator.goal_pos = [np.array([4.0, 0.0])]
+            self.simulator.robot_navs[0].waypoints[-1] = (99.0, 99.0)
+            return super().step(action)
+
+    monkeypatch.setattr(mod, "make_robot_env", lambda config, seed, debug: HandoffEnv())
+    policy, _ = _build_policy("goal", {}, robot_kinematics="differential_drive")
+    result = _run_episode_step_loop(
+        seed=1001,
+        config=_stub_config(),
+        horizon_val=1,
+        planner_runtime=PlannerRuntime(
+            policy_fn=policy,
+            planner_bind_env=None,
+            planner_reset=None,
+            planner_close=None,
+            planner_stats=None,
+            planner_native_action=False,
+        ),
+        noise=NoiseConfig(
+            spec={"enabled": False}, rng=np.random.default_rng(1001), state=None, stats={}
+        ),
+        tracking_precision_spec={"enabled": False, "target_motp_m": 0.05},
+        tracking_precision_rng=np.random.default_rng(1001),
+        safety_wrapper_runtime=mod.runtime_config_from_mapping(None),
+        safety_wrapper_deadlock_monitor=None,
+        cbf_runtime=mod.cbf_runtime_config_from_mapping(None),
+        actuation_controller=None,
+        algo_meta={"algorithm": "goal"},
+        record_forces=True,
+        record_planner_decision_trace=False,
+        record_simulation_step_trace=False,
+        single_pedestrian_intent_metadata=[],
+        single_pedestrian_vru_metadata=[],
+    )
+    assert result.goal_vec.tolist() == [12.0, 3.0]
+    assert result.initial_goal_distance == pytest.approx(np.sqrt(153.0))

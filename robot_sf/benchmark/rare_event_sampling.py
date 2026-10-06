@@ -382,8 +382,8 @@ def apply_sampled_scenario_mutation(
 
     if "ped_density" in row.parameters:
         simulation_config["ped_density"] = row.parameters["ped_density"]
-    if "crossing_time_offset_s" in row.parameters:
-        simulation_config["crossing_time_offset_s"] = row.parameters["crossing_time_offset_s"]
+    # crossing_time_offset_s has no runtime consumer. Keep it only in the
+    # recorded parameter vector above, like other unsupported diagnostic knobs.
     if "pedestrian_speed_multiplier" in row.parameters:
         _apply_speed_multiplier(scenario, row.parameters["pedestrian_speed_multiplier"])
     if "goal_placement_offset" in row.parameters:

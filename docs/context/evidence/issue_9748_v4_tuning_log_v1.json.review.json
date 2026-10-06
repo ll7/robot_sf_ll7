@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9748_v4_tuning_log_v1.json",
+  "artifact_sha256": "1628d5164dcc6294719246bd28a0dda45937474c696fb30c0a6a6a126e17e009",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -1,0 +1,109 @@
+[
+  {
+    "field": "publication.metadata_sha256",
+    "new": "809696b851a614a6cc76490685064027ceef804719009794b4031006f6d404c7",
+    "old": "c737d24e77af094928f1e7aeab0bdda970a4cde71e7c625619b284821f18fffc"
+  },
+  {
+    "field": "release_tag",
+    "new": "paper-matrix-v2-h600-s30-freezeprep-dry-d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "paper-matrix-v2-h600-s30-freezeprep-dry-c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "resolved_manifest.canonical_campaign_config_sha256",
+    "new": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5",
+    "old": "abc410028a7779e4577c083362ee2d668afc28121e64f8cfd523fdfa45794c63"
+  },
+  {
+    "field": "resolved_manifest.identity_resolution.template_sha256",
+    "new": "9dc0657b6168e2fc9d80b39ecf0c1079deb00996676d5b4882db90a6cb8e1eea",
+    "old": "2087a917dfa922ae559642fc1f369cae3364ac44d64041205d8eb42233cebfc8"
+  },
+  {
+    "field": "resolved_manifest.latest_main_base_commit",
+    "new": "805fc33398ba4f8327dcf526b8c9a11690257c28",
+    "old": "007299e2af1a4df61df3d1569bb2bbbb196c8e8c"
+  },
+  {
+    "field": "resolved_manifest.metrics.snqi_v2_binding",
+    "new": {
+      "acquisition_config": {
+        "path": "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml",
+        "sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3"
+      },
+      "anchors": {
+        "path": "configs/benchmarks/snqi_v2/anchors.v2.0.json",
+        "sha256": "bb1a526c818efca16c6d4237127c27dc7812947758f78a18c8f1d28c2a65fa4c"
+      },
+      "family": {
+        "path": "configs/benchmarks/snqi_v2/family.v2.0.yaml",
+        "sha256": "6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942"
+      },
+      "weights": {
+        "path": "configs/benchmarks/snqi_v2/weights.v2.0.json",
+        "sha256": "684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25"
+      }
+    },
+    "old": null
+  },
+  {
+    "field": "resolved_manifest.planning_base_sha",
+    "new": "805fc33398ba4f8327dcf526b8c9a11690257c28",
+    "old": "007299e2af1a4df61df3d1569bb2bbbb196c8e8c"
+  },
+  {
+    "field": "resolved_manifest.provenance.latest_main_base_commit",
+    "new": "805fc33398ba4f8327dcf526b8c9a11690257c28",
+    "old": "007299e2af1a4df61df3d1569bb2bbbb196c8e8c"
+  },
+  {
+    "field": "resolved_manifest.provenance.metadata_sha256",
+    "new": "809696b851a614a6cc76490685064027ceef804719009794b4031006f6d404c7",
+    "old": "c737d24e77af094928f1e7aeab0bdda970a4cde71e7c625619b284821f18fffc"
+  },
+  {
+    "field": "resolved_manifest.provenance.planning_base_sha",
+    "new": "805fc33398ba4f8327dcf526b8c9a11690257c28",
+    "old": "007299e2af1a4df61df3d1569bb2bbbb196c8e8c"
+  },
+  {
+    "field": "resolved_manifest.provenance.source_commit",
+    "new": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "resolved_manifest.provenance.source_sha",
+    "new": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "resolved_manifest.release_id",
+    "new": "paper-matrix-v2-h600-s30-freezeprep-dry-d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "paper-matrix-v2-h600-s30-freezeprep-dry-c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "resolved_manifest.release_tag",
+    "new": "paper-matrix-v2-h600-s30-freezeprep-dry-d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "paper-matrix-v2-h600-s30-freezeprep-dry-c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "resolved_manifest.source_sha",
+    "new": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "resolved_manifest_sha256",
+    "new": "a72332962f12aeb8b8afe888c2f9ef96e6a4e97ba1d729f17fed400e630b71dc",
+    "old": "aba20b943570a0960dc261fc90188f1fc5733489d223fbfef8c4a27affdf8721"
+  },
+  {
+    "field": "source_commit",
+    "new": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+    "old": "c979e0337da4ad053d59a76225fbb9154140ee73"
+  },
+  {
+    "field": "template.sha256",
+    "new": "9dc0657b6168e2fc9d80b39ecf0c1079deb00996676d5b4882db90a6cb8e1eea",
+    "old": "2087a917dfa922ae559642fc1f369cae3364ac44d64041205d8eb42233cebfc8"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10007_fxm/test_failures_base.txt",
+  "artifact_sha256": "135546d9fb3625218f420c1cd30f8a4fb0a828ed163d30e72cbcd871c666ed62",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

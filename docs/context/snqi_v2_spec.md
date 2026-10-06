@@ -54,8 +54,27 @@ semantics. V2 adds `metrics.snqi_v2` and `metrics.snqi_v2_terms`.
 
 ## Calibration before evaluation
 
-Use `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml`: the frozen 14-arm
-release roster, all 48 scenarios, development seeds 101/102, horizon 600 and dt .1.
+For 0.0.8, the development acquisition config is
+`configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml` (renamed from
+`calibration.dev101_102.yaml` under D-068) and declares development seeds **1001/1002**. It covers the 14 arm slots and
+all 48 scenarios at dt .1 with the SHA-pinned authored #9999 schedule:
+24×H400, 13×H500, 9×H600, 1×H650 and 1×H700 (D-084). The freeze path checks each row
+and producer-sidecar budget against its independently resolved scenario, and
+snapshots the schedule with the other acquisition inputs. The producer sidecar
+records each episode's horizon rather than the global scheduled-mode `None`. A row's own
+`run_horizon` is not authority for its scheduled budget.
+
+The 0.0.8 template and calibration acquisition exclude legacy SNQI weights,
+baselines, legacy diagnostic files and legacy score columns throughout campaign
+and publication bundles. Acquisition reports mark `snqi_v2: pending_calibration`.
+Physical metric v2 requires fresh anchors;
+relabeling v1 assets changes their label without correcting jerk/time units.
+The sequence is **execution freeze → dev calibration → reviewed anchor pin →
+release mint → campaign**. After pinning, the campaign can load `snqi_v2_spec`;
+its loader requires the current metric schema before executing an arm. Direct
+scalar scoring also rejects metric/anchor mismatches. Historical scalar APIs and
+historical frozen assets keep their contracts.
+
 The config preserves planner/checkpoint references, requires force recording,
 and disallows prerequisite fallback. V2 scoring is disabled for acquisition.
 The canonical preflight and checkpoint staging gates must pass before submission.
@@ -116,13 +135,16 @@ Direct derivation marks results `derived_pending_custody`. Only the archive free
 path marks anchors `frozen`, after binding the complete grid, all 14 episode files,
 their producer sidecars, campaign config and campaign manifest. The loader verifies
 the hash maps and force-switch threshold/coverage before accepting frozen anchors.
+The freeze writer retains the manifest's 16-character config identity separately
+and records the full canonical-config SHA-256 required by the anchor loader.
 
 In particular, undefined pedestrian–pedestrian-equivalent force on one-step
 traces is never replaced with zero. The 384-row four-arm diagnostic is not this
 calibration split and cannot establish the switch.
 
 Commit and merge the reviewed anchors and quote all three asset hashes before
-running evaluation seeds 111–140. Calibration seeds cannot be used for v2
+running the sealed 0.0.8 evaluation seeds. Both the retired 111–140 band and
+the sealed evaluation set remain forbidden to development probes. Calibration seeds cannot be used for v2
 evaluation. Preserve raw calibration episodes and manifests in durable storage;
 local `output/` is temporary.
 
@@ -142,6 +164,10 @@ seed-bootstrap 95% intervals, rank correlations against declared/success orderin
 top-1 frequencies, top-3 overlap, pairwise flips, and leave-one-out rank changes.
 The separate existing ranking-stability helper resamples seeds independently per
 planner and is explicitly labeled unpaired; the confidence intervals share seed draws.
+Family reports require unique paired scenario/seed cells across arms and equal episode
+counts across seeds. Uneven seed coverage is rejected: under balanced coverage the
+mean of seed means bootstrapped by the CI is exactly the reported episode-weighted
+planner mean. A shared but uneven grid does not meet this reporting contract.
 Undefined correlations are null. Correlations use average ties; tied top-1 values
 split credit; top-3 boundary ties use lexical arm identity. Bootstrap intervals
 with very few seeds are diagnostic and do not establish population precision.
@@ -223,3 +249,46 @@ and remain unchanged through the final custody check.
 The initial acquisition-file snapshot must equal that captured SHA as well. A change between
 configuration validation and input snapshotting is refused; the final check remains bound to the
 original acquisition bytes rather than accepting a newer snapshot as its own authority.
+
+### Budget normalization and diagnostics
+
+`time_to_goal_norm` and `time_to_goal_norm_success_only` divide completed goal
+steps by the episode's own scheduled budget; failures use the existing 1/undefined
+contract. Success/timeout classification and success-conditioned progress/path
+metrics use that same budget for admission. SNQI-v2 **T** uses success-only excess
+over ideal travel time, `clip((time_to_goal_ideal_ratio - 1) / 2)`, rather than a
+fixed-horizon denominator. **N** uses the actual executed-step exposure fraction,
+`clip(near_misses / executed_steps / .25)`. **F** remains the robot-attributable
+impulse, **J** physical mean jerk and **K** mean curvature, each divided by its
+calibration p95. No v2 progress term or horizon divisor is introduced. The
+failure-to-progress window remains 5 seconds at each row's dt; deadlock uses
+remaining route arclength over executed samples.
+
+For an unfrozen diagnostic on a complete 14×48 grid of original seeds within
+1001–1030, without rewriting rows or remapping seeds:
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run python \
+  scripts/analysis/diagnose_snqi_v2_calibration.py /durable/dev-campaign \
+  --output /durable/snqi-v2-diagnostic.json
+```
+
+This uses the same calibration and scalarization contracts, retains source SHA
+and per-file hashes, and emits `diagnostic_only`. It never invokes the archive
+freeze writer or writes the production anchor path. Same-data diagnostic ranking
+is not held-out validation. Report both success/safety rank alignment and the
+legacy target-quality proxy; its raw near-miss count is sensitive to episode
+exposure and is not the v2 close-clearance fraction.
+
+Calibration uses seeds **1001/1002** from the development band 1001..1030,
+which is also used for tuning. Seed **1003** is held apart from anchor fitting
+for a development diagnostic; it is not sealed evaluation evidence. Historical
+101/102 and the entire development band are refused as evaluation inputs.
+Frozen anchors and the release receipt bind the sorted evaluation seeds by
+SHA256 of compact JSON to the author-approved sealed 0.0.8 commitment.
+The retired 111..140 band stays held out. Budget schedules must match the
+calibration schedule at load time. Missing schema identity is refused.
+
+Anchor sensitivity is report-only and uses calibration rows only. Force is a
+cumulative impulse: longer timeouts can accrue more F, while J/K are means;
+all arms face the same scenario budget. This diagnostic is not a release gate.

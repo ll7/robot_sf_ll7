@@ -293,7 +293,9 @@ class TestRunMapEpisodeCharacterization:
         """Run a stubbed episode and return the record."""
         map_def = _minimal_map_def()
         dummy_config = SimpleNamespace(
-            sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+            sim_config=SimpleNamespace(
+                max_sim_steps=600, time_per_step_in_secs=0.1, ped_radius=0.4
+            ),
             robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
         )
 
@@ -449,7 +451,9 @@ class TestErrorPathCharacterization:
     ) -> None:
         """Enabling both safety_wrapper and cbf_safety_filter must raise."""
         dummy_config = SimpleNamespace(
-            sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+            sim_config=SimpleNamespace(
+                max_sim_steps=600, time_per_step_in_secs=0.1, ped_radius=0.4
+            ),
             robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
         )
 

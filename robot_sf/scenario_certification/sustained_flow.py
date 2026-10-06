@@ -134,8 +134,8 @@ def generate_expected_sustained_flow_scenarios(
                     "max_episode_steps": spec.max_episode_steps,
                     "ped_density": spec.ped_density,
                     **EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
-                    "robot_config": {},
                 },
+                "robot_config": {},
                 "metadata": {
                     "archetype": _SUSTAINED_FLOW_FAMILY,
                     "density": spec.density_tier,

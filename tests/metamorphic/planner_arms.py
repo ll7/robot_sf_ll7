@@ -88,6 +88,17 @@ def release_campaign_planners() -> tuple[dict[str, Any], ...]:
     return tuple(entries)
 
 
+def release_0_0_8_planners() -> tuple[dict[str, Any], ...]:
+    """Return the actual 0.0.8 release template planner rows.
+
+    Returns:
+        Planner entries from the campaign template.
+    """
+    return tuple(
+        dict(entry) for entry in load_yaml(RELEASE_TEMPLATE_CAMPAIGN.relative_to(ROOT))["planners"]
+    )
+
+
 def is_unfrozen_release_placeholder(algo_config: str | None) -> bool:
     """Return whether ``algo_config`` is an unfrozen release placeholder (issue #9751).
 
@@ -318,6 +329,7 @@ def robot_env_config(
     max_steps: int,
     ped_density: float = 0.0,
     observation_mode: ObservationMode = ObservationMode.SOCNAV_STRUCT,
+    social_force_kernel_version: str | None = None,
 ) -> RobotSimulationConfig:
     """Return the benchmark map-runner env config for one synthetic map.
 
@@ -334,6 +346,7 @@ def robot_env_config(
         ped_density_by_difficulty=[ped_density],
         difficulty=0,
         max_total_pedestrians=12,
+        social_force_kernel_version=social_force_kernel_version,
     )
     config.map_pool = MapDefinitionPool(map_defs={"metamorphic": map_def})
     config.map_id = "metamorphic"
@@ -374,6 +387,7 @@ def run_arm_episode(
     seed: int,
     max_steps: int,
     ped_density: float = 0.0,
+    social_force_kernel_version: str | None = None,
 ) -> ArmEpisode:
     """Drive one release arm through a seeded map-runner-style episode.
 
@@ -384,7 +398,14 @@ def run_arm_episode(
         The robot poses (including the reset pose), commands, env actions, and outcome.
     """
     algo, algo_config = release_arm(arm)
-    config = robot_env_config(map_def, max_steps=max_steps + 1, ped_density=ped_density)
+    if social_force_kernel_version is not None:
+        algo_config["social_force_kernel_version"] = social_force_kernel_version
+    config = robot_env_config(
+        map_def,
+        max_steps=max_steps + 1,
+        ped_density=ped_density,
+        social_force_kernel_version=social_force_kernel_version,
+    )
     env = make_robot_env(config=config, seed=seed)
     policy, meta = build_map_policy(algo, dict(algo_config), robot_kinematics="differential_drive")
     poses: list[tuple[float, float, float]] = []

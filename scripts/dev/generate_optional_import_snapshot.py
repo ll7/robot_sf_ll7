@@ -29,6 +29,10 @@ TEST_MODULE = REPO_ROOT / "tests" / "test_optional_import_guard_inventory.py"
 # must be added here when blessed, so the snapshot explains *why* the broad
 # catch is legitimate rather than a swallowed bug.
 NOTES = {
+    "ImportError+PermissionError": (
+        "PR #10005: optional MoviePy discovery can fail on an unreadable ancestor .env; "
+        "only the encoder import boundary treats permission denial as unavailable."
+    ),
     "ImportError": (
         "Pure optional-import. Prefer "
         "robot_sf.common.optional_import.try_import for new plain cases."

@@ -296,23 +296,35 @@ all arms face the same scenario budget. This diagnostic is not a release gate.
 ## Source definitions binding (0.1.0)
 
 New producer metrics carry `metric_definitions_sha256`. The digest is SHA256 of
-sorted compact UTF-8 JSON containing `SNQI_V2_SOURCE_DEFINITIONS`, the metric schema,
+sorted compact UTF-8 JSON containing the resolved `SNQI_V2_SOURCE_DEFINITIONS`, the metric schema,
 and both force-source contracts. The registry declares formulas, units, sample
 alignment, thresholds, reductions, force kernels and the reference rule. A
 meaning change must update this registry and the independently pinned fixed-trace
-canary together. Formatting and local file paths do not enter the digest.
+canary together. Thresholds resolve from producer constants (`NEAR_MISS_DIST`,
+`COLLISION_DIST`, `CURVATURE_MIN_DISPLACEMENT_M`, `CURVATURE_LENGTH_FLOOR_M`);
+changing one changes the digest automatically. Numerical canaries straddle each
+threshold independently of the digest pin. Formatting and local file paths do not enter the digest.
 
 Calibration checks every producer digest before copying it into new anchors.
 Mixed, missing or stale digests in a bound grid fail. Historical grids with no
-digest remain unbound; deriving an anchor from them never stamps current meanings
-onto old measurements. Loaded specs expose `metric_definitions_sha256` and
+digest remain unbound; current-schema historical reconstruction requires the explicit
+`allow_historical_unbound=True` derivation opt-in. It never stamps current meanings
+onto old measurements. Bound derivation also requires an explicit `CalibrationGrid`. Loaded specs expose `metric_definitions_sha256` and
 `snqi_v2_definitions_binding` in provenance. A present anchor digest must match
 current definitions; every scored row must match that bound digest. Compact report
 records preserve it. New bound assets require an explicit independent evaluation
 schedule; campaign config loading resolves that schedule before loading the assets.
+Offline `analyze_snqi_contract.py --score-version SNQI-v2` accepts `--horizons
+/path/to/horizons.json`, a nonempty JSON object mapping independently declared
+scenario names to positive integer step budgets. These must exactly match the
+anchor schedule; omission is refused for bound assets.
 
 Frozen 0.0.8 assets remain byte-identical and use the explicit
-`definitions-digest absent` compatibility path. This path checks schema and force
+`definitions-digest absent` compatibility path only for these exact anchor SHA256s:
+`12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2` and
+`8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349`.
+Copies of those exact bytes load from any path; any other digest-absent asset,
+including a whitespace-only rewrite, is refused. This path checks schema and force
 provenance but cannot prove source definitions identity; the release's procedural
 source-drift checks still apply. An explicit null or malformed digest is refused,
 rather than treated as an old asset. No missing metric schema is accepted.

@@ -287,6 +287,15 @@ class SnqiV2Spec:
             raise ValueError("SNQI-v2 evaluation seeds differ from the sealed commitment")
 
 
+# Exact immutable 0.0.8 anchor bytes, independent of path or declared provenance.
+HISTORICAL_UNBOUND_ANCHOR_SHA256 = frozenset(
+    {
+        "12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2",
+        "8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349",
+    }
+)
+
+
 def load_snqi_v2_spec(
     weights_path: Path,
     anchors_path: Path,
@@ -341,6 +350,7 @@ def load_snqi_v2_spec(
     ):
         raise ValueError("SNQI-v2 lower anchors must be physical zero")
     _validate_calibration(anchors_doc)
+    _validate_historical_anchor_exception(anchors_doc, raw["anchors"])
     calibration = anchors_doc["calibration"]
     spec = SnqiV2Spec(
         weights={term: entries[f"w_{term}"]["value"] for term in TERMS},
@@ -358,6 +368,17 @@ def load_snqi_v2_spec(
     )
     _bind_evaluation_schedule(spec, evaluation_scenario_horizons)
     return spec
+
+
+def _validate_historical_anchor_exception(anchors_doc: dict[str, Any], raw: bytes) -> None:
+    """Permit missing identity only for the immutable frozen 0.0.8 pair."""
+    if (
+        "metric_definitions_sha256" not in anchors_doc
+        and hashlib.sha256(raw).hexdigest() not in HISTORICAL_UNBOUND_ANCHOR_SHA256
+    ):
+        raise ValueError(
+            "SNQI-v2 missing definitions digest: only the frozen 0.0.8 anchor pair is exempt"
+        )
 
 
 def _bind_evaluation_schedule(

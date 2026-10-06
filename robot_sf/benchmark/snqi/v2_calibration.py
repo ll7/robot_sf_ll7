@@ -92,7 +92,8 @@ def _validate_calibration_grid(
     return grid
 
 
-def derive_calibration_anchors(
+# Historical reconstruction is a separate explicit opt-in on this established public API.
+def derive_calibration_anchors(  # noqa: PLR0913
     episodes: Sequence[Mapping[str, Any]],
     *,
     arms: Sequence[str],
@@ -102,6 +103,7 @@ def derive_calibration_anchors(
     episodes_sha256: str,
     expected_algorithms: Mapping[str, str] | None = None,
     grid: CalibrationGrid | None = None,
+    allow_historical_unbound: bool = False,
 ) -> dict[str, Any]:
     """Derive the frozen asset only after complete source and split validation.
 
@@ -109,7 +111,11 @@ def derive_calibration_anchors(
         A JSON-serializable anchor document ready for review and commit.
     """
     metric_version = require_uniform_metric_schema(episodes)
-    definitions_digest = calibration_definitions_digest(episodes)
+    definitions_digest = calibration_definitions_digest(
+        episodes, allow_historical_unbound=allow_historical_unbound
+    )
+    if definitions_digest is not None and grid is None:
+        raise ValueError("SNQI-v2 digest-bound derivation requires an explicit calibration grid")
     _validate_provenance(run_id, source_commit, episodes_sha256)
     grid = _validate_calibration_grid(scenarios, grid)
     seeds = grid.seeds
@@ -740,6 +746,11 @@ def _compact_calibration_record(
         },
         "metrics": {
             "metric_schema_version": metric_schema_version(record),
+            **(
+                {"metric_definitions_sha256": metrics["metric_definitions_sha256"]}
+                if "metric_definitions_sha256" in metrics
+                else {}
+            ),
             **{
                 key: metrics.get(key)
                 for key in (

@@ -57,6 +57,8 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.constants import (
     COMFORT_FORCE_THRESHOLD,
+    CURVATURE_LENGTH_FLOOR_M,
+    CURVATURE_MIN_DISPLACEMENT_M,
 )
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
@@ -99,10 +101,6 @@ ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
-# D-055: sub-millimetre displacements are standstill, independent of timestep.
-CURVATURE_MIN_DISPLACEMENT_M = 1e-3
-# Bound total turning on short paths without changing the turning numerator.
-CURVATURE_LENGTH_FLOOR_M = 1.0
 
 
 @dataclass

@@ -81,10 +81,17 @@ def test_acquired_anchors_are_bound_before_scoring(tmp_path, monkeypatch, spec_f
     """Actual strict scoring loader plus a freeze spy verifies source/custody attachment."""
     binding_api = _binding_api()
     cfg = load_campaign_config(CONFIG)
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+
     _weights, anchors, _family = spec_files
     document = json.loads(anchors.read_bytes())
     cal = document["calibration"]
     cal["seeds"] = [1001, 1002]
+    cal["scenario_horizons"] = {
+        row["name"]: row["simulation_config"]["max_episode_steps"]
+        for row in _load_campaign_scenarios(cfg)
+    }
+    cal["scenarios"] = sorted(cal["scenario_horizons"])
     grid = sorted(product(cal["arms"], cal["scenarios"], cal["seeds"]))
     cal["grid_sha256"] = hashlib.sha256(
         json.dumps(grid, separators=(",", ":")).encode()
@@ -147,10 +154,17 @@ def test_reviewed_artifact_route_still_requires_exact_acquisition_identity(
     """Without raw custody, strict anchors must still bind this source and acquisition config."""
     binding_api = _binding_api()
     cfg = load_campaign_config(CONFIG)
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+
     _weights, anchors, _family = spec_files
     document = json.loads(anchors.read_bytes())
     cal = document["calibration"]
     cal["seeds"] = [1001, 1002]
+    cal["scenario_horizons"] = {
+        row["name"]: row["simulation_config"]["max_episode_steps"]
+        for row in _load_campaign_scenarios(cfg)
+    }
+    cal["scenarios"] = sorted(cal["scenario_horizons"])
     grid = sorted(product(cal["arms"], cal["scenarios"], cal["seeds"]))
     cal["grid_sha256"] = hashlib.sha256(
         json.dumps(grid, separators=(",", ":")).encode()

@@ -1,0 +1,21 @@
+{
+  "head": "d333c08abe8c32d555c29dd3def1e5cce8c35f91",
+  "modules": {
+    "robot_sf/planner/socnav_occupancy.py": "edfd154c741b7c581df628df343968a59b7b067ed0ed7b59333ecf96dc0a3d3c",
+    "robot_sf/planner/grid_route.py": "a6403115ffa6db25ea2cf8704786f1ac42a91693a436aa2b67b5dafd1ee37322",
+    "robot_sf/planner/hybrid_rule_local_planner.py": "006e9196ac2608c011de3fc37063f4ffe76166913232e49f4bf17c864c318f22",
+    "robot_sf/sensor/socnav_observation.py": "7a184d63dabee2fc9fa03fb5c4867161be038f4989749dc952b9c8414f5bf86f",
+    "robot_sf/benchmark/map_runner/map_runner_observations.py": "6fd165d5435aa726ddd78118593bdf96c3fbe482ea2985f3311ca096f8279ff9"
+  },
+  "test_sha256": "8075c98c17d8421a6ceca63682acea5bd2eaa2a91756bb41fe47c81bd9a107de",
+  "exit": 1,
+  "argv": [
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_goal_validity_survives_real_observation_flattening",
+    "tests/planner/test_hybrid_feasibility_diagnostics.py::test_map_observation_bridge_preserves_optional_successor_validity",
+    "-n",
+    "0",
+    "-q"
+  ],
+  "intended_reasons_verified": true,
+  "missing_reasons": []
+}

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_1101.json",
+  "artifact_sha256": "dc8bcd8b5ce2b013d31ac2ba4166cbf7e4dbeb4cfa8e112baeb9f956b8f002c4",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

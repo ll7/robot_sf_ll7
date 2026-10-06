@@ -1,0 +1,48 @@
+{
+  "schema_version": "evidence_bundle.v1",
+  "created_at_utc": "2026-09-28T07:06:11.551500Z",
+  "bundle_name": "issue_9759_hybrid_mirror_diagnostic_2026-09-28",
+  "source_root": "docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload",
+  "command": "issue_9759_hybrid_mirror_diagnostic.py --workers 12 --resume --output-dir <private local run directory>; exact argv and environment are retained in private run_meta.json",
+  "commit": "4fc1a1d4ff793065de717b45d9769a3225653a6a",
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "policy": {
+    "large_raw_artifacts": "excluded",
+    "output_tree_mirroring": "forbidden",
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone"
+  },
+  "totals": {
+    "file_count": 4,
+    "total_bytes": 10822
+  },
+  "files": [
+    {
+      "path": "agent_run_manifest.yaml",
+      "size_bytes": 3462,
+      "sha256": "7cd427bfe2d889aced0693e8dffbcda21e33da682b293f4eebc55a47024b12af",
+      "kind": "misc",
+      "location": "payload/agent_run_manifest.yaml"
+    },
+    {
+      "path": "private_artifact_hashes.json",
+      "size_bytes": 1509,
+      "sha256": "da11045f53d5a8845c8ad23ef4d72a5e080640977326c21589865613d78651fd",
+      "kind": "misc",
+      "location": "payload/private_artifact_hashes.json"
+    },
+    {
+      "path": "report.md",
+      "size_bytes": 4623,
+      "sha256": "3207ed8147c4d0cf366683f88bb2d654b04792188c405d74564bef7df5085a47",
+      "kind": "reports",
+      "location": "payload/report.md"
+    },
+    {
+      "path": "summary.json",
+      "size_bytes": 1228,
+      "sha256": "514aca636d5ae9ac0603a77a18e99a89f01101eb3a2995f492c989f9ef19eaf7",
+      "kind": "aggregates",
+      "location": "payload/summary.json"
+    }
+  ]
+}

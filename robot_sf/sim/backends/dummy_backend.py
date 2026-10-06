@@ -12,9 +12,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.nav.map_config import (
     GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1,
     normalize_goal_completion_policy,
+    normalize_robot_goal_sampling_policy,
 )
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 
@@ -35,6 +38,8 @@ class DummySimulator:
         step_dt: float = 0.1,
         goal_proximity_threshold: float = 1.0,
         goal_completion_policy: str | None = None,
+        robot_goal_sampling_policy: str | None = None,
+        robot_radius: float | None = None,
     ):
         """Initialize the deterministic dummy simulator.
 
@@ -44,7 +49,10 @@ class DummySimulator:
             step_dt: Fixed dummy timestep in seconds.
             goal_proximity_threshold: Goal completion tolerance.
             goal_completion_policy: Optional versioned route-success policy override.
+            robot_goal_sampling_policy: Optional versioned final-target sampling policy.
+            robot_radius: Required robot footprint radius when corrected sampling is selected.
         """
+        check_simulation_seed(seed, boundary="DummySimulator.__init__")
         self.map_def = map_def
         self.seed = seed
         self.rng = np.random.default_rng(seed)
@@ -54,6 +62,10 @@ class DummySimulator:
         self.goal_completion_policy = normalize_goal_completion_policy(
             goal_completion_policy if goal_completion_policy is not None else map_policy
         )
+        self.robot_goal_sampling_policy = normalize_robot_goal_sampling_policy(
+            robot_goal_sampling_policy
+        )
+        self.robot_radius = robot_radius
         self.timestep = 0
         self.robots = [_MockRobot()]
         self.robot_navs = [
@@ -68,12 +80,19 @@ class DummySimulator:
 
     def reset_state(self) -> None:
         """Reset simulator to initial state."""
+        check_simulation_seed(self.seed, boundary="DummySimulator.reset_state")
         self.timestep = 0
         self.rng = np.random.default_rng(self.seed)
+        sampling_kwargs = (
+            {
+                "robot_goal_sampling_policy": self.robot_goal_sampling_policy,
+                "robot_radius": self.robot_radius,
+            }
+            if self.robot_goal_sampling_policy == ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1
+            else {}
+        )
         route = sample_route(
-            self.map_def,
-            None,
-            completion_policy=self.goal_completion_policy,
+            self.map_def, None, completion_policy=self.goal_completion_policy, **sampling_kwargs
         )
         navigator = self.robot_navs[0]
         navigator.new_route(
@@ -85,8 +104,19 @@ class DummySimulator:
         )
         self.robots[0].reset_state((route[0], navigator.initial_orientation))
 
+    def repopulate_crowd(self, seed: int | None = None) -> None:
+        """Re-sample the pedestrian crowd (issue #9760 protocol hook).
+
+        The dummy backend holds no crowd (``ped_pos`` is always empty), so
+        there is nothing to re-sample; the method exists so directly-constructed
+        envs running on this backend support the same seeded-reset protocol
+        as the full simulator. The seed has no effect on an empty population.
+        """
+        check_simulation_seed(seed, boundary="DummySimulator.repopulate_crowd")
+
     def step_once(self, actions) -> None:
         """Advance one timestep using a simple unicycle-style pose update."""
+        check_simulation_seed(self.seed, boundary="DummySimulator.step_once")
         self.timestep += 1
         action = actions[0] if actions else (0.0, 0.0)
         self.robots[0].apply_action(action, dt=self.step_dt)
@@ -193,6 +223,8 @@ def dummy_factory(env_config: EnvSettings, map_def: MapDefinition, _peds: bool) 
         step_dt=getattr(sim_settings, "time_per_step_in_secs", 0.1),
         goal_proximity_threshold=getattr(sim_settings, "goal_radius", 1.0),
         goal_completion_policy=getattr(sim_settings, "goal_completion_policy", None),
+        robot_goal_sampling_policy=getattr(sim_settings, "robot_goal_sampling_policy", None),
+        robot_radius=getattr(getattr(env_config, "robot_config", None), "radius", None),
     )
 
 

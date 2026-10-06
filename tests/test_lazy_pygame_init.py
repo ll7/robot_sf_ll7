@@ -62,7 +62,7 @@ env = make_robot_env(debug=True)
 try:
     print("pygame_after_create", "pygame" in sys.modules)
     print("sim_ui_present", getattr(env, "sim_ui", None) is not None)
-    env.reset(seed=123)
+    env.reset(seed=1013)
     env.render()
     print("pygame_after_render", "pygame" in sys.modules)
 finally:

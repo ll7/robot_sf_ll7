@@ -16,7 +16,8 @@ repos:
       - id: trailing-whitespace
         exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
       - id: end-of-file-fixer
-        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
+        # Frozen v0.0.2 campaign byte pin intentionally has no EOF newline.
+        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/|configs/benchmarks/paper_experiment_matrix_all_planners_v1\.yaml$)
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml

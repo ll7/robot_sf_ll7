@@ -49,6 +49,7 @@ def normalize_map_observation(obs: dict[str, Any]) -> dict[str, Any]:
             "goal": {
                 "current": obs.get("goal_current"),
                 "next": obs.get("goal_next"),
+                **({"next_valid": obs["goal_next_valid"]} if "goal_next_valid" in obs else {}),
             },
             "pedestrians": {
                 "positions": obs.get("pedestrians_positions"),

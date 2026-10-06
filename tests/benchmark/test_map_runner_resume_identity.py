@@ -221,6 +221,9 @@ def test_resume_identity_uses_identity_algo_observation_mode(
         fake_resolve,
     )
     monkeypatch.setattr(
+        map_runner._policy_resolution, "_resolve_policy_search_candidate_runtime", fake_resolve
+    )
+    monkeypatch.setattr(
         map_runner,
         "_run_map_job_worker",
         lambda job: runs.append(job) or {"algorithm_metadata": {}},
@@ -287,6 +290,9 @@ def test_resume_identity_uses_identity_algo_observation_level(
         map_runner,
         "_resolve_policy_search_candidate_runtime",
         fake_resolve,
+    )
+    monkeypatch.setattr(
+        map_runner._policy_resolution, "_resolve_policy_search_candidate_runtime", fake_resolve
     )
     monkeypatch.setattr(
         map_runner,

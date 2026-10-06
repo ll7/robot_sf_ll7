@@ -12,6 +12,7 @@ on:
       - "fast-pysf/uv.lock"
       - ".github/workflows/codeql.yml"
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "**/*.py"
       - "pyproject.toml"
@@ -38,6 +39,7 @@ concurrency:
 
 jobs:
   analyze:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Analyze Python
     runs-on: ubuntu-latest
     timeout-minutes: 20

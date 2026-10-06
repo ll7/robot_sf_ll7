@@ -4,6 +4,23 @@ This is the canonical task guide for dependency-aware local validation. Match th
 change risk; use the full readiness lane when the change affects scripts, runtime, schemas,
 benchmark semantics, provenance, or publication behavior.
 
+## Hosted draft and ready PR checks
+
+A draft PR push runs only the CI `dispatch-ownership` job (Ruff lint, format, and a small
+CI-helper test subset) and the `ci-draft` feedback job. Other PR jobs skip drafts. The
+`ready_for_review` event starts the full PR checks, including the four fast-feedback
+shards and exact-head changed coverage. Main pushes and merge groups keep the full
+matrix. The separate `pull_request_target` review-bot workflow retains its write
+permission boundary and runs only when the PR is ready.
+
+On ready PRs, `scripts/dev/ci_heavy_paths.py` selects the macOS compatibility
+matrix rows, examples smoke, notebooks smoke, and xdist scratch isolation from
+the complete GitHub PR file list. A missing or invalid list fails the selection
+job. The aggregate `ci` check accepts a skipped heavy job only when the selector
+explicitly marks it irrelevant to that PR; merge groups and main require every
+heavy job. PR body checks share the `pr-contract-check` runner and retain their
+advisory annotations.
+
 ## Dependency profiles
 
 `run_tests_parallel.sh` checks dependencies before resolving workers or starting pytest:
@@ -156,6 +173,16 @@ gate audit.
 behavior, including base fallback, and does not run the new early check. A successful check is
 only an early rejection filter: all later readiness gates, core registry invariants, hosted
 checks, and final freshness requirements still apply. No success is cached between runs.
+
+## Early docs/evidence-integrity check in final readiness
+
+Final readiness also runs `scripts/dev/check_docs_evidence_integrity.py` before formatting or test
+lanes when a changed path matches the pull-request path filters in
+[the hosted docs/evidence-integrity workflow](../../.github/workflows/docs-evidence-integrity.yml).
+The checker receives the same `BASE_REF` used for readiness and evaluates the same committed
+base-to-head changes. Code-only changes outside those filters skip this check. A changed catalog or
+evidence file that fails the checker stops readiness before expensive lanes; a successful check is
+not a substitute for later tests or the separate evidence-registry gate above.
 
 ## Readiness count selectors
 

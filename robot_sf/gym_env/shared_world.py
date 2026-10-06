@@ -301,6 +301,8 @@ class SharedWorldRunner:
             spawn_capacity=_spawn_capacity(env_config, map_def),
         )
         resolved_map = _resolve_map_def(env_config, map_def)
+        if seed is not None:
+            env_config.sim_config.pedestrian_seed = int(seed)
         with global_reset_seed(seed):
             simulators = init_simulators(
                 env_config,
@@ -319,7 +321,14 @@ class SharedWorldRunner:
         d_t = float(env_config.sim_config.time_per_step_in_secs)
         max_ep_time = float(env_config.sim_config.sim_time_in_secs)
         states = [
-            RobotState(nav, occ, sen, d_t, max_ep_time)
+            RobotState(
+                nav,
+                occ,
+                sen,
+                d_t,
+                max_ep_time,
+                episode_step_limit=env_config.sim_config.episode_step_limit,
+            )
             for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors, strict=False)
         ]
         if len(states) != admission.admitted_robots:
@@ -380,6 +389,8 @@ class SharedWorldRunner:
     def reset(self, seed: int | None = None) -> None:
         """Reset the whole world explicitly; per-agent resets do not exist."""
         with global_reset_seed(seed):
+            if seed is not None:
+                self._sim.repopulate_crowd(seed=int(seed))
             self._sim.reset_state()
             for state in self._states:
                 reset_episode_counter_for_seed(state, seed)

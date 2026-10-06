@@ -1,0 +1,3505 @@
+{
+  "arms": [
+    {
+      "arm": "risk_dwa",
+      "base": {
+        "command_zero_steps": 0,
+        "definitions": {
+          "command_zero": "abs selected linear velocity <0.001 m/s; supplementary",
+          "frozen": "physical post-step velocity norm <0.01 m/s; mean episode fraction primary",
+          "no_admissible": "step diagnostics boolean; mean episode fraction primary"
+        },
+        "episodes": 10,
+        "episodes_metadata": [
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "9ac133adfc1c81ed",
+            "episode_id": "admfix_empty_world--1001--9ac133adfc1c81ed",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1001,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 64,
+            "termination_reason": "success",
+            "trace_steps": 64
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2f5573451dc13cb7",
+            "episode_id": "admfix_empty_world--1002--2f5573451dc13cb7",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1002,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 63,
+            "termination_reason": "success",
+            "trace_steps": 63
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "e1de011b6d45cd4b",
+            "episode_id": "admfix_empty_world--1003--e1de011b6d45cd4b",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1003,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 55,
+            "termination_reason": "success",
+            "trace_steps": 55
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "21473bdf26ddbd66",
+            "episode_id": "admfix_empty_world--1004--21473bdf26ddbd66",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1004,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 57,
+            "termination_reason": "success",
+            "trace_steps": 57
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "1f836f20f0e2bf65",
+            "episode_id": "admfix_empty_world--1005--1f836f20f0e2bf65",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1005,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 55,
+            "termination_reason": "success",
+            "trace_steps": 55
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "e2f9c917beac8397",
+            "episode_id": "admfix_empty_world--1006--e2f9c917beac8397",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1006,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 57,
+            "termination_reason": "success",
+            "trace_steps": 57
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "0c186f20d2ce7cf5",
+            "episode_id": "admfix_empty_world--1007--0c186f20d2ce7cf5",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1007,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 59,
+            "termination_reason": "success",
+            "trace_steps": 59
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "a567ca3712c86504",
+            "episode_id": "admfix_empty_world--1008--a567ca3712c86504",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1008,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 59,
+            "termination_reason": "success",
+            "trace_steps": 59
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "7674bff22c72f134",
+            "episode_id": "admfix_empty_world--1009--7674bff22c72f134",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1009,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 57,
+            "termination_reason": "success",
+            "trace_steps": 57
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "88b773d249044867",
+            "episode_id": "admfix_empty_world--1010--88b773d249044867",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1010,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 56,
+            "termination_reason": "success",
+            "trace_steps": 56
+          }
+        ],
+        "frozen_steps": 0,
+        "mean_episode_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "infeasible_branch": 0.0,
+          "no_admissible": 0.0
+        },
+        "no_admissible_steps": 0,
+        "outcomes": {
+          "S": 10
+        },
+        "pooled_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "no_admissible": 0.0
+        },
+        "raw_path": "producer-home/luttkule/admfix_evidence/empty_base_2/runs/risk_dwa__differential_drive/episodes.jsonl",
+        "raw_sha256": "a2e420a9aef4d281736ebb8b4209260242fa098b2eebb4affcb7dd4c33d9a08f",
+        "scenarios": 1,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005,
+          1006,
+          1007,
+          1008,
+          1009,
+          1010
+        ],
+        "source_shas": [
+          "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+        ],
+        "steps": 582
+      },
+      "pr": {
+        "command_zero_steps": 0,
+        "definitions": {
+          "command_zero": "abs selected linear velocity <0.001 m/s; supplementary",
+          "frozen": "physical post-step velocity norm <0.01 m/s; mean episode fraction primary",
+          "no_admissible": "step diagnostics boolean; mean episode fraction primary"
+        },
+        "episodes": 10,
+        "episodes_metadata": [
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "9ac133adfc1c81ed",
+            "episode_id": "admfix_empty_world--1001--9ac133adfc1c81ed",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1001,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 64,
+            "termination_reason": "success",
+            "trace_steps": 64
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2f5573451dc13cb7",
+            "episode_id": "admfix_empty_world--1002--2f5573451dc13cb7",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1002,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 63,
+            "termination_reason": "success",
+            "trace_steps": 63
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "e1de011b6d45cd4b",
+            "episode_id": "admfix_empty_world--1003--e1de011b6d45cd4b",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1003,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 55,
+            "termination_reason": "success",
+            "trace_steps": 55
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "21473bdf26ddbd66",
+            "episode_id": "admfix_empty_world--1004--21473bdf26ddbd66",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1004,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 57,
+            "termination_reason": "success",
+            "trace_steps": 57
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "1f836f20f0e2bf65",
+            "episode_id": "admfix_empty_world--1005--1f836f20f0e2bf65",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1005,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 55,
+            "termination_reason": "success",
+            "trace_steps": 55
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "e2f9c917beac8397",
+            "episode_id": "admfix_empty_world--1006--e2f9c917beac8397",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1006,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 57,
+            "termination_reason": "success",
+            "trace_steps": 57
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "0c186f20d2ce7cf5",
+            "episode_id": "admfix_empty_world--1007--0c186f20d2ce7cf5",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1007,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 59,
+            "termination_reason": "success",
+            "trace_steps": 59
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "a567ca3712c86504",
+            "episode_id": "admfix_empty_world--1008--a567ca3712c86504",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1008,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 59,
+            "termination_reason": "success",
+            "trace_steps": 59
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "7674bff22c72f134",
+            "episode_id": "admfix_empty_world--1009--7674bff22c72f134",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1009,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 57,
+            "termination_reason": "success",
+            "trace_steps": 57
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "88b773d249044867",
+            "episode_id": "admfix_empty_world--1010--88b773d249044867",
+            "forecast": {
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1010,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 56,
+            "termination_reason": "success",
+            "trace_steps": 56
+          }
+        ],
+        "frozen_steps": 0,
+        "mean_episode_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "infeasible_branch": 0.0,
+          "no_admissible": 0.0
+        },
+        "no_admissible_steps": 0,
+        "outcomes": {
+          "S": 10
+        },
+        "pooled_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "no_admissible": 0.0
+        },
+        "raw_path": "producer-home/luttkule/admfix/out/empty_headde8_2/runs/risk_dwa__differential_drive/episodes.jsonl",
+        "raw_sha256": "7b69486de17a46810794b314053210a0b7278a2d8fe2c0f2c4847dfd132e84da",
+        "scenarios": 1,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005,
+          1006,
+          1007,
+          1008,
+          1009,
+          1010
+        ],
+        "source_shas": [
+          "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+        ],
+        "steps": 582
+      }
+    },
+    {
+      "arm": "predictive_mppi",
+      "base": {
+        "command_zero_steps": 0,
+        "definitions": {
+          "command_zero": "abs selected linear velocity <0.001 m/s; supplementary",
+          "frozen": "physical post-step velocity norm <0.01 m/s; mean episode fraction primary",
+          "no_admissible": "step diagnostics boolean; mean episode fraction primary"
+        },
+        "episodes": 10,
+        "episodes_metadata": [
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "61be09b65d0ddc5c",
+            "episode_id": "admfix_empty_world--1001--61be09b65d0ddc5c",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1001,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 54,
+            "termination_reason": "success",
+            "trace_steps": 54
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "0707e51211e3a484",
+            "episode_id": "admfix_empty_world--1002--0707e51211e3a484",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1002,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 53,
+            "termination_reason": "success",
+            "trace_steps": 53
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "317ff4dc93c99d64",
+            "episode_id": "admfix_empty_world--1003--317ff4dc93c99d64",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1003,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 47,
+            "termination_reason": "success",
+            "trace_steps": 47
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "5fa001e8714b6b45",
+            "episode_id": "admfix_empty_world--1004--5fa001e8714b6b45",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1004,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 49,
+            "termination_reason": "success",
+            "trace_steps": 49
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "136c3989522d71d2",
+            "episode_id": "admfix_empty_world--1005--136c3989522d71d2",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1005,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 47,
+            "termination_reason": "success",
+            "trace_steps": 47
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2033cfcfef9f144c",
+            "episode_id": "admfix_empty_world--1006--2033cfcfef9f144c",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1006,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 49,
+            "termination_reason": "success",
+            "trace_steps": 49
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "8ee4e56bc1323b2d",
+            "episode_id": "admfix_empty_world--1007--8ee4e56bc1323b2d",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1007,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 50,
+            "termination_reason": "success",
+            "trace_steps": 50
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "80483be5c682bcc2",
+            "episode_id": "admfix_empty_world--1008--80483be5c682bcc2",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1008,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 50,
+            "termination_reason": "success",
+            "trace_steps": 50
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "5187cd86aba3a862",
+            "episode_id": "admfix_empty_world--1009--5187cd86aba3a862",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1009,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 48,
+            "termination_reason": "success",
+            "trace_steps": 48
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "8d1f5585b7ddbe3f",
+            "episode_id": "admfix_empty_world--1010--8d1f5585b7ddbe3f",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1010,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 47,
+            "termination_reason": "success",
+            "trace_steps": 47
+          }
+        ],
+        "frozen_steps": 0,
+        "mean_episode_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "infeasible_branch": 0.0,
+          "no_admissible": 0.0
+        },
+        "no_admissible_steps": 0,
+        "outcomes": {
+          "S": 10
+        },
+        "pooled_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "no_admissible": 0.0
+        },
+        "raw_path": "producer-home/luttkule/admfix_evidence/empty_base_1/runs/predictive_mppi__differential_drive/episodes.jsonl",
+        "raw_sha256": "492afec65d7fa0ef70f035d52c808cd78eb84d234c0cff8a004be34ba32ed1c8",
+        "scenarios": 1,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005,
+          1006,
+          1007,
+          1008,
+          1009,
+          1010
+        ],
+        "source_shas": [
+          "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+        ],
+        "steps": 494
+      },
+      "pr": {
+        "command_zero_steps": 0,
+        "definitions": {
+          "command_zero": "abs selected linear velocity <0.001 m/s; supplementary",
+          "frozen": "physical post-step velocity norm <0.01 m/s; mean episode fraction primary",
+          "no_admissible": "step diagnostics boolean; mean episode fraction primary"
+        },
+        "episodes": 10,
+        "episodes_metadata": [
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "61be09b65d0ddc5c",
+            "episode_id": "admfix_empty_world--1001--61be09b65d0ddc5c",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1001,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 54,
+            "termination_reason": "success",
+            "trace_steps": 54
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "0707e51211e3a484",
+            "episode_id": "admfix_empty_world--1002--0707e51211e3a484",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1002,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 53,
+            "termination_reason": "success",
+            "trace_steps": 53
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "317ff4dc93c99d64",
+            "episode_id": "admfix_empty_world--1003--317ff4dc93c99d64",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1003,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 47,
+            "termination_reason": "success",
+            "trace_steps": 47
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "5fa001e8714b6b45",
+            "episode_id": "admfix_empty_world--1004--5fa001e8714b6b45",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1004,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 49,
+            "termination_reason": "success",
+            "trace_steps": 49
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "136c3989522d71d2",
+            "episode_id": "admfix_empty_world--1005--136c3989522d71d2",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1005,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 47,
+            "termination_reason": "success",
+            "trace_steps": 47
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2033cfcfef9f144c",
+            "episode_id": "admfix_empty_world--1006--2033cfcfef9f144c",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1006,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 49,
+            "termination_reason": "success",
+            "trace_steps": 49
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "8ee4e56bc1323b2d",
+            "episode_id": "admfix_empty_world--1007--8ee4e56bc1323b2d",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1007,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 50,
+            "termination_reason": "success",
+            "trace_steps": 50
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "80483be5c682bcc2",
+            "episode_id": "admfix_empty_world--1008--80483be5c682bcc2",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1008,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 50,
+            "termination_reason": "success",
+            "trace_steps": 50
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "5187cd86aba3a862",
+            "episode_id": "admfix_empty_world--1009--5187cd86aba3a862",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1009,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 48,
+            "termination_reason": "success",
+            "trace_steps": 48
+          },
+          {
+            "checkpoint": null,
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "8d1f5585b7ddbe3f",
+            "episode_id": "admfix_empty_world--1010--8d1f5585b7ddbe3f",
+            "forecast": {
+              "foresight": {},
+              "foresight_prediction": {
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_reason": null,
+                "fallback_used": false,
+                "load_error": null,
+                "load_status": "loaded",
+                "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_checkpoint_path": "predictive_proxy_selected_v1",
+                "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+                "requested_model_id": "predictive_proxy_selected_v1"
+              }
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1010,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 47,
+            "termination_reason": "success",
+            "trace_steps": 47
+          }
+        ],
+        "frozen_steps": 0,
+        "mean_episode_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "infeasible_branch": 0.0,
+          "no_admissible": 0.0
+        },
+        "no_admissible_steps": 0,
+        "outcomes": {
+          "S": 10
+        },
+        "pooled_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "no_admissible": 0.0
+        },
+        "raw_path": "producer-home/luttkule/admfix/out/empty_headde8_1/runs/predictive_mppi__differential_drive/episodes.jsonl",
+        "raw_sha256": "df1bdcdda3492dc27bb601f501496a7b3cfbb593635c9515759b6bc927eb292e",
+        "scenarios": 1,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005,
+          1006,
+          1007,
+          1008,
+          1009,
+          1010
+        ],
+        "source_shas": [
+          "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+        ],
+        "steps": 494
+      }
+    },
+    {
+      "arm": "guarded_ppo",
+      "base": {
+        "command_zero_steps": 0,
+        "definitions": {
+          "command_zero": "abs selected linear velocity <0.001 m/s; supplementary",
+          "frozen": "physical post-step velocity norm <0.01 m/s; mean episode fraction primary",
+          "no_admissible": "step diagnostics boolean; mean episode fraction primary"
+        },
+        "episodes": 10,
+        "episodes_metadata": [
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2eddcc3332489724",
+            "episode_id": "admfix_empty_world--1001--2eddcc3332489724",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1001,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 46,
+            "termination_reason": "success",
+            "trace_steps": 46
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2978a57e4768fdb4",
+            "episode_id": "admfix_empty_world--1002--2978a57e4768fdb4",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1002,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 45,
+            "termination_reason": "success",
+            "trace_steps": 45
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "e3b3f80ddd504b2a",
+            "episode_id": "admfix_empty_world--1003--e3b3f80ddd504b2a",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1003,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 156,
+            "termination_reason": "success",
+            "trace_steps": 156
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "08ee5a5879d32604",
+            "episode_id": "admfix_empty_world--1004--08ee5a5879d32604",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1004,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 101,
+            "termination_reason": "success",
+            "trace_steps": 101
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "73a1698e82ad84bd",
+            "episode_id": "admfix_empty_world--1005--73a1698e82ad84bd",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1005,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 347,
+            "termination_reason": "success",
+            "trace_steps": 347
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "a7da1e5957570e4b",
+            "episode_id": "admfix_empty_world--1006--a7da1e5957570e4b",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1006,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 159,
+            "termination_reason": "success",
+            "trace_steps": 159
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "f8de3efb78432841",
+            "episode_id": "admfix_empty_world--1007--f8de3efb78432841",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1007,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 42,
+            "termination_reason": "success",
+            "trace_steps": 42
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "493361ea2993ce88",
+            "episode_id": "admfix_empty_world--1008--493361ea2993ce88",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1008,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 301,
+            "termination_reason": "success",
+            "trace_steps": 301
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "a698e5f5adb4b935",
+            "episode_id": "admfix_empty_world--1009--a698e5f5adb4b935",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1009,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 159,
+            "termination_reason": "success",
+            "trace_steps": 159
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "598ed26617c31a51",
+            "episode_id": "admfix_empty_world--1010--598ed26617c31a51",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/base/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1010,
+            "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+            "steps": 156,
+            "termination_reason": "success",
+            "trace_steps": 156
+          }
+        ],
+        "frozen_steps": 0,
+        "mean_episode_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "infeasible_branch": 0.0,
+          "no_admissible": 0.0
+        },
+        "no_admissible_steps": 0,
+        "outcomes": {
+          "S": 10
+        },
+        "pooled_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "no_admissible": 0.0
+        },
+        "raw_path": "producer-home/luttkule/admfix_evidence/empty_base_0/runs/guarded_ppo__differential_drive/episodes.jsonl",
+        "raw_sha256": "c81fe18a46f4eb0cce1ff4ba3927737dc9d836dd7b9f4d167ef62d5ffa2b08f8",
+        "scenarios": 1,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005,
+          1006,
+          1007,
+          1008,
+          1009,
+          1010
+        ],
+        "source_shas": [
+          "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+        ],
+        "steps": 1512
+      },
+      "pr": {
+        "command_zero_steps": 0,
+        "definitions": {
+          "command_zero": "abs selected linear velocity <0.001 m/s; supplementary",
+          "frozen": "physical post-step velocity norm <0.01 m/s; mean episode fraction primary",
+          "no_admissible": "step diagnostics boolean; mean episode fraction primary"
+        },
+        "episodes": 10,
+        "episodes_metadata": [
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2eddcc3332489724",
+            "episode_id": "admfix_empty_world--1001--2eddcc3332489724",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1001,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 46,
+            "termination_reason": "success",
+            "trace_steps": 46
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "2978a57e4768fdb4",
+            "episode_id": "admfix_empty_world--1002--2978a57e4768fdb4",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1002,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 45,
+            "termination_reason": "success",
+            "trace_steps": 45
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "e3b3f80ddd504b2a",
+            "episode_id": "admfix_empty_world--1003--e3b3f80ddd504b2a",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1003,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 156,
+            "termination_reason": "success",
+            "trace_steps": 156
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "08ee5a5879d32604",
+            "episode_id": "admfix_empty_world--1004--08ee5a5879d32604",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1004,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 101,
+            "termination_reason": "success",
+            "trace_steps": 101
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "73a1698e82ad84bd",
+            "episode_id": "admfix_empty_world--1005--73a1698e82ad84bd",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1005,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 347,
+            "termination_reason": "success",
+            "trace_steps": 347
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "a7da1e5957570e4b",
+            "episode_id": "admfix_empty_world--1006--a7da1e5957570e4b",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1006,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 159,
+            "termination_reason": "success",
+            "trace_steps": 159
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "f8de3efb78432841",
+            "episode_id": "admfix_empty_world--1007--f8de3efb78432841",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1007,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 42,
+            "termination_reason": "success",
+            "trace_steps": 42
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "493361ea2993ce88",
+            "episode_id": "admfix_empty_world--1008--493361ea2993ce88",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1008,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 301,
+            "termination_reason": "success",
+            "trace_steps": 301
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "a698e5f5adb4b935",
+            "episode_id": "admfix_empty_world--1009--a698e5f5adb4b935",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1009,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 159,
+            "termination_reason": "success",
+            "trace_steps": 159
+          },
+          {
+            "checkpoint": {
+              "checkpoint_sha256": null,
+              "fallback_triggered": false,
+              "hash_source": null,
+              "load_error": null,
+              "load_status": "loaded",
+              "load_succeeded": true,
+              "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+            },
+            "collision_counts": {
+              "agent_collision_count": 0,
+              "obstacle_collision_count": 0,
+              "ped_collision_count": 0
+            },
+            "command_zero_fraction": 0.0,
+            "command_zero_steps": 0,
+            "config_hash": "598ed26617c31a51",
+            "episode_id": "admfix_empty_world--1010--598ed26617c31a51",
+            "forecast": {
+              "checkpoint_provenance": {
+                "checkpoint_sha256": null,
+                "fallback_triggered": false,
+                "hash_source": null,
+                "load_error": null,
+                "load_status": "loaded",
+                "load_succeeded": true,
+                "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+              },
+              "foresight": {}
+            },
+            "frozen_fraction": 0.0,
+            "frozen_steps": 0,
+            "infeasible_branch_fraction": 0.0,
+            "infeasible_branch_steps": 0,
+            "input_records": [
+              {
+                "parser": "svg",
+                "path": "producer-home/luttkule/admfix/headde8/admfix_empty.svg",
+                "role": "map_file",
+                "scenario_id": "admfix_empty_world",
+                "sha256": "2487eeb40cae1cccc770acceecebb650b9e4c4fcf9a606c6e672b902f23b1ff0"
+              }
+            ],
+            "no_admissible_fraction": 0.0,
+            "no_admissible_steps": 0,
+            "original_status": "success",
+            "outcome": "S",
+            "outcome_flags": {
+              "collision_event": false,
+              "route_complete": true,
+              "timeout_event": false
+            },
+            "recovery_kinds": {},
+            "scenario": "admfix_empty_world",
+            "seed": 1010,
+            "source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+            "steps": 156,
+            "termination_reason": "success",
+            "trace_steps": 156
+          }
+        ],
+        "frozen_steps": 0,
+        "mean_episode_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "infeasible_branch": 0.0,
+          "no_admissible": 0.0
+        },
+        "no_admissible_steps": 0,
+        "outcomes": {
+          "S": 10
+        },
+        "pooled_fractions": {
+          "command_zero": 0.0,
+          "frozen": 0.0,
+          "no_admissible": 0.0
+        },
+        "raw_path": "producer-home/luttkule/admfix/out/empty_headde8_0/runs/guarded_ppo__differential_drive/episodes.jsonl",
+        "raw_sha256": "71b704d528d543f7ed20c3b738d11528a896b98b74796cf0a9deb20ee1b1acfc",
+        "scenarios": 1,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005,
+          1006,
+          1007,
+          1008,
+          1009,
+          1010
+        ],
+        "source_shas": [
+          "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+        ],
+        "steps": 1512
+      }
+    }
+  ],
+  "diagnostic_only": true,
+  "location": "Raw Slurm outputs imech192:producer-home/luttkule/admfix; compact trace copies producer-home/luttkule/admfix_evidence; temporary map bytes retained in both source worktrees.",
+  "paired_reset_and_ieee_command_parity": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ]
+}

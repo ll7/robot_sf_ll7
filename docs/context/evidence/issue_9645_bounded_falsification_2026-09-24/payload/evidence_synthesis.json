@@ -1,0 +1,53 @@
+{
+  "claim_boundary": "diagnostic_only_finite_search_budget_not_paper_facing_benchmark_evidence_and_not_real_world_safety",
+  "inference": [
+    "The fixed-seed, clipped-domain pilot is too narrow to justify scaling unchanged based on recorded outcomes; severe-intrusion evidence is absent, so criticality is unknown for all 64 candidates.",
+    "A candidate regenerated from the #1501 archive reproduced a collision twice at recorded revision 58e516aa4f69ff3098bf518199f483006589758c, but exact binding to the historical execution remains unknown; no replay at the current PR head was performed.",
+    "NO-GO is scoped to scaling this tested search-space/environment design; it is not evidence that no counterexample exists or that the overall falsification infrastructure cannot find one."
+  ],
+  "limitations": [
+    "No planner optimization or held-out evaluation occurred.",
+    "One counterexample archive entry was replayed; 14 other #1501 archived entries were not rerun.",
+    "The pilot did not record severe-intrusion events or metrics; schema-v3 reporting classifies all 64 candidates and their collision/intrusion tier as unknown, not non-critical.",
+    "The finite pilot result cannot establish counterexample absence or real-world safety.",
+    "The execution-context label said Python 3.12.3, but machine-generated runner provenance records Python 3.13.14; the latter is treated as authoritative.",
+    "Per-run driver wall times were not emitted. Candidate timestamp spans are partial run intervals; the entire driver wall time was captured as 39.10 seconds.",
+    "All 64 exact producer episode-record JSONLs and 64 separate path-normalized report-input copies are retained with SHA-256 and byte-count bindings. The original bytes were recovered from commit 7588b785a607680400adcc6398d8c983c160e4bd; the normalized records differ only at scenario_params.route_overrides_file. The rebuilt v3 report uses the normalized copies and binds them consistently to source revision 58e516aa4f69ff3098bf518199f483006589758c; scenario YAMLs, candidate-specific route overrides, and trajectories are not all bundled.",
+    "The regenerated #1501 candidate is not admitted to the counterexample corpus: its exact historical input binding remains unknown despite identical outcomes across two replays at the recorded regeneration revision."
+  ],
+  "next_action": "Do not launch #9648. Keep the regenerated #1501 candidate pending in #9652 until exact historical input binding is established. Define a separate bounded pilot that includes varied environment seeds and does not exclude known admissible cases, then re-review the gate before any larger campaign.",
+  "observed_evidence": [
+    "64/64 candidates completed under native baseline-safe goal-planner execution with required certification.",
+    "All best-so-far values were 0.0 across 16 evaluations for both samplers and both sampler seeds.",
+    "Pilot min-clearance range was 9.717535\u201311.169427 m; minimum human distance range was 11.117535\u201312.569427 m; no near miss or collision was observed.",
+    "The tracked #1501 archive contains 15 collision failures from a different search contract; one archived goal case was regenerated and replayed twice at recorded revision 58e516aa4f69ff3098bf518199f483006589758c with identical collision outcomes.",
+    "Schema-v3 report: 0 candidates are known critical, 0 known non-critical, and all 64 have unknown criticality because severe-intrusion evidence is absent.",
+    "All 64 candidate episode records have producer and normalized digest bindings after a single route-path-only rewrite; their embedded provenance consistently identifies source revision 58e516aa4f69ff3098bf518199f483006589758c.",
+    "The two matched Random/TPE seed pairs are eligible for descriptive comparison and tied at 0.0; no inferential test was performed."
+  ],
+  "schema_version": "evidence_synthesis_summary.v1",
+  "synthesis_table": [
+    {
+      "artifacts": "candidate_evaluations.csv; best_so_far.csv; comparison manifests; all 64 source episode records; replay_validation.json; convergence_report.json/.md",
+      "caveats": "one planner, one fixed environment seed, generated cases, no held-out family; two matched pairs only; safety criticality unknown for all 64 (missing severe-intrusion evidence); descriptive ties only, no inferential test",
+      "config": "issue_9645_pilot_space.v1.yaml; fixed scenario seed 123",
+      "evidence_tier": "diagnostic-only",
+      "mechanism": "#9645 fixed-seed Random vs TPE bounded search",
+      "metrics": "64 valid/successful; 0 failures; all scores 0.0; all 64 path-normalized episode-record copies have producer and normalized digest bindings with consistent source revision; detailed simulation-step and planner-decision traces were not captured; min clearance 9.7175\u201311.1694 m; criticality unknown for all 64",
+      "seeds": "sampler seeds 1101 and 2202",
+      "source_issue": 9645,
+      "verdict": "NO-GO for #9648 scale under unchanged domain"
+    },
+    {
+      "artifacts": "tracked archive.json and row_status_summary.json; regenerated failure_0002 replayed twice at recorded revision 58e516aa4f69ff3098bf518199f483006589758c",
+      "caveats": "historical run replay sweep was not done then; recorded-revision replay does not compare against missing historical raw episode metrics; task feasibility remains unknown without a successful reference planner; no replay at current PR head",
+      "config": "crossing_ttc_space.yaml; varied scenario seed, legacy objective",
+      "evidence_tier": "historical diagnostic-only",
+      "mechanism": "#1501 archived crossing/TTC hard cases",
+      "metrics": "15 archived collisions (8 goal, 7 ORCA); 66 invalid; 47 valid non-failures; one selected goal collision reproduced twice",
+      "seeds": "campaign seed 42; candidate environment seeds vary",
+      "source_issue": 1501,
+      "verdict": "use existing failure as initial regression candidate; not new #9645 discovery"
+    }
+  ]
+}

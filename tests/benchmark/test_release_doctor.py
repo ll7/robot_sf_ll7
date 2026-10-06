@@ -111,8 +111,8 @@ def test_scheduler_closeout_check_requires_explicit_final_identity(tmp_path: Pat
     assert "expected job ID is required" in missing_job.summary
 
 
-def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
-    """The current 14-arm predecessor resolves to exactly 20,160 cells."""
+def test_manifest_doctor_admits_explicit_historical_h600() -> None:
+    """The real historical manifest retains its 20160-cell doctor contract."""
     check, manifest, cfg = release_doctor._manifest_check(
         Path(
             "configs/benchmarks/releases/"
@@ -120,10 +120,22 @@ def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
         ),
         20160,
     )
-    assert check.status == "pass"
+    assert check.status == "pass", check.summary
     assert "20160-cell" in check.summary
     assert manifest is not None
-    assert cfg is not None
+    assert cfg.horizon_policy == "legacy_runner_cap"
+    assert len(release_doctor._load_campaign_scenarios(cfg)) == 48
+    from dataclasses import replace
+
+    ordinary = release_doctor._load_campaign_scenarios(replace(cfg, horizon_policy=None))
+    assert {s["simulation_config"]["max_episode_steps"] for s in ordinary} == {
+        400,
+        500,
+        600,
+        650,
+        700,
+    }
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
 
 
 def test_doctor_anchors_manifest_and_git_checks_to_explicit_release_checkout(
@@ -223,8 +235,25 @@ def test_campaign_asset_paths_use_explicit_release_checkout(
     assert seed_policy.seed_sets_path == release_seed_sets
 
 
-def test_v02_manifest_cardinality_cannot_be_overridden() -> None:
-    """The v0.2 doctor binds its matrix check to the manifest's 20,160 cells."""
+def test_v02_manifest_cardinality_cannot_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After budget admission, doctor still binds cardinality to the manifest."""
+    # Isolate the cardinality stage with an admitted, synthetic H600 matrix.
+    # The real historical source is refused in the budget-admission test above.
+    monkeypatch.setattr(
+        release_doctor, "validate_release_manifest", lambda *_args, **_kwargs: {"problems": []}
+    )
+    monkeypatch.setattr(
+        release_doctor,
+        "_load_campaign_scenarios",
+        lambda *_args, **_kwargs: [
+            {
+                "name": f"synthetic_h600_{index}",
+                "simulation_config": {"max_episode_steps": 600},
+                "seeds": list(range(1001, 1031)),
+            }
+            for index in range(48)
+        ],
+    )
     check, manifest, cfg = release_doctor._manifest_check(
         Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"),
         1,

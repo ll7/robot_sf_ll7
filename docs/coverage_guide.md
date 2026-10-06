@@ -146,7 +146,7 @@ Files with decreased coverage:
 
 Coverage collection and enforcement run automatically in CI (`.github/workflows/ci.yml`) with the following architecture:
 
-1. **Fast-feedback sharding**: The `fast-feedback` job distributes pytest execution across four runners (`PYTEST_SHARD_COUNT: 4`, `PYTEST_SHARD_INDEX: 1..4`).
+1. **Fast-feedback sharding**: The `fast-feedback` job distributes pytest execution across six runners (`PYTEST_SHARD_COUNT: 6`, `PYTEST_SHARD_INDEX: 1..6`).
    - On **pull request** events, coverage is enabled for the exact-head changed-line gate. The trace-based backend (`COVERAGE_CORE: ctrace`) is used because hosted xdist worker propagation must remain trustworthy.
    - On **merge-queue** events, coverage is likewise enabled with `ctrace` for the exact-head gate.
    - On **main** and **manual dispatch** events, coverage is enabled with `ROBOT_SF_SHARD_INCLUDE_SLOW: 1` and the faster CPython 3.12+ `sys.monitoring` backend (`COVERAGE_CORE: sysmon`) for the aggregate floor. Each shard writes to its own database (`output/coverage/.coverage.<shard>`) and uploads an artifact (`coverage-shard-<shard>`).

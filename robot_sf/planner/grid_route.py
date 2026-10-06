@@ -56,6 +56,8 @@ class GridRoutePlannerConfig:
     progress_weight: float = 1.0
     heading_weight: float = 1.0
     clearance_penalty_weight: float = 0.5
+    mirror_equivariant_waypoint_snap_enabled: bool = False
+    goal_next_validity_enabled: bool = False
 
 
 class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
@@ -98,7 +100,10 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
         if np.linalg.norm(goal_current - robot_pos) > float(self.config.goal_tolerance):
             goal = goal_current
-        elif np.linalg.norm(goal_next - robot_pos) > 1e-6:
+        elif np.linalg.norm(goal_next - robot_pos) > 1e-6 and (
+            not self.config.goal_next_validity_enabled
+            or bool(self._as_1d_float(goal_state.get("next_valid", [1]), pad=1)[0])
+        ):
             goal = goal_next
         else:
             goal = goal_current
@@ -547,7 +552,20 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             return goal
 
         waypoint_idx = min(max(int(self.config.waypoint_lookahead_cells), 1), len(path) - 1)
-        return self._grid_to_world(path[waypoint_idx], meta)
+        waypoint = self._grid_to_world(path[waypoint_idx], meta)
+        if self.config.mirror_equivariant_waypoint_snap_enabled:
+            direct = goal - robot_pos
+            direct_length_sq = float(np.dot(direct, direct))
+            resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
+            if direct_length_sq > 1e-12 and resolution > 0.0:
+                projection_fraction = float(
+                    np.clip(np.dot(waypoint - robot_pos, direct) / direct_length_sq, 0.0, 1.0)
+                )
+                projected_waypoint = robot_pos + projection_fraction * direct
+                quantization_radius = resolution * float(np.sqrt(0.5))
+                if float(np.linalg.norm(waypoint - projected_waypoint)) <= quantization_radius:
+                    return projected_waypoint
+        return waypoint
 
     @staticmethod
     def _path_length(path: list[tuple[int, int]], *, stop_index: int | None = None) -> float:
@@ -835,6 +853,10 @@ def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfi
         progress_weight=float(cfg.get("progress_weight", 1.0)),
         heading_weight=float(cfg.get("heading_weight", 1.0)),
         clearance_penalty_weight=float(cfg.get("clearance_penalty_weight", 0.5)),
+        goal_next_validity_enabled=bool(cfg.get("goal_next_validity_enabled", False)),
+        mirror_equivariant_waypoint_snap_enabled=bool(
+            cfg.get("mirror_equivariant_waypoint_snap_enabled", False)
+        ),
     )
 
 

@@ -106,7 +106,10 @@ def test_scenario_mutation_is_deterministic_and_does_not_edit_input() -> None:
     mutated = apply_sampled_scenario_mutation(scenario, row)
     assert scenario["simulation_config"]["ped_density"] == 0.01
     assert mutated["simulation_config"]["ped_density"] == pytest.approx(0.07)
-    assert mutated["simulation_config"]["crossing_time_offset_s"] == pytest.approx(-0.5)
+    assert "crossing_time_offset_s" not in mutated["simulation_config"]
+    assert mutated["metadata"]["rare_event_sampling"]["parameters"][
+        "crossing_time_offset_s"
+    ] == pytest.approx(-0.5)
     assert mutated["single_pedestrians"][0]["speed"] == pytest.approx(1.2)
     assert (
         mutated["metadata"]["rare_event_sampling"]["parameter_vector_hash"]

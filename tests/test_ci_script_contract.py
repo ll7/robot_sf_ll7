@@ -60,7 +60,7 @@ RUN_XDIST_RACE_VALIDATION = ROOT / "scripts" / "dev" / "run_xdist_race_validatio
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 LOCAL_SIGNOFF = ROOT / "scripts" / "dev" / "local_signoff.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
-PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-body-contracts.yml"
+PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-contract-check.yml"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
 COMMON_SETUP = ROOT / "scripts" / "dev" / "common_setup.sh"
 RUFF_FIX_FORMAT = ROOT / "scripts" / "dev" / "ruff_fix_format.sh"
@@ -129,7 +129,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
 
     script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
 
-    assert 'dist_mode="${PYTEST_XDIST_DIST:-load}"' in script_text
+    assert 'dist_mode="${PYTEST_XDIST_DIST:-$default_dist_mode}"' in script_text
     assert "Invalid PYTEST_XDIST_DIST value" in script_text
     assert "cmd=(uv run pytest)" in script_text
     assert 'if [[ "$pytest_execution_mode" == "xdist" ]]; then' in script_text
@@ -198,7 +198,9 @@ def test_run_tests_parallel_allows_only_empty_fast_only_shards() -> None:
     assert "fast-only shard collected no tests" in script_text
 
 
-def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_path: Path) -> None:
+def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(
+    tmp_path: Path,
+) -> None:
     """Exercise the exit-5 guard and prove rejected cases clean up their logs."""
 
     repo = tmp_path / "repo"
@@ -255,13 +257,14 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         "set -euo pipefail\n"
         'if [[ "$1" == run && "$2" == python ]]; then\n'
         '  case "$3" in\n'
-        "    *resolve_pytest_workers.py) printf '1\\n' ;;\n"
+        "    *resolve_pytest_workers.py) printf '%s\\n' \"$PYTEST_NUM_WORKERS\" ;;\n"
         "    *diagnose_xdist_crash.py) exit 0 ;;\n"
         '    *) echo "unexpected helper: $*" >&2; exit 99 ;;\n'
         "  esac\n"
         "  exit 0\n"
         "fi\n"
         'if [[ "$1" == run && "$2" == pytest ]]; then\n'
+        '  printf \'%s\\n\' "$@" >"$FIXTURE_ARGS"\n'
         '  cat "$FIXTURE_OUTPUT"\n'
         '  exit "$FIXTURE_EXIT"\n'
         "fi\n"
@@ -282,13 +285,21 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         ("full-suite-empty", 5, "no tests ran\n", 2, 1, 1),
         ("unsharded-empty", 5, "no tests ran\n", 1, 1, 0),
     )
-    for name, pytest_exit, pytest_output, shard_count, shard_index, include_slow in cases:
+    for (
+        name,
+        pytest_exit,
+        pytest_output,
+        shard_count,
+        shard_index,
+        include_slow,
+    ) in cases:
         output.write_text(pytest_output, encoding="utf-8")
         env = {
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
-            "PYTEST_NUM_WORKERS": "1",
+            "PYTEST_NUM_WORKERS": "4",
             "PYTEST_FAST_FAIL": "0",
+            "FIXTURE_ARGS": str(tmp_path / "args.txt"),
             "PYTEST_ORDER_MODE": "none",
             "PYTEST_SHARD_COUNT": str(shard_count),
             "PYTEST_SHARD_INDEX": str(shard_index),
@@ -300,6 +311,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             "FIXTURE_OUTPUT": str(output),
             "FIXTURE_EXIT": str(pytest_exit),
         }
+        env.pop("PYTEST_XDIST_DIST", None)
         result = subprocess.run(
             [str(script_dir / "run_tests_parallel.sh")],
             cwd=repo,
@@ -309,10 +321,31 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             timeout=30,
             check=False,
         )
+        argv = (tmp_path / "args.txt").read_text().splitlines()
+        assert argv[argv.index("--dist") + 1] == ("worksteal" if shard_count > 1 else "load")
         expected = 0 if name == "empty-fast-shard" else pytest_exit
         assert result.returncode == expected, (name, result.stdout, result.stderr)
         assert not list(temp_root.glob("pytest_run.*.log")), name
         assert not list(temp_root.glob("pytest_serial.*.log")), name
+
+    override_env = {
+        **env,
+        "PYTEST_SHARD_COUNT": "2",
+        "PYTEST_XDIST_DIST": "loadscope",
+        "FIXTURE_EXIT": "0",
+    }
+    overridden = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh")],
+        cwd=repo,
+        env=override_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert overridden.returncode == 0, overridden.stderr
+    argv = (tmp_path / "args.txt").read_text().splitlines()
+    assert argv[argv.index("--dist") + 1] == "loadscope"
 
     missing_coverage_env = {
         **os.environ,
@@ -359,7 +392,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     fast_feedback_steps = fast_feedback["steps"]
     duration_restore = next(
         step
-        for step in fast_feedback_steps
+        for step in workflow["jobs"]["dispatch-ownership"]["steps"]
         if step.get("name") == "Restore test durations for pytest-split balancing"
     )
     duration_upload = next(
@@ -368,10 +401,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
 
     assert duration_restore["uses"].startswith("actions/cache/restore@")
     assert duration_restore["continue-on-error"] is True
-    assert duration_restore["with"]["path"] == ".test_durations"
+    assert duration_restore["with"]["path"].splitlines() == [
+        ".test_durations",
+        ".pytest_cache/test_durations_metadata.json",
+    ]
     assert "${{ github.run_id }}" in duration_restore["with"]["key"]
     assert "${{ github.run_attempt }}" in duration_restore["with"]["key"]
-    assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
+    assert (
+        "test-durations-v2-${{ runner.os }}-${{ runner.arch }}-"
+        in duration_restore["with"]["restore-keys"]
+    )
     assert duration_upload["if"] == "always()"
     assert duration_upload["continue-on-error"] is True
     assert duration_upload["with"] == {
@@ -427,7 +466,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "always()" in duration_save["if"]
     assert "steps.checkout_ci_source.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
-    assert duration_save["with"]["path"] == ".test_durations"
+    assert duration_save["with"]["path"] == duration_restore["with"]["path"]
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
     assert "${{ github.run_attempt }}" in duration_save["with"]["key"]
 
@@ -472,6 +511,15 @@ def test_required_check_identities_bind_to_aggregate_ci_contract() -> None:
     aggregate = workflow["jobs"][AGGREGATE_JOB]
     assert set(REQUIRED_JOBS) <= set(aggregate["needs"])
     assert required_check_identities() == REQUIRED_JOBS
+
+
+def test_draft_feedback_uses_a_distinct_aggregate_check_name() -> None:
+    """Draft feedback must not publish the full-run check identity."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    assert workflow["jobs"][AGGREGATE_JOB]["name"] == (
+        "${{ github.event_name == 'pull_request' && github.event.pull_request.draft "
+        "&& 'ci-draft' || 'ci' }}"
+    )
 
 
 def test_ci_paths_ignore_manifest_matches_workflow_triggers() -> None:
@@ -959,11 +1007,14 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
     assert "tests/ped_npc" not in OPTIONAL_ALLOWLIST.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("shard_count", [1, 4])
+@pytest.mark.parametrize("serial_exit", [0, 1])
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shard_count: int, serial_exit: int
 ) -> None:
     """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
     monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_DIST", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -1001,7 +1052,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '    *resolve_pytest_workers.py) printf "2\\n" ;;',
                 "    *diagnose_xdist_crash.py)",
                 '      printf "%s\\n" "$*" >> "$UV_DIAGNOSTIC_ARGS"',
-                '      if [[ " $* " == *" --serialized-ok false "* ]]; then',
+                '      if [[ " $* " == *" --execution-mode no-xdist "* ]]; then',
                 '        echo "serial diagnostic observed" >&2',
                 "      else",
                 '        echo "parallel diagnostic observed" >&2',
@@ -1019,7 +1070,8 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '  printf "%s\\n" "$*" >> "$UV_CAPTURED_ARGS"',
                 '  echo "sqlite3.OperationalError: unable to open database file" >&2',
                 '  echo "Segmentation fault (core dumped)" >&2',
-                "  exit 1",
+                '  if [[ "$count" -eq 1 ]]; then exit 1; fi',
+                '  exit "$UV_SERIAL_EXIT"',
                 "fi",
                 'echo "unexpected uv invocation: $*" >&2',
                 "exit 99",
@@ -1041,6 +1093,11 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
             "PYTEST_NUM_WORKERS": "2",
             "PYTEST_FAST_FAIL": "0",
             "PYTEST_ORDER_MODE": "none",
+            "PYTEST_SHARD_COUNT": str(shard_count),
+            "PYTEST_SHARD_INDEX": "3" if shard_count > 1 else "1",
+            "ROBOT_SF_PYTEST_COVERAGE": "0",
+            "CI": "false",
+            "UV_SERIAL_EXIT": str(serial_exit),
             "UV_CAPTURED_ARGS": str(captured_args),
             "UV_DIAGNOSTIC_ARGS": str(captured_diagnostic_args),
             "UV_COUNT_FILE": str(invocation_count),
@@ -1055,7 +1112,8 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     calls = captured_args.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 2
     assert "-n 2" in calls[0]
-    assert "--dist load" in calls[0]
+    expected_dist = "worksteal" if shard_count > 1 else "load"
+    assert f"--dist {expected_dist}" in calls[0]
     padded_serial_call = f" {calls[1]} "
     assert " -n " not in padded_serial_call
     assert " --dist " not in padded_serial_call
@@ -1066,7 +1124,14 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     diagnostic_calls = captured_diagnostic_args.read_text(encoding="utf-8").splitlines()
     assert len(diagnostic_calls) == 2
     assert "--pytest-exit-code 1" in diagnostic_calls[0]
-    assert "--pytest-exit-code 1" in diagnostic_calls[1]
+    assert f"--pytest-exit-code {serial_exit}" in diagnostic_calls[1]
+    assert "--requested-workers 2" in diagnostic_calls[0]
+    assert "--requested-workers 1" in diagnostic_calls[1]
+    assert "--execution-mode no-xdist" in diagnostic_calls[1]
+    assert f"--serialized-ok {str(serial_exit == 0).lower()}" in diagnostic_calls[1]
+    if shard_count > 1:
+        assert "--splits 4 --group 3" in calls[0]
+        assert "--splits 4 --group 3" in calls[1]
 
 
 def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
@@ -1525,8 +1590,8 @@ def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
     assert 0 < followups_index < contract_index
 
 
-def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
-    """The live PR workflow should enforce body, follow-up, and domain-review contracts."""
+def test_pr_contract_workflow_runs_advisory_pr_body_checker() -> None:
+    """The consolidated PR workflow retains advisory body and follow-up checks."""
     workflow_text = PR_BODY_CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
 
     assert "pull_request:" in workflow_text
@@ -1535,6 +1600,7 @@ def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
     assert "gh api --paginate" not in workflow_text
     assert "pr_changed_files.txt" in workflow_text
     assert "scripts/dev/check_pr_followups.py" in workflow_text
+    assert "--advisory" in workflow_text
     for flag in (
         "--github-event-path",
         "--changed-files-file",
@@ -2606,7 +2672,14 @@ def test_worktree_shared_venv_standalone_mode_bypasses_stale_project_env(
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
-    assert "pythonpath=\n" in result.stderr
+    # Standalone drops project injection; the session safety bootstrap still propagates.
+    support = ROOT / "tests" / "support"
+    guard_path = (
+        os.pathsep.join((str(support / "seedguard_bootstrap"), str(support)))
+        if os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
+        else ""
+    )
+    assert f"pythonpath={guard_path}\n" in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(
@@ -2809,7 +2882,18 @@ def test_worktree_shared_venv_pin_manifest_policy(
     """Only actual dev declarations select a pin; ambiguous or malformed input fails closed."""
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
     (repo / "pyproject.toml").write_text(manifest, encoding="utf-8")
-    before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+
+    def snapshot_repo_files() -> dict[Path, bytes]:
+        # Git may create/remove this transient maintenance lock while the helper runs.
+        # It is not durable repo state; continue checking every other file byte-for-byte.
+        maintenance_lock = repo / ".git" / "objects" / "maintenance.lock"
+        return {
+            path: path.read_bytes()
+            for path in repo.rglob("*")
+            if path.is_file() and path != maintenance_lock
+        }
+
+    before = snapshot_repo_files()
     result = subprocess.run(
         [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "."],
         cwd=repo,
@@ -2829,7 +2913,7 @@ def test_worktree_shared_venv_pin_manifest_policy(
         assert "uv-reached" in result.stderr
         expected = "reason=unpinned" if disposition == "unpinned" else "pin==0.16.5"
         assert expected in result.stderr
-    assert {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()} == before
+    assert snapshot_repo_files() == before
 
 
 @pytest.mark.parametrize("failure", ["encoding", "permission"])

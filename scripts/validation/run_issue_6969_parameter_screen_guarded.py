@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Run the issue #6969 lane-metric reference diagnostic.
-
-The command performs the metric-only synthetic audit and a small native
-warm-up/recycled-flow reference campaign.  It does not tune or change the
-released Social Force Model configuration.
-"""
+"""Run the guarded successor of the issue #6969 Stage A parameter screen."""
 
 from __future__ import annotations
 
@@ -20,28 +15,20 @@ from pathlib import Path
 import pysocialforce as pysf
 
 from robot_sf.evidence.writers import write_json, write_sha256sums
-from robot_sf.research.emergent_phenomena import (
-    LITERATURE_CALIBRATION,
-    RELEASED_DEFAULT_CALIBRATION,
-)
-from robot_sf.research.lane_formation_reference import (
-    DEFAULT_REFERENCE_CONDITIONS,
+from robot_sf.research.lane_formation_parameter_screen import (
+    DEFAULT_PARAMETER_SCREEN_PROFILES,
     DEFAULT_REFERENCE_SEEDS,
     DEFAULT_SAMPLING_STRIDES,
     ReferenceProtocol,
 )
-from robot_sf.research.lane_formation_reference_guarded import run_reference_campaign
+from robot_sf.research.lane_formation_parameter_screen_guarded import run_parameter_screen
 
 ISSUE_REF = "robot_sf_ll7#6969"
-DEFAULT_OUTPUT_DIR = Path("output/diagnostics/issue_6969_lane_formation_reference")
-CALIBRATIONS = {
-    RELEASED_DEFAULT_CALIBRATION.name: RELEASED_DEFAULT_CALIBRATION,
-    LITERATURE_CALIBRATION.name: LITERATURE_CALIBRATION,
-}
+DEFAULT_OUTPUT_DIR = Path("output/diagnostics/issue_6969_parameter_screen")
 
 
 def _csv_ints(value: str) -> list[int]:
-    """Parse a comma-separated positive-integer list."""
+    """Parse a comma-separated integer list."""
     return [int(part.strip()) for part in value.split(",") if part.strip()]
 
 
@@ -57,18 +44,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--seeds", type=_csv_ints, default=list(DEFAULT_REFERENCE_SEEDS))
-    parser.add_argument(
-        "--conditions",
-        choices=list(DEFAULT_REFERENCE_CONDITIONS),
-        nargs="+",
-        default=list(DEFAULT_REFERENCE_CONDITIONS),
-    )
-    parser.add_argument(
-        "--calibrations",
-        choices=sorted(CALIBRATIONS),
-        nargs="+",
-        default=sorted(CALIBRATIONS),
-    )
+    parser.add_argument("--profiles", type=int, default=DEFAULT_PARAMETER_SCREEN_PROFILES)
+    parser.add_argument("--profile-seed", type=int, default=6969)
     parser.add_argument(
         "--sampling-strides", type=_csv_ints, default=list(DEFAULT_SAMPLING_STRIDES)
     )
@@ -89,10 +66,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Run and serialize the reference diagnostic."""
+    """Run and serialize Stage A."""
     args = parse_args()
     output_dir = args.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
     protocol = ReferenceProtocol(
         length_m=args.length_m,
         half_width_m=args.half_width_m,
@@ -103,14 +79,14 @@ def main() -> int:
         lane_offset_m=args.lane_offset_m,
         entry_y_span_m=args.entry_y_span_m,
     )
-    calibrations = [CALIBRATIONS[name] for name in args.calibrations]
-    payload = run_reference_campaign(
+    payload = run_parameter_screen(
         protocol=protocol,
         seeds=args.seeds,
-        conditions=args.conditions,
-        calibrations=calibrations,
+        n_profiles=args.profiles,
+        profile_seed=args.profile_seed,
         sampling_strides=args.sampling_strides,
     )
+    output_dir.mkdir(parents=True, exist_ok=True)
     generated_at = args.generated_at or datetime.now(UTC).replace(microsecond=0).isoformat()
     payload["manifest"] = {
         **payload["manifest"],
@@ -126,7 +102,7 @@ def main() -> int:
         ),
     }
     write_json(output_dir / "manifest.json", payload["manifest"])
-    write_json(output_dir / "metric_audit.json", payload["metric_audit"])
+    write_json(output_dir / "profiles.json", {"profiles": payload["profiles"]})
     write_json(output_dir / "summary.json", {"summary": payload["summary"]})
     write_json(output_dir / "rows.json", {"rows": payload["rows"]})
     write_sha256sums(output_dir)
@@ -134,11 +110,11 @@ def main() -> int:
         json.dumps(
             {
                 "issue": ISSUE_REF,
+                "stage": "A",
                 "status": "computed",
                 "output_dir": str(output_dir),
+                "profiles": len(payload["profiles"]),
                 "rows": len(payload["rows"]),
-                "summary_rows": len(payload["summary"]),
-                "metric_audit_passed": payload["metric_audit"]["passed"],
                 "claim_boundary": payload["manifest"]["claim_boundary"],
             },
             sort_keys=True,

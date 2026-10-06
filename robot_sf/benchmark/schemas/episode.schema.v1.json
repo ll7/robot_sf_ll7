@@ -1123,6 +1123,16 @@
                     },
                     "additionalProperties": false
                 },
+                "robot_force_invalid_present_samples": {
+                    "type": "integer",
+                    "const": 0,
+                    "description": "Invalid present samples are refused before row emission."
+                },
+                "robot_force_pp_equiv_invalid_present_samples": {
+                    "type": "integer",
+                    "const": 0,
+                    "description": "Invalid present counterfactual samples are refused before row emission."
+                },
                 "robot_force_impulse_total": {
                     "type": [
                         "number",

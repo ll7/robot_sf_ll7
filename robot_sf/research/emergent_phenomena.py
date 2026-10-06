@@ -48,6 +48,7 @@ from pysocialforce.config import (
     SocialForceConfig,
 )
 
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
 from robot_sf.common.pysf_geometry import endpoint_segments_to_pysf
 
 if TYPE_CHECKING:
@@ -390,6 +391,7 @@ def build_bidirectional_corridor(
         ``(x1, x2, y1, y2)`` wall order, and
         ``desired_directions`` has shape ``(N, 2)`` unit vectors.
     """
+    check_simulation_seed(config.seed, boundary="build_bidirectional_corridor")
     rng = np.random.default_rng(config.seed)
     n = config.n_pedestrians
     n_per_dir = n // 2
@@ -445,6 +447,7 @@ def build_narrow_doorway(
         Tuple of ``(state, obstacles, desired_directions)``; obstacles use
         PySocialForce's ``(x1, x2, y1, y2)`` input order.
     """
+    check_simulation_seed(config.seed, boundary="build_narrow_doorway")
     rng = np.random.default_rng(config.seed)
     n = config.n_pedestrians
     n_per_dir = n // 2
@@ -503,6 +506,7 @@ def build_high_density_exit(
         Tuple of ``(state, obstacles, desired_directions)``; obstacles use
         PySocialForce's ``(x1, x2, y1, y2)`` input order.
     """
+    check_simulation_seed(config.seed, boundary="build_high_density_exit")
     rng = np.random.default_rng(config.seed)
     n = config.n_pedestrians
     speeds = _sample_desired_speeds(rng, n, calibration)
@@ -570,6 +574,8 @@ def run_scenario(
     Returns:
         ScenarioResult with the recorded trajectory and order parameters.
     """
+    check_simulation_seed(config.seed, boundary="emergent run_scenario")
+    check_seed_config(getattr(sim_config, "scene_config", None), boundary="emergent scene")
     if sim_config is None:
         sim_config = released_default_config()
     builder = _BUILDERS.get(config.name)

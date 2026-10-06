@@ -743,6 +743,8 @@ def _compact_calibration_record(
                     "time_to_goal_ideal_ratio",
                     SIMULATED_FORCE,
                     PP_EQUIV_FORCE,
+                    "robot_force_invalid_present_samples",
+                    "robot_force_pp_equiv_invalid_present_samples",
                     "near_misses",
                     "jerk_mean",
                     "curvature_mean",

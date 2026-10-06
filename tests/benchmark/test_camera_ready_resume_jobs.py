@@ -50,7 +50,7 @@ def real_campaign(tmp_path_factory):
         "scenario_matrix": str(matrix),
         "seed_policy": {"mode": "fixed-list", "seeds": [1001, 1002, 1003]},
         "snqi_weights": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
-        "snqi_baseline": None,  # Derive anchors from the current-schema real episodes.
+        "snqi_baseline": "tests/data/snqi/resume_metric_v2_baseline.json",
         "snqi_contract": {"enabled": False},
         "workers": 1,
         "horizon": 1,
@@ -137,6 +137,16 @@ def test_partial_arm_runs_only_missing_rows_and_becomes_valid(real_campaign, tmp
 def test_complete_arm_skips_all_six_identities(real_campaign, tmp_path):
     """A complete multi-seed arm has the right denominator and reuses its exact row bytes."""
     cfg, original, scenarios = real_campaign
+    assert cfg.snqi_baseline_path is not None, (
+        "resume fixture must load a pinned metric-v2 baseline"
+    )
+    baseline = json.loads(cfg.snqi_baseline_path.read_text())
+    assert baseline["_metadata"]["metric_schema_version"] == "robot-sf-metrics.v2"
+    assert baseline["_metadata"]["source_commit"]
+    from hashlib import sha256
+
+    source = get_repository_root() / baseline["_metadata"]["source_rows_path"]
+    assert sha256(source.read_bytes()).hexdigest() == baseline["_metadata"]["source_rows_sha256"]
     campaign = tmp_path / "fixture"
     shutil.copytree(original, campaign)
     episodes = campaign / "runs" / ARM / "episodes.jsonl"

@@ -1158,6 +1158,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
             return {"status": "error", "error": identity_error}
         import numpy as np  # noqa: PLC0415 - lazy: keep module import light
 
+        from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.common.seed import set_global_seed  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.nav.global_route import GlobalRoute  # noqa: PLC0415 - lazy: child-process sim stack
@@ -1170,6 +1171,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         from robot_sf.sim.sim_config import SimulationSettings  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.sim.simulator import init_simulators  # noqa: PLC0415 - lazy: child-process sim stack
 
+        check_simulation_seed(job["seed"], boundary="review_execute episode")
         set_global_seed(int(job["seed"]))
         horizon = int(job["horizon_steps"])
         robot_speed = float(job["robot_speed_m_s"])

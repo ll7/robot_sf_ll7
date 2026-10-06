@@ -30,6 +30,7 @@ from tests.benchmark.test_snqi_execution_context import (
     EVIDENCE,
     complete_context_asset_binding,
 )
+from tests.tools.test_run_benchmark_release import synthetic_execution_admission  # noqa: F401
 from tests.unit.benchmark.test_snqi_v2 import spec_files as _spec_files
 
 spec_files = _spec_files
@@ -39,6 +40,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_post_freeze_external_receipt_admits_same_source_through_release_cli(
     tmp_path, monkeypatch, capsys, spec_files
 ):
@@ -223,6 +225,7 @@ def test_gate_uses_resolved_algorithm_before_environment_or_policy(monkeypatch):
 @pytest.mark.parametrize(
     "missing_arm", ["guarded_ppo", "prediction_planner", "predictive_mppi", "socnav_sampling"]
 )
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_production_release_census_refuses_a_missing_manifest_learned_arm(
     tmp_path, monkeypatch, capsys, missing_arm
 ):
@@ -322,7 +325,7 @@ def test_revalidation_refuses_missing_worker_context_before_acceptance(tmp_path,
     row_path = producer / "runs/ppo__differential_drive/episodes.jsonl"
     row_path.parent.mkdir(parents=True)
     write_json(row_path, {"algo": " PPO ", "seed": 1004, "algorithm_metadata": {}}, indent=None)
-    manifest = SimpleNamespace(planner_keys=("ppo",))
+    manifest = SimpleNamespace(planner_keys=("ppo",), source_sha="a" * 40)
     reference_root = tmp_path / "current-reference"
     cfg = SimpleNamespace(
         snqi_v2_binding=complete_context_asset_binding(reference_root),
@@ -342,6 +345,10 @@ def test_revalidation_refuses_missing_worker_context_before_acceptance(tmp_path,
     monkeypatch.setattr(recovery, "_verify_acceptance_campaign_subset", lambda *_a, **_k: {})
     monkeypatch.setattr(recovery, "load_release_manifest", lambda *_a: manifest)
     monkeypatch.setattr(recovery, "load_release_campaign_config", lambda *_a, **_k: cfg)
+    from robot_sf.benchmark.snqi import v2_binding
+
+    # This fixture supplies a bound spec; acquisition is upstream of the context census.
+    monkeypatch.setattr(v2_binding, "bind_acquired_anchors", lambda config, **_kw: config)
     monkeypatch.setattr(
         recovery, "validate_release_manifest", lambda *_a, **_k: {"status": "valid"}
     )
@@ -428,6 +435,7 @@ def test_identity_resolver_pins_untracked_receipt_without_requiring_a_source_blo
         protocol.verify_resolved_release_identity(second, repository_root=repo)
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_census_normalizes_recorded_algorithm(tmp_path, monkeypatch, capsys):
     import tests.benchmark.test_snqi_execution_context as support
 

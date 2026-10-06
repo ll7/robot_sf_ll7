@@ -19,6 +19,7 @@ import yaml
 
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
     metric_schema_version,
 )
 from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
@@ -177,10 +178,12 @@ class SnqiV2Spec:
     diagnostic: bool = False
     scenario_horizons: Mapping[str, int] | None = None
     evaluation_seeds_sha256: str = SEALED_EVALUATION_SEEDS_SHA256
+    metric_definitions_sha256: str | None = None
 
     def __post_init__(self) -> None:
         """Enforce the complete score contract even for direct construction."""
         metric_schema_version({"metric_schema_version": self.metric_schema_version})
+        _validate_definitions_binding(self.metric_schema_version, self.metric_definitions_sha256)
         if set(self.weights) != set(TERMS):
             raise ValueError("SNQI-v2 weights must contain exactly S,C,T,N,F,J,K")
         weights = {
@@ -246,6 +249,10 @@ class SnqiV2Spec:
             "snqi_v2_version": "SNQI-v2",
             "snqi_v2_evaluation_seeds_sha256": self.evaluation_seeds_sha256,
             "metric_schema_version": self.metric_schema_version,
+            "metric_definitions_sha256": self.metric_definitions_sha256,
+            "snqi_v2_definitions_binding": (
+                "definitions-digest absent" if self.metric_definitions_sha256 is None else "bound"
+            ),
             "snqi_v2_calibration_split_id": self.calibration_split_id,
             "snqi_v2_force_source": self.force_source,
             "snqi_v2_force_source_contract": declared_force_source_contract(self.force_source),
@@ -345,6 +352,7 @@ def load_snqi_v2_spec(
         paths={key: str(path) for key, path in paths.items()},
         hashes={key: hashlib.sha256(value).hexdigest() for key, value in raw.items()},
         metric_schema_version=metric_schema_version(anchors_doc),
+        metric_definitions_sha256=anchors_doc.get("metric_definitions_sha256"),
         scenario_horizons=calibration["scenario_horizons"],
         evaluation_seeds_sha256=anchors_doc["evaluation_seeds_sha256"],
     )
@@ -356,6 +364,10 @@ def _bind_evaluation_schedule(
     spec: SnqiV2Spec, evaluation_scenario_horizons: Mapping[str, int] | None
 ) -> None:
     """Compare a frozen calibration schedule with the current evaluation schedule."""
+    if evaluation_scenario_horizons is None and spec.metric_definitions_sha256 is not None:
+        raise ValueError(
+            "SNQI-v2 digest-bound anchors require an explicit evaluation budget schedule"
+        )
     if evaluation_scenario_horizons is None:
         from robot_sf.benchmark.snqi.v2_calibration import _candidate_calibration_horizons  # noqa: PLC0415
 
@@ -368,6 +380,10 @@ def _validate_anchor_identity(anchors_doc: dict[str, Any]) -> None:
     """Require explicit schema and the sealed evaluation commitment in frozen anchors."""
     if not isinstance(anchors_doc.get("metric_schema_version"), str):
         raise ValueError("SNQI-v2 anchors require explicit metric_schema_version")
+    if "metric_definitions_sha256" in anchors_doc and (
+        anchors_doc["metric_definitions_sha256"] != metric_definitions_sha256()
+    ):
+        raise ValueError("SNQI-v2 stale metric definitions digest")
     if anchors_doc.get("evaluation_seeds_sha256") != SEALED_EVALUATION_SEEDS_SHA256:
         raise ValueError("SNQI-v2 anchors evaluation seeds differ from the sealed commitment")
 
@@ -475,6 +491,13 @@ def _validate_frozen_custody(calibration: dict[str, Any]) -> None:
     for key in ("campaign_config_hash", "campaign_manifest_sha256"):
         if not _valid_digest(calibration.get(key)):
             raise ValueError(f"SNQI-v2 frozen calibration requires {key}")
+    if (
+        calibration.get("campaign_config_identity")
+        != calibration.get("campaign_config_hash", "")[:16]
+    ):
+        raise ValueError(
+            "SNQI-v2 calibration campaign_config_identity must match campaign_config_hash[:16]"
+        )
     if calibration.get("episodes_hash_rule") != (
         "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
     ):
@@ -519,3 +542,11 @@ def _provenance_path(value: str) -> str:
         return str(path.relative_to(get_repository_root()))
     except ValueError:
         return str(path)
+
+
+def _validate_definitions_binding(schema: str, digest: str | None) -> None:
+    """Reject stale or cross-schema bindings for loaded and programmatic specifications."""
+    if digest is not None and (
+        schema != "robot-sf-metrics.v2" or digest != metric_definitions_sha256()
+    ):
+        raise ValueError("SNQI-v2 stale metric definitions digest or incompatible schema")

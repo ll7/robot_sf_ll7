@@ -65,6 +65,7 @@ from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
     METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
     require_anchor_compatibility,
 )
 from robot_sf.benchmark.metric_definitions import (
@@ -3485,7 +3486,10 @@ def compute_all_metrics(  # noqa: PLR0913
             "Missing pedestrian force data; force-based metrics will be NaN.",
         )
 
-    values: dict[str, Any] = {"metric_schema_version": METRIC_SCHEMA_VERSION}
+    values: dict[str, Any] = {
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "metric_definitions_sha256": metric_definitions_sha256(),
+    }
     if isinstance(data.episode_metadata, dict):
         values["_episode_metadata"] = dict(data.episode_metadata)
     values.update(_compute_signal_metrics_block(data))

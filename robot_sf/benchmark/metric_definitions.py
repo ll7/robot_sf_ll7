@@ -4,8 +4,12 @@ Unmarked historical rows/assets use v1 (including published release 0.0.7).
 Version v2 fixes issue #10007 F4/F5/F7/F8 and D-055 curvature; it requires fresh normalization.
 """
 
+import hashlib
+import json
 from collections.abc import Iterable, Mapping
 from typing import Any
+
+from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
 
 LEGACY_METRIC_SCHEMA_VERSION = "robot-sf-metrics.v1"
 METRIC_SCHEMA_VERSION = "robot-sf-metrics.v2"
@@ -141,3 +145,110 @@ def require_uniform_trace_schema(records: Iterable[Mapping[str, Any]]) -> None:
             versions.add(schema.rsplit(".", 1)[-1])
     if len(versions) > 1:
         raise ValueError("trace_schema_version_mismatch: never pool v1/v2 traces")
+
+
+# This registry is the calibration contract. Definition changes must update it and
+# the fixed-trace canary together; a schema label alone cannot establish identity.
+SNQI_V2_SOURCE_DEFINITIONS = {
+    "success": {
+        "formula": "reached_goal_step < horizon and total_collision_count == 0",
+        "units": "binary",
+        "alignment": "episode termination",
+        "reduction": "one episode indicator",
+    },
+    "total_collision_count": {
+        "formula": "ped_collision_count + obstacle_collision_count + agent_collision_count",
+        "units": "collision timesteps",
+        "alignment": "post-step footprint samples",
+        "thresholds": "pedestrian surface clearance < 0; wall and agent footprint overlap",
+        "reduction": "sum counts; scoring uses count > 0",
+    },
+    "time_to_goal_ideal_ratio": {
+        "formula": "elapsed_goal_time / (shortest_path_len / robot_max_speed)",
+        "units": "dimensionless",
+        "alignment": "reset included: goal_step*dt; otherwise (goal_step+1)*dt",
+        "thresholds": "successful episode; positive finite ideal time and physical speed cap",
+        "reduction": "success only; scoring clips (ratio-1)/2 to [0,1], failures contribute zero",
+    },
+    "near_misses": {
+        "formula": "count steps with 0 <= min pedestrian surface clearance < 0.5 m",
+        "units": "timesteps",
+        "alignment": "post-step robot/pedestrian footprints",
+        "thresholds": {"clearance_m": 0.5},
+        "reduction": "minimum over present pedestrians then count; scoring clips count/steps/0.25",
+    },
+    "jerk_mean": {
+        "formula": "mean norm((a[t+1]-a[t])/dt) for first T-2 acceleration differences",
+        "units": "m/s^3",
+        "alignment": "post-step recorded robot acceleration, last difference excluded",
+        "thresholds": "T < 3 returns zero; invalid dt returns NaN",
+        "reduction": "arithmetic mean over T-2; calibration episode p95 with linear interpolation",
+    },
+    "curvature_mean": {
+        "formula": "sum abs wrapped consecutive displacement turns / max(counted path length, 1 m)",
+        "units": "rad/m",
+        "alignment": "positions including reset pose when supplied; bridge stops",
+        "thresholds": {"minimum_displacement_m": 0.001, "length_floor_m": 1.0},
+        "reduction": "finite displacements only; fewer than two returns zero; episode linear p95",
+    },
+    "robot_force_impulse_total": {
+        "formula": "dt * sum over steps and present pedestrians of norm(recorded force)",
+        "units": "m/s (model acceleration impulse)",
+        "alignment": "recorded pre-integration force samples",
+        "thresholds": "zero invalid present samples; absent slots contribute zero",
+        "reduction": "episode sum, calibration episode linear p95",
+        "kernel": "multiplier * delta/distance^4; active if distance <= activation+robot_radius+ped_radius; per-pedestrian response multipliers when declared",
+    },
+    "robot_force_pp_equiv_impulse_total": {
+        "formula": "dt * sum norm(counterfactual pedestrian-pair force)",
+        "units": "m/s (model acceleration impulse)",
+        "alignment": "pre-integration force-input geometry; forward velocity difference at first sample, backward thereafter",
+        "thresholds": "selected iff abs(Spearman(raw F, clipped N)) >= 0.90; zero invalid present samples",
+        "reduction": "episode sum, calibration episode linear p95",
+        "kernel": "effective distance=max(0,distance-robot_radius+ped_radius); interaction=lambda*relative_velocity+direction; B=gamma*norm(interaction)+1e-8; theta=angle(interaction)-angle(direction); along=exp(-distance/B-(n_prime*B*theta)^2); lateral=-sign(theta)*exp(-distance/B-(n*B*theta)^2), sign(0)=1; force=factor*(unit*along+normal*lateral) within activation_threshold",
+    },
+}
+
+
+def metric_definitions_sha256() -> str:
+    """Hash canonical SNQI source meanings and both recorded force reference contracts.
+
+    Returns:
+        SHA256 of sorted compact UTF-8 JSON, independent of paths or formatting.
+    """
+    document = {
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "sources": SNQI_V2_SOURCE_DEFINITIONS,
+        "force_contracts": {
+            source: declared_force_source_contract(source)
+            for source in ("robot_force_impulse_total", "robot_force_pp_equiv_impulse_total")
+        },
+    }
+    return hashlib.sha256(
+        json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    ).hexdigest()
+
+
+def require_definitions_digest(metrics: Mapping[str, Any], expected: str | None) -> None:
+    """Require identical source meanings for bound anchors; retain explicit old-asset compatibility."""
+    if expected is None:
+        return  # Historical assets lack this binding and rely on procedural source-drift checks.
+    if metrics.get("metric_definitions_sha256") != expected:
+        raise ValueError("SNQI-v2 metric definitions digest mismatch or absent on episode")
+
+
+def calibration_definitions_digest(episodes: Iterable[Mapping[str, Any]]) -> str | None:
+    """Validate producer binding before stamping anchors; never relabel unbound old rows.
+
+    Returns:
+        Current digest for fully bound inputs, or None for wholly unbound historical inputs.
+    """
+    rows = list(episodes)
+    if all("metric_definitions_sha256" not in row.get("metrics", {}) for row in rows):
+        return None
+    expected = metric_definitions_sha256()
+    for row in rows:
+        require_definitions_digest(row.get("metrics", {}), expected)
+        if metric_schema_version(row) != METRIC_SCHEMA_VERSION:
+            raise ValueError("SNQI-v2 definitions digest requires current metric schema")
+    return expected

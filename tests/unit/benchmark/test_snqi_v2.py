@@ -230,6 +230,7 @@ def _add_synthetic_freeze_custody(document):
         ).hexdigest(),
         episodes_hash_rule="sha256(sorted compact JSON relative-path-to-file-sha256 map)",
         campaign_config_hash="c" * 64,
+        campaign_config_identity="c" * 16,
         campaign_manifest_sha256="d" * 64,
     )
     document["status"] = "frozen"
@@ -962,7 +963,7 @@ def calibration_records():
         "run_id": "synthetic",
         "source_commit": "a" * 40,
         "episodes_sha256": "b" * 64,
-        "grid": CalibrationGrid(dict.fromkeys(scenarios, 600)),
+        "grid": CalibrationGrid(dict.fromkeys(scenarios, 600), (101, 102)),
     }
 
 
@@ -3232,13 +3233,18 @@ def test_snqifix2_release_seed_commitment_cannot_be_overridden():
         spec.validate_evaluation_commitment(substituted)
 
 
-def test_snqirefresh_campaign_loader_validates_v2_anchor_schedule(spec_files, tmp_path):
+@pytest.mark.parametrize("definitions_bound", [False, True])
+def test_snqirefresh_campaign_loader_validates_v2_anchor_schedule(
+    spec_files, tmp_path, definitions_bound
+):
     """Real acquisition YAML must bind current-schema anchors to its authored budgets."""
     from robot_sf.benchmark.camera_ready._config import load_campaign_config
     from robot_sf.evidence.writers import write_json
 
     document = anchor_document()
     document["metric_schema_version"] = "robot-sf-metrics.v2"
+    if definitions_bound:
+        document["metric_definitions_sha256"] = DEFINITIONS_SHA256
     write_json(spec_files[1], document)
     rows = [
         {"name": name, "simulation_config": {"max_episode_steps": 600}}
@@ -3267,6 +3273,8 @@ def test_snqirefresh_campaign_loader_validates_v2_anchor_schedule(spec_files, tm
     )
     config = load_campaign_config(acquisition)
     assert config.snqi_v2_spec.metric_schema_version == "robot-sf-metrics.v2"
+    if definitions_bound:
+        assert config.snqi_v2_spec.provenance()["metric_definitions_sha256"] == DEFINITIONS_SHA256
     assert len(config.snqi_v2_spec.scenario_horizons) == 48
     rows[0]["simulation_config"]["max_episode_steps"] = 700
     matrix.write_text(yaml.safe_dump(rows))
@@ -3501,3 +3509,161 @@ def test_scenario_routes_refuse_untrusted_config_paths(tmp_path, path_kind):
     assert path.read_bytes() == original
     assert sidecar.read_bytes() == original_sidecar
     assert not list(repo.glob(".*.snqi-v2.tmp"))
+
+
+# Canonical definitions plus force contracts; pinned independently of the digest helper.
+DEFINITIONS_SHA256 = "37480f1b89a2de77b0f39ac5f6a37898c6b2f5d1d2086787053ae72498d6d24d"
+
+
+def _digest_bound_files(spec_files):
+    """Declare current synthetic anchors without changing any checked-in asset."""
+    document = json.loads(spec_files[1].read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    document["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    spec_files[1].write_text(json.dumps(document))
+    return document["calibration"]["scenario_horizons"]
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, None, "", 123])
+def test_load_snqi_v2_spec_rejects_stale_definitions_digest(spec_files, digest):
+    """A present digest cannot silently opt out or retain the same schema label."""
+    document = json.loads(spec_files[1].read_text())
+    document["metric_definitions_sha256"] = digest
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="definitions digest"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, None])
+def test_digest_bound_scoring_refuses_changed_or_absent_row_definitions(spec_files, digest):
+    """The real scoring path must check meanings independently of the schema label."""
+    horizons = _digest_bound_files(spec_files)
+    spec = load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=horizons)
+    values = metrics(metric_schema_version="robot-sf-metrics.v2")
+    values["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    assert compute_snqi_v2(values, spec) == pytest.approx(1.0)
+    values["metric_definitions_sha256"] = digest
+    with pytest.raises(ValueError, match="definitions digest"):
+        compute_snqi_v2(values, spec)
+
+
+def test_old_anchor_definitions_digest_absent_is_explicit_and_scoreable(spec_files):
+    """Historical unbound anchors stay readable without implying a definitions check."""
+    spec = load_snqi_v2_spec(*spec_files)
+    assert spec.provenance()["snqi_v2_definitions_binding"] == "definitions-digest absent"
+    assert spec.provenance()["metric_definitions_sha256"] is None
+    assert compute_snqi_v2(metrics(), spec) == pytest.approx(1.0)
+
+
+def test_digest_bound_loader_requires_independent_schedule(spec_files):
+    """New campaigns cannot silently borrow the 0.0.8 authored schedule."""
+    _digest_bound_files(spec_files)
+    with pytest.raises(ValueError, match="explicit evaluation budget schedule"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("identity", [None, "e" * 16])
+def test_anchor_loader_refuses_config_identity_hash_mismatch(spec_files, identity):
+    """The short campaign identity must actually name the hash-bound input bytes."""
+    document = json.loads(spec_files[1].read_text())
+    document["calibration"]["campaign_config_identity"] = identity
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="campaign_config_identity"):
+        load_snqi_v2_spec(*spec_files)
+
+
+def test_calibration_digest_binds_verified_row_definitions_and_refuses_mixed_inputs():
+    """Derivation must bind producer meanings without upgrading unmarked historical rows."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    for row in rows:
+        row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+        row["metrics"]["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    document = derive_calibration_anchors(rows, **kwargs)
+    assert document["metric_definitions_sha256"] == DEFINITIONS_SHA256
+    rows[-1]["metrics"].pop("metric_definitions_sha256")
+    with pytest.raises(ValueError, match="definitions digest"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+def test_new_calibration_defaults_use_development_split():
+    """Omitting the split selects current development seeds rather than 101/102."""
+    from robot_sf.benchmark.snqi.v2_calibration import CalibrationGrid
+
+    assert CalibrationGrid({"synthetic": 4}).seeds == (1001, 1002)
+
+
+def test_planner_summary_preserves_escaped_pipe_when_legacy_score_excluded():
+    """Removing a score column must preserve the later cells and escaped planner name."""
+    from robot_sf.benchmark.camera_ready._reporting import _write_planner_summary_table
+
+    lines = []
+    _write_planner_summary_table(
+        lines, [{"planner_key": "left|right", "projection_rate": 0.125, "infeasible_rate": 0.25}]
+    )
+    assert "left\\|right" in lines[-1]
+    assert lines[-1].endswith(" | 0.125 | 0.25 |")
+    assert "snqi" not in lines[0]
+
+
+def test_definitions_digest_fixed_trace_canary(spec_files):
+    """Pin producer meanings to a hand-calculated trace with no simulator or random seed."""
+    import numpy as np
+
+    from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
+
+    pos = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0]])
+    metadata = _force_metadata()
+    data = EpisodeData(
+        pos,
+        np.zeros_like(pos),
+        np.array([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0], [100.0, 0.0]]),
+        pos[:, None, :] + np.array([0.6, 0.0]),
+        np.zeros((4, 1, 2)),
+        pos[-1],
+        0.5,
+        reached_goal_step=3,
+        robot_radius=0.2,
+        ped_radius=0.2,
+        robot_ped_forces=np.tile([[[3.0, 4.0]]], (4, 1, 1)),
+        robot_force_config={
+            key: value for key, value in metadata.items() if key.startswith("prf_")
+        },
+        social_force_config=metadata["social_force_config"],
+    )
+    values = compute_all_metrics(data, horizon=5, shortest_path_len=2.0, robot_max_speed=2.0)
+    assert values["metric_definitions_sha256"] == DEFINITIONS_SHA256
+    assert values["jerk_mean"] == 3.0  # First two differences: 2 and 4 m/s^3.
+    assert values["curvature_mean"] == pytest.approx(np.pi / 3)
+    assert values["near_misses"] == 4
+    assert values["robot_force_impulse_total"] == 10.0  # 4 samples * 5 m/s^2 * 0.5 s.
+    assert values["time_to_goal_ideal_ratio"] == 2.0
+    horizons = _digest_bound_files(spec_files)
+    spec = load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=horizons)
+    values["executed_steps"] = 4
+    terms = normalize_snqi_v2_terms(values, spec)
+    assert terms == pytest.approx(
+        {"S": 1.0, "C": 0.0, "T": 0.5, "N": 1.0, "F": 1.0, "J": 1.0, "K": np.pi / 12}
+    )
+    assert compute_snqi_v2(values, spec) == pytest.approx(0.275 - np.pi / 120)
+
+
+@pytest.mark.parametrize(
+    "directory", ["2026-10-04_freeze008_calibration", "2026-10-04_freeze008_f2_calibration"]
+)
+def test_frozen_008_assets_use_definitions_digest_absent_path(directory):
+    """Load actual frozen anchors byte-for-byte; their procedural binding stays explicit."""
+    anchor = ROOT / "docs/context/evidence" / directory / "anchors.v2.0.acquired.json"
+    raw = anchor.read_bytes()
+    document = json.loads(raw)
+    assert "metric_definitions_sha256" not in document
+    spec = load_snqi_v2_spec(
+        ASSETS / "weights.v2.0.json",
+        anchor,
+        ASSETS / "family.v2.0.yaml",
+        evaluation_scenario_horizons=document["calibration"]["scenario_horizons"],
+    )
+    assert spec.provenance()["snqi_v2_definitions_binding"] == "definitions-digest absent"
+    assert spec.hashes["anchors"] == hashlib.sha256(raw).hexdigest()
+    assert anchor.read_bytes() == raw

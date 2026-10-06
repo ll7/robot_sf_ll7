@@ -162,6 +162,7 @@ def test_reviewed_artifact_route_still_requires_exact_acquisition_identity(
             _config_hash_payload(acquisition), sort_keys=True, separators=(",", ":")
         ).encode()
     ).hexdigest()
+    cal["campaign_config_identity"] = cal["campaign_config_hash"][:16]
     if mutation == "configuration":
         cal["campaign_config_hash"] = "0" * 64
     write_json(anchors, document)
@@ -278,3 +279,48 @@ def test_pending_permission_matches_verified_identity_config(monkeypatch, seeds,
                 pending_snqi_v2_identity=ROOT / "output/rehearsal/identity.json",
             )
         assert calls == []
+
+
+def test_bound_acquired_anchors_use_resolved_campaign_schedule(monkeypatch, spec_files):
+    """Bound acquisition uses its own resolved budgets and retains producer meanings."""
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+    from tests.unit.benchmark.test_snqi_v2 import DEFINITIONS_SHA256
+
+    api = _binding_api()
+    cfg = load_campaign_config(CONFIG)
+    document = json.loads(spec_files[1].read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    document["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    cal = document["calibration"]
+    cal["seeds"] = [1001, 1002]
+    cal["scenario_horizons"] = {
+        row["name"]: row["simulation_config"]["max_episode_steps"]
+        for row in _load_campaign_scenarios(cfg)
+    }
+    cal["scenarios"] = sorted(cal["scenario_horizons"])
+    grid = sorted(product(cal["arms"], cal["scenarios"], cal["seeds"]))
+    cal["grid_sha256"] = hashlib.sha256(
+        json.dumps(grid, separators=(",", ":")).encode()
+    ).hexdigest()
+    cal["split_id"] = f"snqi-v2-dev1001-1002-{cal['grid_sha256'][:12]}"
+    acquisition = load_campaign_config(cfg.snqi_v2_binding["acquisition_config_path"])
+    cal["campaign_config_hash"] = hashlib.sha256(
+        json.dumps(
+            _config_hash_payload(acquisition), sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    cal["campaign_config_identity"] = cal["campaign_config_hash"][:16]
+    write_json(spec_files[1], document)
+    # On base the procedural schedule loader must be valid too, isolating digest loss.
+    monkeypatch.setattr(
+        v2_calibration, "_candidate_calibration_horizons", lambda: cal["scenario_horizons"]
+    )
+    result = api.bind_acquired_anchors(
+        cfg,
+        calibration_root=None,
+        anchors_path=spec_files[1],
+        source_commit="a" * 40,
+        diagnostic=True,
+    )
+    assert result.snqi_v2_spec.provenance()["metric_definitions_sha256"] == DEFINITIONS_SHA256
+    assert dict(result.snqi_v2_spec.scenario_horizons) == cal["scenario_horizons"]

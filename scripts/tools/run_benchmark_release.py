@@ -1539,6 +1539,24 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
     if notes_receipt is not None:
         resolved_manifest["release_notes_gate"] = notes_receipt
+    try:
+        snqi_seed_receipt = _snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest)
+    except ValueError as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "snqi_v2_evaluation_seeds_rejected",
+                    "status_reason": str(exc),
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
     if args.mode == "preflight":
         checkpoint_admission = _preflight_checkpoint_admission(args, cfg, manifest)
         if checkpoint_admission["status"] == "rejected":
@@ -1607,6 +1625,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         checkpoint_summary = prepared.get("checkpoint_preflight_summary", {})
         preflight_payload = {
             "mode": "preflight",
+            **snqi_seed_receipt,
             "manifest_validation": validation,
             "resolved_manifest": resolved_manifest,
             "spawn_matrix_preflight": spawn_preflight_summary,
@@ -1652,7 +1671,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "manifest_validation": validation,
         "resolved_manifest": resolved_manifest,
     }
-    result.update(_snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest))
+    result.update(snqi_seed_receipt)
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"

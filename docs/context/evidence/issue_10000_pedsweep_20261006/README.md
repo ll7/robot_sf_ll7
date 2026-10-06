@@ -1,8 +1,8 @@
 # #10000 pedestrian-stack gate receipt — FAILED
 
-`schema_version`: `pedsweep-gate-receipt.v1`  
-`evidence_tier`: `diagnostic-only`  
-`paper_facing`: `false`  
+`schema_version`: `pedsweep-gate-receipt.v1`
+`evidence_tier`: `diagnostic-only`
+`paper_facing`: `false`
 `benchmark_promotion`: `false`
 
 No PR passed the gate. #10073, #10075 and #10094 remain **blocked**; #10104 **failed** refute review. All sweep attempts and failure classifications are complete; nine width MPPI config rejections prevent complete valid coverage, and contact projection bypasses an active pedestrian start-delay hold ([#10178](https://github.com/ll7/robot_sf_ll7/issues/10178)). Newly observed empty-world failures are tracked in [#10180](https://github.com/ll7/robot_sf_ll7/issues/10180). No success-rate threshold, model adoption or release admission is asserted. All four remain draft with `blocked` retained.

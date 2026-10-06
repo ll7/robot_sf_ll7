@@ -37,7 +37,7 @@ assert data['unclassified_findings']==0
 data['classification_counts']=dict(collections.Counter(f['class'] for f in data['new_findings']))
 (folder/'comparison.json').write_text(json.dumps(data,indent=2)+'\n')
 with (folder/'new-failures.csv').open('w',newline='') as handle:
-    writer=csv.writer(handle);writer.writerow(['arm','scenario','seed','events','baseline_outcome','head_outcome','baseline_steps','head_steps','baseline_horizon','head_horizon','baseline_collisions','head_collisions','classification','issue','cause'])
+    writer=csv.writer(handle,lineterminator="\n");writer.writerow(['arm','scenario','seed','events','baseline_outcome','head_outcome','baseline_steps','head_steps','baseline_horizon','head_horizon','baseline_collisions','head_collisions','classification','issue','cause'])
     for f in data['new_findings']:
         b,h=f['baseline'],f['head'];writer.writerow([h['arm'],h['scenario'],h['seed'],';'.join(f.get('events',[])),b['outcome'],h['outcome'],b['steps'],h['steps'],b['horizon'],h['horizon'],b['collisions'],h['collisions'],f['class'],f['issue'],f['cause']])
 rows=[json.loads(s) for s in (raw/'top/results/episodes_main.jsonl').read_text().splitlines() if s.strip()]

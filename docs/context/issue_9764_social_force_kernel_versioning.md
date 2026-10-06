@@ -95,9 +95,11 @@ prefix was compared.
 | `classic_head_on_corridor_medium` | 104 | success | success | 131 / 1,236 | 0.103352465 | 0.675855495 |
 | `classic_head_on_corridor_medium` | 105 | success | success | 128 / 1,196 | 0.000019849 | 0.000043048 |
 
-The checksummed bundle is host-local and retained at
+Merged PR #9878 records the checksummed bundle as host-local custody at
 `.git/codex-agent-runs/issue-9764-social-force-final/paired-diagnostic-final-d2b6ac4e/`. PR #9878
-records that all 15 listed artifacts verified against `SHA256SUMS` at that source head. The legacy
+records that all 15 listed artifacts verified against `SHA256SUMS` at that source head. The raw
+bundle is unavailable in this checkout; this note reconciles the recorded identities and does not
+claim a fresh verification of those missing bytes. The legacy
 and wrapped raw episode files have SHA-256
 `4f425b031f6126b66c08d2ce6becacb428340232dc0adf297cbf287c4857720b` and
 `d4f12e5f074d55083aa476eca088afa4d371ba81c073110552bb4083ec9ce15f`; the comparison report has

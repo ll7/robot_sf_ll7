@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Force validity reduction checks use small fixed NumPy arrays.
+    "test_robot_force_presence.py",
     # Seed inventories and campaign resume planning use deterministic fixtures.
     "test_camera_ready_resume_jobs.py",
     "test_seed_hardening.py",

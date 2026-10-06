@@ -1,0 +1,13 @@
+{
+  "affected_by_issue": "https://github.com/ll7/robot_sf_ll7/issues/10056",
+  "corrected_evidence": "docs/context/evidence/issue_10056_wall_order_2026-09/README.md",
+  "evidence_status": "superseded",
+  "historical_manifest": {
+    "path": "docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08/manifest.json",
+    "sha256": "aed2128d8bc9b4ef2094cf969a31479b6914a622b62b4b7e732dfbdd5fb9dfff"
+  },
+  "note": "This historical bundle used misplaced walls because its builders passed endpoint-order tuples to the axis-order EnvState. Original measurements and replay GIFs are retained for comparison, not current face-validity evidence. GIFs drew intended walls while pedestrians used misplaced walls.",
+  "preservation_reason": "The mechanism-boundary atlas pins historical SHA256SUMS bytes. Original checksummed members stay unchanged; this additive manifest records supersession without rewriting that atlas.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence_supersession.v1"
+}

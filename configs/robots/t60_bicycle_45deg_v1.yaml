@@ -1,0 +1,15 @@
+# Opt-in 0.1.0 diagnostic plant, refs #10093; never a release default.
+# Wheelbase and steering are author-approved estimates, not measured specs.
+# Covering disc r=.64m; capsule physics is a separate building block.
+# 1.34m/s is the task's autonomous proxy cap, not the manual's riding cap.
+robot_config:
+  type: bicycle_drive
+  radius: 0.64
+  wheelbase: 0.90
+  max_steer: 0.79
+  max_velocity: 1.34
+  max_accel: 1.0
+  max_decel: 1.0
+  creep_speed: 0.0  # Explicit opt-in only; safety interventions always veto creep.
+  allow_backwards: false
+  limited_reverse: false  # Intentionally forward-only for this diagnostic plant.

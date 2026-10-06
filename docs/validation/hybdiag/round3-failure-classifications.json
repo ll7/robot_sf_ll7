@@ -1,0 +1,1201 @@
+{
+  "status": "AI-GENERATED/NEEDS-REVIEW; dev-only",
+  "meaning": "Union of new failures versus paired off and same-arm Round 2; one cause/evidence line per episode",
+  "episodes": [
+    {
+      "world": "crowd",
+      "scenario": "classic_cross_trap_high",
+      "seed": 1021,
+      "arm": "platform",
+      "new_vs": [
+        "paired_off",
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "artificial geometric infeasibility",
+      "evidence": "At rest wall-center distance 1.195801690898 m exceeds physical 1.00 m but is below legacy hard 1.20 m; no moving candidate; both arm succeeds.",
+      "next_step": "supplied physical-static flag; planner defect, not physical limit",
+      "witness": {
+        "scenario": "classic_cross_trap_high",
+        "seed": 1021,
+        "arm": "platform",
+        "position": [
+          10.946572110765386,
+          21.565889888703634
+        ],
+        "closest_wall": [
+          28.0,
+          21.0,
+          12.0,
+          21.0
+        ],
+        "center_distance_m": 1.1958016908979119,
+        "physical_radius_m": 1.0,
+        "legacy_hard_radius_m": 1.2,
+        "map": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+        "classification": "artificial geometric infeasibility",
+        "evidence": "Physical body clear; legacy comfort margin rejects all66 candidates at rest. Next step is supplied static flag, not physical limit."
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_cross_trap_high",
+      "seed": 1023,
+      "arm": "platform",
+      "new_vs": [
+        "paired_off",
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "artificial geometric infeasibility",
+      "evidence": "At rest wall-center distance 1.194309723278 m exceeds physical 1.00 m but is below legacy hard 1.20 m; no moving candidate; both arm succeeds.",
+      "next_step": "supplied physical-static flag; planner defect, not physical limit",
+      "witness": {
+        "scenario": "classic_cross_trap_high",
+        "seed": 1023,
+        "arm": "platform",
+        "position": [
+          18.198413828285652,
+          28.88534474891619
+        ],
+        "closest_wall": [
+          21.0,
+          28.0,
+          19.0,
+          28.0
+        ],
+        "center_distance_m": 1.1943097232783189,
+        "physical_radius_m": 1.0,
+        "legacy_hard_radius_m": 1.2,
+        "map": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+        "classification": "artificial geometric infeasibility",
+        "evidence": "Physical body clear; legacy comfort margin rejects all moving candidates at rest. Next step is supplied static flag, not physical limit."
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1001,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.900964 m/s braking cap at step 59; Round 3 times out with 66 feasible moving candidates at the final step and 11.819 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1001,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 281,
+        "first_bound_exceedance": {
+          "step": 59,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9009637777022692,
+          "pre_action_surface_gap_m": 2.096928022670925
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1001,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.981193 m/s braking cap at step 58; Round 3 times out with 77 feasible moving candidates at the final step and 13.938 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1001,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 281,
+        "first_bound_exceedance": {
+          "step": 58,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9811928354558854,
+          "pre_action_surface_gap_m": 2.260681812128661
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1003,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.955206 m/s braking cap at step 50; Round 3 times out with 66 feasible moving candidates at the final step and 13.092 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1003,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 223,
+        "first_bound_exceedance": {
+          "step": 50,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.955206441103825,
+          "pre_action_surface_gap_m": 2.2069367606908097
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1003,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.984913 m/s braking cap at step 47; Round 3 times out with 103 feasible moving candidates at the final step and 17.298 m remaining; no-moving time 1.3/60 s; final constraints: dynamic_collision at 1.6000000059604644 (8 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1003,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 210,
+        "first_bound_exceedance": {
+          "step": 47,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9849132310173552,
+          "pre_action_surface_gap_m": 2.2684315933933648
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1004,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.954618 m/s braking cap at step 41; Round 3 times out with 10 feasible moving candidates at the final step and 9.115 m remaining; no-moving time 1.4/60 s; final constraints: dynamic_collision at 1.6000000059604644 (56 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1004,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 224,
+        "first_bound_exceedance": {
+          "step": 41,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.954617716178194,
+          "pre_action_surface_gap_m": 2.2057269827292556
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1004,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.894972 m/s braking cap at step 42; Round 3 times out with 28 feasible moving candidates at the final step and 8.992 m remaining; no-moving time 1.5/60 s; final constraints: dynamic_collision at 1.6000000059604644 (39 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1004,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 216,
+        "first_bound_exceedance": {
+          "step": 42,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.8949715265223357,
+          "pre_action_surface_gap_m": 2.084955698641157
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1005,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.934273 m/s braking cap at step 49; Round 3 times out with 90 feasible moving candidates at the final step and 8.586 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1005,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 297,
+        "first_bound_exceedance": {
+          "step": 49,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9342726866112105,
+          "pre_action_surface_gap_m": 2.164132684628487
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1007,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.892717 m/s above 1.892358 m/s braking cap at step 65; Round 3 times out with 37 feasible moving candidates at the final step and 7.436 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (19 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1007,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 267,
+        "first_bound_exceedance": {
+          "step": 65,
+          "command_m_s": 1.892717464764913,
+          "braking_cap_m_s": 1.8923583887255389,
+          "pre_action_surface_gap_m": 2.0797459773823466
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1007,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.956244 m/s braking cap at step 64; Round 3 times out with 56 feasible moving candidates at the final step and 7.879 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1007,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 269,
+        "first_bound_exceedance": {
+          "step": 64,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9562442369616515,
+          "pre_action_surface_gap_m": 2.209070183934033
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1008,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.993892 m/s braking cap at step 44; Round 3 times out with 66 feasible moving candidates at the final step and 4.267 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1008,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 246,
+        "first_bound_exceedance": {
+          "step": 44,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9938915141402132,
+          "pre_action_surface_gap_m": 2.287190839465327
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1008,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.992306 m/s braking cap at step 38; Round 3 times out with 66 feasible moving candidates at the final step and 8.670 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1008,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 258,
+        "first_bound_exceedance": {
+          "step": 38,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9923055413959134,
+          "pre_action_surface_gap_m": 2.2838712422467897
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1009,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.951188 m/s braking cap at step 37; Round 3 times out with 66 feasible moving candidates at the final step and 14.334 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1009,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 186,
+        "first_bound_exceedance": {
+          "step": 37,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9511875535686771,
+          "pre_action_surface_gap_m": 2.198685192865023
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1010,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.974213 m/s braking cap at step 34; Round 3 times out with 66 feasible moving candidates at the final step and 9.334 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1010,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 264,
+        "first_bound_exceedance": {
+          "step": 34,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9742133536557214,
+          "pre_action_surface_gap_m": 2.246180521183664
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1011,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.853261 m/s above 1.653116 m/s braking cap at step 59; Round 3 times out with 111 feasible moving candidates at the final step and 15.368 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1011,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 247,
+        "first_bound_exceedance": {
+          "step": 59,
+          "command_m_s": 1.853261375427246,
+          "braking_cap_m_s": 1.6531159473693822,
+          "pre_action_surface_gap_m": 1.6317077649237581
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1011,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.962109 m/s braking cap at step 45; Round 3 times out with 57 feasible moving candidates at the final step and 14.969 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1011,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 249,
+        "first_bound_exceedance": {
+          "step": 45,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.962109248883316,
+          "pre_action_surface_gap_m": 2.221147280088828
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1013,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 0.911980 m/s above 0.884570 m/s braking cap at step 89; Round 3 times out with 66 feasible moving candidates at the final step and 11.194 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1013,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 245,
+        "first_bound_exceedance": {
+          "step": 89,
+          "command_m_s": 0.9119797348976136,
+          "braking_cap_m_s": 0.884569872159099,
+          "pre_action_surface_gap_m": 0.5796889178998041
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1013,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 0.912542 m/s above 0.885185 m/s braking cap at step 89; Round 3 times out with 66 feasible moving candidates at the final step and 3.853 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1013,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 248,
+        "first_bound_exceedance": {
+          "step": 89,
+          "command_m_s": 0.9125422835350038,
+          "braking_cap_m_s": 0.8851854634878747,
+          "pre_action_surface_gap_m": 0.5802952000529384
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1014,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.975320 m/s braking cap at step 26; Round 3 times out with 56 feasible moving candidates at the final step and 2.941 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (10 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1014,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 246,
+        "first_bound_exceedance": {
+          "step": 26,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9753195873689862,
+          "pre_action_surface_gap_m": 2.248475697802145
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1014,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.975320 m/s braking cap at step 26; Round 3 times out with 64 feasible moving candidates at the final step and 3.351 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (2 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1014,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 241,
+        "first_bound_exceedance": {
+          "step": 26,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9753195873689862,
+          "pre_action_surface_gap_m": 2.248475697802145
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1015,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 0.901938 m/s above 0.879808 m/s braking cap at step 92; Round 3 times out with 66 feasible moving candidates at the final step and 2.431 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1015,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 198,
+        "first_bound_exceedance": {
+          "step": 92,
+          "command_m_s": 0.9019382596015931,
+          "braking_cap_m_s": 0.8798079660116265,
+          "pre_action_surface_gap_m": 0.5750118264409363
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1015,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 0.912325 m/s above 0.885470 m/s braking cap at step 79; Round 3 times out with 0 feasible moving candidates at the final step and 11.029 m remaining; no-moving time 4.4/60 s; final constraints: dynamic_collision at 1.6000000059604644 (124 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1015,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 189,
+        "first_bound_exceedance": {
+          "step": 79,
+          "command_m_s": 0.9123245477676393,
+          "braking_cap_m_s": 0.8854697640654813,
+          "pre_action_surface_gap_m": 0.5805753292630904
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1016,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.946236 m/s braking cap at step 49; Round 3 times out with 66 feasible moving candidates at the final step and 10.941 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1016,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 341,
+        "first_bound_exceedance": {
+          "step": 49,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9462361917280737,
+          "pre_action_surface_gap_m": 2.1885412790690224
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1016,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.948077 m/s braking cap at step 47; Round 3 times out with 87 feasible moving candidates at the final step and 13.603 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1016,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 296,
+        "first_bound_exceedance": {
+          "step": 47,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.948076788496956,
+          "pre_action_surface_gap_m": 2.192309268692863
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1017,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.988738 m/s braking cap at step 33; Round 3 times out with 78 feasible moving candidates at the final step and 8.530 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1017,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 280,
+        "first_bound_exceedance": {
+          "step": 33,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.988738499352754,
+          "pre_action_surface_gap_m": 2.276414262302648
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1017,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.988738 m/s braking cap at step 33; Round 3 times out with 66 feasible moving candidates at the final step and 7.360 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1017,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 281,
+        "first_bound_exceedance": {
+          "step": 33,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.988738499352754,
+          "pre_action_surface_gap_m": 2.276414262302648
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1018,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.960349 m/s braking cap at step 31; Round 3 times out with 77 feasible moving candidates at the final step and 16.517 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1018,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 273,
+        "first_bound_exceedance": {
+          "step": 31,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.960349417123406,
+          "pre_action_surface_gap_m": 2.2175198632415274
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1018,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.960349 m/s braking cap at step 31; Round 3 times out with 51 feasible moving candidates at the final step and 13.536 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (15 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1018,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 267,
+        "first_bound_exceedance": {
+          "step": 31,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.960349417123406,
+          "pre_action_surface_gap_m": 2.2175198632415274
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1019,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.984761 m/s braking cap at step 41; Round 3 times out with 78 feasible moving candidates at the final step and 16.650 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1019,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 198,
+        "first_bound_exceedance": {
+          "step": 41,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9847605414460867,
+          "pre_action_surface_gap_m": 2.268113260542814
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1021,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.993786 m/s braking cap at step 48; Round 3 times out with 35 feasible moving candidates at the final step and 6.513 m remaining; no-moving time 0.0/60 s; final constraints: braking_infeasible at 1.6000000059604644 (5 rejections), dynamic_collision at 1.6000000059604644 (26 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1021,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 238,
+        "first_bound_exceedance": {
+          "step": 48,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.993786354862721,
+          "pre_action_surface_gap_m": 2.2869706528756337
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1021,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.998174 m/s braking cap at step 49; Round 3 times out with 43 feasible moving candidates at the final step and 6.557 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (23 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1021,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 211,
+        "first_bound_exceedance": {
+          "step": 49,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9981744758689874,
+          "pre_action_surface_gap_m": 2.2961680685715624
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1022,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.821454 m/s braking cap at step 68; Round 3 times out with 83 feasible moving candidates at the final step and 15.394 m remaining; no-moving time 1.3/60 s; final constraints: dynamic_collision at 1.6000000059604644 (28 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1022,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 167,
+        "first_bound_exceedance": {
+          "step": 68,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.8214535078359522,
+          "pre_action_surface_gap_m": 1.9409917941017203
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1022,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.886085 m/s braking cap at step 67; Round 3 times out with 111 feasible moving candidates at the final step and 16.225 m remaining; no-moving time 1.5/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1022,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 167,
+        "first_bound_exceedance": {
+          "step": 67,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.886084742757904,
+          "pre_action_surface_gap_m": 2.0672663055183502
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1023,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.886041 m/s braking cap at step 88; Round 3 times out with 65 feasible moving candidates at the final step and 12.593 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1023,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 247,
+        "first_bound_exceedance": {
+          "step": 88,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.88604137262506,
+          "pre_action_surface_gap_m": 2.067180169699637
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1023,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.987768 m/s braking cap at step 85; Round 3 times out with 0 feasible moving candidates at the final step and 13.037 m remaining; no-moving time 3.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (11 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1023,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 250,
+        "first_bound_exceedance": {
+          "step": 85,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9877683973441322,
+          "pre_action_surface_gap_m": 2.2743884434364485
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1024,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.085136 m/s above 1.047779 m/s braking cap at step 87; Round 3 times out with 78 feasible moving candidates at the final step and 14.498 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1024,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 262,
+        "first_bound_exceedance": {
+          "step": 87,
+          "command_m_s": 1.0851362943649292,
+          "braking_cap_m_s": 1.0477785111379774,
+          "pre_action_surface_gap_m": 0.7536977568763676
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1024,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.167497 m/s above 1.130040 m/s braking cap at step 75; Round 3 times out with 90 feasible moving candidates at the final step and 13.689 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1024,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 268,
+        "first_bound_exceedance": {
+          "step": 75,
+          "command_m_s": 1.1674970388412476,
+          "braking_cap_m_s": 1.1300399661235108,
+          "pre_action_surface_gap_m": 0.8514991608144546
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1025,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.033539 m/s above 0.999902 m/s braking cap at step 82; Round 3 times out with 66 feasible moving candidates at the final step and 15.221 m remaining; no-moving time 2.3/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1025,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 317,
+        "first_bound_exceedance": {
+          "step": 82,
+          "command_m_s": 1.0335386991500854,
+          "braking_cap_m_s": 0.9999023372613771,
+          "pre_action_surface_gap_m": 0.6998925772464908
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1025,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.045130 m/s above 1.010042 m/s braking cap at step 82; Round 3 times out with 90 feasible moving candidates at the final step and 16.073 m remaining; no-moving time 1.2/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1025,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 323,
+        "first_bound_exceedance": {
+          "step": 82,
+          "command_m_s": 1.0451298952102661,
+          "braking_cap_m_s": 1.0100418745837458,
+          "pre_action_surface_gap_m": 0.7110964831697779
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1026,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.950472 m/s braking cap at step 43; Round 3 times out with 111 feasible moving candidates at the final step and 15.084 m remaining; no-moving time 1.3/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1026,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 276,
+        "first_bound_exceedance": {
+          "step": 43,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9504724298221743,
+          "pre_action_surface_gap_m": 2.197218595636856
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1027,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.969331 m/s braking cap at step 45; Round 3 times out with 66 feasible moving candidates at the final step and 8.637 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1027,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 331,
+        "first_bound_exceedance": {
+          "step": 45,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.969331079597223,
+          "pre_action_surface_gap_m": 2.236065561428036
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1027,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.967932 m/s braking cap at step 44; Round 3 times out with 99 feasible moving candidates at the final step and 9.444 m remaining; no-moving time 0.0/60 s; final constraints: none. Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1027,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 353,
+        "first_bound_exceedance": {
+          "step": 44,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9679321113492878,
+          "pre_action_surface_gap_m": 2.2331716115072093
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1028,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 1.871991 m/s above 1.871821 m/s braking cap at step 65; Round 3 times out with 40 feasible moving candidates at the final step and 15.067 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (17 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1028,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 255,
+        "first_bound_exceedance": {
+          "step": 65,
+          "command_m_s": 1.8719908634821574,
+          "braking_cap_m_s": 1.8718214307357182,
+          "pre_action_surface_gap_m": 2.0390398801435587
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1028,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.884205 m/s braking cap at step 65; Round 3 times out with 34 feasible moving candidates at the final step and 15.031 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (23 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1028,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 253,
+        "first_bound_exceedance": {
+          "step": 65,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.8842054233254413,
+          "pre_action_surface_gap_m": 2.063535583784732
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1029,
+      "arm": "both",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.976508 m/s braking cap at step 39; Round 3 times out with 27 feasible moving candidates at the final step and 12.628 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (50 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1029,
+        "arm": "both",
+        "injected_bound_exceedance_steps": 217,
+        "first_bound_exceedance": {
+          "step": 39,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9765078750731968,
+          "pre_action_surface_gap_m": 2.250942480565728
+        }
+      }
+    },
+    {
+      "world": "crowd",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1029,
+      "arm": "platform",
+      "new_vs": [
+        "same_arm_round2"
+      ],
+      "outcome": "timeout",
+      "classification": "progress shortfall under restored braking bound",
+      "evidence": "Round 2 requested 2.000000 m/s above 1.976508 m/s braking cap at step 39; Round 3 times out with 28 feasible moving candidates at the final step and 13.572 m remaining; no-moving time 0.0/60 s; final constraints: dynamic_collision at 1.6000000059604644 (28 rejections). Combined safeguards remove the former gain; no isolated causal or genuine-infeasibility proof.",
+      "next_step": "planner route/progress work within retained safety bounds",
+      "witness": {
+        "scenario": "classic_station_platform_medium",
+        "seed": 1029,
+        "arm": "platform",
+        "injected_bound_exceedance_steps": 224,
+        "first_bound_exceedance": {
+          "step": 39,
+          "command_m_s": 2.0,
+          "braking_cap_m_s": 1.9765078750731968,
+          "pre_action_surface_gap_m": 2.250942480565728
+        }
+      }
+    }
+  ]
+}

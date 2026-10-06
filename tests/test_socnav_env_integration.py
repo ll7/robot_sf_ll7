@@ -20,7 +20,7 @@ def test_robot_env_delays_actions_and_resets_the_queue_between_episodes() -> Non
             sim_config=SimulationSettings(action_latency_steps=1),
         )
     )
-    _obs, reset_info = env.reset(seed=123)
+    _obs, reset_info = env.reset(seed=1013)
 
     assert reset_info["action_latency"]["effective_steps"] == 1
     _obs, _reward, _terminated, _truncated, first_info = env.step(
@@ -36,7 +36,7 @@ def test_robot_env_delays_actions_and_resets_the_queue_between_episodes() -> Non
     assert second_info["meta"]["action"] == pytest.approx((1.0, 0.0))
     assert env.simulator.robots[0].current_speed[0] > 0.0
 
-    env.reset(seed=123)
+    env.reset(seed=1013)
     _obs, _reward, _terminated, _truncated, reset_step_info = env.step(
         np.array([0.0, 0.0], dtype=np.float32)
     )

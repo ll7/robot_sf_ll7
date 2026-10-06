@@ -157,6 +157,7 @@ def run_pedestrian_model_fixture_trace(
         ped_density_by_difficulty=[0.0],
         difficulty=0,
         route_spawn_seed=config.seed,
+        pedestrian_seed=config.seed,
         max_total_pedestrians=len(spec.single_pedestrians),
         pedestrian_model=normalized_model,
     )

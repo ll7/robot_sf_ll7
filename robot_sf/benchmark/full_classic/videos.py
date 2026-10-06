@@ -31,7 +31,8 @@ except ImportError:
 
 try:  # moviepy for encoding
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-except ImportError:
+except (ImportError, PermissionError):
+    # Keep optional encoder configuration failures out of CLI/help imports.
     ImageSequenceClip = None  # type: ignore
 
 

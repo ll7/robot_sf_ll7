@@ -139,16 +139,17 @@ def _programmatic_core_config() -> CrowdSimulationConfig:
         map_id="wheel-smoke",
     )
 
+# #10063: development wheel smoke must not step retired seed 123.
 try:
-    env = make_crowd_sim_env(seed=123)
+    env = make_crowd_sim_env(seed=1001)
     smoke_mode = "default-map-pool"
 except ValueError as exc:
     if "Map pool is empty" not in str(exc):
         raise
-    env = make_crowd_sim_env(config=_programmatic_core_config(), seed=123)
+    env = make_crowd_sim_env(config=_programmatic_core_config(), seed=1001)
     smoke_mode = "programmatic-core-map"
 try:
-    obs, info = env.reset(seed=123)
+    obs, info = env.reset(seed=1001)
     next_obs, reward, terminated, truncated, next_info = env.step()
 finally:
     env.close()

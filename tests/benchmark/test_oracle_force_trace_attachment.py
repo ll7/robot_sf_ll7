@@ -38,6 +38,7 @@ def test_map_runner_keeps_oracle_trace_as_evaluator_only_step_sibling() -> None:
         info={"oracle_transition_trace": oracle_payload},
         selected_action_payload={"linear_velocity": 0.0},
         applied_environment_action_payload={"linear_velocity": 0.0},
+        action_conversion_payload=None,
         actuation_step=None,
         step_visible=None,
         step_confidence=None,

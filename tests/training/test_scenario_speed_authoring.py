@@ -24,7 +24,7 @@ def _config(name, overrides=None):
 @pytest.mark.parametrize(
     ("overrides", "mean", "std"),
     [
-        ({"ped_speed_tier": "Typical", "desired_speed_seed": 1001}, 1.3, 0.2),
+        ({"ped_speed_tier": "Typical", "desired_speed_seed": 1002}, 1.3, 0.2),
         ({"ped_speed_tier": "typical", "desired_speed_std": 0.0}, 1.3, 0.0),
         (
             {"desired_speed_mean": 1.1, "desired_speed_std": 0.0, "desired_speed_seed": 1001},
@@ -47,6 +47,8 @@ def test_scenario_speed_settings_reach_live_caps(overrides, mean, std):
     np.random.seed(1001)
     assert config.sim_config.desired_speed_mean == pytest.approx(mean)
     assert config.sim_config.desired_speed_std == pytest.approx(std)
+    if "desired_speed_seed" in overrides:
+        assert config.sim_config.desired_speed_seed == overrides["desired_speed_seed"]
     sim = init_simulators(config, next(iter(config.map_pool.map_defs.values())))[0]
     caps = sim.pysf_sim.peds.max_speeds
     assert len(caps) >= 8
@@ -54,8 +56,11 @@ def test_scenario_speed_settings_reach_live_caps(overrides, mean, std):
     if std == 0:
         np.testing.assert_allclose(caps, mean)
     elif "desired_speed_seed" in overrides:
-        # All draws for seed 1001 lie within the documented clipping bounds.
-        expected = np.random.default_rng(1001).normal(mean, std, len(caps))
+        # These draws lie within the documented clipping bounds. The speed seed
+        # differs from the population seed so a dropped override is observable.
+        expected = np.random.default_rng(overrides["desired_speed_seed"]).normal(
+            mean, std, len(caps)
+        )
         np.testing.assert_allclose(caps, expected)
 
 

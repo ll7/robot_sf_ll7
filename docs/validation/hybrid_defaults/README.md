@@ -201,3 +201,9 @@ new default the unrelated physical gate reads geometry absent from those stubs.
 The pins preserve the original dynamic/static collision witnesses and catch an
 erroneous static-clearance early return or route-guide bypass. Physical-wall tests use
 real geometry instead. No additional production seam or new test is introduced.
+
+The complete planner directory passes after these fixture pins (2,321 passed,
+13 skipped); both isolated witnesses also pass with immutable base planner bytes.
+[latest_main_integration_check.json](latest_main_integration_check.json) records
+the subsequent main integration and verifies no additional comparison-bound
+runtime/input change.

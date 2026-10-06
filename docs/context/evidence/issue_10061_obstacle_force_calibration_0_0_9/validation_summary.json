@@ -271,21 +271,21 @@
     },
     {
       "after_repair": "3 passed in output_contracts_local.log",
-      "base_failure": "AssertionError: <frozen runpy>:128: RuntimeWarning: 'robot_sf.analysis_workbench.review_context' found in sys.modules after import of package 'robot_sf.analysis_workbench', but prior to execution of 'robot_sf.analysis_workbench.review_context'; this may result in unpredictable behaviour\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '-m', 'robot_sf.analysis_workbench.re... but prior to execution of 'robot_sf.analysis_workbench.review_context'; this may result in unpredictable behaviour\\n\").returncode",
+      "base_failure": "AssertionError: <frozen runpy>:128: RuntimeWarning: 'robot_sf.analysis_workbench.review_context' found in sys.modules after import of package 'robot_sf.analysis_workbench', but prior to execution of 'robot_sf.analysis_workbench.review_context'; this may result in unpredictable behaviour\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['BASELINE/.venv/bin/python', '-m', 'robot_sf.analysis_workbench.re... but prior to execution of 'robot_sf.analysis_workbench.review_context'; this may result in unpredictable behaviour\\n\").returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/analysis_workbench/test_review_context.py::test_cli_produces_schema_valid_report_from_fixture_request",
       "root_cause_category": "shared_filesystem_output_retirement"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "assert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin... resolved\") from exc\\nrobot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved\\n').returncode",
+      "base_failure": "assert 1 == 0\n +  where 1 = CompletedProcess(args=['BASELINE/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin... resolved\") from exc\\nrobot_sf.adversarial.matched_budget_packet.PacketError: source.base_commit cannot be resolved\\n').returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/adversarial/test_issue_8891_temporal_robustness_packet.py::test_cli_requires_one_explicit_operation_and_uses_check",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "3 passed in output_contracts_local.log",
-      "base_failure": "AssertionError: assert 1 == 0\n +  where 1 = main(['--input', '/home/luttkule/wallcal-10061/baseline/tests/fixtures/scenario_review/review_context/request.json', '--con...fixtures/scenario_review/review_context/config.json', '--output', 'output/scenario_review/srev-06-cli-in-process-test'])",
+      "base_failure": "AssertionError: assert 1 == 0\n +  where 1 = main(['--input', 'BASELINE/tests/fixtures/scenario_review/review_context/request.json', '--con...fixtures/scenario_review/review_context/config.json', '--output', 'output/scenario_review/srev-06-cli-in-process-test'])",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/analysis_workbench/test_review_context.py::test_cli_main_fixture_request_in_process",
       "root_cause_category": "shared_filesystem_output_retirement"
@@ -459,56 +459,56 @@
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_builds_typed_schema_validated_six_card_atlas",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_cards_preserve_the_full_issue_interpretation_contract",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_source_linkage_digests_are_verified",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_code_config_identities_are_structured_and_bound",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_held_out_missing_outcomes_are_inconclusive",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_boundary_labels_preserve_multi_label_cases",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_unavailable_or_blocked_sources_remain_explicit",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_deterministic_output",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
@@ -522,7 +522,7 @@
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: /home/luttkule/wallcal-10061/baseline/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
+      "base_failure": "robot_sf.benchmark.mechanism_boundary_atlas.MechanismBoundaryAtlasError: BASELINE/docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json: /cards/0/code_or_config_identity/1/commit: this_repository commit identity is not present on a reachable repository ref; /cards/1/code_or_config_identity/2/commit: this_repository commit identity is not present on a reachable repository ref",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/benchmark/test_mechanism_boundary_atlas.py::test_loader_returns_independent_nested_dataclasses",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
@@ -611,14 +611,14 @@
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
+      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['BASELINE/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/tools/test_lint_evidence_registry.py::test_committed_baseline_reproduces_from_write_baseline",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"
     },
     {
       "after_repair": "passed after full Git history / python / Node PATH repair",
-      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['/home/luttkule/wallcal-10061/baseline/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
+      "base_failure": "AssertionError: ERROR: could not obtain linter report: evidence-registry linter exited 2 (report mode should exit 0 even with findings).\n  stderr:\n  error: evidence-registry commit reachability requires a full-history Git repository; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\n  \n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['BASELINE/.venv/bin/python', '/home/luttkule/wallcal-10061/baselin...tory; shallow repository detected. Run `git fetch --unshallow` (or use a full-history checkout) before rerunning.\\n\\n').returncode",
       "classification": "environment_failure_reproduced_on_base",
       "nodeid": "tests/tools/test_lint_evidence_registry.py::test_ratchet_gate_passes_against_committed_baseline",
       "root_cause_category": "historical_git_objects_or_shallow_checkout"

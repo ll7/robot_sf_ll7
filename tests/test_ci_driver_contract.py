@@ -425,9 +425,7 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
 
     assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
     assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 6
-    assert (
-        "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
-    )
+    assert fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"] == "1"
     assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
     coverage_core = workflow["env"]["COVERAGE_CORE"]

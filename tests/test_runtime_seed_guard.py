@@ -375,3 +375,131 @@ def test_parameter_screen_admits_all_seeds_before_profile_rng(
     with pytest.raises(AssertionError, match="unguarded RNG or simulation dispatch reached"):
         invoke(1001)
     assert not (tmp_path / "unused").exists()
+
+
+@pytest.mark.parametrize("seed", [True, False, 1001.5, "1001", object()])
+def test_seed_guard_rejects_non_integer_seed(seed):
+    """Refuse boolean/coerced seeds with a boundary-specific domain error."""
+    from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
+
+    with pytest.raises(
+        ValueError, match="simulation seed must be an integer at type admission"
+    ) as exc:
+        check_simulation_seed(seed, boundary="type admission")
+    assert isinstance(exc.value.__cause__, TypeError)
+
+
+def test_authorization_uses_real_identity_reader(forbidden_sentinel, monkeypatch, tmp_path):
+    """An authorization file is verified before its claimed source can admit a seed."""
+    import subprocess
+
+    from robot_sf.benchmark import release_protocol, runtime_seed_guard
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, capture_output=True)
+    (tmp_path / ".gitignore").write_text("output/\n", encoding="utf-8")
+    identity = tmp_path / "output" / "identity.json"
+    identity.parent.mkdir()
+    identity.write_text('{"schema_version":"unsupported"}', encoding="utf-8")
+    monkeypatch.setattr(release_protocol, "get_repository_root", lambda: tmp_path)
+    with pytest.raises(ValueError, match="resolved release identity schema_version is unsupported"):
+        runtime_seed_guard.check_simulation_seed(
+            SENTINEL, boundary="identity reader", authorization=identity
+        )
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        runtime_seed_guard.check_simulation_seed(SENTINEL, boundary="after refused identity")
+
+
+@pytest.fixture
+def verified_authorization(forbidden_sentinel, monkeypatch, tmp_path):
+    """Isolate verified-manifest transport; keep the guard and release policy real."""
+    from robot_sf.benchmark import release_protocol, runtime_seed_guard
+
+    # Metadata only: no freeze checkout, RNG call, environment or simulation.
+    identity = SimpleNamespace(
+        source_sha="66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+        resolved_seeds=[SENTINEL],
+        release_kind="benchmark-data",
+    )
+    path = tmp_path / "verified-identity.json"
+    verified_paths = []
+    policy_calls = []
+    real_policy = release_protocol.sealed_seed_execution_problem
+
+    def verify(requested_path):
+        verified_paths.append(requested_path)
+        assert requested_path == path
+        return identity
+
+    def policy(manifest, seeds, *, source_commit):
+        policy_calls.append((manifest, seeds, source_commit))
+        return real_policy(manifest, seeds, source_commit=source_commit)
+
+    monkeypatch.setattr(release_protocol, "verify_resolved_release_identity", verify)
+    monkeypatch.setattr(release_protocol, "sealed_seed_execution_problem", policy)
+    # seed-holdout: synthetic-fixture begin
+    monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (SENTINEL,))
+    # seed-holdout: synthetic-fixture end
+    return runtime_seed_guard, release_protocol, identity, path, verified_paths, policy_calls
+
+
+def test_authorization_requires_immutable_source(verified_authorization):
+    """A verified development identity cannot authorize held-out execution."""
+    guard, _, identity, path, verified_paths, policy_calls = verified_authorization
+    identity.source_sha = "a" * 40
+    with pytest.raises(
+        ValueError, match="sealed authorization requires the immutable freeze source"
+    ):
+        guard.check_simulation_seed(SENTINEL, boundary="source admission", authorization=path)
+    assert verified_paths == [path]
+    assert policy_calls == [], "wrong source reached release execution admission"
+
+
+def test_authorization_preserves_real_release_policy_refusal(verified_authorization, monkeypatch):
+    """A frozen-source claim cannot override the real development-release refusal."""
+    guard, protocol, identity, path, verified_paths, policy_calls = verified_authorization
+    identity.release_kind = "development_rehearsal"
+    # seed-holdout: synthetic-fixture begin
+    monkeypatch.setattr(protocol, "EVAL_SEEDS_0_0_8", (SENTINEL,))
+    # seed-holdout: synthetic-fixture end
+    with pytest.raises(ValueError, match="development rehearsal cannot be a sealed release"):
+        guard.check_simulation_seed(SENTINEL, boundary="policy admission", authorization=path)
+    assert verified_paths == [path]
+    assert policy_calls == [(identity, (SENTINEL,), "66f402ba176b13e45210d0da0b2cf20fcdc0cc02")]
+
+
+def test_authorization_is_scoped_to_verified_seed_inventory(verified_authorization):
+    """A metadata-only admitted seed does not grant permission to later calls."""
+    guard, _, identity, path, verified_paths, policy_calls = verified_authorization
+    assert guard.validate_sealed_authorization(path) is identity
+    assert (
+        guard.check_simulation_seed(SENTINEL, boundary="scoped admission", authorization=path)
+        is None
+    )
+    assert verified_paths == [path, path]
+    assert policy_calls == [
+        (identity, (SENTINEL,), "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"),
+        (identity, (SENTINEL,), "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"),
+    ]
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        guard.check_simulation_seed(SENTINEL, boundary="no global admission")
+    assert verified_paths == [path, path]
+
+
+@pytest.mark.parametrize("missing_binding", ["evaluation_band", "identity_inventory"])
+def test_authorization_requires_both_seed_bindings(
+    verified_authorization, monkeypatch, missing_binding
+):
+    """Even a valid source/policy needs both evaluation and identity membership."""
+    guard, _, identity, path, verified_paths, policy_calls = verified_authorization
+    if missing_binding == "evaluation_band":
+        # seed-holdout: synthetic-fixture begin
+        monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (1001,))
+        # seed-holdout: synthetic-fixture end
+    else:
+        identity.resolved_seeds = [1001]
+    with pytest.raises(ValueError, match="held-out simulation seed"):
+        guard.check_simulation_seed(SENTINEL, boundary="seed membership", authorization=path)
+    assert verified_paths == [path]
+    assert policy_calls == [
+        (identity, tuple(identity.resolved_seeds), "66f402ba176b13e45210d0da0b2cf20fcdc0cc02")
+    ]

@@ -431,6 +431,10 @@ RUNTIME_POLICY_LINES = {
         {
             'monkeypatch.setattr(seed_bands, "HELD_OUT_SEEDS", frozenset({SENTINEL}))',
             "seed_bands.HELD_OUT_SEEDS = frozenset({1030})",
+            # These reviewed policy doubles use development seeds and never execute episodes.
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (SENTINEL,))',
+            'monkeypatch.setattr(protocol, "EVAL_SEEDS_0_0_8", (SENTINEL,))',
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (1001,))',
         }
     ),
 }

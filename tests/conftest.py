@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Exact finite-distribution tail checks use fixed arrays and arithmetic.
+    "test_multimodal_tail_metrics.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",
     # Seed inventories and campaign resume planning use deterministic fixtures.

@@ -92,6 +92,8 @@ def test_v4_continuous_static_acceptance_still_checks_pedestrian_collision(
 ) -> None:
     """Coarse grid clearance must not bypass v4's independent pedestrian gate."""
     planner = _v4_planner(
+        # This witness isolates the legacy continuous gate with a geometry stub.
+        physical_static_exclusion_enabled=False,
         continuous_static_clearance_enabled=True,
         rollout_horizon=0.4,
         v4_braking_check_enabled=False,
@@ -122,6 +124,8 @@ def test_v4_route_guide_candidate_hits_static_collision_gate(
 ) -> None:
     """A direct route-guide command cannot bypass v4 rollout collision checks."""
     planner = _v4_planner(
+        # Keep the synthetic geometry witness on the legacy continuous gate.
+        physical_static_exclusion_enabled=False,
         continuous_static_clearance_enabled=True,
         rollout_horizon=0.4,
         v4_braking_check_enabled=False,

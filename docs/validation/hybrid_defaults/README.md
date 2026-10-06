@@ -191,3 +191,13 @@ generated `_version.py` also changes when the editable package rebuilds after
 rebase; it contains informational version constants. The other 1,426 bound
 files match. The complete measured results remain applicable; the original
 producer identities and hashes are preserved.
+
+The existing pedestrian/static-gate characterizations
+`test_v4_continuous_static_acceptance_still_checks_pedestrian_collision` and
+`test_v4_route_guide_candidate_hits_static_collision_gate` pin
+`physical_static_exclusion_enabled=False`: their empty geometry stubs deliberately
+isolates the older continuous gate from occupancy-grid conservatism. With the
+new default the unrelated physical gate reads geometry absent from those stubs.
+The pins preserve the original dynamic/static collision witnesses and catch an
+erroneous static-clearance early return or route-guide bypass. Physical-wall tests use
+real geometry instead. No additional production seam or new test is introduced.

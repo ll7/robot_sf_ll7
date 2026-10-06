@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
@@ -137,10 +138,11 @@ def _check_episode(
         state.add("snqi_recompute_failed", f"{source}: curvature-aware recompute failed: {exc}")
         return
     state.snqi_recomputed_rows += 1
-    state.per_arm_field_sum[arm] += stored_snqi
-    state.per_arm_field_count[arm] += 1
-    state.per_arm_recomputed_sum[arm] += recomputed_snqi
-    state.per_arm_recomputed_count[arm] += 1
+    if filter_evidence_eligible_records([dict(record)])[0]:
+        state.per_arm_field_sum[arm] += stored_snqi
+        state.per_arm_field_count[arm] += 1
+        state.per_arm_recomputed_sum[arm] += recomputed_snqi
+        state.per_arm_recomputed_count[arm] += 1
     if not math.isclose(
         stored_snqi, recomputed_snqi, rel_tol=_RECOMPUTE_RTOL, abs_tol=_RECOMPUTE_ATOL
     ):

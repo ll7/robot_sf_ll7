@@ -148,7 +148,7 @@ def test_stubbed_lidar_map_episode_records_track_metadata(
 
     map_def = _minimal_map_def()
     dummy_config = SimpleNamespace(
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4, max_sim_steps=1),
         robot_config=None,
     )
 

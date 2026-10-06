@@ -1,5 +1,7 @@
 <!-- AI-GENERATED (robot_sf_ll7#6969, 2026-08-13) - NEEDS-REVIEW -->
 
+**Affected / superseded geometry evidence (#10056).** This historical bundle used the pre-fix emergent-phenomena builders, whose walls were misplaced by the endpoint/axis tuple-order defect. Its original measurements and exhibits are retained for comparison, not current face-validity evidence. See the [corrected-wall replay](../issue_10056_wall_order_2026-09/README.md) and [issue #10056](https://github.com/ll7/robot_sf_ll7/issues/10056). Historical replay GIFs drew intended walls while pedestrians used misplaced walls.
+
 # Issue #6969 lane-formation reference and Stage A diagnostic
 
 Plain-language summary: the lane metrics distinguish known mixed and separated

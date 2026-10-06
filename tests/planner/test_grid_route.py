@@ -52,7 +52,43 @@ def test_grid_route_build_config_defaults() -> None:
     cfg = build_grid_route_config({"max_linear_speed": 0.7, "waypoint_lookahead_cells": 3})
     assert cfg.max_linear_speed == 0.7
     assert cfg.waypoint_lookahead_cells == 3
+    assert cfg.mirror_equivariant_waypoint_snap_enabled is False
     assert build_grid_route_config(None).goal_tolerance == 0.25
+
+
+def test_grid_route_build_config_parses_reflection_waypoint_snap() -> None:
+    """The opt-in reflected waypoint correction leaves default config unchanged."""
+    cfg = build_grid_route_config({"mirror_equivariant_waypoint_snap_enabled": True})
+
+    assert cfg.mirror_equivariant_waypoint_snap_enabled is True
+
+
+def test_reflection_waypoint_snap_removes_grid_cell_center_bias() -> None:
+    """Near-line grid-cell centers project to the continuous route centerline."""
+
+    class FixedPathPlanner(GridRoutePlannerAdapter):
+        """Return a deterministic row-offset path for quantization testing."""
+
+        def _route_path(self, **_kwargs: Any) -> tuple[list[tuple[int, int]], None]:
+            return [(5, 5), (5, 6), (5, 7)], None
+
+    planner = FixedPathPlanner(
+        GridRoutePlannerConfig(
+            waypoint_lookahead_cells=1,
+            mirror_equivariant_waypoint_snap_enabled=True,
+        )
+    )
+    meta = {"origin": [-1.0, -1.0], "resolution": [0.2], "use_ego_frame": [0.0]}
+
+    target = planner._route_target(
+        robot_pos=np.asarray([0.0, 0.0]),
+        goal=np.asarray([3.0, 0.0]),
+        radius=0.3,
+        grid=np.zeros((3, 11, 11), dtype=float),
+        meta=meta,
+    )
+
+    np.testing.assert_allclose(target, [0.3, 0.0], rtol=0.0, atol=1e-12)
 
 
 def test_grid_route_returns_bounded_open_space_command() -> None:

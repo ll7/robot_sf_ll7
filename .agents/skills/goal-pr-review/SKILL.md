@@ -231,7 +231,8 @@ deterministically:
 | `failed_validation` | `verify_artifacts` | `fixing` if the validation failure is actionable on a writable branch, else `blocked_external` |
 | `missing_artifacts` | `verify_artifacts` | `under_review` |
 | `stale_worktree` | `refresh_snapshot` | `under_review` (re-snapshot the advanced head before deciding) |
-| `stale_merge_base` | `refresh_snapshot` or record the bounded ordinary selector | `under_review` until exact-head base policy proof is current |
+| `stale_merge_base` | `refresh_snapshot` once for base-sensitive validation, or record the exact-head ordinary selector | `under_review`; base movement alone does not invalidate review for the unchanged head and final metadata |
+| `stale_base_churn` | `report_base_churn` | `blocked_external`; stop after one refresh and record the PR base SHA, current `main` SHA, and refresh count |
 | `blocked_preflight` | `no_action` | `blocked_external` until the blocking preflight condition is resolved |
 | `unknown_review_threads` | `await_review_threads` | `awaiting_reviewer` until a thread-capable snapshot is available |
 | `pending_gate_verdict` | `await_gate_verdict` | `awaiting_reviewer` until current exact-head gate evidence is present |
@@ -346,10 +347,16 @@ uv run python -m scripts.dev.pr_loop_policy --snapshot <queue-snapshot.json> --j
 ```
 
 The policy classifies each PR into `pending_ci`, `failed_ci`, `failed_validation`,
-`missing_artifacts`, `stale_worktree`, `stale_merge_base`, `blocked_preflight`,
+`missing_artifacts`, `stale_worktree`, `stale_merge_base`, `stale_base_churn`, `blocked_preflight`,
 `unknown_review_threads`, `pending_gate_verdict`, `pending_pr_metadata`, `ready_to_merge`,
 or `no_action` and recommends one bounded action under the loop budget. Use the policy decision
 to avoid ad-hoc state inspection.
+
+For a base-sensitive PR, record the refresh count in the active review ledger. The first stale
+observation may route to one refresh. On every later evaluation in the same merge attempt, pass
+`--stale-base-refresh-count <pr>=1`; do not reset that count until the attempt ends. A repeated
+authoritative stale verdict then produces `stale_base_churn` and stops the attempt. Missing or
+unavailable base provenance remains `stale_merge_base` and fails closed.
 
 For PR babysitting or handoff, prefer the conservative one-shot babysitter snapshot:
 

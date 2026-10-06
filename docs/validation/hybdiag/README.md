@@ -1,0 +1,106 @@
+# HYBDIAG development experiments (PR #10099)
+
+AI-GENERATED/NEEDS-REVIEW. These paired development experiments use seeds
+1001–1030 only. They are exploratory evidence, not release evaluation results.
+The compact episode summaries contain outcomes and metrics, without raw traces.
+Their manifests identify the measured source revision and SHA256 hashes.
+
+Regenerate the CSV/JSON tables from the committed summaries:
+
+```sh
+python -m scripts.validation.summarize_hybdiag
+python -m scripts.validation.summarize_hybdiag --check
+```
+
+`round*-near-misses.csv` and the readable comparison tables show per-scenario
+events, robot-seconds and rates next to pooled rates. This distinguishes changed
+route exposure from changed risk at the same encounter.
+
+CSV files begin with a normal header. Success, collisions, timeouts and freezing
+have two-sided 95% Wilson intervals over episodes. Stopped time and time without a
+feasible moving candidate are weighted by robot exposure. A near-miss event starts
+on entry into the plant's `near_misses` predicate (surface gap in [0, 0.5) m); consecutive
+near-miss steps count as one event. Event rates use actual robot-seconds; minimum
+pedestrian separation is the executed center-to-center minimum. Robot radius is
+1.0 m, pedestrian radius 0.4 m. No inference of independence between repeated
+near-miss events is made.
+
+Historical Round 2/3: `off` retains the corresponding main behavior. `static` enables physical wall exclusion;
+`platform` extends speed candidates while retaining predicted pedestrian exclusion;
+`both` enables both. Round 2 couples the absent-successor guard to static exclusion.
+Round 3 explicitly enables `goal_next_validity_enabled` and the optional sensor
+field for static/both, independently of wall exclusion. Missing validity fields
+retain legacy behavior. Source defaults, observation keys and spaces are unchanged.
+
+The 1.60 m pedestrian threshold is a **candidate rejection radius** against
+constant-velocity predicted positions at rollout endpoints. It is not a hard limit
+on executed separation. Round 3 retains the current-position pedestrian braking
+cap, normalizes speed preference by drive maximum, checks wall stopping distance
+past the finite rollout, and conservatively covers turning arcs during swept checks.
+
+Round 4 removes the platform injection flag and code: its restored braking cap
+yields no meaningful benefit with a measurable pedestrian-proximity cost.
+The braking audit remains; `round4-platform-verdict.md` records the review verdict
+and follow-up issue #10111. Current arms are `off`, `static_only` (wall exclusion
+only), and `static_plus_goal_validity` (also planner validity plus sensor field).
+`round3-vs-round4.md` and `round4-results.csv` compare the merged-tree results.
+The exact adopted flags are named in `round4-adoption.md`; sealed-seed
+confirmation remains pending. No sealed seed is executed by this lane.
+
+The empty-world gate compares each enabled arm to paired off episodes. Acceptance
+requires no new empty-world failure and collision Wilson bounds not above off
+(per scenario and pooled). This does not certify identical collision risk or
+improved proximity; assess near misses and exposure separately.
+
+The compact `round2-braking-bound-audit.json` records the first injected-command
+bound exceedance and total exceedance steps for each of the 45 successful
+platform/both station episodes. Every one requested commands above the scalar
+braking cap. This is a command-bound violation, not an executed-speed/contact
+claim. Its CSV is regenerated from that committed summary; the optional native
+import command is:
+
+```sh
+python -m scripts.validation.summarize_hybdiag --audit-braking-bound <round2-native-crowd-folder>
+```
+
+Round 3 public artifacts include `round2-vs-round3.md` (generated readable
+comparison), `round3-failure-classifications.json` (every new failure versus off
+and Round 2), and `round3-wall-witnesses.json` (two compact exact-map geometry
+witnesses). The exporter independently recomputes point-to-segment distance and
+requires matching combined-arm success. Lost station successes join the prior
+braking-cap audit; their remaining progress shortfall is not labeled a genuine
+physical limit. Unknown failures refuse publication until classified.
+
+The native default/bound audit publishes only per-episode executed-field hashes
+and aggregate injected-command counts. Recreate it from private run folders:
+
+```sh
+python -m scripts.validation.summarize_hybdiag --audit-native-controls <prior-artifact-parent> \
+  --crowd <round3-crowd-folder> --empty <round3-empty-folder>
+```
+
+The parent contains `round2-measure` and `round2-empty`. The audit requires all
+402 off episodes to match command/position/end-position/contact bytes and refuses
+any selected added command above the reported current-position braking cap.
+
+The first full suite caught two config-reference parity regressions: the new
+`include_goal_next_valid` field lacked seven inherited reference anchors. The
+canonical environment-config generator refreshes those default-False rows; the
+existing byte-parity and exact-field tests reproduce the defect and pass after
+regeneration. No test or planner behavior was changed to repair this drift.
+
+Round 4 native custody can be re-imported with the committed exporter:
+
+```sh
+python -m scripts.validation.summarize_hybdiag --import-round 4 \
+  --crowd <round4-crowd-folder> --empty <round4-empty-folder>
+python -m scripts.validation.summarize_hybdiag --audit-round4-controls <prior-artifact-parent> \
+  --crowd <round4-crowd-folder> --empty <round4-empty-folder>
+```
+
+The parent contains `round3-measure` and `round3-empty`. The audit checks all 402
+new off command/pose/contact trajectories against Round 3, optional-field delivery
+for every enabled goal arm, and runtime evaluator/sensor/reader/geometry bytes
+against publication. The table checker also refuses coupled static-only flags.
+Raw traces are needed only to import custody; public CSV/JSON tables regenerate
+from committed compact episode inputs alone.

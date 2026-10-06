@@ -19,7 +19,7 @@ hybrid arms:
 - hybrid_rule_v3_fast_progress_static_escape
 - hybrid_rule_v3_fast_progress_static_escape_continuous
 
-The selected stress cells are all run at seed 116 and horizon 600:
+The selected stress cells are all run at seed 1001 and horizon 600:
 
 | Scenario | Mechanism |
 | --- | --- |
@@ -34,6 +34,9 @@ the four-arm fallback intersections in the durable issue #4365 job13376/job13378
 artifacts, with the urban-crossing and other representative cells also
 observed in the rejected issue #7742 job14730 artifact. The historical rows are
 diagnostic selection evidence only and must never be reused as release evidence.
+The historical seed was 116; D-049 retires that band. No seed-equivalence rule
+is documented, so the mechanical gate retains these scenarios at dev seed 1001.
+This check does not claim to reproduce the historical stochastic trajectory.
 
 ## Admission contract
 
@@ -112,7 +115,7 @@ Before admission:
 3. Stage the checkpoint receipt against the stress campaign config and require
    submit_safe: true; the receipt must be fresh and config-bound even though
    only the hybrid arms are under test.
-4. Run release preflight and confirm 14 arms, five scenarios, seed 116, H600,
+4. Run release preflight and confirm 14 arms, five scenarios, seed 1001, H600,
    differential-drive, and 70 expected cells.
 5. Bind the same source/config/scenario/manifest hashes into the private launch
    packet. Record the exact module setup and startup sentinel in the private

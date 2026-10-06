@@ -1,0 +1,2137 @@
+{
+  "claim_boundary": "Released-speed doorway stand-off diagnosis only; no realistic clogging, validation, benchmark, paper or dissertation admission.",
+  "definitions": {
+    "approach": "center within 2 m of x=8 door plane",
+    "jamb_proximity": "center within 1.5 m of a jamb tip",
+    "slow_queue": "final approach region and last-10-second mean speed <0.05 m/s",
+    "throughput": "unchanged harness crossing events / ((steps+1)*0.1)"
+  },
+  "evidence_status": "diagnostic-only",
+  "geometry": {
+    "gap_m": 1.2,
+    "one_agent_center_clearance_width_m": 0.5,
+    "radius_m": 0.35,
+    "two_agent_diameters_m": 1.4
+  },
+  "probe_source": {
+    "location": "external lane custody: /home/luttkule/wallfix-evidence/followup/doorway_probe.py",
+    "path": "/home/luttkule/wallfix-evidence/followup/doorway_probe.py",
+    "sha256": "0e1618393408fc9803131debbf0a55d5ad791ef06e94561b4f39a63559e6be99"
+  },
+  "raw_archive": {
+    "location": "external lane custody: /home/luttkule/wallfix-evidence/followup/doorway-raw.tar.gz",
+    "path": "/home/luttkule/wallfix-evidence/followup/doorway-raw.tar.gz",
+    "sha256": "35916f64185e49eec268a19bf8b0941e07271348e48fdd6b39c7d62019899583"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "agents_ever_approach_2m": 19,
+      "agents_ever_within_1_5m_of_jamb_tip": 19,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.7109628664087797,
+      "final_near_plane_2m_count": 12,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.20181272478635107,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.6212759630783127,
+      "min_plane_distance_m": 0.5361236602947193,
+      "oscillation_flips": 0.0,
+      "seed": 1001,
+      "snapshots": [
+        {
+          "lead_agent": 9,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.0488397828649585,
+              -0.4238095191440221
+            ],
+            "SocialForce": [
+              0.5272393975990968,
+              0.5229621619953958
+            ]
+          },
+          "lead_position_m": [
+            6.366721033715519,
+            0.6105863173077704
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 2,
+          "nearest_plane_distance_m": 1.6332789662844807,
+          "step": 0
+        },
+        {
+          "lead_agent": 2,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.115777408278082,
+              0.5133379562613565
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.9022082163279572,
+              -0.17265137069935363
+            ],
+            "SocialForce": [
+              1.7635755710574743,
+              -0.36420262319026636
+            ]
+          },
+          "lead_position_m": [
+            7.270691012600915,
+            0.2402894985651095
+          ],
+          "lead_speed_mps": 0.3111963700393346,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.7293089873990848,
+          "step": 100
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2798729525081503,
+              0.5297796396007795
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.8936796022471016,
+              0.15114287430422854
+            ],
+            "SocialForce": [
+              1.494583111585931,
+              -0.464750615916914
+            ]
+          },
+          "lead_position_m": [
+            7.305743385925791,
+            -0.140098068079675
+          ],
+          "lead_speed_mps": 0.284260330162246,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.6942566140742086,
+          "step": 300
+        }
+      ],
+      "steps": 300,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 20,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.8148513411701676,
+      "final_near_plane_2m_count": 13,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.2158335225698789,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.6069989042105507,
+      "min_plane_distance_m": 0.5361236602947193,
+      "oscillation_flips": 0.0,
+      "seed": 1001,
+      "snapshots": [
+        {
+          "lead_agent": 9,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.0488397828649585,
+              -0.4238095191440221
+            ],
+            "SocialForce": [
+              0.5272393975990968,
+              0.5229621619953958
+            ]
+          },
+          "lead_position_m": [
+            6.366721033715519,
+            0.6105863173077704
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 2,
+          "nearest_plane_distance_m": 1.6332789662844807,
+          "step": 0
+        },
+        {
+          "lead_agent": 2,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.115777408278082,
+              0.5133379562613565
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.9022082163279572,
+              -0.17265137069935363
+            ],
+            "SocialForce": [
+              1.7635755710574743,
+              -0.36420262319026636
+            ]
+          },
+          "lead_position_m": [
+            7.270691012600915,
+            0.2402894985651095
+          ],
+          "lead_speed_mps": 0.3111963700393346,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.7293089873990848,
+          "step": 100
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2798729525081503,
+              0.5297796396007795
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.8936796022471016,
+              0.15114287430422854
+            ],
+            "SocialForce": [
+              1.494583111585931,
+              -0.464750615916914
+            ]
+          },
+          "lead_position_m": [
+            7.305743385925791,
+            -0.140098068079675
+          ],
+          "lead_speed_mps": 0.284260330162246,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.6942566140742086,
+          "step": 300
+        },
+        {
+          "lead_agent": 1,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2297620287709705,
+              0.5089256972266648
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.2279866394382317,
+              -0.3029209439938153
+            ],
+            "SocialForce": [
+              2.0210998220495235,
+              -0.3390610880003078
+            ]
+          },
+          "lead_position_m": [
+            7.369623941379782,
+            0.2868993342232182
+          ],
+          "lead_speed_mps": 0.3035975458069323,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.6303760586202181,
+          "step": 500
+        },
+        {
+          "lead_agent": 1,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.266038294934463,
+              0.6144659140696564
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.952473776909739,
+              -0.14761253313894718
+            ],
+            "SocialForce": [
+              1.6820793362622892,
+              -0.5426224019314434
+            ]
+          },
+          "lead_position_m": [
+            7.356999489544088,
+            0.09946723208139761
+          ],
+          "lead_speed_mps": 0.34082431644101535,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.643000510455912,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 19,
+      "agents_ever_within_1_5m_of_jamb_tip": 18,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.79909162194334,
+      "final_near_plane_2m_count": 14,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.18848208998556135,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.6053723058760344,
+      "min_plane_distance_m": 0.5825545491580186,
+      "oscillation_flips": 0.0,
+      "seed": 1002,
+      "snapshots": [
+        {
+          "lead_agent": 19,
+          "lead_force_components": {
+            "DesiredForce": [
+              -0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              1.1122437814800539,
+              0.3011918587197573
+            ],
+            "SocialForce": [
+              -0.20436961865416897,
+              0.6637811074369224
+            ]
+          },
+          "lead_position_m": [
+            9.607774209773499,
+            -0.49413915378431283
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 1,
+          "nearest_plane_distance_m": 1.607774209773499,
+          "step": 0
+        },
+        {
+          "lead_agent": 2,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.1856539371245831,
+              0.08077846072464567
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.9436427535653955,
+              0.15086966839804844
+            ],
+            "SocialForce": [
+              1.6702432701518029,
+              -0.2226577663862684
+            ]
+          },
+          "lead_position_m": [
+            7.2561572420166796,
+            -0.3351860687588167
+          ],
+          "lead_speed_mps": 0.0885893939772378,
+          "near_plane_2m_count": 10,
+          "nearest_plane_distance_m": 0.7438427579833204,
+          "step": 100
+        },
+        {
+          "lead_agent": 9,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.380152309661156,
+              -0.2773546515939852
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.8665324700699517,
+              -0.1274550798053352
+            ],
+            "SocialForce": [
+              1.45569467603917,
+              0.4045579338703992
+            ]
+          },
+          "lead_position_m": [
+            7.3001307268055875,
+            0.11809686524472492
+          ],
+          "lead_speed_mps": 0.10636717037852549,
+          "near_plane_2m_count": 14,
+          "nearest_plane_distance_m": 0.6998692731944125,
+          "step": 300
+        }
+      ],
+      "steps": 300,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 20,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.8244918702918534,
+      "final_near_plane_2m_count": 13,
+      "final_slow_queue_count": 1,
+      "late_mean_speed_mps": 0.18853133853078674,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.5839276660257147,
+      "min_plane_distance_m": 0.487015988314055,
+      "oscillation_flips": 0.0,
+      "seed": 1002,
+      "snapshots": [
+        {
+          "lead_agent": 19,
+          "lead_force_components": {
+            "DesiredForce": [
+              -0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              1.1122437814800539,
+              0.3011918587197573
+            ],
+            "SocialForce": [
+              -0.20436961865416897,
+              0.6637811074369224
+            ]
+          },
+          "lead_position_m": [
+            9.607774209773499,
+            -0.49413915378431283
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 1,
+          "nearest_plane_distance_m": 1.607774209773499,
+          "step": 0
+        },
+        {
+          "lead_agent": 2,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.1856539371245831,
+              0.08077846072464567
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.9436427535653955,
+              0.15086966839804844
+            ],
+            "SocialForce": [
+              1.6702432701518029,
+              -0.2226577663862684
+            ]
+          },
+          "lead_position_m": [
+            7.2561572420166796,
+            -0.3351860687588167
+          ],
+          "lead_speed_mps": 0.0885893939772378,
+          "near_plane_2m_count": 10,
+          "nearest_plane_distance_m": 0.7438427579833204,
+          "step": 100
+        },
+        {
+          "lead_agent": 9,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.380152309661156,
+              -0.2773546515939852
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.8665324700699517,
+              -0.1274550798053352
+            ],
+            "SocialForce": [
+              1.45569467603917,
+              0.4045579338703992
+            ]
+          },
+          "lead_position_m": [
+            7.3001307268055875,
+            0.11809686524472492
+          ],
+          "lead_speed_mps": 0.10636717037852549,
+          "near_plane_2m_count": 14,
+          "nearest_plane_distance_m": 0.6998692731944125,
+          "step": 300
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2830142737102195,
+              -0.4035279021920572
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.993588433302911,
+              0.10741788215259354
+            ],
+            "SocialForce": [
+              1.5900270211817134,
+              0.2670883216085617
+            ]
+          },
+          "lead_position_m": [
+            7.259609886892444,
+            0.5990007827186379
+          ],
+          "lead_speed_mps": 0.1791873844483695,
+          "near_plane_2m_count": 14,
+          "nearest_plane_distance_m": 0.7403901131075559,
+          "step": 500
+        },
+        {
+          "lead_agent": 12,
+          "lead_force_components": {
+            "DesiredForce": [
+              -1.2995311331252986,
+              0.45231232140328637
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              2.8206766663842253,
+              -0.11688655353789296
+            ],
+            "SocialForce": [
+              -1.4675102108246771,
+              -0.40116191717223276
+            ]
+          },
+          "lead_position_m": [
+            8.786228120216428,
+            0.35174169267011424
+          ],
+          "lead_speed_mps": 0.2667972109245543,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.7862281202164283,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 19,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.7518899865967618,
+      "final_near_plane_2m_count": 13,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.2052257441302848,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.6536352236532589,
+      "min_plane_distance_m": 0.6114415532260553,
+      "oscillation_flips": 0.0,
+      "seed": 1003,
+      "snapshots": [
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.0542595380965998,
+              0.24926984906789032
+            ],
+            "SocialForce": [
+              -0.21637184074834745,
+              -0.690529927255443
+            ]
+          },
+          "lead_position_m": [
+            6.320681055080957,
+            -0.4077156766315334
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 2,
+          "nearest_plane_distance_m": 1.6793189449190429,
+          "step": 0
+        },
+        {
+          "lead_agent": 8,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.3692569665435463,
+              0.6836299034308454
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.1017158089827124,
+              -0.00963464700906122
+            ],
+            "SocialForce": [
+              1.6840827975282247,
+              -0.8447812773831089
+            ]
+          },
+          "lead_position_m": [
+            7.276717890733616,
+            -0.519814799503338
+          ],
+          "lead_speed_mps": 0.26399251155068365,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.7232821092663837,
+          "step": 100
+        },
+        {
+          "lead_agent": 3,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2588519708000063,
+              0.5276624873467924
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.0690752628927935,
+              -0.17451211435019348
+            ],
+            "SocialForce": [
+              1.8587053153793978,
+              -0.4595871067715212
+            ]
+          },
+          "lead_position_m": [
+            7.2908990940047,
+            0.34997108754961415
+          ],
+          "lead_speed_mps": 0.2769835882421453,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.7091009059953004,
+          "step": 300
+        }
+      ],
+      "steps": 300,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 20,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.8360180088661615,
+      "final_near_plane_2m_count": 12,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.2078217027208065,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.6213895743576981,
+      "min_plane_distance_m": 0.5847468600230261,
+      "oscillation_flips": 0.0,
+      "seed": 1003,
+      "snapshots": [
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.0542595380965998,
+              0.24926984906789032
+            ],
+            "SocialForce": [
+              -0.21637184074834745,
+              -0.690529927255443
+            ]
+          },
+          "lead_position_m": [
+            6.320681055080957,
+            -0.4077156766315334
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 2,
+          "nearest_plane_distance_m": 1.6793189449190429,
+          "step": 0
+        },
+        {
+          "lead_agent": 8,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.3692569665435463,
+              0.6836299034308454
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.1017158089827124,
+              -0.00963464700906122
+            ],
+            "SocialForce": [
+              1.6840827975282247,
+              -0.8447812773831089
+            ]
+          },
+          "lead_position_m": [
+            7.276717890733616,
+            -0.519814799503338
+          ],
+          "lead_speed_mps": 0.26399251155068365,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.7232821092663837,
+          "step": 100
+        },
+        {
+          "lead_agent": 3,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2588519708000063,
+              0.5276624873467924
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.0690752628927935,
+              -0.17451211435019348
+            ],
+            "SocialForce": [
+              1.8587053153793978,
+              -0.4595871067715212
+            ]
+          },
+          "lead_position_m": [
+            7.2908990940047,
+            0.34997108754961415
+          ],
+          "lead_speed_mps": 0.2769835882421453,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.7091009059953004,
+          "step": 300
+        },
+        {
+          "lead_agent": 7,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.546141645578987,
+              0.7122942023582529
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.7208091323836383,
+              0.528634851377687
+            ],
+            "SocialForce": [
+              1.1154140711393903,
+              -1.0073752039416097
+            ]
+          },
+          "lead_position_m": [
+            7.234310553467189,
+            -0.861721804295183
+          ],
+          "lead_speed_mps": 0.37825704070368,
+          "near_plane_2m_count": 11,
+          "nearest_plane_distance_m": 0.7656894465328108,
+          "step": 500
+        },
+        {
+          "lead_agent": 7,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.3495815597051628,
+              0.28310790320617796
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.8180530793610545,
+              0.027167581096281673
+            ],
+            "SocialForce": [
+              1.4491652355665623,
+              -0.24666190944247382
+            ]
+          },
+          "lead_position_m": [
+            7.294665231100284,
+            -0.024193004786598922
+          ],
+          "lead_speed_mps": 0.20720963772863932,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.705334768899716,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 17,
+      "agents_ever_within_1_5m_of_jamb_tip": 17,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.6774566432353535,
+      "final_near_plane_2m_count": 12,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.1798299794788731,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.5947474078122579,
+      "min_plane_distance_m": 0.528464585174512,
+      "oscillation_flips": 0.0,
+      "seed": 1004,
+      "snapshots": [
+        {
+          "lead_agent": 8,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -0.36946159211268836,
+              1.7638318678650111
+            ],
+            "SocialForce": [
+              0.30642843086750415,
+              -0.911132396264627
+            ]
+          },
+          "lead_position_m": [
+            5.3016351111391335,
+            -1.1278494352530744
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 2.6983648888608665,
+          "step": 0
+        },
+        {
+          "lead_agent": 15,
+          "lead_force_components": {
+            "DesiredForce": [
+              -1.1137560167486875,
+              -0.2525633288744535
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              2.6641323842316074,
+              0.0675604535735562
+            ],
+            "SocialForce": [
+              -1.419103830966047,
+              0.07768133799124625
+            ]
+          },
+          "lead_position_m": [
+            8.79330424444011,
+            -0.09883954410392808
+          ],
+          "lead_speed_mps": 0.1404588680947954,
+          "near_plane_2m_count": 10,
+          "nearest_plane_distance_m": 0.7933042444401099,
+          "step": 100
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.4951164809515367,
+              -0.5645296111101283
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.3440251035590007,
+              -0.12806560615999552
+            ],
+            "SocialForce": [
+              1.8613205424323025,
+              0.824352485085892
+            ]
+          },
+          "lead_position_m": [
+            7.341093121347249,
+            0.4425540450573553
+          ],
+          "lead_speed_mps": 0.2514113349332397,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.6589068786527514,
+          "step": 300
+        }
+      ],
+      "steps": 300,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 20,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.668632867225554,
+      "final_near_plane_2m_count": 13,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.2055125185728148,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.5338393340076044,
+      "min_plane_distance_m": 0.3688477767476259,
+      "oscillation_flips": 0.0,
+      "seed": 1004,
+      "snapshots": [
+        {
+          "lead_agent": 8,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -0.36946159211268836,
+              1.7638318678650111
+            ],
+            "SocialForce": [
+              0.30642843086750415,
+              -0.911132396264627
+            ]
+          },
+          "lead_position_m": [
+            5.3016351111391335,
+            -1.1278494352530744
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 2.6983648888608665,
+          "step": 0
+        },
+        {
+          "lead_agent": 15,
+          "lead_force_components": {
+            "DesiredForce": [
+              -1.1137560167486875,
+              -0.2525633288744535
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              2.6641323842316074,
+              0.0675604535735562
+            ],
+            "SocialForce": [
+              -1.419103830966047,
+              0.07768133799124625
+            ]
+          },
+          "lead_position_m": [
+            8.79330424444011,
+            -0.09883954410392808
+          ],
+          "lead_speed_mps": 0.1404588680947954,
+          "near_plane_2m_count": 10,
+          "nearest_plane_distance_m": 0.7933042444401099,
+          "step": 100
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.4951164809515367,
+              -0.5645296111101283
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.3440251035590007,
+              -0.12806560615999552
+            ],
+            "SocialForce": [
+              1.8613205424323025,
+              0.824352485085892
+            ]
+          },
+          "lead_position_m": [
+            7.341093121347249,
+            0.4425540450573553
+          ],
+          "lead_speed_mps": 0.2514113349332397,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.6589068786527514,
+          "step": 300
+        },
+        {
+          "lead_agent": 6,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.4199683059820825,
+              -0.3955191034168989
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.2046195140979252,
+              -0.07996824862466209
+            ],
+            "SocialForce": [
+              1.7500263681602182,
+              0.37360367549862883
+            ]
+          },
+          "lead_position_m": [
+            7.326036925526955,
+            0.7050141126088989
+          ],
+          "lead_speed_mps": 0.22979228076904393,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.6739630744730452,
+          "step": 500
+        },
+        {
+          "lead_agent": 9,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.4458546786857005,
+              -0.3691531902604801
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.187859271862183,
+              -0.24195420446590607
+            ],
+            "SocialForce": [
+              1.8484743544502575,
+              0.31818018777108387
+            ]
+          },
+          "lead_position_m": [
+            7.33688868324015,
+            0.3239137217979668
+          ],
+          "lead_speed_mps": 0.18177571691941669,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.6631113167598501,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 20,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.7360005935240228,
+      "final_near_plane_2m_count": 13,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.1899113384495929,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.5907753561261107,
+      "min_plane_distance_m": 0.4294072149439696,
+      "oscillation_flips": 0.0,
+      "seed": 1005,
+      "snapshots": [
+        {
+          "lead_agent": 8,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -0.6640425604966891,
+              -0.6035985194463609
+            ],
+            "SocialForce": [
+              2.1549938822989754,
+              -2.7676733402359974
+            ]
+          },
+          "lead_position_m": [
+            5.895137150876268,
+            0.6547943561130065
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 2.104862849123732,
+          "step": 0
+        },
+        {
+          "lead_agent": 6,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.049708963004394,
+              -0.4412507536849123
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.00399706991989,
+              -0.03603257300115986
+            ],
+            "SocialForce": [
+              1.8643719066921627,
+              0.46167715450721547
+            ]
+          },
+          "lead_position_m": [
+            7.494659793880956,
+            0.011705200696412945
+          ],
+          "lead_speed_mps": 0.17672852449968793,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.505340206119044,
+          "step": 100
+        },
+        {
+          "lead_agent": 1,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.3959545112009355,
+              0.5646078438207427
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.9641683228653584,
+              0.17512365214751094
+            ],
+            "SocialForce": [
+              1.5010364794437374,
+              -0.6521812774374006
+            ]
+          },
+          "lead_position_m": [
+            7.275713047655941,
+            -0.7307871718933812
+          ],
+          "lead_speed_mps": 0.23775865785981484,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.7242869523440589,
+          "step": 300
+        }
+      ],
+      "steps": 300,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 20,
+      "agents_ever_within_1_5m_of_jamb_tip": 20,
+      "control": "original_bidirectional_20",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 0.7596663400940916,
+      "final_near_plane_2m_count": 12,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 0.18520606990870847,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 0.4960032251753899,
+      "min_plane_distance_m": 0.3875187330306371,
+      "oscillation_flips": 0.0,
+      "seed": 1005,
+      "snapshots": [
+        {
+          "lead_agent": 8,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -0.6640425604966891,
+              -0.6035985194463609
+            ],
+            "SocialForce": [
+              2.1549938822989754,
+              -2.7676733402359974
+            ]
+          },
+          "lead_position_m": [
+            5.895137150876268,
+            0.6547943561130065
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 2.104862849123732,
+          "step": 0
+        },
+        {
+          "lead_agent": 6,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.049708963004394,
+              -0.4412507536849123
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.00399706991989,
+              -0.03603257300115986
+            ],
+            "SocialForce": [
+              1.8643719066921627,
+              0.46167715450721547
+            ]
+          },
+          "lead_position_m": [
+            7.494659793880956,
+            0.011705200696412945
+          ],
+          "lead_speed_mps": 0.17672852449968793,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.505340206119044,
+          "step": 100
+        },
+        {
+          "lead_agent": 1,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.3959545112009355,
+              0.5646078438207427
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -2.9641683228653584,
+              0.17512365214751094
+            ],
+            "SocialForce": [
+              1.5010364794437374,
+              -0.6521812774374006
+            ]
+          },
+          "lead_position_m": [
+            7.275713047655941,
+            -0.7307871718933812
+          ],
+          "lead_speed_mps": 0.23775865785981484,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.7242869523440589,
+          "step": 300
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.206194821387215,
+              0.3663897448278946
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.4542479890545086,
+              0.013718625850356603
+            ],
+            "SocialForce": [
+              2.3743573646934135,
+              -0.5870899619925757
+            ]
+          },
+          "lead_position_m": [
+            7.356200294157288,
+            0.5226983318281758
+          ],
+          "lead_speed_mps": 0.2233085973118044,
+          "near_plane_2m_count": 13,
+          "nearest_plane_distance_m": 0.6437997058427118,
+          "step": 500
+        },
+        {
+          "lead_agent": 4,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.1578696673048374,
+              -0.24310159110114318
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -3.055117554190181,
+              -0.22929142141231318
+            ],
+            "SocialForce": [
+              1.8259993736898357,
+              0.35763648177376484
+            ]
+          },
+          "lead_position_m": [
+            7.320034032801671,
+            0.26126820089635283
+          ],
+          "lead_speed_mps": 0.12742190243460474,
+          "near_plane_2m_count": 12,
+          "nearest_plane_distance_m": 0.6799659671983287,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 1,
+      "agents_ever_within_1_5m_of_jamb_tip": 0,
+      "control": "single_with_walls",
+      "crossing_events": 0,
+      "final_min_jamb_tip_distance_m": 1.625779117308082,
+      "final_near_plane_2m_count": 1,
+      "final_slow_queue_count": 1,
+      "late_mean_speed_mps": 1.0378101426775558e-15,
+      "mean_burst_windows": 0.0,
+      "min_jamb_tip_distance_m": 1.6255958445482648,
+      "min_plane_distance_m": 1.5108149621355311,
+      "oscillation_flips": 0.0,
+      "seed": 1001,
+      "snapshots": [
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -0.17639951726929665,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            4.0,
+            0.0
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 4.0,
+          "step": 0
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2972518033155196,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.2995744540769274,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            6.488670368544316,
+            0.0
+          ],
+          "lead_speed_mps": 0.001374098342240265,
+          "near_plane_2m_count": 1,
+          "nearest_plane_distance_m": 1.511329631455684,
+          "step": 100
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.2999999999999936,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.2999999999997813,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            6.48898784310796,
+            0.0
+          ],
+          "lead_speed_mps": 3.258256191927872e-15,
+          "near_plane_2m_count": 1,
+          "nearest_plane_distance_m": 1.5110121568920398,
+          "step": 300
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.299999999999998,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.299999999999998,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            6.488987843108122,
+            0.0
+          ],
+          "lead_speed_mps": 1.0378101426775562e-15,
+          "near_plane_2m_count": 1,
+          "nearest_plane_distance_m": 1.5110121568918782,
+          "step": 500
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              1.299999999999998,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -1.299999999999998,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            6.488987843108122,
+            0.0
+          ],
+          "lead_speed_mps": 1.0378101426775562e-15,
+          "near_plane_2m_count": 1,
+          "nearest_plane_distance_m": 1.5110121568918782,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.0
+    },
+    {
+      "agents_ever_approach_2m": 1,
+      "agents_ever_within_1_5m_of_jamb_tip": 1,
+      "control": "single_no_obstacle_force",
+      "crossing_events": 1,
+      "final_min_jamb_tip_distance_m": 8.11720549203971,
+      "final_near_plane_2m_count": 0,
+      "final_slow_queue_count": 0,
+      "late_mean_speed_mps": 8.521067804190572e-72,
+      "mean_burst_windows": 1.0,
+      "min_jamb_tip_distance_m": 0.600749528896306,
+      "min_plane_distance_m": 0.029999941152168752,
+      "oscillation_flips": 0.0,
+      "seed": 1001,
+      "snapshots": [
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              0.30000000000000004,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              -0.0,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            4.0,
+            0.0
+          ],
+          "lead_speed_mps": 0.5,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 4.0,
+          "step": 0
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              6.111089412286219e-11,
+              0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              0.0,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            10.44000000001222,
+            0.0
+          ],
+          "lead_speed_mps": 0.6499999999694446,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 2.440000000012221,
+          "step": 100
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              -5.963096401574187e-12,
+              -0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              0.0,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            16.09499999999879,
+            0.0
+          ],
+          "lead_speed_mps": 2.9815482007870936e-12,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 8.094999999998791,
+          "step": 300
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              -2.4743961357070296e-31,
+              -0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              0.0,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            16.094999999999978,
+            0.0
+          ],
+          "lead_speed_mps": 1.2371980678535148e-31,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 8.094999999999978,
+          "step": 500
+        },
+        {
+          "lead_agent": 0,
+          "lead_force_components": {
+            "DesiredForce": [
+              -8.678860838728763e-80,
+              -0.0
+            ],
+            "GroupCoherenceForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupGazeForceAlt": [
+              0.0,
+              0.0
+            ],
+            "GroupRepulsiveForce": [
+              0.0,
+              0.0
+            ],
+            "ObstacleForce": [
+              0.0,
+              0.0
+            ],
+            "SocialForce": [
+              0.0,
+              0.0
+            ]
+          },
+          "lead_position_m": [
+            16.094999999999978,
+            0.0
+          ],
+          "lead_speed_mps": 4.3394304193643814e-80,
+          "near_plane_2m_count": 0,
+          "nearest_plane_distance_m": 8.094999999999978,
+          "step": 1000
+        }
+      ],
+      "steps": 1000,
+      "throughput_peds_per_sec": 0.00999000999000999
+    }
+  ],
+  "seed_schedule": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005
+  ],
+  "simulator_config": {
+    "obstacle_force": {
+      "factor": 10.0,
+      "sigma": 0.0,
+      "threshold": -0.57
+    },
+    "scene": {
+      "agent_radius": 0.35,
+      "dt_secs": 0.1,
+      "enable_group": true,
+      "max_speed_multiplier": 1.3,
+      "tau": 0.5
+    },
+    "social_force": {
+      "activation_threshold": 20.0,
+      "factor": 5.1,
+      "gamma": 0.35,
+      "lambda_importance": 2.0,
+      "n": 2,
+      "n_prime": 3
+    }
+  },
+  "source_head": "252a86b54dab92927035ebaf949a2e0209227cee"
+}

@@ -70,6 +70,34 @@ def test_list_publication_files_respects_video_toggle(tmp_path: Path) -> None:
     assert not any(path.as_posix().startswith("videos/") for path in without_videos)
 
 
+@pytest.mark.parametrize(
+    ("bundle_location", "expected"),
+    [
+        (
+            "repository/docs/context/evidence/example",
+            "docs/context/evidence/example/payload/reports/summary.json",
+        ),
+        ("external/evidence/example", "payload/reports/summary.json"),
+    ],
+)
+def test_evidence_payload_location_is_portable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bundle_location: str,
+    expected: str,
+) -> None:
+    """Bundle payload locations stay relative to the repo or bundle root."""
+    repository_root = tmp_path / "repository"
+    bundle_dir = tmp_path / bundle_location
+    monkeypatch.setattr(artifact_publication_module, "get_repository_root", lambda: repository_root)
+
+    location = artifact_publication_module._evidence_payload_location(
+        bundle_dir, "reports/summary.json"
+    )
+
+    assert location == expected
+
+
 def test_goal_timeout_boundary_accepts_exact_signed_provenance_exclusion(
     tmp_path: Path,
 ) -> None:

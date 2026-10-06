@@ -96,7 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "registry checkpoint into the durable cache before continuing; the submit/sbatch "
             "wrapper must use this mode (or run the public "
             "scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) before requeueing. Only "
-            "applied to the preflight-only mode path; 'run' mode keeps the cheap guard and "
+            "accepted with --mode preflight; 'run' mode keeps the cheap guard and "
             "expects checkpoints to be already staged on the compute node."
         ),
     )
@@ -138,6 +138,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     parser = _build_parser()
     args = parser.parse_args(raw_argv)
+
+    if args.mode == "run" and (
+        args.checkpoint_preflight_mode != "metadata_only"
+        or args.checkpoint_cache_dir is not None
+        or args.checkpoint_registry_path is not None
+    ):
+        parser.error(
+            "checkpoint staging configuration requires --mode preflight; stage and verify checkpoints with --mode preflight before --mode run"
+        )
 
     logger.remove()
     logger.add(sys.stderr, level=args.log_level)

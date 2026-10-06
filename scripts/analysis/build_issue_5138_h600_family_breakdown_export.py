@@ -111,6 +111,8 @@ FAMILY_COLUMNS: tuple[str, ...] = (
     "algo",
     "scenario_family",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "collisions_mean",
     "ped_collision_count_mean",
@@ -134,6 +136,8 @@ CELL_COLUMNS: tuple[str, ...] = (
     "scenario_family",
     "scenario_id",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "collisions_mean",
     "ped_collision_count_mean",
@@ -158,6 +162,8 @@ HARD_SUMMARY_COLUMNS: tuple[str, ...] = (
     "algo",
     "scenario_family",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "near_misses_mean",
     "collisions_mean",
@@ -177,6 +183,8 @@ GENERATED_OUTPUTS: tuple[str, ...] = (
 # formatted strings). ``episodes`` is an int and is the per-cell ``n``.
 FAMILY_METRIC_PASSTHROUGH: tuple[str, ...] = (
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "collisions_mean",
     "ped_collision_count_mean",
@@ -320,11 +328,12 @@ def _norm_row(
     if extra:
         row.update(extra)
     for field in passthrough:
-        if field == "episodes":
+        if field in {"episodes", "episodes_total", "episodes_excluded"}:
             try:
-                row["episodes"] = str(int(float(raw.get("episodes", "0") or 0)))
+                default = raw.get("episodes", "0") if field == "episodes_total" else "0"
+                row[field] = str(int(float(raw.get(field, default) or 0)))
             except ValueError:
-                row["episodes"] = "0"
+                row[field] = "0"
         else:
             value = raw.get(field)
             row[field] = "" if value is None else str(value)
@@ -480,6 +489,8 @@ def _build_hard_summary(family_rows: list[dict[str, str]]) -> list[dict[str, str
                 "algo": row["algo"],
                 "scenario_family": row["scenario_family"],
                 "episodes": row["episodes"],
+                "episodes_total": row.get("episodes_total", row["episodes"]),
+                "episodes_excluded": row.get("episodes_excluded", "0"),
                 "success_mean": row.get("success_mean", ""),
                 "near_misses_mean": row.get("near_misses_mean", ""),
                 "collisions_mean": row.get("collisions_mean", ""),

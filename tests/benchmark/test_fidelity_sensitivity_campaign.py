@@ -177,7 +177,7 @@ def test_timestep_episode_cap_preserves_horizon_duration() -> None:
                 runtime_binding="sim_config.time_per_step_in_secs",
             ),
             planner_name="goal_seek",
-            seed=111,
+            seed=1001,
             horizon=180,
         )
     finally:
@@ -277,7 +277,7 @@ def test_success_requires_route_success_without_collision() -> None:
             ),
             planner_name="goal_seek",
             planner_group="default_social_force",
-            seed=111,
+            seed=1001,
             horizon=5,
         )
     finally:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -41,10 +42,61 @@ TARGET_QUALNAMES = {
     RUNNER_FILE: ("run_map_episode",),
 }
 FORCE_LINES = {"Simulator": 1699}
+_POSITIVE_INFINITY_PATHS = frozenset(
+    {
+        ("metrics", "min_separation_corrupted_m"),
+        (
+            "algorithm_metadata",
+            "tracking_precision",
+            "min_separation_corrupted_m",
+        ),
+    }
+)
+_CANONICAL_POSITIVE_INFINITY = {"$robot_sf_nonfinite_float_v1": "positive_infinity"}
 
 
 class ObserverIdentityError(RuntimeError):
     """A force slot cannot be bound to a stable trace actor."""
+
+
+def _canonical_episode_record_value(value: Any, path: tuple[Any, ...] = ()) -> Any:
+    """Copy a row for strict JSON hashing, admitting only known diagnostic +inf sentinels."""
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        if value == math.inf and path in _POSITIVE_INFINITY_PATHS:
+            return dict(_CANONICAL_POSITIVE_INFINITY)
+        raise ValueError(f"unsupported non-finite episode record value at {path!r}")
+    if isinstance(value, dict):
+        if path in _POSITIVE_INFINITY_PATHS and value == _CANONICAL_POSITIVE_INFINITY:
+            raise ValueError(f"reserved canonical infinity token in raw row at {path!r}")
+        return {
+            key: _canonical_episode_record_value(item, (*path, key)) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _canonical_episode_record_value(item, (*path, index))
+            for index, item in enumerate(value)
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _canonical_episode_record_value(item, (*path, index))
+            for index, item in enumerate(value)
+        )
+    return value
+
+
+def canonical_episode_record_bytes(row: dict[str, Any]) -> bytes:
+    """Return deterministic strict-JSON bytes without modifying the producer row."""
+    canonical_row = _canonical_episode_record_value(row)
+    return json.dumps(
+        canonical_row, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+
+
+def canonical_episode_record_sha256(row: dict[str, Any]) -> str:
+    """Hash the canonical episode-record bytes shared by observer and validators."""
+    return hashlib.sha256(canonical_episode_record_bytes(row)).hexdigest()
 
 
 def _frozen_source_state(source: Path) -> dict[str, Any]:
@@ -183,9 +235,7 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
         "scenario_id": row["scenario_id"],
         "seed": row["seed"],
         "algorithm": row["algo"],
-        "episode_record_canonical_sha256": hashlib.sha256(
-            json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-        ).hexdigest(),
+        "episode_record_canonical_sha256": canonical_episode_record_sha256(row),
         "actor_ids": actors,
         "steps": bound_steps,
     }
@@ -458,4 +508,4 @@ def install_from_environment() -> ForceObserver | None:
     return observer
 
 
-_OBSERVER = install_from_environment()
+_OBSERVER = install_from_environment() if __name__ == "sitecustomize" else None

@@ -14,10 +14,163 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9647
-latest_reviewed_date: 2026-09-27
-latest_reviewed_by: Codex #9647 delivery lane; exact-byte sidecar audit only, no additional human sign-off is claimed.
+latest_reconciliation_issue: 9645
+latest_reviewed_date: 2026-09-28
+latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10112
+    reviewed_date: 2026-10-03
+    finding_delta: four diagnostic config-locator bookkeeping findings
+    disposition: baseline
+    decision: >-
+      MINTORDER round 1 commits compact source-d56092ed proofs, review sidecars and
+      a generator; raw episodes and bundles remain external with exact SHA-256 pins.
+      The main identity ledger retains exact 18-field values. Four hash_without_artifact_path
+      findings are explicitly classified below and Git-blob verified by the generator.
+      Missing smoke config metadata and doorway relative-path custody are repaired;
+      no other new finding is accepted. This is the implementing agent's integrity
+      review, not an independent scientific/source approval.
+  - issue: 10007
+    reviewed_date: 2026-10-02
+    finding_delta: none
+    remediated_findings:
+      paths:
+        - docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json
+        - docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json
+      code: artifact_hash_mismatch
+      count: 2
+      disposition: remediate
+      resolution: >-
+        TRAIN2C restores exact release-matrix bytes from base 93ba0d75 under
+        source_release_matrix.yaml and rebinds only historical resolved_path
+        locators. The original 8b16cb1b matrix SHA-256, producer commits and
+        scientific outcomes remain unchanged. Both findings disappear instead
+        of being baselined; 450 previously reviewed findings remain. Current
+        artifact/custody digests are regenerated. The current root provenance record
+        also normalizes its three historical home-path strings, carries an
+        explicit sidecar with its original producer digest/commit, and loses
+        its verbatim-source exemption. No numeric measurement is rewritten.
+        Diagnostic custody repair
+        only; no scientific admission or maintainer sign-off is claimed.
+  - issue: 10007
+    reviewed_date: 2026-10-01
+    finding_delta: none
+    remediated_findings:
+      path: docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json
+      code: artifact_hash_mismatch
+      count: 1
+      disposition: remediate
+      resolution: >-
+        Preserve the exact producing-commit MPPI YAML blob in source_predictive_mppi.yaml
+        with an exact-byte review sidecar. Point only the historical resolved_path at it;
+        retain the original SHA-256, source commit, scientific inputs and outcomes.
+        The live MPPI config changed on main/TRAIN1, so comparing this historical
+        measurement pin with live bytes is incorrect. No mismatch is grandfathered.
+        The train registry returns to the 450 already-reviewed findings, with no new
+        finding or per-code increase. This is diagnostic custody repair only, not
+        scientific admission or maintainer sign-off.
+  - issue: 10064
+    reviewed_date: 2026-10-01
+    previous:
+      count: 2806
+      sha256: c9bb836013f114c657a52c8b04f9618daffba7f7e273d2381de46c4f478203e8
+    candidate:
+      count: 2806
+      sha256: c9bb836013f114c657a52c8b04f9618daffba7f7e273d2381de46c4f478203e8
+    files_added: 0
+    finding_delta: none
+    decision: >-
+      Reviewed the final content of the fourteen existing #10064 evidence members.
+      All 1440 dev-only matrix episodes are complete, with identical paired resets,
+      config hashes and map bytes. All 63 changed outcomes are classified; 17 paired
+      traces were directly inspected, including all six success-to-timeout regressions
+      (five guarded PPO, one MPPI). No unexplained first finite-state divergence remains.
+      The two-float guard tuple spelling is the only production delta after the paired
+      source; 168869 recorded conversions preserve IEEE bytes. The refreshed full suite
+      has 13841 passes plus four serialized vector tests. The importer preregistration
+      failure and type baseline excess reproduce on base; no new findings are waived.
+      Strict provenance lint has no new findings, and all 446 existing findings remain
+      unchanged. Hosted CI is held in draft because it steps forbidden 111/123, including
+      a shell-embedded wheel smoke outside pytest. No sealed evaluation, release claim,
+      safety certification or maintainer result sign-off is asserted.
+  - issue: 10064
+    reviewed_date: 2026-10-01
+    previous:
+      count: 2796
+      sha256: c29bfbac7786b5370a8ca35f335b42d37ce38d7d815a11a52b661786bde4c19a
+    candidate:
+      count: 2806
+      sha256: c9bb836013f114c657a52c8b04f9618daffba7f7e273d2381de46c4f478203e8
+    files_added: 10
+    finding_delta: none
+    decision: >-
+      Reviewed the ten additional #10064 diagnostic evidence members: exact map
+      and horizon inputs with checksum review sidecars, reproduction packet,
+      paired analysis, outcome classifications, manually inspected trace windows
+      and inner-component checkpoint verification. All newly added members pass
+      strict provenance lint; 446 existing findings remain unchanged. Twenty-nine
+      guard-safe first divergences have identical-observation replay proof of
+      inner RiskDWA infeasibility; 4416 preceding command pairs are identical.
+      Outcome tables declare their matrix completion status. Five guard success
+      episodes regress to timeout, which is explicitly disclosed. No sealed
+      evaluation, release claim, safety certificate or maintainer sign-off.
+  - issue: 10064
+    reviewed_date: 2026-10-01
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2796
+      sha256: c29bfbac7786b5370a8ca35f335b42d37ce38d7d815a11a52b661786bde4c19a
+    files_added: 4
+    finding_delta: none
+    decision: >-
+      Reviewed the four marked #10064 recovery evidence members. The shared writer
+      registered the bundle, and narrow strict provenance lint has no findings.
+      Initially missing raw-artifact locations and config hash path metadata were
+      remediated with explicit source locations and resolved paths; none were
+      grandfathered. The 446 existing findings are unchanged. Validation and
+      empty-world parity are complete; paired dev-only matrix analysis remains
+      pending. No held-out evaluation, release ranking, safety certification or
+      maintainer result sign-off is asserted.
+  - issue: 10056
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2801
+      sha256: 99b486497a3e21645c5f76d88cdea0593f3d14496b299c22548fd453208c6339
+    candidate:
+      count: 2805
+      sha256: 50c3e5018d08342f75dc7c60dc10d6d0f19290ef299d09bcdc14c73ccf1ca1e3
+    files_added: 4
+    finding_delta: none
+    decision: >-
+      RR10057 follow-up: reviewed the dev-seed doorway plausibility summary, corrected-wall
+      queue image with its exact-byte marked sidecar, and additive historical multiseed
+      supersession manifest. Historical bundle status and replacement pointers are registered
+      in the catalog. Three historical README notices have refreshed checksum/packet pins;
+      the atlas-pinned multiseed README and SHA256SUMS remain byte-identical and are marked
+      affected by the additive manifest instead. No numerical historical evidence is deleted
+      or rewritten. Full dev traces are externally retained with their archive hash in the
+      doorway summary. All 446 existing findings are unchanged; there are no new findings,
+      baseline exclusions, or atlas digest waivers. Preregistration and atlas bytes stay fixed.
+  - issue: 10056
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2801
+      sha256: 99b486497a3e21645c5f76d88cdea0593f3d14496b299c22548fd453208c6339
+    files_added: 9
+    finding_delta: none
+    decision: >-
+      Reviewed the corrected-wall diagnostic comparison summary, README, three actual-wall
+      snapshots with their exact-byte marked sidecars, and checksum manifest. Registered the
+      new bundle in the catalog. Both original configurations and seed schedules are retained;
+      all 428 corrected rows and 428 main replay rows have external raw custody with archive
+      SHA-256 2063d0c848274c465761cbce5dd6622a57a466a674d6246955958bc1bbb91189.
+      The 446 existing findings are unchanged; there are no new findings or exclusions to
+      disposition. Historical bundles and preregistered thresholds remain unchanged.
   - issue: 9647
     reviewed_date: 2026-09-26
     previous:
@@ -69,11 +222,118 @@ evidence_tree_refresh_addenda:
       bytes. The sidecars mark AI-generated images as needing review; this addendum makes no new
       interpretation or benchmark claim. The refreshed machine baseline retains 438 findings and
       changes only the evidence-tree manifest for these three tracked files.
+  - issue: 9656
+    reviewed_date: 2026-09-27
+    previous:
+      count: 2465
+      sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
+    candidate:
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    files_added: 10
+    finding_delta: none
+    decision: >-
+      Verified the five checksummed #9656 packet files and their five exact-byte evidence-review
+      sidecars against the merged #9808 main tree. The regenerated candidate baseline retains 438
+      findings across 98 files with no new or increased per-code finding; this refresh binds the
+      combined evidence-tree path set only and introduces no finding disposition or scientific claim.
+  - issue: 9759
+    reviewed_date: 2026-09-28
+    previous:
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    candidate:
+      count: 2487
+      sha256: 746fa1210ba77d193e7d12a9e5589bcde626360a7ce487dbd60fff74eebfb628
+    files_added: 12
+    finding_delta: none
+    decision: >-
+      This issue adds six compact diagnostic-bundle files and six evidence-review-marker.v1
+      sidecars, with a catalog row for every tracked file. Payload checksums and sidecar byte
+      digests were verified. The generated registry scan remains at 438 findings across 98 files,
+      with no new or increased finding; the machine refresh only binds the 12-path evidence-tree
+      addition. The report remains partial and diagnostic-only: 8,040 valid eligible terminal
+      jobs and 600 explicit reflected-map exclusions, with no official benchmark or performance
+      claim. Raw episode rows and logs remain private. Inventory and row audit are complete;
+      this addendum records path inventory and finding delta only, with no additional human sign-off.
+  - issue: 9645
+    reviewed_date: 2026-09-28
+    previous:
+      count: 2487
+      sha256: 746fa1210ba77d193e7d12a9e5589bcde626360a7ce487dbd60fff74eebfb628
+    candidate:
+      count: 2885
+      sha256: dbe5cff4d3f0db9bb621b242391fb21aee610029dfa16332915cbd04adbd6ca6
+    files_added: 398
+    finding_delta: none
+    decision: >-
+      Recomputed the evidence-tree manifest on top of origin/main after rebasing the #9645
+      packet; its 394 payload checksums were verified and all 398 tracked packet paths are bound.
+      The #9645 linter change exposed stale size/SHA declarations for the #9759 agent_run_manifest.yaml.
+      Its tracked payload, payload checksum list, and AI-needs-review sidecar agreed; the canonical
+      bundle publisher rebuilt only evidence_bundle_manifest.json, and its AI-needs-review sidecar
+      now binds those exact bytes. No payload bytes changed. The candidate baseline remains at 438
+      findings across 98 files with no net-new finding and zero active strict-CI finding. This is a
+      provenance inventory and metadata-integrity correction only; it records no maintainer sign-off
+      and makes no scientific, planner-performance, or safety claim.
+  - issue: 10007
+    pr: 10054
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2800
+      sha256: cb657420b8cbd912aa94df8083103930954e22f9ed3c3ef2b16420f94e780504
+    candidate:
+      count: 2804
+      sha256: d190ca31b09dd63351242d3a4e40a4b8070870230f7934dea0c8e94cc37db8b0
+    files_added: 4
+    finding_delta: none
+    remediated_findings:
+      path: docs/context/evidence/curvfix/measurement.json
+      code: hash_without_artifact_path
+      count: 28
+      disposition: remediate
+      resolution: >-
+        Bind every source-file checksum to runs/<arm>/episodes.jsonl plus an explicit
+        local-copy location. Preserve all 672 values in a marked local full receipt,
+        and bind the compact tracked summary to that receipt's file name, location,
+        byte size and SHA-256. Local diagnostic custody is not public archival custody.
+    decision: >-
+      Author requested repair of the three evidence-hygiene checks after confirming
+      D-055 implementation and measurement at b87e472d116fc45fec47cfcf669acce84b75373c.
+      Reviewed the four CURVFIX receipts and their exact catalog entries and shared
+      AI-GENERATED/NEEDS-REVIEW markers. All 672 original per-episode values, arm
+      quantiles and extrema agree with the preserved full local receipt. The 28
+      fixable hash-path findings observed in hosted CI are remediated, not baselined.
+      The candidate adds four evidence paths and retains the existing 446 findings
+      across 100 files, with no new finding or per-code increase. This is a reviewed
+      inventory/provenance refresh only; no metric change, scientific admission or
+      additional human sign-off is claimed.
+  - issue: 9952
+    reviewed_date: 2026-09-30
+    reviewer: Codex CI7; metadata and path inventory verification only
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2826
+      sha256: 9fc3f9730659642fa0a68b6fa219b788e6c7e6a90219065800c06d2633a16901
+    files_added: 34
+    finding_delta: none
+    decision: >-
+      Registered the 17 reviewed #9952 diagnostic artifacts and their 17 review sidecars.
+      All payload bytes remain identical to approved PR head b321e72089af45baedcc40b310b46264cb57dc7c.
+      Sidecar artifact_sha256 values bind those tracked bytes; original pre-normalization hashes
+      remain recorded separately as source_artifact_sha256. The three AUD2 text sidecars now
+      explicitly scope exact-byte preservation to the reviewed tracked presentation, retaining
+      their prior normalization history. The machine baseline retains the same 446 findings
+      across the same 100 files: no finding is added, increased, excluded, or grandfathered.
+      This addendum records inventory and metadata integrity only, claims no new maintainer
+      sign-off, and changes no scientific admission, interpretation, or auditor behavior.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 438
-refreshed_baseline_files_with_findings: 98
+refreshed_baseline_total_findings: 446
+refreshed_baseline_files_with_findings: 100
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -220,6 +480,34 @@ decision_summary: >-
   the compact tracked bundle, resolving 23 prior missing-location findings. The seven-file demo
   bundle adds no current evidence-registry findings. The machine baseline drops from 461 findings
   across 102 files to 438 across 98 files; the result remains diagnostic plumbing evidence only.
+  Issue #9656 evidence-tree addendum (2026-09-25): the checksum-pinned historical hard-case packet
+  contributes five diagnostic packet paths under `issue_9656_hard_case_mining_2026-09-24/`:
+  `checksums.sha256`, `evidence_bundle_manifest.json`, and payload
+  `current_head_no_replay_manifest.json`, `report.md`, and `summary.json`. Five adjacent
+  `evidence-review-marker.v1` sidecars bind those exact bytes without modifying the packet. An
+  independent exact-head review at `5ab13d21f56ec6f2c3c3dd9312bc1e2ae5650eb1` verified the packet,
+  sidecar digests, test-fixture writer exemption, and candidate/frozen-base report, and conditionally
+  approved only the tree-manifest refresh after this companion update. Its separate catalog finding
+  was repaired by registering all five sidecars in `docs/context/catalog.yaml` at
+  `97a581a85fefae082922c20290ccdaed473b67c3`. The reviewed candidate adds five paths to the prior
+  baseline tree (2428 files / `4159317c0c3ae61d519788cd1050e8a6f724322c37e8cc2446f4dd8b8809d5b6`
+  to 2433 / `71237cccbc8e6fa3f14a8548a264d0eda3ac30b1b6e368bb72a8bef7d6675022`); from frozen base,
+  the complete packet tree is 2423 files / `c5d2440137291b0eb83416894ba10dcd32aacc24a23946b7a67ef99b0c961222`
+  to 2433. The evidence scan remains at 438 findings across 98 files with no new or increased
+  per-code finding, and no #9656 path has a finding. Refresh the machine baseline only to bind this
+  five-sidecar path-set change. The diagnostic-only historical claim boundary is preserved; no
+  finding disposition or strict-CI exclusion is added.
+  Prior-main reconciliation (2026-09-25): the source packet was merged onto frozen main
+  `61c9db79ba9b37d0668c0a93a72bd9b89ad3405b`. Relative to that base, the only evidence-tree
+  additions are the same five packet files and five SHA-bound sidecars listed above; there are no
+  evidence-tree removals. The tree at that prior-main reconciliation was 2427 files /
+  `2d0a52ac85a26ecedca6e4779c4e486acc999e8aef4d0f0ac88acf026ae1300c`; the merged candidate is
+  2437 files / `105bdffc3c3a47967360ed41c7a43b4e4042cb42cc511cb50265095fc66d7347`. The three
+  payload checksums and all five sidecar artifact paths, schema markers, and byte digests were
+  verified. Candidate projection retains 438 findings across 98 files, with all 171 finding rows
+  unchanged and no #9656 path finding. This refresh binds the merged path set only; it does not
+  alter finding dispositions or strict-CI exclusions.
+  Combined-main reconciliation (2026-09-27): base a0ba60cd contains the #9647 gallery evidence and already binds 2465 evidence-tree paths at SHA-256 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0. This candidate retains those bytes and adds the five checksum-pinned #9656 packet files plus five exact-byte review sidecars, yielding 2475 paths at SHA-256 df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f. The ratchet retains 438 findings across 98 files with no new or increased finding. The refresh binds the combined path inventory only; it introduces no new finding disposition or scientific claim.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -233,6 +521,45 @@ disposition_legend:
     Finding to be fixed in the evidence file itself; not applicable to this refresh because no
     file admitted a trivial, in-repo repair.
 reviewed_files:
+  - path: docs/context/evidence/2026-10-05_freeze008_box4_seed_admission/doorway/release_identity.resolved.json
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      PR #10142 preserves the exact F2-resolved doorway identity. Its 16 hash-locator
+      and two uncommitted-location findings describe source configuration digests
+      and generated files originally staged under ignored output/release-008/.
+      The packet README records the F2 resolver commands, original staging paths,
+      output hashes and separate acquired-calibration custody. Keep the archived
+      identity bytes unchanged rather than rewrite their historical paths or hashes.
+      These entries record diagnostic provenance bookkeeping, not scientific admission,
+      independent review or sealed-seed execution authorization.
+  - path: docs/context/evidence/2026-10-05_freeze008_box4_seed_admission/main/release_identity.resolved.json
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      PR #10142 preserves the exact F2-resolved main identity. Its 18 hash-locator
+      and two uncommitted-location findings describe source configuration digests
+      and generated files originally staged under ignored output/release-008/.
+      The packet README records the F2 resolver commands, original staging paths,
+      output hashes and separate acquired-calibration custody. Keep the archived
+      identity bytes unchanged rather than rewrite their historical paths or hashes.
+      These entries record diagnostic provenance bookkeeping, not scientific admission,
+      independent review or sealed-seed execution authorization.
+  - path: docs/context/evidence/2026-10-03_issue10112_mintorder/identity-differences.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Four literal SNQI-v2 source hashes in the exact 18-field historical identity ledger
+      have adjacent configs/... paths; the generic linter intentionally excludes those
+      config paths as artifact locators. The committed build_mintorder_evidence.py identity
+      route verifies all four hashes against actual Git blobs at producer d56092ed.
+      Preserve exact old/new identity values rather than insert non-identity annotations.
+      Scoped diagnostic provenance disposition for #10112; no scientific admission or
+      independent reviewer sign-off is claimed.
+  - path: docs/context/evidence/issue_10007_fxs2_summary.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: "Under #10011 integration authorization, grandfather four findings in #10008's diagnostic-only FXS2 summary; preserve evidence bytes without scientific admission."
   - path: docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/registration.json
     codes: [hash_without_artifact_path]
     disposition: baseline
@@ -466,6 +793,22 @@ reviewed_files:
       the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
       admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
       unavailable, no waiver is claimed, and the issue stays open.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/archive/report_schema_v1/convergence_report.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The report records the SHA-256 of the pilot search-space config as run (scenario seed 123, a
+      held-out evaluation seed). The in-tree config was re-seeded to a development seed afterwards;
+      the as-run bytes are kept, hash-pinned, at payload/inputs/issue_9645_pilot_space.v1.yaml.
+      The historical hash is not rewritten; the evidence manifest records the re-seed.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The report records the SHA-256 of the pilot search-space config as run (scenario seed 123, a
+      held-out evaluation seed). The in-tree config was re-seeded to a development seed afterwards;
+      the as-run bytes are kept, hash-pinned, at payload/inputs/issue_9645_pilot_space.v1.yaml.
+      The historical hash is not rewritten; the evidence manifest records the re-seed.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

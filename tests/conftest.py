@@ -413,6 +413,118 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Force validity reduction checks use small fixed NumPy arrays.
+    "test_robot_force_presence.py",
+    # Seed inventories and campaign resume planning use deterministic fixtures.
+    "test_camera_ready_resume_jobs.py",
+    "test_seed_hardening.py",
+    # Runtime refusal, source-pin and static caller contracts do not simulate episodes.
+    "test_camera_ready_campaign.py",
+    "test_refresh_packet_working_tree_pins.py",
+    "test_reference_guard_exemptions.py",
+    "test_reference_guarded_imports.py",
+    "test_runtime_seed_guard.py",
+    "test_run_camera_ready_benchmark.py",
+    "test_scenario_thumbnails.py",
+    "test_ecosystem_contract.py",
+    "test_snqi_context_reference_policy_fields.py",
+    "test_snqi_execution_context.py",
+    "test_snqi_context_fix_round.py",
+    # Provenance/version observation uses retained bytes and fake packages; no episodes.
+    "test_benchmark_result_provenance.py",
+    # Retained-row acquisition/determinism proof; no environment reset or step.
+    "test_snqi_v2_acquisition_evidence.py",
+    # CI setup contracts use fake transports and must run on PRs (#10116).
+    "test_ci_uv_install_retry.py",
+    "test_ci_uv_sync_diag.py",
+    "test_ci_uv_sync_retry.py",
+    # Static CI bootstrap contracts: <4 s combined, no environment episodes (#10116).
+    "test_ci_helpers.py",
+    "test_ci_driver_contract.py",
+    # Real shard-collection and SDL isolation checks: ~8 s, no simulation.
+    "test_ci_shard_balance.py",
+    "test_release_notes_gate.py",
+    "test_release_notes_mint.py",
+    "test_bicycle_planner_physics.py",
+    "test_bicycle_creep_safety.py",
+    "test_limited_reverse.py",
+    "test_check_docs_evidence_integrity.py",
+    # D-083 source-bound release admission records workers without reset or step.
+    "test_release_campaign_authority.py",
+    # Exact-repeat resolution verifies retained data and identities without simulation.
+    "test_exact_repeat_campaign.py",
+    # Historical schedule bytes are static; its native episodes are explicitly slow.
+    "test_scheduled_campaign_compatibility.py",
+    # Authored-budget and historical-identity contracts resolve inputs without stepping.
+    "test_campaign_horizon_contracts.py",
+    "test_release_decision_ledgers.py",
+    # Main CI repair guards: filesystem/Sphinx and stubbed diagnostic contracts.
+    # The full real-site build keeps its explicit slow marker.
+    "test_sphinx_strict_build.py",
+    "test_check_broad_exceptions.py",
+    "test_doorway_release_acceptance.py",
+    # Train coverage repair: deterministic SA-CADRL checkpoint capacity (#10008).
+    "test_socnav_sacadrl_module.py",
+    # Train coverage repair: deterministic physical PPO drive contracts (#9995).
+    "test_runner_ppo_drive_observation.py",
+    # Train coverage repair: deterministic explicit bootstrap defaults (#10019).
+    "test_unit_edge_cases.py",
+    # Train coverage repair: deterministic resume job identity contracts (#10029).
+    "test_resume_plan.py",
+    # Campaign integrity/resume contracts use static rows and mocked runner seams.
+    "test_cmpfix_integrity.py",
+    "test_campaign_resume_scheduler.py",
+    "test_camera_ready_campaign_characterization.py",
+    # Train coverage repair: deterministic PPO action contracts (#9995).
+    "test_ppo_action_semantics.py",
+    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain): registry and release-resolver checks with stub inference and no episodes.
+    "test_ppo_release_robot_binding.py",
+    # TRAIN1 deterministic benchmark contracts from PR #10019.
+    "test_multi_amv.py",
+    "test_rank_metrics.py",
+    "test_scenario_difficulty.py",
+    # Optional encoder import contracts execute isolated modules without episodes.
+    "test_optional_moviepy_imports.py",
+    # Runner isolation and resource contracts must run before a PR changes CI.
+    "test_self_hosted_routing.py",
+    # Constructor-state, optimized-guard, and inventory drift checks must run on
+    # PR shards when planner code or shared provenance inputs change.
+    "test_diagnostics_conformance.py",
+    "test_optimized_assert_guards.py",
+    "test_issue_5303_search_promotion_contract_v2.py",
+    "test_issue_7330_assert_inventory.py",
+    "test_issue_7331_benchmark_namespace_inventory.py",
+    "test_coverage_paths_remap.py",
+    # Static runtime-copy admission: small Git fixtures, no environment or episode.
+    "test_sealed_runtime_sources.py",
+    "test_mintorder_contract.py",
+    "test_mintorder_binding.py",
+    "test_heldout_seed_guard.py",
+    "test_emergent_wall_geometry.py",
+    # Generator contracts construct scenes without stepping an environment.
+    "test_scenario_generator.py",
+    # Rehearsal pipeline and release audit regressions use dev-seed row fixtures
+    # and offline files; keep their real campaign branches covered in PR CI.
+    "test_pipefix_pipeline.py",
+    "test_scan_release_audit.py",
+    # #10063 static full-rectangle audit; no planner/environment steps.
+    "test_release_spawn_goal_overlap.py",
+    "test_check_scenario_archetype_geometry.py",
+    "test_scenario_validation_waivers.py",
+    # Scenario/map sampling and reserved-polygon regressions use dev seeds and
+    # authored geometry without environment steps; include them in PR coverage.
+    "test_scenario_map_review_fixes.py",
+    "test_reserved_zone_polygons.py",
+    # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
+    "test_clearance_geometry.py",
+    "test_lidar_tracked_agents.py",
+    # FX3 uses real release checkpoints and static SVG pose checks without episodes.
+    "test_fx3_static_recovery.py",
+    "test_release_horizons.py",
+    # Step-trace invariant contracts inspect synthetic rows without simulation steps.
+    "test_step_trace_invariants.py",
+    # Doorway safe-failure contracts classify synthetic rows without planner steps.
+    "test_infeasible_probe_safe_failure.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",
@@ -429,6 +541,11 @@ _FAST_FILES = {
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
+    # FXB regressions replay captured dev observation bytes; no map episodes.
+    "test_issue_10007_fxb.py",
+    # The #9645 constraints-first objective is a pure episode projection/scoring
+    # contract; run it in PR shards so changed objective branches receive coverage.
+    "test_constraints_first_lexicographic_objective.py",
     # VV-3 bounded metamorphic tests, including the release-arm episodes, run in
     # the default lane; none is marked slow, so PR shards execute all of them.
     "test_grid_resolution_invariance.py",
@@ -436,6 +553,10 @@ _FAST_FILES = {
     "test_pedestrian_removal.py",
     "test_planner_unit_consistency.py",
     "test_replay_determinism.py",
+    # Issue #9759 map-reflection and route-waypoint checks use in-memory maps and
+    # synthetic grids; keep their changed transform/planner branches in fast shards.
+    "test_release_map_mirror.py",
+    "test_grid_route.py",
     # Adversarial evidence packet and gallery tests are deterministic fixture
     # contracts for replay provenance, materialization, and report schemas.
     "test_replay_gallery.py",
@@ -460,6 +581,12 @@ _FAST_FILES = {
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",
+    # Guarded-PPO and Risk-DWA planner tests use synthetic observations and
+    # adapters; keep their planner contracts and frame checks in PR shards.
+    "test_guarded_ppo.py",
+    "test_risk_dwa.py",
+    "test_no_admissible_recovery.py",
+    "test_no_admissible_recovery_trace.py",
     # Surface-distance pedestrian-term contracts include deterministic rollout
     # and construction-validation checks; keep changed lines in PR shards.
     "test_socnav_ped_surface_v3.py",
@@ -518,6 +645,7 @@ _FAST_FILES = {
     # offline contracts; keep changed coverage in the exact-head fast lane.
     "test_audit_scan.py",
     "test_audit_detectors.py",
+    "test_audit_release_regressions.py",
     # VV-4 release-row bundle and anomaly checks are deterministic offline
     # contracts; include them in fast shards for changed-line coverage.
     "test_release_row_bundle.py",
@@ -529,6 +657,7 @@ _FAST_FILES = {
     # Differential-drive kinematics tests are deterministic unit coverage for
     # the changed robot motion module; keep them in the exact-head fast lane.
     "differential_drive_test.py",
+    "test_bicycle_drive.py",
     # Shared-world contract tests are deterministic simulator-backed coverage
     # for the changed multi-robot modules (issue #9344).
     "test_shared_world.py",
@@ -552,6 +681,14 @@ _FAST_FILES = {
     "test_example_prerequisites.py",
     # Deterministic resolved-config drift contracts for the compute-sunset
     # configuration example (issue #8904).
+    # Read-only distribution oracles; all 15 calls together are below 2 seconds.
+    "test_compare_release_distributions.py",
+    # Real matrix projection without environment construction (under 5 seconds).
+    "test_development_pinned_runtime.py",
+    # One public-identity smoke admission witness; recording runtime only.
+    "test_development_rehearsal_smoke_admission.py",
+    # Shared real-byte release refusals and export marker; one source fixture, no steps.
+    "test_development_rehearsal_release_boundaries.py",
     "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
@@ -752,9 +889,21 @@ _FAST_FILES = {
     "test_issue_9348_three_width_doorway.py",
     "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    # DOI-free release candidate tests use deterministic fixture repositories;
+    # keep changed candidate contracts in pull-request fast shards (issue #9863).
+    "test_release_candidate.py",
+    # Contact-attribution fixtures cover the opt-in ledger and map-runner paths
+    # in pull-request fast shards (issue #9729).
+    "test_contact_attribution_issue_9729.py",
     "test_spawn_overlap_rate_paths_issue_9725.py",
     "test_spawn_clearance_issue_9725.py",
+    # Goal-clearance runtime contracts are deterministic and provide exact-head
+    # coverage for the opt-in sampler in pull-request fast shards (issue #9859).
+    "test_goal_clearance_issue_9859.py",
     "test_spawn_preflight_issue_9725.py",
+    # Release-matrix preflight contracts use synthetic fixtures and monkeypatched
+    # environments; keep changed preflight logic covered in PR fast shards.
+    "test_spawn_preflight.py",
     "test_hierarchical_paired_release_analysis.py",
     "test_parquet_export.py",
     "test_seed_variance.py",
@@ -843,6 +992,8 @@ _FAST_FILES = {
     # The direct source/test pairs are required by the changed-coverage router
     # when the release lane is evaluated against current main.
     "test_artifact_publication.py",
+    # Static SNQI exclusion guards run in coverage shards; episode probes stay explicitly slow.
+    "test_snqi_legacy_exclusion.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
     # Stale remote branch prune tests are fast deterministic tooling contracts;
@@ -865,6 +1016,7 @@ _FAST_FILES = {
     "test_hybrid_stress_acceptance_hardening.py",
     "test_hybrid_stress_smoke_contract.py",
     "test_hybrid_rule_local_planner.py",
+    "test_hybrid_feasibility_diagnostics.py",
     "test_release_stress_smoke_acceptance.py",
     "test_release_acceptance.py",
     "test_release_admission_edge_cases.py",
@@ -876,8 +1028,11 @@ _FAST_FILES = {
     # derived-only successor path. The revalidation suite exercises the real
     # build/export/cold-audit orchestration with only external seams mocked.
     "test_release_erratum.py",
+    "test_release_008_erratum.py",
+    "test_release_008_metadata_descriptions.py",
     "test_revalidate_benchmark_release.py",
     "test_release_protocol.py",
+    "test_release_rehearsal_hardening.py",
     "test_release_protocol_edge_cases.py",
     # Resolved release-identity tests are deterministic contract coverage for
     # the source-freeze implementation; keep them in the changed-coverage lane.
@@ -914,6 +1069,7 @@ _FAST_FILES = {
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
+    "test_zenodo_draft_metadata.py",
     "test_zenodo_publisher.py",
     "test_zenodo_publisher_edge_cases.py",
     # SocNav runtime-adapter tests cover the changed fallback diagnostics in
@@ -930,6 +1086,21 @@ _FAST_FILES = {
     "test_metric_layers.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",
+    # Offline metric/schema and shortest-path contracts measured below 3s per file;
+    # they never step an environment or simulator (PR #10014 routing audit).
+    "test_critical_intervals.py",
+    "test_cross_benchmark_metrics.py",
+    "test_control_action_latency_snqi.py",
+    "test_path_utils.py",
+    "test_snqi_scalarization_sensitivity.py",
+    # Maintainer-approved fast-lane exceptions for PR #10014: two 8-step
+    # episodes on dev seeds 1001/1002, and offline trace packaging (~14s).
+    "test_baseline_stats.py",
+    "test_trace_reexport_packaging.py",
+    # Offline v2 baseline, distillation, and trace-binding contracts.
+    "test_snqi_cli_method_aliases.py",
+    "test_pipeline_persistence_gate_wiring.py",
+    "test_issue_6411_real_trace_reexport.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.
@@ -1007,6 +1178,9 @@ _FAST_FILES = {
     # both focused files in the exact-head fast lane.
     "test_maneuver_candidates.py",
     "test_maneuver_candidates_counterexamples.py",
+    # Multimodal arbitration tests are deterministic planner/risk contracts and
+    # cover the issue #8062 selector in exact-head changed-line shards.
+    "test_multimodal_trajectory_arbitration.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as
@@ -1145,6 +1319,10 @@ _FAST_FILES = {
     "test_trace_viewer.py",
 }
 _SLOW_FILE_OVERRIDES = {
+    # Native research episodes and parallel resume integration run in the full lane.
+    "test_emergent_phenomena.py",
+    "test_lane_formation_reference.py",
+    "test_runner_resume_parallel.py",
     "test_edge_cases_recording.py",
     "test_runner_video.py",
 }
@@ -1307,12 +1485,31 @@ def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ign
     return not _should_collect_in_lane(path_obj.as_posix(), lane)
 
 
+# This shell-driver contract is cheap; the rest of its large file stays in the
+# full suite. Match the exact function and all of its parameter cases.
+_FAST_NODE_IDS = {
+    "tests/test_ci_script_contract.py::test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed",
+}
+
+
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
     """Auto-mark non-core tests as slow to keep fast unit runs small."""
-    del config
+    config.addinivalue_line("markers", "affected: test affected by the committed PR diff")
+    affected = set(os.environ.get("ROBOT_SF_AFFECTED_TEST_PATHS", "").splitlines())
+    root = Path(__file__).resolve().parents[1]
     for item in items:
+        item_path = Path(str(item.fspath)).resolve()
+        relative = (
+            item_path.relative_to(root).as_posix()
+            if item_path.is_relative_to(root)
+            else item_path.as_posix()
+        )
+        if relative in affected:
+            item.add_marker(pytest.mark.affected)
         path_str = str(item.fspath)
-        if _should_auto_mark_slow(path_str):
+        if item.nodeid.split("[", maxsplit=1)[0] not in _FAST_NODE_IDS and _should_auto_mark_slow(
+            path_str
+        ):
             item.add_marker(pytest.mark.slow)
 
 
@@ -1494,9 +1691,8 @@ def sample_baseline_data():
     }
 
 
-# ============================================================================
-# Occupancy Grid Fixtures
-# ============================================================================
+# =====================================================================# Occupancy Grid Fixtures
+# ==============================================================
 
 
 @pytest.fixture
@@ -1643,9 +1839,8 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
     return grid
 
 
-# ============================================================================
-# Shared Subprocess Mock Fixture
-# ============================================================================
+# =====================================================================# Shared Subprocess Mock Fixture
+# ==============================================================
 
 
 def _build_matcher_predicate(

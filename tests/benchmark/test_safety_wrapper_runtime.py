@@ -87,6 +87,7 @@ class _Env:
 def _config() -> SimpleNamespace:
     return SimpleNamespace(
         sim_config=SimpleNamespace(
+            max_sim_steps=600,
             time_per_step_in_secs=0.1,
             robot_radius=0.1,
             ped_radius=0.1,
@@ -97,6 +98,7 @@ def _config() -> SimpleNamespace:
 def _config_with_robot_config_radius() -> SimpleNamespace:
     return SimpleNamespace(
         sim_config=SimpleNamespace(
+            max_sim_steps=600,
             time_per_step_in_secs=0.1,
             ped_radius=0.1,
         ),
@@ -466,7 +468,7 @@ def test_run_map_episode_records_native_pairing_trace_for_wrapper_off(monkeypatc
     assert summary["enabled"] is False
     assert summary["arm_key"] == "wrapper_off"
     assert record["metrics"]["wrapper_intervention_rate"] == 0.0
-    assert native["schema_version"] == "paired_effect_native_trace.v1"
+    assert native["schema_version"] == "paired_effect_native_trace.v2"
     assert native["arm_key"] == "wrapper_off"
     assert native["declared_timeout"] is False
     assert step_record["time_s"] == pytest.approx(0.1)
@@ -613,7 +615,9 @@ def test_native_pairing_trace_uses_reset_time_goal_after_route_advances() -> Non
     """Timeout progress must use the goal paired with its initial denominator."""
 
     context = SimpleNamespace(
-        config=SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1)),
+        config=SimpleNamespace(
+            sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1)
+        ),
         horizon_val=2,
         safety_wrapper_runtime=SimpleNamespace(arm_key="wrapper_on"),
     )
@@ -644,7 +648,9 @@ def test_native_pairing_trace_marks_nonfinite_goal_provenance_unavailable() -> N
     """Malformed reset geometry is represented as unavailable native provenance."""
 
     context = SimpleNamespace(
-        config=SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1)),
+        config=SimpleNamespace(
+            sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1)
+        ),
         horizon_val=2,
         safety_wrapper_runtime=SimpleNamespace(arm_key="wrapper_on"),
     )

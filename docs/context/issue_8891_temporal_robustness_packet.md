@@ -14,6 +14,9 @@ change the frozen planning boundary.
 The source-bound input roster also pins the sampler implementation, including
 the CMA-ES builder named by the search-family contract, and the benchmark
 runner that records the effective evaluation timestep in episode artifacts.
+The runner's working-tree hash was refreshed for the CI repair that tolerates
+unreadable MoviePy dotenv configuration during optional imports. Its immutable
+source hash and historical base commit continue to identify the original bytes.
 
 ## Frozen contract
 

@@ -20,6 +20,9 @@ from robot_sf.benchmark.fallback_policy import (
 )
 from robot_sf.benchmark.termination_reason import TERMINATION_REASONS, outcome_contradictions
 from robot_sf.benchmark.utils import _config_hash
+from scripts.validation.issue_9671_force_observer_sitecustomize import (
+    canonical_episode_record_sha256,
+)
 
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 FROZEN_SOURCE_TREE_OID = "3771a78a019823b816cca27a625ec6f29fe93d22"
@@ -315,9 +318,7 @@ def _validate_producer_manifest(
 
 
 def _canonical_row_sha(row: dict[str, Any]) -> str:
-    return hashlib.sha256(
-        json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return canonical_episode_record_sha256(row)
 
 
 def _validate_observer_source_state(
@@ -394,7 +395,7 @@ def _validate_steps(key: tuple[str, str, int], row: dict[str, Any], trace: dict[
     count = row.get("steps")
     if isinstance(count, bool) or not isinstance(count, int) or count != len(trace["steps"]):
         raise ValueError(f"trace tuple {key} step count does not match episode")
-    if trace.get("schema_version") != "simulation-step-trace.v1":
+    if trace.get("schema_version") not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}:
         raise ValueError(f"trace tuple {key} has wrong step-trace schema")
     dt = trace.get("dt")
     if (

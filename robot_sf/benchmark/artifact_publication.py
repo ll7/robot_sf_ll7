@@ -25,8 +25,10 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.metrics import snqi as _curvature_aware_snqi
+from robot_sf.benchmark.release_notes import NOTES_PATH, RECEIPT_NAME, is_release_0_0_8, notes_gate
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping as _load_snqi_baseline_mapping,
 )
@@ -70,8 +72,6 @@ _REQUIRED_RELEASE_METADATA_ROLES = (
     "citation",
     "zenodo_metadata",
     "rights_provenance",
-    "snqi_weights",
-    "snqi_baseline",
 )
 _RELEASE_METADATA_PAYLOAD_PATHS = {
     "release_manifest": "payload/release/release_manifest.resolved.json",
@@ -81,6 +81,8 @@ _RELEASE_METADATA_PAYLOAD_PATHS = {
     "rights_provenance": "payload/release_metadata/rights_provenance.md",
     "snqi_weights": "payload/release_metadata/snqi/snqi_weights_camera_ready_v3.json",
     "snqi_baseline": "payload/release_metadata/snqi/snqi_baseline_camera_ready_v3.json",
+    "release_notes": "payload/release_metadata/release_notes.md",
+    "release_notes_gate": "payload/release_metadata/" + RECEIPT_NAME,
 }
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
@@ -205,6 +207,21 @@ def _to_repo_relative(path: Path) -> str:
         return resolved.relative_to(repo_root).as_posix()
     except ValueError:
         return resolved.name
+
+
+def _evidence_payload_location(bundle_dir: Path, payload_path: str) -> str:
+    """Return a durable location for one evidence payload entry.
+
+    Repository-local bundles use their repository-relative path. Bundles built
+    outside the repository use a bundle-root-relative payload path instead.
+    """
+    bundle_root = bundle_dir.resolve()
+    repository_root = get_repository_root().resolve()
+    try:
+        bundle_relative = bundle_root.relative_to(repository_root)
+    except ValueError:
+        bundle_relative = Path()
+    return (bundle_relative / "payload" / Path(payload_path)).as_posix()
 
 
 def list_publication_files(run_dir: Path, *, include_videos: bool = True) -> list[Path]:
@@ -635,6 +652,18 @@ evidence.
 """
 
 
+def _legacy_snqi_declared(metrics: Mapping[str, Any]) -> bool:
+    """Require paired legacy assets and distinguish an absent legacy score.
+
+    Returns:
+        Whether a legacy SNQI basis was explicitly declared.
+    """
+    weights = metrics.get("snqi_weights_path") is not None
+    if weights != (metrics.get("snqi_baseline_path") is not None):
+        raise ValueError("Release legacy SNQI requires both weights and baseline")
+    return weights
+
+
 def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     run_root: Path,
 ) -> _ReleasePublicationMetadata | None:
@@ -707,6 +736,13 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": weights_path,
         "snqi_baseline": baseline_path,
     }
+    legacy_declared = _legacy_snqi_declared(metrics)
+    if not legacy_declared:
+        resolved_sources = {
+            role: path
+            for role, path in resolved_sources.items()
+            if role not in {"snqi_weights", "snqi_baseline"}
+        }
     missing = [role for role, path in resolved_sources.items() if path is None]
     if missing:
         raise ValueError(
@@ -739,6 +775,10 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
         "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
     }
+    files.update(_release_notes_files(run_root, repo_root, resolved_manifest))
+    if not legacy_declared:
+        files.pop("snqi_weights")
+        files.pop("snqi_baseline")
     for role, path in resolved_sources.items():
         if path is not None:
             source_paths[role] = _to_repo_relative(path)
@@ -1175,7 +1215,7 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     The bundle layout contains:
     - ``payload/``: exactly the selected compact evidence files.
     - ``evidence_bundle_manifest.json``: schema-tagged provenance + file index.
-    - ``checksums.sha256``: SHA-256 checksums for all payload files.
+    - ``checksums.sha256``: bundle-root-relative SHA-256 checksums for all payload files.
 
     Returns:
         Paths and totals describing the exported bundle artifacts.
@@ -1229,7 +1269,7 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
     checksums_path.write_text(
-        "".join(f"{entry.sha256}  {entry.path}\n" for entry in entries),
+        "".join(f"{entry.sha256}  payload/{entry.path}\n" for entry in entries),
         encoding="utf-8",
     )
 
@@ -1247,7 +1287,13 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
             "paper_or_benchmark_claim": "not_established_by_bundle_alone",
         },
         "totals": {"file_count": len(entries), "total_bytes": total_bytes},
-        "files": [asdict(entry) for entry in entries],
+        "files": [
+            {
+                **asdict(entry),
+                "location": _evidence_payload_location(bundle_dir, entry.path),
+            }
+            for entry in entries
+        ],
     }
     if artifact_badging is not None:
         validate_artifact_badging_block(artifact_badging)
@@ -1399,7 +1445,7 @@ For details on verification, see [release_artifact_badging.md](docs/release_arti
     return computed_badging, achieved_level
 
 
-def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
+def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
     run_dir: Path,
     out_dir: Path,
     *,
@@ -1557,11 +1603,23 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
                 "local_output": "working-storage-not-citation-target",
             },
             "cold_verification": {
-                "required_inputs": list(_REQUIRED_RELEASE_METADATA_ROLES),
+                "required_inputs": list(metadata_records),
                 "credentials": "not_recorded",
                 "snqi_claim_policy": "advisory_no_ranking",
             },
         }
+    # Local import avoids the campaign facade / release protocol import cycle.
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
+    release_result_path = run_root / "release/release_result.json"
+    if release_result_path.is_file():
+        release_result = _read_json_file(release_result_path)
+        if (
+            release_result.get("benchmark_release", {}).get("release_kind")
+            == DEVELOPMENT_REHEARSAL_KIND
+        ):
+            manifest_payload["release_kind"] = DEVELOPMENT_REHEARSAL_KIND
+            manifest_payload["release_eligible"] = False
 
     # Dynamically compute badging block and emit README
     if artifact_badging is not None:
@@ -2201,7 +2259,7 @@ def _snqi_scan_episode_snqi_fields(
             )
             if field_present:
                 episode_field_present += 1
-            if stored_snqi is not None:
+            if stored_snqi is not None and filter_evidence_eligible_records([json.loads(line)])[0]:
                 per_arm_field_sum[arm] += stored_snqi
                 per_arm_field_count[arm] += 1
             if rejection is not None:
@@ -2375,6 +2433,20 @@ def _manifest_checksum_mapping(
     return manifest_checksums
 
 
+def _checksum_payload_candidate(bundle_dir: Path, rel_path: str) -> Path:
+    """Resolve only canonical payload paths, never root-level aliases.
+
+    Returns:
+        The payload file signed by both checksum list and manifest.
+    """
+    path = Path(rel_path)
+    if ".." in path.parts or path.is_absolute():
+        raise ValueError(f"checksum path escapes bundle root: {rel_path}")
+    if not rel_path.startswith("payload/") or path.as_posix() != rel_path:
+        raise ValueError(f"checksum entry must use canonical payload path: {rel_path}")
+    return bundle_dir / path
+
+
 def _preflight_check_checksums(
     bundle_dir: Path,
     manifest: dict[str, Any],
@@ -2389,9 +2461,10 @@ def _preflight_check_checksums(
     """
     checksums = _parse_checksum_lines(checksums_path.read_text(encoding="utf-8"))
     for rel_path, expected in checksums.items():
-        candidate = bundle_dir / rel_path
-        if ".." in Path(rel_path).parts or Path(rel_path).is_absolute():
-            violations.append(f"checksum path escapes bundle root: {rel_path}")
+        try:
+            candidate = _checksum_payload_candidate(bundle_dir, rel_path)
+        except ValueError as exc:
+            violations.append(str(exc))
             continue
         if not candidate.is_file():
             violations.append(f"checksum-signed file is missing from bundle root: {rel_path}")
@@ -2405,11 +2478,9 @@ def _preflight_check_checksums(
         # checksums.sha256 is always written relative to the bundle root
         # (``payload/...``); normalize both sides before comparing.
         manifest_checksums = _manifest_checksum_mapping(manifest_files, violations=violations)
-        manifest_paths = {path.removeprefix("payload/") for path in manifest_checksums}
-        normalized_checksums = {key.removeprefix("payload/") for key in checksums}
-        for rel_path in sorted(normalized_checksums - manifest_paths):
+        for rel_path in sorted(set(checksums) - set(manifest_checksums)):
             violations.append(f"checksum entry not listed in manifest files: {rel_path}")
-        for rel_path in sorted(manifest_paths - normalized_checksums):
+        for rel_path in sorted(set(manifest_checksums) - set(checksums)):
             violations.append(f"manifest file not present in checksums.sha256: {rel_path}")
         for path in sorted(set(manifest_checksums) & set(checksums)):
             if manifest_checksums[path] != checksums[path]:
@@ -2435,6 +2506,28 @@ def _preflight_check_channels(
                 )
     elif "publication_channels" not in manifest:
         warnings.append("publication_manifest.json omits publication_channels")
+
+
+def _release_metadata_roles(payload_dir: Path) -> tuple[str, ...]:
+    """Derive required score assets from the signed resolved release bytes.
+
+    Returns:
+        Required cold-verification roles; missing release bytes retain the legacy guard.
+    """
+    release_path = payload_dir / "release/release_manifest.resolved.json"
+    legacy = not release_path.is_file() or _legacy_snqi_declared(
+        _read_json_file(release_path).get("metrics") or {}
+    )
+    notes_roles = (
+        ("release_notes", "release_notes_gate")
+        if release_path.is_file() and _requires_release_notes(_read_json_file(release_path))
+        else ()
+    )
+    return (
+        _REQUIRED_RELEASE_METADATA_ROLES
+        + (("snqi_weights", "snqi_baseline") if legacy else ())
+        + notes_roles
+    )
 
 
 def _preflight_check_release_metadata(  # noqa: C901, PLR0912
@@ -2468,7 +2561,7 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
                 continue
             normalized_path = raw_manifest_path.removeprefix("payload/")
             manifest_entries_by_path.setdefault(f"payload/{normalized_path}", raw_entry)
-    required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
+    required_roles = _release_metadata_roles(payload_dir) if required else tuple(files)
     for role in required_roles:
         entry = files.get(role)
         if not isinstance(entry, Mapping):
@@ -2534,6 +2627,31 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
         cold = block.get("cold_verification")
         if not isinstance(cold, Mapping) or cold.get("credentials") != "not_recorded":
             violations.append("release metadata cold-verification credential policy is invalid")
+
+
+def _preflight_check_development_marker(
+    payload_dir: Path, manifest: dict[str, Any], violations: list[str]
+) -> None:
+    """Require the non-release marker to agree across signed payload and bundle."""
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
+    path = payload_dir / "release/release_result.json"
+    try:
+        result = _read_json_file(path) if path.is_file() else {}
+    except ValueError as exc:
+        violations.append(str(exc))
+        return
+    diagnostic = (
+        result.get("benchmark_release", {}).get("release_kind") == DEVELOPMENT_REHEARSAL_KIND
+    )
+    if diagnostic != (manifest.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND):
+        violations.append("development rehearsal marker differs between payload and bundle")
+    if diagnostic and (
+        manifest.get("release_eligible") is not False
+        or result.get("release_eligible") is not False
+        or result.get("release_benchmark_success") is not False
+    ):
+        violations.append("development rehearsal must remain non-releasable in payload and bundle")
 
 
 def _preflight_check_release_reconciliation(
@@ -2644,6 +2762,100 @@ def _preflight_check_commit_provenance(
     return repository_commit, episode_commits
 
 
+def _publication_snqi_evidence(payload_dir: Path) -> dict[str, Any]:
+    """Keep legacy check 6 out of explicitly excluded acquisition/publication bundles.
+
+    Returns:
+        A consistency result, refusing contradictory excluded/legacy payloads.
+    """
+    campaign_path = payload_dir / "campaign_manifest.json"
+    campaign = _read_json_file(campaign_path) if campaign_path.is_file() else {}
+    excluded = (
+        campaign.get("legacy_snqi") == "excluded"
+        or campaign.get("snqi_v2") == "pending_calibration"
+    )
+    if not excluded:
+        return _check_snqi_field_consistency(payload_dir)
+    violations = []
+    if (payload_dir / "reports/snqi_diagnostics.json").exists():
+        violations.append("Legacy SNQI is excluded but its diagnostics are present")
+    release_path = payload_dir / "release/release_manifest.resolved.json"
+    if release_path.is_file() and _legacy_snqi_declared(
+        _read_json_file(release_path).get("metrics") or {}
+    ):
+        violations.append("Legacy SNQI is excluded but the release declares legacy assets")
+    if (payload_dir / "release_metadata/snqi").exists():
+        violations.append("Legacy SNQI is excluded but its bundle assets are present")
+    return {"checked": False, "reason": "legacy_snqi_excluded", "violations": violations}
+
+
+def _release_notes_files(run_root: Path, repo_root: Path, resolved: Mapping[str, Any]) -> dict:
+    """Stage mint-bound disclosures for cold publication validation.
+
+    Returns:
+        Export roles and source/destination file pairs.
+    """
+    _check_notes_development_marker(run_root, resolved)
+    if not _requires_release_notes(resolved):
+        return {}
+    receipt = resolved.get("release_notes_gate")
+    notes_gate(
+        repo_root, source_commit=resolved.get("source_sha"), phase="publication", receipt=receipt
+    )
+    receipt_path = run_root / "release" / RECEIPT_NAME
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "release_notes": (repo_root / NOTES_PATH, Path("release_metadata/release_notes.md")),
+        "release_notes_gate": (receipt_path, Path("release_metadata") / RECEIPT_NAME),
+    }
+
+
+def _requires_release_notes(resolved: Mapping[str, Any]) -> bool:
+    """Identify the 0.0.8 production contract, including its independent slice.
+
+    Returns:
+        Whether this production release requires bound disclosures.
+    """
+    return resolved.get("release_kind") != "development_rehearsal" and is_release_0_0_8(resolved)
+
+
+def _check_notes_development_marker(artifact_root: Path, resolved: Mapping[str, Any]) -> None:
+    """Require the diagnostic exemption to agree with the completed run's markers."""
+    if resolved.get("release_kind") != "development_rehearsal" or not is_release_0_0_8(resolved):
+        return
+    result = _read_json_file(artifact_root / "release/release_result.json")
+    if (
+        (result.get("benchmark_release") or {}).get("release_kind") != "development_rehearsal"
+        or result.get("release_eligible") is not False
+        or result.get("release_benchmark_success") is not False
+    ):
+        raise ValueError("release notes diagnostic exemption disagrees with release result")
+
+
+def _preflight_release_notes(payload_dir: Path, violations: list[str]) -> None:
+    """Repeat disclosure admission on exported bytes against the mint digest."""
+    resolved_path = payload_dir / "release/release_manifest.resolved.json"
+    if not resolved_path.is_file():
+        return
+    try:
+        resolved = _read_json_file(resolved_path)
+        _check_notes_development_marker(payload_dir, resolved)
+        if not _requires_release_notes(resolved):
+            return
+        receipt = _read_json_file(payload_dir / "release_metadata" / RECEIPT_NAME)
+        if receipt != resolved.get("release_notes_gate"):
+            raise ValueError("release notes bundle receipt differs from mint receipt")
+        notes_gate(
+            get_repository_root(),
+            source_commit=resolved.get("source_sha"),
+            phase="publication",
+            receipt=receipt,
+            notes_path=payload_dir / "release_metadata/release_notes.md",
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        violations.append("release notes admission failed: " + str(exc))
+
+
 def verify_publication_bundle_preflight(
     bundle_dir: Path,
     *,
@@ -2710,6 +2922,8 @@ def verify_publication_bundle_preflight(
         violations.append(f"checksums.sha256 cannot be validated: {exc}")
         checksums = {}
     _preflight_check_channels(manifest, violations=violations, warnings=warnings)
+    _preflight_release_notes(payload_dir, violations)
+    _preflight_check_development_marker(payload_dir, manifest, violations)
     _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
     try:
         _preflight_check_release_reconciliation(
@@ -2730,7 +2944,7 @@ def verify_publication_bundle_preflight(
     # ---- Check 6: per-episode SNQI field vs diagnostics basis (issue #5580) --
     # Runs only on SNQI-bearing bundles (those declaring snqi_diagnostics.json); other
     # bundles report checked=False and are unaffected.
-    snqi_evidence = _check_snqi_field_consistency(payload_dir)
+    snqi_evidence = _publication_snqi_evidence(payload_dir)
     violations.extend(snqi_evidence.get("violations", []))
 
     status = "pass" if not violations else "fail"
@@ -2751,4 +2965,8 @@ def verify_publication_bundle_preflight(
     }
     if status == "fail":
         raise PublicationPreflightError("Publication preflight failed: " + "; ".join(violations))
+    from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
+
+    if manifest.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND:
+        report["release_eligible"] = False
     return report

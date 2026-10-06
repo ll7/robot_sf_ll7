@@ -68,7 +68,13 @@ unset PR_READY_PR_BODY_FILE
 source "$SCRIPT_DIR/common_setup.sh"
 
 fast_fail="${PYTEST_FAST_FAIL:-1}"
-dist_mode="${PYTEST_XDIST_DIST:-load}"
+default_dist_mode=load
+# Sharded suites have long heterogeneous release-check batches. Let idle workers
+# steal their queued tests; ordinary local runs retain the existing scheduler.
+if [[ "${PYTEST_SHARD_COUNT:-1}" =~ ^[0-9]+$ ]] && [[ "${PYTEST_SHARD_COUNT:-1}" -gt 1 ]]; then
+  default_dist_mode=worksteal
+fi
+dist_mode="${PYTEST_XDIST_DIST:-$default_dist_mode}"
 order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
 lane_mode="${ROBOT_SF_TEST_LANE:-all}"
@@ -313,6 +319,9 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
   fi
   sharding_active="1"
   cmd+=("--splits" "$shard_count" "--group" "$shard_index")
+  # Greedy assignment spreads unknown-duration prefixes across runners;
+  # contiguous chunks cannot rebalance an unmeasured collection prefix.
+  cmd+=("--splitting-algorithm" "least_duration")
   # CI restores a prior aggregate and uploads each shard's store for a
   # workflow-level merge job; local runs simply keep the generated file.
   cmd+=("--store-durations" "--durations-path" ".test_durations")
@@ -329,7 +338,7 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
 fi
 
 # Fast PR/local lane: sharding excludes slow tests unless the caller explicitly
-# opts into the complete suite. Main CI uses that opt-in for its four shards.
+# opts into the complete suite. Main CI uses that opt-in for its full-suite shards.
 include_slow="${ROBOT_SF_SHARD_INCLUDE_SLOW:-0}"
 case "$include_slow" in
   1|true|yes|on) include_slow=1 ;;
@@ -346,6 +355,22 @@ for pytest_arg in "${pytest_args[@]}"; do
     break
   fi
 done
+if [[ -n "${ROBOT_SF_AFFECTED_BASE_REF:-}" ]]; then
+  selection_args=(--base "$ROBOT_SF_AFFECTED_BASE_REF" --format mode)
+  if [[ -n "${ROBOT_SF_AFFECTED_SELECTION_FILE:-}" ]]; then
+    selection_args+=(--read-report "$ROBOT_SF_AFFECTED_SELECTION_FILE")
+  fi
+  selection_mode="$(uv run python "$SCRIPT_DIR/affected_test_selection.py" "${selection_args[@]}")"
+  case "$selection_mode" in
+    full) include_slow=1 ;;
+    unchanged) ;;
+    *) echo "Invalid affected-test selection decision." >&2; exit 2 ;;
+  esac
+  if [[ "$selection_mode" == "full" && "$has_marker" == "1" ]]; then
+    echo "Full affected-test admission cannot use a marker selector." >&2
+    exit 2
+  fi
+fi
 if [[ "$sharding_active" == "1" && "$has_marker" == "0" && "$include_slow" != "1" ]]; then
   cmd+=("-m" "not slow")
 fi

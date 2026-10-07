@@ -58,9 +58,10 @@ def test_huber_filtered_straight_line_and_known_onset_coordinate():
     straight = np.column_stack([t, np.zeros(len(t))])
     np.testing.assert_allclose(m.huber_filtered(straight, t), straight, atol=1e-12)
     out = m.turning_onset(p, q, t, [straight] * 5)
-    # PoMD x=5. Gaussian tails exceed zero baseline at first captured x=2.
+    # Physical onset rejects Gaussian tails instead of saturating at the window edge.
     assert out["pomd_own_x_m"] == pytest.approx(5)
-    assert out["onset_m"] == pytest.approx(3)
+    assert out["onset_m"] == pytest.approx(2.6, abs=1e-8)
+    assert out["onset_threshold_rad_s"] == 0.05
     assert len(out["baseline_maxima_rad_s"]) == 5
     assert m.turning_onset(straight, q, t, [straight] * 5)["onset_m"] is None
 

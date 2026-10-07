@@ -2967,6 +2967,8 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "sampler_capture_enabled",
     "ped_radius",
     "pedestrian_radius_m",
+    "pedestrian_contact_rule",
+    "pedestrian_wall_rule",
     "pedestrian_uncertainty_envelope_enabled",
     "pedestrian_uncertainty_alpha_mps",
     "goal_radius",

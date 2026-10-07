@@ -1,0 +1,242 @@
+{
+  "archive_bytes": 5432552,
+  "location": "benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz",
+  "members": [
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10104_comparison.json",
+      "bytes": 281189,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10104_comparison.json",
+      "sha256": "ef7b8bdc1158740c1e43b6f9e31492c8d11fd7bbf3769206aa3310621052af2b"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10104_failures.csv",
+      "bytes": 192030,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10104_failures.csv",
+      "sha256": "28f7fda12fb2bd38083f1cbb3480f4f3954ad3e23152299e410c81f99891adaa"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10104_failures.csv.review.json",
+      "bytes": 334,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10104_failures.csv.review.json",
+      "sha256": "4f0bbe623dcf77b2b68f2b59ff120f23686a657e447a07fa8304de9f92f0df7d"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_custody.json",
+      "bytes": 3034711,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_custody.json",
+      "sha256": "b59d80fc49767d943bc1f701eed866d90743fc2eab49576e4e2c0de2021e952a"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_diagnosis.json",
+      "bytes": 47688,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_diagnosis.json",
+      "sha256": "a89e5848b67df890a4d593fd74c7cddb85600a16f7e2ce6229de720586595f2e"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_drivers.json",
+      "bytes": 107690,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_drivers.json",
+      "sha256": "5df615cf123fbeb4f46a3d27a02af0331352341ffac96b92262846d3f17e7e06"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_fit_grid.json",
+      "bytes": 53838,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_fit_grid.json",
+      "sha256": "e1cbe3f683d0fb4b0df569675429683ebb23607b116a0ca5088094e02ec70d20"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_fit_result.json",
+      "bytes": 1966651,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_fit_result.json",
+      "sha256": "0a348c994eecca64a5aa18e1f0e154139a4cb50f3cd79295c6460f6f90fe0746"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_fit_runtime.json",
+      "bytes": 3042997,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_fit_runtime.json",
+      "sha256": "699a3ae6e805ad9d2a446320b4c33773e0cfc256343fc9aadd88eb4a29c3504a"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_robot_gate.json",
+      "bytes": 252907,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_robot_gate.json",
+      "sha256": "d02bb0f327d412e00deb041d9cfaf78b9725c40a6606324aed1338d569bbdcb8"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_robot_starts.json",
+      "bytes": 51564,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_robot_starts.json",
+      "sha256": "71241cf9ca9e080251c9e0e5228b9a62bdd303dbe480da92dc506f947ed4abd5"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_acquisition_audit.json",
+      "bytes": 831,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_acquisition_audit.json",
+      "sha256": "4167a0a15ac90a20b1c100af14a7294d3e360e8af05973fd2858795541d92030"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_base_failures.json",
+      "bytes": 246518,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_base_failures.json",
+      "sha256": "de9b8310eeea0a6b878ec8bd1e3934cc889cb3c3f8155970c5e9f8a48c5e559e"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_base_receipts.json",
+      "bytes": 2189542,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_base_receipts.json",
+      "sha256": "061a5620268d9fc5a9d79cd39baf97dfe35bd4fda55c2ece28fb373929f8b855"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_custody.json",
+      "bytes": 14573624,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_custody.json",
+      "sha256": "e8ee388532a271159483c6f2903eac4dffc021f4390b7ac57a439b0775ea8dc1"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_drivers.json",
+      "bytes": 4542785,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_drivers.json",
+      "sha256": "9618fbe5a3118760cfcc41190e72a161f9501f1359b2ed279714fa779e484b57"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_fit.json",
+      "bytes": 2289792,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_fit.json",
+      "sha256": "61ccfd6adedb393eb93364cef5f261df575e55d78942b3b6dc157ca8e16d2d9f"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_fit_interpretation.json",
+      "bytes": 7577,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_fit_interpretation.json",
+      "sha256": "02beb713fe4796891a88c46ad82f557ca722201b247a064b5ec4af505224dca1"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_fit_runtime.json",
+      "bytes": 3044998,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_fit_runtime.json",
+      "sha256": "438ba319146a1d7dfc6d1d7710207f101f784a80563b471c30370bf90683dd96"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_preliminary_failures.json",
+      "bytes": 213514,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_preliminary_failures.json",
+      "sha256": "9ddffb6a492d0c205bdfac45a947efb536a0893fd7a88a38a0e83e46f8cfceee"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_purity.json",
+      "bytes": 505557,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_purity.json",
+      "sha256": "edb76cbbab71cb7629c6720f5f0c4d8fdfc6fb55698420cea8c61b2f3a1e01a8"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_robot.json",
+      "bytes": 8444609,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_robot.json",
+      "sha256": "c6fbab78f3a67220369ec096eb886bc2af809b8896e0b6b05cb6d9631d7a3c07"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_robot_geometry.json",
+      "bytes": 9829,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_robot_geometry.json",
+      "sha256": "361b888072a11b5831a745518bfe91d5cbe73c0b74594f3ae54742f769185d53"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_rollback_closure.json",
+      "bytes": 1385,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_rollback_closure.json",
+      "sha256": "f946a5b4a5947069fad785064db0de02391a61968cd06d84f09bfc22836d100b"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_spawn_audit.json",
+      "bytes": 39668,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_spawn_audit.json",
+      "sha256": "144be818b7389ab2de06366b30f67027b66ebf582c014ed4352ecc3c2a10d756"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_step4.json",
+      "bytes": 377377,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_step4.json",
+      "sha256": "eb4cd7cd5eacffe3f53a9c6f6d62b55d59f538d133f64fc3175f317ae3849673"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_test_proofs.json",
+      "bytes": 25773,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_test_proofs.json",
+      "sha256": "52ba3a05a5116ddf5a0bf5dc118e7684928f229298d39fd24846be9bad0bbc23"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_v3_terminal.json",
+      "bytes": 2074,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_v3_terminal.json",
+      "sha256": "9dd3d80f0b7941efdff2119e1f1a721a2262b715df5bfbae466168410f607296"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_v6_controls.json",
+      "bytes": 3732,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_v6_controls.json",
+      "sha256": "ae8f95e1bf72437a51653634a7e05f8c79b19653c5ebe09d4f61ee679fa0386a"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_wall_probe.json",
+      "bytes": 349505,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_wall_probe.json",
+      "sha256": "75a0fadacd325caf6e8d015144f1f1c89898d1d306532c05de0ce38e1cfa87e4"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_round3_warm.json",
+      "bytes": 5510,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_round3_warm.json",
+      "sha256": "6a019747ff9b6e1dbdd2ecec9a1d858ce4ee167773b0f6af96762473ae9d7d2e"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_step4.json",
+      "bytes": 169628,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_step4.json",
+      "sha256": "d3ac99c8c4f04aa7bf76197ba0ed122559947e3a8332590b1a27e5fb0a40378e"
+    },
+    {
+      "archive_member": "docs/pedcontact_10101_v6_sensitivity.json",
+      "bytes": 82624,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10104-historical-evidence.tar.gz#docs/pedcontact_10101_v6_sensitivity.json",
+      "sha256": "3ae278c2005e5862e29590b8d268669fe18e39c8483087d145cf215289a6e39f"
+    }
+  ],
+  "original_head": "5c6ff57778d71e0ad7a1a9ade593b0a3d81a13e4",
+  "path": "pr-10104-historical-evidence.tar.gz",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "sha256": "109bf80ded8b9f6fd617a9aa9d6afdd714db720cf553b385b3f8fb6ccbac6498",
+  "status": "diagnostic-only; exact-byte archive copied and read-back verified in external data hub"
+}

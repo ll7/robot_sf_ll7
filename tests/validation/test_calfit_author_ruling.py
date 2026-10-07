@@ -114,7 +114,6 @@ def test_original_shoulder_rotation_case_is_a_limitation_not_a_failed_gate():
     "case,variant,field,target,bounds",
     [
         ("V5", "diagnostic", "lateral_cm_to_edge_m", 0.5, [0.4, 0.6]),
-        ("V6", "1.15", "onset_m", 2.1, [1.68, 2.52]),
     ],
 )
 def test_unreported_distribution_sd_uses_author_twenty_percent_fallback(
@@ -126,3 +125,14 @@ def test_unreported_distribution_sd_uses_author_twenty_percent_fallback(
     assert check["tolerance_range"] == pytest.approx(bounds)
     assert "no reported SD" in check["rule"]
     assert "20%" in check["rule"]
+
+
+@pytest.mark.parametrize("estimate,status", [(2.1, "PASS"), (2.099, "FAIL"), (2.521, "PASS")])
+def test_v6_missing_sd_preserves_author_lower_bound_equivalent(estimate, status):
+    """V6's one-sided ruling replaces the retired symmetric twenty-percent case."""
+    gate = suite.acceptance_gate([row("V6", "1.15", onset_m=estimate)])
+    check = gate["checks"][0]
+    assert check["status"] == status
+    assert check["tolerance_range"] == [2.1, None]
+    assert check["comparison"] == "published_lower_bound"
+    assert check["estimator_id"] == "fixed_yaw_source_window_lower_bound_v3"

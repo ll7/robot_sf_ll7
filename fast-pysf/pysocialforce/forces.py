@@ -32,9 +32,18 @@ from pysocialforce.config import (
     GroupReplusiveForceConfig,
     ObstacleForceConfig,
     SocialForceConfig,
+    _parameters_sha256,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
     resolve_social_force_kernel_version,
+)
+from pysocialforce.contact import (
+    WALL_AMPLITUDE_M_S2,
+    WALL_DECAY_M,
+    WALL_NORMAL_BLEND_M,
+    WALL_RANGE_M,
+    bounded_wall_force,
+    wall_far_field_weight,
 )
 from pysocialforce.logging import logger
 from pysocialforce.scene import Line2D, PedState, Point2D
@@ -429,6 +438,19 @@ class ObstacleForce:
         self.get_peds = sim.peds.pos
         self.get_agent_radius = lambda: sim.peds.agent_radius
         self._obstacle_force_applied = False
+        if getattr(config, "wall_contact_rule", None) == "bounded_edge_v1":
+            self.contact_wall_parameters = {
+                "amplitude_m_s2": float(
+                    getattr(config, "wall_contact_amplitude_m_s2", WALL_AMPLITUDE_M_S2)
+                ),
+                "decay_m": float(getattr(config, "wall_contact_decay_m", WALL_DECAY_M)),
+                "range_m": float(getattr(config, "wall_contact_range_m", WALL_RANGE_M)),
+                "normal_blend_m": float(
+                    getattr(config, "wall_contact_normal_blend_m", WALL_NORMAL_BLEND_M)
+                ),
+            }
+            if any(not np.isfinite(v) or v <= 0 for v in self.contact_wall_parameters.values()):
+                raise ValueError("wall contact parameters must be finite and positive")
 
     def __call__(self) -> np.ndarray:
         """Compute obstacle forces for each pedestrian.
@@ -457,10 +479,69 @@ class ObstacleForce:
             )
         if factor != 0.0 and ped_positions.shape[0] > 0:
             self._obstacle_force_applied = True
-        return forces * factor
+        legacy = forces * factor
+        if getattr(self.config, "wall_contact_rule", None) == "bounded_edge_v1":
+            self._obstacle_force_applied = True
+            params = self.contact_wall_parameters
+            bounded = bounded_wall_force(
+                ped_positions,
+                obstacles,
+                self.get_agent_radius(),
+                params["amplitude_m_s2"],
+                params["decay_m"],
+                params["range_m"],
+                params["normal_blend_m"],
+            )
+            weights = wall_far_field_weight(
+                ped_positions,
+                obstacles,
+                self.get_agent_radius(),
+                params["range_m"],
+                max(1.0, params["range_m"] + 0.5),
+            )
+            # Add a local correction; restore the exact legacy force beyond 1 m
+            # (or R+.5 for a larger explicit near range). Smoothstep has zero
+            # endpoint derivative, unlike a discontinuous replacement cutoff.
+            # Algebraically legacy + (bounded - (1-weight)*legacy), evaluated
+            # without cancellation of a potentially very large legacy near field.
+            return weights[:, None] * legacy + bounded
+        return legacy
 
     def law_metadata(self) -> dict[str, object]:
         """Return the fast-pysf law and site conventions used by this force."""
+        if getattr(self.config, "wall_contact_rule", None) == "bounded_edge_v1":
+            parameters = {
+                **self.contact_wall_parameters,
+                "agent_radius": float(self.get_agent_radius()),
+                "legacy_factor": float(self.config.factor),
+                "legacy_sigma": float(self.config.sigma),
+                "legacy_threshold": float(self.config.threshold),
+                "far_field_clearance_m": max(1.0, self.contact_wall_parameters["range_m"] + 0.5),
+            }
+            return {
+                "schema_version": "obstacle_force_law_metadata.v2",
+                "law_version": "legacy_far_field_edge_correction_v2",
+                "selector": "bounded_edge_v1",
+                "composition": "legacy + bounded_edge - (1-smoothstep(clearance,R,outer))*legacy",
+                "far_field_clearance_m": max(1.0, self.contact_wall_parameters["range_m"] + 0.5),
+                "base_law_version": resolve_obstacle_force_law(
+                    getattr(self.config, "law_version", None)
+                ),
+                "base_parameters": {
+                    "factor": float(self.config.factor),
+                    "sigma": float(self.config.sigma),
+                    "threshold": float(self.config.threshold),
+                },
+                "site": "fast_pysf",
+                "geometry_convention": "closest_finite_segment_surface",
+                "radius_convention": "physical_body_edge_clearance",
+                "compatibility_mode": "corrected_opt_in",
+                "enabled": True,
+                "applied": bool(self._obstacle_force_applied),
+                "resolution_mode": "explicit",
+                "parameters": parameters,
+                "parameters_sha256": _parameters_sha256(parameters),
+            }
         factor = float(getattr(self.config, "factor", 1.0))
         sigma = float(getattr(self.config, "sigma", 0.0))
         threshold = float(getattr(self.config, "threshold", 0.0))

@@ -11,11 +11,13 @@ from scripts.validation import pedestrian_validation_10074 as suite
 def test_known_trajectories_make_every_primary_estimator_observable():
     controls = preflight.estimator_controls()
     assert {c["case"] for c in controls} == {f"V{i}" for i in range(1, 7)}
-    assert len(controls) == 8
+    assert len(controls) == 9
     assert all(c["known_answer_pass"] for c in controls)
-    assert [c["observed"] for c in controls] == pytest.approx(
-        [1.29, 0.54, 0.40, 1.90, 6 / 11, 0.50, 0.50, 3.00], abs=1e-8
+    assert [c["observed"] for c in controls[:7]] == pytest.approx(
+        [1.29, 0.54, 0.40, 1.90, 6 / 11, 0.50, 0.50], abs=1e-8
     )
+    assert controls[7]["observed"] is None
+    assert controls[8]["observed"] == pytest.approx(5.0, abs=0.2)
 
 
 def test_target_records_pass_author_policy_before_model_search():

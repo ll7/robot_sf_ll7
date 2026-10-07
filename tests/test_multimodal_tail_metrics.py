@@ -49,6 +49,28 @@ def _fraction_reference(
 
 
 @pytest.mark.parametrize(
+    ("probabilities", "alpha", "expected_var"),
+    (
+        ([0.2, 0.4, 0.4], 0.2, 1.0),
+        ([0.2, 0.4, 0.4], math.nextafter(0.2, 0.0), 0.0),
+        ([0.2, 0.4, 0.4], math.nextafter(0.2, 1.0), 1.0),
+        ([0.25, 0.25, 0.5], 0.25, 0.0),
+        ([0.25, 0.25, 0.5], math.nextafter(0.25, 1.0), 1.0),
+    ),
+)
+def test_var_boundary_uses_exact_normalized_probability(
+    probabilities: list[float], alpha: float, expected_var: float
+) -> None:
+    """Select the first atom whose exact normalized cumulative mass reaches alpha."""
+    losses = [0.0, 1.0, 2.0]
+    reference = _fraction_reference(losses, probabilities, alpha)
+    assert reference[1] == expected_var
+    observed = discrete_tail_metrics(losses, probabilities, alpha)
+    assert observed[1] == expected_var
+    assert observed[2] == pytest.approx(reference[2], abs=2.0e-9)
+
+
+@pytest.mark.parametrize(
     ("losses", "probabilities", "alpha"),
     (
         ([1.0, 0.5], [0.0, 1.0], 0.9999999999),

@@ -811,7 +811,7 @@ def test_out_of_order_step_is_rejected() -> None:
 
 def test_reset_returns_to_deterministic_empty_state() -> None:
     manager, _ = _prime(ManeuverState.PASS_RIGHT)
-    manager.reset(seed=123)
+    manager.reset(seed=1001)
     snapshot = manager.snapshot()
     fresh = ManeuverCommitmentManager(manager.config)
     assert snapshot == fresh.snapshot()

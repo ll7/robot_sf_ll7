@@ -605,3 +605,21 @@ def test_report_flag_alias_parses_as_report_mode() -> None:
     assert args.json is True
     assert args.apply is False
     assert parser.parse_args([]).report is False
+
+
+@pytest.mark.parametrize("label", ["state:ready-to-submit", "state:reviewing"])
+def test_newly_classified_qualifiers_are_not_ambiguous(label: str) -> None:
+    """The reconciler must stop returning ambiguous for these live labels (#9938).
+
+    Before the classification these labels made every affected issue
+    ``ambiguous_do_not_mutate`` with the rationale
+    ``unclassified state:* labels present``, so the three affected issues could
+    never be reconciled in either direction.
+    """
+    assert reconcile._has_unknown_state_labels({label}) is False
+
+
+@pytest.mark.parametrize("label", ["state:done", "state:typo-invented"])
+def test_genuinely_unknown_labels_remain_ambiguous(label: str) -> None:
+    """Classification must not become a wildcard."""
+    assert reconcile._has_unknown_state_labels({label}) is True

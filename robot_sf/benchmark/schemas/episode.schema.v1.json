@@ -1315,6 +1315,11 @@
                         ]
                     }
                 },
+                "metric_definitions_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "Digest of the source metric definitions used by SNQI-v2 anchors."
+                },
                 "metric_schema_version": {
                     "type": "string",
                     "enum": [

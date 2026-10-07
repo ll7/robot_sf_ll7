@@ -34,7 +34,9 @@ def wrapper_repository(tmp_path):
     (repo / "tests/test_one.py").write_text("def test_one(): assert True\n")
     (repo / "fast-pysf/tests").mkdir(parents=True)
     (repo / "fast-pysf/tests/test_two.py").write_text("def test_two(): assert True\n")
-    (repo / ".gitignore").write_text("/.venv/\n/fake-bin/\n/captured.jsonl\n/output/\n")
+    (repo / ".gitignore").write_text(
+        "/.venv/\n/fake-bin/\n/captured.jsonl\n/output/\n__pycache__/\n.pytest_cache/\n"
+    )
     python = repo / ".venv/bin/python"
     python.parent.mkdir(parents=True)
     python.write_text("#!/bin/sh\nexit 0\n")
@@ -64,6 +66,8 @@ elif args[:2] == ['run', 'pytest']:
         subprocess.run(['git', 'commit', '-qm', 'moved head'], check=True)
     if os.environ.get('DIRTY_AFTER'):
         Path('untracked_after.py').write_text('pass\\n')
+    if os.environ.get('REAL_PYTEST'):
+        sys.exit(subprocess.run([sys.executable, '-m', 'pytest', *args[2:]], check=False).returncode)
     print('2 passed, 1 skipped in 0.01s')
     sys.exit(int(os.environ.get('FAKE_PYTEST_EXIT', '0')))
 else: sys.exit(99)

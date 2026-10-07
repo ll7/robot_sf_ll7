@@ -32,6 +32,11 @@ def _checks(monkeypatch, body, paths):
     [
         "robot_sf/planner/guarded_ppo.py",
         "robot_sf/benchmark/map_runner/map_runner_episode.py",
+        "robot_sf/benchmark/runner.py",
+        "robot_sf/benchmark/types.py",
+        "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        "robot_sf/benchmark/map_runner_jsonl.py",
+        "robot_sf/benchmark/schema_loader.py",
         "maps/renamed.svg",
     ],
 )
@@ -49,7 +54,10 @@ def _receipt():
             "success": True,
             "collisions": 0,
             "fallback": False,
-            "execution_mode": "native",
+            "execution_mode": "native" if arm == "goal" else "adapter",
+            "algorithm": arm,
+            "controller_executed": True,
+            "degraded": False,
             "baseline_success": True,
             "baseline_collisions": 0,
         }
@@ -230,3 +238,149 @@ def test_rename_out_of_behaviour_scope_keeps_old_endpoint(monkeypatch, tmp_path)
     paths = checker.get_changed_files(None, base)
     assert "robot_sf/planner/old.py" in paths and "docs/renamed.py" in paths
     assert any("behaviour receipt" in b.lower() for b in _checks(monkeypatch, "", paths))
+
+
+def test_contract_checkout_uses_source_identity_and_hydrates_release_tags(monkeypatch, tmp_path):
+    """A source receipt survives a workflow-shaped shallow synthetic-merge checkout."""
+    import subprocess
+    from pathlib import Path
+
+    import yaml
+
+    from scripts.ci import behaviour_receipt as adapter
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[2] / ".github/workflows/pr-contract-check.yml"
+        ).read_text()
+    )
+    checkout = next(
+        s for s in workflow["jobs"]["pr-contract-check"]["steps"] if s.get("name") == "Checkout"
+    )
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+    assert checkout["with"]["fetch-depth"] == 0
+
+    source = tmp_path / "source"
+    source.mkdir()
+
+    def git(root, *args):
+        return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+    git(source, "init", "-b", "main")
+    git(source, "config", "user.name", "Test")
+    git(source, "config", "user.email", "test@example.invalid")
+    (source / "file").write_text("baseline")
+    git(source, "add", "file")
+    git(source, "commit", "-m", "baseline")
+    baseline = git(source, "rev-parse", "HEAD")
+    git(source, "tag", "0.0.7")
+    (source / "file").write_text("source")
+    git(source, "add", "file")
+    git(source, "commit", "-m", "PR source")
+    head = git(source, "rev-parse", "HEAD")
+    git(source, "checkout", "-b", "synthetic-merge")
+    git(source, "commit", "--allow-empty", "-m", "synthetic merge identity")
+    merge = git(source, "rev-parse", "HEAD")
+    clone = tmp_path / "checkout"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--depth=1",
+            "--no-tags",
+            "--branch",
+            "synthetic-merge",
+            source.as_uri(),
+            str(clone),
+        ],
+        check=True,
+    )
+    assert git(clone, "rev-parse", "HEAD") == merge != head
+    assert git(clone, "tag") == ""
+    # checkout@ fetch-depth: 0 hydrates history/tags before resolving the event source.
+    git(clone, "fetch", "--unshallow", "--tags", "origin")
+    git(clone, "checkout", "--detach", head)
+    monkeypatch.setattr(adapter, "ROOT", clone)
+    receipt = _receipt()
+    receipt["head_sha"] = receipt["scheduler"]["source_sha"] = head
+    receipt["interaction_audit"]["source_sha"] = receipt["refute_review"]["head_sha"] = head
+    receipt["baseline"]["source_sha"] = baseline
+    scope = {
+        "arms": ["goal", "orca"],
+        "maps": ["open", "door"],
+        "vehicle_id": "t60",
+        "exceptions": [],
+    }
+    adapter.validate_receipt(
+        receipt, scope, adapter.current_head(), "0.0.7", adapter.release_source("0.0.7")
+    )
+    with pytest.raises(ValueError, match="receipt head is stale"):
+        adapter.validate_receipt(receipt, scope, merge, "0.0.7", baseline)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "solver_skipped",
+        "solver_fallback",
+        "degraded",
+        "native_capable_adapter",
+        "algorithm_substitution",
+    ],
+)
+def test_adapter_receipt_requires_registry_mode_and_real_controller(fault):
+    """Command adaptation is valid only for the bound adapter-only controller."""
+    from scripts.ci import behaviour_receipt as adapter
+
+    receipt = _receipt()
+    scope = {
+        "arms": ["goal", "orca"],
+        "maps": ["open", "door"],
+        "vehicle_id": "t60",
+        "exceptions": [],
+        "arm_algorithms": {"goal": "prediction_mpc", "orca": "orca"},
+    }
+    receipt["scope_sha256"] = hashlib.sha256(
+        json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    for row in receipt["rows"]:
+        if row["arm"] == "goal":
+            row["algorithm"] = "prediction_mpc"
+            row["execution_mode"] = "adapter"
+    row = receipt["rows"][0]
+    if fault == "solver_skipped":
+        row["controller_executed"] = False
+    elif fault == "solver_fallback":
+        row["fallback"] = True
+    elif fault == "degraded":
+        row["degraded"] = True
+    elif fault == "native_capable_adapter":
+        scope["arm_algorithms"]["goal"] = row["algorithm"] = "goal"
+        receipt["scope_sha256"] = hashlib.sha256(
+            json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    elif fault == "algorithm_substitution":
+        row["algorithm"] = "learned_prediction_mpc"
+    if fault is None:
+        adapter.validate_receipt(receipt, scope, HEAD, "0.0.7", "c" * 40)
+    else:
+        reason = {
+            "solver_skipped": "intended solver/controller did not execute",
+            "solver_fallback": "fallback or degraded execution",
+            "degraded": "fallback or degraded execution",
+            "native_capable_adapter": "command execution mode",
+            "algorithm_substitution": "row algorithm differs",
+        }[fault]
+        with pytest.raises(ValueError, match=reason):
+            adapter.validate_receipt(receipt, scope, HEAD, "0.0.7", "c" * 40)
+
+
+def test_missing_owner_inventory_is_explicit_blocker(monkeypatch, tmp_path):
+    """No fixture or inferred roster can activate the integration-owned gate."""
+    from scripts.ci import behaviour_receipt as adapter
+
+    monkeypatch.setattr(adapter, "SCOPE_PATH", tmp_path / "missing.json")
+    body = "<!-- behaviour-change-receipt:v1\n" + json.dumps(_receipt()) + "\n-->"
+    blockers = adapter.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7")
+    assert any("reviewed scope inventory" in b for b in blockers), blockers

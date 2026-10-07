@@ -154,7 +154,21 @@
             "minimum": 0
           },
           "execution_mode": {
-            "const": "native"
+            "enum": [
+              "native",
+              "adapter",
+              "mixed"
+            ]
+          },
+          "algorithm": {
+            "type": "string",
+            "minLength": 1
+          },
+          "controller_executed": {
+            "type": "boolean"
+          },
+          "degraded": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -166,7 +180,10 @@
           "fallback",
           "baseline_success",
           "baseline_collisions",
-          "execution_mode"
+          "execution_mode",
+          "algorithm",
+          "controller_executed",
+          "degraded"
         ],
         "additionalProperties": false
       }

@@ -28,9 +28,9 @@ TRIGGERS = (
     "maps/",
     "configs/scenarios/",
     "configs/benchmarks/",
-    "robot_sf/benchmark/map_runner/",
-    "robot_sf/benchmark/camera_ready/",
-    "robot_sf/benchmark/snqi/",
+    # Covers both physical row producers, their compatibility wrappers, episode
+    # schemas/types and campaign accounting. None may bypass receipt admission.
+    "robot_sf/benchmark/",
 )
 BEHAVIOUR_FILES = {
     "robot_sf/benchmark/metrics.py",
@@ -155,9 +155,29 @@ def validate_receipt(
         len(keys) == len(set(keys)) and set(keys) == expected,
         "omitted or duplicate arm/map/development-seed coverage",
     )
+    from robot_sf.benchmark.algorithm_metadata import (
+        canonical_algorithm_name,
+        enrich_algorithm_metadata,
+    )
+
     new = {}
     for row in rows:
-        _require(not row["fallback"], "fallback or degraded execution cannot satisfy the receipt")
+        expected_algo = canonical_algorithm_name(
+            scope.get("arm_algorithms", {}).get(row["arm"], row["arm"])
+        )
+        _require(row["algorithm"] == expected_algo, "row algorithm differs from reviewed arm")
+        profile = enrich_algorithm_metadata(algo=expected_algo)["planner_kinematics"]
+        required_mode = "native" if profile["supports_native_commands"] else "adapter"
+        _require(
+            row["execution_mode"] == required_mode
+            and (profile["supports_native_commands"] or profile["supports_adapter_commands"]),
+            "command execution mode does not satisfy the algorithm registry",
+        )
+        _require(row["controller_executed"], "intended solver/controller did not execute")
+        _require(
+            not row["fallback"] and not row["degraded"],
+            "fallback or degraded execution cannot satisfy the receipt",
+        )
         key = _key(row)
         if row["baseline_success"] and not row["success"]:
             new[(*key, "success_to_failure")] = 1
@@ -238,6 +258,11 @@ def check_receipt(body: str, changed_files: list[str], repo: str) -> list[str]:
     matches = re.findall(r"<!--\s*behaviour-change-receipt:v1\s*\n(.*?)-->", body, re.DOTALL)
     if len(matches) != 1:
         return ["BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"]
+    if not SCOPE_PATH.is_file():
+        return [
+            "BLOCKER: reviewed scope inventory is not installed; merge the release "
+            "integration owner's inventory before enabling this gate"
+        ]
     import jsonschema
 
     try:

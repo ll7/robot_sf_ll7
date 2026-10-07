@@ -455,8 +455,6 @@ _LEGACY_FAST_FILES = {
     "test_run_camera_ready_benchmark.py",
     "test_scenario_thumbnails.py",
     "test_ecosystem_contract.py",
-    # Browser admission and CI runtime setup are deterministic, without simulation.
-    "test_browser_runtime_admission.py",
     "test_snqi_context_reference_policy_fields.py",
     "test_snqi_execution_context.py",
     "test_snqi_context_fix_round.py",

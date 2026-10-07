@@ -1,5 +1,6 @@
 """Deterministic admission and cleanup at the browser and child boundaries."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,14 +20,15 @@ def test_browser_runtime_checks_supported_version(monkeypatch, version):
 
 
 def test_child_completion_and_hang_cleanup(tmp_path):
+    from tests.dev.test_pr_ready_preflight import _wait_for_process_exit
     from tests.support.subprocess_events import capture_completion
 
     result = capture_completion([sys.executable, "-c", 'print("ready")'])
     assert result.returncode == 0 and result.stdout.strip() == "ready"
-    with pytest.raises(subprocess.TimeoutExpired):
-        capture_completion(
-            [sys.executable, "-c", "import time; time.sleep(120)"], hang_guard_seconds=0.1
-        )
+    with pytest.raises(subprocess.TimeoutExpired) as exc_info:
+        capture_completion(["sh", "-c", "sleep 120 & echo $!; wait"], hang_guard_seconds=1)
+    grandchild_pid = int(exc_info.value.output.strip())
+    _wait_for_process_exit(grandchild_pid)
 
 
 @pytest.mark.parametrize("ci_flag", ["CI", "GITHUB_ACTIONS"])
@@ -90,6 +92,14 @@ def test_browser_ci_jobs_install_declared_node_before_tests():
 
 
 ROOT = Path(__file__).resolve().parents[2]
+BROWSER_WITNESSES = (
+    "tests/render/test_audit_workbench.py::test_browser_controller_runtime_covers_normal_and_missing_media_cases",
+    "tests/render/test_audit_workbench.py::test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics",
+    "tests/render/test_review_editor.py::test_python_generated_model_can_save_storyboard_in_browser_runtime",
+    "tests/render/test_review_editor.py::test_node_browser_controller_honours_typing_shortcut_suppression",
+    "tests/render/test_review_sessions.py::test_node_browser_runtime_is_offline_and_has_no_implicit_start",
+    "tests/test_review_workbench.py::test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime",
+)
 SETUP_CALLS = [
     (path.name, job_name, job)
     for path in sorted((ROOT / ".github/workflows").glob("*.y*ml"))
@@ -115,11 +125,44 @@ def test_ci_node_opt_in_matches_browser_test_execution(workflow_name, job_name, 
         "tests/test_review_workbench.py",
     )
     steps = job["steps"]
+    if workflow_name == "ci.yml" and job_name == "fast-feedback":
+        # Shards still run Python assertions; the hosted lane owns Node witnesses.
+        deselections = job.get("env", {}).get("PYTEST_ADDOPTS", "").split()
+        assert set(deselections) == {f"--deselect={nodeid}" for nodeid in BROWSER_WITNESSES}
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        browser_job = workflow["jobs"]["browser-witnesses"]
+        assert browser_job["runs-on"] == "ubuntu-latest"
+        assert browser_job["needs"] == "dispatch-ownership"
+        assert browser_job["if"] == job["if"]
+        assert "browser-witnesses" in workflow["jobs"]["ci"]["needs"]
+        aggregate = next(
+            step
+            for step in workflow["jobs"]["ci"]["steps"]
+            if step.get("name") == "Check split job results"
+        )
+        assert (
+            aggregate["env"]["BROWSER_WITNESSES_RESULT"] == "${{ needs.browser-witnesses.result }}"
+        )
+        guard = aggregate["run"].split("python scripts/dev/check_ci_needs.py", 1)[0]
+        for result in ("success", "failure", "skipped", "cancelled", ""):
+            completed = subprocess.run(
+                ["bash", "-e", "-c", guard],
+                env={**os.environ, "BROWSER_WITNESSES_RESULT": result},
+                check=False,
+            )
+            assert (completed.returncode == 0) == (result in {"success", "cancelled"})
+        checkout = browser_job["steps"][0]["with"]
+        assert "github.event.pull_request.head.sha" in checkout["ref"]
+        commands = "\n".join(step.get("run", "") for step in browser_job["steps"])
+        assert "uv run pytest" in commands
+        assert all(nodeid in commands for nodeid in BROWSER_WITNESSES)
     test_indexes = [
         i
         for i, step in enumerate(steps)
         if any(route in step.get("run", "") for route in browser_routes)
     ]
+    if workflow_name == "ci.yml" and job_name == "fast-feedback":
+        test_indexes = []
     setup_indexes = [
         i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/setup-ci-python"
     ]

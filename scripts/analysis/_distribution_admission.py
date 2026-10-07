@@ -16,6 +16,7 @@ def admit(  # noqa: C901, PLR0912 - independent source, schema and coverage gate
     successor_manifest_sha256: str,
     successor_source_root: Path,
     diagnostic_partial: bool = False,
+    snqi_v2_anchors: Path | None = None,
 ) -> tuple[dict, dict, dict]:
     """Read verified release rows; diagnostics relax coverage only, never binding."""
     successor_payload = json.loads(successor_manifest.read_text())
@@ -48,7 +49,11 @@ def admit(  # noqa: C901, PLR0912 - independent source, schema and coverage gate
         )
     else:
         verified = admission._verified_successor_manifest(
-            successor_manifest, successor_manifest_sha256, successor_source_root, new
+            successor_manifest,
+            successor_manifest_sha256,
+            successor_source_root,
+            new,
+            snqi_v2_anchors=snqi_v2_anchors,
         )
     identity = admission._root_identity(successor_root, verified)
     expected = verified["expected_slots"]
@@ -113,6 +118,7 @@ def admit(  # noqa: C901, PLR0912 - independent source, schema and coverage gate
         old,
         new,
         {
+            "tooling": admission._tooling_identity(),
             "baseline": {
                 "path": str(baseline_bundle),
                 "sha256": digest,

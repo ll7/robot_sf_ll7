@@ -425,9 +425,7 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
 
     assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
     assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 6
-    assert (
-        "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
-    )
+    assert fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"] == "1"
     assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
     coverage_core = workflow["env"]["COVERAGE_CORE"]
@@ -458,16 +456,7 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     changed_coverage_run = "\n".join(
         str(step.get("run", "")) for step in changed_coverage_gate["steps"]
     )
-    routing_step = next(
-        step
-        for step in changed_coverage_gate["steps"]
-        if step.get("name") == "Audit changed fast-lane routing"
-    )
-    assert "scripts/dev/check_fast_lane_routing.py" in routing_step["run"]
-    assert '"$BASE_SHA"' in routing_step["run"]
-    assert '"$HEAD_SHA"' in routing_step["run"]
-    assert "github.event.pull_request.base.sha" in routing_step["env"]["BASE_SHA"]
-    assert "github.event.pull_request.head.sha" in routing_step["env"]["HEAD_SHA"]
+    assert "scripts/dev/check_fast_lane_routing.py" not in changed_coverage_run
     assert '--base-sha "$BASE_SHA"' in changed_coverage_run
     assert '--head-sha "$HEAD_SHA"' in changed_coverage_run
     assert "--json-output output/coverage/changed-coverage-result.json" in changed_coverage_run

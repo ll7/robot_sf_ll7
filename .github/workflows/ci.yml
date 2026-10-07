@@ -64,6 +64,8 @@ jobs:
       - name: Checkout gate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Elect exact-head full-matrix owner
@@ -178,6 +180,25 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+      - name: Prepare conservative test admission
+        if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/affected_test_selection.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --json-output output/ci/affected-selection.json --format mode
+
+      - name: Upload conservative test admission
+        if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: conservative-test-admission
+          path: output/ci/affected-selection.json
+          if-no-files-found: error
+
   fast-feedback:
     needs: dispatch-ownership
     if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
@@ -189,9 +210,8 @@ jobs:
       contents: read
       actions: read
     timeout-minutes: 45
-    # Split every event across six runners. Pull requests retain their fast-only
-    # shards; all events publish unique coverage data so the exact-head changed-
-    # coverage gate can prove the final PR head before merge admission.
+    # Split complete admission across six runners and combine exact-head coverage.
+    # Uncertain dependencies intentionally select every slow test on pull requests.
     strategy:
       fail-fast: false
       matrix:
@@ -201,7 +221,10 @@ jobs:
       PYTEST_XDIST_DIST: worksteal
       PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
-      ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
+      ROBOT_SF_SHARD_INCLUDE_SLOW: "1"
+      # Reuse the setup decision only after default admission is installed.
+      ROBOT_SF_AFFECTED_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      ROBOT_SF_AFFECTED_SELECTION_FILE: ${{ github.event_name == 'pull_request' && 'output/ci/affected-selection.json' || '' }}
       ROBOT_SF_PYTEST_COVERAGE: "1"
       COVERAGE_FILE: ${{ format('output/coverage/.coverage.{0}', matrix.shard) }}
       # The release-hydration tests invoke `gh` for a public pinned asset. Use
@@ -219,6 +242,13 @@ jobs:
           # ``dangling_commit`` findings and makes main CI environment-dependent.
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Download conservative test admission
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: conservative-test-admission
+          path: output/ci
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -326,16 +356,6 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
-
-      - name: Audit changed fast-lane routing
-        env:
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
-          uv run python scripts/dev/check_fast_lane_routing.py \
-            --base-sha "$BASE_SHA" \
-            --head-sha "$HEAD_SHA"
 
       - name: Download coverage shards
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

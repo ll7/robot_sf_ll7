@@ -624,6 +624,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-bundle", type=Path, required=True)
     parser.add_argument("--successor-root", type=Path, required=True)
+    parser.add_argument("--expected-tooling-commit", help="Exact clean main tooling checkout SHA")
+    parser.add_argument("--snqi-v2-anchors", type=Path)
     parser.add_argument("--successor-manifest", type=Path, required=True)
     parser.add_argument("--successor-manifest-sha256", required=True)
     parser.add_argument("--successor-source-root", type=Path, required=True)
@@ -637,12 +639,16 @@ def main() -> int:
     from scripts.analysis._distribution_admission import admit
 
     try:
+        from scripts.analysis.compare_release_0_0_7_to_0_0_8 import _tooling_identity
+
+        _tooling_identity(args.expected_tooling_commit)
         old, new, provenance = admit(
             args.baseline_bundle,
             args.successor_root,
             successor_manifest=args.successor_manifest,
             successor_manifest_sha256=args.successor_manifest_sha256,
             successor_source_root=args.successor_source_root,
+            snqi_v2_anchors=args.snqi_v2_anchors,
             diagnostic_partial=args.diagnostic_partial,
         )
         report = compare_samples(

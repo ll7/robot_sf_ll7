@@ -115,12 +115,23 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
     if importlib.util.find_spec("stable_baselines3") is None:
         pytest.skip("Stable-Baselines3 is not installed")
 
+    thread_caps = {
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+    }
     probe = subprocess.run(
         [
             sys.executable,
             "-c",
             (
-                "import gymnasium as gym; import os, sys, importlib.util; import robot_sf.models; "
+                "import gymnasium as gym; import os, sys, importlib.util; "
+                "assert os.environ.get('OMP_NUM_THREADS') == '1'; "
+                "assert os.environ.get('MKL_NUM_THREADS') == '1'; "
+                "assert os.environ.get('OPENBLAS_NUM_THREADS') == '1'; "
+                "assert os.environ.get('NUMEXPR_NUM_THREADS') == '1'; "
+                "import robot_sf.models; "
                 "assert os.environ.get('TORCH_COMPILE_DISABLE') == '1'; "
                 "assert importlib.util.find_spec('triton') is None or 'triton' in sys.modules; "
                 "from stable_baselines3 import PPO; "
@@ -133,8 +144,9 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
         capture_output=True,
         text=True,
         timeout=60,
+        env={**os.environ, **thread_caps},
     )
-    assert probe.returncode == 0, probe.stderr
+    assert probe.returncode == 0, f"stdout:\n{probe.stdout}\nstderr:\n{probe.stderr}"
 
 
 def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):
@@ -304,3 +316,30 @@ def test_torch_213_cuda_seed_is_reproducible_across_calls():
     b = torch.randn(4, 4, device="cuda")
 
     assert torch.equal(a, b)
+
+
+def test_startup_probe_overrides_inherited_thread_counts(monkeypatch):
+    """The child starts bounded even when the parent allows eight BLAS threads."""
+    thread_names = (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    )
+    for name in thread_names:
+        monkeypatch.setenv(name, "8")
+    monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: object())
+    calls = []
+
+    def capture_probe(args, **kwargs):
+        calls.append(args)
+        child_env = kwargs.get("env", os.environ)
+        assert {name: child_env[name] for name in thread_names} == dict.fromkeys(thread_names, "1")
+        assert kwargs["timeout"] == 60
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", capture_probe)
+    test_model_package_preloads_torch_runtime_before_direct_ppo_import()
+    assert len(calls) == 1
+    assert "model.policy.optimizer is not None" in calls[0][2]

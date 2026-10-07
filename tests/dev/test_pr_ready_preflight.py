@@ -2684,6 +2684,64 @@ def test_valid_base_ref_is_used_unchanged(preflight_repo: Path) -> None:
     assert "Attempting git fetch" not in result.stderr
 
 
+@pytest.mark.parametrize("behind_base", [False, True])
+def test_final_pr_contract_check_receives_merge_base_budget_sha(
+    preflight_repo: Path,
+    behind_base: bool,
+) -> None:
+    """Budget accounting excludes base-only changes when the feature is behind."""
+    _make_fake_bin(preflight_repo, fail=False)
+    _git(preflight_repo, "update-ref", "refs/heads/preflight-base", "HEAD")
+
+    changed_test = preflight_repo / "tests" / "unit" / "test_budget_base.py"
+    changed_test.parent.mkdir(parents=True, exist_ok=True)
+    changed_test.write_text("print('budget base integration')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "budget base integration")
+
+    expected_base_sha = subprocess.run(
+        ["git", "rev-parse", "preflight-base"],
+        cwd=preflight_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if behind_base:
+        _git(preflight_repo, "checkout", "-q", "preflight-base")
+        base_only = preflight_repo / "base-only.txt"
+        base_only.write_text("base-only change\n" * 500, encoding="utf-8")
+        _git(preflight_repo, "add", "base-only.txt")
+        _git(preflight_repo, "commit", "-q", "-m", "advance base without feature")
+        _git(preflight_repo, "checkout", "-q", "-")
+
+    args_log = preflight_repo / ".home" / "pr-contract-args.log"
+    fake_uv = preflight_repo / "bin" / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$*" == *"pr_contract_check.py"* ]]; then\n'
+        '  printf "%s\\n" "$*" >> "$PR_CONTRACT_ARGS_LOG"\n'
+        "fi\n"
+        'if [[ "$1" == "run" ]]; then shift; exec "$@"; fi\n'
+        f'exec "{shutil.which("uv") or "uv"}" "$@"\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={
+            "BASE_REF": "preflight-base",
+            "PR_READY_MODE": "final",
+            "PR_CONTRACT_ARGS_LOG": str(args_log),
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    args = args_log.read_text(encoding="utf-8")
+    assert "pr_contract_check.py" in args
+    assert f"--budget-base-sha {expected_base_sha}" in args
+
+
 def test_preflight_passes_when_modules_available(preflight_repo: Path) -> None:
     """Preflight should pass silently when python reports no missing modules."""
     _make_fake_bin(preflight_repo, fail=False)

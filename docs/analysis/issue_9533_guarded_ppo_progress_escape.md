@@ -1,5 +1,16 @@
 # Issue #9533: RiskDWA progress-escape diagnostic
 
+## Reproducibility status
+
+**Blocked for independent numerical reuse.** The raw rows, traces and analysis inputs
+named below are not available from a fresh clone or a durable external bundle.
+Until the evidence owner supplies a retrievable checksum-bound bundle with the
+analysis script and source/config identities, every numerical statement below
+remains an unrecomputed historical diagnostic. It may not justify a treatment,
+release gate, ranking or downstream scientific claim. This repair does not
+regenerate the historical evaluation runs. Fresh development sweeps are separate
+source-bound evidence and cannot repair historical custody retrospectively.
+
 ## Claim boundary
 
 This is a bounded local diagnostic, not benchmark-success, safety, release, paper, or dissertation evidence. Both guarded arms completed the paired rows and traces, but the canonical runner failed their admission because `guard_stats.fallback_safe` was positive. The raw PPO control was available. The frozen progress-escape candidate did not change any paired episode outcome and never selected an escape command. The issue remains open for a different minimal guard variant.

@@ -1029,3 +1029,9 @@ def test_progress_escape_status_tracks_infeasible_recovery_selection(monkeypatch
     assert status["status"] == "selected"
     assert status["reason"] == "infeasible_recovery_rank_better"
     assert planner.diagnostics()["recovery_kind"] == "progress_escape"
+    # Infeasible ranking sentinels must never enter public JSON diagnostics.
+    import json
+
+    json.dumps(status, allow_nan=False)
+    assert status["candidate_score"] is None
+    assert status["candidate_score_status"] == "infeasible"

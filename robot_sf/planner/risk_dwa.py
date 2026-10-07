@@ -659,7 +659,17 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_escape["status"] = "evaluated_but_not_selected"
             progress_escape["reason"] = "candidate_score_not_better"
             progress_escape["candidate_command"] = [escape_v, escape_w]
-            progress_escape["candidate_score"] = float(escape_score)
+            # Ranking uses -inf for infeasible rollouts; public diagnostics must
+            # remain strict JSON while retaining the reason no score is available.
+            finite_score = bool(np.isfinite(escape_score))
+            progress_escape["candidate_score"] = float(escape_score) if finite_score else None
+            progress_escape["candidate_score_status"] = (
+                "finite"
+                if finite_score
+                else "infeasible"
+                if escape_score == float("-inf")
+                else "non_finite"
+            )
             if escape_score > best_score:
                 best_score = escape_score
                 best_cmd = (escape_v, escape_w)

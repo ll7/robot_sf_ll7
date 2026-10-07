@@ -218,3 +218,74 @@ def test_issue_9533_campaign_configs_freeze_paired_dev_eval_design() -> None:
     assert "paper_eval_s30" not in (
         benchmark_root / "issue_9533_guarded_ppo_progress_escape.yaml"
     ).read_text(encoding="utf-8")
+
+
+def test_infeasible_escape_is_strict_json_through_guard_and_trace_writer(monkeypatch):
+    """Run real RiskDWA fallback, guard serialization and the production trace writer."""
+    import io
+    import json
+
+    from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
+    from robot_sf.planner.guarded_ppo import GuardedPPOAdapter, build_guarded_ppo_config
+    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
+
+    fallback = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(linear_candidates=(0.0,), angular_candidates=(0.0,))
+    )
+    # The scorer legitimately returns -inf when every rollout is infeasible.
+    monkeypatch.setattr(fallback, "_rollout_score", lambda **kwargs: float("-inf"))
+    monkeypatch.setattr(
+        fallback, "_infeasible_command_rank", lambda command, **kwargs: (command[0], 0.0)
+    )
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 2.5,
+                "guard_hard_ped_clearance": 0.45,
+                "guard_first_step_ped_clearance": 0.55,
+            }
+        ),
+        fallback_adapter=fallback,
+    )
+    observation = {
+        "robot": {
+            "position": np.array([0.0, 0.0]),
+            "heading": np.array([0.0]),
+            "speed": np.array([0.2]),
+        },
+        "goal": {"current": np.array([3.0, 0.0]), "next": np.array([3.0, 0.0])},
+        "pedestrians": {
+            "positions": np.array([[0.58, 0.0]]),
+            "velocities": np.array([[0.0, 0.0]]),
+            "count": np.array([1.0]),
+        },
+    }
+    decision = guard.choose_command_decision(observation, (0.6, 0.0)).to_metadata()
+    assert decision["intervened"] is True
+    diagnostics = decision["fallback_controller_state"]["planner_diagnostics"]
+    assert diagnostics["reason"] == "infeasible_recovery_rank_better"
+    state = SimpleNamespace(
+        goal_vec=np.array([3.0, 0.0]), initial_goal_distance=3.0, planner_decision_trace=[]
+    )
+    _step_build_planner_decision_entry(
+        state,
+        SimpleNamespace(record_planner_decision_trace=True),
+        step_idx=0,
+        sim=SimpleNamespace(robot_pos=np.array([0.0, 0.0]), planner_step_decision=decision),
+    )
+    # Validate strict JSON at the full retained trace boundary, then exercise the
+    # actual JSONL append (the fixture schema intentionally isolates this payload).
+    record = {"algorithm_metadata": {"planner_decision_trace": state.planner_decision_trace}}
+    json.dumps(record, allow_nan=False)
+    handle = io.StringIO()
+    write_validated_to_handle(handle, {"type": "object"}, record)
+
+    def reject_constant(value):
+        raise ValueError(f"non-standard JSON constant: {value}")
+
+    saved = json.loads(handle.getvalue(), parse_constant=reject_constant)
+    saved_diag = saved["algorithm_metadata"]["planner_decision_trace"][0]["safety_guard"][
+        "fallback_controller_state"
+    ]["planner_diagnostics"]
+    assert saved_diag["candidate_score"] is None
+    assert saved_diag["candidate_score_status"] == "infeasible"

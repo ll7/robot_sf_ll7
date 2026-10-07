@@ -235,9 +235,16 @@ OUTPUT = Path('docs/context/evidence/example')
 OUTPUT.joinpath('report.md').write_text('# report', encoding='utf-8')
 """,
     )
-    from scripts.ci.pr_contract_check import run_all_checks
+    from scripts.ci.pr_contract_check import PRDiffBases, run_all_checks
 
-    blockers, _, _ = run_all_checks("", "", [str(path)], "ll7/robot_sf_ll7", "origin/main", None)
+    blockers, _, _ = run_all_checks(
+        "",
+        "",
+        [str(path)],
+        "ll7/robot_sf_ll7",
+        PRDiffBases("origin/main"),
+        None,
+    )
     assert any("evidence-writer" in blocker for blocker in blockers)
 
 

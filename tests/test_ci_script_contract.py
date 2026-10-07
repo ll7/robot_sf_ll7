@@ -49,6 +49,8 @@ from scripts.dev.check_ci_needs import (
 )
 from tests.support.environment_guards import configure_git_identity
 
+pytestmark = pytest.mark.usefixtures("isolated_ci_wrapper_environment")
+
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
@@ -1114,6 +1116,9 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     assert "-n 2" in calls[0]
     expected_dist = "worksteal" if shard_count > 1 else "load"
     assert f"--dist {expected_dist}" in calls[0]
+    assert calls[1].split()[2].startswith("-")
+    assert "-p timeout --timeout=300" in calls[1]
+    assert "tests/dev" in calls[1]
     padded_serial_call = f" {calls[1]} "
     assert " -n " not in padded_serial_call
     assert " --dist " not in padded_serial_call

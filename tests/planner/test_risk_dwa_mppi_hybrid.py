@@ -267,7 +267,7 @@ def test_risk_dwa_progress_escape_call_status_and_legacy_plan_output() -> None:
 
 def test_mppi_is_deterministic_for_fixed_seed() -> None:
     """Two planners with same seed should produce identical action on same observation."""
-    cfg = MPPISocialConfig(random_seed=7, sample_count=24, iterations=2, horizon_steps=5)
+    cfg = MPPISocialConfig(random_seed=1001, sample_count=24, iterations=2, horizon_steps=5)
     p1 = MPPISocialPlannerAdapter(cfg)
     p2 = MPPISocialPlannerAdapter(cfg)
     o = _obs(ped_positions=[(0.6, 0.2), (0.8, -0.1)], ped_velocities=[(0.0, 0.0), (0.0, 0.0)])
@@ -285,7 +285,7 @@ def test_mppi_ttc_computation_emits_no_divide_warning() -> None:
     """
     import warnings
 
-    cfg = MPPISocialConfig(random_seed=7, sample_count=24, iterations=2, horizon_steps=5)
+    cfg = MPPISocialConfig(random_seed=1001, sample_count=24, iterations=2, horizon_steps=5)
     planner = MPPISocialPlannerAdapter(cfg)
 
     o = _obs(
@@ -400,7 +400,11 @@ def test_mppi_obstacle_clearance_accepts_precomputed_grid_without_observation(mo
 def test_mppi_progress_escape_breaks_stall() -> None:
     """MPPI should inject progress command when first action is too conservative."""
     cfg = MPPISocialConfig(
-        random_seed=3,
+        random_seed=1003,
+        # Force conservative candidates so the escape assertion does not depend
+        # on a particular sampled sequence or an out-of-band historical seed.
+        init_linear_std=0.0,
+        init_angular_std=0.0,
         sample_count=12,
         iterations=1,
         horizon_steps=4,

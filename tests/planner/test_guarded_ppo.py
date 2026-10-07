@@ -588,13 +588,13 @@ def test_guarded_ppo_propagates_child_adapter_lifecycle_hooks() -> None:
     env = object()
 
     guard.bind_env(env)
-    guard.reset(seed=7)
+    guard.reset(seed=1001)
     guard.close()
 
     assert fallback.bound_envs == [env]
     assert prior.bound_envs == [env]
-    assert fallback.reset_seeds == [7]
-    assert prior.reset_seeds == [7]
+    assert fallback.reset_seeds == [1001]
+    assert prior.reset_seeds == [1001]
     assert fallback.closed
     assert prior.closed
 

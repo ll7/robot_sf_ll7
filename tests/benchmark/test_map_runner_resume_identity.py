@@ -40,7 +40,7 @@ def test_resume_identity_is_algorithm_aware(
         identity_payload = map_runner._scenario_identity_payload(
             scenario,
             algo=str(params.get("algo", "goal")),
-            algo_config=dict(params.get("algo_config", {})),
+            algo_config=dict(params.get("algo_config") or {}),
             horizon=params.get("horizon"),
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
@@ -340,7 +340,7 @@ def test_resume_identity_includes_algo_config_hash(
         identity_payload = map_runner._scenario_identity_payload(
             scenario,
             algo=str(params.get("algo", "goal")),
-            algo_config=dict(params.get("algo_config", {})),
+            algo_config=dict(params.get("algo_config") or {}),
             horizon=params.get("horizon"),
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
@@ -616,7 +616,7 @@ def test_resume_identity_uses_effective_latency_profile_dt(
         identity_payload = map_runner._scenario_identity_payload(
             scenario,
             algo=str(params.get("algo", "goal")),
-            algo_config=dict(params.get("algo_config", {})),
+            algo_config=dict(params.get("algo_config") or {}),
             horizon=params.get("horizon"),
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
@@ -736,7 +736,7 @@ def test_resume_identity_uses_identity_benchmark_track(
         identity_payload = map_runner._scenario_identity_payload(
             scenario_payload,
             algo=str(params.get("algo", "goal")),
-            algo_config=dict(params.get("algo_config", {})),
+            algo_config=dict(params.get("algo_config") or {}),
             horizon=params.get("horizon"),
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),

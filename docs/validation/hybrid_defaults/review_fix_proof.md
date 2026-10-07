@@ -3,7 +3,7 @@
 Diagnostic-only. Before-fix head: `fcadacd13f71902635fc7008960aa17c2d95e75c`.
 The all-on author choice remains unchanged. The baseline snapshots were captured
 from immutable main `9d8dac2a140f00dadf2c8c2621977bcee96c83e0`, without reset/step.
-The newer main changes only the release runbook and its test, not these builders.
+At snapshot capture, the then-newer main changed only the release runbook and its test; this is a historical capture statement, not a claim about later main heads.
 
 ```sh
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybrid_default_review_regressions.py -n 2 -q
@@ -77,3 +77,30 @@ repo-root redaction. They reject representation changes such as integer versus
 float or boolean versus integer, in addition to field/value changes. The base
 fixtures are unchanged. Negative controls that were already correct still pass
 on base; the all-arm test fails for the actual omitted PPO source.
+
+Full validation after the review fixes is recorded in [review_validation.json](review_validation.json):
+**one full invocation, 42,973 passed / 28 failed / 69 skipped / 7 xfailed**.
+The 28 failures are individually classified there. Nineteen sparse planner
+fixtures lacked validity, five separate benchmark proxy/bridge inputs dropped
+or omitted it, and three identity test doubles expected `{}` rather than `None`.
+Those input/contract corrections retain their old regression witnesses.
+The remaining failure is a real current-default static-exclusion mirror risk:
+the historical diagnostic fixture now explicitly pins its original three false
+controls; current-default symmetry is still reported separately to the author.
+
+The affected 12 files pass 210 cases with one expected failure in 123.43 s.
+After narrowing the compact bridge to retain its old current-goal target while
+carrying only the observed validity bit, its final two files pass 22 cases in
+61.93 s. No second full invocation or final-head full-suite pass is claimed.
+
+| Additional corrected family | Bug/witness retained | Gap and before proof | Determinism / real path |
+| --- | --- | --- | --- |
+| Adaptive selector, topology and reverse fixtures (19 failures) | Keep profile selection, topology refusal/fallback/selection and rear-wall rejection assertions. | Sparse inputs omit the enabled sensor; full run raises before those witnesses. | Fixed declared successor; real adapters/evaluator; no production seam. |
+| Goal-posterior proxy, compact native bridge and native-command reconstruction (5 failures) | Keep posterior consumption, native command/geometry response and real runner witnesses. | Proxy input omits declared validity; compact bridge loses actual navigator validity; native reconstruction drops supplied validity. | Proxy declares its successor; real bridge reads navigator only when the sensor is enabled; RPC copies only supplied validity. Missing input still fails closed. |
+| Resume identity doubles (3 failures) | Preserve algorithm/dt/track identity separation and written-row assertions. | `dict(None)` fails before identity assertions after absence is preserved. | Deterministic real batch dispatch and identity encoder; optional mapping normalized only in test doubles. |
+| Historical diagnostic mirror fixture | Preserve original reflected trace/outcome assertions at 0.1 mm, with original controls now explicit. | Missing control pins let new defaults change its diagnostic premise. The full run records a real new-default failure, retained as author evidence. | Real simulator, drive and planner; original test seed unchanged. Separate 15-episode dev1001 probe checks every switch in native typed configs. |
+
+The separate [mirror probe](mirror_switch_probe.json.gz) checks static attribution:
+static-only and all-on fail both reflections (maximum 0.374 m); all-off, sensor-only
+and validity with sensor meet 0.1 mm. It is a synthetic diagnostic scene, not an
+additional standard-scenario outcome denominator.

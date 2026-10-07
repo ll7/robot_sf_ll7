@@ -266,3 +266,10 @@ redaction. Config-less release identities cover 59 arms; unknown hybrid inputs
 remain current. No released learned observation space changes. The two new
 validity-arm seed-1026 scorer livelocks remain explicitly reported for the author;
 the hard terminal-stop fix does not claim to resolve every preferred-stop decision.
+
+Final review validation: [once-only full run and failure classifications](review_validation.json),
+followed by 210 passing focused cases (one expected failure) and 22 passing final
+compact-bridge cases. The full run itself failed and was not repeated. Static
+exclusion also breaks the separate dev1001 diagnostic mirror relation by up to
+0.374 m; its old controlled fixture remains explicit and the new-default risk
+stays in the author decision brief.

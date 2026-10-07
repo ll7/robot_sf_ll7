@@ -2041,5 +2041,7 @@
       "serialized worker"
     ],
     "required_default_set": "current"
-  }
+  },
+  "full_review_validation": "review_validation.json",
+  "separate_mirror_switch_evidence": "mirror_switch_probe.json.gz"
 }

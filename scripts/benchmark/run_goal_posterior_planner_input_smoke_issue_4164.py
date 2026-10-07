@@ -109,7 +109,7 @@ def _observation(
             "speed": np.asarray([speed], dtype=float),
             "radius": np.asarray([0.25], dtype=float),
         },
-        "goal": {"current": goal.copy(), "next": goal.copy()},
+        "goal": {"current": goal.copy(), "next": goal.copy(), "next_valid": [1.0]},
         "pedestrians": {
             "positions": ped_positions.copy(),
             "velocities": ped_velocities.copy(),

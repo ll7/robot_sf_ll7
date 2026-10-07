@@ -594,3 +594,9 @@ Additional enforcing test: `test_unknown_configless_hybrid_on_released_assets_us
 which runs the actual direct episode and serialized worker. The registry binds
 25 reviewed config-less identities; all 183 full environment dumps and all nine
 frozen planner dumps retain their base bytes after root redaction.
+
+Additional review validation: the once-only full suite records 28 classified
+failures; focused input/bridge corrections pass. A separate dev1001 mirror
+probe isolates another static-exclusion consequence: 100 and 111 deviate by
+up to 0.374 m, while 000, 001 and 011 meet 0.1 mm. This remains author decision
+evidence, not an amendment of the all-on ruling or release admission.

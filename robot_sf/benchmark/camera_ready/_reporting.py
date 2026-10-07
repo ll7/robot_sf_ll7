@@ -8,6 +8,7 @@ existing imports.
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -1442,9 +1443,10 @@ def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -
         )
 
     if not any("snqi_mean" in row for row in rows):
+        score_column = re.split(r"(?<!\\)\|", lines[table_start]).index(" snqi ")
         for index in range(table_start, len(lines)):
-            cells = lines[index].split("|")
-            del cells[12]
+            cells = re.split(r"(?<!\\)\|", lines[index])
+            del cells[score_column]
             lines[index] = "|".join(cells)
 
 

@@ -51,6 +51,8 @@ PROTECTED_PATHS = (
     "robot_sf/baselines",
     "robot_sf/policy",
     "robot_sf/benchmark/metrics.py",
+    "robot_sf/benchmark/constants.py",
+    "robot_sf/benchmark/metric_definitions.py",
     "robot_sf/benchmark/snqi/v2_spec.py",
     "robot_sf/benchmark/snqi/v2_calibration.py",
 )

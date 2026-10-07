@@ -267,6 +267,33 @@ def writable_headless_caches(
                 os.environ[key] = value
 
 
+@pytest.fixture
+def isolated_ci_wrapper_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let shell-contract fixtures own wrapper inputs instead of the hosting job.
+
+    Keep CI/runner identity intact so hosted-only behavior remains exercised.
+    Each test can set the worker, shard, CUDA and selection inputs it needs.
+    """
+    for key in (
+        "PYTEST_ADDOPTS",
+        "PYTEST_NUM_WORKERS",
+        "PYTEST_XDIST_DIST",
+        "PYTEST_FAST_FAIL",
+        "PYTEST_ORDER_MODE",
+        "PYTEST_SHARD_COUNT",
+        "PYTEST_SHARD_INDEX",
+        "ROBOT_SF_SHARD_INCLUDE_SLOW",
+        "ROBOT_SF_TEST_LANE",
+        "ROBOT_SF_CUDA_RUNTIME_STATUS",
+        "ROBOT_SF_AFFECTED_BASE_REF",
+        "ROBOT_SF_AFFECTED_SELECTION_FILE",
+        "ROBOT_SF_AFFECTED_TEST_PATHS",
+        "ROBOT_SF_PYTEST_COVERAGE",
+        "PR_READY_SERIAL_FALLBACK",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
     """Ensure torch deterministic algorithms aren't forced across the suite."""
@@ -389,7 +416,8 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
 _SLOW_SAMPLES: list[tuple[str, float]] = []
 
 
-_FAST_PATH_FRAGMENTS = (
+# Retain main's registrations as historical data; explicit markers now own slow admission.
+_LEGACY_FAST_PATH_FRAGMENTS = (
     "tests/common/",
     "tests/contract/",
     "tests/factories/",
@@ -400,7 +428,7 @@ _FAST_PATH_FRAGMENTS = (
     "tests/training/",
     "tests/unit/",
 )
-_FAST_FILE_PREFIXES = (
+_LEGACY_FAST_FILE_PREFIXES = (
     "test_action_adapters",
     "test_campaign_arm_admission",
     "test_config_validation",
@@ -412,7 +440,7 @@ _FAST_FILE_PREFIXES = (
     "test_seed_utils",
     "test_types",
 )
-_FAST_FILES = {
+_LEGACY_FAST_FILES = {
     # Call-scoped planner status contracts use deterministic synthetic observations.
     "test_risk_dwa_mppi_hybrid.py",
     # Force validity reduction checks use small fixed NumPy arrays.
@@ -1320,7 +1348,7 @@ _FAST_FILES = {
     # Static trace viewer web asset export contract tests.
     "test_trace_viewer.py",
 }
-_SLOW_FILE_OVERRIDES = {
+_LEGACY_SLOW_FILE_OVERRIDES = {
     # Native research episodes and parallel resume integration run in the full lane.
     "test_emergent_phenomena.py",
     "test_lane_formation_reference.py",
@@ -1428,17 +1456,10 @@ def test_planner(test_map: MapDefinition) -> ClassicGlobalPlanner:
 
 def _should_auto_mark_slow(path_str: str) -> bool:
     """Return True when a test path should be auto-marked as slow."""
-    normalized = path_str.replace("\\", "/")
-    filename = Path(normalized).name
-    if filename in _SLOW_FILE_OVERRIDES:
-        return True
-    if filename in _FAST_FILES:
-        return False
-    if any(fragment in normalized for fragment in _FAST_PATH_FRAGMENTS):
-        return False
-    if any(filename.startswith(prefix) for prefix in _FAST_FILE_PREFIXES):
-        return False
-    return True
+    # Expensive tests declare pytest.mark.slow explicitly. Unregistered files
+    # are admitted by default; duration reports inform later classification.
+    del path_str
+    return False
 
 
 def _configured_test_lane() -> str:
@@ -1487,15 +1508,8 @@ def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ign
     return not _should_collect_in_lane(path_obj.as_posix(), lane)
 
 
-# This shell-driver contract is cheap; the rest of its large file stays in the
-# full suite. Match the exact function and all of its parameter cases.
-_FAST_NODE_IDS = {
-    "tests/test_ci_script_contract.py::test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed",
-}
-
-
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
-    """Auto-mark non-core tests as slow to keep fast unit runs small."""
+    """Admit affected explicit slow tests; all other tests are fast by default."""
     config.addinivalue_line("markers", "affected: test affected by the committed PR diff")
     affected = set(os.environ.get("ROBOT_SF_AFFECTED_TEST_PATHS", "").splitlines())
     root = Path(__file__).resolve().parents[1]
@@ -1508,11 +1522,6 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-d
         )
         if relative in affected:
             item.add_marker(pytest.mark.affected)
-        path_str = str(item.fspath)
-        if item.nodeid.split("[", maxsplit=1)[0] not in _FAST_NODE_IDS and _should_auto_mark_slow(
-            path_str
-        ):
-            item.add_marker(pytest.mark.slow)
 
 
 @pytest.hookimpl(hookwrapper=True)

@@ -35,11 +35,21 @@ STATE_QUALIFIER_LABELS = frozenset(
         "state:needs-artifact-promotion",
         "state:needs-interpretation",
         "state:parked",
+        "state:ready-to-submit",
         "state:review",
+        "state:reviewing",
         "state:working",
     }
 )
 KNOWN_STATE_LABELS = EXECUTION_STATE_LABELS | STATE_QUALIFIER_LABELS
+
+# Live ``state:*`` labels that are deliberately outside the classifier. This is
+# an explicit allowlist of named exclusions, never a wildcard: a genuinely
+# mistyped label must still fail closed. ``state:done`` is a live terminal
+# marker that is only ever applied to pull requests, which
+# ``docs/ai/label-taxonomy.md`` records as intentionally outside the
+# execution-state precedence set.
+DELIBERATELY_UNCLASSIFIED_STATE_LABELS = frozenset({"state:done"})
 
 
 def state_labels(labels: set[str]) -> list[str]:

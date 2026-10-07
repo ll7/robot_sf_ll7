@@ -78,13 +78,15 @@ def test_registered_release_full_dataclasses_and_mapping_match_base(source):
     with defaults_for_source(ROOT / source):
         planner = build_hybrid_rule_local_planner_config(raw)
         env = RobotSimulationConfig()
-    assert _json_ready(asdict(planner)) == SNAPSHOTS[source]
-    assert (
-        _json_ready(asdict(build_hybrid_rule_local_planner_config(raw, source_path=ROOT / source)))
-        == SNAPSHOTS[source]
+    assert json.dumps(_json_ready(asdict(planner)), sort_keys=True) == json.dumps(
+        SNAPSHOTS[source], sort_keys=True
     )
+    assert json.dumps(
+        _json_ready(asdict(build_hybrid_rule_local_planner_config(raw, source_path=ROOT / source))),
+        sort_keys=True,
+    ) == json.dumps(SNAPSHOTS[source], sort_keys=True)
     env_dump = json.dumps(_json_ready(asdict(env)), sort_keys=True).replace(str(ROOT), "<repo>")
-    assert json.loads(env_dump) == SNAPSHOTS["environment"]
+    assert env_dump == json.dumps(SNAPSHOTS["environment"], sort_keys=True)
     assert json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False) == before
     registry = json.loads((ROOT / "robot_sf/common/legacy_hybrid_defaults.json").read_text())
     assert (
@@ -171,7 +173,7 @@ def test_release_scenario_environment_dataclasses_match_full_base_dumps():
         full_dump = json.dumps(_json_ready(asdict(config)), sort_keys=True).replace(
             str(ROOT), "<repo>"
         )
-        assert json.loads(full_dump) == baseline[scenario["name"]]
+        assert full_dump == json.dumps(baseline[scenario["name"]], sort_keys=True)
 
 
 def test_native_episode_records_legacy_and_current_builder_default_sets():

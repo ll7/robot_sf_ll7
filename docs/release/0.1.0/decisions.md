@@ -567,7 +567,7 @@ See 0.0.8 D-080 for the approved decision-record policy; its tooling is a separa
 
 Development evidence for D-023: `docs/validation/hybrid_defaults/README.md` records the full 3,084-episode comparison. Empty-world has no new failures; the crowded matrix gains 32 net successes but introduces one pedestrian contact and 35 newly failing cells. These diagnostics require review and do not admit a release.
 
-Review correction for D-023: enabled terminal-goal tracking now waits for actual
+Review correction for D-023: the hard terminal stop now waits for actual
 navigator completion; missing validity observations fail closed; both typed
 builders share the source selector, and the released-arm registry covers absent
 algorithm inputs and the older PPO source. The author default choice above is
@@ -580,3 +580,17 @@ and `test_every_release_arm_keeps_full_base_environment_and_mapping_dumps` in
 `tests/planner/test_hybrid_default_review_regressions.py`. Per-switch evidence
 will support discussion under the existing reopen clause; diagnostic outcomes
 remain distinct from release admission.
+
+Completed review evidence for D-023: [per-switch decision brief](../../validation/hybrid_defaults/per_switch_decision.md),
+7,200 crowded and 204 empty-world episodes on development seeds, plus 1,440
+first-call configuration errors for literal goal-only. All-off / static / sensor /
+validity with sensor / all-on successes are 1,285 / 1,262 / 1,285 / 1,342 / 1,318
+of 1,440; static and all-on each contact one pedestrian while stationary.
+Narrow-hallway successes are 26 / 5 / 26 / 30 / 5 of 30. Two validity-arm
+seed-1026 preferred-stop livelocks remain for discussion. The reason remains
+**author decision 2026-10-05** and the reopen clause remains
+**author: can still be discussed in more detail**; the default choice is unchanged.
+Additional enforcing test: `test_unknown_configless_hybrid_on_released_assets_uses_current_defaults`,
+which runs the actual direct episode and serialized worker. The registry binds
+25 reviewed config-less identities; all 183 full environment dumps and all nine
+frozen planner dumps retain their base bytes after root redaction.

@@ -1,0 +1,28 @@
+{
+  "evidence_status": "diagnostic-only",
+  "measurement_producer_head": "a24bf6e04f293cce4722da4b34f365606684e0fe",
+  "bound_runtime_and_input_files": 1428,
+  "changed_bound_files": [
+    "robot_sf/common/hybrid_defaults.py",
+    "robot_sf/common/legacy_hybrid_defaults.json",
+    "scripts/validation/run_hybrid_feasibility_diagnostics.py"
+  ],
+  "current_scope_functions_unchanged_ast": [
+    "active_default_policy",
+    "current_switch_default",
+    "defaults_for_source",
+    "has_active_default_policy",
+    "legacy_default_registry",
+    "source_default_policy"
+  ],
+  "direct_diagnostic_ast_unchanged": true,
+  "legacy_source_registry_dictionary_unchanged": true,
+  "configless_arm_count": 59,
+  "configless_identity_count": 25,
+  "explanation": "The comparison and missing-sensor probe scope defaults_for_source(None) and call native builders/policy directly. They do not call run_map_episode or its episode_default_policy decorator. Only that unused decorator and two new unused helpers change the legacy selection path. The diagnostic comment correction has identical AST. Generated package version labels are provenance, not planner/environment controls. All other bound file bytes match the measurement producer.",
+  "final_control_source_hashes": {
+    "robot_sf/common/hybrid_defaults.py": "b8ceb11c4c345886d5f24bcf7fee144cbd4d1893d2eb21e8e0638f035e5f7fd2",
+    "robot_sf/common/legacy_hybrid_defaults.json": "152172c0c6d322842ebd2b7967f6454e89ed5aef3277fa429d332dd7e9eb8790",
+    "scripts/validation/run_hybrid_feasibility_diagnostics.py": "0ced4ecb1b7e0bd5bcb9e437f42422ae519a9506c69419b2fb769771e1c9fd9d"
+  }
+}

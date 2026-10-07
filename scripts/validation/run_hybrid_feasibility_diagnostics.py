@@ -211,7 +211,7 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     scenario = _scenario_with_episode_seed_defaults(dict(scenario, seeds=[seed]), seed=seed)
     if empty:
         scenario = remove_pedestrians(scenario, [seed])
-    # Fixed 60 s comparison budget from #10092, independent of release authored budgets.
+    # Apply the admitted scenario horizon without changing recorded release inputs.
     scenario["simulation_config"] = dict(
         scenario.get("simulation_config") or {}, max_episode_steps=horizon
     )

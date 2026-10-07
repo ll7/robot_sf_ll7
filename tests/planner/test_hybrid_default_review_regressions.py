@@ -178,7 +178,9 @@ def test_every_release_arm_keeps_full_base_environment_and_mapping_dumps():
         source = arm["algo_config_path"] or arm["scenario_matrix"]
         with defaults_for_source(ROOT / source):
             constructor = json.dumps(_json_ready(asdict(RobotSimulationConfig())), sort_keys=True)
-            assert json.loads(constructor.replace(str(ROOT), "<repo>")) == baseline["constructor"]
+            assert constructor.replace(str(ROOT), "<repo>") == json.dumps(
+                baseline["constructor"], sort_keys=True
+            )
             env = build_env_config(scenario, scenario_path=matrix)
             if expected["runtime_status"] == "blocked-unfrozen-source":
                 with pytest.raises(UnfrozenReleaseParametersError):
@@ -202,6 +204,57 @@ def test_every_release_arm_keeps_full_base_environment_and_mapping_dumps():
                 )
                 apply_policy_env_observation_overrides(env, raw)
             dump = json.dumps(_json_ready(asdict(env)), sort_keys=True).replace(str(ROOT), "<repo>")
-            assert json.loads(dump) == expected["environment"], arm["id"]
+            assert dump == json.dumps(expected["environment"], sort_keys=True), arm["id"]
         observed.add(arm["id"])
     assert observed == set(baseline["arms"])
+
+
+def test_unknown_configless_hybrid_on_released_assets_uses_current_defaults():
+    """New algorithm inputs cannot inherit another released arm's missing-field policy."""
+    scenario = load_scenarios(MATRIX)[0]
+    record = run_map_episode(
+        scenario,
+        1001,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="hybrid_rule_local_planner",
+        scenario_path=MATRIX,
+        policy_builder=_build_policy,
+    )
+    assert record["algorithm_metadata"]["hybrid_default_policy"] == {"default_set": "current"}
+    params = build_worker_fixed_params(
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="hybrid_rule_local_planner",
+        raw_policy_cfg={},
+        algo_config_path=None,
+        scenario_path=MATRIX,
+        adapter_impact_eval=False,
+        experimental_ped_impact=False,
+        ped_impact_radius_m=1.0,
+        ped_impact_window_steps=5,
+        noise_spec={"enabled": False},
+        tracking_precision_spec={"enabled": False},
+        batch_observation_mode=None,
+        observation_level=None,
+        benchmark_track=None,
+        track_schema_version=None,
+        actuation_profile_metadata=None,
+        latency_profile_metadata=None,
+        latency_stress_metrics=None,
+        safety_wrapper=None,
+        record_planner_decision_trace=False,
+        record_simulation_step_trace=False,
+    )
+    dispatched = execute_map_job(
+        (scenario, 1001, params),
+        run_map_episode=partial(run_map_episode, policy_builder=_build_policy),
+    )
+    assert params["algo_config"] is None
+    assert dispatched["algorithm_metadata"]["hybrid_default_policy"] == {"default_set": "current"}

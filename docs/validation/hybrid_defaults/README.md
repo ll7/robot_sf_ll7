@@ -21,7 +21,7 @@ refused before execution rather than silently assigned a new contract.
 
 Compatibility lives in typed constructor fill-in. The episode runner selects a
 scoped default set using its original algorithm source path; config-less release
-arms use the registered scenario source. Standalone scenario construction uses the current default unless the caller
+arms use 25 explicit, reviewed scenario/algorithm pairs. An unrecorded algorithm on the same assets receives current defaults. Standalone scenario construction uses the current default unless the caller
 explicitly scopes the execution source through the same default selector as the planner. Direct planner builders can pass `source_path`; direct
 constructors can use `defaults_for_source`. Unknown inputs receive current
 defaults. No key is added to the resolved algorithm mapping, and no frozen YAML
@@ -244,3 +244,25 @@ This runs 7,200 crowded episodes (48 scenarios × dev1001–1030 × five arms)
 and repeats the 204-episode empty-world gate after the fixes. Full step traces
 support every failure/contact classification; stationary pedestrian contacts
 remain collisions. No released or sealed seed is reset or stepped.
+
+## Evidence after the review fixes
+
+The author choice remains all on. The [one-page decision brief](per_switch_decision.md)
+reports the complete 7,404-episode sweep and all 1,440 literal goal-only contract
+errors, with an author recommendation under the reopen clause.
+[All 48 scenario rows and times](per_switch_scenarios.md),
+[full classifications and paired deltas](per_switch_summary.json),
+[lossless episode records](per_switch_episodes.json.gz), and
+[all raw trace identities](per_switch_trace_identities.json.gz) are tracked.
+The measured producer is `a24bf6e04f293cce4722da4b34f365606684e0fe`;
+[applicability proof](measurement_applicability.json) explains the subsequent
+episode-selection correction without relabelling the measurements.
+Raw per-step traces remain preserved outside the worktree.
+
+All ten review bug tests fail on reviewed head and the 33 focused cases pass:
+[proof and four test-value questions](review_fix_proof.md). Full release-arm
+constructor/environment dumps now compare canonical JSON bytes after only root
+redaction. Config-less release identities cover 59 arms; unknown hybrid inputs
+remain current. No released learned observation space changes. The two new
+validity-arm seed-1026 scorer livelocks remain explicitly reported for the author;
+the hard terminal-stop fix does not claim to resolve every preferred-stop decision.

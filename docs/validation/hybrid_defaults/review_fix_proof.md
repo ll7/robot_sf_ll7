@@ -9,10 +9,10 @@ The newer main changes only the release runbook and its test, not these builders
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/planner/test_hybrid_default_review_regressions.py -n 2 -q
 ```
 
-With the changed production files restored to the reviewed head, the same nine
-cases fail for their intended bugs: **9 failed in 8.95s**. Full output:
+With the changed production files restored to the reviewed head, the same ten
+cases fail for their intended bugs: **10 failed in 24.11s**. Full output:
 [review_fix_fail_before.txt](review_fix_fail_before.txt). With fixed production
-bytes: **9 passed in 26.20s**. No test-only production seam was added.
+bytes: **33 passed in 24.79s**, including all ten new cases and all 23 preservation/override cases. No test-only production seam was added.
 All inputs are fixed. The worker-provenance case runs one native step at dev1001;
 other new cases do not reset or step an environment.
 
@@ -40,7 +40,7 @@ guard raises before those unrelated assertions. The 48-scenario preservation
 test explicitly scopes its release source, as a caller of released behavior must;
 otherwise it intentionally describes new-input construction. No new seam or RNG.
 The related three planner/default files pass **95 cases in 20.36s**; the final
-nine-case run additionally checks restored guide tolerance and actual goal completion.
+review regression run additionally checks restored guide tolerance and actual goal completion.
 
 Additional existing fixture corrections: the v4 speed/closed-loop fixtures,
 proxemic-costmap and decomposition characterizations, and two map-runner selector
@@ -60,5 +60,20 @@ Before declaration corrections, the speed/characterization/proxemic files fail
 23 cases at the new missing-sensor guard; after correction all 62 pass. The
 dispatch group initially exposes two selector-fixture omissions and the bridge
 fixture assumption; after correction all 193 pass. These existing tests preserve
-old witnesses and are not presented as new fail-on-base bug tests. The nine new
+old witnesses and are not presented as new fail-on-base bug tests. The ten new
 bug cases still fail on the reviewed head for the defects described above.
+
+The config-less release registry now binds 25 exact scenario/algorithm pairs
+covering all 59 catalogued arms without an algorithm file. A new hybrid using
+those scenario assets remains current. The existing 60 source entries are
+unchanged; their exact bytes/dependencies are still verified.
+
+| Additional test | Behavior / credible bug | Existing gap | Base failure; determinism; real path |
+| --- | --- | --- | --- |
+| `test_unknown_configless_hybrid_on_released_assets_uses_current_defaults` | An unrecorded hybrid arm must use current defaults even on registered scenario assets; a scenario-only fallback disables them. | Prior config-less coverage checks the recorded goal arm and skips a new algorithm on the same assets. | The actual episode records legacy rather than current on reviewed head; fixed dev1001, two sequential native one-step episodes, first direct then through the actual serialized worker. No production seam. |
+
+Full preservation assertions now compare canonical sorted JSON text after only
+repo-root redaction. They reject representation changes such as integer versus
+float or boolean versus integer, in addition to field/value changes. The base
+fixtures are unchanged. Negative controls that were already correct still pass
+on base; the all-arm test fails for the actual omitted PPO source.

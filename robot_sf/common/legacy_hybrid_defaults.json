@@ -365,5 +365,132 @@
       "release": "up-to-0.0.8",
       "sha256": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785"
     }
-  }
+  },
+  "configless_arms": [
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "algo": "orca",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "algo": "sacadrl",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "algo": "social_force",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "algo": "socnav_bench",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "algo": "socnav_sampling",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "algo": "orca",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "algo": "sacadrl",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
+      "algo": "orca",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
+      "algo": "sacadrl",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
+      "algo": "social_force",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
+      "algo": "socnav_sampling",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+      "algo": "orca",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+      "algo": "sacadrl",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+      "algo": "social_force",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+      "algo": "socnav_sampling",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml",
+      "algo": "orca",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml",
+      "algo": "sacadrl",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml",
+      "algo": "socnav_sampling",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    },
+    {
+      "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml",
+      "algo": "goal",
+      "authority": "docs/validation/hybrid_defaults/released_arm_inventory.json"
+    }
+  ]
 }

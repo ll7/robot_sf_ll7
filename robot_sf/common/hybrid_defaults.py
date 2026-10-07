@@ -33,6 +33,38 @@ def legacy_default_registry() -> dict[str, Any]:
     ]
 
 
+@cache
+def legacy_configless_arms() -> frozenset[tuple[str, str]]:
+    """Return reviewed scenario and algorithm identities with no algorithm file.
+
+    Returns:
+        Exact pairs recorded in the release arm inventory.
+    """
+    registry = json.loads(Path(__file__).with_name("legacy_hybrid_defaults.json").read_text())
+    return frozenset((arm["scenario_matrix"], arm["algo"]) for arm in registry["configless_arms"])
+
+
+def configless_release_source(source: str | Path | None, algo: str) -> Path | None:
+    """Recognize a released config-less arm before selecting its verified source.
+
+    Returns:
+        The scenario source for a recorded arm, otherwise no legacy source.
+    """
+    if source is None:
+        return None
+    path = Path(os.path.abspath(source))
+    try:
+        relative = path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return None
+    # Load benchmark metadata when an episode selects an algorithm alias.
+    from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name  # noqa: PLC0415
+
+    if (relative, canonical_algorithm_name(algo)) not in legacy_configless_arms():
+        return None
+    return path
+
+
 def source_default_policy(source: str | Path | None) -> dict[str, str]:
     """Select typed defaults by exact registered source identity, never its name.
 
@@ -105,7 +137,7 @@ def episode_default_policy(
     def wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
         source = kwargs.get("algo_config_path")
         if source is None and kwargs.get("algo_config") is None:
-            source = kwargs.get("scenario_path")
+            source = configless_release_source(kwargs.get("scenario_path"), kwargs.get("algo", ""))
         with defaults_for_source(source) as policy:
             logger.debug("Typed hybrid defaults: {}", policy)
             record = function(*args, **kwargs)

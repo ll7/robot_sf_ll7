@@ -24,6 +24,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_surface_clearance_radii,
 )
 from robot_sf.planner.drive_rollout import native_drive_rollout
+from robot_sf.planner.goal_target import ACTIVE_WAYPOINT_V2, select_goal_target
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
 from robot_sf.planner.safety_shield import ShieldDecision
 from robot_sf.planner.socnav import (
@@ -361,13 +362,16 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
         current_dist = float(np.linalg.norm(goal_current - robot_pos))
-        next_dist = float(np.linalg.norm(goal_next - robot_pos))
-        if current_dist > float(self.config.goal_tolerance):
-            goal = goal_current
-        elif next_dist > 1e-6:
-            goal = goal_next
-        else:
-            goal = goal_current
+        # Keep the outer guard's one-step lookahead at real waypoint boundaries,
+        # but never promote the producer's absent-next [0, 0] placeholder.
+        active_goal = goal_current
+        if (
+            current_dist <= float(self.config.goal_tolerance)
+            and np.any(goal_next != 0.0)
+            and float(np.linalg.norm(goal_next - robot_pos)) > 1e-6
+        ):
+            active_goal = goal_next
+        goal = select_goal_target(robot_pos, active_goal, goal_next, version=ACTIVE_WAYPOINT_V2)
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")

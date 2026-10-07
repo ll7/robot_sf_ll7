@@ -20,6 +20,11 @@ to the model's expected form. We support three modes:
         trained on SocNav structured keys like `occupancy_grid`, `goal_current`,
         `robot_position`, etc.). Values are cast/reshaped to model space.
 
+Missing Dict keys retain space-default backfill for compatibility, with a
+warning and ``observation_backfilled_keys`` runtime metadata. Set
+``require_complete_observation=True`` to reject missing checkpoint inputs.
+The map runner enforces this for ``paper`` and ``paper-baseline`` profiles.
+
 The adapter aims to be robust: if prediction fails (shape mismatch, device
 issues), we return a goal-seeking fallback action when `fallback_to_goal` is
 enabled (default True) so benchmarks can still run.
@@ -92,6 +97,7 @@ class PPOPlannerConfig:
 
     # Robustness
     fallback_to_goal: bool = True
+    require_complete_observation: bool = False
     predictive_foresight_enabled: bool = False
     predictive_foresight_model_id: str = "predictive_proxy_selected_v2_full"
     predictive_foresight_checkpoint_path: str | None = None
@@ -147,6 +153,7 @@ class PPOPlanner:
         self._model = None
         self._status = "ok"
         self._fallback_reason: str | None = None
+        self._observation_backfilled_keys: set[str] = set()
         self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._runtime_observation_space: gym_spaces.Space | None = None
         self._defer_model_loading = defer_model_loading
@@ -327,6 +334,7 @@ class PPOPlanner:
         semantics = self._resolve_action_semantics(parsed)
         self.config = parsed
         self._action_semantics = semantics
+        self._observation_backfilled_keys.clear()
         self._model = None
         self._initialized = False
         if not self._defer_model_loading:
@@ -617,6 +625,8 @@ class PPOPlanner:
         self,
         source_obs: dict[str, Any],
         spaces: dict[str, Any],
+        *,
+        key_prefix: str = "",
     ) -> dict[str, Any]:
         """Align source observation fields to a model-declared Dict space.
 
@@ -624,9 +634,10 @@ class PPOPlanner:
         flattening, expansion, and alias resolution) are backfilled with an
         in-bounds default derived from the target subspace rather than raising.
         This keeps PPO evaluation running when a runner emits a subset of the
-        keys a checkpoint declares (see issue #3704); the backfill is logged so
-        the substitution stays visible, and callers should treat heavily
-        backfilled runs as degraded rather than faithful evidence.
+        keys a checkpoint declares (see issue #3704). Each substituted key is
+        warned once and recorded in runtime checkpoint provenance. Strict
+        profiles reject missing keys instead; substituted observations are
+        degraded inputs rather than faithful checkpoint evidence.
 
         Returns:
             Dict payload shaped and typed to match the model-declared subspaces.
@@ -639,10 +650,14 @@ class PPOPlanner:
             "robot_velocity_xy": ("robot_speed",),
         }
         for key, sub_space in spaces.items():
+            key_path = f"{key_prefix}{key}"
             source = self._resolve_dict_observation_source(source_obs, str(key), aliases)
             if source is None:
+                if self.config.require_complete_observation:
+                    # KeyError bypasses prediction-error goal fallback in step().
+                    raise KeyError(f"PPO checkpoint observation missing required key: {key_path}")
                 converted[key] = self._default_for_space(sub_space)
-                backfilled.append(str(key))
+                backfilled.append(key_path)
                 continue
             sub_spaces = getattr(sub_space, "spaces", None)
             if isinstance(sub_spaces, dict):
@@ -651,7 +666,9 @@ class PPOPlanner:
                         f"Observation key '{key}' expected nested Dict payload, "
                         f"got {type(source).__name__}",
                     )
-                converted[key] = self._align_model_obs_dict(source, sub_spaces)
+                converted[key] = self._align_model_obs_dict(
+                    source, sub_spaces, key_prefix=f"{key_path}."
+                )
                 continue
             target_shape = getattr(sub_space, "shape", None)
             target_dtype = getattr(sub_space, "dtype", None)
@@ -666,11 +683,14 @@ class PPOPlanner:
                 arr = arr.reshape(target_shape)
             converted[key] = arr
         if backfilled:
-            logger.debug(
-                "PPO dict observation backfilled {} missing key(s) with space defaults: {}",
-                len(backfilled),
-                ", ".join(backfilled[:6]),
-            )
+            new_keys = sorted(set(backfilled) - self._observation_backfilled_keys)
+            self._observation_backfilled_keys.update(backfilled)
+            if new_keys:
+                logger.warning(
+                    "PPO dict observation backfilled missing checkpoint keys with space "
+                    "defaults: {}. Treat these inputs as degraded checkpoint evidence.",
+                    ", ".join(new_keys),
+                )
         return converted
 
     @classmethod
@@ -1023,6 +1043,8 @@ class PPOPlanner:
         }
         if self._fallback_reason:
             meta["fallback_reason"] = self._fallback_reason
+        if self._observation_backfilled_keys:
+            meta["observation_backfilled_keys"] = sorted(self._observation_backfilled_keys)
         return meta
 
 

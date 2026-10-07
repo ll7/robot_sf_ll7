@@ -12,8 +12,13 @@ def warn_unsupported_reverse(adapter: Any, drive: Any) -> None:
 
     ORCA subclasses and hybrid v4 implement guarded reverse commands. Other
     adapters retain their existing samples; the signed plant can still accept
-    negative commands from external or learned policies.
+    negative commands from external or learned policies. Unbound policy
+    callables are not adapters and must not be described as such.
     """
+    if callable(adapter):
+        adapter = getattr(adapter, "_planner_adapter", None)
+    if adapter is None:
+        return
     if not getattr(drive, "limited_reverse", False):
         return
     families = {cls.__name__ for cls in type(adapter).__mro__}

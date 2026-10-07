@@ -1161,3 +1161,17 @@ def test_surface_v2_guard_requires_positive_body_radii() -> None:
             robot_radius_m=0.0,
             pedestrian_radius_m=0.4,
         )
+
+
+def test_guarded_ppo_final_goal_ignores_next_placeholder() -> None:
+    """A final goal away from the origin must stop instead of chasing its placeholder."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config({"goal_tolerance": 0.25}),
+        fallback_adapter=_FallbackAdapter((0.1, 0.2)),
+    )
+    observation = _obs(robot=(8.0, 5.0), goal=(8.1, 5.0), next_goal=(0.0, 0.0))
+    _, _, target, _, _ = guard._extract_state(observation)
+    np.testing.assert_array_equal(target, [8.1, 5.0])
+    command, decision = guard.choose_command(observation, (0.3, 0.1))
+    assert command == (0.0, 0.0)
+    assert decision == "goal_reached"

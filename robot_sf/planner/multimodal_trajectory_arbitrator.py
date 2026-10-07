@@ -13,6 +13,7 @@ import math
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from hashlib import sha256
 from itertools import pairwise
 from numbers import Integral
@@ -304,6 +305,8 @@ def discrete_tail_metrics(
     ``alpha`` is the confidence level, so CVaR averages exactly the worst
     ``1 - alpha`` probability mass.  The boundary atom is split rather than
     included in full, which preserves the finite-distribution definition.
+    VaR is the first loss whose cumulative mass reaches ``alpha``, using exact
+    normalization of the binary-float probabilities to resolve atom boundaries.
     """
     values = tuple(float(value) for value in losses)
     if not values or any(not math.isfinite(value) for value in values):
@@ -320,28 +323,36 @@ def discrete_tail_metrics(
     expected = float(
         sum(loss * probability for loss, probability in zip(values, weights, strict=True))
     )
+    # Float normalization can round a cumulative mass onto alpha and select
+    # the previous atom. Compare exact masses before normalization instead.
+    exact_weights = tuple(Fraction.from_float(float(value)) for value in probabilities)
+    threshold = Fraction.from_float(float(alpha)) * sum(exact_weights)
     ascending = sorted(
-        zip(values, weights, stable_ids, strict=True), key=lambda item: (item[0], item[2])
+        zip(values, exact_weights, stable_ids, strict=True), key=lambda item: (item[0], item[2])
     )
-    cumulative = 0.0
-    var = ascending[-1][0]
+    cumulative = Fraction(0)
+    var = next(loss for loss, probability, _ in reversed(ascending) if probability > 0.0)
     for loss, probability, _ in ascending:
         cumulative += probability
-        if cumulative + tolerance >= alpha:
+        if cumulative >= threshold:
             var = loss
             break
     descending = sorted(
         zip(values, weights, stable_ids, strict=True), key=lambda item: (-item[0], item[2])
     )
-    remaining = 1.0 - float(alpha)
-    tail_loss = 0.0
+    tail_mass = 1.0 - float(alpha)
+    remaining = tail_mass
+    normalized_tail_losses: list[float] = []
     for loss, probability, _ in descending:
+        # Zero-mass atoms take nothing; only a fully consumed tail stops the loop.
         taken = min(probability, remaining)
-        tail_loss += loss * taken
+        # Normalize each taken mass before multiplying by loss. Multiplying first
+        # can underflow for a finite, tiny loss and a near-one confidence level.
+        normalized_tail_losses.append(loss * (taken / tail_mass))
         remaining -= taken
-        if remaining <= tolerance:
+        if remaining == 0.0:
             break
-    cvar = float(tail_loss / (1.0 - float(alpha)))
+    cvar = float(math.fsum(normalized_tail_losses))
     return expected, float(var), cvar, float(max(values))
 
 

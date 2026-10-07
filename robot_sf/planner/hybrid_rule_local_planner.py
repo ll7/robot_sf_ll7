@@ -2927,8 +2927,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and use_continuous_static_check
         )
         if physical_static_exclusion:
-            # The exact plant gate excludes the physical body. Keep the existing
-            # center-clearance score separate from the exclusion radius.
+            # The exact plant gate excludes the physical body. Keep its safety
+            # rollout independent of pedestrian forecasts and comfort scoring.
             hard_static_clearance = float(state["robot_radius"])
             required_static_clearance = hard_static_clearance + corridor_clearance_buffer
         proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
@@ -3325,6 +3325,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance / max(float(self.config.desired_static_clearance), _EPS)
             )
         )
+        if ctx["physical_static_exclusion"] and not np.isinf(min_static_clearance):
+            static_clearance = _clip01(
+                (min_static_clearance - float(state["robot_radius"]))
+                / max(float(self.config.desired_static_clearance), _EPS)
+            )
         rollout_mean_linear, rollout_max_linear = self._rollout_linear_stats(rollout_commands)
         dynamic_clearance = (
             1.0

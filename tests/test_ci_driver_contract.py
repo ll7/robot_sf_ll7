@@ -1342,7 +1342,7 @@ def test_ci_uv_cache_keeps_downloaded_wheels_and_keys_only_locked_environment() 
 
 
 def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> None:
-    """Staggered restores and reruns must not select overlapping or missing tests."""
+    """All-job reruns replace the snapshot; failed-job retries reuse it."""
     workflow = yaml.safe_load(_workflow_text())
     dispatch = workflow["jobs"]["dispatch-ownership"]
     freeze = next(s for s in dispatch["steps"] if s.get("id") == "freeze-durations")
@@ -1354,6 +1354,7 @@ def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> N
     assert upload["with"] == {
         "name": "test-duration-snapshot",
         "path": ".test_durations",
+        "overwrite": True,
         "include-hidden-files": True,
         "if-no-files-found": "error",
     }

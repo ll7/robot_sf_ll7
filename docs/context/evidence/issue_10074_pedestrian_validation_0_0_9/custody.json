@@ -1,0 +1,228 @@
+{
+  "archive_bytes": 3247269,
+  "location": "benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz",
+  "members": [
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10075_comparison.json",
+      "bytes": 280874,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10075_comparison.json",
+      "sha256": "90df00dc00fd07fad1bac257509acbcd79093dd7fa8e2b08f6c3b5bf8464b9c3"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10075_failures.csv",
+      "bytes": 192030,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10075_failures.csv",
+      "sha256": "28f7fda12fb2bd38083f1cbb3480f4f3954ad3e23152299e410c81f99891adaa"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10075_failures.csv.review.json",
+      "bytes": 334,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10075_failures.csv.review.json",
+      "sha256": "c1ab519a50f9dc350a6943329ef4ceef10b057e32eba8d6f96c41cb7bc9e28cb"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/README.md",
+      "bytes": 4245,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/README.md",
+      "sha256": "5ebc7a9da53f19db96c715655e5ef35e3a43ce302337128d90a5a09d0836de1e"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/baseline.json",
+      "bytes": 40024,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/baseline.json",
+      "sha256": "fc3adc3328951bd51fa266a6ae6f4f1196846fe82629f7ccfd3ee0c627f8e016"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/baseline.md",
+      "bytes": 10629,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/baseline.md",
+      "sha256": "c29e077c49ba477229f879b6fd3f2bedf8228947dca8315306562998fe28bbd8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/censor_probe.json",
+      "bytes": 3618,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/censor_probe.json",
+      "sha256": "4bbe11edd67c82e8d7912b080ed39a520c008474b6895f8a66023bbc6d527eb8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/compute_receipts.json",
+      "bytes": 2719,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/compute_receipts.json",
+      "sha256": "eff159ad8948f99fdfa4b6a8937c6ebc02284251cacaf6a98b57f775825fb68a"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/default_measurement_identity.json",
+      "bytes": 900,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/default_measurement_identity.json",
+      "sha256": "cb9d78493a3904f609b8bef962257afaac3574a65c4ef536cadc4d3fece63c3f"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_025.json",
+      "bytes": 39803,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_025.json",
+      "sha256": "ba34501c75acc82d8836bd9896b66de56bb2c0375a163ac6a5ea2981ce83adc8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_025.md",
+      "bytes": 10595,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_025.md",
+      "sha256": "ae3ffe71e812896793e240341f3a63d2adcdc2c24da60286c50db4041143b1d8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_030.json",
+      "bytes": 39935,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_030.json",
+      "sha256": "d33d35afa314e7294c084055d03f5f864ed1df2d011c8b50fc420303a5b7e71f"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_030.md",
+      "bytes": 10607,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_030.md",
+      "sha256": "35a1803d4b70d20419f08d95c87851f378e0abf7ea95a145e519b7a6da3af7f8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_035.json",
+      "bytes": 40009,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_035.json",
+      "sha256": "5af28ee3682955a430528b03bdfd27a3461edd35b756cdc1e5c25421c0765ca9"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_035.md",
+      "bytes": 10665,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_035.md",
+      "sha256": "03709988000b494ad52fb794737d65a0f7bd4412f2f551dd50d35be9307e252f"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_040.json",
+      "bytes": 40058,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_040.json",
+      "sha256": "47e07dc7c4b68132f19dcdc744e197f383cb69511a9e9664439b8c0bbe74809d"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_040.md",
+      "bytes": 10629,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_040.md",
+      "sha256": "c29e077c49ba477229f879b6fd3f2bedf8228947dca8315306562998fe28bbd8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_inventory.json",
+      "bytes": 19327,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_inventory.json",
+      "sha256": "8dbe58704565aa754da4152dd959b833dd7992f578dfe93b155ab54b6a68cf18"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_inventory.md",
+      "bytes": 12224,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/radius_inventory.md",
+      "sha256": "ebfa4d7287eddfc1aa81d0134d551afc8cc3deefc7354d225bc5a6cc84c57546"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/raw_science.tar.gz",
+      "bytes": 3167965,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/raw_science.tar.gz",
+      "sha256": "7ffce1d4bb1f43142a307f95f87ecd9cf36b522f736d5517b4ae10f86b6dc3ba"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/raw_science.tar.gz.review.json",
+      "bytes": 360,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/raw_science.tar.gz.review.json",
+      "sha256": "3de67598bf4c020e3920409c11f83603a75b05f0fcaf3cdfeab7112219a17d01"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/recommendation.md",
+      "bytes": 2554,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/recommendation.md",
+      "sha256": "ce5522a4efcbafbc9cefe258beafb06d5ac329b8c500ae4c89f902e0875d5cf3"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_baseline.json",
+      "bytes": 61997,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_baseline.json",
+      "sha256": "ac0b9bd0ba7e1086b341589ddcc0a4392f7481f532e182963a71e0198e76beea"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_baseline.md",
+      "bytes": 14339,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_baseline.md",
+      "sha256": "2b9e028bad1da337f098b0dce735457f1c8884b360e315f7d747f3f8cffc4c24"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_definition_audit.md",
+      "bytes": 5903,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_definition_audit.md",
+      "sha256": "baa8b1405a5ee4775ab9a3c7cba94bdde13076b2af8887358b3ee2169e23169e"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028.json",
+      "bytes": 61846,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028.json",
+      "sha256": "ad1fc342d32c1b380daab978954e0b25560af357c0782f03dc1d5a0e3ce45660"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028.md",
+      "bytes": 14304,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028.md",
+      "sha256": "ef31a48fc2fb5e419a58e047febeafdafa1d6a5b803a243fce59e082e91d420c"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028_literature.json",
+      "bytes": 62120,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028_literature.json",
+      "sha256": "7607bd9a7bb8dc22ee11bb89c0419b51eee51c790f309bc2388d0e71add32331"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028_literature.md",
+      "bytes": 14455,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/source_radius_028_literature.md",
+      "sha256": "faee936b003919d4cd6e1f1b0b793fdbdbf97a5682e35f6f79158fb4d2cc90e9"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/test_value.md",
+      "bytes": 9638,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/test_value.md",
+      "sha256": "68c578f25df05043c02a0035cc6c15f400f8d91d62a198d9a5ddc88f5cf74929"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/valsuite_comparison.md",
+      "bytes": 13707,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10075-historical-evidence.tar.gz#docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/valsuite_comparison.md",
+      "sha256": "3c7b9061d014292d4c8f5546e5e0f93d6db403bc87a42dafa644ba998af18aee"
+    }
+  ],
+  "original_head": "8716c13b2ecc0d9fd1780f540e6dfe3a72fe0664",
+  "path": "pr-10075-historical-evidence.tar.gz",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "sha256": "cfdec4ea6134a3627d9b0e89e1ec1e85b2edb0d6ae26c8eb2b89e06d65c85304",
+  "status": "diagnostic-only; exact-byte archive copied and read-back verified in external data hub"
+}

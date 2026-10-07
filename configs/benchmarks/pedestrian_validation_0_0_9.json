@@ -1,0 +1,209 @@
+{
+  "schema": "pedval.config.v1",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "radii_m": [
+    0.25,
+    0.28,
+    0.3,
+    0.35,
+    0.4
+  ],
+  "model": {
+    "wall_law": "legacy_v1",
+    "wall_factor": 10.0,
+    "wall_offset_m": -0.57,
+    "wall_sigma": 0.0,
+    "pair_kernel": "wrapped_v2",
+    "force_radius_m": 0.35,
+    "baseline_physical_radius_m": 0.4,
+    "native_free_speed_m_s": 0.65,
+    "robot_activation_threshold_m": 2.0
+  },
+  "V1": {
+    "source": "Moussaid et al. 2009; Huber et al. 2014",
+    "location": "Moussaid 2009 Fig. 1b and section 4(a); Huber 2014 Table 1",
+    "targets_m_s": [
+      1.29,
+      1.15,
+      1.42,
+      1.78
+    ],
+    "published_spread_m_s": 0.19,
+    "window_s": [
+      10,
+      20
+    ],
+    "setup_status": "Acceleration fit with explicit reaction clock; CM velocities substitute for marker data and native Euler integration remains unchanged.",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "Equation 4.1 desired speed fitted from first 3 s of acceleration after a .35 s clock shift; simulator velocities replace supplementary marker preprocessing; tau is fitted, not imposed."
+  },
+  "V2": {
+    "source": "Wilmut et al. 2015",
+    "location": "Fig. 3, typically developing group, graphical reading",
+    "ratios": [
+      0.9,
+      1.1,
+      1.3,
+      1.5,
+      1.7,
+      1.9,
+      2.1
+    ],
+    "shoulder_width_m": null,
+    "drop_window": {
+      "approach": "first 2 s of capture starting 4 m upstream",
+      "crossing": "remaining capture",
+      "speed_drop_statistic": "approach mean minus minimum cubic trend before passage, conditional on >3 approach-SD event; documented equivalent"
+    },
+    "published_drop_m_s": {
+      "0.9": 0.4,
+      "1.3-2.1": [
+        0.12,
+        0.16
+      ]
+    },
+    "setup_status": "Published temporal phases/event implemented with an explicit cubic speed trend and .46 m shoulder proxy; rigid discs cannot rotate.",
+    "diagnostic_widths_m": [
+      0.8,
+      1.0,
+      1.2,
+      2.0,
+      2.2,
+      2.8,
+      3.6
+    ],
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.",
+    "shoulder_proxy_m": 0.46
+  },
+  "V3": {
+    "source": "Seyfried et al. 2009",
+    "location": "Table 2, N=60; Fig. 2",
+    "widths_m": [
+      0.8,
+      0.9,
+      1.0,
+      1.1,
+      1.2
+    ],
+    "published_specific_flow_persons_m_s": [
+      1.61,
+      1.86,
+      1.9,
+      1.93,
+      1.97
+    ],
+    "plane": "channel centre; y=0.4 is local video coordinate",
+    "window": "60/(t_last-t_first)/width; incomplete runs unavailable",
+    "setup_status": "nominal supply/density matched; archived initial sites adapted for 0.40 m margin; individual human starts unavailable",
+    "equivalence": "source_equivalent_estimator",
+    "protocol_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts."
+  },
+  "V4": {
+    "source": "Liao et al. 2014",
+    "location": "Section 4; Fig. 9a caption reverses labels",
+    "widths_m": [
+      2.4,
+      3.0,
+      3.6,
+      4.4,
+      5.0
+    ],
+    "published_slopes_persons_m_s": {
+      "all_data": 2.3,
+      "steady_state": 2.5
+    },
+    "counting_line": null,
+    "all_data_window": "entire experiment; counting plane, clock origin and denominator unverified",
+    "steady_state_window": null,
+    "setup_status": "Explicit exit-plane all-data and density/speed stationarity equivalent; original counting line and deterministic source window unpublished.",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width."
+  },
+  "V5": {
+    "source": "Gerin-Lajoie et al. 2005, cited in 2008",
+    "location": "2008 p.240",
+    "published_longitudinal_m": 2.0,
+    "published_lateral_m": 0.5,
+    "distance_origin": "centre of mass to obstacle edge",
+    "ellipse_extraction": null,
+    "setup_status": "original obstacle geometry and ellipse extraction not supplied; diagnostic closest lateral centre-to-edge distance only",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "CM-to-cylinder edge; abeam lateral clearance, .25 m radius 32-edge cylinder; exact source geometry/ellipse reconstruction unavailable; no longitudinal ellipse radius inferred."
+  },
+  "V6": {
+    "source": "Huber et al. 2014",
+    "location": "Table 1",
+    "speeds_m_s": [
+      1.15,
+      1.42,
+      1.78
+    ],
+    "published_onset_m": [
+      2.1,
+      2.4,
+      2.7
+    ],
+    "onset_definition": "first absolute angular speed above subject/speed mean maximum from five no-interferer trials; own X displacement to PoMD after marker filtering",
+    "setup_status": "Nonreactive matching-speed interferer, filtered own-X onset and five no-interferer trials; deterministic CM samples substitute for trunk markers.",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway."
+  },
+  "V7": {
+    "source": "Zhang et al. 2012; Feliciani and Nishinari 2016",
+    "location": "target not yet verified",
+    "widths_m": [
+      3.0,
+      3.6
+    ],
+    "persons": 48,
+    "duration_s": 40,
+    "measure": "mean absolute Pearson correlation(direction,lateral position), second half of run",
+    "setup_status": "engineering segregation measure only; no universal numeric target",
+    "equivalence": "engineering_diagnostic",
+    "protocol_reason": "Existing direction/lateral segregation; no verified numeric target."
+  },
+  "V8": {
+    "source": "Ma et al. 2010",
+    "location": "abstract only",
+    "published_distance_m": 0.4,
+    "distance_origin": null,
+    "setup_status": "centre vs edge unresolved; retain both, no target difference",
+    "equivalence": "unresolved_origin",
+    "protocol_reason": "Retain CM-to-wall and signed disc-edge-to-wall distances; source abstract does not settle origin; no target difference."
+  },
+  "V9": {
+    "status": "context only, skipped"
+  }
+}

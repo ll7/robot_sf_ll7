@@ -441,6 +441,10 @@ _LEGACY_FAST_FILE_PREFIXES = (
     "test_types",
 )
 _LEGACY_FAST_FILES = {
+    "test_pedestrian_validation.py",
+    "test_valsuite_source_regressions.py",
+    "test_single_pedestrian_radius.py",
+    "test_pedval_measurements.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",
     # Seed inventories and campaign resume planning use deterministic fixtures.

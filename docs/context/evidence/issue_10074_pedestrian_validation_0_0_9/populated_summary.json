@@ -1,0 +1,341 @@
+{
+  "by_opening": [
+    {
+      "off": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          0,
+          0
+        ],
+        "flags": {},
+        "force_radius_m": 0.35,
+        "max_speed_m_s": [
+          0.65,
+          0.65
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.13139627759857628,
+          0.13139627759857628
+        ],
+        "pair_contact_steps": [
+          105,
+          105
+        ],
+        "path_length_per_ped_m": [
+          [
+            3.441472612669088,
+            3.441472612669088
+          ],
+          [
+            4.258131440375402,
+            4.258131440375402
+          ],
+          [
+            4.126060930827391,
+            4.126060930827391
+          ]
+        ],
+        "physical_radius_m": 0.4,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "on": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          1,
+          1
+        ],
+        "flags": {
+          "obstacle_force_profile": "gradient_v3",
+          "pedestrian_radius_m": 0.28
+        },
+        "force_radius_m": 0.28,
+        "max_speed_m_s": [
+          0.6500000000000001,
+          0.6500000000000001
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.17982791069965998,
+          0.17982791069965998
+        ],
+        "pair_contact_steps": [
+          0,
+          0
+        ],
+        "path_length_per_ped_m": [
+          [
+            9.093623813415254,
+            9.093623813415254
+          ],
+          [
+            3.5270868607117283,
+            3.5270868607117283
+          ],
+          [
+            3.563801288842406,
+            3.563801288842406
+          ]
+        ],
+        "physical_radius_m": 0.28,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "opening_m": 1.2
+    },
+    {
+      "off": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          0,
+          0
+        ],
+        "flags": {},
+        "force_radius_m": 0.35,
+        "max_speed_m_s": [
+          0.65,
+          0.65
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.13173887098054593,
+          0.13173887098054593
+        ],
+        "pair_contact_steps": [
+          117,
+          117
+        ],
+        "path_length_per_ped_m": [
+          [
+            3.6511280527528793,
+            3.6511280527528793
+          ],
+          [
+            4.035214016219305,
+            4.035214016219305
+          ],
+          [
+            4.170156319276955,
+            4.170156319276955
+          ]
+        ],
+        "physical_radius_m": 0.4,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "on": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          1,
+          1
+        ],
+        "flags": {
+          "obstacle_force_profile": "gradient_v3",
+          "pedestrian_radius_m": 0.28
+        },
+        "force_radius_m": 0.28,
+        "max_speed_m_s": [
+          0.6500000000000001,
+          0.6500000000000001
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.1830401351406659,
+          0.1830401351406659
+        ],
+        "pair_contact_steps": [
+          0,
+          0
+        ],
+        "path_length_per_ped_m": [
+          [
+            9.114071106808145,
+            9.114071106808145
+          ],
+          [
+            3.6749108746996675,
+            3.6749108746996675
+          ],
+          [
+            3.6846301811520985,
+            3.6846301811520985
+          ]
+        ],
+        "physical_radius_m": 0.28,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "opening_m": 0.8
+    }
+  ],
+  "default_off_matches_fresh_main": true,
+  "dev_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005
+  ],
+  "geometry": "16x4 m room; 0.1 m thick doorway wall; two pedestrians start 0.45 m from side walls",
+  "metrics_note": "Pair contacts use physical radius. Wall penetration means disc overlap with solid walls/room edges. Tunnelling checks swept centre segments crossing solid walls with both endpoints outside. No robot is present.",
+  "pedestrians_per_run": 3,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "source_harness": "scripts/validation/run_populated_pedestrian_probe.py",
+  "status": "diagnostic-only; domain review evidence, not acceptance",
+  "steps": 300,
+  "trajectory_digests": [
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1001,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "9d6f4f3aab01fc506db4c0a91c70e9c1fdf341d154c7da838ec1e3061fe6a790",
+      "seed": 1001,
+      "trajectory_sha256": "03ead76062b624d863f1bb3efd83888736f0e2b9db2abc11497992abe48a4992"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1002,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "9d6f4f3aab01fc506db4c0a91c70e9c1fdf341d154c7da838ec1e3061fe6a790",
+      "seed": 1002,
+      "trajectory_sha256": "03ead76062b624d863f1bb3efd83888736f0e2b9db2abc11497992abe48a4992"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1003,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "9d6f4f3aab01fc506db4c0a91c70e9c1fdf341d154c7da838ec1e3061fe6a790",
+      "seed": 1003,
+      "trajectory_sha256": "03ead76062b624d863f1bb3efd83888736f0e2b9db2abc11497992abe48a4992"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1004,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "9d6f4f3aab01fc506db4c0a91c70e9c1fdf341d154c7da838ec1e3061fe6a790",
+      "seed": 1004,
+      "trajectory_sha256": "03ead76062b624d863f1bb3efd83888736f0e2b9db2abc11497992abe48a4992"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1005,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "9d6f4f3aab01fc506db4c0a91c70e9c1fdf341d154c7da838ec1e3061fe6a790",
+      "seed": 1005,
+      "trajectory_sha256": "03ead76062b624d863f1bb3efd83888736f0e2b9db2abc11497992abe48a4992"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1001,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "b0d0ca93bf87ed527175fee38a8c02c32b9434308f6e1c1225f5387daccfeeed",
+      "seed": 1001,
+      "trajectory_sha256": "77e199e799acc2f0f43bc862ad0c37555db325241271d3eb1c5d22f1e9e9a1d7"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1002,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "b0d0ca93bf87ed527175fee38a8c02c32b9434308f6e1c1225f5387daccfeeed",
+      "seed": 1002,
+      "trajectory_sha256": "77e199e799acc2f0f43bc862ad0c37555db325241271d3eb1c5d22f1e9e9a1d7"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1003,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "b0d0ca93bf87ed527175fee38a8c02c32b9434308f6e1c1225f5387daccfeeed",
+      "seed": 1003,
+      "trajectory_sha256": "77e199e799acc2f0f43bc862ad0c37555db325241271d3eb1c5d22f1e9e9a1d7"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1004,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "b0d0ca93bf87ed527175fee38a8c02c32b9434308f6e1c1225f5387daccfeeed",
+      "seed": 1004,
+      "trajectory_sha256": "77e199e799acc2f0f43bc862ad0c37555db325241271d3eb1c5d22f1e9e9a1d7"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1005,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "b0d0ca93bf87ed527175fee38a8c02c32b9434308f6e1c1225f5387daccfeeed",
+      "seed": 1005,
+      "trajectory_sha256": "77e199e799acc2f0f43bc862ad0c37555db325241271d3eb1c5d22f1e9e9a1d7"
+    }
+  ]
+}

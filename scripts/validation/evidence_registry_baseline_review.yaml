@@ -18,6 +18,16 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10075
+    reviewed_date: 2026-10-07
+    finding_delta: none
+    disposition: compact diagnostic custody
+    decision: >-
+      PR #10075 adds only its compact manifest, sample and populated diagnostics.
+      The tracked tree at this PR has 3026 files; earlier addenda describe their
+      own branch inventories. All 492 inherited findings are unchanged.
+      Historical bulk bytes are external; no locator repair or domain acceptance
+      is claimed.
   - issue: 10061
     reviewed_date: 2026-10-07
     finding_delta: none

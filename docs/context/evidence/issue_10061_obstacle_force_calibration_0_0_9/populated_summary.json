@@ -1,0 +1,339 @@
+{
+  "by_opening": [
+    {
+      "off": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          0,
+          0
+        ],
+        "flags": {},
+        "force_radius_m": 0.35,
+        "max_speed_m_s": [
+          0.65,
+          0.65
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.13139627759857628,
+          0.13139627759857628
+        ],
+        "pair_contact_steps": [
+          105,
+          105
+        ],
+        "path_length_per_ped_m": [
+          [
+            3.441472612669088,
+            3.441472612669088
+          ],
+          [
+            4.258131440375402,
+            4.258131440375402
+          ],
+          [
+            4.126060930827391,
+            4.126060930827391
+          ]
+        ],
+        "physical_radius_m": 0.4,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "on": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          1,
+          1
+        ],
+        "flags": {
+          "obstacle_force_profile": "gradient_v3"
+        },
+        "force_radius_m": 0.35,
+        "max_speed_m_s": [
+          0.6500000000000001,
+          0.6500000000000001
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.1767682331181986,
+          0.1767682331181986
+        ],
+        "pair_contact_steps": [
+          0,
+          0
+        ],
+        "path_length_per_ped_m": [
+          [
+            9.120289538456298,
+            9.120289538456298
+          ],
+          [
+            3.347648261255556,
+            3.347648261255556
+          ],
+          [
+            3.441203180926029,
+            3.441203180926029
+          ]
+        ],
+        "physical_radius_m": 0.4,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "opening_m": 1.2
+    },
+    {
+      "off": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          0,
+          0
+        ],
+        "flags": {},
+        "force_radius_m": 0.35,
+        "max_speed_m_s": [
+          0.65,
+          0.65
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.13173887098054593,
+          0.13173887098054593
+        ],
+        "pair_contact_steps": [
+          117,
+          117
+        ],
+        "path_length_per_ped_m": [
+          [
+            3.6511280527528793,
+            3.6511280527528793
+          ],
+          [
+            4.035214016219305,
+            4.035214016219305
+          ],
+          [
+            4.170156319276955,
+            4.170156319276955
+          ]
+        ],
+        "physical_radius_m": 0.4,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "on": {
+        "all_states_finite": true,
+        "centre_inside_wall_samples": 0,
+        "door_crossings": [
+          0,
+          0
+        ],
+        "flags": {
+          "obstacle_force_profile": "gradient_v3"
+        },
+        "force_radius_m": 0.35,
+        "max_speed_m_s": [
+          0.6500000000000001,
+          0.6500000000000001
+        ],
+        "max_wall_penetration_m": [
+          0.0,
+          0.0
+        ],
+        "mean_speed_m_s": [
+          0.12620052368490406,
+          0.12620052368490406
+        ],
+        "pair_contact_steps": [
+          0,
+          0
+        ],
+        "path_length_per_ped_m": [
+          [
+            4.225379712606429,
+            4.225379712606429
+          ],
+          [
+            3.6478329582081193,
+            3.6478329582081193
+          ],
+          [
+            3.4848344608268182,
+            3.4848344608268182
+          ]
+        ],
+        "physical_radius_m": 0.4,
+        "solid_wall_tunnelling_steps": 0
+      },
+      "opening_m": 0.8
+    }
+  ],
+  "default_off_matches_fresh_main": true,
+  "dev_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005
+  ],
+  "geometry": "16x4 m room; 0.1 m thick doorway wall; two pedestrians start 0.45 m from side walls",
+  "metrics_note": "Pair contacts use physical radius. Wall penetration means disc overlap with solid walls/room edges. Tunnelling checks swept centre segments crossing solid walls with both endpoints outside. No robot is present.",
+  "pedestrians_per_run": 3,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "source_harness": "scripts/validation/run_populated_pedestrian_probe.py",
+  "status": "diagnostic-only; domain review evidence, not acceptance",
+  "steps": 300,
+  "trajectory_digests": [
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1001,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "498ff9bd1915d01723f379fb65f86334fe01c4e61a4221421bc625942f316520",
+      "seed": 1001,
+      "trajectory_sha256": "20432d492e4845609e01119542772fa1f35037105eb42770ea068c7a52c3aa53"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1002,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "498ff9bd1915d01723f379fb65f86334fe01c4e61a4221421bc625942f316520",
+      "seed": 1002,
+      "trajectory_sha256": "20432d492e4845609e01119542772fa1f35037105eb42770ea068c7a52c3aa53"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1003,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "498ff9bd1915d01723f379fb65f86334fe01c4e61a4221421bc625942f316520",
+      "seed": 1003,
+      "trajectory_sha256": "20432d492e4845609e01119542772fa1f35037105eb42770ea068c7a52c3aa53"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1004,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "498ff9bd1915d01723f379fb65f86334fe01c4e61a4221421bc625942f316520",
+      "seed": 1004,
+      "trajectory_sha256": "20432d492e4845609e01119542772fa1f35037105eb42770ea068c7a52c3aa53"
+    },
+    {
+      "arm": "off",
+      "opening_m": 1.2,
+      "raw_file_sha256": "b9ae485c36d24369e99af720ac4d14b0cb8f08d9f9cf31cb1985355243c8e45d",
+      "seed": 1005,
+      "trajectory_sha256": "64b0e04dd742b14f4f8340c2bb9260c93ac4bcd568e33b9458b26f1763669dae"
+    },
+    {
+      "arm": "on",
+      "opening_m": 1.2,
+      "raw_file_sha256": "498ff9bd1915d01723f379fb65f86334fe01c4e61a4221421bc625942f316520",
+      "seed": 1005,
+      "trajectory_sha256": "20432d492e4845609e01119542772fa1f35037105eb42770ea068c7a52c3aa53"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1001,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "d10858c681b2b32a46fe1a9d59100aa7f0801285fac8f817596e17b620c81aa3",
+      "seed": 1001,
+      "trajectory_sha256": "bfddb20e46c0e327a50ffc308080d2d5a5a27044701c689d51eaa0b590c85bb1"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1002,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "d10858c681b2b32a46fe1a9d59100aa7f0801285fac8f817596e17b620c81aa3",
+      "seed": 1002,
+      "trajectory_sha256": "bfddb20e46c0e327a50ffc308080d2d5a5a27044701c689d51eaa0b590c85bb1"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1003,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "d10858c681b2b32a46fe1a9d59100aa7f0801285fac8f817596e17b620c81aa3",
+      "seed": 1003,
+      "trajectory_sha256": "bfddb20e46c0e327a50ffc308080d2d5a5a27044701c689d51eaa0b590c85bb1"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1004,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "d10858c681b2b32a46fe1a9d59100aa7f0801285fac8f817596e17b620c81aa3",
+      "seed": 1004,
+      "trajectory_sha256": "bfddb20e46c0e327a50ffc308080d2d5a5a27044701c689d51eaa0b590c85bb1"
+    },
+    {
+      "arm": "off",
+      "opening_m": 0.8,
+      "raw_file_sha256": "5fbd759f90ab7c5e4664b1bb17a210b90ba62978963fc8742647e95bac60d9ca",
+      "seed": 1005,
+      "trajectory_sha256": "ab16cbe75ac15d63e09b30cd615e7958ba8f72c4be0f964d04764c1855aa4c3b"
+    },
+    {
+      "arm": "on",
+      "opening_m": 0.8,
+      "raw_file_sha256": "d10858c681b2b32a46fe1a9d59100aa7f0801285fac8f817596e17b620c81aa3",
+      "seed": 1005,
+      "trajectory_sha256": "bfddb20e46c0e327a50ffc308080d2d5a5a27044701c689d51eaa0b590c85bb1"
+    }
+  ]
+}

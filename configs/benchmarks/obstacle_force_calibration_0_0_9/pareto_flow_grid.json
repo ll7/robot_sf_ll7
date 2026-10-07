@@ -1,0 +1,27 @@
+[
+  [
+    "legacy_refit",
+    0.0003,
+    0.4
+  ],
+  [
+    "true_gradient",
+    0.001,
+    0.4
+  ],
+  [
+    "exponential_edge",
+    15.0,
+    0.04
+  ],
+  [
+    "exponential_edge",
+    40.0,
+    0.04
+  ],
+  [
+    "legacy_refit",
+    0.003,
+    0.375
+  ]
+]

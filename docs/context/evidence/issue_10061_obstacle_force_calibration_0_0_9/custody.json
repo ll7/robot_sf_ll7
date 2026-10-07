@@ -1,0 +1,305 @@
+{
+  "archive_bytes": 19987144,
+  "location": "benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz",
+  "members": [
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10073_comparison.json",
+      "bytes": 6970,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10073_comparison.json",
+      "sha256": "3f01b7b0d90b429561b93bb3ed0ee2c72ca95febf5b6b3d29fc55e332ec378bd"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10073_failures.csv",
+      "bytes": 179010,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10073_failures.csv",
+      "sha256": "4194b712eee1b4929488dc6b91ab1e4b3ea9fb99238106a20da96cdcd63da976"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10073_failures.csv.review.json",
+      "bytes": 334,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10073_failures.csv.review.json",
+      "sha256": "a941c035a0b44e53d54c08f97ac0a2032dbb2f4cd1b435c7b4312eccf69d6895"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/CONTINUATION.md",
+      "bytes": 23827,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/CONTINUATION.md",
+      "sha256": "dc24da5a3fea65096b1fccdd24e962ee743d703e247b43e0eaf1a3278987c46d"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/README.md",
+      "bytes": 17410,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/README.md",
+      "sha256": "c6f0352fa5e175b4e0f29163506ce1dedc4522c35ae115d7dd84facad08d0836"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/calibration_raw.tar.gz",
+      "bytes": 455544,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/calibration_raw.tar.gz",
+      "sha256": "62821eba8c4c3874f80a82ebbfd62c6a82f2f4b8970de09c5ea7dc531db365cd"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/calibration_raw.tar.gz.review.json",
+      "bytes": 510,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/calibration_raw.tar.gz.review.json",
+      "sha256": "0e00c777896b04b534d8cdd76af59bb07bcbbd4d6196011c23de35f8c7e7d547"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/candidate_acceptance.json",
+      "bytes": 147253,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/candidate_acceptance.json",
+      "sha256": "87fe56ed8638987c94dab51041064db55138ebd005e25d9bc0f7ffa7555fbeed"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_resource_receipts.json",
+      "bytes": 3598,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_resource_receipts.json",
+      "sha256": "59e33d0ac21b3212e3057bdcc1120429a7b46bafd9b2056c19b57e7c571af1c9"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_validation_raw.tar.gz",
+      "bytes": 2970880,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_validation_raw.tar.gz",
+      "sha256": "df7ec5e937c7498df647d133d3d42e105aa402cc046927b5217963090303c96a"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_validation_raw.tar.gz.review.json",
+      "bytes": 381,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_validation_raw.tar.gz.review.json",
+      "sha256": "f377c7a131a560bab1a4d8ba2eb6412425613a5351e6255d065ee0396d8a180e"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_validation_summary.json",
+      "bytes": 2832,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/continuation_validation_summary.json",
+      "sha256": "fe7c650726aa3caa3b056d39aaae51fb6ceb59d8560d1a609bc3450eb2f0671f"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_law_comparison.json",
+      "bytes": 29381,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_law_comparison.json",
+      "sha256": "501b6639a0bc787d21541d93dd2b83f452562f1aa3e2eb5ed774330aa654bc19"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_laws_raw.tar.gz",
+      "bytes": 1393267,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_laws_raw.tar.gz",
+      "sha256": "7183bccad5e53ded17c620ce59d33a956631742181a45dfcd9aa90ca3c973f19"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_laws_raw.tar.gz.review.json",
+      "bytes": 372,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_laws_raw.tar.gz.review.json",
+      "sha256": "192e25e8cee569a2cf675c78821176e97d5a43b04f3de6c62806917a9194ccfb"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_mechanism_summary.json",
+      "bytes": 139633,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_mechanism_summary.json",
+      "sha256": "d451e93adfe66aba95a5374380b2c53f08c869d154a4259da8d5a72e2eb217a6"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_mechanisms_raw.tar.gz",
+      "bytes": 3038199,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_mechanisms_raw.tar.gz",
+      "sha256": "e16535518c8105f4450bc0b9ed6f3814a6cb7c0304bfc6e4474cb8f8aa6b4a2a"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_mechanisms_raw.tar.gz.review.json",
+      "bytes": 376,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_mechanisms_raw.tar.gz.review.json",
+      "sha256": "eabd8d627f25a7bdc6d7fef960cc13d087be98f51e5b20187b9cafca9ae6f288"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.pdf",
+      "bytes": 55667,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.pdf",
+      "sha256": "976047397ed684a564dda334039cc331460f4eb017a2332505389c1b2f24a93d"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.pdf.review.json",
+      "bytes": 365,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.pdf.review.json",
+      "sha256": "6c6ed47f60f4e3322b424cc0bc9effb792033f2b0b36175706ca6623be4dc526"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.png",
+      "bytes": 483162,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.png",
+      "sha256": "9332abce5b5686accac11555268df4a7e6c3a4d712d1496e17d1e406e3122baf"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.png.review.json",
+      "bytes": 365,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/doorway_traces.png.review.json",
+      "sha256": "6da59fcee80d935395aeca8d4545cd463de9115315c81728cd725da7138bee59"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/exponential_raw.tar.gz",
+      "bytes": 209266,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/exponential_raw.tar.gz",
+      "sha256": "376d26a2ff5621d5f40563857c07e75522ae3060347706f185b15d2fcaceba4b"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/exponential_raw.tar.gz.review.json",
+      "bytes": 409,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/exponential_raw.tar.gz.review.json",
+      "sha256": "e45a23390d6ee5e000535a3eddffa6f823a2f9d7b0ca154a7b8e6b8188890233"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/exponential_screen.json",
+      "bytes": 10047,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/exponential_screen.json",
+      "sha256": "d2aec031677af92aa6855960f3771d5690c51d68a71cc252ed3205fb71727a54"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/fit_grid.json",
+      "bytes": 73899,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/fit_grid.json",
+      "sha256": "3ddace83ca7bb3333ffd6356122f82e9a9deceba199015f029b2ef846e669bbf"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/footprint_audit.json",
+      "bytes": 2705,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/footprint_audit.json",
+      "sha256": "602f3fb893159b514ff45c6e2921564805a28cf25ccae8a7c04dbbf2702ee66c"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/legacy_comparator.json",
+      "bytes": 30717,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/legacy_comparator.json",
+      "sha256": "9a5e8b59df3485a76e98d123c0be525f33697ca85af5e47712a1305eb47ef483"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/matched_kernel_fit.json",
+      "bytes": 19511,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/matched_kernel_fit.json",
+      "sha256": "6826f26d0bbb3777020d0bea49ce21d1e213122d60872c618c24ac968e7f60fc"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/matched_kernel_raw.tar.gz",
+      "bytes": 148797,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/matched_kernel_raw.tar.gz",
+      "sha256": "6b765f41ecde42908549bc8e62a97a7dc8c06b6ef1a8e8887a5471e522b00b8a"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/matched_kernel_raw.tar.gz.review.json",
+      "bytes": 372,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/matched_kernel_raw.tar.gz.review.json",
+      "sha256": "8ccf671f32e6a7e14d9fd4062c7d1479018d0bf218ddbff2c170d5f47518bf6f"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/other_regression_summary.json",
+      "bytes": 129412,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/other_regression_summary.json",
+      "sha256": "16f52f6e7e5e129ce6118230178c1e997ed83f3e9cb1c39dead68dc7de1ac7eb"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/other_regression_traces_raw.tar.gz",
+      "bytes": 4923575,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/other_regression_traces_raw.tar.gz",
+      "sha256": "e86b5b33d2eafe671a16f86010654b4c8f8ed6d312e909370ad2095a003aed11"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/other_regression_traces_raw.tar.gz.review.json",
+      "bytes": 381,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/other_regression_traces_raw.tar.gz.review.json",
+      "sha256": "4cbaa08ad11fd1bd7a681b8e9be4cd8da9336fd012f912843c2136108d7aaa37"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/preview_raw.tar.gz",
+      "bytes": 3504820,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/preview_raw.tar.gz",
+      "sha256": "a813dadf087fe8bad2bcddd769ccb6d9097d795163ad8c426bee64c0df0f7ee2"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/preview_raw.tar.gz.review.json",
+      "bytes": 405,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/preview_raw.tar.gz.review.json",
+      "sha256": "e91b6fd335584881f070dd2f0f5c12d48fc1983800574faad66d9660a4d81a7e"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/preview_summary.json",
+      "bytes": 263708,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/preview_summary.json",
+      "sha256": "ac6eb528b823d01de3aa730687d74e45110a087d9dc11c5e129a19517070313b"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/provenance.json",
+      "bytes": 823,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/provenance.json",
+      "sha256": "984f948263fe71ef912ca2e67bebc2ad6179a00d91fe7b3e23826cce3edc137d"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/resource_receipts.json",
+      "bytes": 4854,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/resource_receipts.json",
+      "sha256": "720f45ff79e038a16864222c33994bd77e8f3d2fed15c079ee5149dfbc1bfd9d"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_raw.tar.gz",
+      "bytes": 2634123,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_raw.tar.gz",
+      "sha256": "6c9960adbc6308444138d29ca68b4afa5dcad740df87ab8818ba20909a835cc8"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_raw.tar.gz.review.json",
+      "bytes": 368,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_raw.tar.gz.review.json",
+      "sha256": "98d754c7ee7228500311c3796363d36f739097126b33066f1b852c8ac449c99f"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_summary.json",
+      "bytes": 57634,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10073-historical-evidence.tar.gz#docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/validation_summary.json",
+      "sha256": "dcb4f7770c058b9b8649729a21b75e757f2b1c9d3734d09a56bab98e59ecc868"
+    }
+  ],
+  "original_head": "e68bc694dc6c6f37d85b1122148437462b423a98",
+  "path": "pr-10073-historical-evidence.tar.gz",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "sha256": "57061d8bf5e15a2efa3f34050a29acc6a9a279cec18feb4f71fea32514a8b3ad",
+  "status": "diagnostic-only; exact-byte archive copied and read-back verified in external data hub"
+}

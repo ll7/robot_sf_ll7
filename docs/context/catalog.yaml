@@ -8105,3 +8105,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

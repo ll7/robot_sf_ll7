@@ -18,9 +18,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_measured_profile_reaches_production_substrate():
     """Catch ignored/rejected overrides and geometry/speed reset in the real builder."""
-    from robot_sf.benchmark.pedestrian_manipulation_checks import build_probe
-    from robot_sf.nav.map_config import SinglePedestrianDefinition
-
     profile = {
         "ped_radius": 0.25,
         "ped_force_radius": 0.25,
@@ -35,6 +32,9 @@ def test_measured_profile_reaches_production_substrate():
     assert config.ped_force_radius == 0.25
     assert config.desired_speed_mean == 1.29
     assert config.desired_speed_std == 0.19
+    from robot_sf.benchmark.pedestrian_manipulation_checks import build_probe
+    from robot_sf.nav.map_config import SinglePedestrianDefinition
+
     actors = [
         SinglePedestrianDefinition(id=str(i), start=(5, 4 * i + 4), goal=(110, 4 * i + 4))
         for i in range(32)
@@ -160,6 +160,21 @@ def test_combined_profile_dependency_is_not_silently_ignored():
         bound = profile_scenario({}, profiles["combined"], 1001)
         config = build_robot_config_from_scenario(bound, scenario_path=ROOT / "test.yaml")
         assert str(config.sim_config.obstacle_force_profile) == "gradient_v3"
+        from robot_sf.benchmark.pedestrian_manipulation_checks import build_probe
+        from robot_sf.nav.map_config import SinglePedestrianDefinition
+
+        sim, _, radius = build_probe(
+            profiles["combined"],
+            1001,
+            [SinglePedestrianDefinition(id="combined", start=(5, 4), goal=(110, 4))],
+            [],
+        )
+        assert radius == 0.25
+        assert sim.peds.agent_radius == 0.25
+        assert (
+            str(sim.config.obstacle_force_config.law_version) == "surface_distance_unit_normal_v2"
+        )
+        assert sim.config.obstacle_force_config.factor == 0.001
 
 
 def test_legacy_profile_retains_default_kernel_and_geometry():
@@ -173,3 +188,55 @@ def test_legacy_profile_retains_default_kernel_and_geometry():
     assert radius == 0.4
     assert sim.peds.agent_radius == 0.35
     assert sim.peds.max_speeds[0] == pytest.approx(0.65)
+
+
+def test_native_goal_seconds_reconstructed_without_failure_imputation():
+    """Catch omitted raw seconds silently becoming missing even for successful rows."""
+    from robot_sf.benchmark.pedestrian_sensitivity import metric_values
+
+    record = {
+        "metrics": {
+            "success": True,
+            "collisions": 0,
+            "near_misses": 1,
+            "time_to_goal_norm_success_only": 0.616,
+        },
+        "effective_budget_steps": 500,
+        "scenario_params": {"run_dt": 0.1},
+    }
+    assert metric_values(record)["time_to_goal"] == pytest.approx(30.8)
+    record["metrics"]["success"] = False
+    record["metrics"].pop("time_to_goal_norm_success_only")
+    assert metric_values(record)["time_to_goal"] is None
+
+
+def test_plan_inventory_and_pre_dispatch_seed_guard():
+    """Catch leaking release-eval seeds into the dev matrix or running during planning."""
+    from scripts.benchmark.run_pedestrian_sensitivity import DEFAULT_CONFIG, prepare
+
+    cfg, _, _, scenarios, planners = prepare(DEFAULT_CONFIG, check_dependencies=False)
+    assert len(scenarios) == 48
+    assert len(planners) == 14
+    assert cfg["selected_seeds"] == list(range(1001, 1031))
+    with pytest.raises(ValueError, match="non-development seed"):
+        prepare(DEFAULT_CONFIG, seeds=[50036], check_dependencies=False)
+
+
+def test_default_settings_bytes_and_profile_roundtrip():
+    """Catch default hash drift or losing opt-in controls during dataclass replace."""
+    import hashlib
+    import json
+    from dataclasses import replace
+
+    from robot_sf.sim.sim_config import SimulationSettings
+
+    digest = hashlib.sha256(
+        json.dumps(
+            SimulationSettings().to_dict(), sort_keys=True, separators=(",", ":"), default=str
+        ).encode()
+    ).hexdigest()
+    # Independently measured on origin/main 61cc91877a159e1d08b321543bd860042520b9ed.
+    assert digest == "0d054279f4a6e090d40e1fa54accaf58e955e624a3309472b44107f8790bb78d"
+    profile = replace(SimulationSettings(ped_force_radius=0.25, desired_speed_truncated=True))
+    assert profile.to_dict()["ped_force_radius"] == 0.25
+    assert profile.to_dict()["desired_speed_truncated"] is True

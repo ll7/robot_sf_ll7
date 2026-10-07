@@ -1,5 +1,9 @@
 # Context Retrieval Index
 
+Issue #10190 pedestrian sensitivity: opt-in measured profiles, strict dev-seed
+driver, paired summaries and bounded smoke; full study unrun:
+[pedsens study preparation](pedsens/README.md).
+
 Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
 [issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).

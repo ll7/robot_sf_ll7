@@ -101,6 +101,9 @@ def manipulation_checks(profile: dict, seeds: list[int]) -> dict:
                 "realized_5_to_10_s_m_s": np.mean(speeds, axis=0).tolist(),
                 "force_radius_m": float(sim.peds.agent_radius),
                 "collision_radius_m": radius,
+                "wall_law": str(sim.config.obstacle_force_config.law_version),
+                "wall_factor": float(sim.config.obstacle_force_config.factor),
+                "wall_threshold_m": float(sim.config.obstacle_force_config.threshold),
             }
         )
         for aperture in (0.8, 1.0, 1.2, 1.4):

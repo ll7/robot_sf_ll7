@@ -27,7 +27,7 @@ profiles:
     desired_speed_std: 0.19
     desired_speed_truncated: true
     obstacle_force_profile: gradient_v3
-wall_dependency: PR #10073
+wall_dependency: "PR #10073"
 smoke:
   scenario: classic_head_on_corridor_low
   planners: [goal, social_force]

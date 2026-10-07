@@ -39,7 +39,7 @@ def write_json(path, value):
     temporary.replace(path)
 
 
-def prepare(config_path, *, smoke=False, seeds=None, factors=None):
+def prepare(config_path, *, smoke=False, seeds=None, factors=None, check_dependencies=True):
     """Load release matrix/roster, bind authored horizons and refuse seed leakage.
 
     Returns:
@@ -79,7 +79,10 @@ def prepare(config_path, *, smoke=False, seeds=None, factors=None):
         if len(scenarios) != 1 or len(planners) != 2 or len(selected_seeds) != 2:
             raise ValueError("smoke requires 1 scenario x 2 release planners x 2 dev seeds")
     for factor in selected_factors:
-        profile_scenario(scenarios[0], cfg["profiles"][factor], selected_seeds[0])
+        if factor not in cfg["profiles"]:
+            raise ValueError(f"unknown study factor: {factor}")
+        if check_dependencies:
+            profile_scenario(scenarios[0], cfg["profiles"][factor], selected_seeds[0])
     return cfg, release, matrix_path, scenarios, planners
 
 
@@ -138,6 +141,13 @@ def run_slot(job):
         "episode_path": path.relative_to(out).as_posix(),
         "execution_mode": record["algorithm_metadata"]["planner_kinematics"]["execution_mode"],
         "elapsed_core_seconds": time.monotonic() - start,
+        "steps": record["steps"],
+        "failure_evidence": {
+            "termination_reason": record["termination_reason"],
+            "exact_events": record["event_ledger"]["exact_events"],
+            "collision_events": record["event_ledger"]["collision_events"],
+            "spawn_validity": record["spawn_validity"],
+        },
     }
 
 
@@ -162,7 +172,11 @@ def main(argv=None):
         parser.error("full study starts only after 0.0.8 sealed main AND doorway dispatch")
     os.chdir(ROOT)
     cfg, release, matrix, scenarios, planners = prepare(
-        args.config, smoke=args.mode == "smoke", seeds=args.seeds, factors=args.factors
+        args.config,
+        smoke=args.mode == "smoke",
+        seeds=args.seeds,
+        factors=args.factors,
+        check_dependencies=args.mode != "plan",
     )
     args.out = args.out.resolve()
     if args.out.exists():
@@ -237,6 +251,8 @@ def main(argv=None):
             "episode_core_seconds": core_seconds,
             "mean_slot_seconds": core_seconds / len(rows),
             "estimated_full_core_hours_2x": core_seconds / len(rows) * 120960 / 3600 * 2,
+            "estimate_limitations": "Only goal/social_force on one scenario measured; "
+            "learned/search planners and matrix costs unmeasured. Not a resource guarantee.",
         }
         write_json(args.out / "summary.json", summary)
         manifest["status"] = "complete"

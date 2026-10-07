@@ -68,6 +68,18 @@ def metric_values(record: dict) -> dict[str, float | None]:
         raw = metrics.get({"collision": "collisions", "near_miss": "near_misses"}.get(key, key))
         if key != "time_to_goal" and (raw is None or not np.isfinite(float(raw))):
             raise ValueError(f"invalid native {key}")
+    if values["success"] and values["time_to_goal"] is None:
+        # Native core metrics export normalized goal time, not always raw seconds.
+        # This is exactly the native time_to_goal identity: norm * horizon * dt.
+        values["time_to_goal"] = (
+            float(metrics["time_to_goal_norm_success_only"])
+            * int(record["effective_budget_steps"])
+            * float(record["scenario_params"]["run_dt"])
+        )
+    if values["success"] and (
+        values["time_to_goal"] is None or not np.isfinite(float(values["time_to_goal"]))
+    ):
+        raise ValueError("successful native row has unavailable time-to-goal")
     values["time_to_goal"] = (
         float(values["time_to_goal"])
         if values["success"]
@@ -94,6 +106,7 @@ def summarize(  # noqa: C901
         raise ValueError("positive bootstrap samples and confidence in (0, 1) required")
     require_dev_seeds([bootstrap_seed])
     table = {}
+    sources = {}
     for row in rows:
         require_dev_seeds([row["seed"]])
         key = (row["factor"], row["planner"], row["scenario"], row["seed"])
@@ -108,6 +121,10 @@ def summarize(  # noqa: C901
             if metric != "time_to_goal" and value not in (0, 1):
                 raise ValueError(f"rate must be a Bernoulli outcome: {key}")
         table[key] = row["values"]
+        sources[key] = {
+            "episode_path": row.get("episode_path"),
+            "failure_evidence": row.get("failure_evidence"),
+        }
     factors = sorted({key[0] for key in table})
     planners = sorted({key[1] for key in table})
     scenarios = sorted({key[2] for key in table})
@@ -204,6 +221,8 @@ def summarize(  # noqa: C901
                                 else "lost_success",
                                 "mechanism": "unclassified_requires_trace_review",
                                 "gate_admitted": False,
+                                "baseline_source": sources["legacy", planner, scenario, seed],
+                                "variant_source": sources[factor, planner, scenario, seed],
                                 "baseline": base,
                                 "variant": variant,
                             }

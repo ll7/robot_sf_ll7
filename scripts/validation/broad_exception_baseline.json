@@ -1801,6 +1801,7 @@
       "handler": "Exception",
       "lineno": 138,
       "path": "scripts/validation/measure_pedfix_planners.py",
+      "review_reason": "Diagnostic matrix boundary around heterogeneous planner adapters: record every ordinary failure with traceback and an explicit error row, continue remaining dev-seed cells, and exit 1 if any cell failed. No fallback or success substitution; BaseException (including interruption) propagates. Narrow adapter-specific types would lose later diagnostic cells for unexpected plugin failures.",
       "source": "except Exception as e:  # noqa: BLE001 - retain each failed matrix cell explicitly"
     },
     {

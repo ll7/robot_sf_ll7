@@ -1,0 +1,43 @@
+# Risk-aware dynamic-window baseline (non-learning).
+goal_target_version: active_waypoint_v2
+allow_testing_algorithms: true
+max_linear_speed: 1.2
+max_angular_speed: 1.0
+rollout_dt: 0.1
+rollout_steps: 16
+goal_tolerance: 0.25
+
+linear_candidates: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+angular_candidates: [-1.0, -0.8, -0.4, 0.0, 0.4, 0.8, 1.0]
+
+goal_progress_weight: 4.0
+heading_weight: 0.8
+ped_clearance_weight: 1.6
+obstacle_clearance_weight: 1.2
+smoothness_weight: 0.15
+ttc_weight: 0.3
+
+safe_distance: 0.35
+near_distance: 0.7
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+
+near_field_distance: 2.5
+density_norm_count: 8.0
+near_field_speed_cap: 0.6
+progress_escape_enabled: true
+progress_escape_distance: 1.0
+progress_escape_speed: 0.55
+progress_escape_heading_gain: 1.6
+
+# Release geometry: safety distances below are surface clearances.
+clearance_model: surface_v2
+robot_radius_m: 1.0
+pedestrian_radius_m: 0.4
+hard_obstacle_clearance: 0.30
+# Reachable commands over the map runner's 0.1 s drive step.
+dynamic_window_version: drive_limited_v2
+dynamic_window_dt: 0.1
+max_linear_accel: 1.0
+max_linear_decel: 1.0
+max_angular_accel: 1.0

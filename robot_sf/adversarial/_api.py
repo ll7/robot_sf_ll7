@@ -62,6 +62,7 @@ from robot_sf.adversarial.materialize import (
     materialize_multi_ped_scenario_payload,
     materialize_multi_ped_single_pedestrian_overrides,
 )
+from robot_sf.adversarial.objectives_v2 import register_constraints_first_lexicographic_v2
 from robot_sf.adversarial.qd import (
     GridSpec,
     QDArchive,
@@ -149,6 +150,8 @@ from robot_sf.adversarial.seed_sensitivity import (
     SeedSensitivitySummary,
     run_seed_sensitivity,
 )
+
+register_constraints_first_lexicographic_v2()
 
 __all__ = [
     "ADMISSIBILITY_VERDICTS",

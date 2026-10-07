@@ -1,0 +1,21 @@
+{
+  "anchors_sha256": "dfb48e6846665bd8aa0ce6fdbf3043018ebeafb829347e6b23e47b42c37bab7b",
+  "artifact_only_attachment": "passed",
+  "diagnostic": true,
+  "episodes_executed": 0,
+  "rehearsal_seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "scientific_admission": false,
+  "source": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+  "strict_raw_custody_attachment": "passed",
+  "upper_anchors": {
+    "F": 78.44270546210876,
+    "J": 1.9396757022730264,
+    "K": 0.5160654761904677,
+    "N": 0.25,
+    "T": 3
+  }
+}

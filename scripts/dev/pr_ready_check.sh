@@ -1097,6 +1097,9 @@ if [[ "$pr_ready_final" == "1" ]]; then
   changed_files_list="$(mktemp "${TMPDIR:-/tmp}/pr-ready-changed-files.XXXXXX")"
   printf '%s\n' "${changed_files[@]}" > "$changed_files_list"
   contract_args=(--changed-files-file "$changed_files_list" --base-ref "$BASE_REF")
+  # Local budgets cover only feature changes; the moving base can be ahead of HEAD.
+  # Keep VALIDATED_BASE_SHA as the base-tip identity for freshness and drift checks.
+  contract_args+=(--budget-base-sha "$(git merge-base "$VALIDATED_BASE_SHA" HEAD)")
   if [[ -n "$PR_READY_PR_BODY_FILE" ]]; then
     contract_args+=(--pr-body-file "$PR_READY_PR_BODY_FILE")
   fi

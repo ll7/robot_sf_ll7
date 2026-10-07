@@ -1,0 +1,7 @@
+{
+  "schema_version": "issue_9860_preflight_source_metadata.v1",
+  "artifact": "goal_clearance_runtime.patch.gz",
+  "distance_convention": "surface_clearance",
+  "meaning": "The source overlay applies robot footprint clearance from static obstacle surfaces; this patch is not a measured distance series.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

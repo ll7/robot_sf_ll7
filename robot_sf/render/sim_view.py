@@ -36,7 +36,9 @@ try:
     from moviepy import ImageSequenceClip
 
     MOVIEPY_AVAILABLE = True
-except ImportError:
+except (ImportError, PermissionError):
+    # MoviePy loads a discovered .env while importing. An unreadable optional
+    # configuration must not break CLI help or users who do not record video.
     MOVIEPY_AVAILABLE = False
     logger.warning(
         "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?",

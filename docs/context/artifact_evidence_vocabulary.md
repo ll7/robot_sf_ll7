@@ -97,6 +97,27 @@ preservation and transfer receipts reference without rewriting producer manifest
 closed with exact file/chunk locations on mutation, truncation, sparse/symlink/hardlink/special
 file, path, collision, and partial-manifest conditions.
 
+Each new file record also has a whole-file `file_sha256` and `allocation_status`. Low reported
+allocation with no usable FIEMAP mapping is recorded as `allocation_unverified` on the source;
+a FIEMAP mapping that shows holes, unwritten extents, or incomplete coverage still fails. Source
+verification must explicitly use `--side source`; the default remains strict destination
+verification. Every nonempty destination file requires a gapless FIEMAP allocation map, regardless
+of its reported block count. Without FIEMAP, destination verification fails with
+`allocation_unverifiable_destination`. `SEEK_DATA`/`SEEK_HOLE` may additionally detect a hole, but
+a walk that reports only data never proves allocation. Its whole-file SHA-256 must match the
+manifest. The `custody` command rejects symlinked root arguments before resolving them, consumes
+the manifest plus source and destination verification JSON, then re-hashes and rechecks allocation
+on both live roots before writing a self-digested `chunk-custody.v1` receipt. It rejects state-backed
+verification receipts because cached digests are not a fresh byte readback. The receipt proves this
+copy check only; scheduler,
+source revision, and preservation claims need their own bound evidence.
+
+```bash
+uv run python scripts/tools/chunk_manifest.py verify --side source --root <SOURCE> --manifest <MANIFEST.json> --json > <SOURCE-VERIFY.json>
+uv run python scripts/tools/chunk_manifest.py verify --side destination --root <DESTINATION> --manifest <MANIFEST.json> --json > <DESTINATION-VERIFY.json>
+uv run python scripts/tools/chunk_manifest.py custody --manifest <MANIFEST.json> --source-verification <SOURCE-VERIFY.json> --destination-verification <DESTINATION-VERIFY.json> --source-root <SOURCE> --destination-root <DESTINATION> --output <CUSTODY.json> --json
+```
+
 New manifests also carry per-file `digest_kind`, a `summary` block, and
 `chunking.read_size_bytes`; validation checks each extra when present and older manifests without
 them remain valid. `resume` and `verify --state` reuse cached digests from a

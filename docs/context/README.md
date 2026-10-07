@@ -1,5 +1,8 @@
 # Context Notes Workflow
 
+* [Issue #9668 Explicit Scenario Budgets](issue_9668_campaign_horizon_authority.md):
+  recorded 0.0.7 budget exposure, real 0.0.8 limits, and the fixed/scheduled contract.
+
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable
 agent handoff, and reusable reasoning that should not be trapped in chat or PR text.
 
@@ -1910,3 +1913,5 @@ why a change was made rather than a full issue execution transcript.
   records the assessment-only boundary for an Actor-Critic Model Predictive Control inspired
   learned-MPC local planner, including adapter burden, benchmark claim limits, and a conditional
   design-child recommendation.
+
+The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).

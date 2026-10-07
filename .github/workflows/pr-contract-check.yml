@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   pr-contract-check:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -27,9 +28,10 @@ jobs:
         run: |
           set -euo pipefail
           # On pull_request the default checkout is a shallow merge-ref with no
-          # origin/<base> ref, so `git diff origin/main` / `git show origin/main:path`
-          # error and the contract check mis-flags modified evidence files as new
-          # (issue #5464). Fetch the base branch so origin/<base> resolves locally.
+          # origin/<base> ref, so current-base checks such as `git diff origin/main`
+          # / `git show origin/main:path` cannot resolve it (issue #5464). Keep
+          # fetching that moving branch for those checks; budget measurement gets
+          # the immutable pull_request.base.sha separately below.
           git fetch --no-tags --depth=1 origin \
             "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" \
             || echo "::warning::Failed to fetch base ref '${BASE_REF}'; contract check will use authoritative added-files list"
@@ -70,9 +72,29 @@ jobs:
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --json
 
+      - name: Enforce evaluation seed holdout
+        run: |
+          set -euo pipefail
+          uv run python scripts/validation/check_seed_holdout_diff.py \
+            --base-ref "origin/${{ github.base_ref }}"
+
+      - name: Validate PR body contracts (advisory)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/check_pr_followups.py \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
+            --require-body \
+            --require-substantive-body \
+            --require-open-issues \
+            --advisory
+
       - name: Run PR Contract Check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           uv run python scripts/ci/pr_contract_check.py \
@@ -80,4 +102,5 @@ jobs:
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --added-files-file "$RUNNER_TEMP/pr_added_files.txt" \
             --base-ref "origin/${{ github.base_ref }}" \
+            --budget-base-sha "$PR_BASE_SHA" \
             --post-comment

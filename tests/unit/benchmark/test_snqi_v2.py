@@ -1,5 +1,8 @@
 """SNQI-v2 contract properties, strict assets and campaign/offline parity."""
 
+# evidence-writer-exempt: writes target temporary test fixtures, including deliberately
+# malformed JSON and exact-byte anchor copies; committed evidence is read-only here.
+
 from __future__ import annotations
 
 import hashlib
@@ -70,26 +73,50 @@ FROZEN_007_PLANNER_CONFIG_SHA256 = {
 }
 
 
-def test_development_calibration_matches_frozen_007_campaign_identity():
-    """Only development seeds and execution/publication metadata may differ from 0.0.7."""
+def test_scheduled_calibration_keeps_literal_publication_placeholders():
+    """Acquired anchors bind these bytes; identity resolution must write elsewhere."""
+    lines = (ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml").read_bytes()
+    assert lines.splitlines(keepends=True)[66:68] == [
+        b"release_tag: '{{release_tag}}'\n",
+        b"doi: '{{version_doi}}'\n",
+    ], "Calibration lines 67-68 must stay literal; resolving them invalidates acquired anchors"
+
+
+def test_development_calibration_matches_candidate_and_preserves_frozen_007():
+    """Calibrate the candidate inputs while keeping 0.0.7 comparison bytes pinned."""
     frozen_bytes = FROZEN_007_CAMPAIGN.read_bytes()
     assert hashlib.sha256(frozen_bytes).hexdigest() == FROZEN_007_CAMPAIGN_SHA256
     frozen = yaml.safe_load(frozen_bytes)
-    calibration = yaml.safe_load((ASSETS / "calibration.dev101_102.yaml").read_bytes())
+    calibration = yaml.safe_load(
+        (ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml").read_bytes()
+    )
+    template = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ).read_bytes()
+    )
 
     assert len(calibration["planners"]) == 14
     assert calibration["seed_policy"] == {
         "mode": "fixed-list",
-        "seeds": [101, 102],
-        "seed_sets_path": frozen["seed_policy"]["seed_sets_path"],
+        "seeds": [1001, 1002],
+        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
     }
-    assert calibration["name"] == "snqi_v2_calibration_dev101_102"
+    assert calibration["name"] == "snqi_v2_calibration_dev1001_1002"
     assert calibration["paper_facing"] is False
     assert calibration["workers"] == 16
     assert calibration["export_publication_bundle"] is False
     assert calibration["arm_isolation"] == "subprocess"
+    assert calibration["planners"] == template["planners"]
+    assert template["protocol_version"] == "0.0.8"
+    assert calibration["protocol_version"] == "0.0.8"
 
+    # D-057 keeps release and calibration rows untraced; rehearsal 2 carries diagnostics.
+    assert template.get("record_simulation_step_trace", False) is False
+    assert calibration.get("record_simulation_step_trace", False) is False
     allowed_deviations = {
+        "protocol_version",  # calibration has no fixed horizon; its schedule binds the budget
         "name",
         "paper_facing",
         "seed_policy",
@@ -97,8 +124,11 @@ def test_development_calibration_matches_frozen_007_campaign_identity():
         "export_publication_bundle",
         "arm_isolation",
     }
+    assert "snqi_v2_spec" not in calibration, "calibration must not declare a spec"
     assert {key: value for key, value in calibration.items() if key not in allowed_deviations} == {
-        key: value for key, value in frozen.items() if key not in allowed_deviations
+        key: value
+        for key, value in template.items()
+        if key not in allowed_deviations and key != "snqi_v2_spec"
     }
     assert hashlib.sha256((ROOT / frozen["scenario_matrix"]).read_bytes()).hexdigest() == (
         FROZEN_007_SCENARIO_SHA256
@@ -108,7 +138,7 @@ def test_development_calibration_matches_frozen_007_campaign_identity():
     ).hexdigest() == (FROZEN_007_SEED_SETS_SHA256)
     assert {
         arm["key"]: hashlib.sha256((ROOT / arm["algo_config"]).read_bytes()).hexdigest()
-        for arm in calibration["planners"]
+        for arm in frozen["planners"]
         if "algo_config" in arm
     } == FROZEN_007_PLANNER_CONFIG_SHA256
 
@@ -124,6 +154,7 @@ def fixture_spec() -> SnqiV2Spec:
         0.8,
         {},
         {},
+        metric_schema_version="robot-sf-metrics.v2",
     )
 
 
@@ -131,6 +162,8 @@ def metrics(**overrides):
     """Return complete synthetic metrics with an independently retained legacy score."""
     force_metadata = overrides.pop("robot_force_metadata", {})
     document = {
+        "metric_schema_version": "robot-sf-metrics.v2",
+        "metric_definitions_sha256": DEFINITIONS_SHA256,
         "success": 1,
         "total_collision_count": 0,
         "time_to_goal_ideal_ratio": 1,
@@ -140,6 +173,8 @@ def metrics(**overrides):
         "jerk_mean": 0,
         "curvature_mean": 0,
         "snqi": -0.12345678901234567,
+        "robot_force_invalid_present_samples": 0,
+        "robot_force_pp_equiv_invalid_present_samples": 0,
         "robot_force_metadata": _force_metadata(**force_metadata),
         **overrides,
     }
@@ -176,7 +211,12 @@ def _force_metadata(**overrides):
 
 def _add_synthetic_freeze_custody(document):
     """Make a loader fixture with an internally consistent fake freeze receipt."""
+    from robot_sf.benchmark.snqi.evaluation_seeds import SEALED_EVALUATION_SEEDS_SHA256
+
+    document.setdefault("metric_schema_version", "robot-sf-metrics.v1")
+    document["evaluation_seeds_sha256"] = SEALED_EVALUATION_SEEDS_SHA256
     calibration = document["calibration"]
+    calibration.setdefault("scenario_horizons", dict.fromkeys(calibration["scenarios"], 600))
     arms = calibration["arms"]
     scenarios = calibration["scenarios"]
     seeds = calibration["seeds"]
@@ -196,6 +236,7 @@ def _add_synthetic_freeze_custody(document):
         ).hexdigest(),
         episodes_hash_rule="sha256(sorted compact JSON relative-path-to-file-sha256 map)",
         campaign_config_hash="c" * 64,
+        campaign_config_identity="c" * 16,
         campaign_manifest_sha256="d" * 64,
     )
     document["status"] = "frozen"
@@ -208,6 +249,8 @@ def anchor_document():
     document = {
         "version": "SNQI-v2.0",
         "status": "frozen",
+        "metric_schema_version": "robot-sf-metrics.v2",
+        "metric_definitions_sha256": DEFINITIONS_SHA256,
         "anchors": {
             key: {
                 "lower": 0,
@@ -243,11 +286,17 @@ def anchor_document():
 
 
 @pytest.fixture
-def spec_files(tmp_path):
+def spec_files(tmp_path, monkeypatch):
     """Write versioned test assets with synthetic anchors."""
     paths = [tmp_path / name for name in ("weights.json", "anchors.json", "family.yaml")]
     paths[0].write_bytes((ASSETS / "weights.v2.0.json").read_bytes())
-    paths[1].write_text(json.dumps(anchor_document()))
+    document = anchor_document()
+    paths[1].write_text(json.dumps(document))
+    # The synthetic evaluation schedule is independent of the mutated anchor file.
+    from robot_sf.benchmark.snqi import v2_calibration
+
+    horizons = dict(document["calibration"]["scenario_horizons"])
+    monkeypatch.setattr(v2_calibration, "_candidate_calibration_horizons", lambda: horizons)
     paths[2].write_bytes((ASSETS / "family.v2.0.yaml").read_bytes())
     return paths
 
@@ -257,7 +306,9 @@ def test_family_loader_rejects_duplicate_yaml_keys(spec_files, prefix):
     family = spec_files[2]
     family.write_text(prefix + family.read_text())
     with pytest.raises(ValueError, match="duplicate YAML key"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("value", [False, True])
@@ -268,7 +319,9 @@ def test_weight_loader_rejects_boolean_numbers(spec_files, term, value):
     document["weights"][f"w_{term}"]["value"] = value
     spec_files[0].write_text(json.dumps(document))
     with pytest.raises(ValueError):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("value", [False, True])
@@ -280,7 +333,9 @@ def test_anchor_loader_rejects_boolean_numbers(spec_files, term, bound, value):
     document["anchors"][term][bound] = value
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("value", [False, True])
@@ -298,7 +353,9 @@ def test_anchor_loader_rejects_boolean_correlation(spec_files, value):
         )
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="rho"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("value", [False, True])
@@ -331,7 +388,9 @@ def test_scoring_preserves_declared_boolean_success(success):
 
 
 def test_spec_load_and_immutable(spec_files):
-    spec = load_snqi_v2_spec(*spec_files)
+    spec = load_snqi_v2_spec(
+        *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+    )
     assert spec.weights == WEIGHTS
     assert all(len(value) == 64 for value in spec.hashes.values())
     with pytest.raises(TypeError):
@@ -353,7 +412,9 @@ def test_weight_loader_fail_closed(spec_files, mutation):
         ]
     spec_files[0].write_text(json.dumps(doc))
     with pytest.raises(ValueError):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("term", TERMS)
@@ -367,7 +428,9 @@ def test_versioned_loader_rejects_alternate_stratum_safe_weights(spec_files, ter
     assert mutated["C"] > mutated["S"] + quality
     spec_files[0].write_text(json.dumps(doc))
     with pytest.raises(ValueError, match="exact declared weight"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("mutation", ["pending", "zero", "nan", "lower", "decision", "seeds"])
@@ -385,7 +448,9 @@ def test_anchor_loader_fail_closed(spec_files, mutation):
         doc["anchors"]["F"]["upper"] = 0 if mutation == "zero" else float("nan")
     spec_files[1].write_text(json.dumps(doc))
     with pytest.raises(ValueError):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("mutation", ["missing", "status", "velocity"])
@@ -408,7 +473,9 @@ def test_anchor_loader_binds_pp_equivalent_counterfactual_contract(spec_files, m
         decision["selected_source_contract"]["pp_equiv_velocity_rule"] = "forward_difference"
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="recorded producer and reference contract"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("mutation", ["missing", "source", "timing", "reference_rule"])
@@ -425,7 +492,9 @@ def test_anchor_loader_binds_recorded_simulated_force_contract(spec_files, mutat
         contract["reference_rule"] = "unspecified"
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="recorded producer and reference contract"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize(
@@ -464,7 +533,9 @@ def test_anchor_loader_requires_complete_freeze_custody(spec_files, mutation):
         document["force_decision"]["threshold_absolute_rho"] = 0.95
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="calibration|force decision"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("quantile_method", [None, "nearest"])
@@ -476,7 +547,9 @@ def test_anchor_loader_requires_linear_quantile_method(spec_files, quantile_meth
         document["calibration"]["quantile_method"] = quantile_method
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="quantile_method must be linear"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 @pytest.mark.parametrize("mutation", ["missing", "arm", "fallback", "short", "bool", "claim"])
@@ -497,7 +570,9 @@ def test_anchor_loader_rejects_unproven_command_mode_census(spec_files, mutation
         }[mutation]
     spec_files[1].write_text(json.dumps(doc))
     with pytest.raises(ValueError, match="calibration"):
-        load_snqi_v2_spec(*spec_files)
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
 
 
 def test_duplicate_and_derived_source_rejected():
@@ -665,8 +740,29 @@ def records():
             "metrics": metrics(success=success),
         }
         for key, success in (("a", 1), ("b", 0))
-        for seed in (111, 112)
+        for seed in (201, 202)
     ]
+
+
+def test_f4_family_rejects_reviewers_uneven_77_cell_seed_grid():
+    """Complete arm pairing alone cannot align episode means with seed-mean CIs."""
+    rows = [
+        {
+            "algo": f"planner_{arm:02d}",
+            "scenario_id": f"s{scenario}",
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(success=int(seed == 1001)),
+        }
+        for arm in range(14)
+        for scenario, seed in (
+            [(i, 1001) for i in range(48)] + [(0, seed) for seed in range(1002, 1031)]
+        )
+    ]
+    # All inputs traverse real validation and scoring. No scored-input mock.
+    assert sum(row["metrics"]["success"] for row in rows) / len(rows) == pytest.approx(48 / 77)
+    with pytest.raises(ValueError, match="equal.*coverage.*seed"):
+        build_family_report(rows, fixture_spec(), bootstrap_samples=2000)
 
 
 def test_legacy_values_preserved_and_legacy_functions_unmodified():
@@ -686,6 +782,7 @@ def test_legacy_values_preserved_and_legacy_functions_unmodified():
             "jerk_mean",
         )
     }
+    baseline["metric_schema_version"] = "robot-sf-metrics.v2"
     for version, func in (("SNQI-v0", compute_snqi_v0), ("SNQI-v1", compute_snqi_v1)):
         assert compute_snqi(ep["metrics"], {}, baseline, score_version=version) == func(
             ep["metrics"], {}, baseline
@@ -712,7 +809,7 @@ def test_family_determinism_grid_and_scaling():
     assert report["top1_frequency"] == other["top1_frequency"]
 
 
-def write_campaign_arm(path, rows):
+def write_campaign_arm(path, rows, *, algo_config_path=None):
     """Create real producer custody for synthetic episode rows."""
     from robot_sf.benchmark.result_provenance import (
         build_result_provenance_manifest,
@@ -737,7 +834,7 @@ def write_campaign_arm(path, rows):
         scenario_path=ROOT / "configs/scenarios/classic_interactions_francis2023.yaml",
         scenarios=[{"name": "fixture"}],
         algo=rows[0]["algo"],
-        algo_config_path=None,
+        algo_config_path=algo_config_path,
         benchmark_profile="baseline-safe",
         suite_key="fixture",
         total_jobs=len(rows),
@@ -854,6 +951,7 @@ def calibration_records():
     """Generate a full synthetic development grid with independent F and N."""
     import numpy as np
 
+    from robot_sf.benchmark.snqi.v2_calibration import CalibrationGrid
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rng = np.random.default_rng(8)
@@ -900,6 +998,7 @@ def calibration_records():
         "run_id": "synthetic",
         "source_commit": "a" * 40,
         "episodes_sha256": "b" * 64,
+        "grid": CalibrationGrid(dict.fromkeys(scenarios, 600), (101, 102)),
     }
 
 
@@ -1080,10 +1179,10 @@ def test_spawn_validity_rejects_nested_clearance_drift(entrypoint, key, value):
 @pytest.mark.parametrize(
     "ped_x,obstacle_clearance", [(2.0, 1.0), (0.0, 1.0), (2.0, -0.1), (None, float("inf"))]
 )
-def test_spawn_validity_accepts_actual_reset_clearance_producer(
+def test_spawn_validity_checks_actual_reset_clearance_producer(
     monkeypatch, ped_x, obstacle_clearance
 ):
-    """Actual reset producer output retains its score/anchors for completed routes."""
+    """Actual reset overlap blocks score and anchors even for completed routes."""
     from types import SimpleNamespace
 
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
@@ -1103,8 +1202,14 @@ def test_spawn_validity_accepts_actual_reset_clearance_producer(
     expected_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(clearance, [], route_complete=True)
-    assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
+    if clearance["overlap"]:
+        with pytest.raises(ValueError, match="spawn_validity"):
+            score_episode(rows[0], fixture_spec())
+        with pytest.raises(ValueError, match="spawn_validity"):
+            derive_calibration_anchors(rows, **kwargs)
+    else:
+        assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
+        assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
 
 
 @pytest.mark.parametrize("entrypoint", ["score", "calibration"])
@@ -1316,8 +1421,8 @@ def test_spawn_validity_completed_exception_requires_consistent_outcome(entrypoi
 
 
 @pytest.mark.parametrize("prior_collision", [False, True])
-def test_spawn_validity_preserves_producer_completed_route_exception(prior_collision):
-    """The producer permits a completed route despite reset-overlap telemetry."""
+def test_spawn_validity_completed_route_cannot_override_invalid_reset(prior_collision):
+    """The producer rejects reset overlap regardless of the observed route outcome."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
@@ -1325,8 +1430,6 @@ def test_spawn_validity_preserves_producer_completed_route_exception(prior_colli
     if prior_collision:
         for row in rows:
             row["metrics"]["total_collision_count"] = 1
-    expected_score = score_episode(rows[0], fixture_spec())
-    expected_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(
             spawn_clearance_fixture(overlap=True), [], route_complete=True
@@ -1336,8 +1439,35 @@ def test_spawn_validity_preserves_producer_completed_route_exception(prior_colli
             "collision_event": prior_collision,
             "timeout_event": False,
         }
-    assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
+    with pytest.raises(ValueError, match="spawn_validity"):
+        score_episode(rows[0], fixture_spec())
+    with pytest.raises(ValueError, match="spawn_validity"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize("reset_kind", ["unmeasured", "overlap"])
+def test_spawn_validity_forged_valid_reset_is_rejected(entrypoint, reset_kind):
+    """A false invalid flag cannot admit an unknown or overlapping reset."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    block = (
+        build_spawn_validity(None, [], reset_clearance_error="probe failed")
+        if reset_kind == "unmeasured"
+        else build_spawn_validity(spawn_clearance_fixture(overlap=True), [], route_complete=True)
+    )
+    block.update(invalid_run=False, invalid_reason=None)
+    rows[0]["spawn_validity"] = block
+    with pytest.raises(
+        ValueError,
+        match="unavailable reset clearance|reset overlap marked valid",
+    ):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
 
 
 @pytest.mark.parametrize("clearance", [spawn_clearance_fixture(), None])
@@ -1356,9 +1486,15 @@ def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block(clearance
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(clearance, [])
         row["outcome"] = {"route_complete": True, "collision_event": False, "timeout_event": False}
-    scored = score_episode(rows[0], fixture_spec())
-    assert scored["metrics"] == legacy_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
+    if clearance is None:
+        with pytest.raises(ValueError, match="spawn_validity"):
+            score_episode(rows[0], fixture_spec())
+        with pytest.raises(ValueError, match="spawn_validity"):
+            derive_calibration_anchors(rows, **kwargs)
+    else:
+        scored = score_episode(rows[0], fixture_spec())
+        assert scored["metrics"] == legacy_score["metrics"]
+        assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
 
 
 @pytest.mark.parametrize("block", [{"invalid_run": True}, {"invalid_run": "false"}, None])
@@ -1403,7 +1539,7 @@ def test_calibration_exact_grid_and_no_imputation():
         derive_calibration_anchors(rows[:-1], **kwargs)
     with pytest.raises(ValueError, match="duplicate"):
         derive_calibration_anchors(rows[:-1] + rows[:1], **kwargs)
-    rows[0]["seed"] = 111
+    rows[0]["seed"] = 1001
     with pytest.raises(ValueError, match="out-of-split"):
         derive_calibration_anchors(rows, **kwargs)
 
@@ -1564,7 +1700,7 @@ def test_calibration_records_actual_command_modes_without_relabeling(
     assert sum(counts.get("native", 0) for counts in census.values()) == 1344 - adapter_count
     assert all(sum(counts.values()) == 96 for counts in census.values())
     spec_files[1].write_text(json.dumps(_add_synthetic_freeze_custody(anchors)))
-    load_snqi_v2_spec(*spec_files)
+    load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=kwargs["grid"].scenario_horizons)
 
 
 @pytest.mark.parametrize("marker", ["fallback_used", "fallback_triggered", "degraded"])
@@ -1602,6 +1738,34 @@ def calibration_archive(tmp_path, guarded_episode, request):
     from robot_sf.benchmark.utils import _config_hash
 
     rows, kwargs = calibration_records()
+    options = dict(getattr(request, "param", {}))
+    scheduled = options.pop("scheduled", False)
+    budgets = dict(
+        zip(kwargs["scenarios"], [400] * 25 + [500] * 13 + [600] * 8 + [650, 700], strict=True)
+    )
+    if scheduled:
+        for row in rows:
+            row["seed"] += 900
+            row["horizon"] = budgets[row["scenario_id"]]
+            row["metric_schema_version"] = "robot-sf-metrics.v2"
+            row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+            row["metrics"]["metric_definitions_sha256"] = DEFINITIONS_SHA256
+        schedule = tmp_path / "budgets.yaml"
+        schedule.write_text(
+            yaml.safe_dump(
+                {
+                    "schema_version": 1,
+                    "scenarios": {
+                        name: {"recommended_horizon_steps": budget, "status": "authored"}
+                        for name, budget in budgets.items()
+                    },
+                }
+            )
+        )
+        options.update(
+            scenario_horizons_path=schedule,
+            scenario_horizons_sha256=hashlib.sha256(schedule.read_bytes()).hexdigest(),
+        )
     kwargs["expected_algorithms"] = {
         arm: "guarded_ppo" if i == 0 else "goal" for i, arm in enumerate(kwargs["arms"])
     }
@@ -1609,7 +1773,15 @@ def calibration_archive(tmp_path, guarded_episode, request):
     scenario_path.write_text(
         yaml.safe_dump(
             [
-                {"name": name, "map_file": str(ROOT / "maps/svg_maps/classic_crossing.svg")}
+                {
+                    "name": name,
+                    "map_file": str(ROOT / "maps/svg_maps/classic_crossing.svg"),
+                    **(
+                        {"simulation_config": {"max_episode_steps": budgets[name]}}
+                        if scheduled
+                        else {}
+                    ),
+                }
                 for name in kwargs["scenarios"]
             ]
         )
@@ -1620,10 +1792,11 @@ def calibration_archive(tmp_path, guarded_episode, request):
         planners=tuple(
             PlannerSpec(key=arm, algo=kwargs["expected_algorithms"][arm]) for arm in kwargs["arms"]
         ),
-        seed_policy=SeedPolicy(mode="fixed-list", seeds=(101, 102)),
-        horizon=600,
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001, 1002) if scheduled else (101, 102)),
+        horizon=None if scheduled else 600,
+        protocol_version="0.0.8" if scheduled else None,
         dt=0.1,
-        **getattr(request, "param", {}),
+        **options,
     )
     resolved = _load_campaign_scenarios(cfg)
     effective = _result_provenance_scenarios(cfg, resolved, kinematics="differential_drive")
@@ -1636,7 +1809,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
         "config_hash": _config_hash(_config_hash_payload(cfg)),
         "scenario_matrix_hash": _scenario_matrix_hash(resolved),
         "kinematics_matrix": ["differential_drive"],
-        "seed_policy": {"resolved_seeds": [101, 102]},
+        "seed_policy": {"resolved_seeds": list(cfg.seed_policy.seeds)},
         "planners": [
             {"key": arm, "algo": kwargs["expected_algorithms"][arm], "enabled": True}
             for arm in kwargs["arms"]
@@ -1664,7 +1837,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
                 scenario_with_episode_seed_defaults(by_name[row["scenario_id"]], seed=row["seed"]),
                 algo=algo,
                 algo_config={},
-                horizon=600,
+                horizon=row["horizon"],
                 dt=0.1,
                 record_forces=True,
                 observation_mode=mode,
@@ -1692,7 +1865,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
                 "config_hash": row["config_hash"],
                 "repo_commit": row["git_hash"],
                 "simulator_settings": build_simulator_settings_provenance(
-                    horizon=600,
+                    horizon=row["horizon"],
                     dt=0.1,
                     record_forces=True,
                     active_observation_mode=mode,
@@ -1712,7 +1885,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
             suite_key="fixture",
             total_jobs=96,
             written=96,
-            horizon=600,
+            horizon=cfg.horizon,
             dt=0.1,
             record_forces=True,
             active_observation_mode=mode,
@@ -1980,11 +2153,17 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
     from robot_sf.benchmark.snqi.v2_calibration import _validated_calibration_config
 
     config = _validated_calibration_config(None)
-    source = ASSETS / "calibration.dev101_102.yaml"
+    source = ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml"
     assert config.source_config_path == source
     assert config.source_config_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
-    assert config.horizon == 600
-    assert config.seed_policy.seeds == (101, 102)
+    assert config.horizon is None
+    assert config.scenario_horizons_path == (
+        ROOT / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
+    )
+    assert config.scenario_horizons_sha256 == (
+        "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
+    )
+    assert config.seed_policy.seeds == (1001, 1002)
     path = tmp_path / "changed.yaml"
     path.write_bytes(source.read_bytes() + b"\n# bytes changed after canonical load\n")
     with pytest.raises(ValueError, match="config source changed"):
@@ -2131,16 +2310,29 @@ def test_config_hash_preserves_disabled_v2_and_serializes_enabled(tmp_path):
 def test_load_snqi_v2_config_resolves_explicit_asset_paths(spec_files, tmp_path, monkeypatch):
     """Load versioned assets from config-local and repository-root paths."""
     from robot_sf.benchmark.camera_ready import _config as config_module
+    from robot_sf.benchmark.snqi import v2_calibration
 
+    monkeypatch.setattr(
+        v2_calibration,
+        "_candidate_calibration_horizons",
+        lambda: {f"synthetic-{i}": 600 for i in range(48)},
+    )
+    document = json.loads(spec_files[1].read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    spec_files[1].write_text(json.dumps(document))
     local_paths = {
         "weights_path": spec_files[0].name,
         "anchors_path": spec_files[1].name,
         "family_path": spec_files[2].name,
     }
     local_spec = config_module._load_snqi_v2_config(
-        local_paths, spec_files[0].parent / "campaign.yaml"
+        local_paths,
+        spec_files[0].parent / "campaign.yaml",
+        evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)},
     )
-    assert local_spec == load_snqi_v2_spec(*spec_files)
+    assert local_spec == load_snqi_v2_spec(
+        *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+    )
     assert config_module._load_snqi_v2_config(None, tmp_path / "campaign.yaml") is None
     with pytest.raises(ValueError, match="requires exactly"):
         config_module._load_snqi_v2_config(
@@ -2156,12 +2348,21 @@ def test_load_snqi_v2_config_resolves_explicit_asset_paths(spec_files, tmp_path,
     repository_paths_spec = config_module._load_snqi_v2_config(
         {key: f"assets/{path.name}" for key, path in zip(local_paths, spec_files, strict=True)},
         tmp_path / "config" / "campaign.yaml",
+        evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)},
     )
-    assert repository_paths_spec == load_snqi_v2_spec(*repository_paths)
+    assert repository_paths_spec == load_snqi_v2_spec(
+        *repository_paths, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+    )
 
 
 def test_offline_cli_emits_mandatory_pair(spec_files, tmp_path):
-    from scripts.tools.analyze_snqi_contract import main
+    from scripts.tools.analyze_snqi_contract import main as analyze_main
+
+    horizons_path = tmp_path / "evaluation-horizons.json"
+    horizons_path.write_text(json.dumps({f"synthetic-{i}": 600 for i in range(48)}))
+
+    def main(args):
+        return analyze_main([*args, "--horizons", str(horizons_path)])
 
     path = tmp_path / "episodes.jsonl"
     path.write_text("".join(json.dumps(row) + "\n" for row in records()))
@@ -2287,7 +2488,13 @@ def test_guarded_campaign_entry_binding(tmp_path, guarded_episode, expected):
 def test_guarded_offline_requires_matching_file_map(
     tmp_path, spec_files, guarded_episode, expected
 ):
-    from scripts.tools.analyze_snqi_contract import main
+    from scripts.tools.analyze_snqi_contract import main as analyze_main
+
+    horizons_path = tmp_path / "evaluation-horizons.json"
+    horizons_path.write_text(json.dumps({f"synthetic-{i}": 600 for i in range(48)}))
+
+    def main(args):
+        return analyze_main([*args, "--horizons", str(horizons_path)])
 
     path = tmp_path / "episodes.jsonl"
     path.write_text(json.dumps(guarded_episode) + "\n")
@@ -2330,7 +2537,13 @@ def test_offline_execution_map_rejects_raw_identity_mismatch(
     tmp_path, spec_files, identity, declared, message
 ):
     """The map cannot relabel explicit producer identities before compaction."""
-    from scripts.tools.analyze_snqi_contract import main
+    from scripts.tools.analyze_snqi_contract import main as analyze_main
+
+    horizons_path = tmp_path / "evaluation-horizons.json"
+    horizons_path.write_text(json.dumps({f"synthetic-{i}": 600 for i in range(48)}))
+
+    def main(args):
+        return analyze_main([*args, "--horizons", str(horizons_path)])
 
     path = tmp_path / "episodes.jsonl"
     rows = [
@@ -2374,7 +2587,13 @@ def test_offline_execution_map_accepts_matching_native_and_adapter_identities(
     tmp_path, spec_files, execution_mode
 ):
     """Matching map and producer identities remain valid for native and adapter rows."""
-    from scripts.tools.analyze_snqi_contract import main
+    from scripts.tools.analyze_snqi_contract import main as analyze_main
+
+    horizons_path = tmp_path / "evaluation-horizons.json"
+    horizons_path.write_text(json.dumps({f"synthetic-{i}": 600 for i in range(48)}))
+
+    def main(args):
+        return analyze_main([*args, "--horizons", str(horizons_path)])
 
     path = tmp_path / "episodes.jsonl"
     rows = [
@@ -2473,22 +2692,45 @@ def test_real_small_campaign_v2_outputs(tmp_path, monkeypatch):
     scenario_path.write_text(
         "- name: v2_smoke\n  map_file: "
         + str(ROOT / "maps/svg_maps/classic_crossing.svg")
-        + "\n  seeds: [201]\n  simulation_config:\n    ped_density: 0.0\n"
+        + "\n  seeds: [1001]\n  simulation_config:\n    ped_density: 0.0\n"
+    )
+    # Synthetic matching-schema anchors, not a relabelled publication asset.
+    baseline_path = tmp_path / "baseline.v2.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "_metadata": {"metric_schema_version": "robot-sf-metrics.v2"},
+                **{
+                    name: {"med": 0.0, "p95": 1.0}
+                    for name in (
+                        "collisions",
+                        "near_misses",
+                        "comfort_exposure",
+                        "force_exceed_events",
+                        "jerk_mean",
+                        "time_to_goal_norm",
+                        "curvature_mean",
+                    )
+                },
+            }
+        )
     )
     cfg = CampaignConfig(
         name="v2_smoke",
         scenario_matrix_path=scenario_path,
         planners=(PlannerSpec(key="goal", algo="goal"),),
-        seed_policy=SeedPolicy(mode="fixed-list", seeds=(201,)),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001,)),
         horizon=4,
         dt=0.1,
         workers=1,
         export_publication_bundle=False,
         snqi_weights_path=ROOT / "configs/benchmarks/snqi_weights_camera_ready_v3.json",
-        snqi_baseline_path=ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+        snqi_baseline_path=baseline_path,
         bootstrap_samples=10,
         snqi_contract=SnqiContractConfig(calibration_trials=10),
-        snqi_v2_spec=fixture_spec(),
+        snqi_v2_spec=replace(
+            fixture_spec(), metric_schema_version="robot-sf-metrics.v2", diagnostic=True
+        ),
     )
     from robot_sf.benchmark.camera_ready import campaign
     from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -2587,11 +2829,19 @@ def test_streaming_retains_only_compact_records_and_distinguishes_same_algo_arms
             yield row
 
     def checked_reports(rows, *args, **kwargs):
+        assert all(row["metrics"]["robot_force_invalid_present_samples"] == 0 for row in rows)
         assert all(ref() is None for ref in refs)
         assert all("algorithm_metadata" not in row for row in rows)
         assert all(
             set(row["metrics"])
-            == set(SOURCES.values()) | {"robot_force_metadata", "snqi_v2_force_provenance"}
+            == set(SOURCES.values())
+            | {
+                "robot_force_metadata",
+                "snqi_v2_force_provenance",
+                "metric_schema_version",
+                "metric_definitions_sha256",
+                "robot_force_invalid_present_samples",
+            }
             for row in rows
         )
         assert all(
@@ -2659,3 +2909,1081 @@ def test_offline_execution_map_rejects_duplicate_planner_key(tmp_path):
     path.write_text('{"episodes.jsonl":{"key":"arm","algo":"goal","algo":"guarded_ppo"}}')
     with pytest.raises(ValueError, match="duplicate JSON key: algo"):
         _v2_execution_declarations(argparse.Namespace(execution_map=path))
+
+
+def test_historical_v2_anchors_reject_corrected_physical_metrics():
+    """A frozen legacy spec must fail on v2 definitions before normalizing J/T."""
+    values = metrics(metric_schema_version="robot-sf-metrics.v2")
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        normalize_snqi_v2_terms(
+            values, replace(fixture_spec(), metric_schema_version="robot-sf-metrics.v1")
+        )
+
+
+def test_snqifix_candidate_drops_legacy_snqi():
+    """Real candidate and calibration bytes must not send v1 anchors to v2 rows."""
+    for path in (
+        ROOT
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+        ASSETS / "calibration.dev1001_1002_scheduled_acquisition.yaml",
+    ):
+        config = yaml.safe_load(path.read_bytes())
+        assert config.get("snqi_weights") is None
+        assert config.get("snqi_baseline") is None
+        assert config["snqi_contract"]["enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "budget,scenario",
+    [
+        (600, "francis2023_pedestrian_overtaking"),
+        (650, "classic_station_platform_medium"),
+        (700, "classic_realworld_double_bottleneck_high"),
+    ],
+)
+def test_snqifix_scheduled_rows_and_schema_survive_compaction(budget, scenario):
+    """Mixed authored budgets remain valid and retain their physical metric meaning."""
+    from robot_sf.benchmark.snqi.v2_calibration import _compact_calibration_record
+
+    rows, _ = calibration_records()
+    row = rows[0]
+    row.update(
+        seed=1001, scenario_id=scenario, horizon=budget, metric_schema_version="robot-sf-metrics.v2"
+    )
+    row["scenario_params"]["run_horizon"] = budget
+    row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    row["metrics"]["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    compact = _compact_calibration_record(row, "arm0")
+    assert compact["metrics"]["robot_force_invalid_present_samples"] == 0
+    assert compact["metrics"]["robot_force_pp_equiv_invalid_present_samples"] == 0
+    assert compact["horizon"] == budget
+    assert compact["metrics"]["metric_schema_version"] == "robot-sf-metrics.v2"
+    assert compact["metrics"]["metric_definitions_sha256"] == DEFINITIONS_SHA256
+
+
+def test_snqifix_compaction_preserves_v2_at_h600():
+    from robot_sf.benchmark.snqi.v2_calibration import _compact_calibration_record
+
+    rows, _ = calibration_records()
+    row = rows[0]
+    row.update(seed=1001, metric_schema_version="robot-sf-metrics.v2")
+    row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    row["metrics"]["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    assert (
+        _compact_calibration_record(row, "arm0", expected_horizon=600)["metrics"][
+            "metric_schema_version"
+        ]
+        == "robot-sf-metrics.v2"
+    )
+
+
+def test_snqifix_campaign_loader_refuses_historical_anchors(spec_files, tmp_path):
+    """Valid frozen v1 anchors cannot be loaded into the current v2 campaign."""
+    from robot_sf.benchmark.camera_ready._config import _load_snqi_v2_config
+
+    weights, anchors, family = spec_files
+    document = json.loads(anchors.read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v1"
+    document.pop("metric_definitions_sha256")
+    anchors.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        _load_snqi_v2_config(
+            {
+                "weights_path": str(weights),
+                "anchors_path": str(anchors),
+                "family_path": str(family),
+            },
+            tmp_path / "campaign.yaml",
+        )
+
+
+def test_snqifix_complete_mixed_budget_dev_grid():
+    """End-to-end derivation binds 1,344 dev rows to an independent schedule."""
+    from robot_sf.benchmark.snqi.v2_calibration import (
+        CalibrationGrid,
+        _candidate_calibration_horizons,
+        derive_calibration_anchors,
+    )
+
+    rows, kwargs = calibration_records()
+    budgets = _candidate_calibration_horizons()
+    names = sorted(budgets)
+    for row in rows:
+        row["scenario_id"] = names[int(row["scenario_id"].removeprefix("scenario"))]
+        row["seed"] += 900
+        row["horizon"] = budgets[row["scenario_id"]]
+        row["scenario_params"]["run_horizon"] = row["horizon"]
+        row["metric_schema_version"] = "robot-sf-metrics.v2"
+        row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+        row["metrics"]["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    kwargs["scenarios"] = names
+    kwargs.pop("grid", None)
+    result = derive_calibration_anchors(rows, **kwargs, grid=CalibrationGrid(budgets, (1001, 1002)))
+    assert result["calibration"]["seeds"] == [1001, 1002]
+    assert result["calibration"]["episode_count"] == 1344
+    assert result["status"] == "derived_pending_custody"
+    assert result["metric_schema_version"] == "robot-sf-metrics.v2"
+    assert result["anchors"]["J"]["upper"] == 2
+    assert result["anchors"]["K"]["upper"] == 4
+    # A matching pair of row claims cannot override the independent budget.
+    rows[0]["horizon"] = rows[0]["scenario_params"]["run_horizon"] = 600
+    with pytest.raises(ValueError, match="scheduled budget"):
+        derive_calibration_anchors(rows, **kwargs, grid=CalibrationGrid(budgets, (1001, 1002)))
+
+
+def test_snqifix_scalar_mismatch_remains_refused():
+    """The existing scorer's schema fence remains closed after campaign changes."""
+    values = metrics(metric_schema_version="robot-sf-metrics.v2")
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        compute_snqi(
+            values,
+            {},
+            json.loads(
+                (ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json").read_bytes()
+            ),
+        )
+
+
+@pytest.mark.parametrize("calibration_archive", [{"scheduled": True}], indirect=True)
+def test_snqifix_freeze_mixed_budgets_and_dev_split(
+    tmp_path, monkeypatch, calibration_archive, spec_files
+):
+    """Exercise the actual row/sidecar budget binding and frozen schema loader."""
+    from robot_sf.benchmark.result_provenance import manifest_path_for_result_jsonl
+    from robot_sf.benchmark.snqi import v2_calibration
+
+    config, _, kwargs = calibration_archive
+    # Programmatic archive fixture; YAML/source-byte admission has separate coverage.
+    monkeypatch.setattr(v2_calibration, "_validated_calibration_config", lambda cfg: cfg)
+    output = tmp_path / "mixed-anchors.json"
+    result = v2_calibration.freeze_campaign_anchors(tmp_path, output, campaign_config=config)
+    assert result["calibration"]["seeds"] == [1001, 1002]
+    assert result["calibration"]["episode_count"] == 1344
+    assert set(result["calibration"]["scenario_horizons"].values()) == {400, 500, 600, 650, 700}
+    assert result["metric_schema_version"] == "robot-sf-metrics.v2"
+    spec = load_snqi_v2_spec(
+        spec_files[0],
+        output,
+        spec_files[2],
+        expected_metric_schema_version="robot-sf-metrics.v2",
+        evaluation_scenario_horizons=result["calibration"]["scenario_horizons"],
+    )
+    assert spec.calibration_seeds == (1001, 1002)
+    assert spec.upper_anchors["J"] == 2
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
+    sidecar = manifest_path_for_result_jsonl(path)
+    document = json.loads(sidecar.read_bytes())
+    document["rows"][0]["simulator_settings"]["horizon"] = 600
+    sidecar.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="sidecar row binding mismatch"):
+        v2_calibration.freeze_campaign_anchors(tmp_path, output, campaign_config=config)
+
+
+@pytest.mark.parametrize("seed", [101, 102, 1001, 1003, 1030])
+def test_snqifix2_rejects_development_evaluation_seeds(seed):
+    """The whole development band stays excluded even beyond fitted seeds."""
+    with pytest.raises(ValueError, match="calibration|development"):
+        replace(fixture_spec(), calibration_seeds=(1001, 1002)).validate_evaluation_seeds([seed])
+
+
+def test_snqifix2_loader_requires_explicit_metric_schema(spec_files):
+    """Omitting schema identity cannot silently admit legacy anchor definitions."""
+    document = anchor_document()
+    document.pop("metric_schema_version", None)
+    from robot_sf.evidence.writers import write_json
+
+    write_json(spec_files[1], document)
+    with pytest.raises(ValueError, match="metric_schema_version"):
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
+
+
+def test_snqifix2_calibration_rejects_missing_schedule(monkeypatch):
+    """An unscheduled 600-step row must never obtain an implicit budget."""
+    from robot_sf.benchmark.snqi import v2_calibration
+
+    rows, kwargs = calibration_records()
+    kwargs.pop("grid", None)
+    monkeypatch.setattr(v2_calibration, "_candidate_calibration_horizons", lambda: {})
+    with pytest.raises(ValueError, match="missing.*schedule|schedule.*missing"):
+        v2_calibration._validate_calibration_episode(rows[0])
+    with pytest.raises(ValueError, match="missing.*schedule|schedule.*missing"):
+        historical_rows = [
+            {
+                **row,
+                "metrics": {
+                    k: v for k, v in row["metrics"].items() if k != "metric_definitions_sha256"
+                },
+            }
+            for row in rows
+        ]
+        for row in historical_rows:
+            row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v1"
+        v2_calibration.derive_calibration_anchors(historical_rows, **kwargs)
+
+
+def test_snqifix2_loader_rejects_budget_mismatch(spec_files):
+    """Current evaluation budgets must equal the independently recorded fit budgets."""
+    document = anchor_document()
+    document["calibration"]["scenario_horizons"] = dict.fromkeys(
+        document["calibration"]["scenarios"], 600
+    )
+    from robot_sf.evidence.writers import write_json
+
+    write_json(spec_files[1], document)
+    schedule = dict(document["calibration"]["scenario_horizons"])
+    schedule["synthetic-0"] = 400
+    with pytest.raises(ValueError, match="budget|schedule"):
+        load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=schedule)
+
+
+def test_snqifix2_diagnostics_report_per_arm_saturation(tmp_path):
+    """Pooled saturation must not hide an arm whose quality terms all cap."""
+    from robot_sf.benchmark.snqi.v2_reports import write_v2_reports
+
+    result = write_v2_reports(records(), fixture_spec(), tmp_path, bootstrap_samples=2)
+    diagnostics = json.loads(Path(result["snqi_v2_diagnostics_json"]).read_text())
+    assert "per_arm_clipped_at_one_fraction" in diagnostics
+    assert set(diagnostics["per_arm_clipped_at_one_fraction"]) == {r["algo"] for r in records()}
+    family = json.loads(Path(result["snqi_v2_family_json"]).read_text())
+    assert (
+        family["per_arm_clipped_at_one_fraction"] == diagnostics["per_arm_clipped_at_one_fraction"]
+    )
+
+
+def test_snqifix2_anchor_sensitivity_flags_single_arm_tail():
+    """A synthetic 14x48x2 grid exposes an arm setting the pooled K anchor."""
+    from scripts.analysis.diagnose_snqi_v2_calibration import anchor_sensitivity
+
+    rows, _ = calibration_records()
+    for row in rows:
+        row["seed"] += 900
+        row["metrics"]["curvature_mean"] = 100 if row["planner_key"] == "arm0" else 1
+    result = anchor_sensitivity(
+        rows,
+        replace(
+            fixture_spec(),
+            upper_anchors={"T": 3, "N": 0.25, "F": 30, "J": 2, "K": 100},
+            diagnostic=True,
+        ),
+    )
+    assert len(rows) == 1344
+    assert result["full_p95"]["K"] == 100
+    tail = result["leave_one_arm_out"]["arm0"]
+    assert tail["p95"]["K"] == 1
+    assert tail["relative_change"]["K"] == -0.99
+    assert tail["sets_anchor"]["K"] is True
+    assert result["leave_one_arm_out"]["arm1"]["sets_anchor"]["K"] is False
+    assert len(tail["ranking"]) == 14
+    assert len(result["leave_one_scenario_out"]) == 48
+    assert set(result["per_seed"]) == {"1001", "1002"}
+    assert set(result["per_seed_pair"]) == {"1001-1002"}
+    rows[0]["seed"] = 1003
+    with pytest.raises(ValueError, match="1001/1002 only"):
+        anchor_sensitivity(rows, fixture_spec())
+
+
+def test_snqifix2_force_clipping_does_not_hide_raw_redundancy():
+    """Raw fractions correlate perfectly while clipping hides the upper tail."""
+    from scripts.analysis.diagnose_snqi_v2_calibration import force_saturation_diagnostics
+
+    rows = [
+        {
+            **records()[0],
+            "planner_key": "witness",
+            "steps": 100,
+            "metrics": metrics(near_misses=index, robot_force_impulse_total=index),
+        }
+        for index in range(1, 101)
+    ]
+    result = force_saturation_diagnostics(
+        rows, replace(fixture_spec(), upper_anchors={"T": 3, "N": 0.25, "F": 100, "J": 2, "K": 4})
+    )
+    assert result["rho_raw_F_raw_N_fraction"] == pytest.approx(1)
+    assert result["rho_normalised_F_clipped_N"] == pytest.approx(0.749036785218564)
+    assert result["per_arm_clipped_at_one_fraction"]["witness"]["N"] == 0.76
+
+
+@pytest.mark.heldout_seed_ok(reason="Static seed-list commitment equality; no episode execution")
+def test_snqifix2_sealed_seed_commitment_validation():
+    """The static companion digest and programmatic commitment must fail closed."""
+    from robot_sf.benchmark.snqi.evaluation_seeds import (
+        SEALED_EVALUATION_SEEDS,
+        SEALED_EVALUATION_SEEDS_SHA256,
+    )
+
+    assert (
+        SEALED_EVALUATION_SEEDS_SHA256
+        == "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6"
+    )
+    spec = replace(fixture_spec(), calibration_seeds=(1001, 1002))
+    spec.validate_evaluation_commitment(SEALED_EVALUATION_SEEDS)
+    with pytest.raises(ValueError, match="sealed commitment"):
+        spec.validate_evaluation_commitment(SEALED_EVALUATION_SEEDS[:-1])
+
+
+@pytest.mark.parametrize("definitions_bound", [True, False])
+@pytest.mark.parametrize("calibration_archive", [{"scheduled": True}], indirect=True)
+def test_snqifix2_protocol_diagnostic_holds_seed_1003_apart(
+    tmp_path, monkeypatch, calibration_archive, definitions_bound
+):
+    """A seed-1003 K tail cannot leak into the fitted calibration anchor."""
+    from copy import deepcopy
+
+    from scripts.analysis import diagnose_snqi_v2_calibration as diagnostic
+
+    cfg, rows, _ = calibration_archive
+    budgets = {row["scenario_id"]: row["horizon"] for row in rows}
+    monkeypatch.setattr(diagnostic, "_candidate_calibration_horizons", lambda: budgets)
+    for path in (tmp_path / "runs").glob("*/episodes.jsonl"):
+        raw = [json.loads(line) for line in path.read_text().splitlines()]
+        for row in raw:
+            row["metrics"].update(collisions=0, comfort_exposure=0)
+            if not definitions_bound:
+                row["metrics"].pop("metric_definitions_sha256")
+        held = [deepcopy(row) for row in raw if row["seed"] == 1001]
+        for row in held:
+            row["seed"] = 1003
+            row["metrics"]["curvature_mean"] = 1000
+        from robot_sf.evidence.writers import write_review_sidecar
+
+        path.write_text("".join(json.dumps(row) + "\n" for row in raw + held))
+        write_review_sidecar(path)
+    report = diagnostic.diagnose(tmp_path)
+    assert cfg.seed_policy.seeds == (1001, 1002)
+    assert report["anchors"]["calibration"]["seeds"] == [1001, 1002]
+    assert report["anchors"]["calibration"]["episode_count"] == 1344
+    assert report["anchors"]["anchors"]["K"]["upper"] == 4
+    assert report["held_apart_development"]["episode_count"] == 672
+    assert "fitted and scored on the same data" in report["ranking_label"]
+    assert "anchor_sensitivity" in report and "force_saturation" in report
+
+
+def test_snqifix2_loader_rejects_changed_sealed_commitment(spec_files):
+    """Frozen anchor bytes cannot substitute a different evaluation seed commitment."""
+    document = anchor_document()
+    document["evaluation_seeds_sha256"] = "f" * 64
+    from robot_sf.evidence.writers import write_json
+
+    write_json(spec_files[1], document)
+    with pytest.raises(ValueError, match="sealed commitment"):
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
+
+
+def test_snqifix2_release_receipt_binds_sealed_seed_list(tmp_path):
+    """Static release preparation records the exact seal and refuses a dev substitution."""
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, SeedPolicy
+    from robot_sf.benchmark.snqi.evaluation_seeds import SEALED_EVALUATION_SEEDS
+    from scripts.tools.run_benchmark_release import _snqi_v2_evaluation_seed_receipt
+
+    matrix = tmp_path / "scenarios.yaml"
+    matrix.write_text(
+        "- name: static-only\n  map_file: "
+        + str(ROOT / "maps/svg_maps/classic_crossing.svg")
+        + "\n"
+    )
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    write_review_sidecar(matrix)
+    cfg = CampaignConfig(
+        "static-seed-receipt",
+        matrix,
+        (),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=SEALED_EVALUATION_SEEDS),
+        snqi_v2_spec=replace(fixture_spec(), calibration_seeds=(1001, 1002)),
+    )
+    assert _snqi_v2_evaluation_seed_receipt(cfg) == {
+        "snqi_v2_evaluation_seeds_sha256": "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6"
+    }
+    assert (
+        cfg.snqi_v2_spec.provenance()["snqi_v2_evaluation_seeds_sha256"]
+        == "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6"
+    )
+    with pytest.raises(ValueError, match="calibration/development"):
+        _snqi_v2_evaluation_seed_receipt(
+            replace(cfg, seed_policy=SeedPolicy(mode="fixed-list", seeds=(1003,)))
+        )
+
+
+def test_snqifix2_default_loader_refuses_changed_recorded_budget(spec_files):
+    """A self-declared changed fit budget cannot override the evaluation schedule."""
+    from robot_sf.evidence.writers import write_json
+
+    document = anchor_document()
+    document["calibration"]["scenario_horizons"]["synthetic-0"] = 400
+    write_json(spec_files[1], document)
+    with pytest.raises(ValueError, match="budget|schedule"):
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
+
+
+def test_snqifix2_release_seed_commitment_cannot_be_overridden():
+    """Even programmatic release specs cannot replace the author-approved seal."""
+    from robot_sf.benchmark.snqi.evaluation_seeds import evaluation_seeds_sha256
+
+    substituted = (201, 202)
+    spec = replace(fixture_spec(), evaluation_seeds_sha256=evaluation_seeds_sha256(substituted))
+    with pytest.raises(ValueError, match="sealed commitment"):
+        spec.validate_evaluation_commitment(substituted)
+
+
+@pytest.mark.parametrize("definitions_bound", [True])
+def test_snqirefresh_campaign_loader_validates_v2_anchor_schedule(
+    spec_files, tmp_path, definitions_bound
+):
+    """Real acquisition YAML must bind current-schema anchors to its authored budgets."""
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from robot_sf.evidence.writers import write_json
+
+    document = anchor_document()
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    if definitions_bound:
+        document["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    write_json(spec_files[1], document)
+    rows = [
+        {"name": name, "simulation_config": {"max_episode_steps": 600}}
+        for name in document["calibration"]["scenarios"]
+    ]
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(yaml.safe_dump(rows))
+    acquisition = tmp_path / "acquisition.yaml"
+    acquisition.write_text(
+        yaml.safe_dump(
+            {
+                "name": "static-schema-and-budget-binding",
+                "scenario_matrix": str(matrix),
+                "horizon": 600,
+                "seed_policy": {"mode": "fixed-list", "seeds": [1001]},
+                "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
+                "snqi_v2_spec": dict(
+                    zip(
+                        ("weights_path", "anchors_path", "family_path"),
+                        map(str, spec_files),
+                        strict=True,
+                    )
+                ),
+            }
+        )
+    )
+    config = load_campaign_config(acquisition)
+    assert config.snqi_v2_spec.metric_schema_version == "robot-sf-metrics.v2"
+    if definitions_bound:
+        assert config.snqi_v2_spec.provenance()["metric_definitions_sha256"] == DEFINITIONS_SHA256
+    assert len(config.snqi_v2_spec.scenario_horizons) == 48
+    rows[0]["simulation_config"]["max_episode_steps"] = 700
+    matrix.write_text(yaml.safe_dump(rows))
+    with pytest.raises(ValueError, match="budget|schedule"):
+        load_campaign_config(acquisition)
+
+
+def test_snqirefresh_manifest_refuses_uncommitted_evaluation_split(tmp_path):
+    """Manifest construction must enforce the seal after checking development overlap."""
+    from robot_sf.benchmark.camera_ready._preflight import _build_campaign_manifest_payload
+    from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, SeedPolicy
+
+    spec = replace(fixture_spec(), hashes={"anchors": "a" * 64})
+    config = CampaignConfig(
+        "static-manifest-refusal",
+        tmp_path / "matrix.yaml",
+        (),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(201, 202)),
+        snqi_v2_spec=spec,
+    )
+    with pytest.raises(ValueError, match="sealed commitment"):
+        _build_campaign_manifest_payload(
+            config,
+            campaign_id="static-refusal",
+            created_at_utc="2026-10-02T00:00:00Z",
+            metadata={
+                "resolved_seeds": [201, 202],
+                "scenario_hash": "b" * 64,
+                "git_meta": {"commit": "c" * 40},
+                "config_hash": "d" * 64,
+                "scenario_horizons_summary": {},
+                "noise_spec": {},
+                "noise_hash": None,
+            },
+            invoked_command=None,
+            route_clearance_warnings=[],
+            route_clearance_warning_summary={},
+            amv_summary={},
+            comparability_summary=None,
+            comparability_mapping_path=None,
+            planner_entries=[],
+            artifact_block={},
+            tuning_ledger={
+                "schema_version": "test",
+                "record_schema_version": "test",
+                "ledger_sha256": "e" * 64,
+                "records": [],
+                "summary": {},
+                "policy": {},
+            },
+            tuning_ledger_path=tmp_path / "ledger.json",
+        )
+
+
+@pytest.mark.parametrize("diagnostic", [False, True])
+def test_snqirefresh_enrichment_refuses_wrong_split_before_replacing_bytes(tmp_path, diagnostic):
+    """A wrong release seal or non-dev diagnostic row cannot replace custody inputs."""
+    entries, before = [], {}
+    for planner in ("a", "b"):
+        path = tmp_path / f"{planner}.jsonl"
+        write_campaign_arm(path, [row for row in records() if row["algo"] == planner])
+        entries.append({"status": "ok", "planner": {"key": planner}, "episodes_path": str(path)})
+        before[path] = path.read_bytes()
+    spec = replace(fixture_spec(), hashes={"anchors": "a" * 64}, diagnostic=diagnostic)
+    message = "diagnostics require development" if diagnostic else "sealed commitment"
+    with pytest.raises(ValueError, match=message):
+        enrich_campaign_v2(
+            entries, spec, tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=2
+        )
+    assert all(path.read_bytes() == original for path, original in before.items())
+    assert not list(tmp_path.glob("*.snqi-v2.*"))
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    ],
+)
+@pytest.mark.parametrize("defect", [None, "wrong_cell", "missing_declaration"])
+def test_d083_snqi_enrichment_retains_declared_scenario_algorithm_routes(tmp_path, arm, defect):
+    """Score the reviewed ORCA branch without accepting undeclared algorithm swaps."""
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    authored = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ).read_bytes()
+    )
+    configured = next(p for p in authored["planners"] if p["key"] == arm)
+    source = yaml.safe_load((ROOT / configured["algo_config"]).read_bytes())
+    assert source["scenario_algo_overrides"]["francis2023_leave_group"]["algo"] == "orca"
+    rows = [
+        {
+            "algo": "orca" if scenario == "francis2023_leave_group" else configured["algo"],
+            "scenario_id": scenario,
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(),
+        }
+        for scenario in ("classic_bottleneck_low", "francis2023_leave_group")
+        for seed in (1001, 1002)
+    ]
+    if defect == "wrong_cell":
+        rows[1]["algo"] = "orca"
+    path = tmp_path / "episodes.jsonl"
+    written = write_campaign_arm(
+        path,
+        rows,
+        algo_config_path=(
+            ROOT / configured["algo_config"] if defect != "missing_declaration" else None
+        ),
+    )
+    write_review_sidecar(path, repo_root=tmp_path)
+    entry = {
+        "status": "ok",
+        "planner": {
+            "key": arm,
+            "algo": configured["algo"],
+            "kinematics": "differential_drive",
+            **(
+                {"algo_config_path": configured["algo_config"]}
+                if defect != "missing_declaration"
+                else {}
+            ),
+        },
+        "episodes_path": str(path),
+    }
+    original = path.read_bytes()
+    if defect:
+        with pytest.raises(ValueError, match="algorithm"):
+            enrich_campaign_v2(
+                [entry],
+                replace(fixture_spec(), diagnostic=True),
+                tmp_path / "reports",
+                repo_root=ROOT,
+                bootstrap_samples=2,
+            )
+        assert path.read_bytes() == original
+        assert not list(tmp_path.glob(".*.snqi-v2.tmp"))
+        return
+    artifacts = enrich_campaign_v2(
+        [entry],
+        replace(fixture_spec(), diagnostic=True),
+        tmp_path / "reports",
+        repo_root=ROOT,
+        bootstrap_samples=2,
+    )
+    enriched = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(enriched) == 4
+    assert [row["algo"] for row in enriched] == [row["algo"] for row in written]
+    assert all(row["planner_key"] == arm for row in enriched)
+    assert all(
+        row["metrics"]["snqi_v2"] == score_episode(row, fixture_spec())["metrics"]["snqi_v2"]
+        for row in enriched
+    )
+    family = json.loads(Path(artifacts["snqi_v2_family_json"]).read_bytes())
+    assert [row["planner"] for row in family["declared_ranking"]] == [f"{arm}::differential_drive"]
+
+
+@pytest.mark.parametrize(
+    "path_kind", ["absolute", "traversal", "symlink", "non_string", "sidecar_mismatch"]
+)
+def test_scenario_routes_refuse_untrusted_config_paths(tmp_path, path_kind):
+    """A forged route file cannot authorize the wrong-cell algorithm via path escape."""
+    from robot_sf.evidence.writers import write_text
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Use the tracked D-083 recipe, rather than assuming its file basename.
+    authored = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+        ).read_bytes()
+    )
+    planner = next(
+        p
+        for p in authored["planners"]
+        if p["key"] == "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4"
+    )
+    actual = ROOT / planner["algo_config"]
+    declared_config = repo / "trusted.yaml"
+    write_text(declared_config, "# AI-GENERATED NEEDS-REVIEW\n" + actual.read_text())
+    forged_payload = yaml.safe_load(actual.read_bytes())
+    forged_payload["scenario_algo_overrides"]["classic_bottleneck_low"] = {"algo": "orca"}
+    forged = tmp_path / "forged.yaml"
+    write_text(forged, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(forged_payload))
+    if path_kind == "absolute":
+        raw_path = str(forged)
+    elif path_kind == "traversal":
+        raw_path = "../forged.yaml"
+    elif path_kind == "symlink":
+        (repo / "linked.yaml").symlink_to(forged)
+        raw_path = "linked.yaml"
+    elif path_kind == "non_string":
+        raw_path = 1001
+    else:
+        write_text(repo / "forged.yaml", forged.read_text())
+        raw_path = "forged.yaml"
+    rows = [
+        {"algo": algo, "scenario_id": scenario, "seed": seed, "steps": 100, "metrics": metrics()}
+        for scenario, seed, algo in (
+            ("classic_bottleneck_medium", 1001, planner["algo"]),
+            ("classic_bottleneck_low", 1001, "orca"),
+            ("classic_bottleneck_medium", 1002, planner["algo"]),
+            ("classic_bottleneck_low", 1002, "orca"),
+        )
+    ]
+    path = repo / "episodes.jsonl"
+    write_campaign_arm(path, rows, algo_config_path=declared_config)
+    entry = {
+        "status": "ok",
+        "episodes_path": str(path),
+        "planner": {"key": planner["key"], "algo": planner["algo"], "algo_config_path": raw_path},
+    }
+    original = path.read_bytes()
+    from robot_sf.benchmark.result_provenance import manifest_path_for_result_jsonl
+
+    sidecar = manifest_path_for_result_jsonl(path)
+    original_sidecar = sidecar.read_bytes()
+    with pytest.raises(ValueError, match="algo_config_path|producer.*config"):
+        enrich_campaign_v2(
+            [entry],
+            replace(fixture_spec(), diagnostic=True),
+            repo / "reports",
+            repo_root=repo,
+            bootstrap_samples=2,
+        )
+    assert path.read_bytes() == original
+    assert sidecar.read_bytes() == original_sidecar
+    assert not list(repo.glob(".*.snqi-v2.tmp"))
+
+
+# Canonical definitions plus force contracts; pinned independently of the digest helper.
+DEFINITIONS_SHA256 = "2deac327cf6636cf4e2cb242b245d7f09963ad64401b231b610365be5de8297c"
+
+
+def _digest_bound_files(spec_files):
+    """Declare current synthetic anchors without changing any checked-in asset."""
+    document = json.loads(spec_files[1].read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    document["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    spec_files[1].write_text(json.dumps(document))
+    return document["calibration"]["scenario_horizons"]
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, None, "", 123])
+def test_load_snqi_v2_spec_rejects_stale_definitions_digest(spec_files, digest):
+    """A present digest cannot silently opt out or retain the same schema label."""
+    document = json.loads(spec_files[1].read_text())
+    document["metric_definitions_sha256"] = digest
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="definitions digest"):
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, None])
+def test_digest_bound_scoring_refuses_changed_or_absent_row_definitions(spec_files, digest):
+    """The real scoring path must check meanings independently of the schema label."""
+    horizons = _digest_bound_files(spec_files)
+    spec = load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=horizons)
+    values = metrics(metric_schema_version="robot-sf-metrics.v2")
+    values["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    assert compute_snqi_v2(values, spec) == pytest.approx(1.0)
+    values["metric_definitions_sha256"] = digest
+    with pytest.raises(ValueError, match="definitions digest"):
+        compute_snqi_v2(values, spec)
+
+
+def test_unrecognized_anchor_cannot_omit_definitions_digest(spec_files):
+    """New assets cannot borrow the frozen historical compatibility path."""
+    document = json.loads(spec_files[1].read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    document.pop("metric_definitions_sha256")
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="missing definitions digest"):
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
+
+
+def test_digest_bound_loader_requires_independent_schedule(spec_files):
+    """New campaigns cannot silently borrow the 0.0.8 authored schedule."""
+    _digest_bound_files(spec_files)
+    with pytest.raises(ValueError, match="explicit evaluation budget schedule"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("identity", [None, "e" * 16])
+def test_anchor_loader_refuses_config_identity_hash_mismatch(spec_files, identity):
+    """The short campaign identity must actually name the hash-bound input bytes."""
+    document = json.loads(spec_files[1].read_text())
+    document["calibration"]["campaign_config_identity"] = identity
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="campaign_config_identity"):
+        load_snqi_v2_spec(
+            *spec_files, evaluation_scenario_horizons={f"synthetic-{i}": 600 for i in range(48)}
+        )
+
+
+def test_calibration_digest_binds_verified_row_definitions_and_refuses_mixed_inputs():
+    """Derivation must bind producer meanings without upgrading unmarked historical rows."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    for row in rows:
+        row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+        row["metrics"]["metric_definitions_sha256"] = DEFINITIONS_SHA256
+    document = derive_calibration_anchors(rows, **kwargs)
+    assert document["metric_definitions_sha256"] == DEFINITIONS_SHA256
+    rows[-1]["metrics"].pop("metric_definitions_sha256")
+    with pytest.raises(ValueError, match="definitions digest"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+def test_new_calibration_defaults_use_development_split():
+    """Omitting the split selects current development seeds rather than 101/102."""
+    from robot_sf.benchmark.snqi.v2_calibration import CalibrationGrid
+
+    assert CalibrationGrid({"synthetic": 4}).seeds == (1001, 1002)
+
+
+def test_planner_summary_preserves_escaped_pipe_when_legacy_score_excluded():
+    """Removing a score column must preserve the later cells and escaped planner name."""
+    from robot_sf.benchmark.camera_ready._reporting import _write_planner_summary_table
+
+    lines = []
+    _write_planner_summary_table(
+        lines, [{"planner_key": "left|right", "projection_rate": 0.125, "infeasible_rate": 0.25}]
+    )
+    assert "left\\|right" in lines[-1]
+    assert lines[-1].endswith(" | 0.125 | 0.25 |")
+    assert "snqi" not in lines[0]
+
+
+def test_definitions_digest_fixed_trace_canary(spec_files):
+    """Pin producer meanings to a hand-calculated trace with no simulator or random seed."""
+    import numpy as np
+
+    from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
+
+    pos = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0]])
+    metadata = _force_metadata()
+    data = EpisodeData(
+        pos,
+        np.zeros_like(pos),
+        np.array([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0], [100.0, 0.0]]),
+        pos[:, None, :] + np.array([0.6, 0.0]),
+        np.zeros((4, 1, 2)),
+        pos[-1],
+        0.5,
+        reached_goal_step=3,
+        robot_radius=0.2,
+        ped_radius=0.2,
+        robot_ped_forces=np.tile([[[3.0, 4.0]]], (4, 1, 1)),
+        robot_force_config={
+            key: value for key, value in metadata.items() if key.startswith("prf_")
+        },
+        social_force_config=metadata["social_force_config"],
+    )
+    values = compute_all_metrics(data, horizon=5, shortest_path_len=2.0, robot_max_speed=2.0)
+    assert values["jerk_mean"] == 3.0  # First two differences: 2 and 4 m/s^3.
+    assert values["curvature_mean"] == pytest.approx(np.pi / 3)
+    assert values["near_misses"] == 4
+    assert values["robot_force_impulse_total"] == 10.0  # 4 samples * 5 m/s^2 * 0.5 s.
+    assert values["time_to_goal_ideal_ratio"] == 2.0
+    assert values["metric_definitions_sha256"] == DEFINITIONS_SHA256
+    horizons = _digest_bound_files(spec_files)
+    spec = load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=horizons)
+    values["executed_steps"] = 4
+    terms = normalize_snqi_v2_terms(values, spec)
+    assert terms == pytest.approx(
+        {"S": 1.0, "C": 0.0, "T": 0.5, "N": 1.0, "F": 1.0, "J": 1.0, "K": np.pi / 12}
+    )
+    assert compute_snqi_v2(values, spec) == pytest.approx(0.275 - np.pi / 120)
+
+
+@pytest.mark.parametrize(
+    "directory", ["2026-10-04_freeze008_calibration", "2026-10-04_freeze008_f2_calibration"]
+)
+def test_frozen_008_assets_use_definitions_digest_absent_path(directory):
+    """Load actual frozen anchors byte-for-byte; their procedural binding stays explicit."""
+    anchor = ROOT / "docs/context/evidence" / directory / "anchors.v2.0.acquired.json"
+    raw = anchor.read_bytes()
+    document = json.loads(raw)
+    assert "metric_definitions_sha256" not in document
+    spec = load_snqi_v2_spec(
+        ASSETS / "weights.v2.0.json",
+        anchor,
+        ASSETS / "family.v2.0.yaml",
+        evaluation_scenario_horizons=document["calibration"]["scenario_horizons"],
+    )
+    assert spec.provenance()["snqi_v2_definitions_binding"] == "definitions-digest absent"
+    assert spec.hashes["anchors"] == hashlib.sha256(raw).hexdigest()
+    assert anchor.read_bytes() == raw
+
+
+@pytest.mark.parametrize(
+    "clearance,expected", [(-0.05, 0), (0.0, 1), (0.45, 1), (0.5, 0), (0.55, 0)]
+)
+def test_source_threshold_canary_near_miss(clearance, expected):
+    """Independent footprint clearances pin both boundaries of the half-meter interval."""
+    import numpy as np
+
+    from robot_sf.benchmark.metrics import EpisodeData, near_misses
+
+    data = EpisodeData(
+        np.zeros((1, 2)),
+        np.zeros((1, 2)),
+        np.zeros((1, 2)),
+        np.array([[[clearance + 0.5, 0.0]]]),
+        np.zeros((1, 1, 2)),
+        np.zeros(2),
+        0.1,
+        robot_radius=0.25,
+        ped_radius=0.25,
+    )
+    assert near_misses(data) == expected
+
+
+@pytest.mark.parametrize(
+    "distance,expected", [(0.0005, 0.0), (0.001, 1.5707963267948966), (0.0015, 1.5707963267948966)]
+)
+def test_source_threshold_canary_curvature_displacement(distance, expected):
+    """A right-angle turn only counts when both displacements reach one millimeter."""
+    import numpy as np
+
+    from robot_sf.benchmark.metrics import EpisodeData, curvature_mean
+
+    pos = np.array([[0.0, 0.0], [distance, 0.0], [distance, distance]])
+    data = EpisodeData(
+        pos,
+        np.zeros_like(pos),
+        np.zeros_like(pos),
+        np.zeros((3, 0, 2)),
+        np.zeros((3, 0, 2)),
+        pos[-1],
+        0.1,
+    )
+    assert curvature_mean(data) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "length,expected",
+    [(0.8, 1.5707963267948966), (1.0, 1.5707963267948966), (1.2, 1.3089969389957472)],
+)
+def test_source_threshold_canary_curvature_length_floor(length, expected):
+    """Hand-calculated pi/2 over max(path length, one meter) straddles the floor."""
+    import numpy as np
+
+    from robot_sf.benchmark.metrics import EpisodeData, curvature_mean
+
+    pos = np.array([[0.0, 0.0], [length / 2, 0.0], [length / 2, length / 2]])
+    data = EpisodeData(
+        pos,
+        np.zeros_like(pos),
+        np.zeros_like(pos),
+        np.zeros((3, 0, 2)),
+        np.zeros((3, 0, 2)),
+        pos[-1],
+        0.1,
+    )
+    assert curvature_mean(data) == pytest.approx(expected)
+
+
+def test_current_schema_unbound_derivation_requires_historical_opt_in():
+    """The real complete-grid derivation refuses silent loss of producer identity."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    for row in rows:
+        row["metrics"].pop("metric_definitions_sha256")
+        row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    with pytest.raises(ValueError, match="requires definitions digest"):
+        derive_calibration_anchors(rows, **kwargs)
+    document = derive_calibration_anchors(rows, **kwargs, allow_historical_unbound=True)
+    assert "metric_definitions_sha256" not in document
+    assert document["status"] == "derived_pending_custody"
+
+
+def test_bound_derivation_requires_explicit_grid(monkeypatch):
+    """Bound producer rows must never borrow the authored historical schedule."""
+    from robot_sf.benchmark.metric_definitions import metric_definitions_sha256
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    from robot_sf.benchmark.snqi import v2_calibration
+
+    horizons = dict(kwargs.pop("grid").scenario_horizons)
+    monkeypatch.setattr(v2_calibration, "_candidate_calibration_horizons", lambda: horizons)
+    for row in rows:
+        row["seed"] += 900
+        row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+        row["metrics"]["metric_definitions_sha256"] = metric_definitions_sha256()
+    with pytest.raises(ValueError, match="explicit calibration grid"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "directory", ["2026-10-04_freeze008_calibration", "2026-10-04_freeze008_f2_calibration"]
+)
+def test_historical_anchor_exemption_is_byte_pinned(directory, tmp_path):
+    """A copied original loads; even harmless whitespace makes a new unbound asset."""
+    anchor = ROOT / "docs/context/evidence" / directory / "anchors.v2.0.acquired.json"
+    copied = tmp_path / "anchors.json"
+    copied.write_bytes(anchor.read_bytes())
+    paths = (ASSETS / "weights.v2.0.json", copied, ASSETS / "family.v2.0.yaml")
+    spec = load_snqi_v2_spec(*paths)
+    assert spec.provenance().get("metric_definitions_sha256") is None
+    copied.write_bytes(copied.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="missing definitions digest"):
+        load_snqi_v2_spec(*paths)
+
+
+@pytest.mark.parametrize("distance,expected", [(0.20, 1), (0.25, 0), (0.30, 0)])
+def test_source_threshold_canary_wall_agent_collision(distance, expected):
+    """Both collision sources use strict quarter-meter center distance."""
+    import numpy as np
+
+    from robot_sf.benchmark.metrics import EpisodeData, agent_collisions, wall_collisions
+
+    data = EpisodeData(
+        np.zeros((1, 2)),
+        np.zeros((1, 2)),
+        np.zeros((1, 2)),
+        np.zeros((1, 0, 2)),
+        np.zeros((1, 0, 2)),
+        np.zeros(2),
+        0.1,
+        obstacles=np.array([[distance, 0.0]]),
+        other_agents_pos=np.array([[[distance, 0.0]]]),
+    )
+    assert wall_collisions(data) == expected
+    assert agent_collisions(data) == expected
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("NEAR_MISS_DIST", 0.30),
+        ("COLLISION_DIST", 0.15),
+        ("CURVATURE_MIN_DISPLACEMENT_M", 0.05),
+        ("CURVATURE_LENGTH_FLOOR_M", 2.0),
+    ],
+)
+def test_code_constant_change_invalidates_definitions_digest(monkeypatch, name, value):
+    """A real threshold constant must affect identity without editing the prose registry."""
+    from robot_sf.benchmark import constants
+    from robot_sf.benchmark import metrics as metric_module
+    from robot_sf.benchmark.metric_definitions import metric_definitions_sha256
+
+    original = metric_definitions_sha256()
+    owner = constants if hasattr(constants, name) else metric_module
+    monkeypatch.setattr(owner, name, value)
+    assert metric_definitions_sha256() != original
+
+
+@pytest.mark.parametrize("schedule", ["matching", "changed", "invalid", "absent"])
+def test_analyzer_bound_schedule_production_entrypoint(spec_files, tmp_path, schedule):
+    """Offline reports pass independent budgets to the real asset loader and reject drift."""
+    from robot_sf.benchmark.metric_definitions import metric_definitions_sha256
+    from scripts.tools.analyze_snqi_contract import _analyze_v2, _parse_args
+
+    # Setup identity from the executing producer; this test's oracle is schedule admission.
+    digest = metric_definitions_sha256()
+    document = json.loads(spec_files[1].read_text())
+    document["metric_definitions_sha256"] = digest
+    spec_files[1].write_text(json.dumps(document))
+    rows = records()
+    for row in rows:
+        row["metrics"]["metric_definitions_sha256"] = digest
+    path = tmp_path / "episodes.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    args = _parse_args(
+        [
+            "--score-version",
+            "SNQI-v2",
+            "--episodes",
+            str(path),
+            "--weights",
+            str(spec_files[0]),
+            "--anchors",
+            str(spec_files[1]),
+            "--family",
+            str(spec_files[2]),
+            "--reports-dir",
+            str(tmp_path / "reports"),
+        ]
+    )
+    args.horizons = None
+    if schedule != "absent":
+        horizons = {f"synthetic-{i}": 600 for i in range(48)}
+        if schedule != "matching":
+            horizons["synthetic-0"] = 400 if schedule == "changed" else True
+        args.horizons = tmp_path / "horizons.json"
+        args.horizons.write_text(json.dumps(horizons))
+    if schedule == "matching":
+        assert _analyze_v2(args) == 0
+        report = json.loads((args.reports_dir / "snqi_v2_family.json").read_text())
+        assert report["provenance"]["metric_definitions_sha256"] == digest
+    else:
+        reason = {
+            "changed": "differs from calibration",
+            "invalid": "positive-integer",
+            "absent": "explicit evaluation budget schedule",
+        }[schedule]
+        with pytest.raises(ValueError, match=reason):
+            _analyze_v2(args)
+        assert not args.reports_dir.exists()

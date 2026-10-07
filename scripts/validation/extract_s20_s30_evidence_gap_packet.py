@@ -341,6 +341,8 @@ def _read_campaign_table(path: Path) -> list[dict[str, str]]:
                     "readiness_tier": row.get("readiness_tier", ""),
                     "status": row.get("status", ""),
                     "episodes": row.get("episodes", ""),
+                    "episodes_total": row.get("episodes_total", row.get("episodes", "")),
+                    "episodes_excluded": row.get("episodes_excluded", "0"),
                     "success_mean": row.get("success_mean", ""),
                     "collisions_mean": row.get("collisions_mean", ""),
                     "snqi_mean": row.get("snqi_mean", "").lstrip("'"),

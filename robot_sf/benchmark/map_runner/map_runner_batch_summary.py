@@ -39,9 +39,12 @@ def accumulate_batch_metadata(
     Returns:
         tuple[bool, int, int]: ``(adapter_requested_seen, native_steps, adapted_steps)`` deltas.
     """
-    impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
-    feasibility_meta = (rec.get("algorithm_metadata") or {}).get("kinematics_feasibility") or {}
-    ammv_meta = (rec.get("algorithm_metadata") or {}).get("ammv_feasibility") or {}
+    metadata = rec.get("algorithm_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    impact_meta = metadata.get("adapter_impact") or {}
+    feasibility_meta = metadata.get("kinematics_feasibility") or {}
+    ammv_meta = metadata.get("ammv_feasibility") or {}
     adapter_requested_seen = False
     adapter_native_steps = 0
     adapter_adapted_steps = 0
@@ -128,6 +131,7 @@ def apply_worker_metadata_bridge(
     merged_runtime_contract = merge_runtime_algorithm_contract(
         runtime_algorithm_contract or {},
         rec.get("algorithm_metadata"),
+        require_identity=True,
     )
     return WorkerMetadataBridgeUpdate(
         runtime_algorithm_contract=merged_runtime_contract,
@@ -227,17 +231,76 @@ def _merge_guard_telemetry(
             base_contract[key] = deepcopy(source)
 
 
+def _merge_runtime_algorithm_identity(
+    base_contract: dict[str, Any],
+    runtime_algorithm_metadata: dict[str, Any],
+    *,
+    require_identity: bool = False,
+) -> None:
+    """Bind summary telemetry to every contributing producer's complete identity."""
+    # Carry producer identity through both worker aggregation and the final
+    # static-contract merge. Conflicting or incomplete shield identities are
+    # sticky: a later valid episode must not grant their telemetry an exemption.
+    planner_runtime = runtime_algorithm_metadata.get("planner_runtime")
+    requires_identity = (
+        require_identity
+        or base_contract.get("canonical_algorithm") == "guarded_ppo"
+        or runtime_algorithm_metadata.get("canonical_algorithm") == "guarded_ppo"
+        or any(key in runtime_algorithm_metadata for key in ("guard_stats", "shield_stats"))
+        or (isinstance(planner_runtime, dict) and "last_decision" in planner_runtime)
+    )
+    for key in ("algorithm", "canonical_algorithm"):
+        if key not in runtime_algorithm_metadata and not requires_identity:
+            continue
+        value = runtime_algorithm_metadata.get(key, "mixed")
+        if key not in base_contract:
+            base_contract[key] = deepcopy(value)
+        elif base_contract[key] != value:
+            base_contract[key] = "mixed"
+    runtime_contract = runtime_algorithm_metadata.get("planner_contract")
+    if isinstance(runtime_contract, dict) or requires_identity:
+        planner_id = (
+            runtime_contract.get("planner_id", "mixed")
+            if isinstance(runtime_contract, dict)
+            else "mixed"
+        )
+        if "planner_contract" not in base_contract:
+            base_contract["planner_contract"] = (
+                deepcopy(runtime_contract) if isinstance(runtime_contract, dict) else {}
+            )
+            base_contract["planner_contract"]["planner_id"] = planner_id
+        else:
+            contract = base_contract["planner_contract"]
+            if isinstance(contract, dict) and contract.get("planner_id") != planner_id:
+                contract["planner_id"] = "mixed"
+
+
 def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
+    *,
+    require_identity: bool = False,
 ) -> dict[str, Any]:
     """Merge runtime-resolved algorithm contract fields into a batch summary contract.
+
+    The episode bridge requires identity even for absent or malformed metadata.
+    Missing fields become sticky ``mixed`` evidence before any later contributor
+    or static contract can supply a verified identity. Generic final merges may
+    legitimately have no runtime payload and retain their no-op behavior.
 
     Returns:
         dict[str, Any]: The merged contract mapping, or the original input on mismatch.
     """
-    if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
+    if not isinstance(base_contract, dict):
         return base_contract
+    if not isinstance(runtime_algorithm_metadata, dict):
+        if not require_identity:
+            return base_contract
+        runtime_algorithm_metadata = {}
+
+    _merge_runtime_algorithm_identity(
+        base_contract, runtime_algorithm_metadata, require_identity=require_identity
+    )
 
     _merge_guard_telemetry(base_contract, runtime_algorithm_metadata)
 

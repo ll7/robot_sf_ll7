@@ -132,7 +132,7 @@ __all__ = [  # noqa: F822 - names resolve through module-level __getattr__.
 
 def __getattr__(name: str) -> Any:
     """Resolve established package-level exports on first access."""
-    if name not in __all__:
+    if name not in __all__ and name != "register_constraints_first_lexicographic_v2":
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
     if name in {"production_candidate_evaluator", "run_adversarial_search"}:
@@ -145,4 +145,4 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    return sorted({*globals(), *__all__})
+    return sorted({*globals(), *__all__, "register_constraints_first_lexicographic_v2"})

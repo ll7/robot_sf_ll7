@@ -1175,14 +1175,56 @@ def test_exact_replay_requires_runtime_inputs_bound_to_source_git_tree(
     assert identity["replay"]["reason"] == "runtime_asset_not_source_bound"
 
 
-def test_exact_replay_records_git_tree_identity_for_tracked_runtime_inputs() -> None:
-    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
-    row["algorithm_metadata"]["config"]["checkpoint_path"] = "pyproject.toml"
+def test_exact_replay_records_git_tree_identity_for_tracked_runtime_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Own both the source tree and runtime bytes: HEAD^ in the CI checkout can
+    # legitimately differ from HEAD when an unrelated PR changes pyproject.toml.
+    repo = tmp_path / "runtime-repo"
+    repo.mkdir()
+    (repo / "map.svg").write_text("fixture map bytes\n", encoding="utf-8")
+    (repo / "checkpoint.bin").write_bytes(b"fixture checkpoint bytes")
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "map.svg", "checkpoint.bin"], cwd=repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "Runtime inputs",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    monkeypatch.setattr(materializer, "REPO_ROOT", repo)
+    monkeypatch.setitem(globals(), "REPO_ROOT", repo)
+    monkeypatch.setitem(globals(), "SOURCE_REVISION", revision)
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a", include_params=False)
+    row["seed"] = 1001
+    row["scenario_params"] = {
+        "id": "scenario_a",
+        "map_file": "map.svg",
+        "run_dt": 0.1,
+        "run_horizon": 10,
+    }
+    row["algorithm_metadata"]["config"]["checkpoint_path"] = "checkpoint.bin"
     _record_fixture_runtime_inputs(row)
     case = {
         "planner_key": "goal",
         "scenario_id": "scenario_a",
-        "seed": 111,
+        "seed": 1001,
         "benchmark_eligible": True,
     }
 
@@ -1203,6 +1245,26 @@ def test_exact_replay_records_git_tree_identity_for_tracked_runtime_inputs() -> 
         "scenario_map",
     ]
     assert all(len(asset["sha256"]) == 64 for asset in identity["source"]["assets"])
+    assert {asset["sha256"] for asset in identity["source"]["assets"]} == {
+        hashlib.sha256(b"fixture map bytes\n").hexdigest(),
+        hashlib.sha256(b"fixture checkpoint bytes").hexdigest(),
+    }
+
+    # Identical rows must still be rejected when the replay file drifts from Git.
+    (repo / "checkpoint.bin").write_bytes(b"changed replay bytes")
+    changed = _classify_replay_row(
+        case,
+        row,
+        json.loads(json.dumps(row)),
+        revision,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+    assert changed["status"] == "unavailable_runtime_input_identity"
+    assets = changed["runtime_input_identity"]["replay"]["assets"]
+    assert next(asset for asset in assets if asset["kind"] == "checkpoint_path")["reason"] == (
+        "runtime_bytes_differ_from_source_tree"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1796,6 +1858,7 @@ def test_replay_records_episode_checksum_and_row_count(
             "head_changed",
         ),
     ],
+    ids=["dirty", "head-changed"],
 )
 def test_checkout_mutation_during_replay_blocks_exact_match(
     tmp_path: Path,

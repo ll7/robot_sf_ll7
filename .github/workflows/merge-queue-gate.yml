@@ -64,7 +64,7 @@ jobs:
     if: >-
       github.event_name == 'merge_group' ||
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft &&
         (github.event.label.name == 'merge-ready' ||
          contains(github.event.pull_request.labels.*.name, 'merge-ready')))
     runs-on: ubuntu-latest

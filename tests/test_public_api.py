@@ -135,15 +135,15 @@ def test_make_env_and_run_episode_roundtrip(tmp_path: Path):
     """Verify make_env + run_episode + episode.save round-trip."""
     env = robot_sf.make_env(
         scenario="configs/scenarios/single/quickstart_demo.yaml",
-        seed=111,
+        seed=1001,
     )
     try:
         assert hasattr(env, "scenario_id")
-        assert env.applied_seed == 111
+        assert env.applied_seed == 1001
 
         record = robot_sf.run_episode(env, max_steps=5)
         assert isinstance(record, EpisodeRecord)
-        assert record.seed == 111
+        assert record.seed == 1001
         assert 1 <= record.horizon <= 5
         assert "steps" in record.metrics.values
         assert record.metrics.values["steps"] == float(record.horizon)
@@ -181,7 +181,7 @@ def test_make_env_with_mapping_and_planner():
     import numpy as np
 
     sc = robot_sf.load_scenario("quickstart_demo")
-    env = robot_sf.make_env(scenario=sc, seed=123)
+    env = robot_sf.make_env(scenario=sc, seed=1013)
     try:
 
         class DummyPlanner:
@@ -195,7 +195,7 @@ def test_make_env_with_mapping_and_planner():
 
         rec = robot_sf.run_episode(env, planner=DummyPlanner(), max_steps=2)
         assert rec.algo == "dummy_planner"
-        assert rec.seed == 123
+        assert rec.seed == 1013
     finally:
         env.close()
 
@@ -205,12 +205,12 @@ def test_make_env_rejects_relative_mapping_without_source_metadata():
     scenario = robot_sf.load_scenario("quickstart_demo")
     scenario.pop("__scenario_path__")
     with pytest.raises(ValueError, match="relative asset paths"):
-        robot_sf.make_env(scenario=scenario, seed=123)
+        robot_sf.make_env(scenario=scenario, seed=1013)
 
 
 def test_make_env_preserves_caller_scenario_name():
     """An explicit scenario_name remains the public environment identity."""
-    env = robot_sf.make_env(scenario="quickstart_demo", scenario_name="caller_name", seed=123)
+    env = robot_sf.make_env(scenario="quickstart_demo", scenario_name="caller_name", seed=1013)
     try:
         assert env.scenario_id == "caller_name"
     finally:
@@ -223,7 +223,7 @@ def test_make_env_preserves_caller_scenario_name():
 )
 def test_run_episode_converts_protocol_action(planner_action):
     """Verify baseline protocol mappings are projected into the env action space."""
-    env = robot_sf.make_env(seed=123)
+    env = robot_sf.make_env(seed=1013)
     try:
 
         class DictPlanner:
@@ -238,7 +238,7 @@ def test_run_episode_converts_protocol_action(planner_action):
 
 def test_run_episode_rejects_invalid_planner():
     """Invalid planner objects fail clearly instead of sampling random actions."""
-    env = robot_sf.make_env(seed=123)
+    env = robot_sf.make_env(seed=1013)
     try:
         with pytest.raises(TypeError, match=r"callable step\(\) method"):
             robot_sf.run_episode(env, planner=object(), max_steps=1)
@@ -249,7 +249,7 @@ def test_run_episode_rejects_invalid_planner():
 @pytest.mark.parametrize("max_steps", [0, -1])
 def test_run_episode_rejects_non_positive_max_steps(max_steps):
     """A non-positive step budget cannot execute an implicit extra action."""
-    env = robot_sf.make_env(seed=123)
+    env = robot_sf.make_env(seed=1013)
     try:
         with pytest.raises(ValueError, match="positive integer"):
             robot_sf.run_episode(env, max_steps=max_steps)
@@ -259,11 +259,11 @@ def test_run_episode_rejects_non_positive_max_steps(max_steps):
 
 def test_run_episode_uses_stable_episode_identity():
     """Repeated calls with the same scenario and seed share the canonical identity."""
-    env = robot_sf.make_env(seed=123)
+    env = robot_sf.make_env(seed=1013)
     try:
         first = robot_sf.run_episode(env, max_steps=1)
         second = robot_sf.run_episode(env, max_steps=1)
-        assert first.episode_id == second.episode_id == "default--123"
+        assert first.episode_id == second.episode_id == "default--1013"
     finally:
         env.close()
 
@@ -285,10 +285,10 @@ def test_run_episode_adapts_builtin_planner_observations():
     from robot_sf.baselines.random_policy import RandomPlanner
     from robot_sf.baselines.social_force import SocialForcePlanner
 
-    for planner in (RandomPlanner({}, seed=123), SocialForcePlanner({}, seed=456)):
-        env = robot_sf.make_env(seed=123)
+    for planner in (RandomPlanner({}, seed=1013), SocialForcePlanner({}, seed=456)):
+        env = robot_sf.make_env(seed=1013)
         try:
-            record = robot_sf.run_episode(env, planner=planner, max_steps=2, seed=123)
+            record = robot_sf.run_episode(env, planner=planner, max_steps=2, seed=1013)
             assert record.horizon <= 2
         finally:
             env.close()
@@ -306,9 +306,9 @@ def test_run_episode_keeps_raw_observation_for_custom_step_planner():
             return np.zeros(2, dtype=np.float32)
 
     planner = CustomPlanner()
-    env = robot_sf.make_env(seed=123)
+    env = robot_sf.make_env(seed=1013)
     try:
-        robot_sf.run_episode(env, planner=planner, max_steps=1, seed=123)
+        robot_sf.run_episode(env, planner=planner, max_steps=1, seed=1013)
         assert isinstance(planner.received, dict)
     finally:
         env.close()
@@ -324,9 +324,9 @@ def test_run_episode_keeps_raw_observation_for_callable_planner():
         received.append(obs)
         return np.zeros(2, dtype=np.float32)
 
-    env = robot_sf.make_env(seed=123)
+    env = robot_sf.make_env(seed=1013)
     try:
-        robot_sf.run_episode(env, planner=callable_planner, max_steps=1, seed=123)
+        robot_sf.run_episode(env, planner=callable_planner, max_steps=1, seed=1013)
         assert len(received) == 1
         assert isinstance(received[0], dict)
     finally:
@@ -338,8 +338,8 @@ def test_social_force_receives_classic_bottleneck_obstacles(monkeypatch):
     from robot_sf.baselines.interface import Observation
     from robot_sf.baselines.social_force import SocialForcePlanner
 
-    env = robot_sf.make_env(scenario="classic_bottleneck_low", seed=131)
-    planner = SocialForcePlanner({}, seed=131)
+    env = robot_sf.make_env(scenario="classic_bottleneck_low", seed=1021)
+    planner = SocialForcePlanner({}, seed=1021)
     received = []
     original_step = planner.step
 
@@ -350,14 +350,14 @@ def test_social_force_receives_classic_bottleneck_obstacles(monkeypatch):
     monkeypatch.setattr(planner, "step", recording_step)
 
     try:
-        env.reset(seed=131)
+        env.reset(seed=1021)
         expected = [
             [float(value) for value in segment] for segment in env.simulator.map_def.obstacles_pysf
         ]
         assert env.simulator.map_def.obstacles
         assert expected
 
-        robot_sf.run_episode(env, planner=planner, max_steps=1, seed=131)
+        robot_sf.run_episode(env, planner=planner, max_steps=1, seed=1021)
 
         assert len(received) == 1
         assert isinstance(received[0], Observation)

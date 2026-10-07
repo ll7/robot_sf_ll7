@@ -1,7 +1,9 @@
 {
   "artifact_path": "docs/context/evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json",
-  "artifact_sha256": "aaca07b222d2bf16fb62f0fa32f69f634a892c2bf8774a676fb12ce08a283777",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "cf0382bd61205e94718d8cef93220ea6b2bdbad85bead026c5638721b08b8168",
+  "preserved_exact_bytes": false,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "schema_version": "evidence-review-marker.v1",
+  "supersedes_artifact_sha256": "aaca07b222d2bf16fb62f0fa32f69f634a892c2bf8774a676fb12ce08a283777",
+  "supersession_note": "PR #9836 replaces scratch-root locators and availability metadata; this marker supersedes the prior artifact digest. These are revised bytes, not an exact-byte preservation or new domain approval."
 }

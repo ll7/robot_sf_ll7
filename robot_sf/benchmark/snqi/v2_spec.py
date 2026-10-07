@@ -17,7 +17,16 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.metric_definitions import (
+    LEGACY_METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
+    metric_schema_version,
+)
 from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
+from robot_sf.benchmark.snqi.evaluation_seeds import (
+    SEALED_EVALUATION_SEEDS_SHA256,
+    evaluation_seeds_sha256,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -165,9 +174,16 @@ class SnqiV2Spec:
     calibration_rho: float
     paths: Mapping[str, str]
     hashes: Mapping[str, str]
+    metric_schema_version: str = LEGACY_METRIC_SCHEMA_VERSION
+    diagnostic: bool = False
+    scenario_horizons: Mapping[str, int] | None = None
+    evaluation_seeds_sha256: str = SEALED_EVALUATION_SEEDS_SHA256
+    metric_definitions_sha256: str | None = None
 
     def __post_init__(self) -> None:
         """Enforce the complete score contract even for direct construction."""
+        metric_schema_version({"metric_schema_version": self.metric_schema_version})
+        _validate_definitions_binding(self.metric_schema_version, self.metric_definitions_sha256)
         if set(self.weights) != set(TERMS):
             raise ValueError("SNQI-v2 weights must contain exactly S,C,T,N,F,J,K")
         weights = {
@@ -195,8 +211,17 @@ class SnqiV2Spec:
         expected = PP_EQUIV_FORCE if abs(self.calibration_rho) >= 0.90 else SIMULATED_FORCE
         if self.force_source != expected:
             raise ValueError("SNQI-v2 F source violates preregistered |rho| >= 0.90 decision")
-        if self.calibration_seeds != (101, 102) or not self.calibration_split_id:
-            raise ValueError("SNQI-v2 requires identified calibration seeds 101,102")
+        diagnostic_seeds = (
+            self.diagnostic
+            and bool(self.calibration_seeds)
+            and all(type(seed) is int and 1001 <= seed <= 1030 for seed in self.calibration_seeds)
+        )
+        if (
+            self.calibration_seeds not in ((101, 102), (1001, 1002)) and not diagnostic_seeds
+        ) or not self.calibration_split_id:
+            raise ValueError(
+                "SNQI-v2 requires the identified development calibration split (1001/1002; historical 101/102)"
+            )
         for name, value in (
             ("weights", weights),
             ("upper_anchors", anchors),
@@ -204,6 +229,13 @@ class SnqiV2Spec:
             ("hashes", self.hashes),
         ):
             object.__setattr__(self, name, MappingProxyType(dict(value)))
+        object.__setattr__(
+            self,
+            "scenario_horizons",
+            None
+            if self.scenario_horizons is None
+            else MappingProxyType(dict(self.scenario_horizons)),
+        )
         validate_sources(self.sources)
 
     @property
@@ -215,6 +247,12 @@ class SnqiV2Spec:
         """Return campaign/manifest provenance with explicit versioned file hashes."""
         return {
             "snqi_v2_version": "SNQI-v2",
+            "snqi_v2_evaluation_seeds_sha256": self.evaluation_seeds_sha256,
+            "metric_schema_version": self.metric_schema_version,
+            "metric_definitions_sha256": self.metric_definitions_sha256,
+            "snqi_v2_definitions_binding": (
+                "definitions-digest absent" if self.metric_definitions_sha256 is None else "bound"
+            ),
             "snqi_v2_calibration_split_id": self.calibration_split_id,
             "snqi_v2_force_source": self.force_source,
             "snqi_v2_force_source_contract": declared_force_source_contract(self.force_source),
@@ -224,11 +262,48 @@ class SnqiV2Spec:
 
     def validate_evaluation_seeds(self, seeds: Sequence[int]) -> None:
         """Fail closed on calibration/evaluation seed leakage."""
-        if set(seeds) & set(self.calibration_seeds):
-            raise ValueError("SNQI-v2 evaluation seeds overlap calibration split")
+        if any(type(seed) is not int for seed in seeds):
+            raise ValueError("SNQI-v2 evaluation seeds must be integers")
+        if set(seeds) & (
+            set(self.calibration_seeds)  # seed-holdout: setup-only (admission exclusion metadata)
+            | {101, 102}
+            | set(range(111, 141))  # seed-holdout: setup-only (retired-band admission exclusion)
+            | set(range(1001, 1031))
+        ):
+            raise ValueError("SNQI-v2 evaluation seeds overlap calibration/development split")
+
+    def validate_evaluation_schedule(self, schedule: Mapping[str, int]) -> None:
+        """Reject a load/evaluation schedule inconsistent with the calibration budgets."""
+        if self.scenario_horizons is None or dict(schedule) != dict(self.scenario_horizons):
+            raise ValueError("SNQI-v2 evaluation budget schedule differs from calibration")
+
+    def validate_evaluation_commitment(self, seeds: Sequence[int]) -> None:
+        """Bind the complete release seed list to the author-approved sealed commitment."""
+        self.validate_evaluation_seeds(seeds)
+        if (
+            self.evaluation_seeds_sha256 != SEALED_EVALUATION_SEEDS_SHA256
+            or evaluation_seeds_sha256(seeds) != SEALED_EVALUATION_SEEDS_SHA256
+        ):
+            raise ValueError("SNQI-v2 evaluation seeds differ from the sealed commitment")
 
 
-def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path) -> SnqiV2Spec:
+# Exact immutable 0.0.8 anchor bytes, independent of path or declared provenance.
+HISTORICAL_UNBOUND_ANCHOR_SHA256 = frozenset(
+    {
+        "12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2",
+        "8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349",
+    }
+)
+
+
+def load_snqi_v2_spec(
+    weights_path: Path,
+    anchors_path: Path,
+    family_path: Path,
+    *,
+    expected_metric_schema_version: str | None = None,
+    evaluation_scenario_horizons: Mapping[str, int] | None = None,
+) -> SnqiV2Spec:
     """Load versioned assets; reject unfrozen calibration and malformed provenance.
 
     Returns:
@@ -259,6 +334,13 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
         raise ValueError("SNQI-v2.0 requires the exact declared weight values")
     if anchors_doc.get("version") != "SNQI-v2.0" or anchors_doc.get("status") != "frozen":
         raise ValueError("SNQI-v2 calibration anchors are not frozen")
+    _validate_anchor_identity(anchors_doc)
+    if expected_metric_schema_version is not None:
+        from robot_sf.benchmark.metric_definitions import require_anchor_compatibility  # noqa: PLC0415
+
+        require_anchor_compatibility(
+            {"metric_schema_version": expected_metric_schema_version}, anchors_doc
+        )
     anchors = anchors_doc["anchors"]
     if set(anchors) != set(QUALITY_TERMS):
         raise ValueError("SNQI-v2 anchors must contain exactly T,N,F,J,K")
@@ -268,6 +350,7 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
     ):
         raise ValueError("SNQI-v2 lower anchors must be physical zero")
     _validate_calibration(anchors_doc)
+    _validate_historical_anchor_exception(anchors_doc, raw["anchors"])
     calibration = anchors_doc["calibration"]
     spec = SnqiV2Spec(
         weights={term: entries[f"w_{term}"]["value"] for term in TERMS},
@@ -278,8 +361,52 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
         calibration_seeds=tuple(calibration["seeds"]),
         paths={key: str(path) for key, path in paths.items()},
         hashes={key: hashlib.sha256(value).hexdigest() for key, value in raw.items()},
+        metric_schema_version=metric_schema_version(anchors_doc),
+        metric_definitions_sha256=anchors_doc.get("metric_definitions_sha256"),
+        scenario_horizons=calibration["scenario_horizons"],
+        evaluation_seeds_sha256=anchors_doc["evaluation_seeds_sha256"],
     )
+    _bind_evaluation_schedule(spec, evaluation_scenario_horizons)
     return spec
+
+
+def _validate_historical_anchor_exception(anchors_doc: dict[str, Any], raw: bytes) -> None:
+    """Permit missing identity only for the immutable frozen 0.0.8 pair."""
+    if (
+        "metric_definitions_sha256" not in anchors_doc
+        and hashlib.sha256(raw).hexdigest() not in HISTORICAL_UNBOUND_ANCHOR_SHA256
+    ):
+        raise ValueError(
+            "SNQI-v2 missing definitions digest: only the frozen 0.0.8 anchor pair is exempt"
+        )
+
+
+def _bind_evaluation_schedule(
+    spec: SnqiV2Spec, evaluation_scenario_horizons: Mapping[str, int] | None
+) -> None:
+    """Compare a frozen calibration schedule with the current evaluation schedule."""
+    if evaluation_scenario_horizons is None and spec.metric_definitions_sha256 is not None:
+        raise ValueError(
+            "SNQI-v2 digest-bound anchors require an explicit evaluation budget schedule"
+        )
+    if evaluation_scenario_horizons is None:
+        from robot_sf.benchmark.snqi.v2_calibration import _candidate_calibration_horizons  # noqa: PLC0415
+
+        evaluation_scenario_horizons = _candidate_calibration_horizons()
+    if evaluation_scenario_horizons is not None:
+        spec.validate_evaluation_schedule(evaluation_scenario_horizons)
+
+
+def _validate_anchor_identity(anchors_doc: dict[str, Any]) -> None:
+    """Require explicit schema and the sealed evaluation commitment in frozen anchors."""
+    if not isinstance(anchors_doc.get("metric_schema_version"), str):
+        raise ValueError("SNQI-v2 anchors require explicit metric_schema_version")
+    if "metric_definitions_sha256" in anchors_doc and (
+        anchors_doc["metric_definitions_sha256"] != metric_definitions_sha256()
+    ):
+        raise ValueError("SNQI-v2 stale metric definitions digest")
+    if anchors_doc.get("evaluation_seeds_sha256") != SEALED_EVALUATION_SEEDS_SHA256:
+        raise ValueError("SNQI-v2 anchors evaluation seeds differ from the sealed commitment")
 
 
 def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
@@ -288,6 +415,13 @@ def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
     if calibration.get("quantile_method") != "linear":
         raise ValueError("SNQI-v2 calibration quantile_method must be linear")
     _validate_calibration_grid(calibration)
+    horizons = calibration.get("scenario_horizons")
+    if (
+        not isinstance(horizons, dict)
+        or set(horizons) != set(calibration["scenarios"])
+        or any(type(value) is not int or value < 1 for value in horizons.values())
+    ):
+        raise ValueError("SNQI-v2 calibration requires explicit complete budget schedule")
     _validate_command_mode_census(calibration)
     _validate_frozen_custody(calibration)
     _validate_force_decision_contract(anchors_doc)
@@ -309,7 +443,7 @@ def _validate_calibration_grid(calibration: dict[str, Any]) -> None:
         or len(scenarios) != 48
         or any(not isinstance(scenario, str) or not scenario for scenario in scenarios)
         or len(set(scenarios)) != 48
-        or seeds != [101, 102]
+        or seeds not in ([101, 102], [1001, 1002])
         or calibration.get("episode_count") != 1344
         or calibration.get("benchmark_execution") != "nonfallback"
     ):
@@ -318,7 +452,7 @@ def _validate_calibration_grid(calibration: dict[str, Any]) -> None:
     grid_sha256 = hashlib.sha256(json.dumps(grid, separators=(",", ":")).encode()).hexdigest()
     if calibration.get("grid_sha256") != grid_sha256:
         raise ValueError("SNQI-v2 calibration grid_sha256 does not match its declared split")
-    if calibration.get("split_id") != f"snqi-v2-dev101-102-{grid_sha256[:12]}":
+    if calibration.get("split_id") != f"snqi-v2-dev{'-'.join(map(str, seeds))}-{grid_sha256[:12]}":
         raise ValueError("SNQI-v2 calibration split_id does not match its declared grid")
 
 
@@ -378,6 +512,13 @@ def _validate_frozen_custody(calibration: dict[str, Any]) -> None:
     for key in ("campaign_config_hash", "campaign_manifest_sha256"):
         if not _valid_digest(calibration.get(key)):
             raise ValueError(f"SNQI-v2 frozen calibration requires {key}")
+    if (
+        calibration.get("campaign_config_identity")
+        != calibration.get("campaign_config_hash", "")[:16]
+    ):
+        raise ValueError(
+            "SNQI-v2 calibration campaign_config_identity must match campaign_config_hash[:16]"
+        )
     if calibration.get("episodes_hash_rule") != (
         "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
     ):
@@ -422,3 +563,11 @@ def _provenance_path(value: str) -> str:
         return str(path.relative_to(get_repository_root()))
     except ValueError:
         return str(path)
+
+
+def _validate_definitions_binding(schema: str, digest: str | None) -> None:
+    """Reject stale or cross-schema bindings for loaded and programmatic specifications."""
+    if digest is not None and (
+        schema != "robot-sf-metrics.v2" or digest != metric_definitions_sha256()
+    ):
+        raise ValueError("SNQI-v2 stale metric definitions digest or incompatible schema")

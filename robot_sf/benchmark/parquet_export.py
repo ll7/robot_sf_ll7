@@ -16,7 +16,7 @@ from typing import Any
 
 from robot_sf.benchmark.analysis_trace import trace_artifact_sha256, trace_coverage
 from robot_sf.benchmark.errors import EpisodeRecordInputError
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 from robot_sf.benchmark.termination_reason import canonical_outcome_flags
 
 try:  # Optional analytics dependency; validated when export is invoked.
@@ -1108,9 +1108,9 @@ def _campaign_cell_rows(
 
 
 def _cell_record_eligible(record: Mapping[str, Any]) -> bool:
-    """Keep fallback/degraded and spawn-overlap rows out of canonical cell aggregates."""
+    """Keep fallback, degraded, and invalid-spawn rows out of cell aggregates."""
 
-    if record_has_spawn_overlap(record):
+    if record_has_invalid_spawn(record):
         return False
 
     blocked_statuses = {
@@ -1330,7 +1330,7 @@ def _comparison_compatibility(
 def _comparison_record_eligible(record: Mapping[str, Any]) -> bool:
     """Apply the same fail-closed execution caveats used by case selection."""
 
-    if record_has_spawn_overlap(record):
+    if record_has_invalid_spawn(record):
         return False
 
     blocked = {

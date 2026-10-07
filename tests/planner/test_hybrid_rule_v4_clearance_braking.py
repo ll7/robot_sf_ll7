@@ -511,6 +511,38 @@ def test_v4_binds_angular_limits_to_the_drive() -> None:
     assert v3._max_angular_accel() == pytest.approx(4.0)
 
 
+def test_v4_dynamic_window_uses_realized_angular_estimate() -> None:
+    """V4 bounds the next turn command from the rate used by rollout prediction."""
+    planner = _v4_planner()
+    _bind(planner, DifferentialDriveSettings())
+    planner._last_command = (0.0, -0.4)
+    planner._v4_angular_estimate = 0.2
+
+    _v_min, _v_max, w_min, w_max = planner._dynamic_window(0.0, 1.0)
+
+    # The drive acceleration is 1 rad/s^2, so the 0.6 s window extends 0.6
+    # rad/s either side of the realized 0.2 rad/s estimate, not the -0.4 target.
+    assert (w_min, w_max) == pytest.approx((-0.4, 0.8))
+
+
+def test_v3_dynamic_window_remains_anchored_at_the_last_command() -> None:
+    """The v4 angular-estimate change does not alter the frozen v3 window."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(
+            planner_variant="hybrid_rule_v3_teb_like_rollout",
+            control_period=0.5,
+            max_angular_accel=0.4,
+            max_angular_speed=1.2,
+        )
+    )
+    planner._last_command = (0.0, 0.4)
+    planner._v4_angular_estimate = -0.4
+
+    _v_min, _v_max, w_min, w_max = planner._dynamic_window(0.0, 1.0)
+
+    assert (w_min, w_max) == pytest.approx((0.2, 0.6))
+
+
 def test_v4_braking_check_turns_at_the_drive_angular_limit() -> None:
     """A hard swerve cannot escape a head-on pedestrian within one step at 1 rad/s^2."""
     planner = _v4_planner()
@@ -544,6 +576,42 @@ def test_v4_pedestrian_gates_use_surface_clearance() -> None:
     planner._corridor_subgoal_activation = _spy
     planner.plan(obs)
     assert captured["nearest_ped"] == pytest.approx(2.0, abs=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("planner_variant", "expected"),
+    [
+        ("hybrid_rule_v3_teb_like_rollout", 1.0),
+        (HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT, 0.0),
+    ],
+)
+def test_recovery_score_gates_use_variant_distance(
+    planner_variant: str, expected: float, monkeypatch
+) -> None:
+    """V4 recovery bonuses use surface clearance while v3 keeps centre distance."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(
+            planner_variant=planner_variant,
+            recovery_enabled=True,
+            static_recenter_enabled=True,
+            slow_distance_human=1.0,
+        )
+    )
+    monkeypatch.setattr(planner, "_static_recenter_probe_score", lambda **_kwargs: 1.0)
+    candidate = HybridRuleCandidate(0.0, 0.6, "rotate_left")
+    state = _state(clearance=-0.2)  # 1.2 m centre distance, inside 1.4 m contact distance.
+
+    terms = planner._compute_recovery_and_commitment_terms(
+        candidate=candidate,
+        observation={},
+        state=state,
+        ctx={"start_dist": 4.0, "hard_static_clearance": 2.0},
+        nearest_ped=1.2,
+        progress_windows={"3s": 0.0},
+    )
+
+    assert terms["deadlock_escape"] == pytest.approx(expected)
+    assert terms["static_recenter"] == pytest.approx(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -641,6 +709,27 @@ def test_v4_configs_resolve_to_the_v4_variant(v4_name: str) -> None:
         assert cfg.v4_braking_check_enabled is True
         assert cfg.continuous_static_clearance_enabled is True
         HybridRuleLocalPlannerAdapter(cfg)
+
+
+@pytest.mark.parametrize("v4_name", sorted(V3_TO_V4.values()))
+def test_v4_perpendicular_override_matches_its_clearance_band(v4_name: str) -> None:
+    """The 0.6 m/s scenario override belongs to the 0.35 m slow band, not stop band."""
+    effective = load_planner_config(
+        CANDIDATES + v4_name,
+        "francis2023_perpendicular_traffic",
+    )
+    cfg = build_hybrid_rule_local_planner_config(effective)
+    decel = float(DifferentialDriveSettings().max_linear_decel)
+    reaction = BENCHMARK_DT
+    margin = float(cfg.v4_braking_margin)
+
+    stop_distance = stopping_distance(0.15, decel, reaction) + margin
+    slow_distance = stopping_distance(0.6, decel, reaction) + margin
+    assert cfg.very_slow_speed == pytest.approx(0.6)
+    assert cfg.v4_stop_clearance_human == pytest.approx(0.15)
+    assert cfg.v4_stop_clearance_human >= stop_distance
+    assert cfg.v4_slow_clearance_human == pytest.approx(0.35)
+    assert cfg.v4_slow_clearance_human >= slow_distance
 
 
 def test_v3_configs_keep_the_v3_variant() -> None:

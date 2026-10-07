@@ -7,6 +7,7 @@ name: Docs & Evidence Integrity
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "**/*.md"
       - "**/*.markdown"
@@ -24,6 +25,7 @@ concurrency:
 
 jobs:
   docs-evidence-integrity:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

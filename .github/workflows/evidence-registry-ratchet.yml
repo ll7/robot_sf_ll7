@@ -30,6 +30,7 @@ name: Evidence-registry ratchet
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "docs/RELEASE.md"
       - "CITATION.cff"
@@ -57,6 +58,7 @@ concurrency:
 
 jobs:
   evidence-registry-ratchet:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

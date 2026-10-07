@@ -25,6 +25,7 @@ from numba import njit
 from pysocialforce.config import (
     LEGACY_SHIFTED_GRADIENT_V1,
     OBSTACLE_FORCE_DISTANCE_FLOOR,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     DesiredForceConfig,
     GroupCoherenceForceConfig,
     GroupGazeForceConfig,
@@ -33,6 +34,7 @@ from pysocialforce.config import (
     SocialForceConfig,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
+    resolve_social_force_kernel_version,
 )
 from pysocialforce.logging import logger
 from pysocialforce.scene import Line2D, PedState, Point2D
@@ -213,6 +215,9 @@ class SocialForce:
         kernel = (
             _social_force_gil_releasing if _release_gil_for_social_force.get() else social_force
         )
+        kernel_version = resolve_social_force_kernel_version(
+            getattr(self.config, "kernel_version", None)
+        )
         forces = kernel(
             ped_positions,
             ped_velocities,
@@ -221,6 +226,7 @@ class SocialForce:
             self.config.n_prime,
             self.config.lambda_importance,
             self.config.gamma,
+            kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2,
         )
         return forces * self.config.factor
 
@@ -234,6 +240,7 @@ def social_force(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    wrap_theta: bool = False,
 ) -> np.ndarray:
     """
     Calculates the social force acting on each pedestrian.
@@ -246,6 +253,8 @@ def social_force(
         n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): Weight of relative velocity in the interaction direction.
         gamma (float): Scale factor for the interaction range parameter B.
+        wrap_theta (bool): Select the corrected shortest-angle calculation. The
+            default preserves the historical unwrapped kernel exactly.
 
     Returns:
         np.ndarray: Array of shape (num_peds, 2) representing the social forces acting on each pedestrian.
@@ -275,7 +284,7 @@ def social_force(
         vel_diffs = ped_velocities[other_ped_ids] - ped_velocities[ped_i]
         # Calculate the social force components for the current pedestrian
         force_x, force_y = social_force_single_ped(
-            pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma
+            pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma, wrap_theta
         )
         # Assign calculated force components to the forces array
         forces[ped_i, 0] = force_x
@@ -296,6 +305,7 @@ def social_force_single_ped(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    wrap_theta: bool = False,
 ) -> Point2D:
     """
     Calculates the social force exerted on a single pedestrian.
@@ -307,6 +317,7 @@ def social_force_single_ped(
         n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): Importance factor for the social force.
         gamma (float): Scaling factor for the social force.
+        wrap_theta (bool): Whether to use the versioned shortest-angle correction.
 
     Returns:
         Point2D: The total social force exerted on the pedestrian in the x and y directions.
@@ -314,7 +325,7 @@ def social_force_single_ped(
     force_sum_x, force_sum_y = 0.0, 0.0
     for i in range(pos_diffs.shape[0]):
         force_x, force_y = social_force_ped_ped(
-            pos_diffs[i], vel_diffs[i], n, n_prime, lambda_importance, gamma
+            pos_diffs[i], vel_diffs[i], n, n_prime, lambda_importance, gamma, wrap_theta
         )
         force_sum_x += force_x
         force_sum_y += force_y
@@ -329,6 +340,7 @@ def social_force_ped_ped(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    wrap_theta: bool = False,
 ) -> Point2D:
     """
     Calculates the social force between two pedestrians.
@@ -340,6 +352,7 @@ def social_force_ped_ped(
         n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): The importance of the velocity difference.
         gamma (float): The gamma value.
+        wrap_theta (bool): Whether to use the versioned shortest-angle correction.
 
     Returns:
         Point2D: The social force vector between the two pedestrians.
@@ -361,6 +374,8 @@ def social_force_ped_ped(
 
     # Calculate angle between interaction direction and difference direction
     theta = atan2(interaction_dir[1], interaction_dir[0]) - atan2(diff_dir_y, diff_dir_x)
+    if wrap_theta:
+        theta = (theta + np.pi) % (2.0 * np.pi) - np.pi
     # Determine the sign of theta for force calculation
     theta_sign = 1 if theta >= 0 else -1
     # Calculate B parameter with a small constant to avoid division by zero

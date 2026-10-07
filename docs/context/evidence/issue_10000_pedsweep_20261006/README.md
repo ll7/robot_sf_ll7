@@ -4,6 +4,14 @@
 `evidence_tier`: `diagnostic-only`
 Round 2 at `d90bf243`: [exact held-actor witness and targeted #10180 attribution](r2/README.md). The specific hold refutation is fixed; the historical negative full-gate receipt below remains preserved.
 
+October 7 refresh: [SACADRL/PPO causal contract dispositions](learned-arm-disposition-20261007.md)
+reconcile nine adjacent-source-pair witnesses (17 event labels) from the committed r2
+evidence. Retain clearance-aware reset sampling and declared PPO velocity-delta semantics;
+the physical collision deficits remain failures. The later issue comment reports the ten
+remaining r2 labels as joint causes; its external raw evidence was not re-executed or
+independently retrieved for this annotation. No runtime repair, exception, gate pass or
+readiness change is asserted. The original receipt and r2 data below are historical snapshots.
+
 `paper_facing`: `false`
 `benchmark_promotion`: `false`
 

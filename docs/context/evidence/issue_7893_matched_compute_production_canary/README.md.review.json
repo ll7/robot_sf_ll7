@@ -1,7 +1,9 @@
 {
   "artifact_path": "docs/context/evidence/issue_7893_matched_compute_production_canary/README.md",
-  "artifact_sha256": "cc8196007ab3b85dc4fd61233fc7c97a580f939dde0d7b5e200cfcb66d46c43d",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "5f4ebb1a2d415b90b344fceeab78918fd0c44918e83c68ea87590e8d40cb9436",
+  "preserved_exact_bytes": false,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "schema_version": "evidence-review-marker.v1",
+  "supersedes_artifact_sha256": "cc8196007ab3b85dc4fd61233fc7c97a580f939dde0d7b5e200cfcb66d46c43d",
+  "supersession_note": "PR #9836 replaces scratch-root locators and availability metadata; this marker supersedes the prior artifact digest. These are revised bytes, not an exact-byte preservation or new domain approval."
 }

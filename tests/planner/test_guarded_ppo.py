@@ -1259,6 +1259,58 @@ def test_sacadrl_nonfinite_scores_stop_and_record_fallback(monkeypatch, bad, raw
     assert adapter.plan(_adapter_residual_observation()) == (0.5, 0.0)
 
 
+def test_sacadrl_episode_reset_clears_transient_fallback_provenance(monkeypatch):
+    """A nonfinite step taints only its episode, retaining checkpoint custody."""
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
+        attach_planner_reset,
+    )
+
+    adapter = SACADRLPlannerAdapter(allow_fallback=True)
+    model = SimpleNamespace(
+        actions=np.array([[1.0, -0.5], [0.5, 0.0]]),
+        predict=lambda _: np.array([[np.nan, np.nan]]),
+    )
+    monkeypatch.setattr(adapter, "_build_model", lambda: model)
+    monkeypatch.setattr(adapter, "_build_network_input", lambda _: (np.zeros(3), 1.0, 10.0))
+    adapter._checkpoint_provenance.update(checkpoint_sha256="checkpoint-custody")
+    observation = _adapter_residual_observation()
+    assert adapter.plan(observation) == (0.0, 0.0)
+    model.predict = lambda _: np.array([[0.1, 0.2]])
+    assert adapter.plan(observation) == (0.5, 0.0)
+    assert adapter.diagnostics()["checkpoint_provenance"]["fallback_triggered"] is True
+
+    def policy(_observation):
+        return adapter.plan(_observation)
+
+    attach_planner_reset(policy, adapter)
+    # The episode runner tolerates adapters without a reset hook.
+    reset = getattr(policy, "_planner_reset", None)
+    if reset is not None:
+        reset(seed=1001)
+    assert policy(observation) == (0.5, 0.0)
+    provenance = adapter.diagnostics()["checkpoint_provenance"]
+    assert provenance["fallback_triggered"] is False
+    assert "fallback_reason" not in provenance
+    assert provenance["checkpoint_sha256"] == "checkpoint-custody"
+    assert provenance["load_succeeded"] is True
+    assert provenance["load_status"] == "loaded"
+    assert adapter._model is model
+
+    # A persistent load failure must still mark later episodes as degraded.
+    adapter._model = None
+    adapter._load_error = RuntimeError("checkpoint unavailable")
+    adapter._checkpoint_provenance.update(
+        load_succeeded=False,
+        load_status="fallback",
+        load_error="RuntimeError: checkpoint unavailable",
+    )
+    reset(seed=1002)
+    assert adapter._ensure_model() is None
+    provenance = adapter.diagnostics()["checkpoint_provenance"]
+    assert provenance["fallback_triggered"] is True
+    assert provenance["load_error"] == "RuntimeError: checkpoint unavailable"
+
+
 @pytest.mark.parametrize("parser", ["map", "classic"])
 @pytest.mark.parametrize(
     "payload",

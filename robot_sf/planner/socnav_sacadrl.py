@@ -144,6 +144,14 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             "load_error": None,
         }
 
+    def reset(self, *, seed: int | None = None) -> None:
+        """Clear episode fallback flags while preserving checkpoint and load state."""
+        del seed
+        self._checkpoint_provenance["fallback_triggered"] = bool(
+            self._load_error is not None and self._allow_fallback
+        )
+        self._checkpoint_provenance.pop("fallback_reason", None)
+
     def diagnostics(self) -> dict[str, Any]:
         """Return runtime checkpoint provenance for benchmark episode metadata."""
         return {"checkpoint_provenance": dict(self._checkpoint_provenance)}

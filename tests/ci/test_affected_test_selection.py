@@ -14,7 +14,7 @@ def test_changed_slow_pin_is_admitted(tmp_path):
     pin.write_text(
         'import pytest\npytestmark = pytest.mark.slow\nPIN = "robot_sf/benchmark/metrics.py"\ndef test_pin(): assert False, "pin executed"\n'
     )
-    env = {**os.environ, "ROBOT_SF_AFFECTED_TEST_PATHS": str(pin)}
+    env = {**os.environ, "ROBOT_SF_AFFECTED_TEST_PATHS": str(pin), "PYTHONPATH": str(ROOT)}
     result = subprocess.run(
         [
             sys.executable,
@@ -84,3 +84,41 @@ def test_imports_pins_deletes_and_renames(tmp_path):
         "tests/test_pin.py",
         "tests/test_unrelated.py",
     ]
+
+
+def test_mapped_change_excludes_unrelated_slow_and_always_admits_pins(tmp_path):
+    """Mapped paths select real dependents without paying for unrelated slow files."""
+    from scripts.dev.affected_test_selection import affected_tests
+
+    files = {
+        "robot_sf/model.py": "VALUE = 1\n",
+        "tests/test_model.py": "from robot_sf.model import VALUE\n",
+        "tests/test_reference.py": 'PIN = "robot_sf" / "model.py"\n',
+        "tests/test_pin.py": "def test_pin(): pass\n",
+        "tests/test_inventory.py": "def test_inventory(): pass\n",
+        "tests/test_unrelated.py": "import pytest\npytestmark = pytest.mark.slow\n",
+    }
+    for name, content in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", *files], cwd=tmp_path, check=True)
+    assert affected_tests(tmp_path, {"robot_sf/model.py"}) == [
+        "tests/test_inventory.py",
+        "tests/test_model.py",
+        "tests/test_pin.py",
+        "tests/test_reference.py",
+    ]
+    assert affected_tests(tmp_path, set()) == ["tests/test_inventory.py", "tests/test_pin.py"]
+
+
+def test_unchanged_pr_still_admits_inventory(tmp_path):
+    """Every PR executes integrity witnesses even when its diff is empty."""
+    from scripts.dev.affected_test_selection import affected_tests
+
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests/test_inventory.py").write_text("def test_inventory(): pass\n")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "tests/test_inventory.py"], cwd=tmp_path, check=True)
+    assert affected_tests(tmp_path, set()) == ["tests/test_inventory.py"]

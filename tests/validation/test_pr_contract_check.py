@@ -673,13 +673,77 @@ def test_check_closes_discipline_ignores_other_repository(mock_metadata: MagicMo
     mock_metadata.assert_not_called()
 
 
-@patch("scripts.ci.pr_contract_check.subprocess.run")
-def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> None:
-    """Partial issue responses cannot be treated as evidence that closure is safe."""
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": []}')
-    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+@patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
+def test_get_issue_metadata_uses_rest_issue_endpoint(mock_api_get: MagicMock) -> None:
+    """Closing metadata comes from REST issue data and preserves normalization."""
+    mock_api_get.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {"labels": [{"name": "Epic"}, {"name": "LL7-Main-Red-Incident:V1"}], "body": "Details"}
+        ),
+    )
 
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"body": ""}')
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") == (
+        ["epic", "ll7-main-red-incident:v1"],
+        "Details",
+    )
+    mock_api_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/8414", timeout=10)
+
+
+@pytest.mark.parametrize("body", (None, ""))
+def test_closing_metadata_survives_graphql_quota_exhaustion(body: str | None) -> None:
+    """An empty issue stays readable through REST when GraphQL is unavailable."""
+    with (
+        patch("scripts.ci.pr_contract_check.gh_api_metadata_get", create=True) as rest_get,
+        patch("scripts.ci.pr_contract_check.subprocess.run") as graphql_run,
+    ):
+        rest_get.return_value = MagicMock(
+            returncode=0, stdout=json.dumps({"labels": [], "body": body})
+        )
+        graphql_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="GraphQL API rate limit exceeded"
+        )
+        assert pr_contract_check.get_issue_metadata("9715", "ll7/robot_sf_ll7") == ([], "")
+        rest_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/9715", timeout=10)
+        graphql_run.assert_not_called()
+
+
+@pytest.mark.parametrize("returncode", (1, 124))
+@patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
+def test_get_issue_metadata_fails_closed_on_rest_error(
+    mock_api_get: MagicMock, returncode: int
+) -> None:
+    """REST errors and bounded transport timeouts leave issue metadata unknown."""
+    mock_api_get.return_value = MagicMock(
+        returncode=returncode,
+        stdout="",
+        stderr="REST metadata unavailable",
+    )
+
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+    mock_api_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/8414", timeout=10)
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    (
+        "not JSON",
+        "[]",
+        '{"labels": []}',
+        '{"body": ""}',
+        '{"labels": {}, "body": ""}',
+        '{"labels": ["epic"], "body": ""}',
+        '{"labels": [{"name": 1}], "body": ""}',
+        '{"labels": [], "body": 1}',
+    ),
+)
+@patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
+def test_get_issue_metadata_rejects_malformed_or_incomplete_payload(
+    mock_api_get: MagicMock, stdout: str
+) -> None:
+    """Malformed or partial REST issue payloads cannot certify closing safety."""
+    mock_api_get.return_value = MagicMock(returncode=0, stdout=stdout)
+
     assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
 
 
@@ -966,6 +1030,7 @@ def test_github_closing_parity_scans_commit_messages() -> None:
 _OVERRIDE_NUMSTAT = "\n".join(f"300\t0\tscripts/dev/file_{index}.py" for index in range(5)) + "\n"
 _CAPPED_ISSUE_BODY = "Reviewability budget: Maximum 10 files and 800 net new lines.\n"
 _BINARY_NUMSTAT = "10\t2\tscripts/dev/a.py\n-\t-\texamples/fixtures/synthetic.zip\n"
+_BUDGET_BASE_SHA = "a" * 40
 
 
 @patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
@@ -977,13 +1042,16 @@ def test_check_line_budget_discipline_blocks_over_budget(
     mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
 
     blockers = pr_contract_check.check_line_budget_discipline(
-        "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        budget_base_sha=_BUDGET_BASE_SHA,
     )
 
     assert len(blockers) == 1
     assert "#9094" in blockers[0]
     assert "1500 net new lines > 800-line cap" in blockers[0]
-    mock_numstat.assert_called_once_with("origin/main")
+    mock_numstat.assert_called_once_with(_BUDGET_BASE_SHA)
 
 
 @patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
@@ -998,6 +1066,7 @@ def test_check_line_budget_discipline_honors_reasoned_override(
         "Closes #9094\nbudget-override: split agreed with review; follow-up filed\n",
         "origin/main",
         "ll7/robot_sf_ll7",
+        budget_base_sha=_BUDGET_BASE_SHA,
     )
 
     assert blockers == []
@@ -1054,13 +1123,16 @@ def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
     mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
 
     blockers = pr_contract_check.check_line_budget_discipline(
-        "Closes #9094\n", "missing-base", "ll7/robot_sf_ll7"
+        "Closes #9094\n",
+        "missing-base",
+        "ll7/robot_sf_ll7",
+        budget_base_sha=_BUDGET_BASE_SHA,
     )
 
     assert len(blockers) == 1
     assert "cannot measure the PR diff" in blockers[0]
     assert "fail-closed" in blockers[0]
-    mock_numstat.assert_called_once_with("missing-base")
+    mock_numstat.assert_called_once_with(_BUDGET_BASE_SHA)
 
 
 @patch("scripts.ci.pr_contract_check.get_issue_metadata")
@@ -1120,7 +1192,7 @@ def test_run_all_checks_injects_historical_numstat_only_for_budget_check(
         "Closes #9094\n",
         [],
         "ll7/robot_sf_ll7",
-        "missing-base",
+        pr_contract_check.PRDiffBases("missing-base"),
         None,
         historical_numstat="10\t0\thistorical.py\n",
     )
@@ -1139,12 +1211,13 @@ def test_supplied_unavailable_historical_numstat_fails_closed(
         "Closes #9094\n",
         "origin/main",
         "ll7/robot_sf_ll7",
+        budget_base_sha=_BUDGET_BASE_SHA,
         numstat_text=None,
     )
 
     assert len(blockers) == 1
     assert "fail-closed" in blockers[0]
-    assert "origin/main" in blockers[0]
+    assert _BUDGET_BASE_SHA in blockers[0]
 
 
 @pytest.mark.parametrize(
@@ -2024,30 +2097,168 @@ def test_fetch_historical_pr_evidence_rejects_mutated_merge_compare_identity(
 
 
 @patch("subprocess.run")
-def test_diff_numstat_falls_back_to_two_dot_without_merge_base(
+def test_diff_numstat_fetches_exact_base_and_uses_tree_diff(
     mock_run: MagicMock,
 ) -> None:
-    """A shallow checkout without a merge base measures via the two-dot tree diff."""
+    """Budget measurement fetches the immutable base and never consults a branch tip."""
     mock_run.side_effect = [
         MagicMock(returncode=1, stdout=""),
+        MagicMock(returncode=0, stdout=""),
+        MagicMock(returncode=0, stdout=""),
         MagicMock(returncode=0, stdout="10\t2\tscripts/dev/a.py\n"),
     ]
 
-    assert pr_contract_check._diff_numstat("origin/main") == "10\t2\tscripts/dev/a.py\n"
-    assert mock_run.call_count == 2
-    assert mock_run.call_args_list[0].args[0][-1] == "origin/main...HEAD"
-    assert mock_run.call_args_list[1].args[0][-1] == "origin/main..HEAD"
+    assert pr_contract_check._diff_numstat(_BUDGET_BASE_SHA) == "10\t2\tscripts/dev/a.py\n"
+    assert mock_run.call_count == 4
+    assert mock_run.call_args_list[0].args[0] == [
+        "git",
+        "cat-file",
+        "-e",
+        f"{_BUDGET_BASE_SHA}^{{commit}}",
+    ]
+    assert mock_run.call_args_list[1].args[0] == [
+        "git",
+        "fetch",
+        "--no-tags",
+        "--depth=1",
+        "origin",
+        _BUDGET_BASE_SHA,
+    ]
+    assert mock_run.call_args_list[2].args[0][-1] == f"{_BUDGET_BASE_SHA}^{{commit}}"
+    assert mock_run.call_args_list[3].args[0][-1] == f"{_BUDGET_BASE_SHA}..HEAD"
 
 
 @patch("subprocess.run")
-def test_diff_numstat_returns_none_when_both_forms_fail(mock_run: MagicMock) -> None:
-    """Unavailable measurement stays None so budget enforcement fails closed."""
+def test_diff_numstat_returns_none_when_exact_base_fetch_fails(mock_run: MagicMock) -> None:
+    """An exact base SHA that cannot be fetched stays unavailable."""
     mock_run.side_effect = [
         MagicMock(returncode=1, stdout=""),
         MagicMock(returncode=1, stdout=""),
     ]
 
+    assert pr_contract_check._diff_numstat(_BUDGET_BASE_SHA) is None
+    assert mock_run.call_count == 2
+
+
+@patch("subprocess.run")
+def test_diff_numstat_rejects_moving_or_malformed_base_reference(mock_run: MagicMock) -> None:
+    """Branch names and malformed SHAs are never used as budget baselines."""
     assert pr_contract_check._diff_numstat("origin/main") is None
+    assert pr_contract_check._diff_numstat("short-sha") is None
+    mock_run.assert_not_called()
+
+
+def test_diff_numstat_excludes_target_branch_drift_from_old_merge_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An old PR merge ref is measured against its event base after main advances."""
+
+    def git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=check)
+
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "init", "--bare", "--initial-branch=main", str(origin))
+    git(
+        tmp_path,
+        "--git-dir",
+        str(origin),
+        "config",
+        "uploadpack.allowReachableSHA1InWant",
+        "true",
+    )
+
+    source = tmp_path / "source"
+    source.mkdir()
+    git(source, "init", "--initial-branch=main")
+    configure_git_identity(source, name="CI", email="ci@example.com")
+    (source / "base.txt").write_text("base\n", encoding="utf-8")
+    git(source, "add", "base.txt")
+    git(source, "commit", "-m", "base")
+    base_sha = git(source, "rev-parse", "HEAD").stdout.strip()
+    git(source, "remote", "add", "origin", str(origin))
+    git(source, "push", "origin", "HEAD:refs/heads/main")
+
+    git(source, "checkout", "-b", "pr-change")
+    (source / "pr-only.txt").write_text("PR change\n", encoding="utf-8")
+    git(source, "add", "pr-only.txt")
+    git(source, "commit", "-m", "PR change")
+    git(source, "checkout", "-b", "merge-ref", base_sha)
+    git(source, "merge", "--no-ff", "--no-edit", "pr-change")
+    merge_sha = git(source, "rev-parse", "HEAD").stdout.strip()
+    git(source, "push", "origin", f"{merge_sha}:refs/pull/1/merge")
+
+    git(source, "checkout", "main")
+    (source / "target-drift.txt").write_text("later target change\n", encoding="utf-8")
+    git(source, "add", "target-drift.txt")
+    git(source, "commit", "-m", "advance target after PR merge ref")
+    git(source, "push", "origin", "main")
+
+    shallow = tmp_path / "shallow"
+    shallow.mkdir()
+    git(shallow, "init")
+    git(shallow, "remote", "add", "origin", str(origin))
+    git(
+        shallow,
+        "fetch",
+        "--no-tags",
+        "--depth=1",
+        "origin",
+        "+refs/heads/main:refs/remotes/origin/main",
+        "+refs/pull/1/merge:refs/remotes/origin/pr/merge",
+    )
+    git(shallow, "checkout", "--detach", "refs/remotes/origin/pr/merge")
+    assert git(shallow, "cat-file", "-e", f"{base_sha}^{{commit}}", check=False).returncode != 0
+
+    moving_tip_numstat = git(shallow, "diff", "--numstat", "origin/main..HEAD").stdout
+    monkeypatch.chdir(shallow)
+    exact_numstat = pr_contract_check._diff_numstat(base_sha)
+
+    assert "target-drift.txt" in moving_tip_numstat
+    assert exact_numstat == "1\t0\tpr-only.txt\n"
+    evidence = pr_contract_check.HistoricalNumstatEvidence.from_numstat(exact_numstat)
+    assert evidence.changed_files == ("pr-only.txt",)
+    assert evidence.files == 1
+    assert evidence.added == 1
+    assert evidence.deleted == 0
+
+
+def test_main_passes_explicit_event_base_sha_to_budget_check(
+    tmp_path: Path,
+) -> None:
+    """The workflow-provided event base SHA reaches only the budget parameter."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {"number": 17, "title": "Example", "body": ""},
+                "repository": {"full_name": "ll7/robot_sf_ll7"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with (
+        patch("scripts.ci.pr_contract_check.get_changed_files", return_value=[]),
+        patch("scripts.ci.pr_contract_check.get_added_files", return_value=None),
+        patch(
+            "scripts.ci.pr_contract_check.run_all_checks", return_value=([], [], [])
+        ) as mock_run_all,
+        patch(
+            "sys.argv",
+            [
+                "pr_contract_check.py",
+                "--github-event-path",
+                str(event_path),
+                "--base-ref",
+                "origin/main",
+                "--budget-base-sha",
+                _BUDGET_BASE_SHA,
+            ],
+        ),
+    ):
+        assert pr_contract_check.main() == 0
+
+    diff_bases = mock_run_all.call_args.args[4]
+    assert diff_bases == pr_contract_check.PRDiffBases("origin/main", _BUDGET_BASE_SHA)
 
 
 def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
@@ -2809,7 +3020,7 @@ def test_regression_last_20_merged_prs() -> None:
             body,
             changed_files,
             "ll7/robot_sf_ll7",
-            "origin/main",
+            pr_contract_check.PRDiffBases("origin/main"),
             None,
             historical_numstat=historical_evidence.numstat,
         )

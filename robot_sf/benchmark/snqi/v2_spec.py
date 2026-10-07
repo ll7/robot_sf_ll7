@@ -19,6 +19,7 @@ import yaml
 
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
     metric_schema_version,
 )
 from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
@@ -177,10 +178,12 @@ class SnqiV2Spec:
     diagnostic: bool = False
     scenario_horizons: Mapping[str, int] | None = None
     evaluation_seeds_sha256: str = SEALED_EVALUATION_SEEDS_SHA256
+    metric_definitions_sha256: str | None = None
 
     def __post_init__(self) -> None:
         """Enforce the complete score contract even for direct construction."""
         metric_schema_version({"metric_schema_version": self.metric_schema_version})
+        _validate_definitions_binding(self.metric_schema_version, self.metric_definitions_sha256)
         if set(self.weights) != set(TERMS):
             raise ValueError("SNQI-v2 weights must contain exactly S,C,T,N,F,J,K")
         weights = {
@@ -246,6 +249,10 @@ class SnqiV2Spec:
             "snqi_v2_version": "SNQI-v2",
             "snqi_v2_evaluation_seeds_sha256": self.evaluation_seeds_sha256,
             "metric_schema_version": self.metric_schema_version,
+            "metric_definitions_sha256": self.metric_definitions_sha256,
+            "snqi_v2_definitions_binding": (
+                "definitions-digest absent" if self.metric_definitions_sha256 is None else "bound"
+            ),
             "snqi_v2_calibration_split_id": self.calibration_split_id,
             "snqi_v2_force_source": self.force_source,
             "snqi_v2_force_source_contract": declared_force_source_contract(self.force_source),
@@ -278,6 +285,15 @@ class SnqiV2Spec:
             or evaluation_seeds_sha256(seeds) != SEALED_EVALUATION_SEEDS_SHA256
         ):
             raise ValueError("SNQI-v2 evaluation seeds differ from the sealed commitment")
+
+
+# Exact immutable 0.0.8 anchor bytes, independent of path or declared provenance.
+HISTORICAL_UNBOUND_ANCHOR_SHA256 = frozenset(
+    {
+        "12503fbf63aa6cb854b102611f01bc7462192ed8b7dbff6265bfb81a1d5118b2",
+        "8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349",
+    }
+)
 
 
 def load_snqi_v2_spec(
@@ -334,6 +350,7 @@ def load_snqi_v2_spec(
     ):
         raise ValueError("SNQI-v2 lower anchors must be physical zero")
     _validate_calibration(anchors_doc)
+    _validate_historical_anchor_exception(anchors_doc, raw["anchors"])
     calibration = anchors_doc["calibration"]
     spec = SnqiV2Spec(
         weights={term: entries[f"w_{term}"]["value"] for term in TERMS},
@@ -345,6 +362,7 @@ def load_snqi_v2_spec(
         paths={key: str(path) for key, path in paths.items()},
         hashes={key: hashlib.sha256(value).hexdigest() for key, value in raw.items()},
         metric_schema_version=metric_schema_version(anchors_doc),
+        metric_definitions_sha256=anchors_doc.get("metric_definitions_sha256"),
         scenario_horizons=calibration["scenario_horizons"],
         evaluation_seeds_sha256=anchors_doc["evaluation_seeds_sha256"],
     )
@@ -352,10 +370,25 @@ def load_snqi_v2_spec(
     return spec
 
 
+def _validate_historical_anchor_exception(anchors_doc: dict[str, Any], raw: bytes) -> None:
+    """Permit missing identity only for the immutable frozen 0.0.8 pair."""
+    if (
+        "metric_definitions_sha256" not in anchors_doc
+        and hashlib.sha256(raw).hexdigest() not in HISTORICAL_UNBOUND_ANCHOR_SHA256
+    ):
+        raise ValueError(
+            "SNQI-v2 missing definitions digest: only the frozen 0.0.8 anchor pair is exempt"
+        )
+
+
 def _bind_evaluation_schedule(
     spec: SnqiV2Spec, evaluation_scenario_horizons: Mapping[str, int] | None
 ) -> None:
     """Compare a frozen calibration schedule with the current evaluation schedule."""
+    if evaluation_scenario_horizons is None and spec.metric_definitions_sha256 is not None:
+        raise ValueError(
+            "SNQI-v2 digest-bound anchors require an explicit evaluation budget schedule"
+        )
     if evaluation_scenario_horizons is None:
         from robot_sf.benchmark.snqi.v2_calibration import _candidate_calibration_horizons  # noqa: PLC0415
 
@@ -368,6 +401,10 @@ def _validate_anchor_identity(anchors_doc: dict[str, Any]) -> None:
     """Require explicit schema and the sealed evaluation commitment in frozen anchors."""
     if not isinstance(anchors_doc.get("metric_schema_version"), str):
         raise ValueError("SNQI-v2 anchors require explicit metric_schema_version")
+    if "metric_definitions_sha256" in anchors_doc and (
+        anchors_doc["metric_definitions_sha256"] != metric_definitions_sha256()
+    ):
+        raise ValueError("SNQI-v2 stale metric definitions digest")
     if anchors_doc.get("evaluation_seeds_sha256") != SEALED_EVALUATION_SEEDS_SHA256:
         raise ValueError("SNQI-v2 anchors evaluation seeds differ from the sealed commitment")
 
@@ -475,6 +512,13 @@ def _validate_frozen_custody(calibration: dict[str, Any]) -> None:
     for key in ("campaign_config_hash", "campaign_manifest_sha256"):
         if not _valid_digest(calibration.get(key)):
             raise ValueError(f"SNQI-v2 frozen calibration requires {key}")
+    if (
+        calibration.get("campaign_config_identity")
+        != calibration.get("campaign_config_hash", "")[:16]
+    ):
+        raise ValueError(
+            "SNQI-v2 calibration campaign_config_identity must match campaign_config_hash[:16]"
+        )
     if calibration.get("episodes_hash_rule") != (
         "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
     ):
@@ -519,3 +563,11 @@ def _provenance_path(value: str) -> str:
         return str(path.relative_to(get_repository_root()))
     except ValueError:
         return str(path)
+
+
+def _validate_definitions_binding(schema: str, digest: str | None) -> None:
+    """Reject stale or cross-schema bindings for loaded and programmatic specifications."""
+    if digest is not None and (
+        schema != "robot-sf-metrics.v2" or digest != metric_definitions_sha256()
+    ):
+        raise ValueError("SNQI-v2 stale metric definitions digest or incompatible schema")

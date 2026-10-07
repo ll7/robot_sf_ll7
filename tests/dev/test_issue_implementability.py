@@ -1545,3 +1545,85 @@ def test_inspect_contract_surfaces_heading_suggestions_on_missing_fields() -> No
     assert "heading_suggestions" in inspection
     assert "input contract" in inspection["heading_suggestions"]
     assert inspection["heading_suggestions"]["input contract"]["field"] == "inputs"
+
+
+class TestReadyToSubmitAndReviewingQualifiers:
+    """``state:ready-to-submit`` / ``state:reviewing`` are known qualifiers (#9938).
+
+    Both labels were live in the repository but absent from the shared taxonomy, so
+    every state consumer refused the affected issues with
+    ``unknown state:* label(s) must be classified before admission``.
+    """
+
+    NEW_QUALIFIERS = ("state:ready-to-submit", "state:reviewing")
+
+    def test_labels_are_qualifiers_not_execution_states(self) -> None:
+        from scripts.dev import issue_state_taxonomy as taxonomy
+
+        for label in self.NEW_QUALIFIERS:
+            assert label in taxonomy.STATE_QUALIFIER_LABELS, label
+            assert taxonomy.execution_state_labels({label}) == [], label
+            assert taxonomy.unknown_state_labels({label}) == [], label
+
+    def test_ready_plus_qualifier_is_no_longer_refused_as_unknown(self) -> None:
+        for label in self.NEW_QUALIFIERS:
+            result = issue_implementability.evaluate_issue(
+                _issue(labels=["state:ready", label]), _claim()
+            )
+            reasons = " ".join(str(reason) for reason in result.get("reasons", ()))
+            assert "unknown state:*" not in reasons, (label, result.get("reasons"))
+
+    def test_blocked_plus_ready_to_submit_stays_blocked(self) -> None:
+        """#6700's shape: a blocking execution state must still win."""
+        result = issue_implementability.evaluate_issue(
+            _issue(labels=["state:blocked", "state:ready-to-submit"]), _claim()
+        )
+
+        assert result.get("ready") is not True
+        assert result.get("admission_reason") != "claimable"
+
+    def test_needs_triage_and_slurm_shapes_do_not_become_dispatchable(self) -> None:
+        """#8873 / #8868 carry needs-triage + resource:slurm; they stay blocked."""
+        for labels in (
+            ["state:ready", "state:ready-to-submit", "needs-triage", "resource:slurm"],
+            ["state:ready", "state:ready-to-submit", "needs-triage", "campaign", "resource:slurm"],
+            ["state:blocked", "state:ready-to-submit", "campaign", "resource:slurm"],
+        ):
+            result = issue_implementability.evaluate_issue(_issue(labels=labels), _claim())
+            assert result.get("admission_reason") != "claimable", labels
+            assert result.get("ready") is not True, labels
+
+    def test_pre_existing_classifications_are_unchanged(self) -> None:
+        """The new qualifiers must not reclassify anything already known."""
+        from scripts.dev import issue_state_taxonomy as taxonomy
+
+        pre_existing_qualifiers = (
+            "state:author-decision",
+            "state:blocked-human-decision",
+            "state:blocked-no-code-slice",
+            "state:deferred",
+            "state:needs-artifact-promotion",
+            "state:needs-interpretation",
+            "state:parked",
+            "state:review",
+            "state:working",
+        )
+        pre_existing_execution = (
+            "state:blocked",
+            "state:blocked-external-input",
+            "state:hold",
+            "state:ready",
+            "state:running",
+        )
+
+        for label in pre_existing_qualifiers:
+            assert label in taxonomy.STATE_QUALIFIER_LABELS, label
+            assert taxonomy.execution_state_labels({label}) == [], label
+
+        for label in pre_existing_execution:
+            assert label in taxonomy.EXECUTION_STATE_LABELS, label
+            assert taxonomy.state_qualifier_labels({label}) == [], label
+
+        for label in pre_existing_qualifiers + pre_existing_execution:
+            assert label in taxonomy.KNOWN_STATE_LABELS, label
+            assert taxonomy.unknown_state_labels({label}) == [], label

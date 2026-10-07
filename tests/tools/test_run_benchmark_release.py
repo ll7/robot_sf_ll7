@@ -2567,3 +2567,48 @@ def test_default_runner_fixture_keeps_execution_guard():
     from robot_sf.benchmark.spawn_preflight import guard_manifest_execution
 
     assert run_benchmark_release.guard_manifest_execution is guard_manifest_execution
+
+
+@pytest.mark.usefixtures("synthetic_execution_admission")
+@pytest.mark.parametrize("mode", ["preflight", "run"])
+def test_release_cli_reports_invalid_snqi_seeds_before_setup(monkeypatch, capsys, mode):
+    """Both modes reject the real seed commitment without a traceback or any campaign step."""
+    from robot_sf.benchmark.camera_ready import _config
+    from tests.unit.benchmark.test_snqi_v2 import fixture_spec
+
+    manifest = SimpleNamespace(canonical_campaign_config_path=Path("synthetic.yaml"))
+    cfg = SimpleNamespace(snqi_v2_spec=fixture_spec())
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid"},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        _config, "_load_campaign_scenarios", lambda cfg: [{"name": "synthetic", "seeds": [1001]}]
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("campaign setup must not run after a rejected seed commitment")
+
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_preflight_checkpoint_admission",
+        lambda *args: {"status": "admitted"},
+    )
+    monkeypatch.setattr(run_benchmark_release, "prepare_campaign_preflight", forbidden)
+    monkeypatch.setattr(run_benchmark_release, "run_campaign", forbidden)
+    code = run_benchmark_release.main(["--manifest", "synthetic.yaml", "--mode", mode])
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "snqi_v2_evaluation_seeds_rejected"
+    assert (
+        payload["status_reason"] == "SNQI-v2 evaluation seeds overlap calibration/development split"
+    )
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["release_exit_code"] == 2

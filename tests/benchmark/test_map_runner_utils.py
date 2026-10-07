@@ -5773,7 +5773,7 @@ def test_camera_ready_roster_keys_reach_serialized_map_runner_rows(
         "Cfg",
         (),
         {
-            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})(),
             "robot_config": HolonomicDriveSettings(
                 max_speed=1.0,
                 max_angular_speed=1.0,

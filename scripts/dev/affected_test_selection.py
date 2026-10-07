@@ -131,7 +131,8 @@ def _reverse_graph(vertices: set[str], sources: dict) -> dict:
                 reverse.setdefault(dependency, []).append((source, kind))
     # A conftest dependency applies implicitly to every test in its directory.
     for fixture in sorted(path for path in vertices if Path(path).name == "conftest.py"):
-        scope = str(Path(fixture).parent) + "/"
+        parent = Path(fixture).parent
+        scope = "" if parent == Path(".") else parent.as_posix() + "/"
         for consumer in sorted(
             path for path in sources if path.startswith(scope) and path != fixture
         ):

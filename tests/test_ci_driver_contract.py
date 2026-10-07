@@ -425,7 +425,11 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
 
     assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
     assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 6
-    assert fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"] == "1"
+    # PRs admit affected slow witnesses; main and merge groups still collect
+    # every slow test before the absolute coverage floor is applied.
+    assert fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"] == (
+        "${{ github.event_name == 'pull_request' && '0' || '1' }}"
+    )
     assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
     coverage_core = workflow["env"]["COVERAGE_CORE"]

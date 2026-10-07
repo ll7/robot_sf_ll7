@@ -97,6 +97,8 @@ def test_mapped_change_excludes_unrelated_slow_and_always_admits_pins(tmp_path):
         "tests/test_pin.py": "def test_pin(): pass\n",
         "tests/test_inventory.py": "def test_inventory(): pass\n",
         "tests/test_unrelated.py": "import pytest\npytestmark = pytest.mark.slow\n",
+        "tests/scoped/conftest.py": "from robot_sf.model import VALUE\n",
+        "tests/scoped/test_fixture.py": "def test_fixture(): pass\n",
     }
     for name, content in files.items():
         path = tmp_path / name
@@ -105,6 +107,7 @@ def test_mapped_change_excludes_unrelated_slow_and_always_admits_pins(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", *files], cwd=tmp_path, check=True)
     assert affected_tests(tmp_path, {"robot_sf/model.py"}) == [
+        "tests/scoped/test_fixture.py",
         "tests/test_inventory.py",
         "tests/test_model.py",
         "tests/test_pin.py",

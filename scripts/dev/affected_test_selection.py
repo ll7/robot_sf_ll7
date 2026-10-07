@@ -101,7 +101,7 @@ def _dependency_index(vertices: set[str]) -> tuple[dict, dict, dict]:
 def _source_dependencies(imports, literals, text, modules, path_prefixes, basenames) -> dict:
     """Resolve static imports and path references without running input code."""
     dependencies = {}
-    for name in sorted(imports):
+    for name in sorted(imports | (literals & modules.keys())):
         parts = name.split(".")
         for index in range(1, len(parts) + 1):
             prefix = ".".join(parts[:index])
@@ -129,6 +129,13 @@ def _reverse_graph(vertices: set[str], sources: dict) -> dict:
         for dependency, kind in sorted(dependencies.items()):
             if source != dependency:
                 reverse.setdefault(dependency, []).append((source, kind))
+    # A conftest dependency applies implicitly to every test in its directory.
+    for fixture in sorted(path for path in vertices if Path(path).name == "conftest.py"):
+        scope = str(Path(fixture).parent) + "/"
+        for consumer in sorted(
+            path for path in sources if path.startswith(scope) and path != fixture
+        ):
+            reverse.setdefault(fixture, []).append((consumer, "fixture"))
     return reverse
 
 

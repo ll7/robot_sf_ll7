@@ -19,17 +19,62 @@ def test_shell_invokes_selector_and_does_not_filter_full_fallback(tmp_path):
 
 def test_shell_applies_affected_marker_instead_of_full_suite(tmp_path):
     """The real selector's mapped decision must reach pytest's marker expression."""
+    import os
     import subprocess
+    from pathlib import Path
 
     repo, env = wrapper_repository(tmp_path)
-    base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
     (repo / "model.py").write_text("VALUE = 1\n")
     (repo / "tests/test_one.py").write_text(
-        "from model import VALUE\ndef test_one(): assert VALUE == 1\n"
+        "import pytest\npytestmark = pytest.mark.slow\nfrom model import VALUE\ndef test_one(): assert False, 'mapped slow executed'\n"
     )
-    subprocess.run(["git", "add", "model.py", "tests/test_one.py"], cwd=repo, check=True)
+    (repo / "tests/test_unrelated.py").write_text(
+        "import pytest\npytestmark = pytest.mark.slow\ndef test_unrelated(): assert False, 'unrelated slow executed'\n"
+    )
+    (repo / "tests/conftest.py").write_text("""
+from tests import conftest as production
+
+def pytest_collection_modifyitems(config, items):
+    # Run the actual hook with this synthetic checkout as its filesystem root.
+    original = production.__file__
+    try:
+        production.__file__ = __file__
+        production.pytest_collection_modifyitems(config, items)
+    finally:
+        production.__file__ = original
+""")
+    subprocess.run(
+        [
+            "git",
+            "add",
+            "model.py",
+            "tests/test_one.py",
+            "tests/test_unrelated.py",
+            "tests/conftest.py",
+        ],
+        cwd=repo,
+        check=True,
+    )
     subprocess.run(["git", "commit", "-qm", "mapped input"], cwd=repo, check=True)
-    result = run_wrapper(repo, {**env, "ROBOT_SF_AFFECTED_BASE_REF": base}, "tests")
-    assert result.returncode == 0, result.stdout + result.stderr
+    base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    (repo / "model.py").write_text("VALUE = 2\n")
+    subprocess.run(["git", "add", "model.py"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "changed module"], cwd=repo, check=True)
+    result = run_wrapper(
+        repo,
+        {
+            **env,
+            "ROBOT_SF_AFFECTED_BASE_REF": base,
+            "REAL_PYTEST": "1",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[2]) + os.pathsep + str(repo),
+        },
+        "tests",
+        "-n",
+        "0",
+        "-q",
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
     args = next(c["args"] for c in captured_calls(repo) if c["args"][:2] == ["run", "pytest"])
     assert args[args.index("-m") + 1] == "not slow or affected"
+    assert "mapped slow executed" in result.stderr
+    assert "unrelated slow executed" not in result.stderr

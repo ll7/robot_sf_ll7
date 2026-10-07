@@ -1627,3 +1627,17 @@ class TestReadyToSubmitAndReviewingQualifiers:
         for label in pre_existing_qualifiers + pre_existing_execution:
             assert label in taxonomy.KNOWN_STATE_LABELS, label
             assert taxonomy.unknown_state_labels({label}) == [], label
+
+
+@pytest.mark.parametrize(
+    "labels", [["state:blocked-dependency"], ["state:ready", "state:blocked-dependency"]]
+)
+def test_dependency_blocked_qualifier_refuses_with_blocking_reason(labels: list[str]) -> None:
+    """A known dependency hold composes with ready and still prevents dispatch."""
+    report = evaluate_issue(_issue(labels=labels), _claim())
+
+    assert report["classification"] == "blocked"
+    assert report["admission_reason"] == "blocked"
+    assert report["write_allowed"] is False
+    assert "state:blocked-dependency" in report["reasons"][0]
+    assert "unknown" not in report["reasons"][0]

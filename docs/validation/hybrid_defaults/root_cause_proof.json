@@ -1,0 +1,1382 @@
+{
+  "baseline_head": "9dd6009f8499713925da65c2ecc0d4962a115031",
+  "crowding_rollout_only_probe": {
+    "baseline": "9dd6009f8499713925da65c2ecc0d4962a115031",
+    "baseline_planner_sha256": "96e1ba6fa4ce3690b7025a10ae8c4b60f08dcb370fb95c9a0d75efef80f554eb",
+    "changes": "Forecast/scoring trajectory integration only; original plant static gate, physical exclusion radius and body-clearance score retained.",
+    "probe_sha256": "846b90ce08a472683679955a758486ac27079904f7c4b31c88d99358355fcf82",
+    "result": {
+      "arm": "static_only",
+      "duration_s": 37.0,
+      "outcome": "success",
+      "runtime": {
+        "actuation_scoring": null,
+        "fallback_count": 0,
+        "goal_posterior_avoidance": {
+          "crossing_lateral_margin": 0.75,
+          "enabled": false,
+          "fallback_or_degraded": false,
+          "min_confidence": 0.55,
+          "near_distance": 2.5,
+          "score_bonus": 2.0,
+          "status": "disabled",
+          "turn_rate": 0.55,
+          "yield_speed": 0.15
+        },
+        "last_decision": {
+          "candidate_evaluator_debug": {
+            "best_feasible_moving": {
+              "command": [
+                0.9698575735092164,
+                0.02998362830823098
+              ],
+              "continuous_static_checked": true,
+              "min_dynamic_clearance": 3.1271847919171485,
+              "min_static_clearance": 1.6124515736871103,
+              "predicted_ttc": null,
+              "proxemic_cost_summary": {
+                "enabled": false,
+                "max": 0.0,
+                "mean": 0.0,
+                "normalized_mean": 0.0
+              },
+              "raw_value_score": 7.693666325881691,
+              "score": 7.693666325881691,
+              "source": "dynamic_window",
+              "terms": {
+                "actuation_clip_risk": 0.0,
+                "actuation_feasibility": 1.0,
+                "control_effort": 0.7450424281609329,
+                "corridor_subgoal_centering": 0.0,
+                "corridor_subgoal_clearance_margin": 0.0,
+                "corridor_subgoal_continuity": 0.0,
+                "corridor_subgoal_route_progress": 0.0,
+                "corridor_subgoal_tangent_alignment": 0.0,
+                "deadlock_escape": 0.0,
+                "dynamic_clearance": 1.0,
+                "freezing_penalty": 0.0,
+                "goal_posterior_avoidance": 0.0,
+                "goal_progress": 0.4786101610974744,
+                "heading_smoothness": 0.875,
+                "oscillation_penalty": 0.0,
+                "path_alignment": 0.8963709138219952,
+                "proxemic_cost": 0.0,
+                "route_arc_progress": 0.4847762161341858,
+                "route_guide_commitment": 0.0,
+                "speed_preference": 0.5845403924541495,
+                "static_clearance": 0.8749308195530148,
+                "static_clearance_escape": 0.0,
+                "static_corridor_transit": 0.0,
+                "static_recenter": 0.0,
+                "static_safety_gate_penalty": 0.0,
+                "time_to_collision_margin": 1.0,
+                "velocity_smoothness": 1.0
+              }
+            },
+            "candidate_count": 69,
+            "chosen_stop": false,
+            "constraint_context": {
+              "braking_moving_threshold_m_s": 0.05,
+              "hard_collision_horizon_s": 1.2,
+              "near_human_activation_distance_m": 0.8,
+              "physical_pedestrian_radius_m": 0.4000000059604645,
+              "physical_robot_radius_m": 1.0
+            },
+            "constraints": [
+              {
+                "arc_padding_m": 0.0,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 5.88375342296973e-05,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0000588375342296,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.000201846427727464,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0002018464277274,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.00023551076957554356,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0002355107695755,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.0003531858380349382,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.000353185838035,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.0004623549784460635,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0004623549784462,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.0005298590733807843,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0005298590733809,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.0007192032811337173,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.0007192032811336,
+                "threshold_name": "exclusion_radius_m"
+              },
+              {
+                "arc_padding_m": 0.0008242073771860253,
+                "constraint": "exact_body_wall_overlap",
+                "rejected": 1,
+                "threshold": 1.000824207377186,
+                "threshold_name": "exclusion_radius_m"
+              }
+            ],
+            "feasible_moving_count": 57,
+            "moving_epsilon_m_s": 1e-09,
+            "speed_cap_m_s": 1.6591797351032345,
+            "stop_kind": null
+          },
+          "corridor_subgoal": {
+            "active": false,
+            "candidate_count": 0,
+            "enabled": true,
+            "goal_progress_1s": 0.4225340735829648,
+            "goal_progress_3s": 1.7452580842215886,
+            "goal_stalled": false,
+            "min_nearest_pedestrian_distance": 1.0,
+            "nearest_pedestrian_distance": 1.6423566726713137,
+            "reason": "progress_not_stalled",
+            "robot_lateral_offset_to_corridor": 1.1039712435615747e-15,
+            "route_arc_progress_1s": 0.3171572922513928,
+            "route_arc_progress_3s": 1.9656854542402336,
+            "route_regressing": false,
+            "route_remaining_distance": 1.8828427405311619,
+            "route_stalled": false
+          },
+          "goal_posterior_avoidance": {
+            "active": false,
+            "blocker": "planner_disabled",
+            "consumed": false,
+            "enabled": false,
+            "source": "planner_goal_posterior_channel"
+          },
+          "moving_rejection_counts": {
+            "static_collision": 9
+          },
+          "nearest_pedestrian_distance": 3.042356678631778,
+          "nearest_static_obstacle_distance": 1.6124515736871103,
+          "planner_mode": "NORMAL",
+          "planner_variant": "hybrid_rule_v4_clearance_braking",
+          "predicted_ttc": null,
+          "progress_windows": {
+            "1s": 0.4225340735829648,
+            "3s": 1.7452580842215886,
+            "5s": 2.905036176636228
+          },
+          "proxemic_costmap": {
+            "config_hash": "5198b4bfe767",
+            "enabled": false,
+            "fallback_or_degraded": false,
+            "soft_cost_only": true,
+            "status": "disabled",
+            "weight": 0.0
+          },
+          "rejected_examples": [
+            {
+              "arc_padding_m": 0.0007192032811337173,
+              "command": [
+                1.3698575735092167,
+                -0.420016371691769
+              ],
+              "continuous_static_collision": true,
+              "hard_static_clearance": 1.0,
+              "reason": "static_collision",
+              "source": "dynamic_window",
+              "time": 1.600000023841858
+            },
+            {
+              "arc_padding_m": 0.0004623549784460635,
+              "command": [
+                1.3698575735092167,
+                -0.27001637169176895
+              ],
+              "continuous_static_collision": true,
+              "hard_static_clearance": 1.0,
+              "reason": "static_collision",
+              "source": "dynamic_window",
+              "time": 1.600000023841858
+            },
+            {
+              "arc_padding_m": 0.0,
+              "command": [
+                1.3698575735092167,
+                -0.12001637169176899
+              ],
+              "continuous_static_collision": true,
+              "hard_static_clearance": 1.0,
+              "reason": "static_collision",
+              "source": "dynamic_window",
+              "time": 1.6
+            },
+            {
+              "arc_padding_m": 0.0008242073771860253,
+              "command": [
+                1.5698575735092164,
+                -0.420016371691769
+              ],
+              "continuous_static_collision": true,
+              "hard_static_clearance": 1.0,
+              "reason": "static_collision",
+              "source": "dynamic_window",
+              "time": 1.5000000223517418
+            },
+            {
+              "arc_padding_m": 0.0005298590733807843,
+              "command": [
+                1.5698575735092164,
+                -0.27001637169176895
+              ],
+              "continuous_static_collision": true,
+              "hard_static_clearance": 1.0,
+              "reason": "static_collision",
+              "source": "dynamic_window",
+              "time": 1.5000000223517418
+            }
+          ],
+          "rejection_counts": {
+            "static_collision": 9
+          },
+          "rejection_counts_by_source": {
+            "dynamic_window": {
+              "static_collision": 8
+            },
+            "path_follow_0.5m": {
+              "static_collision": 1
+            }
+          },
+          "route_corridor": {
+            "corridor_center_clearance": 1.4000000208616257,
+            "corridor_width_estimate": 2.8000000417232513,
+            "robot_lateral_offset_to_corridor": 1.1039712435615747e-15,
+            "route_arc_progress_windows": {
+              "1s": 0.3171572922513928,
+              "3s": 1.9656854542402336,
+              "5s": 3.21421361026861
+            },
+            "route_corner_distance": 0.2828427166893039,
+            "route_distance_to_waypoint": 1.082842728610233,
+            "route_goal_world": [
+              17.54723407558017,
+              10.505879706381519
+            ],
+            "route_heading_error": 0.0,
+            "route_next_world": [
+              16.005499611179562,
+              10.078030530183515
+            ],
+            "route_path_cell_count": 10,
+            "route_remaining_distance": 1.8828427405311619,
+            "route_start_world": [
+              15.866263950154236,
+              9.831832575108688
+            ],
+            "route_tangent_heading": 0.2706997096538545,
+            "route_waypoint_index": 5,
+            "route_waypoint_world": [
+              16.776366843379865,
+              10.291955118282516
+            ]
+          },
+          "route_trace_recovery": {
+            "active": false,
+            "enabled": false,
+            "min_nearest_pedestrian_distance": 1.0,
+            "nearest_pedestrian_distance": 1.6423566726713137,
+            "reason": "disabled",
+            "selected": false
+          },
+          "selected_actuation_diagnostics": null,
+          "selected_command": [
+            0.9698575735092164,
+            0.02998362830823098
+          ],
+          "selected_score": 7.693666325881691,
+          "selected_source": "dynamic_window",
+          "selected_static_safety_gate": null,
+          "selected_terms": {
+            "actuation_clip_risk": 0.0,
+            "actuation_feasibility": 1.0,
+            "control_effort": 0.7450424281609329,
+            "corridor_subgoal_centering": 0.0,
+            "corridor_subgoal_clearance_margin": 0.0,
+            "corridor_subgoal_continuity": 0.0,
+            "corridor_subgoal_route_progress": 0.0,
+            "corridor_subgoal_tangent_alignment": 0.0,
+            "deadlock_escape": 0.0,
+            "dynamic_clearance": 1.0,
+            "freezing_penalty": 0.0,
+            "goal_posterior_avoidance": 0.0,
+            "goal_progress": 0.4786101610974744,
+            "heading_smoothness": 0.875,
+            "oscillation_penalty": 0.0,
+            "path_alignment": 0.8963709138219952,
+            "proxemic_cost": 0.0,
+            "route_arc_progress": 0.4847762161341858,
+            "route_guide_commitment": 0.0,
+            "speed_preference": 0.5845403924541495,
+            "static_clearance": 0.8749308195530148,
+            "static_clearance_escape": 0.0,
+            "static_corridor_transit": 0.0,
+            "static_recenter": 0.0,
+            "static_safety_gate_penalty": 0.0,
+            "time_to_collision_margin": 1.0,
+            "velocity_smoothness": 1.0
+          },
+          "speed_safety": {
+            "band_cap": 2.0,
+            "braking_cap": 1.6591797351032345,
+            "level": "braking",
+            "min_surface_clearance": 1.6423566726713137,
+            "model": "hybrid_rule_v4_clearance_braking",
+            "reaction_time": 0.10000000149011612,
+            "speed_cap": 1.6591797351032345
+          },
+          "state_sources": {
+            "dt": "observation.sim_timestep",
+            "ped_radius": "observation.pedestrians_radius",
+            "robot_radius": "observation.robot_radius"
+          },
+          "top_k": [
+            {
+              "command": [
+                0.9698575735092164,
+                0.02998362830823098
+              ],
+              "continuous_static_checked": true,
+              "min_dynamic_clearance": 3.1271847919171485,
+              "min_static_clearance": 1.6124515736871103,
+              "predicted_ttc": null,
+              "proxemic_cost_summary": {
+                "enabled": false,
+                "max": 0.0,
+                "mean": 0.0,
+                "normalized_mean": 0.0
+              },
+              "raw_value_score": 7.693666325881691,
+              "score": 7.693666325881691,
+              "source": "dynamic_window",
+              "terms": {
+                "actuation_clip_risk": 0.0,
+                "actuation_feasibility": 1.0,
+                "control_effort": 0.7450424281609329,
+                "corridor_subgoal_centering": 0.0,
+                "corridor_subgoal_clearance_margin": 0.0,
+                "corridor_subgoal_continuity": 0.0,
+                "corridor_subgoal_route_progress": 0.0,
+                "corridor_subgoal_tangent_alignment": 0.0,
+                "deadlock_escape": 0.0,
+                "dynamic_clearance": 1.0,
+                "freezing_penalty": 0.0,
+                "goal_posterior_avoidance": 0.0,
+                "goal_progress": 0.4786101610974744,
+                "heading_smoothness": 0.875,
+                "oscillation_penalty": 0.0,
+                "path_alignment": 0.8963709138219952,
+                "proxemic_cost": 0.0,
+                "route_arc_progress": 0.4847762161341858,
+                "route_guide_commitment": 0.0,
+                "speed_preference": 0.5845403924541495,
+                "static_clearance": 0.8749308195530148,
+                "static_clearance_escape": 0.0,
+                "static_corridor_transit": 0.0,
+                "static_recenter": 0.0,
+                "static_safety_gate_penalty": 0.0,
+                "time_to_collision_margin": 1.0,
+                "velocity_smoothness": 1.0
+              }
+            },
+            {
+              "command": [
+                0.9698575735092164,
+                0.179983628308231
+              ],
+              "continuous_static_checked": true,
+              "min_dynamic_clearance": 3.1271847919171485,
+              "min_static_clearance": 1.6124515736871103,
+              "predicted_ttc": null,
+              "proxemic_cost_summary": {
+                "enabled": false,
+                "max": 0.0,
+                "mean": 0.0,
+                "normalized_mean": 0.0
+              },
+              "raw_value_score": 7.651737397329811,
+              "score": 7.651737397329811,
+              "source": "dynamic_window",
+              "terms": {
+                "actuation_clip_risk": 0.0,
+                "actuation_feasibility": 1.0,
+                "control_effort": 0.6825424281609329,
+                "corridor_subgoal_centering": 0.0,
+                "corridor_subgoal_clearance_margin": 0.0,
+                "corridor_subgoal_continuity": 0.0,
+                "corridor_subgoal_route_progress": 0.0,
+                "corridor_subgoal_tangent_alignment": 0.0,
+                "deadlock_escape": 0.0,
+                "dynamic_clearance": 1.0,
+                "freezing_penalty": 0.0,
+                "goal_posterior_avoidance": 0.0,
+                "goal_progress": 0.4771820942806193,
+                "heading_smoothness": 1.0,
+                "oscillation_penalty": 0.0,
+                "path_alignment": 0.804225087216419,
+                "proxemic_cost": 0.0,
+                "route_arc_progress": 0.4794504898866196,
+                "route_guide_commitment": 0.0,
+                "speed_preference": 0.5845403924541495,
+                "static_clearance": 0.8749308195530148,
+                "static_clearance_escape": 0.0,
+                "static_corridor_transit": 0.0,
+                "static_recenter": 0.0,
+                "static_safety_gate_penalty": 0.0,
+                "time_to_collision_margin": 1.0,
+                "velocity_smoothness": 1.0
+              }
+            },
+            {
+              "command": [
+                0.9024714651912759,
+                0.1322498714760612
+              ],
+              "continuous_static_checked": true,
+              "min_dynamic_clearance": 3.1150770841890734,
+              "min_static_clearance": 1.6124515736871103,
+              "predicted_ttc": null,
+              "proxemic_cost_summary": {
+                "enabled": false,
+                "max": 0.0,
+                "mean": 0.0,
+                "normalized_mean": 0.0
+              },
+              "raw_value_score": 7.634292441489733,
+              "score": 7.634292441489733,
+              "source": "route_guide",
+              "terms": {
+                "actuation_clip_risk": 0.0,
+                "actuation_feasibility": 1.0,
+                "control_effort": 0.7192780205871555,
+                "corridor_subgoal_centering": 0.0,
+                "corridor_subgoal_clearance_margin": 0.0,
+                "corridor_subgoal_continuity": 0.0,
+                "corridor_subgoal_route_progress": 0.0,
+                "corridor_subgoal_tangent_alignment": 0.0,
+                "deadlock_escape": 0.0,
+                "dynamic_clearance": 1.0,
+                "freezing_penalty": 0.0,
+                "goal_posterior_avoidance": 0.0,
+                "goal_progress": 0.44990954068622535,
+                "heading_smoothness": 0.9602218693065252,
+                "oscillation_penalty": 0.0,
+                "path_alignment": 0.9725823054591909,
+                "proxemic_cost": 0.0,
+                "route_arc_progress": 0.44847886230715567,
+                "route_guide_commitment": 0.0,
+                "speed_preference": 0.5439262824260109,
+                "static_clearance": 0.8749308195530148,
+                "static_clearance_escape": 0.0,
+                "static_corridor_transit": 0.0,
+                "static_recenter": 0.0,
+                "static_safety_gate_penalty": 0.0,
+                "time_to_collision_margin": 1.0,
+                "velocity_smoothness": 0.9663069458410298
+              }
+            },
+            {
+              "command": [
+                0.7698575735092164,
+                0.02998362830823098
+              ],
+              "continuous_static_checked": true,
+              "min_dynamic_clearance": 3.0912825718862162,
+              "min_static_clearance": 1.8110770546146342,
+              "predicted_ttc": null,
+              "proxemic_cost_summary": {
+                "enabled": false,
+                "max": 0.0,
+                "mean": 0.0,
+                "normalized_mean": 0.0
+              },
+              "raw_value_score": 7.479992598808817,
+              "score": 7.479992598808817,
+              "source": "dynamic_window",
+              "terms": {
+                "actuation_clip_risk": 0.0,
+                "actuation_feasibility": 1.0,
+                "control_effort": 0.795042428160933,
+                "corridor_subgoal_centering": 0.0,
+                "corridor_subgoal_clearance_margin": 0.0,
+                "corridor_subgoal_continuity": 0.0,
+                "corridor_subgoal_route_progress": 0.0,
+                "corridor_subgoal_tangent_alignment": 0.0,
+                "deadlock_escape": 0.0,
+                "dynamic_clearance": 1.0,
+                "freezing_penalty": 0.0,
+                "goal_posterior_avoidance": 0.0,
+                "goal_progress": 0.3830509313535423,
+                "heading_smoothness": 0.875,
+                "oscillation_penalty": 0.0,
+                "path_alignment": 0.9879763090164319,
+                "proxemic_cost": 0.0,
+                "route_arc_progress": 0.3848076786137484,
+                "route_guide_commitment": 0.0,
+                "speed_preference": 0.4639989009155272,
+                "static_clearance": 1.0,
+                "static_clearance_escape": 0.0,
+                "static_corridor_transit": 0.0,
+                "static_recenter": 0.0,
+                "static_safety_gate_penalty": 0.0,
+                "time_to_collision_margin": 1.0,
+                "velocity_smoothness": 0.9
+              }
+            },
+            {
+              "command": [
+                0.7698575735092164,
+                0.179983628308231
+              ],
+              "continuous_static_checked": true,
+              "min_dynamic_clearance": 3.0912825718862162,
+              "min_static_clearance": 1.8110770546146342,
+              "predicted_ttc": null,
+              "proxemic_cost_summary": {
+                "enabled": false,
+                "max": 0.0,
+                "mean": 0.0,
+                "normalized_mean": 0.0
+              },
+              "raw_value_score": 7.4755410425544175,
+              "score": 7.4755410425544175,
+              "source": "dynamic_window",
+              "terms": {
+                "actuation_clip_risk": 0.0,
+                "actuation_feasibility": 1.0,
+                "control_effort": 0.732542428160933,
+                "corridor_subgoal_centering": 0.0,
+                "corridor_subgoal_clearance_margin": 0.0,
+                "corridor_subgoal_continuity": 0.0,
+                "corridor_subgoal_route_progress": 0.0,
+                "corridor_subgoal_tangent_alignment": 0.0,
+                "deadlock_escape": 0.0,
+                "dynamic_clearance": 1.0,
+                "freezing_penalty": 0.0,
+                "goal_posterior_avoidance": 0.0,
+                "goal_progress": 0.381797906217293,
+                "heading_smoothness": 1.0,
+                "oscillation_penalty": 0.0,
+                "path_alignment": 0.9418019893796781,
+                "proxemic_cost": 0.0,
+                "route_arc_progress": 0.38058020150977323,
+                "route_guide_commitment": 0.0,
+                "speed_preference": 0.4639989009155272,
+                "static_clearance": 1.0,
+                "static_clearance_escape": 0.0,
+                "static_corridor_transit": 0.0,
+                "static_recenter": 0.0,
+                "static_safety_gate_penalty": 0.0,
+                "time_to_collision_margin": 1.0,
+                "velocity_smoothness": 0.9
+              }
+            }
+          ],
+          "unavailable_counts": {
+            "corridor_subgoal": 1
+          },
+          "unavailable_examples": [
+            {
+              "reason": "progress_not_stalled",
+              "source": "corridor_subgoal"
+            }
+          ],
+          "value_scorer": null
+        },
+        "planner_variant": "hybrid_rule_v4_clearance_braking",
+        "protective_stop_count": 20,
+        "proxemic_costmap": {
+          "config_hash": "5198b4bfe767",
+          "enabled": false,
+          "fallback_or_degraded": false,
+          "soft_cost_only": true,
+          "status": "disabled",
+          "weight": 0.0
+        },
+        "rejection_counts": {
+          "braking_infeasible": 63,
+          "dynamic_collision": 4378,
+          "static_collision": 29
+        },
+        "selected_source_counts": {
+          "corridor_subgoal": 7,
+          "creep": 9,
+          "dynamic_protective_stop": 20,
+          "dynamic_window": 321,
+          "path_follow_0.5m": 6,
+          "route_guide": 4,
+          "stop": 3
+        },
+        "speed_safety": {
+          "bound_timestep": 0.1,
+          "braking_check_enabled": true,
+          "braking_margin": 0.1,
+          "centre_distance_gates": [
+            "near_human_angular_limit_distance"
+          ],
+          "clearance_reference": "surface",
+          "drive_limits": {
+            "max_angular_accel": 1.0,
+            "max_angular_speed": 1.0,
+            "max_linear_accel": 1.0,
+            "max_linear_decel": 1.0,
+            "max_linear_speed": 2.0,
+            "source": "env_robot_config:DifferentialDriveSettings"
+          },
+          "effective_max_angular_speed": 1.0,
+          "effective_max_linear_speed": 2.0,
+          "model": "hybrid_rule_v4_clearance_braking",
+          "moderate_clearance_human": 0.6,
+          "slow_clearance_human": 0.35,
+          "state_sources": {
+            "dt": "observation.sim_timestep",
+            "ped_radius": "observation.pedestrians_radius",
+            "robot_radius": "observation.robot_radius"
+          },
+          "stop_clearance_human": 0.15,
+          "surface_clearance_gates": [
+            "corridor_subgoal_min_nearest_ped_distance",
+            "route_trace_recovery_min_nearest_ped_distance",
+            "slow_distance_human (deadlock escape and static recenter)"
+          ]
+        },
+        "steps": 370,
+        "unavailable_counts": {
+          "corridor_subgoal": 359
+        },
+        "value_scorer": null
+      },
+      "scenario": "francis2023_robot_crowding",
+      "seed": 1013
+    }
+  },
+  "fixed_cells": [
+    {
+      "arm": "static_only",
+      "duration_s": 26.700000000000003,
+      "final_goal_distance_m": 0.7632264254131379,
+      "outcome": "success",
+      "scenario": "francis2023_narrow_hallway",
+      "seed": 1001
+    },
+    {
+      "arm": "static_only",
+      "duration_s": 37.0,
+      "final_goal_distance_m": 1.6214279447848887,
+      "outcome": "success",
+      "scenario": "francis2023_robot_crowding",
+      "seed": 1013
+    },
+    {
+      "arm": "goal_validity_with_sensor",
+      "duration_s": 13.5,
+      "final_goal_distance_m": 0.1415404897252144,
+      "outcome": "success",
+      "scenario": "francis2023_exiting_room",
+      "seed": 1026
+    },
+    {
+      "arm": "goal_validity_with_sensor",
+      "duration_s": 15.0,
+      "final_goal_distance_m": 0.10499303338522777,
+      "outcome": "success",
+      "scenario": "francis2023_exiting_elevator",
+      "seed": 1026
+    }
+  ],
+  "focused_after": {
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -n 2 tests/planner/test_hybrid_failure_regressions.py tests/planner/test_hybrid_default_compatibility.py tests/planner/test_hybrid_default_review_regressions.py tests/planner/test_hybrid_rule_local_planner.py tests/planner/test_hybrid_rule_v4_clearance_braking.py tests/planner/test_hybrid_rule_local_planner_characterization.py tests/planner/test_hybrid_feasibility_diagnostics.py -q",
+    "failed": 0,
+    "passed": 183,
+    "seconds": 110.59
+  },
+  "goal_threshold_probe": {
+    "francis2023_exiting_elevator": {
+      "actual_goal": [
+        3.916712760925293,
+        9.733887672424316
+      ],
+      "continuous_goal_command": [
+        0.16016953035255924,
+        0.1093623865829099,
+        0.06075688143494995
+      ],
+      "grid_command": [
+        0.10569232095978025,
+        0.1093623865829179
+      ],
+      "grid_target": [
+        3.9634786845096834,
+        9.762024782434116
+      ],
+      "position": [
+        4.054210186004639,
+        9.816614151000977
+      ]
+    },
+    "francis2023_exiting_room": {
+      "actual_goal": [
+        3.916712760925293,
+        9.733887672424316
+      ],
+      "continuous_goal_command": [
+        0.15260048327737316,
+        -0.2228044451638466,
+        -0.1237802473132481
+      ],
+      "grid_command": [
+        0.11072783920717254,
+        -0.2228044451638514
+      ],
+      "grid_target": [
+        3.9478894747369515,
+        9.762321300168544
+      ],
+      "position": [
+        4.030333042144775,
+        9.83751106262207
+      ]
+    }
+  },
+  "isolation_probes": [
+    [
+      "francis2023_narrow_hallway",
+      "exact",
+      "timeout",
+      40.0
+    ],
+    [
+      "francis2023_robot_crowding",
+      "exact",
+      "collision",
+      5.800000000000001
+    ],
+    [
+      "francis2023_narrow_hallway",
+      "center",
+      "success",
+      18.1
+    ],
+    [
+      "francis2023_robot_crowding",
+      "center",
+      "collision",
+      5.800000000000001
+    ],
+    [
+      "francis2023_narrow_hallway",
+      "rollout",
+      "success",
+      22.3
+    ],
+    [
+      "francis2023_robot_crowding",
+      "rollout",
+      "success",
+      37.0
+    ]
+  ],
+  "mirror": {
+    "after": [
+      {
+        "arm": "off",
+        "max_position_error_m": 0.0,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          false
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "off",
+        "max_position_error_m": 2.2109000781256327e-06,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          false
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "static_only",
+        "max_position_error_m": 1.7763568394002505e-15,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          false,
+          false
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "static_only",
+        "max_position_error_m": 9.730833632204394e-07,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          false,
+          false
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "sensor_only",
+        "max_position_error_m": 0.0,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          true
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "sensor_only",
+        "max_position_error_m": 2.2109000781256327e-06,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          true
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "goal_validity_with_sensor",
+        "max_position_error_m": 0.0,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          true,
+          true
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "goal_validity_with_sensor",
+        "max_position_error_m": 2.2109000781256327e-06,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          true,
+          true
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "current_defaults",
+        "max_position_error_m": 1.7763568394002505e-15,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          true,
+          true
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "current_defaults",
+        "max_position_error_m": 9.730833632204394e-07,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          true,
+          true
+        ],
+        "transform": "mirror_x"
+      }
+    ],
+    "before": [
+      {
+        "arm": "off",
+        "max_position_error_m": 0.0,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          false
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "off",
+        "max_position_error_m": 2.2109000781256327e-06,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          false
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "static_only",
+        "max_position_error_m": 0.3380156559265597,
+        "position_relation_passed": false,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          false,
+          false
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "static_only",
+        "max_position_error_m": 0.37375370151005427,
+        "position_relation_passed": false,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          false,
+          false
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "sensor_only",
+        "max_position_error_m": 0.0,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          true
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "sensor_only",
+        "max_position_error_m": 2.2109000781256327e-06,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          false,
+          true
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "goal_validity_with_sensor",
+        "max_position_error_m": 0.0,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          true,
+          true
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "goal_validity_with_sensor",
+        "max_position_error_m": 2.2109000781256327e-06,
+        "position_relation_passed": true,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          false,
+          true,
+          true
+        ],
+        "transform": "mirror_x"
+      },
+      {
+        "arm": "current_defaults",
+        "max_position_error_m": 0.3380156559265597,
+        "position_relation_passed": false,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          true,
+          true
+        ],
+        "transform": "mirror_y"
+      },
+      {
+        "arm": "current_defaults",
+        "max_position_error_m": 0.37375370151005427,
+        "position_relation_passed": false,
+        "position_tolerance_m": 0.0001,
+        "same_outcome": true,
+        "seed": 1001,
+        "steps": 60,
+        "switches": [
+          true,
+          true,
+          true
+        ],
+        "transform": "mirror_x"
+      }
+    ],
+    "episodes": 15,
+    "producer_head": "a635fb00e95e5446ea20e8dda49a879a899e2930"
+  },
+  "producer_head": "a635fb00e95e5446ea20e8dda49a879a899e2930",
+  "regression_before": {
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -n 2 tests/planner/test_hybrid_failure_regressions.py -q",
+    "failed": 6,
+    "passed": 0,
+    "seconds": 79.96
+  },
+  "release_bytes": {
+    "baseline_head": "9d8dac2a140f00dadf2c8c2621977bcee96c83e0",
+    "head": "a635fb00e95e5446ea20e8dda49a879a899e2930",
+    "path_checks": {
+      "configs/algos/guarded_ppo_camera_ready.yaml": {
+        "current_sha256": "d2b61082f11574b2f03c50a110cf5f945b908053df65968399a5c863e69ee854",
+        "matches_base_bytes": true
+      },
+      "configs/algos/guarded_ppo_camera_ready_cpu.yaml": {
+        "current_sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772",
+        "matches_base_bytes": true
+      },
+      "configs/algos/guarded_ppo_release_v0_0_8.yaml": {
+        "current_sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c",
+        "matches_base_bytes": true
+      },
+      "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": {
+        "current_sha256": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374",
+        "matches_base_bytes": true
+      },
+      "configs/algos/hybrid_rule_v4_clearance_braking.yaml": {
+        "current_sha256": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab",
+        "matches_base_bytes": true
+      },
+      "configs/algos/orca_release_v0_0_8.yaml": {
+        "current_sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+        "matches_base_bytes": true
+      },
+      "configs/algos/prediction_planner_camera_ready.yaml": {
+        "current_sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481",
+        "matches_base_bytes": true
+      },
+      "configs/algos/prediction_planner_release_v0_0_8.yaml": {
+        "current_sha256": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c",
+        "matches_base_bytes": true
+      },
+      "configs/algos/predictive_mppi_camera_ready.yaml": {
+        "current_sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb",
+        "matches_base_bytes": true
+      },
+      "configs/algos/predictive_mppi_release_v0_0_8.yaml": {
+        "current_sha256": "79f13475d9d66f0754c11038f6d52a15b3420965b6f639de7f000c5190ba820b",
+        "matches_base_bytes": true
+      },
+      "configs/algos/risk_dwa_camera_ready.yaml": {
+        "current_sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c",
+        "matches_base_bytes": true
+      },
+      "configs/algos/risk_dwa_release_v0_0_8.yaml": {
+        "current_sha256": "27d0b269e5a65572bdf2f5af069a5e0037eb0728d501ea12438597404e7e1527",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_release_v0_0_8.yaml": {
+        "current_sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_resolution_independent_v2.yaml": {
+        "current_sha256": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml": {
+        "current_sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_terminal_goal_v1.yaml": {
+        "current_sha256": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb",
+        "matches_base_bytes": true
+      },
+      "configs/algos/socnav_release_v0_0_8.yaml": {
+        "current_sha256": "277c57a45caf213fdc4fb2abdb996062669f9ba05fb4e8adf3e47f90f0429b50",
+        "matches_base_bytes": true
+      },
+      "configs/algos/socnav_sampling_bounded_v2.yaml": {
+        "current_sha256": "9c52dc30d3894220caabaf1ac80d01561d6c1318d56c50e5ad7fa27d9c7999b3",
+        "matches_base_bytes": true
+      },
+      "configs/algos/socnav_sampling_release_v0_0_8.yaml": {
+        "current_sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6",
+        "matches_base_bytes": true
+      },
+      "configs/baselines/ppo_15m_grid_socnav.yaml": {
+        "current_sha256": "644b57e451cfc42b6ab5cf56ef6ec20fd6290a3bb9bae1be113a1aa6afb792ca",
+        "matches_base_bytes": true
+      },
+      "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": {
+        "current_sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
+        "matches_base_bytes": true
+      },
+      "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml": {
+        "current_sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml": {
+        "current_sha256": "43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml": {
+        "current_sha256": "43319acd6b426d9b34de316487a6c1eb3ce3ea9b9c93fd07b6435a0dbc3a4057",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v1.yaml": {
+        "current_sha256": "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml": {
+        "current_sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+        "current_sha256": "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": {
+        "current_sha256": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": {
+        "current_sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml": {
+        "current_sha256": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml": {
+        "current_sha256": "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml": {
+        "current_sha256": "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml": {
+        "current_sha256": "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml": {
+        "current_sha256": "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml": {
+        "current_sha256": "698b4bc44455a3fd4485b5b25b0bca16e47ca7d6ceaf62fd918aaba05df177d4",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml": {
+        "current_sha256": "a546df04e8f69896f001792d22931c184dd54d440f2828898049e57bdf92419b",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml": {
+        "current_sha256": "6471bc36db5806badd527701ca30b2f63f425dd3830d6b2b86cfa00ade1f5c46",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml": {
+        "current_sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml": {
+        "current_sha256": "cf2e6844b3c8e8315c31e6cf115f66ea2c7051526ff2e1f9cfe3a1c5a3f23cc4",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+        "current_sha256": "3952b569bb8b5dbb2f4f895b393532b5fc58db2954282af7c68c894e04da4507",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
+        "current_sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml": {
+        "current_sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml": {
+        "current_sha256": "3129fed61da9b5edf571a76c4024ce18a1cc2b7e1ee2c026e45605531f1a3541",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml": {
+        "current_sha256": "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml": {
+        "current_sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+        "current_sha256": "d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml": {
+        "current_sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml": {
+        "current_sha256": "6c60719a8b59a4eef1651dc94779cffa754c392dcf8641de31f96b9a7f675694",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml": {
+        "current_sha256": "4812a9cecf2a75c9d4b82ad9cf377f4e9406aa09dcd15897caa43932309d2887",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml": {
+        "current_sha256": "bfee5ca060ca8c00e5d84b46c1b7b183e66eb9f372a84486042d0d0b21e7d2ef",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml": {
+        "current_sha256": "7c5b4b1a51f7622368cd35926f2452cde0bdc6bac43b0c0d0bde1b45069acb65",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/classic_interactions_francis2023.yaml": {
+        "current_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": {
+        "current_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": {
+        "current_sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+        "current_sha256": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/single/francis2023_blind_corner.yaml": {
+        "current_sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": {
+        "current_sha256": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": {
+        "current_sha256": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785",
+        "matches_base_bytes": true
+      }
+    },
+    "registry_sources": 60
+  },
+  "status": "diagnostic-only; author default decision unchanged"
+}

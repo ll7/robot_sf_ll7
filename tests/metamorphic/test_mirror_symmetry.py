@@ -384,6 +384,7 @@ def test_release_scenario_orca_override_trace_is_rotation_equivariant(arm: str) 
 
 def test_risk_dwa_flat_release_trace_is_rotation_equivariant() -> None:
     """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
+    # Use development seed 1001 to keep this episode check within the 1001-1030 dev range.
     base = run_arm_episode("risk_dwa", interaction_scene(), seed=1001, max_steps=_ARM_STEPS)
     rotated = run_arm_episode(
         "risk_dwa", interaction_scene(rotate_90), seed=1001, max_steps=_ARM_STEPS

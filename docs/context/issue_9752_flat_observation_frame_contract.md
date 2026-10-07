@@ -4,10 +4,10 @@ This crosswalk was verified against the 14-arm roster reached through
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml::canonical_campaign_config`,
 which points to
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`. The roster
-and four candidate files below were checked at the PR base snapshot
-`6fb2cfdd9fdad68858c9559de0170a0e7aca5e3f` and compared with live `origin/main`
-`9a578901421826c873845952d9418f146d7d3695`; none of the 34 referenced paths changed between those
-snapshots. Candidate arms point to their own files under `configs/policy_search/candidates/`.
+and four candidate files below were checked at the merge-base snapshot
+`61cc91877a159e1d08b321543bd860042520b9ed`, also the current `origin/main` snapshot.
+Referenced paths and source/test anchors were re-verified against that snapshot and this PR
+candidate. Candidate arms point to their own files under `configs/policy_search/candidates/`.
 Source symbols and focused test anchors below were checked against this PR candidate. They provide
 implementation-integrity evidence only.
 
@@ -41,7 +41,7 @@ Test anchors establish implementation-integrity behavior only; they are not camp
 |---|---|---|
 | `prediction_planner` | Learned predictor feature; ego-native in both paths. | `robot_sf/planner/socnav_prediction.py::PredictionPlannerAdapter._build_model_input`; `tests/planner/test_socnav_prediction_module.py::test_predictive_model_input_preserves_ego_pedestrian_velocity`; flat feature test at `tests/planner/test_socnav_prediction_module.py::test_flat_observation_pedestrian_velocity_stays_ego_native_in_model_input` |
 | `goal` | **N/A**: does not consume pedestrian velocity. | `robot_sf/benchmark/map_runner/map_runner.py::_goal_policy`; `tests/benchmark/test_map_runner_view_integrity.py::test_goal_reference_declares_itself_pedestrian_blind` |
-| `social_force` | World-frame force interaction; converts ego to world. | `robot_sf/planner/socnav_social_force.py::SocialForcePlannerAdapter._rotate_velocities_to_world`; `tests/metamorphic/test_mirror_symmetry.py::test_release_arm_trace_is_mirror_and_rotation_equivariant[social_force]` is a strict expected failure for the separately recorded branch-cut defect; it is not green rotation evidence. |
+| `social_force` | World-frame force interaction; converts ego to world. | `robot_sf/planner/socnav_social_force.py::SocialForcePlannerAdapter._rotate_velocities_to_world`; `tests/metamorphic/test_mirror_symmetry.py::test_release_arm_trace_is_mirror_and_rotation_equivariant[social_force]` passes on the wrapped-v2 social-force kernel (#9878) and asserts flat leaves for base and transformed episodes. |
 | `orca` | World-frame RVO2 and heuristic interactions; converts ego at each world-velocity boundary. | `robot_sf/planner/socnav_orca.py::ORCAPlannerAdapter._rvo2_velocity_world` and `robot_sf/planner/socnav_orca.py::ORCAPlannerAdapter._heuristic_velocity_world`; `tests/metamorphic/test_mirror_symmetry.py::test_release_arm_trace_is_mirror_and_rotation_equivariant[orca]` asserts flat leaves for the base and transformed map-runner episodes |
 | `ppo` (training) | Training observations already carry ego pedestrian velocity; PPO features retain that frame. | `robot_sf/sensor/socnav_observation.py::SocNavObservationFusion.next_obs`; `tests/test_socnav_observation.py::test_socnav_observation_rotates_pedestrian_velocities_to_ego_frame`; `tests/test_socnav_observation.py::test_flat_socnav_observation_preserves_declared_frames` |
 | `ppo` (release evaluation) | Structured leaves flatten into checkpoint keys unchanged; flat leaves pass through. No world-frame pedestrian rollout occurs in this path. | `robot_sf/baselines/ppo.py::PPOPlanner._flatten_nested_observation` and `robot_sf/baselines/ppo.py::PPOPlanner._build_model_obs_dict`; `tests/baselines/test_ppo_planner.py::test_build_model_obs_dict_flattens_structured_socnav_observation` checks structured and flat feature preservation at `heading=pi/2` |
@@ -120,8 +120,8 @@ this observation shape as `ArmEpisode.flat_socnav_observation`; the ORCA release
 ORCA scenario overrides, and Risk-DWA assert the flag for baseline and rotated episodes. Count-zero
 runtime behavior is handled separately in #9869.
 
-Social Force's current rotation case is a strict expected failure for its separately recorded
-branch-cut defect; it is not counted as passing evidence. Learned and stochastic arms receive
+Social Force's rotation case passes on the wrapped-v2 kernel (#9878); the 0.0.7 kernel's
+branch-cut defect remains recorded separately. Learned and stochastic arms receive
 feature-boundary or seeded-replay evidence only. The deterministic ORCA override test and Risk-DWA
 flat trace test use real planner episodes over rotated synthetic scenes. These tests establish no
 campaign, release-row, safety, performance, or paper-facing claim. No campaign was run and no
@@ -137,9 +137,8 @@ The `SOCNAV_STRUCT` selector in the metamorphic environment setup does not mean 
 hands the planner a nested observation: occupancy-grid mode emits flat SOCNAV keys. The episode
 helper now records the actual keys it sees, and the applicable 90-degree episode tests assert that
 shape. `robot_sf/benchmark/map_runner/map_runner.py::_build_common_adapter_policy` passes the same
-observation dictionary directly to `adapter.plan`. The Social Force case remains a strict expected
-failure for its known branch-cut defect (tracked separately as #9764); it is not counted as passing
-rotation evidence.
+observation dictionary directly to `adapter.plan`. The Social Force case passes on the wrapped-v2
+kernel (#9878); the 0.0.7 kernel's branch-cut defect remains recorded separately as #9764.
 
 The flat-path feature tests use nonzero heading where conversion is under test: the prediction
 model retains ego-native features, SACADRL converts ego velocity before global/goal projection, and
@@ -166,5 +165,6 @@ the unrelated `tests/analysis_workbench/test_audit_materialize.py`; readiness wa
 this split and no readiness pass is claimed. These are implementation-integrity/smoke results, not
 campaign evidence. All 34 referenced paths and 82 source/config/test anchor references (41 unique
 path-symbol pairs) resolved; the 14 roster arms and 12 candidate override keys also resolved
-against the PR candidate. The live-main path comparison found no referenced files changed after
-the PR base snapshot.
+against the PR candidate. The referenced paths and source/test anchors were re-verified at merge base
+`61cc91877a159e1d08b321543bd860042520b9ed`; the roster YAML files remain unchanged from the
+earlier snapshots.

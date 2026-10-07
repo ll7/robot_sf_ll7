@@ -429,12 +429,12 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         if grid_payload is None:
             return float("inf")
         grid, meta = grid_payload
+        if grid.size == 0:
+            return float("inf")
         # Pedestrians are forecast separately; combined occupancy is not static geometry.
         channel = self._grid_channel_index(meta, "obstacles")
-        if channel < 0 and self._grid_channel_index(meta, "combined") >= 0:
-            raise ValueError("A static obstacle channel is required for guarded PPO clearance")
         if channel < 0 or channel >= grid.shape[0]:
-            return float("inf")
+            raise ValueError("A static obstacle channel is required for guarded PPO clearance")
 
         rc = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
         if rc is None:

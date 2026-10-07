@@ -838,7 +838,8 @@ def test_guarded_ppo_obstacle_clearance_helper_branches() -> None:
     guard._extract_grid_payload = lambda observation: (grid, meta)  # type: ignore[method-assign]
 
     meta["channel_indices"] = [2]
-    assert guard._min_obstacle_clearance(point, {}) == float("inf")
+    with pytest.raises(ValueError, match="static obstacle channel"):
+        guard._min_obstacle_clearance(point, {})
 
     meta["channel_indices"] = [0]
     guard._world_to_grid = lambda point, meta, grid_shape: None  # type: ignore[method-assign]
@@ -1518,3 +1519,36 @@ def test_guard_compares_best_effort_commands_on_the_same_braking_clock():
     assert decision.selected_evaluation["min_ped_clear"] == pytest.approx(-0.35)
     assert command == pytest.approx((0.55, 0.0))
     assert label == "fallback_best_effort"
+
+
+@pytest.mark.parametrize("indices", [[-1, 0, -1, -1], [3, 0, -1, -1]])
+def test_guard_grid_refuses_missing_or_out_of_bounds_static_channel(indices):
+    """A pedestrian-only or invalid static channel must not certify a wall-free path."""
+    observation = _adapter_residual_observation()
+    observation["occupancy_grid"] = np.ones((1, 20, 20))
+    observation["occupancy_grid_meta"] = {
+        "origin": [-1.0, -1.0],
+        "resolution": [0.1],
+        "size": [2.0, 2.0],
+        "channel_indices": indices,
+    }
+    with pytest.raises(ValueError, match="static obstacle channel"):
+        GuardedPPOAdapter()._min_obstacle_clearance(np.zeros(2), observation)
+
+
+@pytest.mark.parametrize("helper", ["progress", "collision", "clearance", "ttc"])
+def test_bound_prediction_helpers_refuse_unspecified_measured_motion(helper):
+    """Standalone bound forecasts must not silently substitute rest for unknown motion."""
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig())
+    drive = DifferentialDriveRobot(DifferentialDriveSettings())
+    adapter.bind_env(SimpleNamespace(simulator=SimpleNamespace(robots=[drive])))
+    kwargs = {"future_peds": np.ones((1, 3, 2)), "mask": np.ones(1), "v": 1.0, "w": 0.0, "steps": 3}
+    with pytest.raises(ValueError, match="measured-motion observation"):
+        if helper == "progress":
+            adapter._goal_progress({}, {"current": [2.0, 0.0]}, 1.0, 0.0, steps=3)
+        elif helper == "collision":
+            adapter._collision_cost(**kwargs)
+        elif helper == "clearance":
+            adapter._min_clearance(**kwargs)
+        else:
+            adapter._ttc_penalty(**kwargs)

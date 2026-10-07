@@ -999,6 +999,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if self._prediction_drive_settings is not None:
             if steps == 0:
                 return np.zeros((0, 2))
+            if observation is None:
+                raise ValueError("Bound prediction requires a measured-motion observation")
             positions, _ = self._bound_drive_rollout(
                 np.tile((v, w), (steps, 1)),
                 dt,

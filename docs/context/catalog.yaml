@@ -8113,3 +8113,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10074_calibration_start_review
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

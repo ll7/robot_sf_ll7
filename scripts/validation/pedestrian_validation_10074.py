@@ -22,6 +22,13 @@ import pysocialforce
 from robot_sf.evidence.writers import write_json, write_text
 from robot_sf.research import emergent_phenomena as ep
 from robot_sf.research import pedestrian_validation as estimators
+from robot_sf.research.pedestrian_acceptance import engineering_gate, feasible_apertures
+from robot_sf.research.pedestrian_initial_state import (
+    attach_initial_receipts,
+    holding_state,
+    initial_admissibility,
+    require_initial_admissibility,
+)
 from robot_sf.sim.obstacle_force_profile import apply_obstacle_force_profile
 from robot_sf.sim.sim_config import SimulationSettings
 from scripts.validation import compare_obstacle_laws_10061 as reused
@@ -324,7 +331,7 @@ def markdown(table):
 # Source protocol runner. Historical helpers above remain callable for default-byte proof.
 
 
-def protocol_simulate(
+def protocol_simulate(  # noqa: PLR0913
     state,
     segments,
     config,
@@ -334,6 +341,8 @@ def protocol_simulate(
     speed_cap_m_s=None,
     goal_update=None,
     stop_x=None,
+    desired_distribution=None,
+    desired_seed=None,
 ):
     """Step actual forces; optionally prescribe a straight nonreactive second walker.
 
@@ -344,9 +353,19 @@ def protocol_simulate(
     Returns:
         Measurement values with explicit missingness and units.
     """
+    require_initial_admissibility(state, segments, config.scene_config.agent_radius)
     walls = [(a, c, b, d) for a, b, c, d in segments]
     sim = pysocialforce.Simulator(state=state.copy(), obstacles=walls, config=config)
     positions, speeds = [sim.peds.pos().copy()], []
+    if desired_distribution is not None:
+        if desired_seed is None or not 1001 <= desired_seed <= 1030:
+            raise ValueError("CALFIT desired speeds require an explicit dev seed")
+        rng = np.random.default_rng(desired_seed)
+        desired = rng.normal(*desired_distribution, size=sim.peds.size())
+        while np.any(desired <= 0):
+            mask = desired <= 0
+            desired[mask] = rng.normal(*desired_distribution, size=int(mask.sum()))
+        sim.peds.assign_desired_speeds(desired)
     desired = sim.peds.max_speeds.copy()
     if speed_cap_m_s is not None:
         integrate = sim.peds.step
@@ -379,6 +398,13 @@ def protocol_simulate(
     return np.asarray(positions), np.asarray(speeds), desired
 
 
+def calfit_exponential_force(force):
+    """Keep the diagnostic wall law defined for free-space source protocols."""
+    if np.asarray(force.get_obstacles()).size == 0:
+        return np.zeros_like(force.get_peds())
+    return reused.exponential_force(force)
+
+
 def run_task(task):  # noqa: C901, PLR0915
     """One source-protocol dev episode, or historical byte-compatibility episode."""
     case, seed, variant, radius, mode = task[:5]
@@ -387,6 +413,7 @@ def run_task(task):  # noqa: C901, PLR0915
         raise ValueError("new episodes require dev seeds 1001..1030")
     if options.get("protocol") == "legacy":
         return legacy_run_task(task[:5])
+    wall_candidate = options.get("wall_candidate")
     profile = options.get("wall_profile", "legacy_v1")
     literature = options.get("speed_tier") == "literature"
     original_config, original_simulate, original_radius = (
@@ -395,6 +422,10 @@ def run_task(task):  # noqa: C901, PLR0915
         reused.RADIUS,
     )
     traces = []
+    input_audits = []
+    trace_segments = []
+    holding_receipts = []
+    original_force = reused.ObstacleForce.__call__
 
     def configured(candidate, speed):
         cfg = original_config(candidate, speed)
@@ -404,15 +435,46 @@ def run_task(task):  # noqa: C901, PLR0915
         apply_obstacle_force_profile(
             cfg.obstacle_force_config, profile, settings.pedestrian_radius_m
         )
+        if wall_candidate is not None:
+            cfg.obstacle_force_config.factor = wall_candidate["factor"]
+            cfg.obstacle_force_config.threshold = wall_candidate["offset_m"]
+            cfg.obstacle_force_config.sigma = 0.0
+            if wall_candidate["family"] == "exponential_edge":
+                reused.ObstacleForce.__call__ = calfit_exponential_force
         if literature:
-            cfg.scene_config.desired_speed_mean = 1.3
-            cfg.scene_config.desired_speed_std = 0.2
+            cfg.scene_config.desired_speed_mean = 1.29 if options.get("calfit") else 1.3
+            cfg.scene_config.desired_speed_std = 0.19 if options.get("calfit") else 0.2
             cfg.scene_config.desired_speed_seed = seed
         return cfg
 
     def captured(state, segments, config, steps, **kwargs):
+        if case in {"V3", "V4"}:
+            state, segments, holding = holding_state(
+                state,
+                segments,
+                wide=case == "V4",
+                radius_m=radius,
+                seed=seed,
+                aperture_width_m=float(variant),
+            )
+            holding_receipts.append(holding)
+        input_audits.append(
+            initial_admissibility(state, segments, config.scene_config.agent_radius)
+        )
+        trace_segments.append(segments)
+        extra = (
+            {"desired_distribution": (1.29, 0.19), "desired_seed": seed}
+            if options.get("calfit")
+            else {}
+        )
         p, v, desired = protocol_simulate(
-            state, segments, config, steps, speed_cap_m_s=3.0 if literature else None, **kwargs
+            state,
+            segments,
+            config,
+            steps,
+            speed_cap_m_s=options.get("execution_cap_m_s", 3.0) if literature else None,
+            **extra,
+            **kwargs,
         )
         traces.append((p, v, desired))
         return p, v
@@ -446,11 +508,21 @@ def run_task(task):  # noqa: C901, PLR0915
         elif case == "V2":
             ratio = float(variant)
             shoulder = options.get("shoulder_width_m", 0.46)
-            width = ratio * shoulder
+            width = ratio if options.get("calfit") else ratio * shoulder
+            ratio = width / shoulder
             row.update(reused.aperture(CANDIDATE, seed, width, 0.65))
             p = traces[-1][0]
             row["legacy_spatial_speed_drop_m_s"] = row.pop("speed_drop_m_s")
             row.update(estimators.aperture_drop(p[:, 0], np.arange(len(p)) * 0.1, plane_m=8.0))
+            row["passage_diagnostic"] = {
+                "passage_plane_m": 8.0,
+                "maximum_x_m": float(p[:, 0, 0].max()),
+                "final_x_m": float(p[-1, 0, 0]),
+                "terminal_speed_m_s": float(traces[-1][1][-1, 0]),
+                "last_10s_displacement_m": float(
+                    np.linalg.norm(p[-1, 0] - p[max(0, len(p) - 101), 0])
+                ),
+            }
             row.update(
                 aperture_shoulder_ratio=ratio,
                 shoulder_width_m=shoulder,
@@ -467,6 +539,7 @@ def run_task(task):  # noqa: C901, PLR0915
                 )
             )
             p = traces[-1][0]
+            row.update(reused.wall_metrics(p, trace_segments[-1]))
             if case == "V4":
                 row.update(
                     estimators.bottleneck_flow(
@@ -511,11 +584,27 @@ def run_task(task):  # noqa: C901, PLR0915
             # Source speed conditions are controlled, even in the literature tier.
             cfg.scene_config.desired_speed_mean, cfg.scene_config.desired_speed_std = speed, 0.0
             steps = int(np.ceil(12 / speed / 0.1))
-            p, v, desired = protocol_simulate(state, [], cfg, steps, interferer=True)
+            input_audits.append(initial_admissibility(state, [], cfg.scene_config.agent_radius))
+            p, v, desired = protocol_simulate(
+                state,
+                [],
+                cfg,
+                steps,
+                interferer=True,
+                speed_cap_m_s=options.get("execution_cap_m_s") if options.get("calfit") else None,
+            )
             traces.append((p, v, desired))
             baselines = []
             for _ in range(5):
-                bp, _bv, _bd = protocol_simulate(state[:1], [], cfg, steps)
+                bp, _bv, _bd = protocol_simulate(
+                    state[:1],
+                    [],
+                    cfg,
+                    steps,
+                    speed_cap_m_s=options.get("execution_cap_m_s")
+                    if options.get("calfit")
+                    else None,
+                )
                 baselines.append(bp[:, 0])
             row.update(
                 estimators.turning_onset(p[:, 0], p[:, 1], np.arange(len(p)) * 0.1, baselines)
@@ -532,15 +621,26 @@ def run_task(task):  # noqa: C901, PLR0915
         else:
             raise ValueError(f"unknown case {case}")
         p, v, desired = traces[-1]
+        attach_initial_receipts(row, input_audits, holding_receipts)
         row["pair_overlap"] = estimators.pair_overlap(p, radius, row["groups"])
         row["desired_speeds_m_s"] = desired.tolist()
         row["execution_cap_m_s"] = (
-            3.0 if literature and case != "V6" else "legacy desired-speed cap"
+            options.get("execution_cap_m_s", 3.0)
+            if literature and (case != "V6" or options.get("calfit"))
+            else "legacy desired-speed cap"
         )
+        if options.get("calfit"):
+            row["calfit_candidate"] = wall_candidate
+            row["desired_distribution"] = (
+                "positive N(1.29,0.19), no upper clipping"
+                if case != "V6"
+                else "source-controlled speed"
+            )
         row["trajectory_sha256"] = hashlib.sha256(p.tobytes()).hexdigest()
         row["_positions"], row["_speeds"] = p, v
         return row
     finally:
+        reused.ObstacleForce.__call__ = original_force
         reused.candidate_config, reused.harness.simulate, reused.RADIUS = (
             original_config,
             original_simulate,
@@ -551,6 +651,14 @@ def run_task(task):  # noqa: C901, PLR0915
 def protocol_tasks(config, radius, mode, options):
     """Same source case grid for each model; all seven shoulder ratios explicit."""
     grid = tasks(config, radius, mode)
+    if options.get("calfit"):
+        grid = [t for t in grid if t[0] in {"V1", "V3", "V4", "V5", "V6"}]
+        grid += [
+            ("V2", seed, str(width), radius, mode)
+            for width in feasible_apertures(radius, config["V2"]["shoulder_proxy_m"])
+            for seed in config["seeds"]
+        ]
+        return [(*t, options) for t in grid]
     grid = [t for t in grid if t[0] != "V2"]
     grid += [
         ("V2", seed, str(ratio), radius, mode)
@@ -670,41 +778,9 @@ def protocol_summary(rows, config):  # noqa: C901
     return table
 
 
-def acceptance_gate(rows):
-    """Fail closed on censored primary measurements, body contact or wall penetration.
-
-    Exit 2 denotes incomplete measurements; 3 physical infeasibility; 5 missing
-    numerical acceptance tolerances/domain approval. Published SDs are not
-    acceptance tolerances. No release pass is inferred from complete measurements.
-    """
-    required = {
-        "V1": ("fitted_desired_speed_m_s", "fitted_tau_s"),
-        "V2": ("speed_drop_m_s",),
-        "V3": ("specific_flow_persons_m_s",),
-        "V4": ("all_data_specific_flow_persons_m_s", "steady_specific_flow_persons_m_s"),
-        "V5": ("lateral_cm_to_edge_m",),
-        "V6": ("onset_m",),
-    }
-    missing = [
-        f"{r['case']}/{r['variant']}/{r['seed']}"
-        for r in rows
-        if any(
-            r.get(key) is None or not np.isfinite(r[key])
-            for key in required.get(r["case"], ("seed",))
-        )
-    ]
-    physical = [
-        f"{r['case']}/{r['variant']}/{r['seed']}"
-        for r in rows
-        if r.get("wall_penetration_m", 0.0) > 1e-6 or r["pair_overlap"]["all"]["below_2r_count"] > 0
-    ]
-    return {
-        "schema": "valsuite.gate.v1",
-        "measurement_missing": missing,
-        "physical_violations": physical,
-        "exit_code": 4 if not rows else (2 if missing else (3 if physical else 5)),
-        "release_admission": "blocked pending domain review and numeric tolerances for documented equivalents",
-    }
+def acceptance_gate(rows, *, config=None, require_complete=False):
+    """Apply the author-delegated 2026-10-02 engineering policy, not release admission."""
+    return engineering_gate(rows, config, require_complete=require_complete)
 
 
 def verify_acquisition(out, config, config_path):  # noqa: C901

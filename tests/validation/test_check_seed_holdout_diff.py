@@ -691,6 +691,9 @@ def test_all_holdout_names_need_allowlist(tmp_path, name):
     assert not check_diff(_diff("tests/benchmark/test_newseeds.py", f"seeds = {name}"), tmp_path)
 
 
+# seed-holdout: synthetic-fixture begin
+
+
 @pytest.mark.parametrize(
     ("path", "context", "added"),
     [
@@ -726,3 +729,74 @@ def test_string_seed_detection_keeps_unrelated_values_clear(
     """Numeric strings in unrelated lists and development seeds remain admissible."""
     path = "configs/adversarial/pilot.json" if context else "scripts/benchmark/pilot.py"
     assert check_diff(_diff(path, added, context=context), tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "consumer", ["run_map_episode(s)", "execute_episode(s)", "env.reset(\n        seed=s,\n    )"]
+)
+@pytest.mark.parametrize("complete_file", [False, True])
+def test_review_round1_episode_loop_forms(
+    tmp_path: Path, consumer: str, complete_file: bool
+) -> None:
+    """Each accepted episode consumer must reject its own held-out loop variable."""
+    path = "scripts/benchmark/pilot.py"
+    content = f"for s in range(111, 141):\n    {consumer}\n"
+    if complete_file:
+        _write(tmp_path, path, content)
+    findings = check_diff(_file_diff(path, content), tmp_path)
+    assert findings
+    assert any(
+        "run_map_episode" in f.text or "execute_episode" in f.text or "seed=s" in f.text
+        for f in findings
+    )
+
+
+@pytest.mark.parametrize(
+    "consumer", ["run_map_episode(s)", "execute_episode(s)", "env.reset(\n        seed=s,\n    )"]
+)
+def test_review_round1_episode_loop_dev_control(tmp_path: Path, consumer: str) -> None:
+    """The same consumer forms stay clear on development ranges."""
+    path = "scripts/benchmark/pilot.py"
+    content = f"for s in range(1001, 1031):\n    {consumer}\n"
+    _write(tmp_path, path, content)
+    assert check_diff(_file_diff(path, content), tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "for s in range(111, 141):\n    record_count(s)\nrun_map_episode(1001)\n",
+        "for count in range(111, 141):\n    execute_episode(dev_seed)\n",
+        "for count in range(111, 141):\n    env.reset(seed=dev_seed)\n",
+        "for s in range(111, 141):\n    record_count(s)\nfor s in range(1001, 1031):\n    execute_episode(s)\n",
+    ],
+)
+def test_review_round1_loop_binding_control(tmp_path: Path, content: str) -> None:
+    """A nearby call or another loop must not consume an unrelated held-out range."""
+    path = "scripts/benchmark/pilot.py"
+    _write(tmp_path, path, content)
+    assert check_diff(_file_diff(path, content), tmp_path) == []
+
+
+@pytest.mark.parametrize("complete_file", [False, True])
+def test_review_round1_multiline_environment_literal(tmp_path: Path, complete_file: bool) -> None:
+    """A parenthesized literal seed value must be rejected across line breaks."""
+    path = "scripts/benchmark/pilot.py"
+    content = 'os.environ["SEEDS"] = (\n    "111,112"\n)\n'
+    if complete_file:
+        _write(tmp_path, path, content)
+    findings = check_diff(_file_diff(path, content), tmp_path)
+    assert findings
+    assert any('"111,112"' in f.text for f in findings)
+
+
+@pytest.mark.parametrize(("key", "value"), [("SEEDS", "1001,1002"), ("COUNTS", "111,112")])
+def test_review_round1_multiline_environment_control(tmp_path: Path, key: str, value: str) -> None:
+    """Development seeds and unrelated literal environment keys remain clear."""
+    path = "scripts/benchmark/pilot.py"
+    content = f'os.environ["{key}"] = (\n    "{value}"\n)\n'
+    _write(tmp_path, path, content)
+    assert check_diff(_file_diff(path, content), tmp_path) == []
+
+
+# seed-holdout: synthetic-fixture end

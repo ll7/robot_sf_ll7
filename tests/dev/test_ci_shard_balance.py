@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("isolated_ci_wrapper_environment")
+
 ROOT = Path(__file__).resolve().parents[2]
 
 

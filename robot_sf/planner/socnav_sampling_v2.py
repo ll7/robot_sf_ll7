@@ -105,15 +105,14 @@ class _ObstacleClearance:
         if payload is None:
             return
         grid, meta = payload
-        if grid.ndim < 3:
+        if grid.ndim < 3 or grid.size == 0:
             return
         channel = adapter._grid_channel_index(meta, "obstacles")
-        if channel < 0:
-            if adapter._grid_channel_index(meta, "combined") >= 0:
-                raise ValueError("A static obstacle channel is required for sampler clearance")
-            return
         if channel < 0 or channel >= grid.shape[0]:
-            return
+            raise ValueError(
+                "A valid static obstacle channel is required for sampler clearance "
+                f"on a nonempty grid (index {channel}, channels {grid.shape[0]})"
+            )
         resolution = _positive(meta.get("resolution"))
         if resolution is None:
             return

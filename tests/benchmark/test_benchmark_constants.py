@@ -43,12 +43,14 @@ def test_constants_are_finite() -> None:
 
 
 def test_all_exports_present() -> None:
-    """The module __all__ must list exactly the four public constants."""
+    """The module __all__ includes shared curvature thresholds and existing constants."""
     from robot_sf.benchmark import constants
 
     assert set(constants.__all__) == {
         "COLLISION_DIST",
         "COMFORT_FORCE_THRESHOLD",
+        "CURVATURE_LENGTH_FLOOR_M",
+        "CURVATURE_MIN_DISPLACEMENT_M",
         "EPISODE_SCHEMA_VERSION",
         "NEAR_MISS_DIST",
     }

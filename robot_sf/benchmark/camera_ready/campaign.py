@@ -2912,7 +2912,7 @@ def _build_campaign_metadata_section(
             cfg.snqi_v2_spec.provenance()
             if getattr(cfg, "snqi_v2_spec", None)
             else {"snqi_v2": "pending_calibration"}
-            if snqi is None
+            if getattr(cfg, "snqi_v2_binding", None) is not None
             else {}
         ),
         **_legacy_snqi_metadata(cfg, snqi),
@@ -3237,7 +3237,7 @@ def _build_campaign_manifest_payload(
         "runtime_sec": outcome.runtime_sec,
         **(
             {"snqi_v2": "pending_calibration"}
-            if snqi is None and not paths.manifest_payload.get("metrics", {}).get("snqi_v2_version")
+            if paths.manifest_payload.get("snqi_v2") == "pending_calibration"
             else {}
         ),
         "finished_at_utc": outcome.campaign_finished_at_utc,

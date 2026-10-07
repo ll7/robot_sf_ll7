@@ -70,6 +70,13 @@ def test_post_freeze_external_receipt_admits_same_source_through_release_cli(
     document = json.loads(anchors.read_bytes())
     cal = document["calibration"]
     cal.update(source_commit=freeze, seeds=[1001, 1002])
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+
+    cal["scenario_horizons"] = {
+        row["name"]: row["simulation_config"]["max_episode_steps"]
+        for row in _load_campaign_scenarios(cfg)
+    }
+    cal["scenarios"] = sorted(cal["scenario_horizons"])
     grid = sorted(product(cal["arms"], cal["scenarios"], cal["seeds"]))
     cal["grid_sha256"] = hashlib.sha256(
         json.dumps(grid, separators=(",", ":")).encode()
@@ -81,6 +88,7 @@ def test_post_freeze_external_receipt_admits_same_source_through_release_cli(
             _config_hash_payload(acquisition), sort_keys=True, separators=(",", ":")
         ).encode()
     ).hexdigest()
+    cal["campaign_config_identity"] = cal["campaign_config_hash"][:16]
     write_json(anchors, document)
     live = build_execution_context_provenance()
     receipt = json.loads((EVIDENCE / "determinism-receipt.json").read_bytes())

@@ -1,7 +1,9 @@
 {
   "artifact_path": "docs/context/evidence/issue_7900_validation_helper_inventory/README.md",
-  "artifact_sha256": "405e8a35347413cdc9ff87da9cfd97026a2319cb21d8064b4552fbbd194ccc63",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "117a3f0244f92343fd0f8a07053a20bd4b35fb629ce2e3fbae95fd4cfa69835f",
+  "preserved_exact_bytes": false,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "schema_version": "evidence-review-marker.v1",
+  "supersedes_artifact_sha256": "405e8a35347413cdc9ff87da9cfd97026a2319cb21d8064b4552fbbd194ccc63",
+  "supersession_note": "PR #9836 replaces scratch-root locators and availability metadata; this marker supersedes the prior artifact digest. These are revised bytes, not an exact-byte preservation or new domain approval."
 }

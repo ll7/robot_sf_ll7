@@ -706,7 +706,7 @@ class TestScopedScenarioParity:
         {
             "name": "blind_corner",
             "map_file": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
-            "seeds": [111],
+            "seeds": [1001],
             "simulation_config": {"max_episode_steps": 30},
             "robot_config": {"kinematics": "differential_drive"},
         }

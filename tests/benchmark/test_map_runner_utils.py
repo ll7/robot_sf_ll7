@@ -5268,7 +5268,7 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     record = _run_map_job_worker(
         (
             {"name": "metadata-forwarding"},
-            7,
+            1001,
             {
                 "horizon": 3,
                 "dt": 0.1,
@@ -5298,7 +5298,7 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     )
 
     assert captured["scenario"] == {"name": "metadata-forwarding"}
-    assert captured["seed"] == 7
+    assert captured["seed"] == 1001
     assert captured["observation_mode"] == "socnav_state"
     assert captured["observation_level"] == "tracked_agents_no_noise"
     assert captured["benchmark_track"] == "lidar"
@@ -5649,7 +5649,7 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
         "metadata": {"supported": True},
         "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
         "simulation_config": {"max_episode_steps": 1},
-        "seeds": [1],
+        "seeds": [1001],
     }
     out_path = tmp_path / "episodes.jsonl"
     schema_path = tmp_path / "episode.schema.json"
@@ -5809,7 +5809,7 @@ def test_camera_ready_roster_keys_reach_serialized_map_runner_rows(
         "metadata": {"supported": True},
         "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
         "simulation_config": {"max_episode_steps": 1},
-        "seeds": [1],
+        "seeds": [1001],
     }
     scenario_matrix = tmp_path / "source-scenarios.yaml"
     scenario_matrix.write_text("- name: shared_effective_planner_identity\n", encoding="utf-8")

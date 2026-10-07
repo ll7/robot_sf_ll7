@@ -678,12 +678,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             The route guide command with its configured waypoint tolerance restored.
         """
         guide_tolerance = self._route_guide.config.goal_tolerance
+        waypoint_tolerance = self._route_guide.config.waypoint_reached_distance
         if state.get("terminal_goal", False):
             self._route_guide.config.goal_tolerance = 0.0
+            self._route_guide.config.waypoint_reached_distance = 0.0
         try:
             return self._route_guide.plan(state["observation"])
         finally:
             self._route_guide.config.goal_tolerance = guide_tolerance
+            self._route_guide.config.waypoint_reached_distance = waypoint_tolerance
 
     def _extract_state(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Extract the structured planner state from map-runner observations.
@@ -2142,11 +2145,19 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
 
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
-        """Approximate static-obstacle clearance from occupancy-grid observations.
+        """Return center clearance using exact geometry on the physical exclusion path.
 
         Returns:
-            float: Clearance in metres, or infinity when no obstacle grid is available.
+            Clearance in metres, with the historical raster fallback otherwise.
         """
+        if (
+            self._v4_clearance_braking
+            and self.config.physical_static_exclusion_enabled
+            and self._continuous_static_context is not None
+            and self._continuous_static_context.swept_geometry is not None
+        ):
+            # Keep the scorer's center-distance units, without raster cell ties.
+            return self._continuous_static_context.swept_geometry.clearance(point, 0.0)
         context = (
             self._clearance_context
             if self._clearance_context is not None
@@ -2916,26 +2927,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and use_continuous_static_check
         )
         if physical_static_exclusion:
-            # Exact map geometry excludes the physical body. The discretionary
-            # margin stays a soft preference below; it is not wall contact.
+            # The exact plant gate excludes the physical body. Keep the existing
+            # center-clearance score separate from the exclusion radius.
             hard_static_clearance = float(state["robot_radius"])
             required_static_clearance = hard_static_clearance + corridor_clearance_buffer
-            # Check the first committed plant step, then every plant interval.
-            # Trapezoidal velocity and midpoint heading match DifferentialDriveMotion.
-            dt = max(float(state["dt"]), 1e-3)
-            steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
-            robot_fields, _, _ = self._socnav_fields(state["observation"])
-            current_angular = float(
-                self._as_1d_float(
-                    robot_fields.get("angular_velocity", [self._v4_angular_estimate]), pad=1
-                )[0]
-            )
-            rollout_commands = self._v4_realized_rollout_commands(
-                self._candidate_rollout_commands(candidate, dt=dt, steps=steps),
-                current_speed=float(state["current_speed"]),
-                dt=dt,
-                current_angular=current_angular,
-            )
         proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
         return {
             "dt": dt,
@@ -2954,7 +2949,17 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "use_continuous_static_check": use_continuous_static_check,
             "physical_static_exclusion": physical_static_exclusion,
             "previous_linear": float(state["current_speed"]),
-            "previous_angular": current_angular if physical_static_exclusion else 0.0,
+            "plant_dt": float(state["dt"]),
+            "plant_angular": float(
+                self._as_1d_float(
+                    self._socnav_fields(state["observation"])[0].get(
+                        "angular_velocity", [self._v4_angular_estimate]
+                    ),
+                    pad=1,
+                )[0]
+            )
+            if physical_static_exclusion
+            else 0.0,
             "proxemic_enabled": proxemic_enabled,
             "proxemic_costmap_config": self._proxemic_costmap_config if proxemic_enabled else None,
             "rollout_points": [np.array(robot_pos, dtype=float)] if proxemic_enabled else None,
@@ -3018,6 +3023,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             violation, mirroring the original monolithic loop's ``continue`` that skipped
             the per-step dynamic collision check for that step.
         """
+        if ctx["physical_static_exclusion"]:
+            # The separate plant rollout owns exclusion. Raster lookup must not
+            # reject or score a reflected physical scene differently.
+            return (
+                None,
+                min(min_static_clearance, self._min_obstacle_clearance(robot_pos, observation)),
+                False,
+            )
         static_rejection = self._static_collision_rejection(
             candidate=candidate,
             observation=observation,
@@ -3050,6 +3063,47 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return clearance_rejection, min_static_clearance, skip_dynamic
 
+    def _physical_static_rollout_rejection(
+        self, candidate: HybridRuleCandidate, ctx: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Check the plant's swept body independently of pedestrian forecasts and scoring.
+
+        Returns:
+            A physical wall rejection, or None when every plant interval is clear.
+        """
+        dt = max(ctx["plant_dt"], 1e-3)
+        steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
+        speed, angular = ctx["previous_linear"], ctx["plant_angular"]
+        commands = self._v4_realized_rollout_commands(
+            self._candidate_rollout_commands(candidate, dt=dt, steps=steps),
+            current_speed=speed,
+            dt=dt,
+            current_angular=angular,
+        )
+        position, heading = ctx["start_pos"].copy(), ctx["heading"]
+        geometry = self._continuous_static_context.swept_geometry
+        for index, (next_speed, next_angular) in enumerate(commands):
+            turn = 0.5 * (angular + next_angular) * dt
+            distance = 0.5 * (speed + next_speed) * dt
+            end = position + distance * np.array(
+                [np.cos(heading + turn / 2), np.sin(heading + turn / 2)]
+            )
+            padding = abs(distance * turn) / 8.0
+            if geometry.clearance(end, ctx["hard_static_clearance"] + padding, position) <= 0:
+                return {
+                    "accepted": False,
+                    "reason": "static_collision",
+                    "candidate": candidate,
+                    "continuous_static_collision": True,
+                    "hard_static_clearance": ctx["hard_static_clearance"],
+                    "swept_plant_interval": True,
+                    "arc_padding_m": float(padding),
+                    "time": float((index + 1) * dt),
+                }
+            position, heading = end, _wrap_angle(heading + turn)
+            speed, angular = next_speed, next_angular
+        return None
+
     def _execute_rollout_collision_check(
         self,
         *,
@@ -3065,6 +3119,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             None if the candidate survives all collision checks (with ``ctx``
             mutated to reflect final rollout state), or a rejection dict.
         """
+        if ctx["physical_static_exclusion"]:
+            rejection = self._physical_static_rollout_rejection(candidate, ctx)
+            if rejection is not None:
+                return rejection
         robot_pos = ctx["robot_pos"]
         heading = ctx["heading"]
         initial_static_clearance = self._min_obstacle_clearance(robot_pos, observation)
@@ -3074,44 +3132,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
         for step_idx, (step_linear, step_angular) in enumerate(ctx["rollout_commands"]):
             t = (step_idx + 1) * ctx["dt"]
-            if ctx["physical_static_exclusion"]:
-                previous = robot_pos.copy()
-                delta_heading = 0.5 * (ctx["previous_angular"] + step_angular) * ctx["dt"]
-                mid_heading = heading + delta_heading / 2
-                distance = 0.5 * (ctx["previous_linear"] + step_linear) * ctx["dt"]
-                robot_pos = previous + distance * np.array(
-                    [np.cos(mid_heading), np.sin(mid_heading)]
+            robot_pos = (
+                robot_pos
+                + np.array(
+                    [step_linear * np.cos(heading), step_linear * np.sin(heading)],
+                    dtype=float,
                 )
-                heading = _wrap_angle(heading + delta_heading)
-                ctx["previous_linear"], ctx["previous_angular"] = step_linear, step_angular
-                geometry = self._continuous_static_context.swept_geometry
-                arc_padding = abs(distance * delta_heading) / 8.0
-                if (
-                    geometry.clearance(
-                        robot_pos, ctx["hard_static_clearance"] + arc_padding, previous
-                    )
-                    <= 0
-                ):
-                    return {
-                        "accepted": False,
-                        "reason": "static_collision",
-                        "candidate": candidate,
-                        "continuous_static_collision": True,
-                        "hard_static_clearance": ctx["hard_static_clearance"],
-                        "swept_plant_interval": True,
-                        "arc_padding_m": float(arc_padding),
-                        "time": float(t),
-                    }
-            else:
-                robot_pos = (
-                    robot_pos
-                    + np.array(
-                        [step_linear * np.cos(heading), step_linear * np.sin(heading)],
-                        dtype=float,
-                    )
-                    * ctx["dt"]
-                )
-                heading = _wrap_angle(heading + step_angular * ctx["dt"])
+                * ctx["dt"]
+            )
+            heading = _wrap_angle(heading + step_angular * ctx["dt"])
             if ctx["proxemic_enabled"] and ctx["rollout_points"] is not None:
                 ctx["rollout_points"].append(np.array(robot_pos, dtype=float))
 
@@ -3268,7 +3297,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         max_progress = max(
             float(self.config.max_linear_speed) * float(self.config.rollout_horizon), _EPS
         )
-        goal_vec = goal - robot_pos
+        # A terminal rollout can pass the target before its horizon ends.
+        # Judge its approach heading against the target from the current pose;
+        # reversing that vector after crossing rewards a stationary candidate.
+        goal_vec = goal - (start_pos if state["terminal_goal"] else robot_pos)
         goal_heading = (
             heading
             if np.linalg.norm(goal_vec) <= _EPS
@@ -3293,11 +3325,6 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance / max(float(self.config.desired_static_clearance), _EPS)
             )
         )
-        if ctx["physical_static_exclusion"] and not np.isinf(min_static_clearance):
-            static_clearance = _clip01(
-                (min_static_clearance - float(state["robot_radius"]))
-                / max(float(self.config.desired_static_clearance), _EPS)
-            )
         rollout_mean_linear, rollout_max_linear = self._rollout_linear_stats(rollout_commands)
         dynamic_clearance = (
             1.0

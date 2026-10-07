@@ -1249,6 +1249,12 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
     return {
         **({"legacy_snqi": "excluded"} if cfg.snqi_weights_path is None else {}),
         **(
+            {"snqi_v2": "pending_calibration"}
+            if getattr(cfg, "snqi_v2_binding", None) is not None
+            and getattr(cfg, "snqi_v2_spec", None) is None
+            else {}
+        ),
+        **(
             {"metrics": cfg.snqi_v2_spec.provenance()} if getattr(cfg, "snqi_v2_spec", None) else {}
         ),
         **_build_manifest_context_block(

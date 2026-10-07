@@ -673,13 +673,77 @@ def test_check_closes_discipline_ignores_other_repository(mock_metadata: MagicMo
     mock_metadata.assert_not_called()
 
 
-@patch("scripts.ci.pr_contract_check.subprocess.run")
-def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> None:
-    """Partial issue responses cannot be treated as evidence that closure is safe."""
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": []}')
-    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+@patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
+def test_get_issue_metadata_uses_rest_issue_endpoint(mock_api_get: MagicMock) -> None:
+    """Closing metadata comes from REST issue data and preserves normalization."""
+    mock_api_get.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {"labels": [{"name": "Epic"}, {"name": "LL7-Main-Red-Incident:V1"}], "body": "Details"}
+        ),
+    )
 
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"body": ""}')
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") == (
+        ["epic", "ll7-main-red-incident:v1"],
+        "Details",
+    )
+    mock_api_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/8414", timeout=10)
+
+
+@pytest.mark.parametrize("body", (None, ""))
+def test_closing_metadata_survives_graphql_quota_exhaustion(body: str | None) -> None:
+    """An empty issue stays readable through REST when GraphQL is unavailable."""
+    with (
+        patch("scripts.ci.pr_contract_check.gh_api_metadata_get", create=True) as rest_get,
+        patch("scripts.ci.pr_contract_check.subprocess.run") as graphql_run,
+    ):
+        rest_get.return_value = MagicMock(
+            returncode=0, stdout=json.dumps({"labels": [], "body": body})
+        )
+        graphql_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="GraphQL API rate limit exceeded"
+        )
+        assert pr_contract_check.get_issue_metadata("9715", "ll7/robot_sf_ll7") == ([], "")
+        rest_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/9715", timeout=10)
+        graphql_run.assert_not_called()
+
+
+@pytest.mark.parametrize("returncode", (1, 124))
+@patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
+def test_get_issue_metadata_fails_closed_on_rest_error(
+    mock_api_get: MagicMock, returncode: int
+) -> None:
+    """REST errors and bounded transport timeouts leave issue metadata unknown."""
+    mock_api_get.return_value = MagicMock(
+        returncode=returncode,
+        stdout="",
+        stderr="REST metadata unavailable",
+    )
+
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+    mock_api_get.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/8414", timeout=10)
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    (
+        "not JSON",
+        "[]",
+        '{"labels": []}',
+        '{"body": ""}',
+        '{"labels": {}, "body": ""}',
+        '{"labels": ["epic"], "body": ""}',
+        '{"labels": [{"name": 1}], "body": ""}',
+        '{"labels": [], "body": 1}',
+    ),
+)
+@patch("scripts.ci.pr_contract_check.gh_api_metadata_get")
+def test_get_issue_metadata_rejects_malformed_or_incomplete_payload(
+    mock_api_get: MagicMock, stdout: str
+) -> None:
+    """Malformed or partial REST issue payloads cannot certify closing safety."""
+    mock_api_get.return_value = MagicMock(returncode=0, stdout=stdout)
+
     assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
 
 

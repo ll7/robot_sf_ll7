@@ -3,9 +3,10 @@
 This is a diff gate, not an audit of historical releases or archived evidence.
 See issue #9668 for the evaluation split and anchor barrier.
 
-Accepted syntactic limits: quoted seed values on continuation lines of multiline
-JSON lists, non-literal or aliased seed generation (including dynamic ``range``
-bounds), and seeds passed through environment variables need exact-head review.
+Accepted syntactic limits: non-literal or aliased seed generation (including
+dynamic ``range`` bounds), dynamically named environment keys, and non-literal
+environment seed values need exact-head review. Literal environment assignments
+and quoted numeric seed-list continuations are checked.
 Literal Python ``range`` calls and nearby episode loops are checked across common
 wrappers and line breaks; unknown syntax remains an exact-head review obligation.
 
@@ -96,6 +97,13 @@ SEED_FIELD = re.compile(
     r"map_seed|spawn_seed|pedestrian_seed|desired_speed_seed|route_spawn_seed|archetype_seed|response_law_seed)['\"]?\s*[:=]"
 )
 SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
+ENVIRONMENT_SEEDS = re.compile(
+    r"(?i)\bos\.environ\s*\[\s*['\"](?:[A-Z_][A-Z0-9_]*_)?SEEDS?['\"]\s*\]\s*="
+)
+SEED_LIST_VALUE = r"(?:\d+|['\"]\d+['\"])"
+SEED_LIST_LINE = re.compile(
+    rf"^\s*(?:-\s*)?\[?\s*{SEED_LIST_VALUE}(?:\s*,\s*{SEED_LIST_VALUE})*\s*,?\s*\]?,?\s*(?:#.*)?$"
+)
 EPISODE_SEED_LOOP = re.compile(
     r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
 )
@@ -354,6 +362,7 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     if (
         SEED_FIELD.search(text)
         or SCENARIO_SEEDS.search(text)
+        or ENVIRONMENT_SEEDS.search(text)
         or EPISODE_SEED_LOOP.search(text)
         or SEED_CONSTANT.search(text)
         or SEED_PARAM.search(text)
@@ -364,10 +373,7 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         return True
     # YAML block lists and multiline pytest parametrizations put the value on
     # a separate line from the seed key. Use the closest enclosing declaration.
-    if re.match(
-        rf"^\s*(?:-\s*)?\[?\s*{SEALED_SEED_PATTERN}(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
-        text,
-    ):
+    if SEED_LIST_LINE.fullmatch(text):
         if any("parametrize" in line for line in before[-12:]) and any(
             re.search(r"['\"]seed['\"]", line) for line in before[-12:]
         ):
@@ -375,9 +381,8 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         for previous in reversed(before):
             if SEED_FIELD.search(previous) or SEED_PARAM.search(previous):
                 return True
-            if previous.strip() and not re.match(
-                r"^\s*(?:-\s*)?\[?\s*\d+(?:\s*,\s*\d+)*\s*,?\]?\s*(?:#.*)?$|^\s*#",
-                previous,
+            if previous.strip() and not (
+                SEED_LIST_LINE.fullmatch(previous) or previous.lstrip().startswith("#")
             ):
                 break
     return False

@@ -689,3 +689,40 @@ def test_every_seed_file_value_is_seed_context(tmp_path, path, added, context):
 def test_all_holdout_names_need_allowlist(tmp_path, name):
     assert check_diff(_diff("scripts/benchmark/pilot.py", f"seeds = {name}"), tmp_path)
     assert not check_diff(_diff("tests/benchmark/test_newseeds.py", f"seeds = {name}"), tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("path", "context", "added"),
+    [
+        ("configs/adversarial/pilot.json", '"seeds": [', '    "111",'),
+        ("configs/adversarial/pilot.json", '"seeds": [\n    "1001",', '    "112"'),
+        ("scripts/benchmark/pilot.py", "", 'os.environ["SEEDS"] = "111,112"'),
+        ("scripts/benchmark/pilot.py", "", 'os.environ["ROBOT_SF_SEED"] = "113"'),
+    ],
+)
+def test_string_seed_escape_forms_are_reported(
+    tmp_path: Path, path: str, context: str, added: str
+) -> None:
+    """Quoted continuation values and literal environment seeds cannot bypass review."""
+    findings = check_diff(_diff(path, added, context=context), tmp_path)
+    assert len(findings) == 1
+    assert findings[0].path == path
+    assert findings[0].text == added.strip()
+
+
+@pytest.mark.parametrize(
+    ("context", "added"),
+    [
+        ('"counts": [', '    "111",'),
+        ('"seeds": [', '    "1001",'),
+        ('"seeds": [\n    "1001"\n],\n"counts": [', '    "111",'),
+        ("", 'os.environ["COUNTS"] = "111,112"'),
+        ("", 'os.environ["SEEDS"] = "1001,1002"'),
+    ],
+)
+def test_string_seed_detection_keeps_unrelated_values_clear(
+    tmp_path: Path, context: str, added: str
+) -> None:
+    """Numeric strings in unrelated lists and development seeds remain admissible."""
+    path = "configs/adversarial/pilot.json" if context else "scripts/benchmark/pilot.py"
+    assert check_diff(_diff(path, added, context=context), tmp_path) == []

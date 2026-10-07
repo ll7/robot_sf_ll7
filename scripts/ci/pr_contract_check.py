@@ -44,6 +44,7 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
 from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
+from scripts.dev._gh_rest import gh_api_metadata_get  # noqa: E402
 from scripts.dev.check_issue_line_budget import (  # noqa: E402
     evaluate_budget,
     has_declared_cap,
@@ -256,13 +257,7 @@ def get_issue_metadata(issue: str, repo: str) -> tuple[list[str], str] | None:
     enforce a closing contract must treat that result as unknown and fail closed.
     """
     try:
-        res = subprocess.run(
-            ["gh", "issue", "view", issue, "--json", "labels,body", "--repo", repo],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
+        res = gh_api_metadata_get(f"repos/{repo}/issues/{issue}", timeout=10)
         if res.returncode != 0:
             return None
         data = json.loads(res.stdout)
@@ -1109,28 +1104,54 @@ def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dic
     return added
 
 
-def _diff_numstat(base_ref: str) -> str | None:
-    """Return ``git diff --numstat`` output for the PR head against *base_ref*.
+def _diff_numstat(base_sha: str | None) -> str | None:
+    """Return PR numstat against the immutable event base commit.
 
-    Prefers the merge-base form ``{base_ref}...HEAD``. CI fetches the base ref
-    with ``--depth=1`` (see ``pr-contract-check.yml``), so no merge base exists
-    and ``...`` fails; the two-dot tree diff ``{base_ref}..HEAD`` is then used,
-    which is exact for the merge-ref checkout. Returns None when neither form
-    can be computed; budget enforcement treats that as a blocker.
+    The budget baseline must be the full ``pull_request.base.sha`` associated
+    with the checked-out merge ref. A moving branch ref is not an acceptable
+    substitute when that commit is unavailable. Fetch the exact commit once,
+    then use a tree-to-tree diff so shallow history does not require a merge
+    base. Failure to resolve or compare the exact commit stays fail-closed.
     """
-    for diff_spec in (f"{base_ref}...HEAD", f"{base_ref}..HEAD"):
-        try:
-            res = subprocess.run(
-                ["git", "diff", "--numstat", diff_spec],
+    if not isinstance(base_sha, str) or FULL_SHA_PATTERN.fullmatch(base_sha) is None:
+        return None
+
+    object_spec = f"{base_sha}^{{commit}}"
+    try:
+        available = subprocess.run(
+            ["git", "cat-file", "-e", object_spec],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if available.returncode != 0:
+            fetched = subprocess.run(
+                ["git", "fetch", "--no-tags", "--depth=1", "origin", base_sha],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            if fetched.returncode != 0:
+                return None
+            available = subprocess.run(
+                ["git", "cat-file", "-e", object_spec],
                 capture_output=True,
                 text=True,
                 check=False,
             )
-        except _BEST_EFFORT_ERRORS:
+        if available.returncode != 0:
             return None
-        if res.returncode == 0:
-            return res.stdout
-    return None
+
+        res = subprocess.run(
+            ["git", "diff", "--numstat", f"{base_sha}..HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except _BEST_EFFORT_ERRORS:
+        return None
+    return res.stdout if res.returncode == 0 else None
 
 
 def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, int]:
@@ -1228,6 +1249,7 @@ def check_line_budget_discipline(
     base_ref: str,
     repo: str,
     *,
+    budget_base_sha: str | None = None,
     numstat_text: object = _UNSET_NUMSTAT,
 ) -> list[str]:
     """Fail when the linked issue's declared line/file budget is exceeded (issue #9094).
@@ -1247,11 +1269,12 @@ def check_line_budget_discipline(
         if not has_declared_cap(issue_body):
             continue
         if resolved_numstat is _UNSET_NUMSTAT:
-            resolved_numstat = _diff_numstat(base_ref)
+            resolved_numstat = _diff_numstat(budget_base_sha)
         historical_evidence = _coerce_historical_numstat(resolved_numstat)
         if historical_evidence is None:
             blockers.append(
-                f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
+                f"BLOCKER: cannot measure the PR diff against immutable base commit "
+                f"{budget_base_sha!r}; "
                 f"budget enforcement for issue #{issue} is unavailable, malformed, or "
                 "ambiguous and remains fail-closed (issue #9094)."
             )
@@ -1339,12 +1362,20 @@ def check_placeholder_docstrings(base_ref: str, repo_root: str | None = None) ->
     return blockers
 
 
+@dataclass(frozen=True, slots=True)
+class PRDiffBases:
+    """Carry current comparisons and immutable budget measurement bases."""
+
+    current_base_ref: str
+    budget_base_sha: str | None = None
+
+
 def run_all_checks(
     title: str,
     body: str,
     changed_files: list[str],
     repo: str,
-    base_ref: str,
+    diff_bases: PRDiffBases,
     pr_number: str | None,
     added_files: set[str] | None = None,
     historical_numstat: object = _UNSET_NUMSTAT,
@@ -1392,11 +1423,13 @@ def run_all_checks(
     blockers.extend(state_blockers)
 
     # 4. Evidence tree hygiene
-    evidence_blockers = check_evidence_tree_hygiene(changed_files, base_ref, added_files)
+    evidence_blockers = check_evidence_tree_hygiene(
+        changed_files, diff_bases.current_base_ref, added_files
+    )
     blockers.extend(evidence_blockers)
 
     # 5. Evidence writer adoption
-    blockers.extend(check_evidence_writer_usage(changed_files, base_ref))
+    blockers.extend(check_evidence_writer_usage(changed_files, diff_bases.current_base_ref))
 
     # 6. Successor discipline
     successor_warnings = check_successor_discipline(title, body, repo)
@@ -1407,12 +1440,18 @@ def run_all_checks(
     infos.append(lane_info)
 
     # 8. Placeholder docstring ratchet (issue #5856): reject NEW placeholder docstrings.
-    blockers.extend(check_placeholder_docstrings(base_ref))
+    blockers.extend(check_placeholder_docstrings(diff_bases.current_base_ref))
 
     # 9. Issue line/file budget (issue #9094): enforce declared caps unless a
     # reasoned `budget-override:` line records an explicit exception.
     blockers.extend(
-        check_line_budget_discipline(body, base_ref, repo, numstat_text=historical_numstat)
+        check_line_budget_discipline(
+            body,
+            diff_bases.current_base_ref,
+            repo,
+            budget_base_sha=diff_bases.budget_base_sha,
+            numstat_text=historical_numstat,
+        )
     )
 
     return blockers, warnings, infos
@@ -1551,6 +1590,14 @@ def main() -> int:  # noqa: C901
     parser.add_argument("--pr-body-file", type=Path, help="PR body file for local run/test.")
     parser.add_argument("--pr-title", type=str, help="PR title for local run/test.")
     parser.add_argument("--pr-number", type=str, help="PR number for local run/test.")
+    parser.add_argument(
+        "--budget-base-sha",
+        type=str,
+        help=(
+            "Immutable pull_request.base.sha for budget measurement; a missing or invalid "
+            "value fails closed when a linked issue declares a budget."
+        ),
+    )
     parser.add_argument("--repo", type=str, default="ll7/robot_sf_ll7", help="Repo name.")
     parser.add_argument("--base-ref", type=str, default="origin/main", help="Git base branch ref.")
     parser.add_argument(
@@ -1590,7 +1637,13 @@ def main() -> int:  # noqa: C901
 
     # Run checks
     blockers, warnings, infos = run_all_checks(
-        pr_title, pr_body, changed_files, repo, args.base_ref, pr_number, added_files
+        pr_title,
+        pr_body,
+        changed_files,
+        repo,
+        PRDiffBases(args.base_ref, args.budget_base_sha),
+        pr_number,
+        added_files,
     )
 
     # Build status

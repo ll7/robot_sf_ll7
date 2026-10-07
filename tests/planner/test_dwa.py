@@ -776,7 +776,7 @@ def test_dwa_vectorized_rollout_matches_scalar_reference():
     legacy step-by-step loop on a fixed observation/command grid.
     """
     config = DWAPlannerConfig(prediction_steps=20, linear_samples=7, angular_samples=11)
-    rng = np.random.default_rng(5412)
+    rng = np.random.default_rng(1001)
     obs = _observation(
         robot=(0.0, 0.0),
         heading=0.0,
@@ -910,7 +910,7 @@ def test_dwa_vectorized_rollout_trajectory_matches_scalar():
     recurrence; the planner score is gated separately by the parity tests above.
     """
     config = DWAPlannerConfig()
-    rng = np.random.default_rng(7)
+    rng = np.random.default_rng(1002)
     worst = 0.0
     for _ in range(10):
         robot_pos = rng.uniform(-5.0, 5.0, size=2)

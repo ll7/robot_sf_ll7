@@ -7,8 +7,11 @@ Accepted syntactic limits: non-literal or aliased seed generation (including
 dynamic ``range`` bounds), dynamically named environment keys, and non-literal
 environment seed values need exact-head review. Literal environment assignments
 and quoted numeric seed-list continuations are checked.
-Literal Python ``range`` calls and nearby episode loops are checked across common
-wrappers and line breaks; unknown syntax remains an exact-head review obligation.
+Literal Python ``range`` loops use complete-file AST context when available.
+Positional episode seeds require a resolvable local or directly imported source
+signature with a parameter named ``seed``; unresolved callees use keywords only.
+Bounded diff-only fragments, dynamic rebinding, re-exports and unknown syntax
+remain exact-head review obligations.
 
 Markers: ``# seed-holdout: setup-only`` and ``synthetic-fixture`` (line or
 ``begin``/``end`` block) exempt fixtures anywhere. ``release-evaluation`` (line
@@ -106,9 +109,6 @@ SEED_LIST_VALUE = r"(?:\d+|['\"]\d+['\"])"
 SEED_LIST_LINE = re.compile(
     rf"^\s*(?:-\s*)?\[?\s*{SEED_LIST_VALUE}(?:\s*,\s*{SEED_LIST_VALUE})*\s*,?\s*\]?,?\s*(?:#.*)?$"
 )
-EPISODE_SEED_LOOP = re.compile(
-    r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
-)
 PYTHON_INT_LITERAL = (
     r"[+-]?\s*(?:"
     r"0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|"
@@ -122,11 +122,6 @@ RANGE = re.compile(
     rf"(?:,\s*(?P<second>{PYTHON_INT_LITERAL})\s*"
     rf"(?:,\s*(?P<third>{PYTHON_INT_LITERAL})\s*)?)?,?\s*\)"
 )
-EPISODE_RANGE_LOOP = re.compile(
-    r"\bfor\s+[A-Za-z_]\w*\s+in\b(?P<body>.{0,1200}?)\brun_episode\s*\(",
-    re.DOTALL,
-)
-EPISODE_RANGE_MAP = re.compile(r"\bmap\s*\(\s*run_episode\b", re.DOTALL)
 EPISODE_CALL = re.compile(
     r"\b(?:run_episode|run_map_episode|execute_episode)\s*\(|\.\s*(?:step|reset)\s*\(",
 )
@@ -286,75 +281,195 @@ def _parse_python_int_literal(value: str) -> int | None:
         return None
 
 
-def _loop_consumes_variable(loop: ast.For) -> bool:
-    """Bind episode arguments to this loop, excluding scopes that shadow it."""
+EPISODE_FUNCTIONS = frozenset({"run_episode", "run_map_episode", "execute_episode"})
+
+
+def _call_name(node: ast.AST) -> str:
+    """Return a dotted static callee name, or an empty unresolved name."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _call_name(node.value)
+        return f"{prefix}.{node.attr}" if prefix else ""
+    return ""
+
+
+class _SeedSignatures:
+    """Resolve local/imported function signatures from source, never imports."""
+
+    def __init__(self, tree: ast.AST, root: Path):
+        self.root = root
+        self.parents = {
+            child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)
+        }
+        self.modules: dict[str, ast.Module | None] = {}
+        self.scopes: dict[ast.AST, dict[str, list[ast.AST]]] = {}
+        for scope in ast.walk(tree):
+            if isinstance(scope, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
+                self.scopes[scope] = self._bindings(scope)
+
+    @staticmethod
+    def _bindings(
+        scope: ast.Module | ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> dict[str, list[ast.AST]]:
+        """Keep lexical bindings separate, treating ambiguous rebinding as unknown."""
+        bindings: dict[str, list[ast.AST]] = {}
+
+        def collect(node: ast.AST) -> None:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bindings.setdefault(node.name, []).append(node)
+                return
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    name = alias.asname or alias.name.split(".")[0]
+                    bindings.setdefault(name, []).append(node)
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                bindings.setdefault(node.id, []).append(node)
+            for child in ast.iter_child_nodes(node):
+                collect(child)
+
+        for statement in scope.body:
+            collect(statement)
+        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for arg in scope.args.posonlyargs + scope.args.args + scope.args.kwonlyargs:
+                bindings.setdefault(arg.arg, []).append(arg)
+        return bindings
+
+    def _imported(self, module: str, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+        if module not in self.modules:
+            source = self.root.joinpath(*module.split(".")).with_suffix(".py")
+            try:
+                self.modules[module] = ast.parse(source.read_text())
+            except (OSError, SyntaxError, UnicodeError):
+                self.modules[module] = None
+        tree = self.modules[module]
+        if tree is None:
+            return None
+        matches = [node for node in tree.body if getattr(node, "name", None) == name]
+        if len(matches) == 1 and isinstance(matches[0], (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return matches[0]
+        return None
+
+    def seed_position(self, call: ast.Call, callee: ast.AST | None = None) -> int | None:
+        """Only an unambiguous callee's parameter named seed can bind positionally."""
+        name = _call_name(callee or call.func)
+        parts = name.split(".")
+        parent = self.parents.get(call)
+        binding = None
+        while parent is not None:
+            candidates = self.scopes.get(parent, {}).get(parts[0], [])
+            if candidates:
+                if len(candidates) != 1:
+                    return None
+                binding = candidates[0]
+                break
+            parent = self.parents.get(parent)
+        function = None
+        if isinstance(binding, (ast.FunctionDef, ast.AsyncFunctionDef)) and len(parts) == 1:
+            function = binding
+        elif isinstance(binding, ast.ImportFrom) and binding.module and not binding.level:
+            alias = next(a for a in binding.names if (a.asname or a.name) == parts[0])
+            if len(parts) == 1:
+                function = self._imported(binding.module, alias.name)
+        elif isinstance(binding, ast.Import):
+            alias = next(a for a in binding.names if (a.asname or a.name.split(".")[0]) == parts[0])
+            module = alias.name if alias.asname else ".".join(parts[:-1])
+            function = self._imported(module, parts[-1])
+        if function is None or function.name not in EPISODE_FUNCTIONS:
+            return None
+        parameters = function.args.posonlyargs + function.args.args
+        return next((i for i, arg in enumerate(parameters) if arg.arg == "seed"), None)
+
+
+def _loop_seed_calls(loop: ast.For, signatures: _SeedSignatures) -> list[ast.Call]:
+    """Bind calls inside this loop, excluding nested scopes and shadowed loops."""
     if not isinstance(loop.target, ast.Name):
-        return False
+        return []
     variable = loop.target.id
+    calls: list[ast.Call] = []
 
     def is_variable(node: ast.AST) -> bool:
         return isinstance(node, ast.Name) and node.id == variable
 
-    def consumes(node: ast.AST) -> bool:
+    def visit(node: ast.AST) -> None:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
-            return False
+            return
         if isinstance(node, ast.For) and is_variable(node.target):
-            return False
+            return
         if isinstance(node, ast.Call):
-            function = node.func
-            episode = isinstance(function, ast.Name) and function.id in {
-                "run_episode",
-                "run_map_episode",
-                "execute_episode",
-            }
-            reset = isinstance(function, ast.Attribute) and function.attr == "reset"
-            if episode and node.args and is_variable(node.args[0]):
-                return True
-            if (episode or reset) and any(
-                keyword.arg == "seed" and is_variable(keyword.value) for keyword in node.keywords
-            ):
-                return True
-        return any(consumes(child) for child in ast.iter_child_nodes(node))
-
-    return any(consumes(statement) for statement in loop.body)
-
-
-def _episode_range_context(text: str, before: list[str], after: list[str]) -> bool:
-    """Recognize a literal range consumed by an episode inside its own loop."""
-    window = textwrap.dedent("\n".join(before[-20:] + [text] + after[:20]))
-    if not _range_overlaps_holdout(window):
-        return False
-    if EPISODE_RANGE_MAP.search(window):
-        return True
-    try:
-        tree = ast.parse(window)
-    except SyntaxError as error:
-        # A diff may stop inside a multiline call. Close only an explicitly
-        # unclosed parenthesis; other incomplete syntax retains the old fallback.
-        if error.msg == "'(' was never closed":
-            try:
-                tree = ast.parse(window + "\n)")
-            except SyntaxError:
-                tree = None
-        else:
-            tree = None
-        if tree is None:
-            return any(
-                _range_overlaps_holdout(match.group("body"))
-                for match in EPISODE_RANGE_LOOP.finditer(window)
+            name = _call_name(node.func).split(".")[-1]
+            position = signatures.seed_position(node)
+            episode = name in EPISODE_FUNCTIONS or position is not None
+            reset = isinstance(node.func, ast.Attribute) and name == "reset"
+            positional = (
+                position is not None
+                and not any(isinstance(arg, ast.Starred) for arg in node.args[: position + 1])
+                and len(node.args) > position
+                and is_variable(node.args[position])
             )
-    return any(
-        isinstance(node, ast.For)
-        and _range_overlaps_holdout(ast.get_source_segment(window, node.iter) or "")
-        and _loop_consumes_variable(node)
-        for node in ast.walk(tree)
-    )
+            keyword = any(k.arg == "seed" and is_variable(k.value) for k in node.keywords)
+            if (episode and positional) or ((episode or reset) and keyword):
+                calls.append(node)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    for statement in loop.body:
+        visit(statement)
+    return calls
+
+
+def _episode_seed_lines(source: str, root: Path) -> set[int]:
+    """Report loop headers and their consumers using the complete AST context."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    signatures = _SeedSignatures(tree, root)
+    flagged: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.For) and _range_overlaps_holdout(
+            ast.get_source_segment(source, node.iter) or ""
+        ):
+            calls = _loop_seed_calls(node, signatures)
+            if calls:
+                flagged.update(range(node.lineno, (node.iter.end_lineno or node.lineno) + 1))
+                for call in calls:
+                    flagged.update(range(call.lineno, (call.end_lineno or call.lineno) + 1))
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "map"
+            and len(node.args) == 2
+            and signatures.seed_position(node, node.args[0]) == 0
+            and _range_overlaps_holdout(ast.get_source_segment(source, node.args[1]) or "")
+        ):
+            flagged.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return flagged
+
+
+def _episode_range_context(text: str, before: list[str], after: list[str], root: Path) -> bool:
+    """Parse bounded diff-only loops, dropping partial preceding suites."""
+    lines = before[-20:] + [text] + after[:20]
+    if not _range_overlaps_holdout("\n".join(lines)):
+        return False
+    # Prefer the whole fragment so local function signatures remain available.
+    starts = [0] + [i for i, line in enumerate(lines) if line.lstrip().startswith("for ")]
+    for start in starts:
+        fragment = textwrap.dedent("\n".join(lines[start:]))
+        # Closing an unfinished call preserves its original indentation context.
+        for source in (
+            fragment,
+            fragment + "\n" + " " * (len(lines[start]) - len(lines[start].lstrip())) + ")",
+        ):
+            if len(before[-20:]) + 1 - start in _episode_seed_lines(source, root):
+                return True
+    return False
 
 
 def _literal_environment_seed_lines(lines: list[str]) -> set[int]:
     """Inspect literal Python environment assignments without executing source."""
     try:
-        tree = ast.parse("\n".join(lines))
+        tree = ast.parse(textwrap.dedent("\n".join(lines)))
     except SyntaxError:
         return set()
     flagged: set[int] = set()
@@ -446,7 +561,11 @@ def _environment_seed_continuation(text: str, before: list[str], after: list[str
             if _literal_environment_seed_lines(fragment):
                 return True
             # A diff-only window can end before the closing parenthesis.
-            return bool(_literal_environment_seed_lines(before[-offset:] + [text, ")"]))
+            return bool(
+                _literal_environment_seed_lines(
+                    before[-offset:] + [text, " " * (len(previous) - len(previous.lstrip())) + ")"]
+                )
+            )
         if previous.strip() and not previous.lstrip().startswith(("#", '"', "'", "(")):
             break
     return False
@@ -465,12 +584,10 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         SEED_FIELD.search(text)
         or SCENARIO_SEEDS.search(text)
         or ENVIRONMENT_SEEDS.search(text)
-        or EPISODE_SEED_LOOP.search(text)
         or SEED_CONSTANT.search(text)
         or SEED_PARAM.search(text)
         or _yaml_seed_range_bound(path, text, before)
         or _seed_range_context(text, before)
-        or _episode_range_context(text, before, after)
         or (path.endswith(".py") and _environment_seed_continuation(text, before, after))
     ):
         return True
@@ -678,12 +795,16 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
     marked_block_lines: set[int] = set()
     file_lines: list[str] = []
     environment_seed_lines: set[int] = set()
+    episode_seed_lines: set[int] = set()
     for row in diff.splitlines():
         if row.startswith("+++ b/"):
             path = row[6:]
             file_lines, marked_block_lines = _diff_file_context(root, path)
             environment_seed_lines = (
                 _literal_environment_seed_lines(file_lines) if path.endswith(".py") else set()
+            )
+            episode_seed_lines = (
+                _episode_seed_lines("\n".join(file_lines), root) if path.endswith(".py") else set()
             )
             before = []
         elif row.startswith("@@ "):
@@ -694,6 +815,9 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                     before = file_lines[: line_number - 1]
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
+            episode_seed = line_number in episode_seed_lines or (
+                not file_lines and _episode_range_context(content, before, [], root)
+            )
             reference = _reference_finding(path, line_number, content, file_lines)
             if reference is not None:
                 findings.append(reference)
@@ -704,13 +828,14 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                 and not _line_marker_exempts(path, content)
                 and (
                     line_number in environment_seed_lines
+                    or episode_seed
                     or SEED.search(_normalize_integer_spellings(RANGE.sub("", content)))
                     or _range_overlaps_holdout(content)
-                    or _episode_range_context(content, before, file_lines[line_number:])
                     or _yaml_bounds_overlap(path, content, before, file_lines[line_number:])
                 )
                 and (
                     line_number in environment_seed_lines
+                    or episode_seed
                     or _seed_context(
                         path,
                         _normalize_integer_spellings(content),

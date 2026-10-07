@@ -2,6 +2,7 @@
 
 # seed-holdout: synthetic-fixture begin
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -149,9 +150,15 @@ def test_multiline_seed_range_overlapping_holdout_fails(
 @pytest.mark.parametrize(
     ("path", "added"),
     [
-        ("scripts/benchmark/run_pilot.py", "for seed in range(142): run_episode(seed)"),
-        ("scripts/benchmark/run_pilot.py", "for seed in range(110, 121, 5): run_episode(seed)"),
-        ("scripts/benchmark/run_pilot.py", "for seed in range(140, 110, -1): run_episode(seed)"),
+        ("scripts/benchmark/run_pilot.py", "for seed in range(142): run_episode(seed=seed)"),
+        (
+            "scripts/benchmark/run_pilot.py",
+            "for seed in range(110, 121, 5): run_episode(seed=seed)",
+        ),
+        (
+            "scripts/benchmark/run_pilot.py",
+            "for seed in range(140, 110, -1): run_episode(seed=seed)",
+        ),
         ("tests/benchmark/test_pilot.py", "seeds = list(range(142))"),
         ("tests/benchmark/test_pilot.py", "seeds = list(range(140, 110, -1))"),
     ],
@@ -163,14 +170,14 @@ def test_one_and_three_argument_seed_ranges_fail(tmp_path: Path, path: str, adde
 @pytest.mark.parametrize(
     "added",
     [
-        "for seed in range(0, 141, +1): run_episode(seed)",
-        "for seed in range(142,): run_episode(seed)",
-        "for seed in range(0, 141,): run_episode(seed)",
-        "for seed in range(1_00, 1_42): run_episode(seed)",
-        "for seed in range(0, 0x8e): run_episode(seed)",
-        "for seed in list(range(111, 141)): run_episode(seed)",
-        "for seed in tuple(range(111, 141)): run_episode(seed)",
-        "list(map(run_episode, range(111, 141)))",
+        "for seed in range(0, 141, +1): run_episode(seed=seed)",
+        "for seed in range(142,): run_episode(seed=seed)",
+        "for seed in range(0, 141,): run_episode(seed=seed)",
+        "for seed in range(1_00, 1_42): run_episode(seed=seed)",
+        "for seed in range(0, 0x8e): run_episode(seed=seed)",
+        "for seed in list(range(111, 141)): run_episode(seed=seed)",
+        "for seed in tuple(range(111, 141)): run_episode(seed=seed)",
+        "def run_episode(seed): pass\nlist(map(run_episode, range(111, 141)))",
     ],
 )
 def test_literal_range_spellings_and_wrappers_fail(tmp_path: Path, added: str) -> None:
@@ -178,17 +185,17 @@ def test_literal_range_spellings_and_wrappers_fail(tmp_path: Path, added: str) -
 
 
 def test_multiline_episode_range_fails(tmp_path: Path) -> None:
-    added = "for seed in range(111, 141):\n    run_episode(seed)"
+    added = "for seed in range(111, 141):\n    run_episode(seed=seed)"
     findings = check_diff(_diff("scripts/benchmark/run_pilot.py", added), tmp_path)
-    assert [(finding.line, finding.text) for finding in findings] == [(2, "run_episode(seed)")]
+    assert [(finding.line, finding.text) for finding in findings] == [(2, "run_episode(seed=seed)")]
 
 
 @pytest.mark.parametrize(
     "added",
     [
-        "for seed in range(111): run_episode(seed)",
-        "for seed in range(100, 111): run_episode(seed)",
-        "for seed in range(141, 110, -50): run_episode(seed)",
+        "for seed in range(111): run_episode(seed=seed)",
+        "for seed in range(100, 111): run_episode(seed=seed)",
+        "for seed in range(141, 110, -50): run_episode(seed=seed)",
     ],
 )
 def test_seed_ranges_outside_holdout_pass(tmp_path: Path, added: str) -> None:
@@ -399,7 +406,7 @@ def test_deletion_in_another_file_does_not_hide_new_episode_seed(tmp_path: Path)
         "environment_seed = 124",
         "world_seed = 125",
         'scenario["seeds"] = [111]',
-        "for seed in range(111, 141): run_episode(seed)",
+        "for seed in range(111, 141): run_episode(seed=seed)",
     ],
 )
 def test_direct_episode_seed_forms_fail(tmp_path: Path, added: str) -> None:
@@ -440,7 +447,7 @@ def test_parametrized_rejection_seed_that_steps_episode_fails(tmp_path: Path) ->
     file.write_text(
         decorator
         + "\ndef test_rejects_bad_seed(seed: int) -> None:\n"
-        + "    run_episode(seed)\n"
+        + "    run_episode(seed=seed)\n"
         + "    with pytest.raises(ValueError):\n"
         + "        reject(seed)\n"
     )
@@ -732,7 +739,8 @@ def test_string_seed_detection_keeps_unrelated_values_clear(
 
 
 @pytest.mark.parametrize(
-    "consumer", ["run_map_episode(s)", "execute_episode(s)", "env.reset(\n        seed=s,\n    )"]
+    "consumer",
+    ["run_map_episode(seed=s)", "execute_episode(seed=s)", "env.reset(\n        seed=s,\n    )"],
 )
 @pytest.mark.parametrize("complete_file", [False, True])
 def test_review_round1_episode_loop_forms(
@@ -752,7 +760,8 @@ def test_review_round1_episode_loop_forms(
 
 
 @pytest.mark.parametrize(
-    "consumer", ["run_map_episode(s)", "execute_episode(s)", "env.reset(\n        seed=s,\n    )"]
+    "consumer",
+    ["run_map_episode(seed=s)", "execute_episode(seed=s)", "env.reset(\n        seed=s,\n    )"],
 )
 def test_review_round1_episode_loop_dev_control(tmp_path: Path, consumer: str) -> None:
     """The same consumer forms stay clear on development ranges."""
@@ -797,6 +806,172 @@ def test_review_round1_multiline_environment_control(tmp_path: Path, key: str, v
     content = f'os.environ["{key}"] = (\n    "{value}"\n)\n'
     _write(tmp_path, path, content)
     assert check_diff(_file_diff(path, content), tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    ["run_map_episode(s)", "execute_episode(s)", "env.reset(\n            seed=s,\n        )"],
+)
+def test_review_round2_added_heldout_loop_after_indented_existing_block(tmp_path, consumer):
+    path = "scripts/benchmark/pilot.py"
+    prefix = (
+        "def run_map_episode(seed): pass\ndef execute_episode(seed): pass\ndef pilot(env):\n    if env is not None:\n"
+        + "        prepare_env(env)\n" * 21
+    )
+    added = "    for s in range(111, 141):\n        " + consumer + "\n"
+    source = prefix + added
+    ast.parse(source)  # entire changed file is ordinary valid Python
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text(source)
+    start = len(prefix.splitlines()) - 2
+    lines = added.splitlines()
+    diff = f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -{start},3 +{start},{3 + len(lines)} @@\n"
+    diff += "".join(" " + line + "\n" for line in prefix.splitlines()[-3:])
+    diff += "".join("+" + line + "\n" for line in lines)
+    findings = check_diff(diff, tmp_path)
+    assert findings, (
+        "literal held-out range feeds an accepted episode consumer but was missed with full file context"
+    )
+
+
+def test_review_round2_indented_environment_literal_diff_only(tmp_path):
+    path = "scripts/benchmark/pilot.py"
+    source = 'def setup():\n    os.environ["SEEDS"] = (\n        "111,112"\n    )\n'
+    ast.parse(source)
+    diff = (
+        f"diff --git a/{path} b/{path}\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,4 @@\n"
+        + "".join("+" + line + "\n" for line in source.splitlines())
+    )
+    findings = check_diff(diff, tmp_path)
+    assert findings, (
+        "indented literal environment seed assignment missed in documented diff-only mode"
+    )
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    ["run_map_episode(s)", "execute_episode(s)", "env.reset(\n            seed=s,\n        )"],
+)
+def test_review_round2_same_indented_loop_context_with_dev_seeds(tmp_path, consumer):
+    path = "scripts/benchmark/pilot.py"
+    prefix = (
+        "def run_map_episode(seed): pass\ndef execute_episode(seed): pass\ndef pilot(env):\n    if env is not None:\n"
+        + "        prepare_env(env)\n" * 21
+    )
+    added = "    for s in range(1001, 1031):\n        " + consumer + "\n"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text(prefix + added)
+    lines = added.splitlines()
+    start = len(prefix.splitlines()) - 2
+    diff = (
+        f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -{start},3 +{start},{3 + len(lines)} @@\n"
+    )
+    diff += "".join(" " + line + "\n" for line in prefix.splitlines()[-3:])
+    diff += "".join("+" + line + "\n" for line in lines)
+    assert check_diff(diff, tmp_path) == []
+
+
+@pytest.mark.parametrize("key,value", [("SEEDS", "1001,1002"), ("COUNTS", "111,112")])
+def test_review_round2_same_indented_environment_with_safe_values(tmp_path, key, value):
+    path = "scripts/benchmark/pilot.py"
+    source = f'def setup():\n    os.environ["{key}"] = (\n        "{value}"\n    )\n'
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -0,0 +1,4 @@\n" + "".join(
+        "+" + line + "\n" for line in source.splitlines()
+    )
+    assert check_diff(diff, tmp_path) == []
+
+
+@pytest.mark.parametrize("seed_range", ["111, 141", "50036, 50038"])
+def test_review_round2_real_runner_positional_seed_argument(tmp_path, seed_range):
+    # Verify the actual committed API: scenario_params first, seed second.
+    tree = ast.parse((Path(__file__).parents[2] / "robot_sf/benchmark/runner.py").read_text())
+    signature = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run_episode"
+    )
+    assert [a.arg for a in signature.args.args[:2]] == ["scenario_params", "seed"]
+    path = "scripts/benchmark/pilot.py"
+    _write(
+        tmp_path,
+        "robot_sf/benchmark/runner.py",
+        (Path(__file__).parents[2] / "robot_sf/benchmark/runner.py").read_text(),
+    )
+    source = (
+        "from robot_sf.benchmark.runner import run_episode\n"
+        + f"for s in range({seed_range}):\n    run_episode({{}}, s)\n"
+    )
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text(source)
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -0,0 +1,3 @@\n" + "".join(
+        "+" + line + "\n" for line in source.splitlines()
+    )
+    assert check_diff(diff, tmp_path), (
+        "real runner consumes sealed/retired seed as its second positional argument"
+    )
+
+
+def test_review_round2_real_runner_positional_dev_seed_argument(tmp_path):
+    path = "scripts/benchmark/pilot.py"
+    source = "from robot_sf.benchmark.runner import run_episode\nfor s in range(1001, 1031):\n    run_episode({}, s)\n"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text(source)
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -0,0 +1,3 @@\n" + "".join(
+        "+" + line + "\n" for line in source.splitlines()
+    )
+    assert check_diff(diff, tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("definition", "consumer", "reject"),
+    [
+        ("def run_episode(scenario_params, seed): pass", "run_episode({}, s)", True),
+        ("def run_episode(scenario_params, seed): pass", "run_episode(s, 1001)", False),
+        ("def execute_episode(data, *, seed): pass", "execute_episode({}, seed=s)", True),
+        ("def execute_episode(data, *, seed): pass", "execute_episode(s, seed=1001)", False),
+        ("def run_map_episode(data, seed, /): pass", "run_map_episode({}, s)", True),
+        ("", "execute_episode(s)", False),
+        ("", "run_map_episode(s)", False),
+        ("", "run_episode(s)", False),
+        ("", "execute_episode(seed=s)", True),
+        ("", "run_map_episode(seed=s)", True),
+        ("", "run_episode(seed=s)", True),
+        ("def run_episode(data, seed): pass", "run_episode(*data, s)", False),
+        ("def run_episode(seed): pass\nrun_episode = other", "run_episode(s)", False),
+        ("def record_count(seed): pass", "record_count(s)", False),
+    ],
+)
+@pytest.mark.parametrize("complete_file", [False, True])
+def test_signature_binding_contract(tmp_path, definition, consumer, reject, complete_file):
+    """Only the named seed parameter may bind a positional loop variable."""
+    path = "scripts/benchmark/pilot.py"
+    source = definition + "\nfor s in range(111, 141):\n    " + consumer + "\n"
+    if complete_file:
+        _write(tmp_path, path, source)
+    assert bool(check_diff(_file_diff(path, source), tmp_path)) == reject
+
+
+@pytest.mark.parametrize(
+    ("import_line", "consumer"),
+    [
+        ("from robot_sf.benchmark.runner import run_episode as play", "play({}, s)"),
+        ("import robot_sf.benchmark.runner as runner", "runner.run_episode({}, s)"),
+        ("import robot_sf.benchmark.runner", "robot_sf.benchmark.runner.run_episode({}, s)"),
+    ],
+)
+def test_imported_runner_alias_binding(tmp_path, import_line, consumer):
+    """Imported aliases use the actual second seed parameter, without importing code."""
+    path = "scripts/benchmark/pilot.py"
+    _write(
+        tmp_path,
+        "robot_sf/benchmark/runner.py",
+        (Path(__file__).parents[2] / "robot_sf/benchmark/runner.py").read_text(),
+    )
+    source = import_line + "\nfor s in range(111, 141):\n    " + consumer + "\n"
+    _write(tmp_path, path, source)
+    assert check_diff(_file_diff(path, source), tmp_path)
 
 
 # seed-holdout: synthetic-fixture end

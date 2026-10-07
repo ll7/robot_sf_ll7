@@ -327,6 +327,9 @@ class SimulationSettings:
     ped_radius: float = 0.4
     """Pedestrian radius"""
 
+    ped_force_radius: float | None = None
+    """Opt-in force-kernel radius; None retains fast-pysf's legacy 0.35 m."""
+
     pedestrian_uncertainty_envelope_enabled: bool = False
     """Whether planner configs should opt into horizon-dependent pedestrian inflation."""
 
@@ -447,6 +450,9 @@ class SimulationSettings:
     """Optional standard deviation (m/s) of the decoupled desired-speed
     distribution. Ignored unless ``desired_speed_mean`` (or ``ped_speed_tier``)
     is set."""
+    desired_speed_truncated: bool = False
+    """Use rejection-truncated N(mean, std) on [0, 3] instead of legacy clipping."""
+
     desired_speed_seed: int | None = None
     """Optional RNG seed for deterministic desired-speed sampling (issue #4972)."""
     debug_without_robot_movement: bool = False
@@ -670,6 +676,10 @@ class SimulationSettings:
         # Check that the pedestrian radius is positive
         if self.ped_radius <= 0:
             raise ValueError("Pedestrian radius mustn't be negative or zero!")
+        if self.ped_force_radius is not None and (
+            not isfinite(self.ped_force_radius) or self.ped_force_radius <= 0
+        ):
+            raise ValueError("ped_force_radius must be finite and positive")
         self._validate_pedestrian_uncertainty_envelope_config()
         # Check that the non-reactive response multiplier is finite and >= 0
         if (

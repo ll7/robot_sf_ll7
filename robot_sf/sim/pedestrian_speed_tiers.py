@@ -89,6 +89,8 @@ def sample_desired_pedestrian_speeds(
     std: float | None = None,
     high: float = PED_SPEED_TIER_HIGH,
     seed: int | None = None,
+    *,
+    truncate: bool = False,
 ) -> np.ndarray:
     """Sample per-pedestrian desired walking speeds from a truncated normal distribution.
 
@@ -103,6 +105,8 @@ def sample_desired_pedestrian_speeds(
             (0.2 m/s), matching the pysf ``DEFAULT_DESIRED_SPEED_STD`` constant.
         high: Inclusive upper-bound clip for the distribution (m/s).
         seed: Optional RNG seed for deterministic sampling.
+        truncate: Opt into rejection truncation on [0, high], retaining legacy clipping
+            when false.
 
     Returns:
         np.ndarray: Non-negative desired speeds, shape ``(num_peds,)``.
@@ -115,6 +119,13 @@ def sample_desired_pedestrian_speeds(
         speeds = rng.normal(loc=float(mean), scale=std_eff, size=num_peds)
     else:
         speeds = np.full(num_peds, float(mean), dtype=float)
+    if truncate:
+        if not np.isfinite(high) or high <= 0 or not 0 <= mean <= high:
+            raise ValueError("truncated speeds require finite high > 0 and mean in [0, high]")
+        outside = (speeds < 0) | (speeds > high)
+        while np.any(outside):
+            speeds[outside] = rng.normal(loc=float(mean), scale=std_eff, size=int(outside.sum()))
+            outside = (speeds < 0) | (speeds > high)
     return np.clip(speeds, 0.0, float(high))
 
 

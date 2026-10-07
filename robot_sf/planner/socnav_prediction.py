@@ -960,6 +960,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple: Local positions and headings at each prediction sample.
         """
+        if observation is None and len(commands) > 0:
+            raise ValueError("Bound prediction requires a measured-motion observation")
         state, _, _ = self._socnav_fields(observation or {})
         drive = DifferentialDriveRobot(self._prediction_drive_settings)
         drive.state.velocity = (
@@ -1003,8 +1005,6 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if self._prediction_drive_settings is not None:
             if steps == 0:
                 return np.zeros((0, 2))
-            if observation is None:
-                raise ValueError("Bound prediction requires a measured-motion observation")
             positions, _ = self._bound_drive_rollout(
                 np.tile((v, w), (steps, 1)),
                 dt,

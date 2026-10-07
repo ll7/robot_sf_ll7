@@ -1588,7 +1588,7 @@ def test_guard_grid_refuses_missing_or_out_of_bounds_static_channel(indices):
         GuardedPPOAdapter()._min_obstacle_clearance(np.zeros(2), observation)
 
 
-@pytest.mark.parametrize("helper", ["progress", "collision", "clearance", "ttc"])
+@pytest.mark.parametrize("helper", ["progress", "collision", "clearance", "ttc", "sequence"])
 def test_bound_prediction_helpers_refuse_unspecified_measured_motion(helper):
     """Standalone bound forecasts must not silently substitute rest for unknown motion."""
     adapter = PredictionPlannerAdapter(SocNavPlannerConfig())
@@ -1602,5 +1602,7 @@ def test_bound_prediction_helpers_refuse_unspecified_measured_motion(helper):
             adapter._collision_cost(**kwargs)
         elif helper == "clearance":
             adapter._min_clearance(**kwargs)
-        else:
+        elif helper == "ttc":
             adapter._ttc_penalty(**kwargs)
+        else:
+            adapter._rollout_robot_sequence(sequence=[(1.0, 0.0)], segment_steps=3, dt=0.2)

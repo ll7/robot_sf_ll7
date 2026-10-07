@@ -12,8 +12,9 @@
   return paths, raise types, call sites, dependency layer, and statically provable semantic
   features (`None`/bool/coercion policies, whitespace stripping, non-finite handling, etc.);
   unprovable features are `unknown` — similarity of names is never treated as equivalence.
-- Full report (SHA-256 in `receipt.json`): `output/validation_helper_inventory.json`
-  (ignored, worktree-local).
+- The full report SHA-256 is recorded in `receipt.json`, but its disposable worktree-local bytes
+  are unavailable. No durable retrieval pointer exists; this README and receipt are the retained
+  compact inventory.
 
 ## Candidate clusters
 

@@ -57,6 +57,8 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.constants import (
     COMFORT_FORCE_THRESHOLD,
+    CURVATURE_LENGTH_FLOOR_M,
+    CURVATURE_MIN_DISPLACEMENT_M,
 )
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
@@ -65,6 +67,7 @@ from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
     METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
     require_anchor_compatibility,
 )
 from robot_sf.benchmark.metric_definitions import (
@@ -98,10 +101,6 @@ ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
-# D-055: sub-millimetre displacements are standstill, independent of timestep.
-CURVATURE_MIN_DISPLACEMENT_M = 1e-3
-# Bound total turning on short paths without changing the turning numerator.
-CURVATURE_LENGTH_FLOOR_M = 1.0
 
 
 @dataclass
@@ -3485,7 +3484,10 @@ def compute_all_metrics(  # noqa: PLR0913
             "Missing pedestrian force data; force-based metrics will be NaN.",
         )
 
-    values: dict[str, Any] = {"metric_schema_version": METRIC_SCHEMA_VERSION}
+    values: dict[str, Any] = {
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "metric_definitions_sha256": metric_definitions_sha256(),
+    }
     if isinstance(data.episode_metadata, dict):
         values["_episode_metadata"] = dict(data.episode_metadata)
     values.update(_compute_signal_metrics_block(data))

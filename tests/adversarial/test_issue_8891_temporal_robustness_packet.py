@@ -46,7 +46,7 @@ def test_packet_is_source_bound_and_diagnostic_only(packet: dict) -> None:
 def test_packet_separates_immutable_and_working_tree_source_hashes(packet: dict) -> None:
     result = validate_packet(packet, repo_root=ROOT)
     assert result["status"] == "ok"
-    for input_id in ("robustness", "samplers", "runner", "benchmark_runner"):
+    for input_id in ("robustness", "samplers", "runner", "benchmark_runner", "benchmark_constants"):
         source_input = packet["source"]["inputs"][input_id]
         assert source_input["sha256"] != source_input["working_tree_sha256"]
 

@@ -54,18 +54,37 @@ def _v2_contract_body(*, status: str, issues: str, relates: str = "[]") -> str:
     return _V2_CONTRACT_BODY_TEMPLATE.format(status=status, issues=issues, relates=relates)
 
 
-def test_standalone_and_readiness_reject_invalid_v2_with_shared_reasons() -> None:
-    body = _v2_contract_body(status="issues", issues="[9488]", relates="[9488]")
+@pytest.mark.parametrize(
+    ("status", "relates", "expected_reason"),
+    [
+        pytest.param("issues", "[]", "deferred_work.status must be one of", id="invalid-status"),
+        pytest.param(
+            "open",
+            "[9488]",
+            "linked_issues and deferred_work contain duplicate issue references",
+            id="duplicate-reference",
+        ),
+    ],
+)
+def test_standalone_and_readiness_reject_invalid_v2_with_shared_reasons(
+    status: str, relates: str, expected_reason: str
+) -> None:
+    body = _v2_contract_body(status=status, issues="[9488]", relates=relates)
     parsed = parse_pr_contract_v2(body, source="fixture")
     followups = analyze_pr_followups(body, source="fixture")
     blockers, _, _ = pr_contract_check.run_all_checks(
-        "contract parity", body, [], "ll7/robot_sf_ll7", "missing-base", None
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
     )
 
     assert parsed.status == "malformed"
     assert followups.status == "malformed_v2_contract"
-    assert any("deferred_work.status must be one of" in reason for reason in parsed.errors)
-    assert "linked_issues and deferred_work contain duplicate issue references" in parsed.errors
+    assert len(parsed.errors) == 1
+    assert expected_reason in parsed.errors[0]
     for reason in parsed.errors:
         assert reason in followups.message
         assert any(reason in blocker for blocker in blockers)
@@ -75,7 +94,12 @@ def test_standalone_and_readiness_accept_valid_v2_no_deferred_work() -> None:
     body = _v2_contract_body(status="none", issues="[]", relates="[9488]")
     followups = analyze_pr_followups(body, source="fixture")
     blockers, _, _ = pr_contract_check.run_all_checks(
-        "contract parity", body, [], "ll7/robot_sf_ll7", "missing-base", None
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
     )
 
     assert followups.status == "ok"
@@ -93,7 +117,12 @@ Legacy Markdown contract.
     parsed = parse_pr_contract_v2(body, source="fixture")
     followups = analyze_pr_followups(body, source="fixture")
     blockers, _, _ = pr_contract_check.run_all_checks(
-        "contract parity", body, [], "ll7/robot_sf_ll7", "missing-base", None
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
     )
 
     assert parsed.status == "absent"

@@ -1093,6 +1093,12 @@ def _classify_issue(  # noqa: PLR0913 - explicit gate inputs keep precedence aud
             "covering_pr_open",
         ),
         (
+            "state:blocked-dependency" in labels,
+            "blocked",
+            "a dependency blocking label is present: state:blocked-dependency",
+            "dependency_missing",
+        ),
+        (
             bool(blocking_present),
             "blocked",
             "a blocking workflow label is present: " + ", ".join(blocking_present),

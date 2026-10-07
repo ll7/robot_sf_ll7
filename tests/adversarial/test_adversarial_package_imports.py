@@ -19,6 +19,19 @@ def test_adversarial_package_import_does_not_eagerly_load_search() -> None:
     subprocess.run([sys.executable, "-c", code], check=True)
 
 
+def test_objectives_import_resolves_v2_without_loading_deferred_api() -> None:
+    """Direct objective lookup registers v2 without loading the deferred package API."""
+
+    code = (
+        "import sys\n"
+        "from robot_sf.adversarial.objectives import get_objective\n"
+        "objective = get_objective('constraints_first_lexicographic_v2')\n"
+        "assert callable(objective)\n"
+        "assert 'robot_sf.adversarial._api' not in sys.modules\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
 def test_adversarial_search_reexport_is_lazy() -> None:
     """The package-level search re-export resolves through module __getattr__."""
 

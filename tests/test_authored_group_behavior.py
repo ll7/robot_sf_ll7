@@ -13,7 +13,7 @@ def _simulator(kind):
     scenario = dict(load_scenarios(path)[0])
     scenario["seeds"] = [1001]
     config = build_robot_config_from_scenario(scenario, scenario_path=path)
-    config.sim_config.seed = 1001
+    config.sim_config.pedestrian_seed = 1001
     map_def = next(iter(config.map_pool.map_defs.values()))
     simulator = init_simulators(config, map_def, num_robots=1, random_start_pos=False)[0]
     simulator.reset_state()

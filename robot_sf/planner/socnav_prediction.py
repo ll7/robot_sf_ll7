@@ -1928,15 +1928,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return best
 
     def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
+        """Return execution diagnostics, including before adapter initialization."""
         return {
             "planner_type": "PredictionPlannerAdapter",
             "prediction_execution_contract": (
                 "native_motion_static_footprint_v2"
-                if self._prediction_drive_settings is not None
+                if getattr(self, "_prediction_drive_settings", None) is not None
                 else "unbound_command_rollout_v1"
             ),
-            "static_geometry_bound": self._static_obstacle_geometry is not None,
+            "static_geometry_bound": getattr(self, "_static_obstacle_geometry", None) is not None,
         }
 
 

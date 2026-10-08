@@ -841,6 +841,7 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
                 "bitwise_identical": None,
                 "first_divergence": None,
                 "repeat_fingerprints": [],
+                "repeat_diagnostics": result.get("repeat_diagnostics", []),
             }
             verified_targets.append(verified)
             by_cell[key[:2]].append(verified)
@@ -1551,6 +1552,18 @@ def _build_executed_target_result(
         The classified result entry for the executed target.
     """
     any_degraded, any_isolation = _classify_repeat_failure(records)
+    repeat_diagnostics = [
+        {
+            "repeat_index": index,
+            "algorithm_metadata": _safe_json_value(record.get("algorithm_metadata", {})),
+            "worker_events": _safe_json_value(
+                (record.get("algorithm_metadata") or {})
+                .get("policy_step_timeout", {})
+                .get("worker_events", [])
+            ),
+        }
+        for index, record in enumerate(records)
+    ]
     if records and any_isolation:
         return {
             "scenario_id": key[0],
@@ -1559,6 +1572,7 @@ def _build_executed_target_result(
             "horizon": int(target["horizon"]),
             "source_config_hash": target["source_config_hash"],
             "repeats": [],
+            "repeat_diagnostics": repeat_diagnostics,
             "isolation_failure": True,
             "disposition": PROCESS_ISOLATION_DISPOSITION,
             "disposition_reason": (
@@ -1577,6 +1591,7 @@ def _build_executed_target_result(
             "horizon": int(target["horizon"]),
             "source_config_hash": target["source_config_hash"],
             "repeats": [],
+            "repeat_diagnostics": repeat_diagnostics,
             "degraded": True,
             "disposition": UNRUNNABLE_DISPOSITION,
             "disposition_reason": (

@@ -369,6 +369,8 @@ def _handshake_runner(connection: _HandshakeConnection) -> object:
     step_runner._ctx = context
     step_runner._process = None
     step_runner._conn = None
+    step_runner._stderr = None
+    step_runner.worker_events = []
     return step_runner
 
 

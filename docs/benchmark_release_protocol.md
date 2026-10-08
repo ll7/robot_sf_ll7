@@ -256,7 +256,15 @@ The release entrypoint:
 The matrix setup gate uses the release manifest's checksummed matrix and seed set without
 development-matrix or seed overrides. It requires 0.10 m surface clearance and checks the robot
 footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
-robot stationary for 20 steps to catch early route-end respawn overlap. A conservative grid block
+robot stationary for 20 steps to catch early route-end respawn overlap. A pedestrian walking
+into the parked robot is recorded separately from respawn failure.
+After a positively identified pedestrian-only episode end, the separate preflight environment
+continues through the public simulator/state APIs for the remaining stationary steps, without
+resetting or clearing terminal flags. Contact flags and their window steps are retained in
+`respawn_safety.contact_events`; `step1_collision` reports only measured first-step contact.
+Actual respawn overlaps, robot motion, timeouts, truncation and unknown or other termination
+causes still block. This continuation belongs only to the preflight environment, which is closed
+after the check; campaign episodes retain their normal termination behavior. A conservative grid block
 can be cleared only by a continuous-geometry proof. There are two proofs. The buffered proof
 buffers obstacles and insets map bounds by the robot radius plus the clearance margin, then
 requires every ordered route leg to share free space. The exact straight-segment certificate is

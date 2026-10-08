@@ -680,13 +680,30 @@ def _check_footprint_path(
     return reachability, passage
 
 
-def _check_respawn_window(  # noqa: C901
+def _step_respawn_diagnostic(env: Any, zero_action: np.ndarray) -> tuple[bool, bool, dict]:
+    """Advance the separate preflight world after a pedestrian-contact episode end.
+
+    Use the public simulator/state APIs also used by ``RobotEnv.step``. Do not
+    call Gym's episode step after terminal, reset, clear terminal flags, compute
+    rewards, or change campaign configuration. The caller checks stationarity,
+    respawn ledgers and termination causes after every diagnostic step.
+
+    Returns:
+        Current state termination and contact metadata (no Gym truncation).
+    """
+    actions = [robot.parse_action(zero_action) for robot in env.simulator.robots]
+    env.simulator.step_once(actions)
+    env.state.step()
+    return bool(env.state.is_terminal), False, {"meta": env.state.meta_dict()}
+
+
+def _check_respawn_window(  # noqa: C901, PLR0912
     env: Any, *, window_steps: int
 ) -> dict[str, Any]:
     """Keep a robot at zero action and detect fallback respawns inside its footprint.
 
     Returns:
-        Respawn safety status, reason, and observed overlap details.
+        Respawn safety status, observed overlaps and independently measured contacts.
     """
     simulator = env.simulator
     pedestrian_count = len(getattr(simulator, "ped_pos", []))
@@ -728,8 +745,41 @@ def _check_respawn_window(  # noqa: C901
     zero_action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
     first_event: dict[str, Any] | None = None
     max_translation = 0.0
+    contacts: list[dict[str, Any]] = []
+    observations: dict[str, Any] = {
+        "contact_events": contacts,
+        "step1_collision": False,
+        "diagnostic_continuation_steps": 0,
+    }
+    diagnostic_continuation = False
     for step in range(1, window_steps + 1):
-        _observation, _reward, terminated, truncated, _info = env.step(zero_action)
+        if diagnostic_continuation:
+            terminated, truncated, info = _step_respawn_diagnostic(env, zero_action)
+            observations["diagnostic_continuation_steps"] += 1
+        else:
+            _observation, _reward, terminated, truncated, info = env.step(zero_action)
+        meta = info.get("meta", info) if isinstance(info, dict) else {}
+        meta = meta if isinstance(meta, dict) else {}
+        contact_flags = {
+            flag: bool(meta.get(flag))
+            for flag in (
+                "is_pedestrian_collision",
+                "is_obstacle_collision",
+                "is_robot_collision",
+            )
+        }
+        collision = any(contact_flags.values())
+        if step == 1:
+            observations["step1_collision"] = collision
+        if collision:
+            contacts.append(
+                {
+                    "step": step,
+                    **contact_flags,
+                    "terminated": bool(terminated),
+                    "truncated": bool(truncated),
+                }
+            )
         for robot, (start_xy, start_heading) in zip(simulator.robots, initial_poses, strict=True):
             max_translation = max(
                 max_translation,
@@ -740,6 +790,7 @@ def _check_respawn_window(  # noqa: C901
             )
             if max_translation > 1.0e-4 or heading_delta > 1.0e-4:
                 return {
+                    **observations,
                     "status": "invalid",
                     "reason": "robot_did_not_remain_stationary",
                     "steps_checked": step,
@@ -750,15 +801,38 @@ def _check_respawn_window(  # noqa: C901
             if new_events and first_event is None:
                 first_event = dict(new_events[0])
         if terminated or truncated:
-            return {
-                "status": "invalid",
-                "reason": "episode_ended_before_respawn_window",
-                "steps_checked": step,
-                "window_steps": window_steps,
-            }
+            # Only a positively identified pedestrian-only episode end permits
+            # continuation. Missing cause metadata, timeout, goal completion,
+            # other contacts and truncation remain fail-closed.
+            pedestrian_only = (
+                terminated
+                and not truncated
+                and contact_flags["is_pedestrian_collision"]
+                and all(
+                    flag in meta and not meta[flag]
+                    for flag in (
+                        "is_obstacle_collision",
+                        "is_robot_collision",
+                        "is_timesteps_exceeded",
+                        "is_route_complete",
+                    )
+                )
+                and not meta.get("rollover_critical")
+                and not info.get("rollover_critical")
+            )
+            if not pedestrian_only:
+                return {
+                    **observations,
+                    "status": "invalid",
+                    "reason": "episode_ended_before_respawn_window",
+                    "steps_checked": step,
+                    "window_steps": window_steps,
+                }
+            diagnostic_continuation = True
 
     if first_event is not None:
         return {
+            **observations,
             "status": "fail",
             "reason": "pedestrian_respawn_inside_robot_exclusion_radius",
             "steps_checked": window_steps,
@@ -766,6 +840,7 @@ def _check_respawn_window(  # noqa: C901
             "max_robot_translation_m": round(max_translation, 6),
         }
     return {
+        **observations,
         "status": "pass",
         "reason": "no_respawn_inside_robot_exclusion_radius",
         "steps_checked": window_steps,
@@ -911,10 +986,7 @@ def _check_release_scenario(  # noqa: C901
                     env,
                     window_steps=respawn_window_steps,
                 )
-            row["step1_collision"] = bool(
-                row["respawn_safety"].get("first_overlap_event")
-                or row["respawn_safety"].get("reason") == "episode_ended_before_respawn_window"
-            )
+            row["step1_collision"] = bool(row["respawn_safety"].get("step1_collision", False))
         # A failing cell must remain visible as invalid rather than disappear.
         except Exception as exc:  # noqa: BLE001
             row["cell_error"] = f"{type(exc).__name__}: {exc}"

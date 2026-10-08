@@ -68,6 +68,7 @@ Each single pedestrian is defined by:
   Use `role_target_id: "robot:0"` to target the first robot (default).
 - `join` steers toward a target pedestrian group and attaches once within the goal threshold.
   Use `role_target_id` to reference another pedestrian id.
+- `leave` detaches from the current group once per episode, then follows its trajectory/goal.
 
 For a join scenario, give the waiting anchors the same `initial_group_id` and leave the
 joiner's label unset. For a leave scenario, give the leaver and anchors the same label.
@@ -75,7 +76,6 @@ Episode reset restores these initial memberships. `social_groups` remains diagno
 shared-space metadata and does not create physics groups. A joiner can set `join_radius_m`
 to reach the group without having to overcome social repulsion at a waypoint-sized threshold;
 when omitted, the existing waypoint threshold still applies. The join scenario uses 0.8 m.
-- `leave` detaches from the current group once per episode, then follows its trajectory/goal.
 
 ### Wait Rule Format
 

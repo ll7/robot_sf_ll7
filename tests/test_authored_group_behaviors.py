@@ -20,7 +20,7 @@ def group_simulator():
         scenario = load_scenarios(path)[0]
         set_global_seed(1001)
         config = build_robot_config_from_scenario(scenario, scenario_path=path)
-        config.route_spawn_seed = 1001
+        config.sim_config.route_spawn_seed = 1001
         map_def = next(iter(config.map_pool.map_defs.values()))
         sim = init_simulators(config, map_def, num_robots=1, random_start_pos=False)[0]
         sim.reset_state()

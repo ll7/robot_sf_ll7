@@ -1506,6 +1506,12 @@ def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ign
     return not _should_collect_in_lane(path_obj.as_posix(), lane)
 
 
+_FAST_NODE_IDS = {
+    "tests/benchmark/test_spawn_preflight_respawn_window.py::test_contact_continuation_preserves_negative_controls",
+    "tests/benchmark/test_spawn_preflight_respawn_window.py::test_release_step1_collision_is_measured",
+}
+
+
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
     """Admit affected explicit slow tests; all other tests are fast by default."""
     config.addinivalue_line("markers", "affected: test affected by the committed PR diff")
@@ -1518,6 +1524,11 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-d
             if item_path.is_relative_to(root)
             else item_path.as_posix()
         )
+        if (
+            relative == "tests/benchmark/test_spawn_preflight_respawn_window.py"
+            and item.nodeid.split("[", maxsplit=1)[0] not in _FAST_NODE_IDS
+        ):
+            item.add_marker(pytest.mark.slow)
         if relative in affected:
             item.add_marker(pytest.mark.affected)
 

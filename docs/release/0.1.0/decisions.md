@@ -675,11 +675,16 @@ per-episode and per-scenario tables, every failure classification and completion
 audit are bound by the SHA-256 manifest above. The uncompressed bundle manifest
 has SHA-256 `0a838a7c733580d12294b7ec2968a4f9abbfb08fe9b19464dcffd1fa1fd67afa`.
 Storage locations: `wandb://ll7/robot_sf/campaign-hybrid_defaults_010_20261008:v0`
-and `cluster-login:evidence/hybrid_defaults_010_20261008/`. The latter is the
-private login-node location requested by the author; its transport hostname and
-home path are kept in the private lane report. No cluster jobs run.
+and `imech192:~/evidence/hybrid_defaults_010_20261008/`. The second location is
+the verified cluster login-node copy requested by the author. No cluster jobs run.
 The repository preservation route is
 [the approved W&B backend](../../context/issue_3075_durable_artifact_backend.md)
 and [restore-tested custody](../../context/artifact_retention_and_cleanup.md).
 Read-back results and commands are recorded in
 `docs/validation/hybrid_defaults/preservation_receipt.json`.
+
+**Follow-up, independent review 2026-10-08:** The remaining opt-in static
+exclusion narrow-hallway defect is tracked in
+[#10242](https://github.com/ll7/robot_sf_ll7/issues/10242). It does not block the
+validity-plus-sensor default above. Domain-Aware Approval remains pending until
+an independent reviewer grants it; the builder cannot approve its own work.

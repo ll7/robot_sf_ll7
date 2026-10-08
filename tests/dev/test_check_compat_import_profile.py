@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import scripts.dev.check_compat_import_profile as compat_profile
 from scripts.dev.check_compat_import_profile import COMPAT_TEST_DIRS, check_profile
 
@@ -366,3 +368,36 @@ def test_transitive_owner_import_is_checked(tmp_path: Path) -> None:
     assert any(
         "heavy_thing" in error and "definitely_not_installed_xyz" in error for error in errors
     )
+
+
+@pytest.mark.parametrize(
+    "owner,dependencies",
+    [
+        ("robot_sf/baselines/pinned_actor.py", ("torch",)),
+        ("robot_sf/_numerical_mode.py", ("torch", "threadpoolctl")),
+    ],
+)
+def test_pinned_learned_owner_registration_is_deferred_and_scoped(
+    tmp_path: Path, owner: str, dependencies: tuple[str, ...]
+) -> None:
+    """Pinned learned helpers may defer optional dependencies, but cannot expand the profile."""
+    module = owner.removesuffix(".py").replace("/", ".")
+    imports = "".join(f"    import {dependency}\n" for dependency in dependencies)
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_owner.py": f"import {module}\n",
+            owner: f"def load():\n{imports}",
+        },
+    )
+    errors, report = check_profile(tmp_path)
+    assert errors == []
+    assert all(dependency in report for dependency in dependencies)
+
+    # Registration permits neither another dependency nor eager optional imports.
+    (tmp_path / owner).write_text("def load():\n    import unregistered_dependency\n")
+    errors, _ = check_profile(tmp_path)
+    assert any("unregistered_dependency" in error for error in errors)
+    (tmp_path / owner).write_text("import torch\n")
+    errors, _ = check_profile(tmp_path)
+    assert any("torch" in error and "collection" in error for error in errors)

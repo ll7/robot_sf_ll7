@@ -17,6 +17,14 @@ Only compact artifacts in this PR receive catalog/registry bookkeeping.
 The earlier 1440-row actor-free sweep validates default-OFF preservation only.
 Its ON equality is tautological for pedestrian changes, and supplies no evidence
 of pedestrian interaction correctness. The complete behaviour gate remains open:
-other planner arms unrun, width goal metric-reference rejection and width MPPI
-predictor-contract rejection (issue #10180). Populated probes are domain review
+Current main fixes the width diagnostic SNQI reference and respawn-window validation.
+The updated-head full dev sweep must classify every failed, missing or degraded slot.
+Width MPPI still rejects horizon 12 against eight-step forecast support; the compatible
+successor binding belongs to #10186. Historical #10180 layer attribution is not
+current-head causal repair or contact acceptance. Populated probes are domain review
 evidence and do not close that gate.
+
+Diagnostic-development landing requires an author disposition naming the claim, current-main
+comparator, fallback/degraded exclusions and evidence tier. Until then this PR stays draft;
+model adoption and default promotion remain blocked. Historical custody pointers have not
+been hydrated or independently replayed in this repair.

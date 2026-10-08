@@ -42,6 +42,10 @@ The scenario-window preparation dossier is documented in
 and its machine-readable record; it remains a preparation-only packet with no empirical or
 benchmark claim.
 
+Issue #9654's fixture-backed feasibility-frontier report contract is documented in
+[adversarial_feasibility_frontier.md](adversarial_feasibility_frontier.md); real empirical
+acceptance depends on a persisted multi-round loop from Issue #9653.
+
 The route-side and homotopy observability contract is documented in
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
 analysis-only diagnostic for planner-route observability, not evidence of human preference or

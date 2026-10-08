@@ -172,6 +172,8 @@ class PedSpawnConfig:
     response_law_composition: dict[str, float] | None = None
     response_law_seed: int | None = None
     force_population_size: int | None = None
+    group_allocation_mode: str = "legacy"
+    group_fraction: float | None = None
     rng: np.random.Generator | None = field(default=None, repr=False)
 
     def __post_init__(self):
@@ -179,6 +181,7 @@ class PedSpawnConfig:
         Ensures that `group_member_probs` has exactly `max_group_members`
         elements by creating a power-law distributed list if needed.
         """
+        self._validate_group_allocation()
         if self.rng is None:
             self.rng = np.random.default_rng(self.route_spawn_seed)
         if len(self.group_member_probs) != self.max_group_members:
@@ -199,6 +202,59 @@ class PedSpawnConfig:
                     "archetype_speed_factors must be provided when archetype_composition is set"
                 )
             validate_composition(self.archetype_composition, self.archetype_speed_factors)
+
+    def _validate_group_allocation(self) -> None:
+        """Reject unknown allocation laws and invalid exact-allocation targets."""
+        if self.group_allocation_mode not in {"legacy", "exact_small_crowd_v1"}:
+            raise ValueError("unknown group_allocation_mode")
+        if self.group_allocation_mode == "exact_small_crowd_v1":
+            if (
+                self.group_fraction is None
+                or not isfinite(self.group_fraction)
+                or not 0 <= self.group_fraction <= 1
+            ):
+                raise ValueError("exact_small_crowd_v1 requires groups in [0, 1]")
+            if self.max_group_members < 1 or (
+                self.max_group_members == 1 and self.group_fraction > 0
+            ):
+                raise ValueError("groups > 0 requires max_group_members >= 2")
+
+
+def _allocated_group_sizes(config: PedSpawnConfig, population: int):
+    """Yield sizes with legacy draws interleaved, or an exact nearest-feasible count.
+
+    Exact allocation applies independently to each background spawning channel.
+    Ties select the larger feasible count. Explicit authored actors are excluded.
+    """
+    if config.group_allocation_mode == "legacy":
+        remaining = population
+        while remaining > 0:
+            size = min(
+                int(
+                    config.rng.choice(len(config.group_member_probs), p=config.group_member_probs)
+                    + 1
+                ),
+                remaining,
+            )
+            yield size
+            remaining -= size
+        return
+    maximum = config.max_group_members
+    feasible = [0, *range(2, population + 1)] if maximum >= 3 else list(range(0, population + 1, 2))
+    if maximum == 1:
+        feasible = [0]
+    target = population * config.group_fraction
+    grouped = min(feasible, key=lambda count: (abs(count - target), -count))
+    sizes = [1] * (population - grouped)
+    remaining = grouped
+    while remaining:
+        size = min(maximum, remaining)
+        if remaining - size == 1:
+            size -= 1
+        sizes.append(size)
+        remaining -= size
+    config.rng.shuffle(sizes)
+    yield from sizes
 
 
 def sample_route(
@@ -464,7 +520,7 @@ class RoutePointsGenerator:
         return spawn_pos, route_id, sec_id
 
 
-def populate_ped_routes(  # noqa: C901,PLR0915
+def populate_ped_routes(
     config: PedSpawnConfig,
     routes: list[GlobalRoute],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
@@ -512,13 +568,7 @@ def populate_ped_routes(  # noqa: C901,PLR0915
 
     rng = config.rng
     if config.route_spawn_distribution == "spread" and total_num_peds > 0:
-        probs = config.group_member_probs
-        group_sizes: list[int] = []
-        while num_unassigned_peds > 0:
-            num_peds_in_group = int(rng.choice(len(probs), p=probs) + 1)
-            num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
-            group_sizes.append(num_peds_in_group)
-            num_unassigned_peds -= num_peds_in_group
+        group_sizes = list(_allocated_group_sizes(config, total_num_peds))
 
         group_count = len(group_sizes)
         route_ids = rng.choice(
@@ -567,11 +617,7 @@ def populate_ped_routes(  # noqa: C901,PLR0915
                 ped_states[ped_ids, 2:4] = velocity
                 ped_states[ped_ids, 4:6] = group_goal
     else:
-        while num_unassigned_peds > 0:
-            # Determine number of members in next group based on configured probabilities
-            probs = config.group_member_probs
-            num_peds_in_group = config.rng.choice(len(probs), p=probs) + 1
-            num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
+        for num_peds_in_group in _allocated_group_sizes(config, total_num_peds):
             # Calculate range of IDs for newly assigned pedestrians
             num_assigned_peds = total_num_peds - num_unassigned_peds
             ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
@@ -658,10 +704,7 @@ def populate_crowded_zones(
     num_unassigned_peds = total_num_peds
     zone_assignments = {}
 
-    while num_unassigned_peds > 0:
-        probs = config.group_member_probs
-        num_peds_in_group = config.rng.choice(len(probs), p=probs) + 1
-        num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
+    for num_peds_in_group in _allocated_group_sizes(config, total_num_peds):
         num_assigned_peds = total_num_peds - num_unassigned_peds
         ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
         groups.append(set(ped_ids))
@@ -1025,11 +1068,7 @@ def _populate_scattered_background(
     accepted_positions: list[Vec2D] = []
     num_unassigned = num_pedestrians
 
-    while num_unassigned > 0:
-        group_size = int(
-            rng.choice(len(config.group_member_probs), p=config.group_member_probs) + 1
-        )
-        group_size = min(group_size, num_unassigned)
+    for group_size in _allocated_group_sizes(config, num_pedestrians):
         first_id = num_pedestrians - num_unassigned
         ped_ids = list(range(first_id, first_id + group_size))
         zone_id: int | None = None

@@ -321,6 +321,9 @@ class SimulationSettings:
     does not allocate an exact fraction per reset. None retains the default law.
     """
 
+    group_allocation_mode: str = "legacy"
+    """Group law: legacy (default) or opt-in exact_small_crowd_v1."""
+
     max_peds_per_group: int = 3
     """Maximum number of pedestrians per group"""
 

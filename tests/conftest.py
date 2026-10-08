@@ -441,6 +441,8 @@ _LEGACY_FAST_FILE_PREFIXES = (
     "test_types",
 )
 _LEGACY_FAST_FILES = {
+    # Episode-local commitment transitions use fixed synthetic portfolios.
+    "test_maneuver_commitment.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",
     # Seed inventories and campaign resume planning use deterministic fixtures.

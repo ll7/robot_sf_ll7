@@ -21,15 +21,30 @@ def initial_admissibility(state, segments, radius_m) -> dict[str, object]:
     Returns:
         Input verdict and independently readable distances and violation counts.
     """
-    xy = np.asarray(state, dtype=float)[:, :2]
-    if len(xy) == 0 or not np.isfinite(xy).all() or not np.isfinite(radius_m) or radius_m <= 0:
+    values = np.asarray(state, dtype=float)
+    if (
+        values.ndim != 2
+        or values.shape[0] == 0
+        or values.shape[1] not in (6, 7)
+        or not np.isfinite(values).all()
+        or isinstance(radius_m, (bool, np.bool_))
+        or not np.isscalar(radius_m)
+        or not np.isfinite(radius_m)
+        or radius_m <= 0
+    ):
         raise ValueError("invalid initial state/radius")
+    xy = values[:, :2]
+    walls = np.asarray(segments, dtype=float)
+    if walls.size and (
+        walls.shape not in ((len(walls), 4), (len(walls), 2, 2)) or not np.isfinite(walls).all()
+    ):
+        raise ValueError("expected finite wall segments with four coordinates")
     pairs = np.linalg.norm(xy[:, None] - xy[None, :], axis=-1)[np.triu_indices(len(xy), 1)]
     minimum = float(pairs.min()) if pairs.size else None
     wall_minimum = None
     wall_overlaps = 0
     if len(segments):
-        walls = np.asarray(segments, dtype=float).reshape(-1, 2, 2)
+        walls = walls.reshape(-1, 2, 2)
         vector = walls[:, 1] - walls[:, 0]
         length2 = np.sum(vector * vector, axis=1)
         delta = xy[:, None] - walls[None, :, 0]

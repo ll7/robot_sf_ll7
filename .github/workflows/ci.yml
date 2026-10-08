@@ -262,8 +262,9 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
-      - name: Probe optional idle runner capacity
-        id: route
+      # No PR-head code runs with this credential. Only the probe consumes it.
+      - name: Mint narrow runner inventory token
+        id: router-token
         if: >-
           needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' &&
           vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.run_attempt == 1 &&
@@ -272,14 +273,39 @@ jobs:
           ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' &&
           github.event.pull_request.base.ref == 'main' &&
           github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' &&
+          github.event.pull_request.head.repo.fork == false &&
           github.event.pull_request.user.login == 'll7'))
+        continue-on-error: true
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.ROBOT_SF_ROUTER_APP_ID }}
+          private-key: ${{ secrets.ROBOT_SF_ROUTER_APP_KEY }}
+          owner: ll7
+          repositories: robot_sf_ll7
+          permission-administration: read
+          # Default post-job revocation remains enabled.
+
+      - name: Probe optional idle runner capacity
+        id: route
+        if: >-
+          steps.router-token.outcome == 'success' && steps.router-token.outputs.token != '' &&
+          needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' &&
+          vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.run_attempt == 1 &&
+          github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' &&
+          github.triggering_actor == 'll7' &&
+          ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' &&
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' &&
+          github.event.pull_request.head.repo.fork == false &&
+          github.event.pull_request.user.login == 'll7'))
+        continue-on-error: true
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SELF_HOSTED_ENABLED: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED }}
           PROVENANCE_ADMITTED: ${{ needs.self-hosted-admission.outputs.self_hosted }}
         with:
-          # Read-only job token only. API denial/rate limit selects hosted.
-          github-token: ${{ github.token }}
+          # Step-local installation token; never exported to env or job outputs.
+          github-token: ${{ steps.router-token.outputs.token }}
           retries: 0
           script: |
             try {

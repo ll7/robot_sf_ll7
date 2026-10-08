@@ -725,5 +725,8 @@
       "after_max_mps": 1.7236656133708235,
       "after_caps_sha256": "f8b53bac62030b0546a6f2edf44085bc912adbe786602b08a7dbdc202653e3cd"
     }
-  ]
+  ],
+  "head_runtime_revision": "c6388c4dbbf9cb679f8516153914b183be3c62b4",
+  "probe_sha256": "ebfc42eb6fe312f76912504609bc488f16f3f9683c37ca547a958b26d6df60d8",
+  "base_loader_sha256": "ff4136cce3a0e91d8a35433cea752e75d5e1d6267e30ff2da837f413165496b3"
 }

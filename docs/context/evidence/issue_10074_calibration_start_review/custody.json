@@ -1,0 +1,32 @@
+{
+  "archive_bytes": 32600,
+  "location": "benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10094-historical-evidence.tar.gz",
+  "members": [
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10094_comparison.json",
+      "bytes": 280874,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10094-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10094_comparison.json",
+      "sha256": "e0795d7523283aec86283411a5633071159f5837a2cb615e5f7c035708730764"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10094_failures.csv",
+      "bytes": 192030,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10094-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10094_failures.csv",
+      "sha256": "28f7fda12fb2bd38083f1cbb3480f4f3954ad3e23152299e410c81f99891adaa"
+    },
+    {
+      "archive_member": "docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10094_failures.csv.review.json",
+      "bytes": 334,
+      "location": "member of preserved external archive",
+      "path": "data-hub:benchmark-results/robot_sf_ll7/pedestrian-model-review-20261007/pr-10094-historical-evidence.tar.gz#docs/context/evidence/issue_10000_pedsweep_20261006/review_20261007/pr_10094_failures.csv.review.json",
+      "sha256": "598f955f53b9a14e421b4c7ed48af080a7781db3848506ce56ec2d6ae6d12b58"
+    }
+  ],
+  "original_head": "b1e1ad67a159f20df5668f10040f73f03a234710",
+  "path": "pr-10094-historical-evidence.tar.gz",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "sha256": "d0dd48ec094012eae33f099fddc6e98a21cfe8d4a6c0bdf774e7edd8db0fbfb8",
+  "status": "diagnostic-only; exact-byte archive copied and read-back verified in external data hub"
+}

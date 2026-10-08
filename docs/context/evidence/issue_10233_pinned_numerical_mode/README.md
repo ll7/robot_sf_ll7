@@ -108,3 +108,30 @@ No release branch or artifact was written.
 three learned arms on francis2023_frontal_approach / seed 1001, including final
 run-manifest mode and effective context. This checks subprocess propagation,
 retained arm validation and final manifest writing, with no publication export.
+
+## Independent review corrections
+
+The review of commit `e932cbd064360f868d3c9c365ba03d9fa10c4678`
+identified that prediction planners could bypass the campaign's learned-arm check.
+Pinned campaigns now accept only PPO/guarded PPO and the measured goal,
+social-force and ORCA controls. Both config loading and final retained-manifest
+validation reject every other algorithm, including newly introduced algorithms.
+This deliberately rejects prediction planners rather than pretending the
+CNN/MLP float64 implementation measured in #10211 covers their inference stack.
+Additional algorithms require an implementation and numerical evidence before
+being added to the allowlist.
+
+Failed campaigns write `requested_numerical_mode` and
+`numerical_mode_validation: unvalidated` in all three final metadata files;
+they omit the execution claim and numerical kernel evidence. Successful
+campaigns still require the retained-arm validation before writing the claim.
+
+Seven added regression cases fail on the reviewed commit for the intended
+acceptance/false-claim defects and pass after correction. The numerical-mode
+file has 20 passing cases; the broader focused selection has 428 passing tests.
+The byte audit was repeated: the same 4,720 protected pre-existing files have
+zero changed bytes and the same inventory digest. The campaign arm set,
+checkpoints and inference implementation are unchanged, so the 360-episode
+empty-world gate and paired inference costs above remain applicable without
+another sweep. A fresh canonical three-learned-arm smoke succeeded on the corrected
+writer; its final manifest passes the corrected validator against current inputs. Independent domain approval remains pending.

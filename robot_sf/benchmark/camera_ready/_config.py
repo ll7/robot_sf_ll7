@@ -1762,12 +1762,17 @@ def _assemble_campaign_config(
     """
     mode = payload.get("numerical_mode")
     if mode is not None:
-        from robot_sf._numerical_mode import PINNED_MODE  # noqa: PLC0415
+        from robot_sf._numerical_mode import (  # noqa: PLC0415
+            PINNED_LEARNED_ALGOS,
+            PINNED_MODE,
+            validate_pinned_campaign_arm,
+        )
 
         if mode != PINNED_MODE:
             raise ValueError("Unsupported campaign numerical_mode")
         for planner in parsed.planner_specs:
-            if planner.algo in {"ppo", "guarded_ppo"}:
+            validate_pinned_campaign_arm(planner.algo)
+            if planner.algo in PINNED_LEARNED_ALGOS:
                 arm = yaml.safe_load(planner.algo_config_path.read_text())
                 if arm.get("numerical_mode") != mode:
                     raise ValueError(

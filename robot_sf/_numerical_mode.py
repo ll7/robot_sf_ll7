@@ -6,6 +6,17 @@ import os
 import sys
 
 PINNED_MODE = "pinned_float64_v1"
+# Only these learned actors have the float64 implementation measured in #10211.
+PINNED_LEARNED_ALGOS = frozenset({"ppo", "guarded_ppo"})
+PINNED_CONTROL_ALGOS = frozenset({"goal", "social_force", "orca"})
+
+
+def validate_pinned_campaign_arm(algo: str) -> None:
+    """Reject arms outside the measured actor/control allowlist, including new arms."""
+    if algo not in PINNED_LEARNED_ALGOS | PINNED_CONTROL_ALGOS:
+        raise ValueError(f"Unsupported pinned campaign arm: {algo}")
+
+
 PINNED_ENV = {
     "ATEN_CPU_CAPABILITY": "default",
     "MKL_CBWR": "COMPATIBLE",

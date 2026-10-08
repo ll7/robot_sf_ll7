@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-from robot_sf._numerical_mode import validate_numerical_mode
+from robot_sf._numerical_mode import (
+    PINNED_LEARNED_ALGOS,
+    validate_numerical_mode,
+    validate_pinned_campaign_arm,
+)
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 
 
@@ -22,13 +26,18 @@ def validate_campaign_numerical_manifest(payload: dict, campaign_root: Path) -> 
     claim = payload.get("numerical_mode")
     if claim is None:
         return
-    expected = sum(
-        planner.get("algo") in {"ppo", "guarded_ppo"} for planner in payload.get("planners", [])
-    ) * len(payload.get("kinematics_matrix", ["differential_drive"]))
+    planners = payload.get("planners", [])
+    for planner in planners:
+        validate_pinned_campaign_arm(planner.get("algo", ""))
+    expected = sum(planner.get("algo") in PINNED_LEARNED_ALGOS for planner in planners) * len(
+        payload.get("kinematics_matrix", ["differential_drive"])
+    )
     matched = 0
     for path in (campaign_root / "runs").rglob("*.provenance.json"):
         arm = json.loads(path.read_text())
-        if arm.get("campaign_identity", {}).get("algorithm") not in {"ppo", "guarded_ppo"}:
+        algo = arm.get("campaign_identity", {}).get("algorithm", "")
+        validate_pinned_campaign_arm(algo)
+        if algo not in PINNED_LEARNED_ALGOS:
             continue
         if arm.get("run", {}).get("numerical_mode") != claim:
             raise ValueError("Pinned numerical mode does not match retained arm manifest")

@@ -238,3 +238,109 @@ def test_full_float64_actor_matches_independent_torch():
             atol=1e-14,
         )
         assert actor.mean(obs).dtype == np.float64
+
+
+@pytest.mark.parametrize("algo", ["prediction_planner", "future_learned_planner"])
+def test_pinned_campaign_rejects_unsupported_arm(tmp_path, algo):
+    """Unsupported and newly introduced learned arms cannot inherit a pinned claim."""
+    import yaml
+
+    payload = yaml.safe_load(CONFIG.read_text())
+    payload["planners"].append(
+        {
+            "key": "unsupported",
+            "algo": algo,
+            "algo_config": "configs/algos/prediction_planner_camera_ready.yaml",
+        }
+    )
+    for key in ("scenario_matrix", "scenario_horizons"):
+        payload[key] = str(ROOT / payload[key])
+    for planner in payload["planners"]:
+        if "algo_config" in planner:
+            planner["algo_config"] = str(ROOT / planner["algo_config"])
+    path = tmp_path / "campaign.yaml"
+    path.write_text(yaml.safe_dump(payload))
+    with pytest.raises(ValueError, match="Unsupported pinned campaign arm"):
+        load_campaign_config(path, repository_root=ROOT)
+
+
+@pytest.mark.parametrize("algo", ["prediction_planner", "future_learned_planner"])
+@pytest.mark.parametrize("declared", [True, False])
+def test_pinned_run_rejects_unsupported_arm(tmp_path, monkeypatch, algo, declared):
+    """Both planned and retained arms are checked, even with a valid PPO manifest."""
+    import json
+
+    from robot_sf import _numerical_mode
+    from robot_sf.benchmark.numerical_mode import validate_campaign_numerical_manifest
+
+    observed = {
+        "mode": "pinned_float64_v1",
+        "inference_dtype": "float64",
+        "kernel_env": dict(_numerical_mode.PINNED_ENV),
+        "blas": [{"internal_api": "openblas", "architecture": "Haswell", "num_threads": 1}],
+        "torch_cpu_capability": "DEFAULT",
+        "mkldnn_enabled": False,
+        "deterministic_algorithms": True,
+    }
+    monkeypatch.setattr(_numerical_mode, "effective_numerical_mode", lambda: dict(observed))
+    arm = _manifest(tmp_path, observed)
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "ppo.provenance.json").write_text(json.dumps(arm))
+    payload = {"numerical_mode": arm["run"]["numerical_mode"], "planners": [{"algo": "ppo"}]}
+    validate_campaign_numerical_manifest(payload, tmp_path)
+    if declared:
+        payload["planners"].append({"algo": algo})
+    else:
+        arm["campaign_identity"]["algorithm"] = algo
+        (runs / "unsupported.provenance.json").write_text(json.dumps(arm))
+    with pytest.raises(ValueError, match="Unsupported pinned campaign arm"):
+        validate_campaign_numerical_manifest(payload, tmp_path)
+
+
+def test_failed_campaign_does_not_claim_pinned_execution(tmp_path, monkeypatch):
+    """All three final files distinguish an unvalidated request from execution evidence."""
+    import json
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark.camera_ready import campaign
+
+    claim = {"mode": "pinned_float64_v1", "inference_dtype": "float64"}
+    paths = SimpleNamespace(
+        campaign_root=tmp_path,
+        git_meta={},
+        scenario_hash="abc",
+        reports_dir=tmp_path,
+        manifest_payload={"numerical_mode": claim, "numerical_kernel_context": {}},
+    )
+    outcome = SimpleNamespace(
+        benchmark_success=False,
+        runtime_sec=1,
+        total_episodes=0,
+        campaign_finished_at_utc="2026-10-08T00:00:00Z",
+    )
+    monkeypatch.setattr(campaign, "_build_run_meta", lambda *args, **kwargs: {})
+    tables = dict.fromkeys(
+        (
+            "seed_variability_json_path",
+            "seed_variability_csv_path",
+            "seed_episode_rows_csv_path",
+            "statistical_sufficiency_json_path",
+        ),
+        tmp_path / "unused",
+    )
+    campaign._write_run_level_files(
+        SimpleNamespace(numerical_mode="pinned_float64_v1"),
+        paths=paths,
+        outcome=outcome,
+        snqi=None,
+        seed_variability_payload={},
+        invoked_command=None,
+        table_paths=tables,
+    )
+    for name in ("run_meta.json", "manifest.json", "campaign_manifest.json"):
+        payload = json.loads((tmp_path / name).read_text())
+        assert "numerical_mode" not in payload, name
+        assert "numerical_kernel_context" not in payload, name
+        assert payload["requested_numerical_mode"] == claim, name
+        assert payload["numerical_mode_validation"] == "unvalidated", name

@@ -3322,24 +3322,28 @@ def _write_run_level_files(
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
     }
-    if cfg.numerical_mode is not None:
+    if cfg.numerical_mode is not None and outcome.benchmark_success:
         run_manifest["numerical_mode"] = paths.manifest_payload["numerical_mode"]
         run_manifest["numerical_kernel_context"] = paths.manifest_payload[
             "numerical_kernel_context"
         ]
         run_meta["numerical_mode"] = run_manifest["numerical_mode"]
+    campaign_manifest = _build_campaign_manifest_payload(
+        paths,
+        outcome=outcome,
+        snqi=snqi,
+        run_meta=run_meta,
+        table_paths=table_paths,
+    )
+    if cfg.numerical_mode is not None and not outcome.benchmark_success:
+        for payload in (run_meta, run_manifest, campaign_manifest):
+            payload.pop("numerical_mode", None)
+            payload.pop("numerical_kernel_context", None)
+            payload["requested_numerical_mode"] = paths.manifest_payload["numerical_mode"]
+            payload["numerical_mode_validation"] = "unvalidated"
     _write_json(campaign_root / "run_meta.json", run_meta)
     _write_json(campaign_root / "manifest.json", run_manifest)
-    _write_json(
-        campaign_root / "campaign_manifest.json",
-        _build_campaign_manifest_payload(
-            paths,
-            outcome=outcome,
-            snqi=snqi,
-            run_meta=run_meta,
-            table_paths=table_paths,
-        ),
-    )
+    _write_json(campaign_root / "campaign_manifest.json", campaign_manifest)
 
 
 def _export_publication_bundle_section(  # noqa: PLR0913

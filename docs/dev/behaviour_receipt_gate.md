@@ -24,18 +24,41 @@ character limit), payloads over 32 MiB, uncommitted files, symlinks, paths outsi
 summaries. It reconstructs the full receipt and applies the existing coverage,
 source, baseline, execution, totals, exception and classification checks.
 Changes to dirty worktree payload bytes do not replace the source Git blob.
-Commit the rows/classifications first, then put the resulting source SHA in the
-PR header and source/job/review identities. Committing the header is unnecessary.
+Run the sweep and real-row audit on their recorded source commit(s), then commit
+the rows/classifications. Set the PR header's `head_sha` and refute review's
+`head_sha` to that final PR head. Keep `scheduler.source_sha` and
+`interaction_audit.source_sha` at the commits where they actually executed.
+Each execution source must be an ancestor of head. Its two-tree Git diff to head
+must contain only paths under `receipts/behaviour/`, with rename detection disabled
+so both endpoints are checked. Any other changed path invalidates that identity,
+including docs, tests and attribute-policy edits.
+The refute review must cover the final head. Committing the header is unnecessary.
+
+The repository already uses Git LFS, so `.gitattributes` routes
+`receipts/behaviour/*.json` through LFS. Commit that attribute policy before the
+run; changing it afterward is a non-receipt change. The loader reads the source
+blob with `git cat-file blob`, resolves its LFS pointer through Git LFS, then
+verifies the payload's byte digest and declared size. It never reads dirty
+checkout payloads. CI requires Git LFS and access to the referenced objects;
+missing objects fail closed. The 32 MiB limit applies to decoded payloads,
+including LFS objects; use only receipt data rather than raw traces in these
+files, and keep traces at the external artifact URI.
 
 ## Scope and dependency rule
 
 Production triggers cover planner/adapters, simulator/dynamics, maps/scenarios,
 benchmark configuration and writers/metrics, algorithm/baseline/planner/robot
 configs, model weights/registry, sensors, pedestrian logic, shared runtime code,
-training, prediction, feature extractors, all `fast-pysf/` code and benchmark
+training, prediction, feature extractors (including `robot_sf/feature_extractor.py`),
+`robot_sf/ped_ego/`, all `fast-pysf/` code and benchmark
 runners under `scripts/`. Markdown files are exempt under every prefix, as are
 docs-only changes and the owner inventory itself. Mixed planner/inventory PRs
-remain in scope.
+remain in scope. The top-level extractor is imported by
+`feature_extractors/config.py`. `ped_ego/unicycle_drive.py` is used by
+`gym_env/unified_config.py` and `sim/simulator.py`, and pedestrian environment
+state comes from `ped_ego/pedestrian_state.py`. The current checkout has no
+benchmark/planner runtime imports of the additive `robot_sf/core/` facade, so it
+remains exempt; revisit this decision when those consumers adopt it.
 
 A separate base-owned `DEPENDENCY_RECEIPTS_ENABLED` rule examines `uv.lock`
 and `pyproject.toml` (root and `fast-pysf/`) through the existing Dependabot policy parsers. A change to

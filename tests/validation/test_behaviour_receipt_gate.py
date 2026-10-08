@@ -146,6 +146,8 @@ def _commit_receipt(monkeypatch, tmp_path, receipt):
     git("init", "-b", "main")
     git("config", "user.name", "Test")
     git("config", "user.email", "test@example.invalid")
+    git("commit", "--allow-empty", "-m", "executed run source")
+    run_source = git("rev-parse", "HEAD")
     path = "receipts/behaviour/sweep.json"
     file = tmp_path / path
     file.parent.mkdir(parents=True)
@@ -162,8 +164,8 @@ def _commit_receipt(monkeypatch, tmp_path, receipt):
     head = git("rev-parse", "HEAD")
     if receipt["head_sha"] == HEAD:
         receipt["head_sha"] = head
-    receipt["scheduler"]["source_sha"] = head
-    receipt["interaction_audit"]["source_sha"] = head
+    receipt["scheduler"]["source_sha"] = run_source
+    receipt["interaction_audit"]["source_sha"] = run_source
     receipt["refute_review"]["head_sha"] = head
     monkeypatch.setattr(adapter, "ROOT", tmp_path)
     monkeypatch.setenv("BEHAVIOUR_PR_HEAD_SHA", head)
@@ -480,6 +482,9 @@ def test_missing_owner_inventory_is_explicit_blocker(monkeypatch, tmp_path):
         (["scripts/tools/run_benchmark_release.py"], True),
         (["scripts/tools/run_split_camera_ready_campaign.py"], True),
         (["scripts/tools/benchmark_feature_extractors.py"], True),
+        (["robot_sf/feature_extractor.py"], True),
+        (["robot_sf/ped_ego/unicycle_drive.py"], True),
+        (["robot_sf/core/time.py"], False),
         (["robot_sf/planner/README.md"], False),
         (["configs/algos/README.md"], False),
         (["model/README.md"], False),

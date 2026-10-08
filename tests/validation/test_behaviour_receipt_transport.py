@@ -193,10 +193,12 @@ def test_stale_branch_preserves_merge_checkout_for_existing_guards(monkeypatch, 
 def _trusted_fixture(root):
     """Copy real policy and its imports into an independent fixture base commit."""
     git = _git_repo(root)
+    git("lfs", "install", "--local")
     shutil.copytree(
         ROOT / "robot_sf", root / "robot_sf", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
     files = [
+        ".gitattributes",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
         "scripts/dev/check_dependabot_update_policy.py",
@@ -241,13 +243,15 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     planner.write_text("VALUE = 1\n")
     git(
         "add",
-        path,
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
         adapter.SCOPE_FILE,
         "robot_sf/planner/new_policy.py",
     )
-    git("commit", "-m", "PR source with untrusted policy edits")
+    git("commit", "-m", "executed source with untrusted policy edits")
+    run_source = git("rev-parse", "HEAD")
+    git("add", path)
+    git("commit", "-m", "preserve run rows after execution")
     head = git("rev-parse", "HEAD")
     # Leave CI at a distinct synthetic merge identity.
     merge = git(
@@ -268,7 +272,7 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
         receipt["refute_review"],
     ):
         key = "source_sha" if "source_sha" in item else "head_sha"
-        item[key] = head
+        item[key] = run_source if key == "source_sha" else head
     receipt["baseline"]["source_sha"] = base
     body = _header(receipt, raw)
     assert len(body) < 65536 < len(raw)

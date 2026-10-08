@@ -36,10 +36,12 @@ TRIGGERS = (
     "robot_sf/models/",
     "robot_sf/sensor/",
     "robot_sf/ped_npc/",
+    "robot_sf/ped_ego/",
     "robot_sf/common/",
     "robot_sf/training/",
     "robot_sf/prediction/",
     "robot_sf/feature_extractors/",
+    "robot_sf/feature_extractor.py",
     "scripts/benchmark",
     "scripts/classic_benchmark",
     "scripts/run_social_navigation_benchmark",
@@ -134,6 +136,30 @@ def _key(row: dict) -> tuple:
     return row["arm"], row["map"], row["seed"]
 
 
+def require_receipt_only_ancestor(source: str, head: str, label: str) -> None:
+    """Preserve execution bytes when evidence is committed after a run or audit."""
+    if source == head:
+        return
+    ancestry = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", source, head],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+    )
+    _require(ancestry.returncode == 0, f"{label} source is not an ancestor of PR head")
+    changed = (
+        subprocess.check_output(
+            ["git", "diff", "--name-only", "-z", "--no-renames", source, head], cwd=ROOT
+        )
+        .decode()
+        .split("\0")
+    )
+    _require(
+        all(path.startswith("receipts/behaviour/") for path in changed if path),
+        f"non-receipt changes after {label} source invalidate execution identity",
+    )
+
+
 def validate_receipt(
     receipt: dict, scope: dict, head: str, release: str, baseline_source: str
 ) -> None:
@@ -151,7 +177,10 @@ def validate_receipt(
         "baseline source does not match the published tag",
     )
     _require(receipt["head_sha"] == head, "receipt head is stale")
-    _require(receipt["scheduler"]["source_sha"] == head, "job source does not match head")
+    require_receipt_only_ancestor(receipt["scheduler"]["source_sha"], head, "job")
+    require_receipt_only_ancestor(
+        receipt["interaction_audit"]["source_sha"], head, "real-row audit"
+    )
     _require(
         bool(re.fullmatch(r"[1-9]\d*(?:_\d+)?", receipt["scheduler"]["job_id"])),
         "missing scheduler job identity",
@@ -273,7 +302,6 @@ def validate_receipt(
         receipt["refute_review"]["uri"],
     ):
         _require(_uri(uri), "missing external evidence identity")
-    _require(receipt["interaction_audit"]["source_sha"] == head, "real-row audit head is stale")
     _require(
         receipt["refute_review"]["head_sha"] == head
         and receipt["refute_review"]["verdict"] == "accepted",
@@ -361,7 +389,29 @@ def load_receipt(header: dict, head: str) -> dict:
     blob = f"{head}:{path}"
     size = int(subprocess.check_output(["git", "cat-file", "-s", blob], cwd=ROOT, text=True))
     _require(size <= MAX_ROWS_BYTES, "receipt payload exceeds the 32 MiB limit")
-    raw = subprocess.check_output(["git", "show", blob], cwd=ROOT)
+    raw = subprocess.check_output(["git", "cat-file", "blob", blob], cwd=ROOT)
+    if raw.startswith(b"version https://git-lfs.github.com/spec/v1\n"):
+        pointer = re.fullmatch(
+            rb"version https://git-lfs.github.com/spec/v1\noid sha256:([0-9a-f]{64})\nsize ([0-9]+)\n",
+            raw,
+        )
+        _require(pointer is not None, "invalid receipt LFS pointer")
+        oid, object_size = pointer.groups()
+        _require(int(object_size) <= MAX_ROWS_BYTES, "receipt LFS payload exceeds the 32 MiB limit")
+        _require(
+            oid.decode() == header["rows_artifact"]["sha256"], "receipt LFS pointer digest mismatch"
+        )
+        # Smudge the exact source pointer, never potentially dirty checkout bytes.
+        # Missing downloads must fail, rather than returning the pointer as data.
+        raw = subprocess.run(
+            ["git", "-c", "lfs.skipdownloaderrors=false", "lfs", "smudge", "--", path],
+            input=raw,
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+            env={**os.environ, "GIT_LFS_SKIP_SMUDGE": "0"},
+        ).stdout
+        _require(len(raw) == int(object_size), "receipt LFS payload size mismatch")
     _require(
         hashlib.sha256(raw).hexdigest() == header["rows_artifact"]["sha256"],
         "receipt payload digest mismatch",

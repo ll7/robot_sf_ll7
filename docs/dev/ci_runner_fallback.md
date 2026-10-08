@@ -15,8 +15,8 @@ It remains off until reviewed infrastructure is ready. Changing repository
 variables or secrets is a separate authorized settings action.
 
 The hosted `runner-availability` job runs after admission, before workload jobs.
-It reads trusted base source for PRs, probes the repository runners API with a
-five-second timeout and no retries, and treats online, idle Linux x64 registered
+It reads main's base source for PRs targeting main, probes the repository runners
+API with a five-second abort signal and decision bound and no retries, and treats online, idle Linux x64 registered
 runners carrying the reviewed ephemeral label as available. That is a GitHub
 heartbeat, not proof of application health. Busy/offline/missing runners,
 incomplete pagination, malformed inventory, duplicate IDs, API errors and
@@ -30,7 +30,7 @@ or an equivalently scoped installation token. It is consumed only by the hosted
 probe step. With no token, the normal job token is tried; a denied response
 selects hosted. This PR neither creates credentials nor enables acceleration.
 The probe step runs only for the author as both actor and rerun initiator, on
-push or an author-owned same-repository PR, and only on attempt one. Forks,
+push or an author-owned same-repository PR targeting main, and only on attempt one. Forks,
 bots, manual dispatch, privileged events and every retry stay hosted.
 
 ## Queue recovery
@@ -53,7 +53,8 @@ main commits, closed/draft/updated/fork PRs, other workflows, moved attempts and
 completed runs are declined. API errors, incomplete job inventory, failed
 cancellation, or an unconfirmed rerun fail the watchdog with no blind retry.
 It exits when every workload job has started, finished or been routed hosted.
-It observes for at most 110 minutes; its hosted job timeout is 120 minutes.
+It observes for at most 110 minutes of wall-clock time and reserves seven minutes
+for cancellation/rerun before any write; its hosted job timeout is 120 minutes.
 
 GitHub control-plane outages, hosted queue delays and watchdog failure can
 exceed the normal bound. Inspect the watchdog's `ci-runner-watchdog` decision
@@ -70,6 +71,11 @@ pre-merge PR CI stays hosted if its base lacks the routing module.
   Inventory/error responses and runner names are never logged. The watchdog
   has repository `actions: write` only for cancel/rerun, plus `contents: read`;
   no registration, settings, secret, deployment or repository write authority.
+  A repository secret remains accessible to write collaborators who can edit
+  workflows: the main-base checkout is defense in depth, not protection from
+  existing repository write authority. Scope the optional token to this single
+  repository and read only. Stronger protection would require a separately
+  authorized environment or default-branch inventory service.
 - **Who may execute self-hosted:** the existing author/event/repository
   expression and immutable runner hook remain necessary admission boundaries.
   Availability never expands trust. A contributor can edit a workflow, so the

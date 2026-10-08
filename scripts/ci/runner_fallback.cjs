@@ -6,6 +6,7 @@ const COSTS = { 'fast-feedback': 6, 'smoke-artifacts': 1, 'wheel-smoke-install':
   'examples-smoke': 1, 'notebooks-smoke': 1 };
 const QUEUE_LIMIT_MS = 10 * 60 * 1000;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const bounded = args => ({ ...args, request: { timeout: 5000, signal: AbortSignal.timeout(5000) } });
 
 function eligible(context, enabled) {
   const pr = context.payload.pull_request;
@@ -14,7 +15,7 @@ function eligible(context, enabled) {
     process.env.GITHUB_TRIGGERING_ACTOR === 'll7' &&
     process.env.GITHUB_RUN_ATTEMPT === '1' &&
     (context.eventName === 'push' || (context.eventName === 'pull_request' &&
-      pr?.head?.repo?.full_name === 'll7/robot_sf_ll7' && pr?.user?.login === 'll7'));
+      pr?.base?.ref === 'main' && pr?.head?.repo?.full_name === 'll7/robot_sf_ll7' && pr?.user?.login === 'll7'));
 }
 
 function allocate(data) {
@@ -25,11 +26,11 @@ function allocate(data) {
   const ids = new Set();
   let idle = 0;
   for (const runner of data.runners) {
-    if (!Number.isSafeInteger(runner?.id) || ids.has(runner.id) ||
+    if (!Number.isSafeInteger(runner?.id) || runner.id <= 0 || ids.has(runner.id) ||
         !Array.isArray(runner.labels)) return result;
     ids.add(runner.id);
-    const labels = runner.labels.map(label => label?.name?.toLowerCase());
-    if (runner.status === 'online' && runner.busy === false && runner.os === 'linux' &&
+    const labels = runner.labels.map(label => typeof label?.name === 'string' ? label.name.toLowerCase() : null);
+    if (runner.status === 'online' && runner.busy === false && typeof runner.os === 'string' && runner.os.toLowerCase() === 'linux' &&
         ['self-hosted', 'linux', 'x64', LABEL].every(label => labels.includes(label))) idle++;
   }
   for (const [name, cost] of Object.entries(COSTS)) {
@@ -45,8 +46,7 @@ async function route({ github, context, core, enabled }) {
     let timer;
     try {
       const response = await Promise.race([
-        github.rest.actions.listSelfHostedRunnersForRepo({ ...context.repo,
-          per_page: 100, request: { timeout: 5000 } }),
+        github.rest.actions.listSelfHostedRunnersForRepo(bounded({ ...context.repo, per_page: 100 })),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 5000); }),
       ]);
       result = allocate(response.data);
@@ -92,20 +92,20 @@ function admissionFinished(jobs) {
 async function currentHead(github, repo, run) {
   if (run.event === 'push') {
     if (run.head_branch !== 'main') return false;
-    const { data } = await github.rest.repos.getBranch({ ...repo, branch: 'main' });
+    const { data } = await github.rest.repos.getBranch(bounded({ ...repo, branch: 'main' }));
     return data.commit.sha === run.head_sha;
   }
   if (run.pull_requests?.length !== 1) return false;
-  const { data } = await github.rest.pulls.get({ ...repo, pull_number: run.pull_requests[0].number });
-  return data.state === 'open' && !data.draft && data.user.login === 'll7' &&
+  const { data } = await github.rest.pulls.get(bounded({ ...repo, pull_number: run.pull_requests[0].number }));
+  return data.state === 'open' && !data.draft && data.base?.ref === 'main' && data.user.login === 'll7' &&
     data.head.repo?.full_name === 'll7/robot_sf_ll7' && data.head.sha === run.head_sha;
 }
 
 async function listJobs(github, repo, target) {
   const jobs = [];
   for (let page = 1; page <= 10; page++) {
-    const { data } = await github.rest.actions.listJobsForWorkflowRunAttempt({ ...repo,
-      run_id: target.id, attempt_number: 1, per_page: 100, page });
+    const { data } = await github.rest.actions.listJobsForWorkflowRunAttempt(bounded({ ...repo,
+      run_id: target.id, attempt_number: 1, per_page: 100, page }));
     if (!Array.isArray(data.jobs) || !Number.isInteger(data.total_count)) throw new Error('incomplete jobs');
     jobs.push(...data.jobs);
     if (jobs.length === data.total_count) return jobs;
@@ -115,18 +115,19 @@ async function listJobs(github, repo, target) {
 }
 
 async function watch({ github, context, core, wait = sleep, now = Date.now }) {
-  const repo = { ...context.repo, request: { timeout: 5000 } };
+  const repo = context.repo;
   const target = context.payload.workflow_run;
   const log = verdict => core.info(`ci-runner-watchdog run=${target?.id} ${verdict}`);
   if (repo.owner !== 'll7' || repo.repo !== 'robot_sf_ll7' || !target || !sameAttempt(target, target)) {
     log('decline: outside first-attempt CI scope'); return;
   }
   const args = { ...repo, run_id: target.id };
-  const getRun = async () => (await github.rest.actions.getWorkflowRun(args)).data;
+  const getRun = async () => (await github.rest.actions.getWorkflowRun(bounded(args))).data;
   const queuedSince = new Map();
+  const deadline = now() + 110 * 60 * 1000;
   // A separate hosted workflow survives cancellation of the target CI run.
   // Includes the dispatch gate (55m) and subsequent job admission; bounded at 110m.
-  for (let tick = 0; tick < 110; tick++) {
+  while (now() < deadline) {
     const run = await getRun();
     if (!sameAttempt(run, target) || run.status === 'completed') { log('decline: finished or moved'); return; }
     if (!await currentHead(github, repo, run)) { log('decline: superseded or untrusted head'); return; }
@@ -141,9 +142,14 @@ async function watch({ github, context, core, wait = sleep, now = Date.now }) {
           !stranded(await listJobs(github, repo, target), now(), queuedSince)) {
         log('decline: queue recovered or run moved'); return;
       }
+      if (now() + 7 * 60 * 1000 >= deadline) {
+        log('decline: insufficient time to confirm recovery');
+        throw new Error('watchdog recovery deadline; inspect and rerun manually hosted');
+      }
       log('act: cancel first attempt after 10m self-hosted queue');
-      await github.rest.actions.cancelWorkflowRun(args);
-      for (let poll = 0; poll < 180; poll++) {
+      await github.rest.actions.cancelWorkflowRun(bounded(args));
+      const cancelDeadline = now() + 6 * 60 * 1000;
+      while (now() < cancelDeadline) {
         await wait(2000);
         const cancelled = await getRun();
         if (!sameAttempt(cancelled, target)) { log('decline: attempt changed during cancellation'); return; }
@@ -152,9 +158,10 @@ async function watch({ github, context, core, wait = sleep, now = Date.now }) {
           log('decline: not cancelled or superseded'); return;
         }
         log('act: rerun all jobs; attempt >1 forces hosted');
-        await github.rest.actions.reRunWorkflow(args);
+        await github.rest.actions.reRunWorkflow(bounded(args));
         // Successful POST alone does not establish effective state.
-        for (let verify = 0; verify < 15; verify++) {
+        const verifyDeadline = now() + 30000;
+        while (now() < verifyDeadline) {
           await wait(2000);
           const resumed = await getRun();
           if (resumed.head_sha === target.head_sha && resumed.run_attempt > 1) {

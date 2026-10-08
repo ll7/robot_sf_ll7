@@ -14,14 +14,17 @@ const core = { info() {}, setOutput() {} };
 test('allocate only healthy idle registered capacity; no runners or bad inventory is hosted', () => {
   assert.deepEqual(allocate({ total_count: 1, runners: [runner(1)] }),
     { ...hosted, 'smoke-artifacts': true });
+  assert.deepEqual(allocate({ total_count: 1, runners: [{ ...runner(1), os: 'Linux' }] }),
+    { ...hosted, 'smoke-artifacts': true });
   assert.deepEqual(allocate({ total_count: 10, runners: Array.from({ length: 10 }, (_, i) => runner(i + 1)) }),
     Object.fromEntries(names.map(name => [name, true])));
   for (const change of [{ status: 'offline' }, { busy: true }, { busy: undefined },
-    { os: 'windows' }, { labels: [{ name: 'self-hosted' }] }]) {
+    { os: 'windows' }, { os: 42 }, { labels: [{ name: 'self-hosted' }] }]) {
     assert.deepEqual(allocate({ total_count: 1, runners: [{ ...runner(1), ...change }] }), hosted);
   }
   for (const data of [null, {}, { total_count: 0, runners: [] },
-    { total_count: 101, runners: [runner(1)] }, { total_count: 2, runners: [runner(1), runner(1)] }]) {
+    { total_count: 101, runners: [runner(1)] }, { total_count: 1, runners: [runner(0)] },
+    { total_count: 2, runners: [runner(1), runner(1)] }]) {
     assert.deepEqual(allocate(data), hosted);
   }
 });
@@ -33,6 +36,7 @@ test('route uses bounded API and emits hosted on API error; disabled/untrusted/r
   const github = { rest: { actions: { async listSelfHostedRunnersForRepo(args) {
     calls++;
     assert.equal(args.request.timeout, 5000);
+    assert.ok(args.request.signal instanceof AbortSignal);
     return { data: { total_count: 1, runners: [runner(1)] } };
   } } } };
   const outputs = {};
@@ -56,6 +60,12 @@ test('route uses bounded API and emits hosted on API error; disabled/untrusted/r
   assert.deepEqual(await route({ github, context, core, enabled: 'true' }), hosted);
   process.env.GITHUB_TRIGGERING_ACTOR = 'll7';
   assert.equal(calls, 1);
+  const pr = { base: { ref: 'main' }, head: { repo: { full_name: 'll7/robot_sf_ll7' } }, user: { login: 'll7' } };
+  const prContext = { ...context, eventName: 'pull_request', payload: { pull_request: pr } };
+  assert.equal((await route({ github, context: prContext, core, enabled: 'true' }))['smoke-artifacts'], true);
+  assert.deepEqual(await route({ github, context: { ...prContext, payload: { pull_request: {
+    ...pr, base: { ref: 'collaborator-branch' } } } }, core, enabled: 'true' }), hosted);
+  assert.equal(calls, 2);
   github.rest.actions.listSelfHostedRunnersForRepo = async () => { throw new Error('sensitive API error'); };
   const logs = [];
   assert.deepEqual(await route({ github, context, core: { ...core, info(x) { logs.push(x); } }, enabled: 'true' }), hosted);
@@ -83,8 +93,13 @@ function harness(overrides = {}) {
   let jobCalls = 0;
   const github = { rest: { actions: {
     async getWorkflowRun() { return { data: { ...run } }; },
-    async listJobsForWorkflowRunAttempt() {
+    async listJobsForWorkflowRunAttempt(args) {
       jobCalls++;
+      assert.ok(args.request.signal instanceof AbortSignal);
+      if (overrides.listError) throw new Error('jobs unavailable');
+      if (overrides.incomplete) return { data: { total_count: 2, jobs: [queued] } };
+      if (overrides.pages) return { data: { total_count: 101,
+        jobs: args.page === 1 ? Array.from({ length: 100 }, (_, i) => ({ id: i + 1000, name: 'other', status: 'completed' })) : [queued] } };
       const jobs = overrides.jobs ? overrides.jobs(jobCalls, clock) : [queued];
       return { data: { total_count: jobs.length, jobs } };
     },
@@ -92,16 +107,18 @@ function harness(overrides = {}) {
       writes.push(['cancel', args.run_id, clock]);
       if (overrides.cancelError) throw new Error('cancel failed');
       if (!overrides.cancelStuck) run = { ...run, status: 'completed', conclusion: 'cancelled' };
+      if (overrides.cancelConclusion) run.conclusion = overrides.cancelConclusion;
+      if (overrides.movedOnCancel) run.run_attempt = 2;
       if (overrides.supersedeOnCancel) head = 'b'.repeat(40);
     },
     async reRunWorkflow(args) {
       writes.push(['rerun', args.run_id, clock]);
-      run = { ...run, run_attempt: 2, status: 'queued', conclusion: null };
+      if (!overrides.unconfirmed) run = { ...run, run_attempt: 2, status: 'queued', conclusion: null };
     },
   }, repos: { async getBranch() { return { data: { commit: { sha: overrides.stale ? 'b'.repeat(40) : head } } }; } },
   pulls: { async get() { return { data: overrides.pr }; } } } };
   return { writes, args: { github, core, context: { ...context, payload: { workflow_run: { ...target, ...overrides.run } } },
-    now: () => clock, wait: async ms => { clock += ms; } } };
+    now: () => clock, wait: async ms => { clock += overrides.clockJump && ms === 60000 ? overrides.clockJump : ms; } } };
 }
 
 test('queue timing tracks continuous observed jobs; ignores hosted, running and dependencies', () => {
@@ -149,10 +166,10 @@ test('cancellation error/unconfirmed cancellation or superseded head cannot reru
 });
 
 test('PR recovery requires current open author PR in the same repository', async () => {
-  const pr = { state: 'open', draft: false, user: { login: 'll7' },
+  const pr = { state: 'open', draft: false, base: { ref: 'main' }, user: { login: 'll7' },
     head: { sha: target.head_sha, repo: { full_name: 'll7/robot_sf_ll7' } } };
   const run = { event: 'pull_request', pull_requests: [{ number: 321 }] };
-  for (const change of [{ state: 'closed' }, { draft: true }, { user: { login: 'other' } },
+  for (const change of [{ state: 'closed' }, { draft: true }, { base: { ref: 'other' } }, { user: { login: 'other' } },
     { head: { ...pr.head, repo: { full_name: 'outsider/repo' } } }, { head: { ...pr.head, sha: 'b'.repeat(40) } }]) {
     const h = harness({ run, pr: { ...pr, ...change } });
     await watch(h.args);
@@ -161,4 +178,51 @@ test('PR recovery requires current open author PR in the same repository', async
   const h = harness({ run, pr });
   await watch(h.args);
   assert.equal(h.writes.length, 2);
+});
+
+test('hosted/running/skipped workload admission finishes observation without waiting', async () => {
+  const jobs = names.flatMap(name => name === 'fast-feedback' ? Array.from({ length: 6 }, (_, i) =>
+    ({ id: i + 1, name: `fast-feedback (${i + 1})`, status: 'in_progress' })) :
+    [{ id: name, name, status: 'completed', conclusion: 'skipped' }]);
+  jobs[0] = { ...jobs[0], status: 'queued', labels: ['ubuntu-latest'] };
+  const h = harness({ jobs: () => jobs });
+  h.args.wait = async () => { assert.fail('completed admission must not sleep'); };
+  await watch(h.args);
+  assert.deepEqual(h.writes, []);
+});
+
+test('complete pagination finds stranded jobs; API failure/incomplete inventory never writes', async () => {
+  const h = harness({ pages: true });
+  await watch(h.args);
+  assert.equal(h.writes.length, 2);
+  for (const options of [{ listError: true }, { incomplete: true }]) {
+    const denied = harness(options);
+    await assert.rejects(watch(denied.args));
+    assert.deepEqual(denied.writes, []);
+  }
+});
+
+test('unconfirmed rerun and wall-clock deadlines fail visibly without another write', async () => {
+  const h = harness({ unconfirmed: true });
+  await assert.rejects(watch(h.args), /rerun not confirmed/);
+  assert.equal(h.writes.length, 2);
+  const late = harness({ clockJump: 104 * 60 * 1000 });
+  await assert.rejects(watch(late.args), /recovery deadline/);
+  assert.deepEqual(late.writes, []);
+  const empty = harness({ jobs: () => [] });
+  await assert.rejects(watch(empty.args), /observation deadline/);
+  assert.deepEqual(empty.writes, []);
+});
+
+test('non-cancelled completion, moved attempt and ambiguous PR list cannot rerun', async () => {
+  for (const options of [{ cancelConclusion: 'success' }, { movedOnCancel: true }]) {
+    const h = harness(options);
+    await watch(h.args);
+    assert.equal(h.writes.length, 1);
+  }
+  for (const pull_requests of [[], [{ number: 1 }, { number: 2 }]]) {
+    const h = harness({ run: { event: 'pull_request', pull_requests } });
+    await watch(h.args);
+    assert.deepEqual(h.writes, []);
+  }
 });

@@ -1,5 +1,19 @@
 # Hybrid defaults: author decision brief
 
+**Author ruling, 2026-10-08 (chat to the orchestrator): choose 011, goal
+validity with its sensor; keep static exclusion opt-in.** This supersedes the
+October 5 all-on choice. The selected arm has 1,346/1,440 successes against
+1,285 off and 1,319 all-on, recovers 61 episodes and introduces none. Static
+exclusion introduces 48 failures and drops hallway success from 26/30 to 4/30.
+All arms have zero collisions in this sample. Opt in with
+`physical_static_exclusion_enabled: true`; the hallway defect remains open.
+
+**Reopen if a fixed static exclusion beats validity plus sensor without introducing failures.**
+[Ruling proof](ruling_proof.md), [custody manifest](preservation_manifest.json.gz),
+and [selection applicability](ruling_applicability.json) accompany this decision.
+
+## Historical packet submitted before the October 8 ruling
+
 **All-on remains in code.** Reason: **author decision 2026-10-05**.
 2026-10-07 direction: fix known failures before choosing the default.
 Reopen: **author: can still be discussed in more detail**.

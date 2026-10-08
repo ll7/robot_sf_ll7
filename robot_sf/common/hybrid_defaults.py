@@ -105,12 +105,21 @@ def has_active_default_policy() -> bool:
 
 
 def current_switch_default() -> bool:
-    """Fill an omitted switch without adding fields to the typed config dump.
+    """Fill omitted goal validity and its sensor from the same source policy.
 
     Returns:
         True for current inputs and false for verified legacy inputs.
     """
     return active_default_policy()["default_set"] == "current"
+
+
+def physical_static_exclusion_default() -> bool:
+    """Keep static exclusion opt-in under the author ruling of 2026-10-08.
+
+    Returns:
+        False for both current and verified released inputs; explicit values win.
+    """
+    return False
 
 
 @contextmanager

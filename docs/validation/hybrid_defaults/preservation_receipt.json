@@ -1,0 +1,46 @@
+{
+  "approved_route": "docs/context/issue_3075_durable_artifact_backend.md; docs/context/artifact_retention_and_cleanup.md",
+  "archive_bytes": 1746841600,
+  "archive_sha256": "690127191d42fec05daffa113c6b3ece4ff90dace54cb1bf0f915f9f9b1e34c3",
+  "artifact_hydration": "wandb artifact get ll7/robot_sf/campaign-hybrid_defaults_010_20261008:v0 --root <scratch>; gunzip campaign.tar.gz; tar -xf campaign.tar; rehash every SHA256_MANIFEST.json member",
+  "capacity_preflight": "Both approved wrapper quota checks passed before upload; 32.82 GB initial headroom, 10 GB minimum floor.",
+  "claim_boundary": "Custody and restoration integrity only; development diagnostics, not release admission.",
+  "copies": {
+    "cluster": {
+      "bytes_verified": 1717018116,
+      "files_verified": 14848,
+      "jobs_run": 0,
+      "manifest_sha256": "0a838a7c733580d12294b7ec2968a4f9abbfb08fe9b19464dcffd1fa1fd67afa",
+      "method": "Every member read back and rehashed with SHA-256; complete byte sizes checked.",
+      "raw_json_gzip_files_verified": 14808,
+      "status": "verified",
+      "storage_location": "cluster-login:evidence/hybrid_defaults_010_20261008/",
+      "transfer": "rsync -a <snapshot>/ <private-login-node>:~/evidence/hybrid_defaults_010_20261008/"
+    },
+    "wandb": {
+      "archive_sha256": "690127191d42fec05daffa113c6b3ece4ff90dace54cb1bf0f915f9f9b1e34c3",
+      "artifact_state": "COMMITTED",
+      "artifact_uri": "wandb://ll7/robot_sf/campaign-hybrid_defaults_010_20261008:v0",
+      "bytes_verified": 1717018116,
+      "files_verified": 14848,
+      "manifest_sha256": "0a838a7c733580d12294b7ec2968a4f9abbfb08fe9b19464dcffd1fa1fd67afa",
+      "method": "Fresh API client, skip_cache cold download, gunzip and tar restore; every restored member rehashed with SHA-256.",
+      "raw_json_gzip_files_verified": 14808,
+      "status": "verified"
+    }
+  },
+  "independent_failure_domains": [
+    "W&B managed artifact backend",
+    "institutional cluster login storage"
+  ],
+  "manifest": "preservation_manifest.json.gz",
+  "producer_head": "234fa6eda2e4333c7a51e78998dc915a471abebb",
+  "raw_files": 14808,
+  "source_snapshot_retained": true,
+  "status": "verified",
+  "total_members": 14848,
+  "uncompressed_manifest_sha256": "0a838a7c733580d12294b7ec2968a4f9abbfb08fe9b19464dcffd1fa1fd67afa",
+  "upload_route": "private-ops:ops/jobs/scripts/preserve_campaign.sh --campaign-id hybrid_defaults_010_20261008 --campaign-dir <campaign-archive-and-manifest> --project robot_sf --workers 2",
+  "verified_payload_bytes": 1717018116,
+  "wrapper_receipt_digest": "sha256:4577ce059d172e85ef66ec0f5754a555fda29708db30e38da0ef7732a9af3c74"
+}

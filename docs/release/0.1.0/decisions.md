@@ -554,6 +554,7 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 See 0.0.8 D-080 for the approved decision-record policy; its tooling is a separate later lane.
 
 ### D-023: Enable the hybrid planner repairs by default
+- **Status of 2026-10-05 choice:** Superseded by the author ruling of 2026-10-08 below. The original entry and evidence are retained.
 - **Date:** 2026-10-05
 - **Question:** Should the three independent hybrid repair switches remain opt-in for 0.1.0?
 - **Choice:** Current inputs default to planner `physical_static_exclusion_enabled: true`, planner `goal_next_validity_enabled: true`, and environment `include_goal_next_valid: true`. Explicit values always win. Registered released/frozen inputs through 0.0.8 retain false fill-in at the typed builders, with unchanged resolved mappings and canonical digests.
@@ -622,3 +623,63 @@ item 2 is not fully resolved and the draft is not merge-ready. The decision brie
 recommends goal validity plus its sensor and static exclusion opt-in pending
 further repair. This is evidence for author reconsideration, not a new ruling;
 all-on remains in code and the reason/reopen clause above remain unchanged.
+
+#### D-023 author ruling, 2026-10-08
+
+- **Source:** Author ruling in chat to the orchestrator, 2026-10-08, explicitly
+  superseding **author decision 2026-10-05** under that decision's reopen clause.
+- **Choice:** Current/0.1.0 missing fields use
+  `physical_static_exclusion_enabled: false`, `goal_next_validity_enabled: true`,
+  and `include_goal_next_valid: true`. Each explicit value wins. Static exclusion
+  stays available with `physical_static_exclusion_enabled: true` in the algorithm
+  config. Released/frozen inputs through 0.0.8 retain their original defaults,
+  full constructor/environment dumps, resolved mappings and frozen identities.
+- **Reason:** Validity plus its required sensor had the most successes: 1,346 of
+  1,440, against 1,285 all off and 1,319 all on. It recovered 61 episodes and
+  introduced none. Every arm had zero collisions in this development sample.
+  Static exclusion reduced `francis2023_narrow_hallway` success from 26/30 to
+  4/30 and introduced 48 failures overall. Keep it opt-in until that problem is
+  fixed. This is a development default choice, not a safety guarantee or release
+  admission. The remaining hallway repair stays open.
+- **Enforcing tests:** `test_010_defaults_follow_author_ruling_20261008`,
+  `test_each_explicit_switch_overrides_the_selected_defaults`,
+  `test_registry_requires_known_source_and_matching_bytes`,
+  `test_registered_release_full_dataclasses_and_mapping_match_base`,
+  `test_release_scenario_environment_dataclasses_match_full_base_dumps`,
+  `test_release_registry_covers_learned_observation_contract` in
+  `tests/planner/test_hybrid_default_compatibility.py`;
+  `test_every_release_arm_keeps_full_base_environment_and_mapping_dumps`,
+  `test_new_env_and_planner_share_defaults_on_registered_release_scenario`,
+  `test_enabled_validity_rejects_a_missing_sensor_field` in
+  `tests/planner/test_hybrid_default_review_regressions.py`.
+- **Reopen:** Reopen if a fixed static exclusion beats validity plus sensor without introducing failures.
+
+Evidence produced at `234fa6eda2e4333c7a51e78998dc915a471abebb`:
+7,200 crowded and 204 empty-world episodes, development seeds 1001–1030 only.
+Historical `current_defaults` labels mean all-on; the selected new default is the
+explicit `goal_validity_with_sensor` arm. New selection applicability is recorded
+in `docs/validation/hybrid_defaults/ruling_applicability.json`.
+
+| Evidence path | SHA-256 |
+| --- | --- |
+| `docs/validation/hybrid_defaults/per_switch_summary.json` | `2a73832581917c79bf702dd743f1b84168462adcfd3cb2bee8c8d58a3372e92d` |
+| `docs/validation/hybrid_defaults/per_switch_manifest.json` | `b6d23532e12bf14b3d4a0c55dc25bf96c3077504ef2b9fa4e42fe8859ec2bd5b` |
+| `docs/validation/hybrid_defaults/per_switch_scenarios.csv` | `a151dc99d3a3d5b3edeae11b91d841d6fa4e6e1cd5b7ed2b5e23820563f45f04` |
+| `docs/validation/hybrid_defaults/per_switch_episodes.json.gz` | `b452e8d11c0afe4bccc5845b71af67522e2b7a9f4f5c101af7996866c2f9f3a7` |
+| `docs/validation/hybrid_defaults/per_switch_trace_identities.json.gz` | `54cb37ef56d784c2ff995edd1d724385b51f3681ce42dfc4148e213bf736b0d7` |
+| `docs/validation/hybrid_defaults/resume_validation.json.gz` | `dfa9fabff3dff93922a23235f6de3472f74460c9422d88d259b12efd69cb6b2e` |
+| `docs/validation/hybrid_defaults/preservation_manifest.json.gz` | `1f102b1dc78932cc4196f1dcbcae341a45c1918b1aa28e677e71ce822da2f4e7` |
+
+**Preservation:** Complete 14,808 raw JSON/gzip files, original campaign manifest,
+per-episode and per-scenario tables, every failure classification and completion
+audit are bound by the SHA-256 manifest above. The uncompressed bundle manifest
+has SHA-256 `0a838a7c733580d12294b7ec2968a4f9abbfb08fe9b19464dcffd1fa1fd67afa`.
+Storage locations: `wandb://ll7/robot_sf/campaign-hybrid_defaults_010_20261008:v0`
+and `cluster-login:evidence/hybrid_defaults_010_20261008/`. The latter is the
+private login-node location requested by the author; its transport hostname and
+home path are kept in the private lane report. No cluster jobs run.
+The repository preservation route is
+[the approved W&B backend](../../context/issue_3075_durable_artifact_backend.md)
+and [restore-tested custody](../../context/artifact_retention_and_cleanup.md).
+Read-back results and commands are recorded in
+`docs/validation/hybrid_defaults/preservation_receipt.json`.

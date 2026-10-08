@@ -59,7 +59,7 @@ ARM_SWITCHES = {
     "sensor_only": (False, False, True),
     "goal_validity_with_sensor": (False, True, True),
     "static_plus_goal_validity": (True, True, True),
-    "current_defaults": (True, True, True),
+    "current_defaults": (False, True, True),
     "orca": (False, False, False),
 }
 

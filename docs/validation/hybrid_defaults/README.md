@@ -1,5 +1,20 @@
 # Hybrid defaults for release 0.1.0
 
+## Author ruling, 2026-10-08
+
+Current defaults: `physical_static_exclusion_enabled: false`,
+`goal_next_validity_enabled: true`, `include_goal_next_valid: true`.
+Static exclusion remains opt-in with `physical_static_exclusion_enabled: true`.
+[The ruling and enforcing proof](ruling_proof.md) supersede the all-on choice.
+[New selection applicability](ruling_applicability.json) distinguishes historical
+all-on arm labels from the defaults now in code. Full raw data is preserved
+with [the SHA-256 manifest](preservation_manifest.json.gz); storage and read-back
+receipts are recorded in D-023 and `preservation_receipt.json`.
+
+## Historical all-on implementation and measurement record
+
+The following record describes the measurement producer before this ruling.
+
 Diagnostic development evidence only. This change does not admit release results
 or assert collision safety. Retired and sealed seeds are excluded from new runs.
 

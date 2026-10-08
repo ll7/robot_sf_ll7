@@ -33,7 +33,11 @@ from typing import Any
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 
-from robot_sf.common.hybrid_defaults import current_switch_default, defaults_for_source
+from robot_sf.common.hybrid_defaults import (
+    current_switch_default,
+    defaults_for_source,
+    physical_static_exclusion_default,
+)
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.nav.proxemic_costmap import (
@@ -321,7 +325,9 @@ class HybridRuleLocalPlannerConfig:
     hard_safety_margin: float = 0.05
     static_hard_safety_margin: float = -1.0
     debug_candidate_evaluator: bool = False
-    physical_static_exclusion_enabled: bool = field(default_factory=current_switch_default)
+    physical_static_exclusion_enabled: bool = field(
+        default_factory=physical_static_exclusion_default
+    )
     goal_next_validity_enabled: bool = field(default_factory=current_switch_default)
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9

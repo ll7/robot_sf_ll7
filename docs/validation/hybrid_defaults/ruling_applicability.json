@@ -1,0 +1,21 @@
+{
+  "changed_bound_files": [
+    "robot_sf/common/hybrid_defaults.py",
+    "robot_sf/planner/hybrid_rule_local_planner.py",
+    "scripts/validation/run_hybrid_default_comparison.py",
+    "scripts/validation/run_hybrid_feasibility_diagnostics.py"
+  ],
+  "counterfactual_roster": "Five explicit arms retain 000,100,001,011,111; the newly named static_plus_goal_validity counterfactual is 111. Empty-world current_defaults now uses 011.",
+  "historical_current_defaults_means": "all three on (111), not the defaults after this ruling",
+  "historical_documentation_head": "8e6ab04a0c219af3cab085ffd813421772696989",
+  "measurement_producer_head": "234fa6eda2e4333c7a51e78998dc915a471abebb",
+  "producer_bound_files": 1428,
+  "ruling": "2026-10-08",
+  "scope": "Default selection and diagnostic arm labels only; planner algorithm fixes and every input remain those of the measurement producer. Explicit measured 011 controls match new typed defaults. This is reuse of a measured arm, not a new exact-head campaign. Historical measurement_applicability.json applies to 8e6ab04a only.",
+  "selected_effective_switches": {
+    "goal_next_validity_enabled": true,
+    "include_goal_next_valid": true,
+    "physical_static_exclusion_enabled": false
+  },
+  "selected_measured_arm": "goal_validity_with_sensor"
+}

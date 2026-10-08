@@ -12,7 +12,10 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
     _resolve_policy_search_candidate_runtime,
 )
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
-from robot_sf.planner.hybrid_rule_local_planner import build_hybrid_rule_local_planner_config
+from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleLocalPlannerConfig,
+    build_hybrid_rule_local_planner_config,
+)
 from scripts.validation.run_policy_search_step_diagnostics import _json_ready
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,12 +25,30 @@ SNAPSHOTS = json.loads(
 PLANNER_SWITCHES = ("physical_static_exclusion_enabled", "goal_next_validity_enabled")
 
 
-def test_current_defaults_enable_all_three_switches():
-    """An unregistered config enables both planner repairs and the validity sensor."""
+def test_010_defaults_follow_author_ruling_20261008():
+    """New inputs enable validity and its sensor while static exclusion stays opt-in."""
     cfg = build_hybrid_rule_local_planner_config({})
-    assert cfg.physical_static_exclusion_enabled is True
+    assert cfg.physical_static_exclusion_enabled is False
     assert cfg.goal_next_validity_enabled is True
     assert RobotSimulationConfig().include_goal_next_valid is True
+    assert HybridRuleLocalPlannerConfig().physical_static_exclusion_enabled is False
+    assert HybridRuleLocalPlannerConfig().goal_next_validity_enabled is True
+    from scripts.validation.run_hybrid_default_comparison import PER_SWITCH_ARMS
+    from scripts.validation.run_hybrid_feasibility_diagnostics import ARM_SWITCHES
+
+    assert ARM_SWITCHES["current_defaults"] == (
+        cfg.physical_static_exclusion_enabled,
+        cfg.goal_next_validity_enabled,
+        RobotSimulationConfig().include_goal_next_valid,
+    )
+    # The new fill-in must not replace the explicit all-on counterfactual.
+    assert {ARM_SWITCHES[arm] for arm in PER_SWITCH_ARMS} == {
+        (False, False, False),
+        (True, False, False),
+        (False, False, True),
+        (False, True, True),
+        (True, True, True),
+    }
 
 
 @pytest.mark.parametrize("switch", (*PLANNER_SWITCHES, "include_goal_next_valid"))
@@ -41,7 +62,7 @@ def test_each_explicit_switch_overrides_the_selected_defaults(switch, value):
         other = next(k for k in PLANNER_SWITCHES if k != switch)
         cfg = build_hybrid_rule_local_planner_config({switch: value})
         assert getattr(cfg, switch) is value
-        assert getattr(cfg, other) is True
+        assert getattr(cfg, other) is (other == "goal_next_validity_enabled")
 
 
 @pytest.mark.parametrize("value", (False, True, "true"))
@@ -65,7 +86,7 @@ def test_scenario_validity_override_wins_or_rejects_non_boolean(value):
 @pytest.mark.parametrize("source", sorted(k for k in SNAPSHOTS if k != "environment"))
 def test_registered_release_full_dataclasses_and_mapping_match_base(source):
     """Current defaults differ, but registered release dumps and raw identities do not."""
-    assert build_hybrid_rule_local_planner_config({}).physical_static_exclusion_enabled is True
+    assert build_hybrid_rule_local_planner_config({}).physical_static_exclusion_enabled is False
     from robot_sf.common.hybrid_defaults import defaults_for_source, source_default_policy
 
     _, raw = _resolve_policy_search_candidate_runtime(
@@ -113,7 +134,8 @@ def test_registry_requires_known_source_and_matching_bytes(tmp_path, monkeypatch
     source.write_text("planner_variant: hybrid_rule_v4_clearance_braking\n")
     with defaults_for_source(source):
         cfg = build_hybrid_rule_local_planner_config({})
-        assert all(getattr(cfg, k) is True for k in PLANNER_SWITCHES)
+        assert cfg.physical_static_exclusion_enabled is False
+        assert cfg.goal_next_validity_enabled is True
         assert RobotSimulationConfig().include_goal_next_valid is True
     assert source_default_policy(source)["default_set"] == "current"
     from robot_sf.common import hybrid_defaults

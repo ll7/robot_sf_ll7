@@ -42,7 +42,7 @@ PER_SWITCH_ARMS = (
     "static_only",
     "sensor_only",
     "goal_validity_with_sensor",
-    "current_defaults",
+    "static_plus_goal_validity",
 )
 SWITCH_NAMES = (
     "physical_static_exclusion_enabled",

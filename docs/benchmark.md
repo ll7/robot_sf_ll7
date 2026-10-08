@@ -372,3 +372,45 @@ Every native-command episode record includes additive fields:
 - `metrics.deadlock_stall`: A detailed diagnostic block detailing the parameters and statistics of the deadlock check.
 - `algorithm_metadata.planner_diagnostics`: High-resolution stats detailing subprocess runtimes (`planner_step_runtime_seconds`), exit codes (`exit_codes` / `last_exit_code`), timeouts (`runtime_bound_exits`), and fallbacks (`fallback_count`). This is the canonical location consumed by the issue #5416 analyzer.
 - `algorithm_metadata.native_command`: Subprocess launch configuration, invocation provenance, and the resolved binary path/content hash when readable. The map-runner compatibility arm records both the canonical names (`argv`, `timeout_s`, `persistent`) and its legacy aliases.
+
+
+## Runtime physics in campaign manifests
+
+Main's campaign writer emits `benchmark-camera-ready-campaign.v2`. Preflight
+metadata describes intended execution; the final `campaign_manifest.json` adds
+`effective_physics.v1` witnesses captured from the running map environment before
+teardown. Publication bundles preserve that campaign manifest and episode records.
+Historical v1 manifests remain readable and are not rewritten.
+
+Each native episode carries `effective_physics` and the dissertation intake's
+`release_design_parameters` mapping. The snapshot records contact, force, metric,
+placement and occupancy-grid radius roles; the sampler's actual distribution
+inputs and per-agent speed caps; active wall, social and group force parameters;
+robot interaction and effective reverse cap; plant identity; pedestrian timestep
+and integrator; and executing metric definitions for TTC and surface clearance.
+The absence of a separate robot-steering force is recorded explicitly. Heading
+model variants are identified separately from that force graph.
+
+The final manifest contains one source episode/seed witness per scenario and
+configuration hash. Every episode is validated; only equal, non-null intake fields
+across every episode appear in the global mapping. Scenario-dependent values stay
+in the witnesses and episode mappings. `effective_physics_episode_count` records
+coverage. A campaign with no episode rows has zero coverage and no physics claim.
+Missing, malformed or contradictory witnesses in existing rows block final v2
+manifest writing; resuming old rows does not silently manufacture physics facts.
+
+For the legacy spawn-coupled speed model, normal mean/spread and a scalar global
+cap do not exist. These three snapshot fields are null, the cap rule and per-agent
+caps are explicit, and the fields are omitted from the global intake mapping.
+The dissertation intake will keep them unverified until its consumer supports this
+model's definition or uses a reviewed source witness. For the clipped-normal model,
+all 15 intake fields are recorded with usable values; fields that differ across
+scenarios are verified through the episode mappings rather than global defaults.
+
+`robot_sf.benchmark.effective_physics.validate_effective_physics(snapshot, env=env)`
+checks the JSON schema and equality with live objects. Without `env`, it checks
+schema and finite JSON values.
+`validate_campaign_physics(manifest)` checks version, coverage, sample identities,
+snapshot schemas and consistency of global fields with the runtime samples.
+Neither validator treats a planner's configuration or observed velocity as proof
+of a pedestrian-model parameter.

@@ -88,6 +88,22 @@ from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
 
 
+@pytest.fixture(autouse=True)
+def _mock_runtime_physics_for_orchestrator_units(monkeypatch):
+    """Orchestrator units use mocked episodes; native physics has separate integration tests."""
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "campaign_physics",
+        lambda root: {
+            "effective_physics_schema_version": "effective-physics.v1",
+            "effective_physics_episode_count": 0,
+            "effective_physics_samples": [],
+            "release_design_parameters": {},
+        },
+        raising=False,
+    )
+
+
 def test_camera_ready_campaign_reexports_package_artifact_helpers() -> None:
     """Legacy camera_ready_campaign imports expose moved artifact helpers."""
     helper_names = (

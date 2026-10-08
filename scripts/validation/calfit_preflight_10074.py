@@ -49,14 +49,24 @@ def estimator_controls() -> list[dict[str, object]]:
         centre_xy=(0, 0),
         obstacle_radius_m=0.25,
     )
-    t = np.arange(101) * 0.1
+    t = np.arange(601) * 0.1
     straight = np.column_stack([t, np.zeros(len(t))])
-    turning = m.turning_onset(
-        np.column_stack([t, np.clip(t - 3, 0, 1) * 0.4]),
-        np.column_stack([10 - t, np.zeros(len(t))]),
-        t,
-        [straight] * 5,
-    )  # Own PoMD x=5, first captured baseline-exceeding sample x=2.
+    tiny = straight.copy()
+    tiny[:, 1] = 1e-8 * np.sin(t)
+    interferer = np.column_stack([60 - t, np.zeros(len(t))])
+    turning = m.turning_onset(tiny, interferer, t, [straight] * 5)
+    # Two identical analytic manoeuvres translated five metres have onsets five
+    # metres apart. Both finish well before PoMD x=30; no capture-edge oracle.
+    onsets = []
+    for location in (19.0, 24.0):
+        path = straight.copy()
+        path[:, 1] = 0.5 * (1 + np.tanh((t - location) / 0.5))
+        onsets.append(
+            m.turning_onset(path, interferer, t, [straight] * 5, analysis_window_m=25.0)["onset_m"]
+        )
+    shifted = {
+        "onset_translation_m": None if any(v is None for v in onsets) else onsets[0] - onsets[1]
+    }
     specifications = [
         ("V1", acceleration, "fitted_desired_speed_m_s", 1.29),
         ("V1", acceleration, "fitted_tau_s", 0.54),
@@ -65,7 +75,8 @@ def estimator_controls() -> list[dict[str, object]]:
         ("V4", wide, "all_data_specific_flow_persons_m_s", 6 / 11),
         ("V4", wide, "steady_specific_flow_persons_m_s", 0.5),
         ("V5", clearance, "lateral_cm_to_edge_m", 0.5),
-        ("V6", turning, "onset_m", 3.0),
+        ("V6", turning, "onset_m", None),
+        ("V6", shifted, "onset_translation_m", 5.0),
     ]
     return [
         {
@@ -74,7 +85,15 @@ def estimator_controls() -> list[dict[str, object]]:
             "expected": expected,
             "observed": result[key],
             "known_answer_pass": bool(
-                result[key] is not None and np.isclose(result[key], expected, rtol=0, atol=1e-8)
+                result[key] is None
+                if expected is None
+                else result[key] is not None
+                and np.isclose(
+                    result[key],
+                    expected,
+                    rtol=0,
+                    atol=0.2 if key == "onset_translation_m" else 1e-8,
+                )
             ),
         }
         for case, result, key, expected in specifications

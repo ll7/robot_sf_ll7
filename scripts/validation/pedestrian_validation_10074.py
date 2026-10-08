@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -331,7 +332,7 @@ def markdown(table):
 # Source protocol runner. Historical helpers above remain callable for default-byte proof.
 
 
-def protocol_simulate(  # noqa: PLR0913
+def protocol_simulate(  # noqa: C901, PLR0913
     state,
     segments,
     config,
@@ -343,6 +344,8 @@ def protocol_simulate(  # noqa: PLR0913
     stop_x=None,
     desired_distribution=None,
     desired_seed=None,
+    physics_receipts=None,
+    step_receipts=None,
 ):
     """Step actual forces; optionally prescribe a straight nonreactive second walker.
 
@@ -355,7 +358,11 @@ def protocol_simulate(  # noqa: PLR0913
     """
     require_initial_admissibility(state, segments, config.scene_config.agent_radius)
     walls = [(a, c, b, d) for a, b, c, d in segments]
+    if interferer and getattr(config, "pedestrian_contact_rule", None) is not None:
+        config.contact_prescribed_indices = (1,)
     sim = pysocialforce.Simulator(state=state.copy(), obstacles=walls, config=config)
+    if physics_receipts is not None:
+        physics_receipts.append(sim.pedestrian_physics_metadata())
     positions, speeds = [sim.peds.pos().copy()], []
     if desired_distribution is not None:
         if desired_seed is None or not 1001 <= desired_seed <= 1030:
@@ -374,17 +381,27 @@ def protocol_simulate(  # noqa: PLR0913
             # Forces see desired speeds; only velocity integration sees the cap.
             desired_speeds = sim.peds.max_speeds.copy()
             sim.peds.max_speeds = np.full(sim.peds.size(), speed_cap_m_s)
+            if getattr(config, "pedestrian_contact_rule", None) or getattr(
+                getattr(config, "obstacle_force_config", None), "wall_contact_rule", None
+            ):
+                sim.peds.contact_step_speed_caps = sim.peds.max_speeds.copy()
             try:
                 return integrate(force, *args, **kwargs)
             finally:
                 sim.peds.max_speeds = desired_speeds
 
         sim.peds.step = capped_integration
+    step_time_s = 0.0
+    projection_passes = []
     for k in range(steps):
         if goal_update is not None:
             goal_update(sim)
         # Preserve registered forces, callbacks and future post-integration contact handling.
+        begin_step = time.perf_counter() if step_receipts is not None else None
         sim.step()
+        if begin_step is not None:
+            step_time_s += time.perf_counter() - begin_step
+            projection_passes.append(getattr(sim, "contact_projection_passes", 0))
         if interferer:
             # Subject forces saw the exact prescribed position/velocity at step start.
             sim.peds.state[1, :2] = (
@@ -395,6 +412,24 @@ def protocol_simulate(  # noqa: PLR0913
         speeds.append(np.linalg.norm(sim.peds.vel(), axis=1))
         if stop_x is not None and sim.peds.pos()[0, 0] > stop_x:
             break
+    if physics_receipts is not None:
+        physics_receipts[-1] = sim.pedestrian_physics_metadata()
+    if step_receipts is not None:
+        step_receipts.append(
+            {
+                "steps": len(speeds),
+                "step_time_s": step_time_s,
+                "maximum_projection_passes": max(projection_passes, default=0),
+                "fallback_count": getattr(sim, "contact_projection_fallback_count", 0),
+                "unresolved_count": getattr(sim, "contact_projection_unresolved_count", 0),
+                "maximum_speed_m_s": float(np.max(speeds)) if speeds else 0.0,
+                "over_cap_samples": int(
+                    np.count_nonzero(np.asarray(speeds) > speed_cap_m_s + 1e-10)
+                )
+                if speed_cap_m_s is not None
+                else None,
+            }
+        )
     return np.asarray(positions), np.asarray(speeds), desired
 
 
@@ -405,7 +440,7 @@ def calfit_exponential_force(force):
     return reused.exponential_force(force)
 
 
-def run_task(task):  # noqa: C901, PLR0915
+def run_task(task):  # noqa: C901, PLR0912, PLR0915
     """One source-protocol dev episode, or historical byte-compatibility episode."""
     case, seed, variant, radius, mode = task[:5]
     options = task[5] if len(task) > 5 else {}
@@ -425,6 +460,8 @@ def run_task(task):  # noqa: C901, PLR0915
     input_audits = []
     trace_segments = []
     holding_receipts = []
+    physics_receipts = []
+    step_receipts = []
     original_force = reused.ObstacleForce.__call__
 
     def configured(candidate, speed):
@@ -441,6 +478,17 @@ def run_task(task):  # noqa: C901, PLR0915
             cfg.obstacle_force_config.sigma = 0.0
             if wall_candidate["family"] == "exponential_edge":
                 reused.ObstacleForce.__call__ = calfit_exponential_force
+        if options.get("pedestrian_contact_rule") is not None:
+            cfg.pedestrian_contact_rule = options["pedestrian_contact_rule"]
+        if options.get("pedestrian_wall_rule") is not None:
+            cfg.obstacle_force_config.wall_contact_rule = options["pedestrian_wall_rule"]
+            for key in ("amplitude_m_s2", "decay_m", "range_m"):
+                if key in options.get("wall_contact_parameters", {}):
+                    setattr(
+                        cfg.obstacle_force_config,
+                        "wall_contact_" + key,
+                        options["wall_contact_parameters"][key],
+                    )
         if literature:
             cfg.scene_config.desired_speed_mean = 1.29 if options.get("calfit") else 1.3
             cfg.scene_config.desired_speed_std = 0.19 if options.get("calfit") else 0.2
@@ -475,6 +523,13 @@ def run_task(task):  # noqa: C901, PLR0915
             speed_cap_m_s=options.get("execution_cap_m_s", 3.0) if literature else None,
             **extra,
             **kwargs,
+            **(
+                {"physics_receipts": physics_receipts, "step_receipts": step_receipts}
+                if options.get("pedcontact_measurement")
+                or options.get("pedestrian_contact_rule")
+                or options.get("pedestrian_wall_rule")
+                else {}
+            ),
         )
         traces.append((p, v, desired))
         return p, v
@@ -577,13 +632,15 @@ def run_task(task):  # noqa: C901, PLR0915
             state = np.array(
                 [
                     [0.0, y, speed, 0.0, 100.0, y, 0.5],
-                    [12.0, 0.0, -speed, 0.0, -100.0, 0.0, 0.5],
+                    [60.0, 0.0, -speed, 0.0, -100.0, 0.0, 0.5],
                 ]
             )
             cfg = configured(CANDIDATE, speed)
             # Source speed conditions are controlled, even in the literature tier.
             cfg.scene_config.desired_speed_mean, cfg.scene_config.desired_speed_std = speed, 0.0
-            steps = int(np.ceil(12 / speed / 0.1))
+            # Extended deterministic capture, beyond the force range. Human
+            # protocol used 12m; this explicit extension prevents window clipping.
+            steps = int(np.ceil(60 / speed / 0.1))
             input_audits.append(initial_admissibility(state, [], cfg.scene_config.agent_radius))
             p, v, desired = protocol_simulate(
                 state,
@@ -591,9 +648,18 @@ def run_task(task):  # noqa: C901, PLR0915
                 cfg,
                 steps,
                 interferer=True,
+                **(
+                    {"physics_receipts": physics_receipts, "step_receipts": step_receipts}
+                    if options.get("pedcontact_measurement")
+                    or options.get("pedestrian_contact_rule")
+                    or options.get("pedestrian_wall_rule")
+                    else {}
+                ),
                 speed_cap_m_s=options.get("execution_cap_m_s") if options.get("calfit") else None,
             )
             traces.append((p, v, desired))
+            if getattr(cfg, "contact_prescribed_indices", ()):
+                del cfg.contact_prescribed_indices
             baselines = []
             for _ in range(5):
                 bp, _bv, _bd = protocol_simulate(
@@ -601,16 +667,30 @@ def run_task(task):  # noqa: C901, PLR0915
                     [],
                     cfg,
                     steps,
+                    **(
+                        {"physics_receipts": physics_receipts, "step_receipts": step_receipts}
+                        if options.get("pedcontact_measurement")
+                        else {}
+                    ),
                     speed_cap_m_s=options.get("execution_cap_m_s")
                     if options.get("calfit")
                     else None,
                 )
                 baselines.append(bp[:, 0])
             row.update(
-                estimators.turning_onset(p[:, 0], p[:, 1], np.arange(len(p)) * 0.1, baselines)
+                estimators.turning_onset(
+                    p[:, 0],
+                    p[:, 1],
+                    np.arange(len(p)) * 0.1,
+                    baselines,
+                    yaw_threshold_rad_s=options.get("yaw_threshold_rad_s", 0.05),
+                    analysis_window_m=options.get("analysis_window_m", 3.0),
+                    persistence_s=options.get("onset_persistence_s", 0.3),
+                )
             )
             row["interferer_nonreactive"] = True
             row["baseline_trial_n"] = 5
+            row["initial_pair_separation_m"] = 60.0
             row["baseline_identical_reason"] = "deterministic CM model; no trunk sway/noise"
             row["min_pair_centre_m"] = float(np.linalg.norm(p[:, 0] - p[:, 1], axis=-1).min())
             row["_baselines"] = np.asarray(baselines)
@@ -637,6 +717,15 @@ def run_task(task):  # noqa: C901, PLR0915
                 else "source-controlled speed"
             )
         row["trajectory_sha256"] = hashlib.sha256(p.tobytes()).hexdigest()
+        if physics_receipts:
+            row["effective_pedestrian_physics"] = physics_receipts
+            row["step_runtime"] = step_receipts
+            segments = trace_segments[-1] if trace_segments else []
+            row["wall_penetration_ped_steps"] = (
+                int(np.count_nonzero(reused.harness.distance(p[1:], segments) < radius))
+                if segments
+                else 0
+            )
         row["_positions"], row["_speeds"] = p, v
         return row
     finally:
@@ -713,6 +802,8 @@ def protocol_summary(rows, config):  # noqa: C901
             }
             if entry["simulated"]["mean"] is not None:
                 entry["difference"] = entry["simulated"]["mean"] - 0.5
+        entry["right_censored_n"] = sum(bool(r.get("onset_right_censored")) for r in group)
+        entry["comparison"] = {"V6": "published_lower_bound"}.get(case)
         if case == "V6" and entry["simulated"]["mean"] is not None:
             entry["difference"] = entry["simulated"]["mean"] - entry["published_value"]
         if case == "V8":

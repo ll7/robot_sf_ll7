@@ -70,6 +70,22 @@ Each single pedestrian is defined by:
 
 ### Wait Rule Format
 
+With the opt-in `projection_v1` pedestrian contact rule or the `bounded_edge_v1`
+wall contact rule (including wall-only mode), active start delays, waypoint waits,
+proximity holds, and the `wait` role fix the actor's position and zero its velocity
+through contact correction. A moving neighbor absorbs the separation correction.
+Releasing the hold makes the actor movable again. If fixed actors overlap each
+other or a wall, the solver records its existing fallback and unresolved counters;
+it does not move a held actor to escape an infeasible configuration. An infeasible
+fixed pair does not abort projection of other pairs. Local rollback of movable
+contact sets remains available even when unrelated held actors overlap.
+
+The validation-only `contact_prescribed_indices` selector also prevents wall
+push-out and wall projection of prescribed actors. A prescribed actor keeps its
+prescribed trajectory; incompatible wall geometry is reported as unresolved.
+Prescribed trajectories retain their rollback guard. Controller holds override
+prescribed motion for the held actor while active.
+
 Each wait rule includes:
 
 | Field | Type | Required | Description |

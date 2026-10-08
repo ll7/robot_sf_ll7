@@ -166,6 +166,8 @@ class PedState:
         self.desired_speed_seed = config.desired_speed_seed
 
         self.max_speeds: np.ndarray | None = None
+        # Controller holds constrain contact geometry independently of speed capability.
+        self.contact_held_indices: set[int] = set()
         self.initial_speeds: np.ndarray | None = None
         # Explicitly assigned desired speeds decouple the goal-driving speed
         # (``max_speeds``) from the spawn speed (issue #4972). When ``None`` the

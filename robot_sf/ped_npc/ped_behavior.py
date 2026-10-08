@@ -406,10 +406,13 @@ class SinglePedestrianBehavior:
             if runtime.ped_id not in self._start_delay_max_speeds:
                 self._start_delay_max_speeds[runtime.ped_id] = float(max_speeds[runtime.ped_id])
             max_speeds[runtime.ped_id] = 0.0
+            peds.contact_held_indices.add(runtime.ped_id)
 
     def step(self) -> None:
         """Advance single-pedestrian behaviors for one timestep."""
         for runtime in self._runtimes:
+            if self._pysf_peds is not None:
+                self._pysf_peds.contact_held_indices.discard(runtime.ped_id)
             if self._tick_start_delay(runtime):
                 continue
             role = runtime.definition.role
@@ -429,6 +432,8 @@ class SinglePedestrianBehavior:
     def reset(self) -> None:
         """Reset per-pedestrian runtime state for a new episode."""
         for runtime in self._runtimes:
+            if self._pysf_peds is not None:
+                self._pysf_peds.contact_held_indices.discard(runtime.ped_id)
             runtime.waypoint_index = 0
             runtime.pending_waits = {
                 rule.waypoint_index: rule.wait_s for rule in runtime.definition.wait_at or []
@@ -494,6 +499,8 @@ class SinglePedestrianBehavior:
 
     def _release_start_delay(self, runtime: SinglePedestrianRuntime) -> None:
         """Restore the pedestrian's configured goal after a start-delay dwell."""
+        if self._pysf_peds is not None:
+            self._pysf_peds.contact_held_indices.discard(runtime.ped_id)
         self._set_start_delay_speed_cap(
             runtime,
             self._start_delay_max_speeds.get(runtime.ped_id, 0.0),
@@ -532,6 +539,8 @@ class SinglePedestrianBehavior:
         if runtime.wait_remaining_s <= 0 and runtime.waiting_for_advance:
             runtime.waiting_for_advance = False
             self._advance_waypoint(runtime)
+            if self._pysf_peds is not None:
+                self._pysf_peds.contact_held_indices.discard(runtime.ped_id)
         return runtime.wait_remaining_s > 0
 
     @staticmethod
@@ -654,6 +663,8 @@ class SinglePedestrianBehavior:
 
     def _hold_position(self, runtime: SinglePedestrianRuntime) -> None:
         """Hold the pedestrian in place by zeroing velocity and goal."""
+        if self._pysf_peds is not None:
+            self._pysf_peds.contact_held_indices.add(runtime.ped_id)
         pos = self.states.pos_of(runtime.ped_id)
         self.states.redirect(runtime.ped_id, pos)
         self.states.set_velocity(runtime.ped_id, (0.0, 0.0))

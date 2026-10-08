@@ -142,17 +142,26 @@ def _case_checks(case, variant, bank, config):
         target = config["V3"]["published_specific_flow_persons_m_s"][
             config["V3"]["widths_m"].index(float(variant))
         ]
-        checks.append(
-            _check(
-                case,
-                variant,
-                required[case][0],
-                values,
-                target,
-                [0.8 * target, 1.2 * target],
-                "±20% of literature flow",
-            )
+        check = _check(
+            case,
+            variant,
+            required[case][0],
+            values,
+            target,
+            [0.8 * target, 1.2 * target],
+            "±20% of literature finite-N flow",
         )
+        censored = [r for r in bank if r.get("flow_right_censored", False)]
+        check["right_censored_n"] = len(censored)
+        check["crossed"] = [r.get("crossed") for r in bank]
+        check["estimator_id"] = "finite_n_completion_upper_bound_v2"
+        if censored and check["estimate"] is not None:
+            # Average completion flow is in [0, average observed upper bound].
+            # Only a bound BELOW the accepted band can settle a failure.
+            check["identified_interval"] = [0.0, check["estimate"]]
+            check["status"] = "FAIL" if check["estimate"] < 0.8 * target else "CENSORED"
+            check["rule"] += "; incomplete full-N flow upper bound; cannot establish PASS"
+        checks.append(check)
     elif case in {"V5", "V6"}:
         source = config[case]
         if case == "V5":
@@ -163,8 +172,24 @@ def _case_checks(case, variant, bank, config):
             target = source["published_onset_m"][i]
             band = (source.get("acceptance_ranges_m") or [None] * 3)[i]
             sd = (source.get("published_onset_sd_m") or [None] * 3)[i]
-        bounds, rule = _distribution_tolerance(target, band, sd)
-        checks.append(_check(case, variant, required[case][0], values, target, bounds, rule))
+        if case == "V6":
+            check = _check(
+                case,
+                variant,
+                required[case][0],
+                values,
+                target,
+                [target, float("inf")],
+                "2026-10-03 author ruling: model onset >= published lower bound",
+            )
+            check["tolerance_range"] = [target, None]
+            check["comparison"] = "published_lower_bound"
+            check["right_censored_n"] = sum(bool(r.get("onset_right_censored")) for r in bank)
+            check["estimator_id"] = "fixed_yaw_source_window_lower_bound_v3"
+            checks.append(check)
+        else:
+            bounds, rule = _distribution_tolerance(target, band, sd)
+            checks.append(_check(case, variant, required[case][0], values, target, bounds, rule))
     return checks
 
 
@@ -216,12 +241,85 @@ def _original_shoulder_case(row):
     )
 
 
+def _finite_nonnegative(value):
+    """Check a recorded nonnegative numeric measurement.
+
+    Returns:
+        Whether the value is finite, numeric and nonnegative.
+    """
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and np.isfinite(value)
+        and value >= 0
+    )
+
+
+def _valid_counter(value):
+    """Validate nonnegative integral counters.
+
+    Returns:
+        Whether the counter is finite and has a numeric integer value.
+    """
+    return _finite_nonnegative(value) and value == int(value)
+
+
+def _recorded_physics(row):
+    """Read independent physical failures and malformed runtime receipts.
+
+    Returns:
+        Invalid receipt, physical violation and solver fallback flags.
+    """
+    invalid = False
+    violated = False
+    fallback = False
+    records = [row, row.get("pair_overlap", {}).get("all", {})]
+    runtime = row.get("step_runtime", [])
+    if not isinstance(runtime, list) or any(not isinstance(r, dict) for r in runtime):
+        return True, False, False
+    records.extend(runtime)
+    for record in records:
+        for key in (
+            "unresolved_count",
+            "over_cap_samples",
+            "wall_penetration_ped_steps",
+            "below_2r_count",
+            "initial_overlapping_pairs",
+            "fallback_count",
+            "steps",
+            "maximum_projection_passes",
+        ):
+            if key not in record:
+                continue
+            value = record[key]
+            if not _valid_counter(value):
+                invalid = True
+            elif key == "fallback_count":
+                fallback |= value > 0
+            elif key not in {"steps", "maximum_projection_passes"}:
+                violated |= value > 0
+    invalid |= any(
+        not _finite_nonnegative(record[key])
+        for record in runtime
+        for key in ("step_time_s", "maximum_speed_m_s")
+        if key in record
+    )
+    if "wall_penetration_m" in row:
+        value = row["wall_penetration_m"]
+        if not _finite_nonnegative(value):
+            invalid = True
+        else:
+            violated |= value > 0
+    return invalid, violated, fallback
+
+
 def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, object]:
     """Evaluate population means, preserving every physical/censoring failure.
 
     Full acquisition admission additionally requires the complete declared grid;
     callers evaluating a single case receive an explicitly observed-cases scope.
-    V5/V6 without reported spread use the author-approved ±20% fallback.
+    V5 without reported spread uses the author-approved ±20% fallback.
+    V6 uses the author-ruled one-sided published onset lower bounds.
 
     Returns:
         Gate table with residuals, ranges, provenance and independent hard failures.
@@ -235,15 +333,19 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         for r in active
         if any(r.get(key) is None or not np.isfinite(r[key]) for key in required.get(r["case"], ()))
     ]
-    physical = [
-        f"{r['case']}/{r['variant']}/{r['seed']}"
-        for r in active
-        if (
-            r.get("wall_penetration_m", 0.0) > 0.0
-            or r["pair_overlap"]["all"]["below_2r_count"] > 0
-            or r["pair_overlap"]["all"].get("initial_overlapping_pairs", 0) > 0
-        )
-    ]
+    physical = []
+    fallbacks = []
+    for row in active:
+        identity = f"{row['case']}/{row['variant']}/{row['seed']}"
+        invalid, violated, fallback = _recorded_physics(row)
+        if invalid and identity not in missing:
+            missing.append(identity)
+        if violated:
+            physical.append(identity)
+        if fallback:
+            fallbacks.append(identity)
+            if identity not in physical:
+                physical.append(identity)
     checks = []
     for case, variant in sorted(
         {(r["case"], r["variant"]) for r in active if r["case"] in required}
@@ -269,6 +371,7 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         if len(observed) != len(expected) or set(observed) != expected:
             missing.append("complete declared V1-V6 dev grid")
     numerical = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "FAIL"]
+    censored = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "CENSORED"]
     unspecified = [f"{c['case']}/{c['variant']}" for c in checks if c["status"] == "UNSPECIFIED"]
     missing += [
         f"{c['case']}/{c['variant']}"
@@ -280,7 +383,9 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         4
         if not rows
         else (
-            3 if physical else (2 if missing else (1 if numerical else (5 if unspecified else 0)))
+            3
+            if physical
+            else (2 if missing else (1 if numerical else (5 if unspecified or censored else 0)))
         )
     )
     return {
@@ -288,9 +393,15 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         "scope": "complete dev suite" if require_complete else "observed cases",
         "measurement_missing": missing,
         "physical_violations": physical,
+        "solver_fallbacks": fallbacks,
+        "fallback_disposition": "diagnostic; qualification requires explicit disposition",
         "numeric_failures": numerical,
         "unspecified_tolerances": unspecified,
         "checks": checks,
+        "censored_unresolved": censored,
+        "producible_items": sum(c["status"] in {"PASS", "FAIL"} for c in checks),
+        "potential_items": len(checks),
+        "passed_items": sum(c["status"] == "PASS" for c in checks),
         "excluded_measurements": [
             {
                 "case": r["case"],

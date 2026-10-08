@@ -446,6 +446,7 @@ _LEGACY_FAST_FILES = {
     "test_calfit_exponential_empty_walls.py",
     "test_calfit_preflight.py",
     "test_calfit_search.py",
+    "test_pedcontact_artifacts.py",
     "test_pedestrian_validation.py",
     "test_valsuite_source_regressions.py",
     "test_single_pedestrian_radius.py",

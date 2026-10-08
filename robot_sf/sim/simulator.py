@@ -38,6 +38,7 @@ from pysocialforce.config import (
     obstacle_force_law_metadata,
     social_force_kernel_metadata,
 )
+from pysocialforce.contact import apply_contact_step
 from pysocialforce.force_trace import (
     ForceComputationResult,
     annotate_force_component,
@@ -544,6 +545,10 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config.scene_config.max_speed_multiplier = config.peds_speed_mult
     if config.pedestrian_radius_m is not None:
         pysf_config.scene_config.agent_radius = config.pedestrian_radius_m
+    if config.pedestrian_contact_rule is not None:
+        pysf_config.pedestrian_contact_rule = config.pedestrian_contact_rule
+    if config.pedestrian_wall_rule is not None:
+        pysf_config.obstacle_force_config.wall_contact_rule = config.pedestrian_wall_rule
     pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
     pysf_config.obstacle_force_config._obstacle_force_law_resolution_mode = getattr(
         config,
@@ -925,6 +930,16 @@ class Simulator:
             metadata["resolution_mode"],
         )
         return metadata
+
+    def pedestrian_physics_metadata(self) -> dict[str, Any] | None:
+        """Return live opt-in contact/wall physics; omit the released default path.
+
+        Returns:
+            Effective physics mapping or None for the released path.
+        """
+        if self.config.pedestrian_contact_rule is None and self.config.pedestrian_wall_rule is None:
+            return None
+        return self.pysf_sim.pedestrian_physics_metadata()
 
     def goal_completion_metadata(self) -> dict[str, Any]:
         """Return versioned success-definition and route-binding runtime metadata."""
@@ -1528,7 +1543,7 @@ class Simulator:
             "transitions": [trace.to_dict() for trace in traces],
         }
 
-    def _step_pedestrians(  # noqa: C901, PLR0912
+    def _step_pedestrians(  # noqa: C901, PLR0912, PLR0915
         self,
         ped_forces: np.ndarray,
         groups: list[list[int]],
@@ -1538,6 +1553,22 @@ class Simulator:
         """Advance pedestrians through the configured pedestrian-model implementation."""
         if not capture_diagnostics:
             self.last_step_diagnostics = None
+        backend_config = getattr(self.pysf_sim, "config", None)
+        contact_enabled = (
+            getattr(backend_config, "pedestrian_contact_rule", None) is not None
+            or getattr(
+                getattr(backend_config, "obstacle_force_config", None), "wall_contact_rule", None
+            )
+            is not None
+        )
+        if contact_enabled and self.pedestrian_model in {
+            HSFM_TOTAL_FORCE_V1,
+            HSFM_TTC_PREDICTIVE_V1,
+            HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+            HSFM_ANISOTROPIC_FOV_V1,
+            HSFM_ALIGNMENT_TORQUE_V1,
+        }:
+            raise ValueError("PEDCONTACT currently supports the fast-pysf pedestrian integrator")
         if self.pedestrian_model not in {
             HSFM_TOTAL_FORCE_V1,
             HSFM_TTC_PREDICTIVE_V1,
@@ -1545,6 +1576,9 @@ class Simulator:
             HSFM_ANISOTROPIC_FOV_V1,
             HSFM_ALIGNMENT_TORQUE_V1,
         }:
+            previous = self.pysf_sim.peds.state.copy() if contact_enabled else None
+            if contact_enabled:
+                self.pysf_sim.peds.contact_step_speed_caps = self.pysf_sim.peds.max_speeds.copy()
             if capture_diagnostics:
                 self.pysf_sim.peds.step(
                     ped_forces,
@@ -1553,6 +1587,8 @@ class Simulator:
                 )
             else:
                 self.pysf_sim.peds.step(ped_forces, groups)
+            if previous is not None:
+                apply_contact_step(self.pysf_sim, previous)
             if capture_diagnostics:
                 self.last_step_diagnostics = self.pysf_sim.peds.last_step_diagnostics
             self.ped_headings = self._headings_from_current_ped_velocities()

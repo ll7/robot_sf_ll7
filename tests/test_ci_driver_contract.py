@@ -27,6 +27,7 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "dispatch-ownership": 55,
     "fast-feedback": 45,
+    "browser-witnesses": 30,
     "coverage-gate": 20,
     "changed-coverage-gate": 30,
     "compat-matrix": 30,
@@ -500,6 +501,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     )
     assert 'compat_os=["ubuntu-latest","macos-latest"]' in path_step["run"]
     assert setup_step["with"] == {
+        "node": "true",
         "python-version": "${{ matrix.python }}",
         "sync-args": "--extra viz --extra maps --frozen",
     }

@@ -102,7 +102,7 @@ assertion. The fixed cases pass. The existing
 
 ## Released input byte proof
 
-The [per-file byte inventory](context/evidence/scenario_authoring_0_1_0_bytes.csv) compares every one of the 1,369 files under `configs/`, `maps/`, `robot_sf/maps/` and `fast-pysf/maps/` in freeze commit `66f402ba176b13e45210d0da0b2cf20fcdc0cc02` with fresh main and this PR. SHA-256 is computed from `git show <revision>:<path>` bytes, with exact byte equality checked separately. No frozen path is missing. All 1,369 head files are byte-identical to main; 1,364 are also byte-identical to the freeze. This deliberately over-inclusive inventory covers every released scenario/config/map, including include ancestors, registries, planner configs and seed sets.
+The [per-file byte inventory](context/evidence/scenario_authoring_0_1_0_bytes.csv) compares every one of the 1,369 files under `configs/` and `maps/`, plus packaged SVG/JSON map data under `robot_sf/maps/` and `fast-pysf/maps/` in freeze commit `66f402ba176b13e45210d0da0b2cf20fcdc0cc02` with fresh main and this PR. SHA-256 is computed from `git show <revision>:<path>` bytes, with exact byte equality checked separately. No frozen path is missing. All 1,369 head files are byte-identical to main; 1,364 are also byte-identical to the freeze. This deliberately over-inclusive inventory covers every released scenario/config/map, including include ancestors, registries, planner configs and seed sets.
 
 Five upstream differences already exist on main, and this PR preserves them:
 
@@ -123,6 +123,9 @@ def blob(revision, path):
 paths = subprocess.check_output([
     "git", "ls-tree", "-r", "--name-only", freeze, "--", "configs", "maps", "robot_sf/maps", "fast-pysf/maps"
 ], text=True).splitlines()
+# Packaged map directories also contain Python tools and Markdown, not map data.
+paths = [p for p in paths if p.startswith(("configs/", "maps/"))
+         or p.endswith((".svg", ".json"))]
 for path in paths:
     frozen, base, head = (blob(rev, path) for rev in (freeze, "53f8f2666", "HEAD"))
     assert base == head, path
@@ -201,7 +204,39 @@ PYTHONPATH="$PWD" <environment-python> <probe-script> \
 
 ## Behaviour gate and adversarial review
 
-The full released roster is exercised actor-free on development seeds 1001 and 1002, on both base and head. The corrected successor is checked separately after removing all pedestrian actors. These are diagnostic executions on main, not 0.0.8 release runs. Every non-success must have an outcome classification and a paired base comparison; infrastructure errors and fallback are blocking, never counted as successful execution. The final receipt records complete cells, failures and the review disposition.
+The [paired receipt](context/evidence/scenario_authoring_0_1_0_empty_world.json) covers 1,344 actor-free cells on base and the same 1,344 on head: 14 arms × 48 scenarios × dev seeds 1001 and 1002. Every robot trajectory digest, outcome, step count and declared guard fallback count is identical. Each cohort has 1,131 successes, 140 collisions and 73 timeouts. All 213 non-successes are individually classified as pre-existing actor-free collision or timeout with the paired base evidence; matching base is not a causal explanation or a claim that these planners solve every scenario.
+
+The successor's two corrected scenarios contribute another 56 cells (14 arms × 2 scenarios × 2 seeds): 45 successes, 2 collisions and 9 timeouts. All outcomes and trajectories equal the corresponding released-input actor-free controls, and every non-success is listed. All three execution receipts are complete with no missing, duplicate, unavailable, failed or incomplete-trace slots. Pedestrian arrays are empty at reset and throughout every step trace.
+
+No unexpected checkpoint or predictor substitution is observed. The guarded PPO arm does use its declared safety-controller fallback: 13,267 `fallback_safe` decisions in each full cohort, with identical per-cell counts on base and head. These are inventoried as part of that composite arm's normal behaviour, not described as absent or promoted as independent PPO evidence. This preservation gate passes with zero changed cells; it does not certify goal completion, ranking, safety or release eligibility.
+
+| Arm | Cells | Success | Collision | Timeout |
+| --- | ---: | ---: | ---: | ---: |
+| goal | 96 | 63 | 25 | 8 |
+| guarded_ppo | 96 | 87 | 0 | 9 |
+| hybrid_rule_v4_fast_progress_static_escape | 96 | 87 | 0 | 9 |
+| hybrid_rule_v4_fast_progress_static_escape_continuous | 96 | 84 | 0 | 12 |
+| orca | 96 | 94 | 0 | 2 |
+| ppo | 96 | 62 | 34 | 0 |
+| prediction_planner | 96 | 79 | 17 | 0 |
+| predictive_mppi | 96 | 92 | 0 | 4 |
+| risk_dwa | 96 | 92 | 0 | 4 |
+| sacadrl | 96 | 29 | 64 | 3 |
+| scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4 | 96 | 91 | 0 | 5 |
+| scenario_adaptive_hybrid_orca_v2_collision_guard_v4 | 96 | 91 | 0 | 5 |
+| social_force | 96 | 86 | 0 | 10 |
+| socnav_sampling | 96 | 94 | 0 | 2 |
+
+Reproduce the full actor-free sweep from an immutable checkout of the named source, separately for base and head:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  PYTHONPATH="$PWD" <environment-python> scripts/validation/run_empty_world_sweep.py \
+  --head-sha HEAD --suite main --seeds 1001 1002 --workers 4 \
+  --output-dir <diagnostic-output>
+```
+
+For the successor diagnostic, copy the main campaign template to an external temporary file, change only `scenario_matrix` to the successor, bind `SUITES["main"]` to that temporary template and filter `--scenarios classic_realworld_double_bottleneck_high classic_station_platform_medium`. The runner still removes every actor and uses its ordinary campaign path. No released template is modified. Base used four workers and head eight; both produced identical paired robot trajectories. Raw local episode-file hashes and source-tree bindings are retained in the compact receipt; raw traces remain in the local diagnostic archive.
 
 The adversarial review found and corrected evidence gaps: the original broad freeze claim ignored five pre-existing main differences; the first inventory omitted packaged maps; the speed comparison needed the actual base loader and a clear distinction between rejected requests and native controls; the probe needed executing-revision and source-file hashes. A release-checklist edit changed a pinned assurance example, so both files were restored exactly to main and retirement guidance stays here. No golden assurance digest was weakened. The bottleneck test was renamed to describe its actual checks (route density and marker clearance), avoiding a claim that it independently audits route geometry.
 

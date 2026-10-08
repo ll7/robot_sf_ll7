@@ -17,7 +17,7 @@ from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _episode(*, radius=0.47, tier="typical"):
+def _episode(*, radius=0.47, tier="typical", grid=False, robot_force=True, reverse_cap=None):
     cfg = load_campaign_config(ROOT / "configs/benchmarks/camera_ready_smoke_all_planners.yaml")
     scenario = copy.deepcopy(
         next(
@@ -29,6 +29,7 @@ def _episode(*, radius=0.47, tier="typical"):
     scenario["seeds"] = [1001]
     scenario.setdefault("simulation_config", {}).update(
         ped_radius=radius,
+        prf_config={"is_active": robot_force},
     )
     from dataclasses import replace
 
@@ -41,6 +42,15 @@ def _episode(*, radius=0.47, tier="typical"):
         config.sim_config = replace(
             config.sim_config, ped_speed_tier=tier, desired_speed_mean=None, desired_speed_std=None
         )
+        if grid:
+            from robot_sf.nav.occupancy_grid import GridConfig
+
+            config.use_occupancy_grid = True
+            config.grid_config = GridConfig()
+        if reverse_cap is not None:
+            config.robot_config = replace(
+                config.robot_config, limited_reverse=True, max_reverse_speed=reverse_cap
+            )
         return original_factory(**kwargs)
 
     with pytest.MonkeyPatch.context() as patch:
@@ -63,7 +73,7 @@ def _manifest(tmp_path, row):
     run = tmp_path / "runs" / "goal"
     run.mkdir(parents=True, exist_ok=True)
     (run / "episodes.jsonl").write_text(json.dumps(row) + "\n")
-    return campaign._build_campaign_manifest_payload(
+    payload = campaign._build_campaign_manifest_payload(
         SimpleNamespace(
             campaign_root=tmp_path,
             reports_dir=tmp_path / "reports",
@@ -82,6 +92,8 @@ def _manifest(tmp_path, row):
             )
         },
     )
+    campaign._write_json(tmp_path / "campaign_manifest.json", payload)
+    return json.loads((tmp_path / "campaign_manifest.json").read_text())
 
 
 def test_changed_live_config_reaches_final_campaign_manifest(tmp_path):
@@ -198,3 +210,21 @@ def test_scenario_specific_physics_does_not_become_global(tmp_path):
     manifest["release_design_parameters"]["pedestrian_physical_radius_m"] = 0.47
     with pytest.raises(ValueError, match="global design parameters contradict"):
         validate_campaign_physics(manifest)
+
+
+def test_live_disabled_force_grid_radii_and_reverse_cap(tmp_path):
+    """Record active components, rasterized geometry and the plant's effective reverse bound."""
+    row = _episode(grid=True, robot_force=False, reverse_cap=0.31)
+    assert "effective_physics" in row, "native episode lacks runtime physics witness"
+    manifest = _manifest(tmp_path, row)
+    physics = manifest["effective_physics_samples"][0]["physics"]
+    params = physics["release_design_parameters"]
+    assert params["pedestrian_robot_force_enabled"] is False
+    assert params["pedestrian_robot_force_law"]["parameters"] == []
+    assert params["robot_reverse_speed_cap_m_s"] == 0.31
+    grid = physics["radius_roles"]["occupancy_grid"]
+    assert grid["enabled"] is True
+    assert grid["radii_m"] and set(grid["radii_m"]) == {0.35}
+    assert physics["integration"] == {"dt_s": 0.1, "integrator": "semi_implicit_euler"}
+    assert physics["robot_kinematics"] == "DifferentialDriveRobot"
+    assert physics["pedestrian_contact_law"]["hard_nonpenetration"] is False

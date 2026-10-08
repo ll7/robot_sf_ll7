@@ -36,6 +36,9 @@ def capture_effective_physics(env: Any) -> dict[str, Any]:
     force_radius = float(peds.agent_radius)
     physical_radius = float(env.state.occupancy.ped_radius)
     metric_radius = float(env.config.sim_config.ped_radius)
+    radius_values = {physical_radius, force_radius, metric_radius, float(sim.config.ped_radius)}
+    if env.occupancy_grid is not None:
+        radius_values.update(env._last_grid_ped_radii.tolist())
     wall = next((force for force in forces if isinstance(force, ObstacleForce)), None)
     social = next((force for force in forces if isinstance(force, SocialForce)), None)
     robot_forces = [force for force in forces if isinstance(force, PedRobotForce)]
@@ -79,7 +82,7 @@ def capture_effective_physics(env: Any) -> dict[str, Any]:
         "pedestrian_force_radius_m": force_radius,
         "pedestrian_metric_radius_m": metric_radius,
         "pedestrian_radius_convention": "role_specific_radii_v1"
-        if len({physical_radius, force_radius, metric_radius}) != 1
+        if len(radius_values) != 1
         else "unified_radius_v1",
         "wall_force_law": wall.law_metadata()
         if wall is not None

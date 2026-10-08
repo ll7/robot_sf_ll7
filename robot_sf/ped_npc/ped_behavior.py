@@ -431,6 +431,12 @@ class SinglePedestrianBehavior:
             if role == "leave":
                 self._apply_leave_role(runtime)
             self._advance_trajectory(runtime)
+        self._sync_authored_groups_to_physics()
+
+    def _sync_authored_groups_to_physics(self) -> None:
+        """Expose explicit membership transitions before group forces are computed."""
+        if self._initial_group_memberships and self._pysf_peds is not None:
+            self._pysf_peds.groups = self.groups.groups_as_lists
 
     def reset(self) -> None:
         """Reset per-pedestrian runtime state for a new episode."""
@@ -453,6 +459,7 @@ class SinglePedestrianBehavior:
             if runtime.start_delay_remaining_s > 0:
                 self._hold_position(runtime)
             self._set_start_delay_speed_cap(runtime, 0.0)
+        self._sync_authored_groups_to_physics()
 
     def _advance_trajectory(self, runtime: SinglePedestrianRuntime) -> None:
         """Advance trajectory waypoints and honor wait rules."""

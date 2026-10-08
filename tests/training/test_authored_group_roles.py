@@ -37,6 +37,7 @@ def test_authored_roles_start_with_real_group(role, expected):
     sim.step_once([(0.0, 0.0)])
     sim.reset_state()
     assert memberships(sim) == expected
+    assert {frozenset(group) for group in sim.pysf_sim.peds.groups if group} == expected
 
 
 def test_authored_join_completes_under_social_repulsion():
@@ -45,13 +46,28 @@ def test_authored_join_completes_under_social_repulsion():
     for _ in range(400):
         sim.step_once([(0.0, 0.0)])
     assert memberships(sim) == {frozenset({0, 1, 2})}
+    sim.reset_state()
+    assert memberships(sim) == {frozenset({0, 1}), frozenset({2})}
+    assert {frozenset(group) for group in sim.pysf_sim.peds.groups if group} == {
+        frozenset({0, 1}),
+        frozenset({2}),
+    }
 
 
-def test_authored_leave_separates_from_retained_group():
+def test_authored_leave_separates_from_retained_group(monkeypatch):
     """The leaver exits its authored group while the two anchors remain together."""
     sim = build_group_scenario("leave")
+    force_memberships = []
+    compute_forces = sim.pysf_sim.compute_forces
+
+    def capture_force_membership():
+        force_memberships.append({frozenset(group) for group in sim.pysf_sim.peds.groups if group})
+        return compute_forces()
+
+    monkeypatch.setattr(sim.pysf_sim, "compute_forces", capture_force_membership)
     sim.step_once([(0.0, 0.0)])
     assert memberships(sim) == {frozenset({0}), frozenset({1, 2})}
+    assert force_memberships == [{frozenset({0}), frozenset({1, 2})}]
 
 
 @pytest.mark.parametrize(

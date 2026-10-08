@@ -82,11 +82,16 @@ The six cases in [the regression file](../tests/training/test_scenario_speed_aut
 seeded or geometry-only and exercise the actual scenario loader, parsed maps and, for speeds,
 the live simulator. No production test seam is added.
 
-| Test | Bug / credible regression caught | Why previous coverage misses it | Deterministic real path |
-| --- | --- | --- | --- |
-| Speed settings (4 cases) | Dropped tier, explicit fields, seed or tier precedence; removal of post-assignment normalization | Speed-tier tests cover mappings, not scenario-to-live-cap wiring | Fixed dev seed; actual loader and simulator; independently computed normal draws |
-| Bottleneck | Lost route density or paths through blocks/wall faces | Loader override tests cover supplied fields, not authored geometry | Parsed successor map and body-clearance path intersections |
-| Platform | Unreachable pause waypoint inside stairs | Trajectory override tests resolve waypoints without checking stair geometry | Parsed map, pause rule and complete trajectory clearance |
+| New test case | Defect caught | Fails on base? | Tests behaviour? | Cheapest meaningful check? |
+| --- | --- | --- | --- | --- |
+| Typical + speed seed 1002 | Tier normalization, derived distribution and dropped RNG seed | Yes: unknown speed fields | Yes: actual caps equal independent seeded draws | One seeded reset; no episode rollout |
+| Typical + zero std | Explicit spread must override the tier spread | Yes: unknown speed fields | Yes: all live caps are exactly 1.3 | One reset isolates spread precedence |
+| Explicit mean/std/seed | Explicit speed fields must reach the simulator without a tier | Yes: unknown speed fields | Yes: all live caps are exactly 1.1 | One reset isolates direct-field wiring |
+| Typical + explicit mean/std | Explicit values must take precedence over tier defaults | Yes: unknown speed fields | Yes: all live caps are exactly 1.1 | One reset isolates mean precedence |
+| Bottleneck routes/markers | Missing high density and paths intersecting body-buffered obstacles | Yes: density; density-only repair still fails marker clearance | Yes: real loaded population setting and full marker path geometry | Map geometry avoids a stochastic rollout |
+| Platform pause path | Pause waypoint and connecting path inside the stair block | Yes: buffered obstacle intersection | Yes: real loaded pause and trajectory clearance | Map geometry avoids a stochastic rollout |
+
+Existing tier tests cover mappings rather than loader-to-live-cap wiring. Existing override tests resolve supplied fields and waypoints without checking these authored paths against obstacles. The 21-row simulator diagnostic complements the geometry checks with actual pedestrian progress; it is not duplicated in every regression test.
 
 Fail-on-base uses a detached checkout of fresh main `53f8f2666e98d00b70a8ef5376790be474a743aa` and selects the released scenario
 matrix as pre-fix authoring input. The only test-file substitution is the matrix path, because the successor does not exist on base. The base source is imported from that checkout, not from the fixed environment's editable package. All six cases fail: the four speed cases raise
@@ -97,7 +102,7 @@ assertion. The fixed cases pass. The existing
 
 ## Released input byte proof
 
-The [per-file byte inventory](context/evidence/scenario_authoring_0_1_0_bytes.csv) compares every one of the 1,359 files under `configs/` and `maps/` in freeze commit `66f402ba176b13e45210d0da0b2cf20fcdc0cc02` with fresh main and this PR. SHA-256 is computed from `git show <revision>:<path>` bytes, with exact byte equality checked separately. No frozen path is missing. All 1,359 head files are byte-identical to main; 1,354 are also byte-identical to the freeze. This deliberately over-inclusive inventory covers every released scenario/config/map, including include ancestors, registries, planner configs and seed sets.
+The [per-file byte inventory](context/evidence/scenario_authoring_0_1_0_bytes.csv) compares every one of the 1,369 files under `configs/`, `maps/`, `robot_sf/maps/` and `fast-pysf/maps/` in freeze commit `66f402ba176b13e45210d0da0b2cf20fcdc0cc02` with fresh main and this PR. SHA-256 is computed from `git show <revision>:<path>` bytes, with exact byte equality checked separately. No frozen path is missing. All 1,369 head files are byte-identical to main; 1,364 are also byte-identical to the freeze. This deliberately over-inclusive inventory covers every released scenario/config/map, including include ancestors, registries, planner configs and seed sets.
 
 Five upstream differences already exist on main, and this PR preserves them:
 
@@ -116,7 +121,7 @@ freeze = "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"
 def blob(revision, path):
     return subprocess.check_output(["git", "show", f"{revision}:{path}"])
 paths = subprocess.check_output([
-    "git", "ls-tree", "-r", "--name-only", freeze, "--", "configs", "maps"
+    "git", "ls-tree", "-r", "--name-only", freeze, "--", "configs", "maps", "robot_sf/maps", "fast-pysf/maps"
 ], text=True).splitlines()
 for path in paths:
     frozen, base, head = (blob(rev, path) for rev in (freeze, "53f8f2666", "HEAD"))
@@ -197,3 +202,7 @@ PYTHONPATH="$PWD" <environment-python> <probe-script> \
 ## Behaviour gate and adversarial review
 
 The full released roster is exercised actor-free on development seeds 1001 and 1002, on both base and head. The corrected successor is checked separately after removing all pedestrian actors. These are diagnostic executions on main, not 0.0.8 release runs. Every non-success must have an outcome classification and a paired base comparison; infrastructure errors and fallback are blocking, never counted as successful execution. The final receipt records complete cells, failures and the review disposition.
+
+The adversarial review found and corrected evidence gaps: the original broad freeze claim ignored five pre-existing main differences; the first inventory omitted packaged maps; the speed comparison needed the actual base loader and a clear distinction between rejected requests and native controls; the probe needed executing-revision and source-file hashes. A release-checklist edit changed a pinned assurance example, so both files were restored exactly to main and retirement guidance stays here. No golden assurance digest was weakened. The bottleneck test was renamed to describe its actual checks (route density and marker clearance), avoiding a claim that it independently audits route geometry.
+
+Two early sweep attempts observed moving Git revisions while documentation commits were being made. Their mixed-commit receipts were rejected and excluded, not repaired or resealed. Accepted head and successor sweeps use one immutable detached checkout; the receipt verifies that its runtime/config/map/dependency trees equal the final PR trees. Initial numerical-library thread oversubscription was corrected by setting OMP, MKL and OpenBLAS thread counts to one before repeating execution.

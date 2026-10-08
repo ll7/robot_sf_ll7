@@ -64,7 +64,7 @@ def test_scenario_speed_settings_reach_live_caps(overrides, mean, std):
         np.testing.assert_allclose(caps, expected)
 
 
-def test_bottleneck_routes_and_markers_clear_both_openings():
+def test_bottleneck_has_high_route_density_and_clear_markers():
     """High density requires route spawns and obstacle-clear marker paths."""
     config = _config("classic_realworld_double_bottleneck_high")
     assert config.sim_config.peds_per_area_m2 == pytest.approx(0.08)

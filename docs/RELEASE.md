@@ -1,9 +1,5 @@
 # Benchmark Release Checklist
 
-The historical three-width v1 manifest is retired as an execution input. See
-[the successor authoring notes](scenario_authoring_0_1_0.md#retired-width-slice-manifest)
-for the maintained v2 template and the existing fail-closed execution guard.
-
 This checklist covers the approved S30/H600 benchmark-data release. It is a
 different release lane from the Robot SF software/package release: the
 benchmark-data tag identifies an immutable campaign contract, while the

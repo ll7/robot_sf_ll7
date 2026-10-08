@@ -138,8 +138,13 @@ files are under `${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners` on
 the host. The registration token is fetched by `gh api` inside the supervisor
 and piped directly to the container's registration step; it is never written to
 a token file, Docker argument, or log. Do not enable shell tracing or capture
-the pipe. Preserve runner diagnostic logs before removing a failed container
-when troubleshooting.
+the pipe. Token delivery uses a short-lived interactive `docker exec` that
+writes only to PID 1's stdin pipe; `docker wait` determines when the container
+has actually exited. A successful `docker attach` at stdin EOF is not proof of
+registration or job completion. The supervisor log records lifecycle outcomes;
+use `docker logs <container>` or the runner's `_diag` directory for job and
+registration diagnostics. Preserve those logs before removing a failed
+container when troubleshooting.
 
 Accepted residual: `config.sh --token` places the short-lived registration
 token in the argument list inside the container's own PID namespace. The token

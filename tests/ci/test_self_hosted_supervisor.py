@@ -19,10 +19,24 @@ def _mock_command(directory: Path, name: str, body: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "failure", ["none", "network", "probe", "disk", "info", "ps", "df", "start", "attach"]
+    "failure",
+    [
+        "none",
+        "network",
+        "probe",
+        "disk",
+        "info",
+        "ps",
+        "df",
+        "start",
+        "delivery",
+        "token",
+        "job",
+        "wait",
+    ],
 )
 def test_supervisor_checks_isolation_before_each_registration(tmp_path: Path, failure: str) -> None:
-    """A failed isolation or disk check skips token requests and retries after 60 seconds."""
+    """Gate replacements, deliver stdin, and retry fetch/delivery/job/wait failures."""
     commands = tmp_path / "commands"
     commands.mkdir()
     _mock_command(commands, "hostname", "printf 'imech039\\n'\n")
@@ -54,9 +68,24 @@ case "$1:$2" in
     esac
     ;;
   attach:*)
-    cat >/dev/null
-    printf 'runner\\n' >>"$TRACE"
-    [[ "$FAILURE" != attach ]]
+    # Empty upstream leaves the old attach waiting for a tokenless container.
+    value="$(cat)"
+    if [[ -z "$value" ]]; then /bin/sleep 30; fi
+    # Nonempty stdin can end attach successfully before the actual job exits.
+    printf 'attach-ended\\n' >>"$TRACE"
+    ;;
+  exec:*)
+    [[ "$2" == --interactive ]]
+    [[ "$4:$5:$6" == 'bash:-c:cat > /proc/1/fd/0' ]]
+    value="$(cat)"
+    [[ "$FAILURE" == token || "$value" == fixture-token ]]
+    printf 'delivery\\n' >>"$TRACE"
+    [[ "$FAILURE" != delivery ]]
+    ;;
+  wait:*)
+    printf 'runner-wait\\n' >>"$TRACE"
+    [[ "$FAILURE" != wait ]] || exit 1
+    if [[ "$FAILURE" == job ]]; then printf '1\\n'; else printf '0\\n'; fi
     ;;
   stop:*) printf 'runner-stop\\n' >>"$TRACE" ;;
   *) exit 2 ;;
@@ -71,7 +100,9 @@ esac
     _mock_command(
         commands,
         "gh",
-        "printf 'gh\\n' >>\"$TRACE\"\nprintf 'fixture-token\\n'\n",
+        "printf 'gh\\n' >>\"$TRACE\"\n"
+        '[[ "$FAILURE" != token ]] || exit 1\n'
+        "printf 'fixture-token\\n'\n",
     )
     _mock_command(
         commands,
@@ -116,10 +147,11 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
     )
 
     assert result.returncode == 99, result.stderr
+    assert "fixture-token" not in result.stdout + result.stderr
     events = (tmp_path / "trace").read_text(encoding="utf-8").splitlines()
     checked = ["network-verify", "probe", "docker-info", "docker-ps", "df"]
     expected = {
-        "none": checked + ["runner-start", "gh", "runner", "sleep:15"],
+        "none": checked + ["runner-start", "gh", "delivery", "runner-wait", "sleep:15"],
         "network": ["network-verify", "sleep:60"],
         "probe": ["network-verify", "probe", "sleep:60"],
         "info": checked[:3] + ["sleep:60"],
@@ -127,7 +159,12 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         "df": checked + ["sleep:60"],
         "disk": checked + ["sleep:60"],
         "start": checked + ["runner-start", "sleep:15"],
-        "attach": checked + ["runner-start", "gh", "runner", "runner-stop", "sleep:15"],
+        "delivery": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
+        "token": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
+        "job": checked
+        + ["runner-start", "gh", "delivery", "runner-wait", "runner-stop", "sleep:15"],
+        "wait": checked
+        + ["runner-start", "gh", "delivery", "runner-wait", "runner-stop", "sleep:15"],
     }
     assert events == expected[failure] * 2
     expected_error = {
@@ -138,7 +175,10 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         "df": "Docker disk capacity check failed",
         "disk": "Docker disk capacity check failed",
         "start": "container failed to start",
-        "attach": "failed to register",
+        "delivery": "failed to register",
+        "token": "failed to register",
+        "job": "failed to register",
+        "wait": "failed to register",
     }
     if failure != "none":
         assert expected_error[failure] in result.stderr
@@ -174,7 +214,8 @@ case "$1:$2" in
       printf 'runner-start\\n' >>"$TRACE"
     fi
     ;;
-  attach:*) cat >/dev/null ;;
+  exec:*) cat >/dev/null ;;
+  wait:*) printf '0\\n' ;;
   *) exit 2 ;;
 esac
 """,
@@ -247,7 +288,8 @@ case "$1:$2" in
       printf 'robot-sf-ci-imech039-1\\n' >"$ACTIVE_SLOT"
     fi
     ;;
-  attach:*) cat >/dev/null ;;
+  exec:*) cat >/dev/null ;;
+  wait:*) printf '0\\n' ;;
   *) exit 2 ;;
 esac
 """,

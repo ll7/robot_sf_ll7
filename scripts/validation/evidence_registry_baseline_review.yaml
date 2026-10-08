@@ -18,6 +18,15 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10061
+    reviewed_date: 2026-10-07
+    finding_delta: none
+    disposition: compact diagnostic custody
+    decision: >-
+      Keep only feature-owned compact custody, populated diagnostics and sample.
+      The refreshed tracked tree manifest has 3022 files. Historical raw payloads
+      are preserved externally; no registry locator repair is claimed.
+      This is an implementing-agent integrity check, not domain acceptance.
   - issue: 10112
     reviewed_date: 2026-10-03
     finding_delta: four diagnostic config-locator bookkeeping findings

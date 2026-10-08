@@ -2973,6 +2973,7 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "robot_goal_sampling_policy",
     "pedestrian_model",
     "social_force_kernel_version",
+    "obstacle_force_profile",
     "ttc_predictive_force",
     "zanlungo_collision_prediction",
     "anisotropic_fov",

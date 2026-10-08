@@ -1,6 +1,7 @@
 """Analytic footprint regressions; base uses the historical scalar when the block is absent."""
 
 import inspect
+import json
 import math
 from dataclasses import replace
 from types import SimpleNamespace
@@ -20,9 +21,15 @@ from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.benchmark.near_miss_ttc import compute_ttc_near_miss_diagnostic
 from robot_sf.benchmark.path_utils import compute_completion_reference_length
 from robot_sf.benchmark.runner import _scenario_ped_radius_m, _scenario_robot_radius_m
-from robot_sf.benchmark.trace_scene_figure import EpisodeTrace, _draw_timeline
+from robot_sf.benchmark.trace_scene_figure import (
+    EpisodeTrace,
+    _draw_timeline,
+    load_episode,
+    render_scene,
+)
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
+from scripts.repro.trace_series_adapter import TraceSeriesAdapterError, build_bundle
 
 MARKER = {"footprint_metric_schema_version": "robot-sf-footprint.v1"}
 
@@ -395,3 +402,75 @@ def test_aggregation_refuses_mixed_opt_in_definitions():
     rows[1]["metrics"]["footprint_metrics"] = {"schema_version": "robot-sf-footprint.v1"}
     with pytest.raises(ValueError, match="footprint metric definitions"):
         require_uniform_metric_schema(rows)
+
+
+def _export_source(tmp_path, metadata):
+    frames = [
+        {
+            "step": step,
+            "time_s": (step + 1) * 0.1,
+            "robot": {"position": [0.0, 0.0], "velocity": [0.0, 0.0], "heading": 0.0},
+            "pedestrians": [{"id": 0, "position": [1.0, 0.0], "velocity": [0.0, 0.0]}],
+        }
+        for step in range(2)
+    ]
+    row = {
+        "algo": "goal",
+        "episode_id": "footprint-export",
+        "scenario_id": "dev",
+        "seed": 1001,
+        "status": "success",
+        "termination_reason": "success",
+        "steps": 2,
+        "git_hash": "synthetic",
+        "algorithm_metadata": {
+            "simulation_step_trace": {
+                "schema_version": "simulation-step-trace.v1",
+                "dt": 0.1,
+                "steps": frames,
+                **metadata,
+            }
+        },
+    }
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(row) + "\n")
+    return source
+
+
+@pytest.mark.parametrize("marked,envelope,comfort", [(False, 1.4, 1.2), (True, 0.8, 1.3)])
+def test_exported_trace_keeps_figure_definition(tmp_path, monkeypatch, marked, envelope, comfort):
+    from matplotlib import pyplot as plt
+
+    source = _export_source(
+        tmp_path, {**(MARKER if marked else {}), "robot_radius_m": 0.6, "ped_radius_m": 0.2}
+    )
+    out = tmp_path / "exported"
+    build_bundle(source, out, episode_id="footprint-export")
+    episode = load_episode(out)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.trace_scene_figure._load_map_definition",
+        lambda _: SimpleNamespace(
+            width=3.0, height=3.0, obstacles=[], robot_spawn_zones=[], robot_goal_zones=[]
+        ),
+    )
+    output, fig = render_scene(episode, tmp_path / "figure.png", return_figure=True, dpi=40)
+    try:
+        assert output.stat().st_size > 0
+        lines = fig.axes[1].lines
+        assert any(np.allclose(line.get_ydata(), [envelope, envelope]) for line in lines)
+        assert any(np.allclose(line.get_ydata(), [comfort, comfort]) for line in lines)
+    finally:
+        plt.close(fig)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"footprint_metric_schema_version": "future"},
+        {**MARKER, "robot_radius_m": 0.6},
+    ],
+)
+def test_footprint_export_rejects_unknown_or_incomplete_geometry(tmp_path, metadata):
+    source = _export_source(tmp_path, metadata)
+    with pytest.raises(TraceSeriesAdapterError, match="footprint"):
+        build_bundle(source, tmp_path / "exported", episode_id="footprint-export")

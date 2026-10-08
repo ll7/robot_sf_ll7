@@ -105,6 +105,9 @@ stays centre distance. Unmarked interval inputs preserve historical fields.
 Trace figures with opted-in metadata derive the centre-distance collision
 reference from the sum of radii, and the comfort reference from that sum + 0.50 m.
 Unmarked figures retain their historical default lines.
+The generic trace-series exporter preserves the footprint marker and physical
+radii for this reader. Unknown definitions or incomplete opted-in geometry
+fail before any bundle is written.
 
 The block reports near-miss gap counts at 0.10/0.20/0.30/0.50 m and comfort-gap
 violation fractions at 0.30/0.50/0.80/1.20 m. These are descriptive sensitivity

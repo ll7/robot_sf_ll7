@@ -26,6 +26,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "self-hosted-admission": 5,
+    "runner-availability": 2,
     "dispatch-ownership": 55,
     "fast-feedback": 45,
     "coverage-gate": 20,
@@ -172,7 +173,7 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
         # Owner-approved provenance admission (#10217) precedes routed jobs.
         # Ruling: https://github.com/ll7/robot_sf_ll7/pull/10217#issuecomment-6057864254
         expected_needs = (
-            ["dispatch-ownership", "self-hosted-admission"]
+            ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
             if job_name
             in (
                 "fast-feedback",
@@ -416,6 +417,7 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert workflow["jobs"]["fast-feedback"]["needs"] == [
         "dispatch-ownership",
         "self-hosted-admission",
+        "runner-availability",
     ]
 
 
@@ -658,6 +660,7 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
     assert workflow["jobs"]["examples-smoke"]["needs"] == [
         "dispatch-ownership",
         "self-hosted-admission",
+        "runner-availability",
     ]
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
 
@@ -752,6 +755,7 @@ def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() 
     assert workflow["jobs"]["notebooks-smoke"]["needs"] == [
         "dispatch-ownership",
         "self-hosted-admission",
+        "runner-availability",
     ]
     assert "notebooks-smoke" in workflow["jobs"]["ci"]["needs"]
 
@@ -768,6 +772,7 @@ def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> N
     assert workflow["jobs"]["wheel-smoke-install"]["needs"] == [
         "dispatch-ownership",
         "self-hosted-admission",
+        "runner-availability",
     ]
     assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
 
@@ -1389,7 +1394,7 @@ def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> N
         "if-no-files-found": "error",
     }
     fast = workflow["jobs"]["fast-feedback"]
-    assert fast["needs"] == ["dispatch-ownership", "self-hosted-admission"]
+    assert fast["needs"] == ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
     assert fast["permissions"] == {"contents": "read", "actions": "read"}
     download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
     assert download["uses"] == "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"

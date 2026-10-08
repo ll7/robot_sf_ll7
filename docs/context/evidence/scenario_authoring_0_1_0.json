@@ -1,10 +1,13 @@
 {
   "classification": "diagnostic-only",
+  "mode": "authoring",
   "robot_action": [
     0,
     0
   ],
-  "baseline_revision": "66df3de19",
+  "execution_revision": "6f267345d131bd464e64a89d9cde659ca5bd2ed1",
+  "loader_sha256": "448a3f2cd49ee431550bf48318f82b19c74df3ed007c5bcc0bb3b1d3e8768ee7",
+  "comparison": "Input matrices on one runtime; base-loader speed rows require a separate base checkout.",
   "rows": [
     {
       "scenario": "classic_realworld_double_bottleneck_high",

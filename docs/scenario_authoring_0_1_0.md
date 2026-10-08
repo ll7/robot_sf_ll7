@@ -5,7 +5,7 @@
 Use [the 0.1.0 authoring matrix](../configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml)
 for the corrected double bottleneck and station platform. It inherits the 48 scenarios from the
 0.0.8 matrix and overrides only those two scenarios. It is a new authoring input, not a published
-benchmark release. Released YAML, SVG maps, seed sets, manifests and hash-bound bytes remain unchanged.
+benchmark release. This PR preserves the existing YAML, SVG maps, seed sets and manifests relative to fresh main. The freeze comparison and its pre-existing main differences are listed below.
 
 The double bottleneck uses the high route density, 0.08 pedestrians per square metre of spawnable
 sidewalk area. Its eight markers use opposing obstacle-clear lanes through both openings instead of
@@ -88,9 +88,112 @@ the live simulator. No production test seam is added.
 | Bottleneck | Lost route density or paths through blocks/wall faces | Loader override tests cover supplied fields, not authored geometry | Parsed successor map and body-clearance path intersections |
 | Platform | Unreachable pause waypoint inside stairs | Trajectory override tests resolve waypoints without checking stair geometry | Parsed map, pause rule and complete trajectory clearance |
 
-Fail-on-base uses the exact loader source from base `66df3de19` and selects the released scenario
-matrix as pre-fix authoring input. All six cases fail: the four speed cases raise
+Fail-on-base uses a detached checkout of fresh main `53f8f2666e98d00b70a8ef5376790be474a743aa` and selects the released scenario
+matrix as pre-fix authoring input. The only test-file substitution is the matrix path, because the successor does not exist on base. The base source is imported from that checkout, not from the fixed environment's editable package. All six cases fail: the four speed cases raise
 `simulation_config contains unknown keys`, bottleneck density is 0 rather than 0.08, and the platform
 path intersects an obstacle. Replacing only base density with 0.08 still fails the marker clearance
 assertion. The fixed cases pass. The existing
 `test_unknown_simulation_key_fails_at_real_loader` covers strict rejection and passes unchanged.
+
+## Released input byte proof
+
+The [per-file byte inventory](context/evidence/scenario_authoring_0_1_0_bytes.csv) compares every one of the 1,359 files under `configs/` and `maps/` in freeze commit `66f402ba176b13e45210d0da0b2cf20fcdc0cc02` with fresh main and this PR. SHA-256 is computed from `git show <revision>:<path>` bytes, with exact byte equality checked separately. No frozen path is missing. All 1,359 head files are byte-identical to main; 1,354 are also byte-identical to the freeze. This deliberately over-inclusive inventory covers every released scenario/config/map, including include ancestors, registries, planner configs and seed sets.
+
+Five upstream differences already exist on main, and this PR preserves them:
+
+- `configs/adversarial/issue_8891_temporal_robustness_packet.yaml`: a working-tree diagnostic provenance pin.
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml` and `benchmark_data_release_s30_h600_zenodo_metadata.template.json`: the approved future metadata successor and its metadata hash.
+- `configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml` and `three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json`: the corresponding future doorway metadata successor and hash.
+
+The metadata changes came from the separate release-description follow-up already merged on main. The scenario matrices, SVGs, scientific campaign configs, seed sets and frozen planner configs are equal to the freeze. An absolute statement that *every* current config/map byte equals the freeze would be false; preservation by this PR is the proven claim. The release branch and freeze commit are read-only comparators.
+
+Reproduce the inventory from the repository root (standard library only):
+
+```python
+import hashlib
+import subprocess
+freeze = "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"
+def blob(revision, path):
+    return subprocess.check_output(["git", "show", f"{revision}:{path}"])
+paths = subprocess.check_output([
+    "git", "ls-tree", "-r", "--name-only", freeze, "--", "configs", "maps"
+], text=True).splitlines()
+for path in paths:
+    frozen, base, head = (blob(rev, path) for rev in (freeze, "53f8f2666", "HEAD"))
+    assert base == head, path
+    print(path, hashlib.sha256(frozen).hexdigest(),
+          hashlib.sha256(head).hexdigest(), frozen == head)
+```
+
+## Per-scenario effective speed requests
+
+No checked-in YAML under `configs/scenarios/` requests `ped_speed_tier`, including the resolved 48-row successor. To make the before/after check non-vacuous, every row below explicitly requests `typical` on dev seed 1001. Fresh main rejects all 48 requests before constructing a simulator. The before native column is a separate no-tier control, not the effective speed of the refused request. All after distributions resolve to mean 1.3 and std 0.2 m/s; the table measures live caps at reset, not observed trajectory velocity. The bottleneck population changes with the authored density.
+
+| Scenario | Before native mean m/s | Before typical | After typical count | After live cap mean [min, max] m/s |
+| --- | ---: | --- | ---: | --- |
+| classic_bottleneck_low | no actors | rejected | 0 | no actors [no actors, no actors] |
+| classic_bottleneck_medium | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| classic_bottleneck_high | 0.650000 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| classic_realworld_double_bottleneck_high | 0.910000 | rejected | 31 | 1.324000 [0.938150, 1.723666] |
+| classic_station_platform_medium | 0.650000 | rejected | 27 | 1.337676 [0.995988, 1.723666] |
+| classic_cross_trap_low | 0.650000 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| classic_cross_trap_medium | 0.650000 | rejected | 8 | 1.260927 [0.995988, 1.541863] |
+| classic_cross_trap_high | 0.650000 | rejected | 12 | 1.316614 [0.995988, 1.723666] |
+| classic_doorway_low | 0.650000 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| classic_doorway_medium | 0.650000 | rejected | 6 | 1.267435 [0.995988, 1.541863] |
+| classic_doorway_high | 0.650000 | rejected | 9 | 1.258330 [0.995988, 1.541863] |
+| classic_group_crossing_low | 0.650000 | rejected | 2 | 1.379748 [1.273032, 1.486464] |
+| classic_group_crossing_medium | 0.650000 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| classic_group_crossing_high | 0.650000 | rejected | 4 | 1.345451 [1.080446, 1.541863] |
+| classic_head_on_corridor_low | 0.650000 | rejected | 2 | 1.379748 [1.273032, 1.486464] |
+| classic_head_on_corridor_medium | 0.650000 | rejected | 4 | 1.345451 [1.080446, 1.541863] |
+| classic_merging_low | 0.650000 | rejected | 4 | 1.345451 [1.080446, 1.541863] |
+| classic_merging_medium | 0.650000 | rejected | 9 | 1.258330 [0.995988, 1.541863] |
+| classic_overtaking_low | 0.650000 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| classic_overtaking_medium | 0.650000 | rejected | 6 | 1.267435 [0.995988, 1.541863] |
+| classic_t_intersection_low | 0.650000 | rejected | 2 | 1.379748 [1.273032, 1.486464] |
+| classic_t_intersection_medium | 0.650000 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| classic_urban_crossing_medium | 0.650000 | rejected | 5 | 1.275558 [0.995988, 1.541863] |
+| francis2023_frontal_approach | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_pedestrian_obstruction | 0.390000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_pedestrian_overtaking | 1.040000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_robot_overtaking | 0.390000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_down_path | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_intersection_no_gesture | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_blind_corner | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_narrow_hallway | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_narrow_doorway | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_entering_room | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_exiting_room | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_entering_elevator | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_exiting_elevator | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_intersection_wait | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_intersection_proceed | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_following_human | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_leading_human | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_accompanying_peer | 0.650000 | rejected | 1 | 1.486464 [1.486464, 1.486464] |
+| francis2023_join_group | 0.216667 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| francis2023_leave_group | 0.216667 | rejected | 3 | 1.279981 [1.080446, 1.486464] |
+| francis2023_crowd_navigation | 0.650000 | rejected | 9 | 1.258330 [0.995988, 1.541863] |
+| francis2023_parallel_traffic | 0.650000 | rejected | 8 | 1.260927 [0.995988, 1.541863] |
+| francis2023_perpendicular_traffic | 0.650000 | rejected | 7 | 1.274588 [0.995988, 1.541863] |
+| francis2023_circular_crossing | 0.650000 | rejected | 6 | 1.267435 [0.995988, 1.541863] |
+| francis2023_robot_crowding | 0.650000 | rejected | 24 | 1.336439 [0.995988, 1.723666] |
+
+
+The [speed receipt](context/evidence/scenario_authoring_0_1_0_speeds.json) records the requested and effective values and a live-cap digest for each scenario. No tier is added to released or successor YAML. The no-actors scenario has no live speed caps even when the distribution setting is accepted.
+
+```bash
+# In the PR checkout:
+uv run python scripts/validation/probe_scenario_authoring.py \
+  --mode speed-caps --output speed-caps-head.json
+# In a detached fresh-main checkout, with the same environment and this probe script:
+PYTHONPATH="$PWD" <environment-python> <probe-script> \
+  --mode speed-caps \
+  --matrix configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml \
+  --output speed-caps-base.json
+```
+
+## Behaviour gate and adversarial review
+
+The full released roster is exercised actor-free on development seeds 1001 and 1002, on both base and head. The corrected successor is checked separately after removing all pedestrian actors. These are diagnostic executions on main, not 0.0.8 release runs. Every non-success must have an outcome classification and a paired base comparison; infrastructure errors and fallback are blocking, never counted as successful execution. The final receipt records complete cells, failures and the review disposition.

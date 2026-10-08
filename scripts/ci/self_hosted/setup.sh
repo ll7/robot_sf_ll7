@@ -187,9 +187,9 @@ supervise() {
     fi
     unlock_disk_admission
     # An empty token response can leave attach blocked on a tokenless
-    # container; with data, attach can return before the job exits. Deliver to
-    # PID 1's stdin using exec, then wait for the actual container exit.
-    # The token remains a pipe:
+    # container, delaying detection of the failed API request indefinitely.
+    # Deliver to PID 1's stdin using exec and check the complete pipeline
+    # before waiting for container exit. The token remains a pipe:
     # no token file, token-bearing Docker argument, or shell trace is created.
     if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
       docker exec --interactive "$name" bash -c 'cat > /proc/1/fd/0' &&

@@ -31,6 +31,7 @@ def _mock_command(directory: Path, name: str, body: str) -> None:
         "start",
         "delivery",
         "token",
+        "partial-token",
         "job",
         "wait",
     ],
@@ -68,15 +69,14 @@ case "$1:$2" in
     esac
     ;;
   attach:*)
-    # Empty upstream leaves the old attach waiting for a tokenless container.
-    value="$(cat)"
-    if [[ -z "$value" ]]; then /bin/sleep 30; fi
-    # Nonempty stdin can end attach successfully before the actual job exits.
-    printf 'attach-ended\\n' >>"$TRACE"
+    # Model attach entering its container wait, even after an empty API failure.
+    cat >/dev/null
+    printf 'delivery\\n' >>"$TRACE"
+    [[ "$FAILURE" != delivery ]] || exit 1
+    printf 'runner-wait\\n' >>"$TRACE"
+    [[ "$FAILURE" != job && "$FAILURE" != wait ]]
     ;;
   exec:*)
-    [[ "$2" == --interactive ]]
-    [[ "$4:$5:$6" == 'bash:-c:cat > /proc/1/fd/0' ]]
     value="$(cat)"
     [[ "$FAILURE" == token || "$value" == fixture-token ]]
     printf 'delivery\\n' >>"$TRACE"
@@ -102,7 +102,8 @@ esac
         "gh",
         "printf 'gh\\n' >>\"$TRACE\"\n"
         '[[ "$FAILURE" != token ]] || exit 1\n'
-        "printf 'fixture-token\\n'\n",
+        "printf 'fixture-token\\n'\n"
+        '[[ "$FAILURE" != partial-token ]]\n',
     )
     _mock_command(
         commands,
@@ -161,6 +162,7 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         "start": checked + ["runner-start", "sleep:15"],
         "delivery": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
         "token": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
+        "partial-token": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
         "job": checked
         + ["runner-start", "gh", "delivery", "runner-wait", "runner-stop", "sleep:15"],
         "wait": checked
@@ -177,6 +179,7 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         "start": "container failed to start",
         "delivery": "failed to register",
         "token": "failed to register",
+        "partial-token": "failed to register",
         "job": "failed to register",
         "wait": "failed to register",
     }
@@ -214,7 +217,7 @@ case "$1:$2" in
       printf 'runner-start\\n' >>"$TRACE"
     fi
     ;;
-  exec:*) cat >/dev/null ;;
+  attach:*|exec:*) cat >/dev/null ;;
   wait:*) printf '0\\n' ;;
   *) exit 2 ;;
 esac
@@ -288,7 +291,7 @@ case "$1:$2" in
       printf 'robot-sf-ci-imech039-1\\n' >"$ACTIVE_SLOT"
     fi
     ;;
-  exec:*) cat >/dev/null ;;
+  attach:*|exec:*) cat >/dev/null ;;
   wait:*) printf '0\\n' ;;
   *) exit 2 ;;
 esac

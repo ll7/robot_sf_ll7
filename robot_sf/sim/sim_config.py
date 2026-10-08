@@ -15,11 +15,12 @@ from robot_sf.nav.map_config import (
     normalize_robot_goal_sampling_policy,
 )
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
-from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
+from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig, PedRobotForceV2Config
 from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
     _normalize_residual_adversary_config,
 )
+from robot_sf.sim.pedestrian_force_profiles import normalize_pedestrian_force_profile
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -465,6 +466,13 @@ class SimulationSettings:
     from integer steps to seconds and back. This budget takes precedence over duration.
     """
 
+    pedestrian_force_profile: InitVar[str | None] = field(default=None, kw_only=True)
+    """Opt-in ``pedestrian_interaction_v2`` group gaze/repulsion and robot steering.
+
+    Absence retains legacy laws and serialized config bytes. This selector does
+    not change hold/role controllers, cohesion, obstacles, or contact handling.
+    """
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "obstacle_force_law":
@@ -481,6 +489,11 @@ class SimulationSettings:
             if value is not None and (type(value) is not int or value <= 0):
                 raise ValueError("episode_step_limit must be a positive integer")
             object.__setattr__(self, "_episode_step_limit", value)
+            return
+        if name == "pedestrian_force_profile":
+            object.__setattr__(
+                self, "_pedestrian_force_profile", normalize_pedestrian_force_profile(value)
+            )
             return
         object.__setattr__(self, name, value)
 
@@ -500,6 +513,11 @@ class SimulationSettings:
                 return object.__getattribute__(self, "_episode_step_limit")
             except AttributeError:
                 return None
+        if name == "pedestrian_force_profile":
+            try:
+                return object.__getattribute__(self, "_pedestrian_force_profile")
+            except AttributeError:
+                return None
         return object.__getattribute__(self, name)
 
     def _config_hash_overrides(self) -> dict[str, Any]:
@@ -513,6 +531,8 @@ class SimulationSettings:
             overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
         if self.episode_step_limit is not None:
             overrides["episode_step_limit"] = self.episode_step_limit
+        if self.pedestrian_force_profile is not None:
+            overrides["pedestrian_force_profile"] = self.pedestrian_force_profile
         return overrides
 
     def to_dict(self) -> dict[str, Any]:
@@ -621,6 +641,8 @@ class SimulationSettings:
             self.social_force_kernel_version = init_vars[0]
         if len(init_vars) > 1:
             self.episode_step_limit = init_vars[1]
+        if len(init_vars) > 2:
+            self.pedestrian_force_profile = init_vars[2]
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")
@@ -694,7 +716,15 @@ class SimulationSettings:
         if not 0 <= self.difficulty < len(self.ped_density_by_difficulty):
             raise ValueError("No pedestrian density registered for selected difficulty level!")
         # Restore nested force configuration objects serialized by ``to_dict``.
-        self.prf_config = _restore_nested_config(self.prf_config, PedRobotForceConfig)
+        self.pedestrian_force_profile = normalize_pedestrian_force_profile(
+            self.pedestrian_force_profile
+        )
+        robot_force_config_type = (
+            PedRobotForceV2Config
+            if isinstance(self.prf_config, dict) and "law_version" in self.prf_config
+            else PedRobotForceConfig
+        )
+        self.prf_config = _restore_nested_config(self.prf_config, robot_force_config_type)
         self.apf_config = _restore_nested_config(self.apf_config, AdversarialPedForceConfig)
         # Check that the pedestrian-robot force configuration is specified
         if not self.prf_config:

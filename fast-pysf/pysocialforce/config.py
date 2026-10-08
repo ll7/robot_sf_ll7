@@ -436,6 +436,20 @@ class GroupGazeForceConfig:
 
 
 @dataclass
+class GroupGazeForceV2Config(GroupGazeForceConfig):
+    """Moussaid 2010 gaze braking; ``fov_phi`` is a half-angle in degrees."""
+
+    law_version: str = "moussaid_2010_v2"
+
+
+@dataclass
+class GroupRepulsiveForceV2Config(GroupReplusiveForceConfig):
+    """Unit-vector repulsion, retaining the existing distance gate and factor."""
+
+    law_version: str = "unit_vectors_v2"
+
+
+@dataclass
 class DesiredForceConfig:
     """Parameters for goal-directed acceleration toward target waypoints.
 

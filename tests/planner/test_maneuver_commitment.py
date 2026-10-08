@@ -600,6 +600,42 @@ def test_pass_rejoin_releases_deterministically() -> None:
     assert len(context.allowed_candidate_ids) == len(candidates)
 
 
+@pytest.mark.parametrize("state", [ManeuverState.PASS_LEFT, ManeuverState.PASS_RIGHT])
+def test_pass_interaction_behind_releases_without_route_progress(state: ManeuverState) -> None:
+    """A still-present interaction moving behind alone releases either pass lock."""
+    observation = CommitmentObservation(
+        route_progress_m=0.0,
+        lateral_offset_m=1.0,
+        interaction_id="track-a",
+        interaction_present=True,
+    )
+    manager, candidates = _prime(
+        state,
+        config=ManeuverCommitmentConfig(min_dwell_steps_by_state={state: 10}),
+        observation=observation,
+    )
+    values = _evaluations(candidates)
+    held = _context(manager, candidates, values, 1, observation)
+    assert held.release_reason is None
+    assert held.hold_reason == TransitionReason.MINIMUM_DWELL.value
+    assert set(held.allowed_candidate_ids) == {
+        _candidate_for(candidates, state).candidate_id,
+        _candidate_for(candidates, ManeuverState.STOP).candidate_id,
+    }
+
+    released = _context(
+        manager, candidates, values, 1, replace(observation, interaction_behind=True)
+    )
+    assert released.release_reason == TransitionReason.PASS_COMPLETE.value
+    assert set(released.allowed_candidate_ids) == {
+        candidate.candidate_id for candidate in candidates
+    }
+    follow = _candidate_for(candidates, ManeuverState.FOLLOW)
+    transition = _select(manager, released, follow, values)
+    assert transition.transition_reason == TransitionReason.PASS_COMPLETE.value
+    assert manager.state.active is ManeuverState.FOLLOW
+
+
 def test_pass_interaction_clear_requires_persistence_window() -> None:
     config = ManeuverCommitmentConfig(
         min_dwell_steps_by_state={ManeuverState.PASS_LEFT: 10},

@@ -50,7 +50,7 @@ def derive_inputs(out: Path, seeds: list[int], arms: list[str], workers: int) ->
     source = REPO_ROOT / SUITES["main"]
     payload = yaml.safe_load(source.read_text())
     matrix = REPO_ROOT / payload["scenario_matrix"]
-    scenarios = load_scenarios(matrix, base_dir=matrix.parent)
+    scenarios = [dict(s) for s in load_scenarios(matrix, base_dir=matrix.parent)]
     for scenario in scenarios:
         scenario.setdefault("metadata", {})[FOOTPRINT_MARKER] = FOOTPRINT_SCHEMA
         scenario["seeds"] = seeds

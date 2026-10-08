@@ -43,6 +43,9 @@ learned arm before recording run-level success.
 
 ## Inference cost
 
+Host CPU: Intel Core i7-12700KF; Python 3.13.14, NumPy 2.4.6,
+Torch distribution 2.13.0, Stable-Baselines3 2.9.0.
+
 `inference_cost.json` retains all 27 paired coordinates and five timing blocks per
 mode. Three scenarios: classic_cross_trap_medium, francis2023_narrow_doorway,
 francis2023_circular_crossing; seeds 1001–1003. Each mode ran in a fresh interpreter

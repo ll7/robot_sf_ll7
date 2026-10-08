@@ -102,6 +102,13 @@
     "ppo_release_robot_b1002_last_20261001": "764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc"
   },
   "source_note": "The measurement source digest precedes final fail-closed None checks in the PPO adapter; the cached actor forward path is unchanged.",
+  "host_context": {
+    "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "python": "3.13.14",
+    "numpy": "2.4.6",
+    "torch_distribution": "2.13.0",
+    "stable_baselines3": "2.9.0"
+  },
   "rows": [
     {"default_blocks_ms": [2.6589546800005337, 2.7144449100069323, 2.5621345299987297, 2.6286528399941744, 2.5313641000047937], "default_ms": 2.619110212001033, "float64_reference_max_abs_error": 2.6645352591003757e-15, "input_sha256": "55063228b16317b34ba7b8fba768a2fa7f1d78f6a6f481ed768ef161ef4ed581", "pinned_blocks_ms": [6.548292520001269, 6.5533218500058865, 6.8309955800032185, 6.797828759999902, 6.527902000007089], "pinned_ms": 6.651668142003473, "planner": "ppo", "scenario": "classic_cross_trap_medium", "seed": 1001},
     {"default_blocks_ms": [2.477083379999385, 2.4576813200019387, 2.4752465700021276, 2.4540060799972707, 2.4168014299993956], "default_ms": 2.4561637560000236, "float64_reference_max_abs_error": 3.552713678800501e-15, "input_sha256": "7cf9e48adfa112522d429d983089b14dad2351f1cef256bd37d36feb35ff567a", "pinned_blocks_ms": [6.247415249999904, 6.53717983000206, 6.509775849999642, 6.424893319999683, 6.464671339999768], "pinned_ms": 6.436787118000211, "planner": "ppo", "scenario": "classic_cross_trap_medium", "seed": 1002},

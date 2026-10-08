@@ -1,6 +1,7 @@
 """Opt-in diagnostic profile contract; no released plant changes."""
 
 import json
+from hashlib import sha256
 from dataclasses import asdict
 from pathlib import Path
 
@@ -36,6 +37,17 @@ def test_profile_loads_through_scenario_robot_config(tmp_path):
 def test_unselected_profile_preserves_default_bytes(tmp_path):
     """Default robot settings and latency keep their pre-profile serialization."""
     config = build_robot_config_from_scenario({}, scenario_path=tmp_path / "scenario.yaml")
+    # Exact default robot + simulation bytes captured on origin/main dada635b4.
+    default_bytes = json.dumps(
+        {
+            "robot_config": asdict(config.robot_config),
+            "simulation_config": config.sim_config.to_dict(),
+        },
+        sort_keys=True,
+    ).encode()
+    assert sha256(default_bytes).hexdigest() == (
+        "4f89830e00963476c5cd056d75b210d6d8f235de7a10ad4c2eb77d47d3283117"
+    )
     assert json.dumps(asdict(config.robot_config), sort_keys=True) == (
         '{"allow_backwards": false, "interaxis_length": 0.3, "max_angular_accel": 1.0, '
         '"max_angular_speed": 1.0, "max_linear_accel": 1.0, "max_linear_decel": 1.0, '

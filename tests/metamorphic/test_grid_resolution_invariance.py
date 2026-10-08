@@ -104,12 +104,20 @@ def _measure_social_force(
     return command, planner.obstacle_force
 
 
-def _measure_dwa(resolution: float, *, wall_present: bool) -> np.ndarray:
+def _measure_dwa(
+    resolution: float,
+    *,
+    wall_present: bool,
+    wall_bounds: tuple[tuple[float, float], tuple[float, float]] = (
+        (1.2, 2.4),
+        (-0.8, 0.8),
+    ),
+) -> np.ndarray:
     """Run DWA on the float32 occupancy observation used by the resolution probe."""
     observation = _observation_with_wall(
         resolution,
         wall_present=wall_present,
-        wall_bounds=((1.2, 2.4), (-0.8, 0.8)),
+        wall_bounds=wall_bounds,
     )
     planner = DWAPlannerAdapter(DWAPlannerConfig(prediction_steps=25))
     return np.asarray(planner.plan(observation), dtype=float)
@@ -178,12 +186,30 @@ def test_orca_command_is_invariant_to_grid_resolution_with_wall_influence() -> N
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="Known DWA grid-resolution dependence tracked by #9740; remove after that fix merges.",
-)
-def test_dwa_command_is_invariant_to_grid_resolution_with_wall_influence() -> None:
+def test_dwa_obstacle_clearance_uses_world_space_cell_geometry() -> None:
+    """The same point-to-wall clearance is measured across grid resolutions."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(prediction_steps=25))
+    clearances = [
+        planner._min_obstacle_clearance(
+            np.asarray([0.0, 0.0]),
+            _observation_with_wall(
+                resolution,
+                wall_bounds=((1.2, 2.4), (-0.8, 0.8)),
+            ),
+        )
+        for resolution in GRID_RESOLUTIONS
+    ]
+
+    np.testing.assert_allclose(
+        clearances,
+        np.full(len(GRID_RESOLUTIONS), 1.2),
+        rtol=0.0,
+        atol=1e-6,
+        err_msg="DWA clearance changed with raster resolution for the same wall",
+    )
+
+
+def test_dwa_command_is_invariant_to_grid_resolution_for_same_wall() -> None:
     """The same float32 wall and free control should give stable DWA commands."""
     wall_bounds = ((1.2, 2.4), (-0.8, 0.8))
     observations = [
@@ -216,15 +242,37 @@ def test_dwa_command_is_invariant_to_grid_resolution_with_wall_influence() -> No
         atol=COMMAND_ATOL,
         err_msg="free-space DWA command changed with occupancy-grid resolution",
     )
-    assert np.any(np.linalg.norm(wall_commands - free_commands, axis=1) > COMMAND_ATOL), (
-        "the wall must affect at least one DWA command so the obstacle is exercised"
-    )
     np.testing.assert_allclose(
         wall_commands[1:],
         np.broadcast_to(wall_commands[0], wall_commands[1:].shape),
         rtol=0.0,
         atol=COMMAND_ATOL,
         err_msg="DWA command changed after halving or doubling occupancy resolution",
+    )
+
+
+def test_dwa_command_responds_to_wall_at_each_grid_resolution() -> None:
+    """A wall inside the rollout's safety envelope changes commands at every resolution."""
+    wall_bounds = ((0.4, 1.6), (-0.8, 0.8))
+    wall_commands = np.asarray(
+        [
+            _measure_dwa(resolution, wall_present=True, wall_bounds=wall_bounds)
+            for resolution in GRID_RESOLUTIONS
+        ]
+    )
+    free_commands = np.asarray(
+        [_measure_dwa(resolution, wall_present=False) for resolution in GRID_RESOLUTIONS]
+    )
+
+    assert np.all(np.linalg.norm(wall_commands - free_commands, axis=1) > COMMAND_ATOL), (
+        "a near wall must affect the DWA command at each resolution"
+    )
+    np.testing.assert_allclose(
+        wall_commands[1:],
+        np.broadcast_to(wall_commands[0], wall_commands[1:].shape),
+        rtol=0.0,
+        atol=COMMAND_ATOL,
+        err_msg="near-wall DWA response changed after halving or doubling grid resolution",
     )
 
 

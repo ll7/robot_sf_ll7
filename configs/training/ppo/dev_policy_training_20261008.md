@@ -1,6 +1,6 @@
 # Bounded development policy training
 
-Two 5M-step PPO arms use the current feasible-doorway successor scenarios,
+Two 5M-step PPO arms use the current main release-geometry scenario input (including its declared narrow-doorway probe),
 velocity-delta actions, a 2 m/s differential-drive robot with no reverse, and the
 existing grid/SocNav observation. `dev_fixed_objective_5m.yaml` applies full fixed
 weights from step zero. `dev_safety_objective_5m.yaml` changes only collision,

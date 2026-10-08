@@ -1,6 +1,6 @@
 base_config: expert_ppo_release_contract_b_seed1001.yaml
 policy_id: ppo_dev_fixed_objective_5m
-scenario_config: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v3_feasible_doorway_v1.yaml
+scenario_config: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
 seeds:
 - 1001
 randomize_seeds: false
@@ -52,7 +52,7 @@ convergence:
   collision_rate: 0.0
   plateau_window: 100000000
 evaluation:
-  scenario_config: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v3_feasible_doorway_v1.yaml
+  scenario_config: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   evaluation_seed_manifest: dev_policy_selection_seeds.yaml
   evaluation_episodes: 480
   randomize_seeds: false

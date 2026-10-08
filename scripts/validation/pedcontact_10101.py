@@ -63,6 +63,36 @@ def interval(values: list[float]) -> dict[str, object]:
     }
 
 
+def fit_physics_admitted(on):
+    """Admit only complete, clean physical evidence; repaired fallbacks stay diagnostic."""
+    from robot_sf.research.pedestrian_acceptance import _valid_counter
+
+    counters = (
+        "overlap_pair_steps",
+        "wall_penetration_ped_steps",
+        "unresolved_count",
+        "over_cap_samples",
+        "fallback_count",
+    )
+    if any(not _valid_counter(on.get(key)) or on[key] != 0 for key in counters):
+        return False
+    gate = on.get("gate", {})
+    if (
+        gate.get("scope") != "complete dev suite"
+        or gate.get("physical_violations") != []
+        or gate.get("measurement_missing") != []
+    ):
+        return False
+    banks = [bank for key, bank in on.get("per_case", {}).items() if key.startswith("V2/")]
+    return bool(banks) and all(
+        _valid_counter(bank.get("attempted_n"))
+        and bank["attempted_n"] > 0
+        and _valid_counter(bank.get("passed_n"))
+        and bank["passed_n"] == bank["attempted_n"]
+        for bank in banks
+    )
+
+
 def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
     """Verify full dev off/on banks and retain every gate, violation and interval.
 
@@ -168,16 +198,11 @@ def collect(root: Path, out: Path) -> dict[str, object]:  # noqa: C901
             ),
             "runtime_scope": "All integration calls including five V6 no-interferer baselines; cold JIT included; use separate warmed probe for cost",
         }
+    if len({arm["source_sha"] for arm in result["arms"].values()}) != 1:
+        raise ValueError("mixed producer heads across comparison arms")
     on = result["arms"]["on"]
-    result["fit_admitted"] = (
-        on["overlap_pair_steps"] == 0
-        and on["wall_penetration_ped_steps"] == 0
-        and all(
-            bank["passed_n"] == bank["attempted_n"]
-            for key, bank in on["per_case"].items()
-            if key.startswith("V2/")
-        )
-    )
+    result["source_sha"] = on["source_sha"]
+    result["fit_admitted"] = fit_physics_admitted(on)
     result["runtime_on_off_ratio"] = (
         on["runtime_ms_per_step"] / result["arms"]["off"]["runtime_ms_per_step"]
     )

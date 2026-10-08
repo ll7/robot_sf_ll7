@@ -9,6 +9,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+import jsonschema
 import numpy as np
 
 from robot_sf.evidence.writers import write_json
@@ -64,14 +65,220 @@ def group(point):
     return f"r{point['radius_m']:.2f}_cap{point['cap_m_s']:.1f}"
 
 
+SOURCE_PATHS = (
+    "scripts/validation/pedcontact_10101.py",
+    "scripts/validation/pedcontact_fit_10101.py",
+    "scripts/validation/calfit_search_10074.py",
+    "robot_sf/research/pedestrian_validation.py",
+    "robot_sf/sim/sim_config.py",
+    "robot_sf/sim/simulator.py",
+    "robot_sf/training/scenario_loader.py",
+    "scripts/validation/pedestrian_validation_10074.py",
+    "robot_sf/research/pedestrian_acceptance.py",
+    "robot_sf/research/pedestrian_initial_state.py",
+    "configs/benchmarks/pedestrian_validation_0_0_9.json",
+    *(
+        "fast-pysf/pysocialforce/" + name
+        for name in ("contact.py", "simulator.py", "scene.py", "forces.py", "config.py")
+    ),
+)
+
+
+def _reference(root, receipt):
+    """Verify available evidence bytes before decoding a reference."""
+    if not isinstance(receipt, dict) or set(receipt) != {"path", "sha256"}:
+        raise ValueError("qualification requires a checksummed evidence reference")
+    if not isinstance(receipt["path"], str) or not isinstance(receipt["sha256"], str):
+        raise ValueError("qualification reference schema mismatch")
+    path = (root / receipt["path"]).resolve()
+    if not path.is_relative_to(root.resolve()) or not path.is_file():
+        raise ValueError("qualification evidence is missing or outside its custody root")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != receipt["sha256"]:
+        raise ValueError("qualification evidence checksum mismatch")
+    return path
+
+
+def _document(root, receipt, schema, fields):
+    path = _reference(root, receipt)
+    document = json.loads(path.read_bytes())
+    try:
+        jsonschema.validate(
+            document,
+            {
+                "type": "object",
+                "required": ["schema", "source_sha", *fields],
+                "properties": {
+                    "schema": {"const": schema},
+                    "source_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+                    **fields,
+                },
+            },
+        )
+    except jsonschema.ValidationError as exc:
+        raise ValueError("qualification schema mismatch: " + exc.message) from exc
+    return document
+
+
+def _source_checked(document, source_sha):
+    if document["source_sha"] != source_sha:
+        raise ValueError("qualification source mismatch")
+    sources = document.get("source_files", {})
+    if not set(SOURCE_PATHS) <= sources.keys():
+        raise ValueError("qualification source manifest incomplete")
+    for name in SOURCE_PATHS:
+        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != sources[name]:
+            raise ValueError("qualification source bytes mismatch: " + name)
+    if subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=ROOT, check=False).returncode:
+        raise ValueError("qualification source tree is dirty")
+
+
+def require_fit_qualification(root, comparison, robot, source_sha):  # noqa: C901
+    """Require source-bound physical banks and a unique, fully passing robot roster.
+
+    Historical count-only summaries and unresolved failure dispositions cannot admit fit.
+    Returns:
+        Checksums of all referenced qualification evidence.
+    """
+    from robot_sf.research.pedestrian_acceptance import engineering_gate
+
+    if (
+        comparison.get("schema") != "pedcontact.comparison.v1"
+        or comparison.get("source_sha") != source_sha
+        or comparison.get("fit_admitted") is not True
+    ):
+        raise ValueError("complete physical qualification required")
+    physical = _document(
+        root,
+        comparison.get("qualification"),
+        "pedcontact.physical_qualification.v1",
+        {
+            "source_files": {"type": "object"},
+            "rows": {"type": "array", "minItems": 1},
+        },
+    )
+    _source_checked(physical, source_sha)
+    rows = physical["rows"]
+    for row in rows:
+        if not isinstance(row, dict) or row.get("radius_m") != 0.28 or not row.get("step_runtime"):
+            raise ValueError("physical qualification lacks measured runtime receipts")
+        if "wall_penetration_ped_steps" not in row:
+            raise ValueError("physical qualification lacks wall receipts")
+        for runtime in row["step_runtime"]:
+            if (
+                not isinstance(runtime, dict)
+                or not {
+                    "unresolved_count",
+                    "over_cap_samples",
+                    "fallback_count",
+                    "steps",
+                    "step_time_s",
+                    "maximum_projection_passes",
+                    "maximum_speed_m_s",
+                }
+                <= runtime.keys()
+            ):
+                raise ValueError("physical qualification lacks contact/cap receipts")
+        _reference(
+            root, {"path": row.get("raw_trajectory"), "sha256": row.get("raw_trajectory_sha256")}
+        )
+    gate = engineering_gate(rows, require_complete=True)
+    if (
+        gate["physical_violations"]
+        or gate["measurement_missing"]
+        or any(row.get("passed") is not True for row in rows if row["case"] == "V2")
+    ):
+        raise ValueError("physical qualification failed or incomplete")
+    if (
+        robot.get("schema") != "pedcontact.robot_gate.v1"
+        or robot.get("source_sha") != source_sha
+        or robot.get("gate_pass") is not True
+        or robot.get("pairs") != ROBOT_GATE_PAIRS
+    ):
+        raise ValueError("complete source-matched robot gate required")
+    roster = _document(
+        root,
+        robot.get("qualification"),
+        "pedcontact.robot_roster.v1",
+        {
+            "source_files": {"type": "object"},
+            "scenarios": {
+                "type": "array",
+                "minItems": 57,
+                "maxItems": 57,
+                "uniqueItems": True,
+                "items": {"type": "string"},
+            },
+            "arms": {
+                "type": "array",
+                "minItems": 5,
+                "maxItems": 5,
+                "uniqueItems": True,
+                "items": {"type": "string"},
+            },
+            "variants": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "uniqueItems": True,
+                "items": {"type": "string"},
+            },
+            "seeds": {"const": list(range(1001, 1011))},
+            "rows": {"type": "array"},
+            "accepted_failure_disposition": {"const": "no_failures"},
+        },
+    )
+    _source_checked(roster, source_sha)
+    contract_path = ROOT / "configs/benchmarks/pedcontact_robot_gate_v1.json"
+    if not contract_path.is_file():
+        raise ValueError("robot gate roster binding requires author-approved versioned contract")
+    contract_bytes = subprocess.check_output(
+        ["git", "show", "HEAD:configs/benchmarks/pedcontact_robot_gate_v1.json"], cwd=ROOT
+    )
+    if contract_bytes != contract_path.read_bytes():
+        raise ValueError("robot gate contract is dirty")
+    contract = json.loads(contract_bytes)
+    if contract.get("schema") != "pedcontact.robot_contract.v1" or any(
+        roster[key] != contract.get(key) for key in ("scenarios", "arms", "variants", "seeds")
+    ):
+        raise ValueError("robot gate roster differs from versioned contract")
+    expected = set(
+        itertools.product(roster["scenarios"], roster["arms"], roster["variants"], roster["seeds"])
+    )
+    observed = []
+    for row in roster["rows"]:
+        if not isinstance(row, dict) or not {"scenario", "arm", "variant", "seed"} <= row.keys():
+            raise ValueError("robot gate row schema mismatch")
+        observed.append((row["scenario"], row["arm"], row["variant"], row["seed"]))
+        if (
+            row.get("status") != "PASS"
+            or row.get("fallback") is not False
+            or row.get("degraded") is not False
+            or type(row.get("new_contacts")) is not int
+            or row["new_contacts"] != 0
+        ):
+            raise ValueError("robot gate failure requires explicit author disposition")
+        _reference(root, row.get("evidence"))
+    if len(observed) != len(expected) or set(observed) != expected:
+        raise ValueError("robot gate roster incomplete or duplicate")
+    return {
+        r["path"]: r["sha256"]
+        for r in [
+            comparison["qualification"],
+            robot["qualification"],
+            *({"path": r["raw_trajectory"], "sha256": r["raw_trajectory_sha256"]} for r in rows),
+            *(r["evidence"] for r in roster["rows"]),
+        ]
+    }
+
+
 def freeze(root):
     """Freeze the grid only after complete physical and robot-gate evidence."""
     comparison_path = root.parent / "step4_comparison.json"
     robot_path = root.parent / "robot_gate_summary.json"
     comparison = json.loads(comparison_path.read_text())
     robot = json.loads(robot_path.read_text())
-    if not comparison["fit_admitted"] or robot["pairs"] != ROBOT_GATE_PAIRS:
-        raise ValueError("complete step-4 qualification and robot gate required")
+    source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    qualification = require_fit_qualification(root.parent, comparison, robot, source_sha)
     ps = points()
     blob = {
         "schema": "pedcontact.bounded_fit.v2",
@@ -85,6 +292,7 @@ def freeze(root):
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
         "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "qualification_sha256": qualification,
         "admission_sha256": {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest()
             for p in (comparison_path, robot_path)

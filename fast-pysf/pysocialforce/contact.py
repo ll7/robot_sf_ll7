@@ -484,6 +484,32 @@ def unresolved_contact_mask(positions, obstacles, radius, pairs, walls, fixed_ma
     return affected
 
 
+@njit(cache=True)
+def swept_pair_violations(previous, corrected, radius, pairs):
+    """Retain physical crossings of the accepted segment after endpoint retry.
+
+    Initially overlapping pairs are endpoint repair, not a new swept crossing.
+    Returns:
+        Bodies on a segment whose minimum separation is below the physical diameter.
+    """
+    affected = np.zeros(len(corrected), dtype=np.bool_)
+    if not pairs:
+        return affected
+    diameter2 = (2 * radius) ** 2
+    for pair in grid_pairs(corrected, previous, 2 * radius):
+        i, j = pair[0], pair[1]
+        start = previous[i] - previous[j]
+        if np.dot(start, start) < diameter2:
+            continue
+        motion = corrected[i] - corrected[j] - start
+        length2 = np.dot(motion, motion)
+        alpha = min(1.0, max(0.0, -np.dot(start, motion) / length2)) if length2 > 0 else 0.0
+        closest = start + alpha * motion
+        if np.dot(closest, closest) < diameter2 - 1e-12:
+            affected[i] = affected[j] = True
+    return affected
+
+
 def apply_contact_step(sim, previous: np.ndarray) -> None:
     """Project geometry and closing velocities; cap, count and continue on fallback."""
     pairs = getattr(sim.config, "pedestrian_contact_rule", None) == PROJECTION_RULE
@@ -542,9 +568,10 @@ def apply_contact_step(sim, previous: np.ndarray) -> None:
                         converged = geometry_valid(corrected, obstacles, radius, pairs, walls)
                         break
                     affected |= newly_affected
-        if not converged:
+        swept = swept_pair_violations(previous_positions, corrected, radius, pairs)
+        if not converged or swept.any():
             sim.contact_projection_unresolved_count += 1
-            unresolved = unresolved_contact_mask(corrected, obstacles, radius, pairs, walls)
+            unresolved = unresolved_contact_mask(corrected, obstacles, radius, pairs, walls) | swept
             sim.peds.state[unresolved & ~fixed, 2:4] = 0.0
     attempted = current.copy()
     sim.peds.state[:, :2] = corrected

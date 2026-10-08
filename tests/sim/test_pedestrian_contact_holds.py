@@ -223,3 +223,34 @@ def test_unrelated_holds_allow_local_rollback(monkeypatch, overlapping_holds):
     np.testing.assert_array_equal(sim.peds.vel()[4:], np.zeros((len(definitions), 2)))
     assert sim.contact_projection_fallback_count == 1
     assert sim.contact_projection_unresolved_count == int(overlapping_holds)
+
+
+@pytest.mark.parametrize("integration_path", ["native", "robot_benchmark"])
+def test_prescribed_swap_reports_swept_contact_with_separated_endpoints(integration_path):
+    """Two immovable .28m bodies cross at zero separation within a .2s step."""
+    np.random.seed(1001)
+    cfg = config(dt=0.2)
+    cfg.contact_prescribed_indices = (0, 1)
+    state = np.array([[-0.29, 0, 3, 0, 10, 0, 0.5], [0.29, 0, -3, 0, -10, 0, 0.5]])
+    sim = Simulator(state.copy(), config=cfg, make_forces=free_forces)
+    step_backend(sim, integration_path)
+    np.testing.assert_allclose(sim.peds.pos(), [[0.31, 0], [-0.31, 0]], atol=1e-12)
+    assert np.linalg.norm(sim.peds.pos()[0] - sim.peds.pos()[1]) > 0.56
+    assert sim.contact_projection_fallback_count == 1
+    assert sim.contact_projection_unresolved_count == 1
+
+
+@pytest.mark.parametrize("integration_path", ["native", "robot_benchmark"])
+def test_prescribed_crossing_of_production_hold_reports_swept_contact(integration_path):
+    """The real start-delay hold stays stationary but cannot certify a crossing."""
+    sim, _ = held_pair(separation=0.6)
+    sim.config.contact_prescribed_indices = (1,)
+    sim.peds.d_t = 0.2
+    sim.peds.state[1, 2:4] = [-6, 0]
+    sim.forces = free_forces(sim, sim.config)
+    step_backend(sim, integration_path)
+    np.testing.assert_array_equal(sim.peds.pos()[0], [0, 0])
+    np.testing.assert_array_equal(sim.peds.vel()[0], [0, 0])
+    np.testing.assert_allclose(sim.peds.pos()[1], [-0.6, 0], atol=1e-12)
+    assert sim.contact_projection_fallback_count == 1
+    assert sim.contact_projection_unresolved_count == 1

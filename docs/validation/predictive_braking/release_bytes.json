@@ -14,5 +14,9 @@
   "final_config_map_tree_sha256": "a04eba285b6f64bc110432f0ff5c304c457a2cdce196465f86c07a094f6265b3",
   "changed_config_or_map_paths_from_base": [],
   "preserves_all_base_config_map_bytes": true,
-  "interpretation": "Five freeze-to-main changes predate this branch; this patch changes no config/map bytes, including every 0.0.8 scenario and planner config."
+  "interpretation": "Five freeze-to-main changes predate this branch; this patch changes no config/map bytes, including every 0.0.8 scenario and planner config.",
+  "raw_byte_compared_files": 1359,
+  "raw_base_file_sha256_manifest_digest": "7f775d78b6c3830aba8df5d223c476096218855f7bb3b0fd032fce269f85b6c4",
+  "raw_final_file_sha256_manifest_digest": "7f775d78b6c3830aba8df5d223c476096218855f7bb3b0fd032fce269f85b6c4",
+  "raw_byte_differences": []
 }

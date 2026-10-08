@@ -110,7 +110,7 @@ def _source_dependencies(imports, literals, text, modules, path_prefixes, basena
     # Text inputs can themselves point at other inputs (YAML -> SVG, etc.).
     references = literals | {token for token in re.findall(r"[\w./-]+", text) if "/" in token}
     for literal in sorted(references):
-        for dependency in path_prefixes.get(literal.strip("/"), ()) if "/" in literal else ():
+        for dependency in path_prefixes.get(literal.strip("/"), ()):
             dependencies.setdefault(dependency, "path")
         if len(basenames.get(literal, ())) == 1:
             dependency = next(iter(basenames[literal]))

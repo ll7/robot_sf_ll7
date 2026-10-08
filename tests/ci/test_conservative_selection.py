@@ -57,6 +57,7 @@ def test_uncertain_changes_include_every_test(tmp_path, changed):
         "fast-pysf/tests/test_force.py",
     }
     mapped = {
+        "notebooks/01_run_first_episode.ipynb": {"tests/test_pin.py"},
         "robot_sf/pinned.py": {"tests/test_pin.py"},
         "fast-pysf/pysocialforce/forces.py": {"tests/test_pin.py", "fast-pysf/tests/test_force.py"},
     }

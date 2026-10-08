@@ -17,6 +17,15 @@ Only compact artifacts in this PR receive catalog/registry bookkeeping.
 The earlier 1440-row actor-free sweep validates default-OFF preservation only.
 Its ON equality is tautological for pedestrian changes, and supplies no evidence
 of pedestrian interaction correctness. The complete behaviour gate remains open:
-other planner arms unrun, width goal metric-reference rejection and width MPPI
-predictor-contract rejection (issue #10180). Populated probes are domain review
+Current main resolves the width diagnostic SNQI reference and respawn validation.
+The updated-head sweep must classify every failed, missing or degraded slot.
+Width MPPI still rejects horizon 12 against eight-step support (#10186).
+Historical #10180 attribution does not establish current-head repair or contact acceptance. Populated probes are domain review
 evidence and do not close that gate.
+
+The speed proof uses the parent-compatible production task/options path. Separate
+assertions witness the actual desired draw and independently lower execution cap;
+an unsupported keyword is not before-fix behavioural proof. Initial admission now
+refuses malformed state shapes, non-finite motion/goals and non-finite walls before
+distance arithmetic. Diagnostic-development landing still needs domain disposition
+and independent final-head review. Archive hydration and analysis replay remain unverified.

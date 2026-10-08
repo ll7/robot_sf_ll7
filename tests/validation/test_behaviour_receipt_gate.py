@@ -24,7 +24,9 @@ def _checks(monkeypatch, body, paths):
     ):
         monkeypatch.setattr(checker, name, lambda *a, **k: [])
     monkeypatch.setattr(checker, "check_worker_lane_provenance", lambda *a, **k: ("tooling", False))
-    return checker.run_all_checks("change", body, paths, "ll7/robot_sf_ll7", "origin/main", None)[0]
+    return checker.run_all_checks(
+        "change", body, paths, "ll7/robot_sf_ll7", checker.PRDiffBases("origin/main"), None
+    )[0]
 
 
 @pytest.mark.parametrize(
@@ -384,3 +386,143 @@ def test_missing_owner_inventory_is_explicit_blocker(monkeypatch, tmp_path):
     body = "<!-- behaviour-change-receipt:v1\n" + json.dumps(_receipt()) + "\n-->"
     blockers = adapter.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7")
     assert any("reviewed scope inventory" in b for b in blockers), blockers
+
+
+@pytest.mark.parametrize(
+    ("paths", "blocked"),
+    [
+        (["docs/receipt_notes.md"], False),
+        (["configs/benchmarks/releases/behaviour_gate_0_1_0.json"], False),
+        (["robot_sf/planner/guarded_ppo.py"], True),
+        (
+            [
+                "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
+                "robot_sf/planner/guarded_ppo.py",
+            ],
+            True,
+        ),
+        (["configs/benchmarks/paper_experiment_matrix_v1.yaml"], True),
+    ],
+)
+def test_real_diff_scope_controls(monkeypatch, tmp_path, paths, blocked):
+    """Actual Git diffs exempt prose/inventory while retaining planner/campaign admission."""
+    import subprocess
+
+    from scripts.ci import behaviour_receipt as adapter
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+
+    git("init", "-b", "main")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.invalid")
+    git("commit", "--allow-empty", "-m", "base")
+    base = git("rev-parse", "HEAD")
+    for path in paths:
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("changed\n")
+    git("add", *paths)
+    git("commit", "-m", "change")
+    monkeypatch.chdir(tmp_path)
+    # Exempt paths must not consult inventory/release state even if absent.
+    monkeypatch.setattr(adapter, "SCOPE_PATH", tmp_path / "absent.json")
+
+    def unexpected_release_query(*args):
+        pytest.fail("scope controls should not query release metadata")
+
+    monkeypatch.setattr(adapter, "latest_release", unexpected_release_query)
+    changed = checker.get_changed_files(None, base)
+    assert set(changed) == set(paths)
+    blockers = _checks(monkeypatch, "", changed)
+    if blocked:
+        assert blockers == [
+            "BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"
+        ]
+    else:
+        assert blockers == []
+
+
+def test_installed_owner_inventory_matches_sweep_inputs():
+    """The shipped inventory covers both sweep suites and preserves the declared probe."""
+    from pathlib import Path
+
+    import yaml
+
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+    from robot_sf.training.scenario_loader import load_scenarios
+    from scripts.validation.run_empty_world_sweep import SUITES
+
+    root = Path(__file__).resolve().parents[2]
+    policy = root / "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
+    assert policy.is_file(), "behaviour gate owner inventory must ship with the gate"
+    from scripts.ci import behaviour_receipt as adapter
+
+    scope = json.loads(policy.read_text())
+    assert scope["owner"] == "release-integration"
+    assert scope["vehicle_id"] == "differential_drive_r1m"
+    assert DifferentialDriveSettings().radius == 1.0
+    arms = {}
+    maps = {}
+    probes = []
+    for suite, config_path in SUITES.items():
+        config_file = root / config_path
+        config = yaml.safe_load(config_file.read_text())
+        matrix = root / config["scenario_matrix"]
+        provenance = scope["sources"][suite]
+        assert provenance["campaign"] == config_path
+        assert provenance["campaign_sha256"] == hashlib.sha256(config_file.read_bytes()).hexdigest()
+        assert provenance["matrix"] == config["scenario_matrix"]
+        assert provenance["matrix_sha256"] == hashlib.sha256(matrix.read_bytes()).hexdigest()
+        arms.update({arm["key"]: arm["algo"] for arm in config["planners"]})
+        for row in load_scenarios(matrix, base_dir=matrix.parent):
+            assert not row.get("map_id"), "inventory map paths must follow resolved map authority"
+            map_file = (matrix.parent / row["map_file"]).resolve()
+            maps[row["name"]] = map_file.relative_to(root).as_posix()
+            assert (
+                scope["map_sha256"][row["name"]]
+                == hashlib.sha256(map_file.read_bytes()).hexdigest()
+            )
+            if row.get("infeasibility_probe"):
+                probes.append(row["name"])
+    assert len(arms) == 14 and len(maps) == 51
+    assert set(scope["arms"]) == set(arms)
+    assert scope["arm_algorithms"] == arms
+    assert set(scope["maps"]) == set(maps)
+    assert scope["map_files"] == maps
+    assert probes == ["francis2023_narrow_doorway"]
+    assert [(e["map"], e["vehicle"], e["kind"]) for e in scope["exceptions"]] == [
+        ("francis2023_narrow_doorway", "differential_drive_r1m", "infeasible_by_design")
+    ]
+    # Exercise the actual validator with the installed roster, not only a template check.
+    from robot_sf.benchmark.algorithm_metadata import (
+        canonical_algorithm_name,
+        enrich_algorithm_metadata,
+    )
+
+    receipt = _receipt()
+    receipt["scope_sha256"] = hashlib.sha256(
+        json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    receipt["vehicle"]["id"] = scope["vehicle_id"]
+    receipt["exceptions"] = scope["exceptions"]
+    prototype = receipt["rows"][0]
+    receipt["rows"] = []
+    for arm in scope["arms"]:
+        algo = canonical_algorithm_name(scope["arm_algorithms"][arm])
+        profile = enrich_algorithm_metadata(algo=algo)["planner_kinematics"]
+        mode = "native" if profile["supports_native_commands"] else "adapter"
+        for map_id in scope["maps"]:
+            for seed in range(1001, 1031):
+                receipt["rows"].append(
+                    {
+                        **prototype,
+                        "arm": arm,
+                        "algorithm": algo,
+                        "execution_mode": mode,
+                        "map": map_id,
+                        "seed": seed,
+                    }
+                )
+    receipt["totals"]["episodes"] = 21420
+    adapter.validate_receipt(receipt, scope, HEAD, "0.0.7", "c" * 40)

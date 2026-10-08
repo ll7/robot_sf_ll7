@@ -1,16 +1,24 @@
 # Behaviour receipt gate integration
 
-This gate is not ready to enable until the release integration owner lands
-`configs/benchmarks/releases/behaviour_gate_0_1_0.json` on the target branch.
-Merge that dependency before the gate PR. Missing scope remains a blocker;
-there is no default roster, inferred roster, or tooling exemption for a missing inventory.
+The release integration inventory is installed at
+`configs/benchmarks/releases/behaviour_gate_0_1_0.json`. It binds the 14 named
+arms and 51 scenario/map slots from the empty-world sweep's `main` and `width`
+inputs, with explicit arm-to-registry algorithm mappings. Map keys are scenario
+names, matching sweep row identities; shared SVGs retain separate slots when
+scenario settings differ. The inventory records repository-relative map paths,
+map digests and campaign/matrix source digests. Receipts bind its canonical JSON
+SHA-256, including those provenance fields.
 
-The owner reviews the complete release arms, maps, vehicle identity and vehicle-specific
-exceptions. The inventory includes `arms`, `maps`, `vehicle_id` and `exceptions`.
-For named treatment arms, `arm_algorithms` binds each arm key to its canonical
-registry algorithm. Without a mapping the arm key itself must identify the registry
-algorithm. Receipts bind the canonical JSON SHA-256 of this reviewed inventory.
-No inventory is authored by the receipt validator or its synthetic test fixtures.
+The vehicle is `differential_drive_r1m`: the current differential-drive body with
+1.0 m radius. The existing 2.0 m narrow doorway remains an infeasible-by-design
+exception, linked to the source declaration at the integration base commit.
+This does not certify a sweep or admit scientific conclusions. The release
+integration owner maintains this inventory when arms, maps or body change;
+missing inventory still fails closed for behaviour receipts.
+
+The inventory itself is gate tooling, so an inventory-only PR is exempt, just
+like validator/test changes. A PR also touching a planner or campaign remains
+in scope. Docs-only PRs do not read inventory or query release metadata.
 
 The workflow checks out the PR source SHA with complete history and tags. The
 baseline resolves to the latest published software release tag, excluding model

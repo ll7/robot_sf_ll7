@@ -16,7 +16,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
-SCOPE_PATH = ROOT / "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
+SCOPE_FILE = "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
+SCOPE_PATH = ROOT / SCOPE_FILE
 TRIGGERS = (
     "robot_sf/planner/",
     "robot_sf/baselines/",
@@ -253,7 +254,10 @@ def validate_receipt(
 
 def check_receipt(body: str, changed_files: list[str], repo: str) -> list[str]:
     """Fail closed for in-scope changes; prose and tooling paths are exempt."""
-    if not any(path in BEHAVIOUR_FILES or path.startswith(TRIGGERS) for path in changed_files):
+    if not any(
+        path != SCOPE_FILE and (path in BEHAVIOUR_FILES or path.startswith(TRIGGERS))
+        for path in changed_files
+    ):
         return []
     matches = re.findall(r"<!--\s*behaviour-change-receipt:v1\s*\n(.*?)-->", body, re.DOTALL)
     if len(matches) != 1:

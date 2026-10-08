@@ -132,6 +132,10 @@ class SinglePedestrianDefinition:
         role (str | None): Optional runtime behavior role (wait, follow, lead, accompany, join, leave).
         role_target_id (str | None): Optional target identifier for role behaviors (e.g., "robot:0").
         role_offset (Vec2D | None): Optional (forward, lateral) offset for follow/lead/accompany roles.
+        initial_group_id (str | None): Shared initial physics-group label among single pedestrians.
+            Omit to start alone. Unlike social_groups metadata, this controls membership.
+        join_radius_m (float | None): Optional distance to the target group's centroid for joining.
+            Omit to retain the waypoint-arrival threshold.
         hold_until_robot_within_m (float | None): Optional proximity-released hold. When set, the
             pedestrian holds at the trajectory waypoint immediately before ``hold_ref_point`` until
             a robot is within this distance (world units) of ``hold_ref_point`` (or ``hold_timeout_s``
@@ -160,6 +164,8 @@ class SinglePedestrianDefinition:
     hold_ref_point: Vec2D | None = None
     hold_timeout_s: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    initial_group_id: str | None = None
+    join_radius_m: float | None = None
 
     def __post_init__(self):
         """
@@ -181,6 +187,7 @@ class SinglePedestrianDefinition:
         self._validate_role()
         self._validate_role_target()
         self._validate_role_offset()
+        self._validate_group_behavior()
         self._validate_proximity_hold()
         self._validate_metadata()
         self._warn_if_static()
@@ -189,6 +196,19 @@ class SinglePedestrianDefinition:
         """Validate pedestrian ID is a non-empty string."""
         if not self.id or not isinstance(self.id, str):
             raise ValueError(f"Pedestrian ID must be a non-empty string, got: {self.id!r}")
+
+    def _validate_group_behavior(self) -> None:
+        """Reject ambiguous membership labels and unreachable/invalid join radii."""
+        if self.initial_group_id is not None:
+            if not isinstance(self.initial_group_id, str) or not self.initial_group_id.strip():
+                raise ValueError("initial_group_id must be a non-empty string")
+            self.initial_group_id = self.initial_group_id.strip()
+        if self.join_radius_m is not None:
+            if self.role != "join":
+                raise ValueError("join_radius_m requires role='join'")
+            self.join_radius_m = float(self.join_radius_m)
+            if not isfinite(self.join_radius_m) or self.join_radius_m <= 0:
+                raise ValueError("join_radius_m must be positive and finite")
 
     def _validate_start_position(self):
         """Validate start position is a 2-tuple."""
@@ -1554,6 +1574,8 @@ def _parse_single_pedestrians(
                 hold_ref_point=hold_ref_point,
                 hold_timeout_s=hold_timeout_s,
                 metadata=dict(metadata),
+                initial_group_id=ped_def.get("initial_group_id"),
+                join_radius_m=ped_def.get("join_radius_m"),
             )
         )
     return single_pedestrians

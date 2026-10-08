@@ -2792,6 +2792,8 @@ def _apply_single_pedestrian_override(
         hold_ref_point=hold_ref_point,
         hold_timeout_s=hold_timeout_s,
         metadata=metadata,
+        initial_group_id=entry.get("initial_group_id", ped.initial_group_id),
+        join_radius_m=entry.get("join_radius_m", ped.join_radius_m),
     )
 
 

@@ -48,6 +48,8 @@ Each single pedestrian is defined by:
 | `note` | `str \| None` | No | Optional note for scenario documentation |
 | `role` | `str \| None` | No | Optional runtime behavior role (`wait`, `follow`, `lead`, `accompany`, `join`, `leave`) |
 | `role_target_id` | `str \| None` | No | Optional target identifier for role behaviors (e.g., `robot:0`, other ped id) |
+| `initial_group_id` | `str \| None` | No | Single pedestrians sharing this label start in one physics group; omitted means alone |
+| `join_radius_m` | `float \| None` | No | Positive, finite arrival radius around the target group centroid; requires `role: join` |
 | `role_offset` | `Vec2D \| None` | No | Optional `(forward, lateral)` offset for robot-relative roles |
 
 ### Constraints
@@ -66,6 +68,13 @@ Each single pedestrian is defined by:
   Use `role_target_id: "robot:0"` to target the first robot (default).
 - `join` steers toward a target pedestrian group and attaches once within the goal threshold.
   Use `role_target_id` to reference another pedestrian id.
+
+For a join scenario, give the waiting anchors the same `initial_group_id` and leave the
+joiner's label unset. For a leave scenario, give the leaver and anchors the same label.
+Episode reset restores these initial memberships. `social_groups` remains diagnostic
+shared-space metadata and does not create physics groups. A joiner can set `join_radius_m`
+to reach the group without having to overcome social repulsion at a waypoint-sized threshold;
+when omitted, the existing waypoint threshold still applies. The join scenario uses 0.8 m.
 - `leave` detaches from the current group once per episode, then follows its trajectory/goal.
 
 ### Wait Rule Format
@@ -177,6 +186,8 @@ Optional override fields:
 - `note`
 - `role`
 - `role_target_id`
+- `initial_group_id`
+- `join_radius_m`
 - `role_offset`
 
 If the map defines a `goal` but you want a `trajectory`, set `goal: null` in the override.

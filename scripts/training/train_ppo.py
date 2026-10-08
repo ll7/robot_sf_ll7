@@ -1299,6 +1299,7 @@ class _TrainingEnvFactory:
             env_factory_kwargs=self.env_factory_kwargs,
             density_curriculum=self.density_curriculum,
             domain_randomization=self.domain_randomization,
+            episode_seed_pool=self.scenario_sampling.get("episode_seed_pool"),
             seed=self.seed,
         )
 

@@ -1,0 +1,11 @@
+base_config: dev_fixed_objective_5m.yaml
+policy_id: ppo_dev_safety_objective_5m
+env_factory_kwargs:
+  reward_kwargs:
+    weights:
+      collision: -25.0
+      near_miss: -2.0
+      living: -0.02
+tracking:
+  wandb:
+    name: ppo-safety-objective-dev1001

@@ -1,0 +1,70 @@
+base_config: expert_ppo_release_contract_b_seed1001.yaml
+policy_id: ppo_dev_fixed_objective_5m
+scenario_config: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v3_feasible_doorway_v1.yaml
+seeds:
+- 1001
+randomize_seeds: false
+total_timesteps: 5000000
+num_envs: 20
+worker_mode: subproc
+ppo_hyperparams:
+  n_steps: 256
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 1.0
+      living: -0.015
+      collision: -15.0
+      near_miss: -1.5
+      ttc_risk: 0.0
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -6.5
+      stagnation: -0.8
+      terminal_bonus: 20.0
+  peds_have_obstacle_forces: true
+scenario_sampling:
+  strategy: random
+  episode_seed_pool:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+  - 1006
+  - 1007
+  - 1008
+  - 1009
+  - 1010
+  - 1011
+  - 1012
+  - 1013
+  - 1014
+  - 1015
+  - 1016
+  - 1017
+  - 1018
+  - 1019
+  - 1020
+convergence:
+  success_rate: 1.1
+  collision_rate: 0.0
+  plateau_window: 100000000
+evaluation:
+  scenario_config: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v3_feasible_doorway_v1.yaml
+  evaluation_seed_manifest: dev_policy_selection_seeds.yaml
+  evaluation_episodes: 480
+  randomize_seeds: false
+  step_schedule:
+  - every_steps: 1000000
+  full_policy_analysis_on_new_best: false
+  full_policy_analysis_videos: false
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: navigation-dev-20261008
+    name: ppo-fixed-objective-dev1001
+    job_type: development-policy-training

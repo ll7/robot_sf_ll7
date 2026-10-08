@@ -68,9 +68,19 @@ def test_shared_radius_sets_gradient_profile_body_edge_origin():
     assert sim.pysf_sim.config.scene_config.agent_radius == 0.28
 
 
-@pytest.mark.parametrize("radius", [0, -1, float("nan"), float("inf"), True, "0.28"])
-def test_invalid_radius_is_rejected_before_simulation(radius):
-    with pytest.raises((TypeError, ValueError), match="pedestrian_radius_m"):
+@pytest.mark.parametrize(
+    ("radius", "error"),
+    [
+        (0, ValueError),
+        (-1, ValueError),
+        (float("nan"), ValueError),
+        (float("inf"), ValueError),
+        (True, TypeError),
+        ("0.28", TypeError),
+    ],
+)
+def test_invalid_radius_is_rejected_before_simulation(radius, error):
+    with pytest.raises(error, match="^pedestrian_radius_m must be a positive finite number$"):
         SimulationSettings(pedestrian_radius_m=radius)
 
 

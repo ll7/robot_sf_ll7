@@ -64,3 +64,33 @@ def test_holding_population_survives_required_area_expansion(monkeypatch, radius
     row = suite.run_task(("V3", 1001, ".8", radius, "radius"))
     assert row["initial_admissibility"]["admissible"]
     assert row["holding_layout"]["new_density_persons_m2"] <= 3.3 + 1e-12
+
+
+@pytest.mark.parametrize("coordinate", range(4))
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+def test_initial_admission_refuses_nonfinite_wall_geometry(coordinate, bad):
+    """No distance calculation can turn a non-finite wall into an admission receipt."""
+    from robot_sf.research.pedestrian_initial_state import initial_admissibility
+
+    wall = [2.0, -1.0, 2.0, 1.0]
+    wall[coordinate] = bad
+    with pytest.raises(ValueError, match="finite wall segments"):
+        initial_admissibility([[0, 0, 0, 0, 10, 0, 0.5]], [wall], 0.28)
+
+
+@pytest.mark.parametrize("column", range(2, 7))
+def test_initial_admission_refuses_nonfinite_motion_and_goal_state(column):
+    from robot_sf.research.pedestrian_initial_state import initial_admissibility
+
+    state = np.array([[0, 0, 0, 0, 10, 0, 0.5]])
+    state[0, column] = np.nan
+    with pytest.raises(ValueError, match="initial state"):
+        initial_admissibility(state, [], 0.28)
+
+
+@pytest.mark.parametrize("state", [[[0, 0]], [0, 0, 0, 0, 10, 0], np.zeros((1, 2, 3))])
+def test_initial_admission_refuses_invalid_state_shape(state):
+    from robot_sf.research.pedestrian_initial_state import initial_admissibility
+
+    with pytest.raises(ValueError, match="initial state"):
+        initial_admissibility(state, [], 0.28)

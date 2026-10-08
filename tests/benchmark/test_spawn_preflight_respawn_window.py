@@ -158,5 +158,10 @@ def test_release_step1_collision_is_measured(monkeypatch, contact_step):
     )
     row = result["rows"][0]
     assert row["step1_collision"] is (contact_step == 1)
-    assert row["overall_status"] == ("blocked" if contact_step == 99 else "valid")
+    assert row["overall_status"] == ("valid" if contact_step == 2 else "blocked")
+    if contact_step == 1:
+        assert row["respawn_safety"]["status"] == "invalid"
+        assert row["respawn_safety"]["reason"] == "pedestrian_contact_at_first_step"
+        assert row["respawn_safety"]["steps_checked"] == 1
+        assert row["respawn_safety"]["diagnostic_continuation_steps"] == 0
     assert env.closed

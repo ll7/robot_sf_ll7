@@ -258,7 +258,10 @@ development-matrix or seed overrides. It requires 0.10 m surface clearance and c
 footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
 robot stationary for 20 steps to catch early route-end respawn overlap. A pedestrian walking
 into the parked robot is recorded separately from respawn failure.
-After a positively identified pedestrian-only episode end, the separate preflight environment
+Pedestrian contact on step 1 remains blocking with reason
+`pedestrian_contact_at_first_step` and `step1_collision=true`: the planner has no chance
+to avoid that initial contact. Only when the first pedestrian contact occurs after step 1
+may a positively identified pedestrian-only episode end continue. The separate preflight environment
 continues through the public simulator/state APIs for the remaining stationary steps, without
 resetting or clearing terminal flags. Contact flags and their window steps are retained in
 `respawn_safety.contact_events`; `step1_collision` reports only measured first-step contact.

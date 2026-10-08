@@ -61,6 +61,9 @@ def derive_inputs(out: Path, seeds: list[int], arms: list[str], workers: int) ->
     out.mkdir(parents=True, exist_ok=True)
     matrix_out = out / "scenarios_dev.yaml"
     matrix_out.write_text(yaml.safe_dump({"scenarios": scenarios}, sort_keys=False))
+    payload["name"] = "footprint_metric_dev"
+    payload["protocol_version"] = "0.1.0"
+    payload["paper_facing"] = False
     payload["scenario_matrix"] = str(matrix_out.resolve())
     payload["seed_policy"] = {"mode": "fixed-list", "seeds": assert_dev_seeds(seeds)}
     payload["workers"] = workers
@@ -169,10 +172,10 @@ def main() -> int:
         config = derive_inputs(out, seeds, args.arms, args.workers)
         run_campaign(
             load_campaign_config(config),
-            out_dir=out / "campaign",
+            output_root=out / "campaign",
             label="footprint-dev",
             campaign_id="footprint-dev",
-            skip_preflight=False,
+            skip_publication_bundle=True,
         )
     summary = summarize(out / "campaign")
     summary.update(head_sha=head, seeds=seeds, arms=args.arms)

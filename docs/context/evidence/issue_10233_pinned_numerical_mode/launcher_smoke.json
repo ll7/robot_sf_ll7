@@ -1,0 +1,59 @@
+{
+  "markers": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ],
+  "evidence_tier": "diagnostic-only",
+  "scenario": "francis2023_frontal_approach",
+  "seeds": [
+    1001
+  ],
+  "learned_arms": 3,
+  "benchmark_success": true,
+  "run_manifest_numerical_mode": {
+    "mode": "pinned_float64_v1",
+    "inference_dtype": "float64"
+  },
+  "run_manifest_kernel_context": {
+    "mode": "pinned_float64_v1",
+    "blas": [
+      {
+        "internal_api": "openblas",
+        "version": "0.3.31.188.0",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.30",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.15",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.15",
+        "architecture": "Haswell",
+        "num_threads": 1
+      }
+    ],
+    "kernel_env": {
+      "ATEN_CPU_CAPABILITY": "default",
+      "MKL_CBWR": "COMPATIBLE",
+      "OPENBLAS_CORETYPE": "Haswell",
+      "ONEDNN_MAX_CPU_ISA": "AVX2",
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "torch_cpu_capability": "DEFAULT",
+    "mkldnn_enabled": false,
+    "deterministic_algorithms": true
+  },
+  "status": "benchmark_success"
+}

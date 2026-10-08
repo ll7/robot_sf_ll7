@@ -618,6 +618,9 @@ class RobotEnv(BaseEnv):
         self.config = env_config
         self.grid_config = env_config.grid_config
 
+        # No pedestrian circles have been rasterized before the first regeneration.
+        self._last_grid_ped_radii = np.empty(0, dtype=float)
+
         # Initialize optional occupancy grid
         self.occupancy_grid = self._build_occupancy_grid(env_config)
 

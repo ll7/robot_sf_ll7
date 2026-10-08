@@ -119,12 +119,14 @@ def test_changed_live_config_reaches_final_campaign_manifest(tmp_path):
     assert changed["release_design_parameters"]["pedestrian_speed_sd_m_s"] == 0.2
 
 
-def test_manifest_rejects_missing_runtime_witness(tmp_path):
-    """An old/config-only episode cannot be upgraded to a runtime-witness manifest."""
+def test_manifest_preserves_v1_without_runtime_witnesses(tmp_path):
+    """A resumed config-only campaign remains writable without invented physics."""
     row = _episode()
     row.pop("effective_physics", None)
-    with pytest.raises(ValueError, match="lacks live effective_physics"):
-        _manifest(tmp_path, row)
+    manifest = _manifest(tmp_path, row)
+    assert manifest["schema_version"] == "benchmark-camera-ready-campaign.v1"
+    assert "release_design_parameters" not in manifest
+    assert not any(key.startswith("effective_physics") for key in manifest)
 
 
 def test_manifest_rejects_declared_live_mismatch(tmp_path):
@@ -228,3 +230,110 @@ def test_live_disabled_force_grid_radii_and_reverse_cap(tmp_path):
     assert physics["integration"] == {"dt_s": 0.1, "integrator": "semi_implicit_euler"}
     assert physics["robot_kinematics"] == "DifferentialDriveRobot"
     assert physics["pedestrian_contact_law"]["hard_nonpenetration"] is False
+
+
+@pytest.fixture(scope="module")
+def native_physics_row():
+    """One native runtime witness reused by serialization-only review regressions."""
+    return _episode()
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "robot_kinematics",
+        "radius_roles",
+        "pedestrian_model",
+        "integration",
+        "pedestrian_contact_law",
+        "group_forces",
+        "per_agent_caps_m_s",
+    ],
+)
+def test_manifest_retains_non_intake_changes_for_same_config(tmp_path, native_physics_row, field):
+    """Differing full snapshots under one scenario/config identity must survive serialization."""
+    first = copy.deepcopy(native_physics_row)
+    second = copy.deepcopy(first)
+    second["episode_id"] += "--second"
+    second["seed"] = 1002
+    physics = second["effective_physics"]
+    if field == "robot_kinematics":
+        physics[field] = "BicycleDriveRobot"
+    elif field == "radius_roles":
+        physics[field]["placement_m"] = 0.51
+    elif field == "pedestrian_model":
+        physics[field] = "hsfm_total_force_v1"
+    elif field == "integration":
+        physics[field]["dt_s"] = 0.2
+    elif field == "pedestrian_contact_law":
+        physics[field]["parameters"]["factor"] = 6.0
+    elif field == "group_forces":
+        physics[field] = [{"identity": "GroupGazeForce", "parameters": {"factor": 6.0}}]
+    else:
+        physics["pedestrian_speed_model"][field][0] += 0.01
+    _manifest(tmp_path, first)
+    (tmp_path / "runs" / "goal" / "episodes.jsonl").write_text(
+        json.dumps(first) + "\n" + json.dumps(second) + "\n"
+    )
+    from robot_sf.benchmark.effective_physics import campaign_physics, validate_campaign_physics
+
+    manifest = {"schema_version": campaign.CAMPAIGN_SCHEMA_VERSION, **campaign_physics(tmp_path)}
+    campaign._write_json(tmp_path / "campaign_manifest.json", manifest)
+    manifest = json.loads((tmp_path / "campaign_manifest.json").read_text())
+    assert len(manifest["effective_physics_samples"]) == 2
+    assert [sample["physics"] for sample in manifest["effective_physics_samples"]] == [
+        first["effective_physics"],
+        second["effective_physics"],
+    ]
+    assert validate_campaign_physics(manifest)["status"] == "complete"
+
+
+def test_manifest_reports_mixed_witnesses_as_incomplete(tmp_path, native_physics_row):
+    """A missing resumed row is retained as an explicit marker, without global physics claims."""
+    first = copy.deepcopy(native_physics_row)
+    missing = copy.deepcopy(first)
+    missing["episode_id"] += "--old"
+    missing["seed"] = 1002
+    missing.pop("effective_physics")
+    missing.pop("release_design_parameters")
+    (tmp_path / "runs" / "other").mkdir(parents=True)
+    (tmp_path / "runs" / "other" / "episodes.jsonl").write_text(json.dumps(missing) + "\n")
+    manifest = _manifest(tmp_path, first)
+    assert manifest["schema_version"] == "benchmark-camera-ready-campaign.v2"
+    assert manifest["release_design_parameters"] == {}
+    assert manifest["effective_physics_episode_count"] == 2
+    assert manifest["effective_physics_witnessed_episode_count"] == 1
+    assert manifest["effective_physics_missing_episode_count"] == 1
+    absent = next(
+        s for s in manifest["effective_physics_samples"] if s["episode_id"] == missing["episode_id"]
+    )
+    assert absent["physics_witness"] == "missing"
+    assert absent["scenario_id"] == first["scenario_id"]
+    assert "physics" not in absent
+    from robot_sf.benchmark.effective_physics import validate_campaign_physics
+
+    report = validate_campaign_physics(manifest)
+    assert report["status"] == "incomplete"
+    assert report["missing"] == [absent]
+    # A claimed global value remains invalid while any episode is unwitnessed.
+    manifest["release_design_parameters"] = {"pedestrian_force_radius_m": 0.35}
+    with pytest.raises(ValueError, match="global design parameters.*incomplete"):
+        validate_campaign_physics(manifest)
+
+
+def test_capture_before_grid_regeneration_records_empty_radii():
+    """An episode closed before reset/step can still snapshot an enabled, ungenerated grid."""
+    from robot_sf.benchmark.effective_physics import capture_effective_physics
+    from robot_sf.gym_env.environment_factory import make_robot_env
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.nav.occupancy_grid import GridConfig
+
+    env = make_robot_env(
+        config=RobotSimulationConfig(use_occupancy_grid=True, grid_config=GridConfig()), seed=1001
+    )
+    try:
+        snapshot = capture_effective_physics(env)
+        assert snapshot["radius_roles"]["occupancy_grid"]["enabled"] is True
+        assert snapshot["radius_roles"]["occupancy_grid"]["radii_m"] == []
+    finally:
+        env.close()

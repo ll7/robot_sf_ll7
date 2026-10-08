@@ -171,16 +171,17 @@ def validate_effective_physics(snapshot: dict[str, Any], *, env: Any = None) -> 
 
 
 def campaign_physics(campaign_root: Path) -> dict[str, Any]:
-    """Collect runtime witnesses, retaining every distinct scenario/config binding.
+    """Collect episode witnesses without hiding variation or missing coverage.
 
     Returns:
-        Per-scenario witnesses and only genuinely uniform global intake fields.
-
-    Missing witnesses fail closed; historical campaigns remain readable but cannot
-    be silently upgraded to the runtime-witness manifest version.
+        v1 without physics when no witness exists, otherwise v2 with retained
+        distinct snapshots and explicit missing markers. Partial coverage never
+        establishes a campaign-wide design parameter.
     """
-    samples: dict[tuple[str, str], dict[str, Any]] = {}
+    samples: dict[tuple[str, str, str], dict[str, Any]] = {}
+    signatures: set[tuple[str, str, str]] = set()
     count = 0
+    witnessed = 0
     common: dict[str, Any] | None = None
     for path in sorted((campaign_root / "runs").rglob("episodes.jsonl")):
         with path.open(encoding="utf-8") as stream:
@@ -188,12 +189,13 @@ def campaign_physics(campaign_root: Path) -> dict[str, Any]:
                 if not line.strip():
                     continue
                 row = json.loads(line)
-                snapshot = row.get("effective_physics")
-                if snapshot is None:
-                    raise ValueError("episode lacks live effective_physics witness")
-                validate_effective_physics(snapshot)
-                if row.get("release_design_parameters") != snapshot["release_design_parameters"]:
-                    raise ValueError("episode design parameters contradict runtime witness")
+                sample = _episode_physics_sample(row)
+                count += 1
+                if sample["physics_witness"] == "missing":
+                    _retain_sample(samples, sample)
+                    continue
+                witnessed += 1
+                snapshot = sample["physics"]
                 parameters = snapshot["release_design_parameters"]
                 if common is None:
                     common = {key: value for key, value in parameters.items() if value is not None}
@@ -201,29 +203,68 @@ def campaign_physics(campaign_root: Path) -> dict[str, Any]:
                     common = {
                         key: value for key, value in common.items() if parameters[key] == value
                     }
-                identity = (row["scenario_id"], row["config_hash"])
-                # One sample per scenario/config, retaining the source episode.
-                # Uniform fields above are compared against EVERY episode.
-                sample = {
-                    "scenario_id": identity[0],
-                    "config_hash": identity[1],
-                    "episode_id": row["episode_id"],
-                    "seed": row["seed"],
-                    "physics": snapshot,
-                }
-                samples.setdefault(identity, sample)
-                count += 1
-    witnesses = list(samples.values())
+                signature = (
+                    sample["scenario_id"],
+                    sample["config_hash"],
+                    json.dumps(snapshot, sort_keys=True, allow_nan=False),
+                )
+                if signature not in signatures:
+                    _retain_sample(samples, sample)
+                    signatures.add(signature)
+    if not witnessed:
+        return {"schema_version": "benchmark-camera-ready-campaign.v1"}
+    missing = count - witnessed
     return {
+        "schema_version": "benchmark-camera-ready-campaign.v2",
         "effective_physics_schema_version": PHYSICS_SCHEMA_VERSION,
         "effective_physics_episode_count": count,
-        "effective_physics_samples": witnesses,
-        "release_design_parameters": common or {},
+        "effective_physics_witnessed_episode_count": witnessed,
+        "effective_physics_missing_episode_count": missing,
+        "effective_physics_status": "incomplete" if missing else "complete",
+        "effective_physics_samples": list(samples.values()),
+        "release_design_parameters": {} if missing else common or {},
     }
 
 
-def validate_campaign_physics(manifest: dict[str, Any]) -> None:
-    """Validate a v2 campaign's physics section, including its scope and intake fields."""
+def _episode_physics_sample(row: dict[str, Any]) -> dict[str, Any]:
+    """Validate a row and preserve its source identity even without physics.
+
+    Returns:
+        A recorded witness or a missing marker carrying no invented parameters.
+    """
+    sample = {key: row[key] for key in ("scenario_id", "config_hash", "episode_id", "seed")}
+    _sample_identity(sample)
+    snapshot = row.get("effective_physics")
+    if snapshot is None:
+        return {**sample, "physics_witness": "missing"}
+    validate_effective_physics(snapshot)
+    if row.get("release_design_parameters") != snapshot["release_design_parameters"]:
+        raise ValueError("episode design parameters contradict runtime witness")
+    return {**sample, "physics_witness": "recorded", "physics": snapshot}
+
+
+def _retain_sample(samples: dict, sample: dict[str, Any]) -> None:
+    """Keep different episode witnesses and reject conflicting duplicate source identities."""
+    identity = _sample_identity(sample)
+    if identity in samples and samples[identity] != sample:
+        raise ValueError("conflicting physics for episode identity")
+    samples.setdefault(identity, sample)
+
+
+def validate_campaign_physics(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Validate physics structure and report incomplete coverage without blocking resume.
+
+    Returns:
+        A complete/incomplete report with the missing source markers, or an
+        unavailable report for a legacy v1 manifest with no physics block.
+        Malformed witnesses and contradictory claims still raise ValueError.
+    """
+    if manifest.get("schema_version") == "benchmark-camera-ready-campaign.v1":
+        if "release_design_parameters" in manifest or any(
+            key.startswith("effective_physics") for key in manifest
+        ):
+            raise ValueError("legacy campaign cannot declare runtime physics")
+        return {"status": "unavailable", "missing": []}
     if manifest.get("schema_version") != "benchmark-camera-ready-campaign.v2":
         raise ValueError("runtime physics requires campaign manifest v2")
     if manifest.get("effective_physics_schema_version") != PHYSICS_SCHEMA_VERSION:
@@ -237,12 +278,36 @@ def validate_campaign_physics(manifest: dict[str, Any]) -> None:
     common = manifest.get("release_design_parameters")
     if not isinstance(common, dict):
         raise ValueError("campaign lacks design parameter mapping")
+    missing = _validate_samples(samples, common)
+    status = "incomplete" if missing else "complete"
+    _validate_coverage_counts(manifest, count, len(missing), status)
+    return {"status": status, "missing": missing}
+
+
+def _validate_samples(
+    samples: list[dict[str, Any]], common: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Validate source identities, missing markers and agreement with global claims.
+
+    Returns:
+        The explicit missing-witness markers.
+    """
+    missing = []
     identities = set()
     for sample in samples:
         identity = _sample_identity(sample)
         if identity in identities:
-            raise ValueError("duplicate scenario/config physics sample")
+            raise ValueError("duplicate episode physics sample")
         identities.add(identity)
+        if sample.get("physics_witness", "recorded") == "missing":
+            if "physics" in sample:
+                raise ValueError("missing physics marker cannot contain a witness")
+            if common:
+                raise ValueError("global design parameters cannot claim incomplete coverage")
+            missing.append(sample)
+            continue
+        if sample.get("physics_witness", "recorded") != "recorded":
+            raise ValueError("unsupported physics_witness marker")
         validate_effective_physics(sample["physics"])
         parameters = sample["physics"]["release_design_parameters"]
         if any(
@@ -250,17 +315,31 @@ def validate_campaign_physics(manifest: dict[str, Any]) -> None:
             for key, value in common.items()
         ):
             raise ValueError("global design parameters contradict runtime sample")
+    return missing
 
 
-def _sample_identity(sample: dict[str, Any]) -> tuple[str, str]:
+def _validate_coverage_counts(
+    manifest: dict[str, Any], count: int, missing: int, status: str
+) -> None:
+    """Check optional coverage counters while preserving previously emitted v2 snapshots."""
+    for key, expected in (
+        ("effective_physics_missing_episode_count", missing),
+        ("effective_physics_witnessed_episode_count", count - missing),
+        ("effective_physics_status", status),
+    ):
+        if key in manifest and manifest[key] != expected:
+            raise ValueError(f"inconsistent {key}")
+
+
+def _sample_identity(sample: dict[str, Any]) -> tuple[str, str, str]:
     """Validate a runtime sample's source identity.
 
     Returns:
-        The scenario/config identity for duplicate detection.
+        The scenario/config/episode identity for duplicate detection.
     """
     for key in ("scenario_id", "config_hash", "episode_id"):
         if not isinstance(sample.get(key), str) or not sample[key].strip():
             raise ValueError(f"runtime sample lacks {key}")
     if type(sample.get("seed")) is not int:
         raise ValueError("runtime sample lacks integer seed")
-    return sample["scenario_id"], sample["config_hash"]
+    return sample["scenario_id"], sample["config_hash"], sample["episode_id"]

@@ -32,6 +32,29 @@ def test_objectives_import_resolves_v2_without_loading_deferred_api() -> None:
     subprocess.run([sys.executable, "-c", code], check=True)
 
 
+@pytest.mark.parametrize(
+    "first_module", ["robot_sf.adversarial.objectives", "robot_sf.adversarial.objectives_v2"]
+)
+def test_fresh_objective_registry_enumerates_builtins(first_module: str) -> None:
+    """Enumeration includes v2 before any lookup, regardless of scorer import order."""
+    code = (
+        "import importlib, sys\n"
+        f"importlib.import_module({first_module!r})\n"
+        "from robot_sf.adversarial.objectives import list_objectives\n"
+        "expected = (\n"
+        "    'constraints_first_lexicographic_v1',\n"
+        "    'constraints_first_lexicographic_v2',\n"
+        "    'minimize_episode_min_robot_distance',\n"
+        "    'temporal_robustness',\n"
+        "    'worst_case_snqi',\n"
+        ")\n"
+        "assert list_objectives() == expected, list_objectives()\n"
+        "assert list_objectives() == expected\n"
+        "assert 'robot_sf.adversarial._api' not in sys.modules\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
 def test_adversarial_search_reexport_is_lazy() -> None:
     """The package-level search re-export resolves through module __getattr__."""
 

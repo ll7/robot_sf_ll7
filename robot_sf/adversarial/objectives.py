@@ -299,5 +299,6 @@ def get_objective(name: str) -> ObjectiveFn:
 
 
 def list_objectives() -> tuple[str, ...]:
-    """Return registered objective names."""
+    """Return registered objective names, including lazily loaded built-ins."""
+    get_objective("constraints_first_lexicographic_v2")
     return tuple(sorted(_OBJECTIVES))

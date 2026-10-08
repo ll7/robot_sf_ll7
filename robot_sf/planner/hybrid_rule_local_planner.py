@@ -1145,7 +1145,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         relative_delta = state["ped_vel"][None, :, :] * dt - np.diff(nodes, axis=0)[:, None, :]
         squared = np.sum(relative_delta * relative_delta, axis=2)
         fractions = np.clip(
-            -np.sum(relative_start * relative_delta, axis=2) / np.maximum(squared, _EPS), 0, 1
+            -np.sum(relative_start * relative_delta, axis=2) / np.where(squared > 0, squared, 1),
+            0,
+            1,
         )
         separation = np.linalg.norm(relative_start + fractions[:, :, None] * relative_delta, axis=2)
         lower = np.min(separation, axis=1) - error * (times + dt) - np.asarray(paddings)

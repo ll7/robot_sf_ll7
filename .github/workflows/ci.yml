@@ -1040,6 +1040,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
       PPO_ALGO_CONFIG: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
     steps:
       - name: Checkout
@@ -1065,11 +1068,19 @@ jobs:
       - name: Preflight required model assets (before the timed test)
         run: uv run python scripts/models/preflight_models.py --config "${PPO_ALGO_CONFIG}"
 
-      - name: Run exact-repeat native-PPO determinism offline
+      - name: Run exact-repeat native-PPO determinism offline 20 times
         run: |
-          uv run pytest -m slow -p no:cacheprovider \
-            tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
-            -q
+          failures=0
+          for attempt in $(seq 1 20); do
+            echo "Native PPO offline attempt ${attempt}/20"
+            if ! uv run pytest -m slow -p no:cacheprovider \
+              tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
+              -q; then
+              failures=$((failures + 1))
+            fi
+          done
+          echo "Native PPO offline failures: ${failures}/20"
+          test "$failures" -eq 0
 
   ci:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'ci-draft' || 'ci' }}

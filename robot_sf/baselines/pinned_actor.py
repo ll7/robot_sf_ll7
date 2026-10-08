@@ -7,10 +7,15 @@ Box action clipping remain owned by the existing PPO adapter.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-def _compile(module):  # noqa: C901 - supported inference layer dispatch
+
+def _compile(module) -> Callable[[np.ndarray], np.ndarray]:  # noqa: C901 - supported inference layer dispatch
     """Compile supported inference layers.
 
     Returns:
@@ -21,7 +26,7 @@ def _compile(module):  # noqa: C901 - supported inference layer dispatch
     if isinstance(module, nn.Sequential):
         layers = [_compile(layer) for layer in module]
 
-        def sequential(value):
+        def sequential(value: np.ndarray) -> np.ndarray:
             for layer in layers:
                 value = layer(value)
             return value
@@ -43,7 +48,7 @@ def _compile(module):  # noqa: C901 - supported inference layer dispatch
         padding, stride = module.padding, module.stride
         kernel = module.kernel_size
 
-        def convolution(value):
+        def convolution(value: np.ndarray) -> np.ndarray:
             value = np.pad(
                 value, ((0, 0), (0, 0), (padding[0], padding[0]), (padding[1], padding[1]))
             )
@@ -69,7 +74,7 @@ def _compile(module):  # noqa: C901 - supported inference layer dispatch
 class PinnedActor:
     """Deterministic float64 action mean for the admitted GridSocNav architecture."""
 
-    def __init__(self, model):
+    def __init__(self, model) -> None:
         """Copy actor weights and reject unsupported policy architectures."""
         policy = model.policy
         extractor = policy.pi_features_extractor
@@ -90,7 +95,7 @@ class PinnedActor:
         self.policy = _compile(policy.mlp_extractor.policy_net)
         self.action = _compile(policy.action_net)
 
-    def mean(self, observation):
+    def mean(self, observation) -> np.ndarray:
         """Return unclipped actor means, with all network arithmetic in float64."""
         obs = {}
         for key, space in self.space.spaces.items():
@@ -118,7 +123,7 @@ class PinnedActor:
         social = self.social(np.concatenate(parts, axis=1))
         return self.action(self.policy(np.concatenate((grid, social), axis=1)))
 
-    def predict(self, observation):
+    def predict(self, observation) -> np.ndarray:
         """Preserve existing Box action clipping.
 
         Returns:

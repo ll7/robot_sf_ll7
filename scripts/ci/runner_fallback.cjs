@@ -39,10 +39,10 @@ function allocate(data) {
   return result;
 }
 
-async function route({ github, context, core, enabled }) {
+async function route({ github, context, core, enabled, provenance }) {
   let result = allocate(null);
   let reason = 'hosted: admission disabled or retry';
-  if (eligible(context, enabled)) {
+  if (provenance === 'true' && eligible(context, enabled)) {
     let timer;
     try {
       const response = await Promise.race([

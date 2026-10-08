@@ -5,6 +5,10 @@ accelerators; removing every registered runner requires no code change. All
 existing jobs, six test shards, path selections, result gates and timeouts remain.
 The availability/recovery owner is `scripts/ci/runner_fallback.cjs`; trust and
 commit-provenance enforcement remain in the workflow and job-started hook.
+The hosted provenance admission must publish exactly `self_hosted=true` before
+the inventory probe may run. Every workload expression independently requires
+both that admission and its allocated capacity. Denial, missing output or a
+failed admission leaves all jobs hosted, even with stale positive capacity.
 
 ## Availability and kill switch
 
@@ -80,7 +84,8 @@ pre-merge PR CI stays hosted if its base lacks the routing module.
   expression and immutable runner hook remain necessary admission boundaries.
   Availability never expands trust. A contributor can edit a workflow, so the
   execution hook must reject direct-label attempts. Commit provenance work in
-  issue #10210 remains independently owned and must be integrated separately.
+  issue #10210 is supplied by the lower provenance PR in the stack. Its
+  execution hook and hosted admission policy are preserved without changes.
   The inventory token must never be added to workload jobs or the runner image.
 - **Fail closed:** missing inputs, credentials, routing output, trust fields,
   complete inventory or heartbeat select hosted. A broken hosted probe job

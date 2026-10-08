@@ -41,34 +41,35 @@ test('route uses bounded API and emits hosted on API error; disabled/untrusted/r
   } } } };
   const outputs = {};
   const recordingCore = { info() {}, setOutput(name, value) { outputs[name] = value; } };
-  assert.equal((await route({ github, context, core: recordingCore, enabled: 'true' }))['smoke-artifacts'], true);
+  assert.equal((await route({ github, context, core: recordingCore, enabled: 'true', provenance: 'true' }))['smoke-artifacts'], true);
   assert.equal(outputs.smoke_artifacts, 'true');
   assert.equal(outputs.fast_feedback, 'false');
   const denied = [
-    { enabled: 'false' }, { enabled: '' }, { context: { ...context, actor: 'other' } },
+    { enabled: 'false' }, { enabled: '' }, { provenance: 'false' },
+    { provenance: '' }, { provenance: undefined }, { context: { ...context, actor: 'other' } },
     { context: { ...context, eventName: 'workflow_dispatch' } },
     { context: { ...context, eventName: 'pull_request', payload: { pull_request: {
       head: { repo: { full_name: 'outsider/repo' } }, user: { login: 'll7' } } } } },
     { context: { ...context, eventName: 'pull_request', payload: { pull_request: {
       head: { repo: { full_name: 'll7/robot_sf_ll7' } }, user: { login: 'other' } } } } },
   ];
-  for (const override of denied) assert.deepEqual(await route({ github, context, core, enabled: 'true', ...override }), hosted);
+  for (const override of denied) assert.deepEqual(await route({ github, context, core, enabled: 'true', provenance: 'true', ...override }), hosted);
   process.env.GITHUB_RUN_ATTEMPT = '2';
-  assert.deepEqual(await route({ github, context, core, enabled: 'true' }), hosted);
+  assert.deepEqual(await route({ github, context, core, enabled: 'true', provenance: 'true' }), hosted);
   process.env.GITHUB_RUN_ATTEMPT = '1';
   process.env.GITHUB_TRIGGERING_ACTOR = 'other';
-  assert.deepEqual(await route({ github, context, core, enabled: 'true' }), hosted);
+  assert.deepEqual(await route({ github, context, core, enabled: 'true', provenance: 'true' }), hosted);
   process.env.GITHUB_TRIGGERING_ACTOR = 'll7';
   assert.equal(calls, 1);
   const pr = { base: { ref: 'main' }, head: { repo: { full_name: 'll7/robot_sf_ll7' } }, user: { login: 'll7' } };
   const prContext = { ...context, eventName: 'pull_request', payload: { pull_request: pr } };
-  assert.equal((await route({ github, context: prContext, core, enabled: 'true' }))['smoke-artifacts'], true);
+  assert.equal((await route({ github, context: prContext, core, enabled: 'true', provenance: 'true' }))['smoke-artifacts'], true);
   assert.deepEqual(await route({ github, context: { ...prContext, payload: { pull_request: {
-    ...pr, base: { ref: 'collaborator-branch' } } } }, core, enabled: 'true' }), hosted);
+    ...pr, base: { ref: 'collaborator-branch' } } } }, core, enabled: 'true', provenance: 'true' }), hosted);
   assert.equal(calls, 2);
   github.rest.actions.listSelfHostedRunnersForRepo = async () => { throw new Error('sensitive API error'); };
   const logs = [];
-  assert.deepEqual(await route({ github, context, core: { ...core, info(x) { logs.push(x); } }, enabled: 'true' }), hosted);
+  assert.deepEqual(await route({ github, context, core: { ...core, info(x) { logs.push(x); } }, enabled: 'true', provenance: 'true' }), hosted);
   assert.equal(logs.some(x => x.includes('sensitive')), false);
 });
 
@@ -76,7 +77,7 @@ test('a hung inventory call falls back after five seconds', async () => {
   process.env.GITHUB_TRIGGERING_ACTOR = 'll7';
   process.env.GITHUB_RUN_ATTEMPT = '1';
   const github = { rest: { actions: { listSelfHostedRunnersForRepo: () => new Promise(() => {}) } } };
-  assert.deepEqual(await route({ github, context, core, enabled: 'true' }), hosted);
+  assert.deepEqual(await route({ github, context, core, enabled: 'true', provenance: 'true' }), hosted);
 });
 
 const target = { id: 123, workflow_id: 9, run_attempt: 1, head_sha: 'a'.repeat(40),

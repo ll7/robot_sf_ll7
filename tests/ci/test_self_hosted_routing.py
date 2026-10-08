@@ -27,6 +27,13 @@ def _evaluate_node(node: ast.AST, context: dict[str, Any]) -> Any:
     """Evaluate only the expression features used in the runs-on contract."""
     if isinstance(node, ast.Expression):
         return _evaluate_node(node.body, context)
+    if isinstance(node, ast.Call):
+        assert isinstance(node.func, ast.Name) and node.func.id in {"cancelled", "always"}
+        assert not node.args and not node.keywords
+        return True if node.func.id == "always" else context["cancelled"]
+    if isinstance(node, ast.UnaryOp):
+        assert isinstance(node.op, ast.Not)
+        return not _evaluate_node(node.operand, context)
     if isinstance(node, ast.Name):
         assert node.id in {"github", "vars", "needs"}
         return context[node.id]
@@ -37,8 +44,9 @@ def _evaluate_node(node: ast.AST, context: dict[str, Any]) -> Any:
         return node.value
     if isinstance(node, ast.Compare):
         assert len(node.ops) == len(node.comparators) == 1
-        assert isinstance(node.ops[0], ast.Eq)
-        return _evaluate_node(node.left, context) == _evaluate_node(node.comparators[0], context)
+        assert isinstance(node.ops[0], (ast.Eq, ast.NotEq))
+        equal = _evaluate_node(node.left, context) == _evaluate_node(node.comparators[0], context)
+        return equal if isinstance(node.ops[0], ast.Eq) else not equal
     if isinstance(node, ast.BoolOp):
         return _evaluate_bool_op(node, context)
     raise AssertionError(f"Unsupported runs-on expression node: {ast.dump(node)}")

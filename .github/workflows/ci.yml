@@ -53,6 +53,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       self_hosted: ${{ steps.provenance.outputs.self_hosted }}
     steps:
@@ -64,9 +65,18 @@ jobs:
           persist-credentials: false
       - name: Verify commit provenance
         id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
+          # Feature-branch bases and non-main pushes are never trust anchors.
+          if [[ "$GITHUB_EVENT_NAME" == pull_request && "$PR_BASE_REF" != main ]] ||
+             [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" != refs/heads/main ]]; then
+            echo 'self_hosted=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Empty output, script errors and API failures all select hosted.
-          decision="$(bash scripts/ci/self_hosted/job_started_hook.sh --route)" || decision='self_hosted=false'
+          decision="$(/bin/bash -p scripts/ci/self_hosted/job_started_hook.sh --route)" || decision='self_hosted=false'
           if [[ "$decision" == 'self_hosted=true' ]]; then
             echo 'self_hosted=true' >> "$GITHUB_OUTPUT"
           else
@@ -228,7 +238,7 @@ jobs:
 
   fast-feedback:
     needs: [dispatch-ownership, self-hosted-admission]
-    if: always() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
     # Default-off rollout switch keeps CI hosted until runners are reviewed and
     # installed. Both the original actor and rerun initiator must be the author.
     # Complete owner commit provenance is also required; uncertainty stays hosted.
@@ -575,7 +585,7 @@ jobs:
 
   smoke-artifacts:
     needs: [dispatch-ownership, self-hosted-admission]
-    if: always() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
     runs-on: ${{ needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
@@ -808,7 +818,7 @@ jobs:
 
   wheel-smoke-install:
     needs: [dispatch-ownership, self-hosted-admission]
-    if: always() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
     runs-on: ${{ needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
@@ -845,9 +855,9 @@ jobs:
   examples-smoke:
     needs: [dispatch-ownership, self-hosted-admission]
     if: >-
-      always() && needs.dispatch-ownership.result == 'success' &&
+      ${{ !cancelled() && needs.dispatch-ownership.result == 'success' &&
       needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
-      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.examples_smoke == 'true')
+      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.examples_smoke == 'true') }}
     runs-on: ${{ needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
@@ -911,9 +921,9 @@ jobs:
   notebooks-smoke:
     needs: [dispatch-ownership, self-hosted-admission]
     if: >-
-      always() && needs.dispatch-ownership.result == 'success' &&
+      ${{ !cancelled() && needs.dispatch-ownership.result == 'success' &&
       needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
-      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.notebooks_smoke == 'true')
+      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.notebooks_smoke == 'true') }}
     runs-on: ${{ needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import copy
+import json
 import os
 import subprocess
 from typing import TYPE_CHECKING
@@ -27,6 +29,7 @@ from tests.ci.test_self_hosted_routing import (
     CI_WORKFLOW,
     ROOT,
     ROUTED_JOBS,
+    _evaluate_node,
     _github_context,
     _resolve_runs_on,
 )
@@ -58,9 +61,24 @@ def _assert_decision(tmp_path: Path, *, expected: bool, event: str = "pull_reque
             GITHUB_EVENT_NAME=event,
             GITHUB_EVENT_PATH=str(tmp_path / "event.json"),
             GITHUB_SHA=kwargs.get("changes", {}).get("sha", HEAD),
+            GITHUB_REF=kwargs.get("changes", {}).get("ref", "refs/heads/main"),
+            GH_TOKEN=kwargs.get("changes", {}).get("token", "offline-test-value"),
+            PR_BASE_REF=json.loads((tmp_path / "event.json").read_text())["pull_request"][
+                "base"
+            ].get("ref", "")
+            or "",
         )
         completed = subprocess.run(
-            ["bash", "-e", "-c", step["run"]],
+            [
+                "/bin/bash",
+                "-p",
+                "-e",
+                "-c",
+                step["run"].replace(
+                    "scripts/ci/self_hosted/job_started_hook.sh",
+                    str(tmp_path / "job_started_hook.sh"),
+                ),
+            ],
             cwd=ROOT,
             env=env,
             capture_output=True,
@@ -238,10 +256,6 @@ def test_gate_failure_or_missing_output_routes_hosted(tmp_path: Path, value: str
             == "ubuntu-latest"
         )
         assert "self-hosted-admission" in jobs[name]["needs"]
-        # Failed admission jobs must not cause bot/other-author CI to be skipped.
-        assert jobs[name]["if"].startswith(
-            "always() && needs.dispatch-ownership.result == 'success'"
-        )
 
 
 @pytest.mark.parametrize("event", ["pull_request", "push"])
@@ -320,3 +334,138 @@ def test_exact_head_approval_cannot_override_missing_provenance(tmp_path: Path, 
     else:
         del responses[COMPARE]
     _assert_decision(tmp_path, expected=False, payload=payload, responses=responses)
+
+
+@pytest.mark.parametrize("base_ref", ["feat-a", "", None])
+def test_stacked_or_unknown_pr_base_stays_hosted(tmp_path: Path, base_ref: str | None):
+    """An owner-only range cannot establish trust in a foreign branch's ancestors."""
+    payload = _event()
+    payload["pull_request"]["base"]["ref"] = base_ref
+    _assert_decision(tmp_path, expected=False, payload=payload)
+
+
+@pytest.mark.parametrize("ref", ["refs/heads/feature", "refs/tags/v1", ""])
+def test_non_main_push_stays_hosted(tmp_path: Path, ref: str):
+    """Even a complete owner-only push must be anchored on main."""
+    _assert_decision(tmp_path, expected=False, event="push", changes={"ref": ref})
+
+
+@pytest.mark.parametrize("event", ["pull_request", "push"])
+def test_start_hook_independently_rejects_non_main_anchor(tmp_path: Path, event: str):
+    """Direct private-label selection cannot bypass the main trust anchor."""
+    payload = _event()
+    payload["pull_request"]["base"]["ref"] = "feat-a"
+    result = _run_hook(
+        tmp_path, event_name=event, payload=payload, changes={"ref": "refs/heads/feature"}
+    )
+    assert result.returncode == 1, result.stderr
+
+
+def test_exact_head_approval_cannot_authorize_stacked_base(tmp_path: Path):
+    """The owner approval exception does not grant trust to arbitrary branch bases."""
+    payload = _event()
+    payload["pull_request"]["base"]["ref"] = "feat-a"
+    _assert_decision(tmp_path, expected=False, payload=payload, responses=_approval())
+
+
+@pytest.mark.parametrize("status", [403, 429])
+def test_rate_limit_routes_hosted_and_hook_logs_rejection(tmp_path: Path, status: int):
+    """Quota exhaustion is hosted at scheduling and a named denial before steps."""
+    responses = {COMPARE: {"_http": status, "body": {"message": "API rate limit exceeded"}}}
+    _assert_decision(tmp_path, expected=False, responses=responses)
+    result = _run_hook(tmp_path, responses=responses)
+    assert "GitHub API rate limit exhausted" in result.stderr
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize("route", [False, True])
+def test_only_routing_sends_read_only_job_token(tmp_path: Path, route: bool):
+    """Installed hooks discard tokens; hosted routing authenticates its API calls."""
+    result = _run_hook(tmp_path, route=route)
+    assert result.returncode == 0, result.stderr
+    transport = json.loads((tmp_path / "api-calls.txt.transport").read_text().splitlines()[-1])
+    assert transport["authorized"] is route
+    assert ("GH_TOKEN" in transport["environment"]) is route
+    if route:
+        assert result.stdout.strip() == "self_hosted=true"
+        gate = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["self-hosted-admission"]
+        step = next(step for step in gate["steps"] if step.get("id") == "provenance")
+        assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
+        assert gate["permissions"] == {"contents": "read", "pull-requests": "read"}
+
+
+def test_missing_routing_token_is_hosted(tmp_path: Path):
+    """Missing authentication cannot silently consume the anonymous routing budget."""
+    result = _run_hook(tmp_path, route=True, changes={"token": ""})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "self_hosted=false"
+    assert "read-only job token" in result.stderr
+
+
+def test_hook_cleans_inherited_transport_environment(tmp_path: Path):
+    """Proxies, CA overrides, Bash startup controls and arbitrary env reach no tools."""
+    injected = {
+        "HTTPS_PROXY": "https://invalid.example",
+        "CURL_CA_BUNDLE": "/absent",
+        "BASH_ENV": "/absent",
+        "UNREVIEWED_WORKFLOW_ENV": "present",
+    }
+    result = _run_hook(tmp_path, extra_env=injected)
+    assert result.returncode == 0, result.stderr
+    transport = json.loads((tmp_path / "api-calls.txt.transport").read_text().splitlines()[0])
+    assert not set(injected).intersection(transport["environment"])
+    assert "API_FIXTURES" not in transport["environment"]
+    assert "API_CALLS" not in transport["environment"]
+
+
+def test_hook_absolute_launcher_ignores_untrusted_path(tmp_path: Path):
+    """PATH cannot select the hook shell or its policy/transport commands."""
+    # The intentional hostile shell identifies exactly the launcher regression.
+    hostile_bash = tmp_path / "bash"
+    hostile_bash.write_text("#!/bin/sh\necho untrusted-PATH-shell >&2\nexit 99\n")
+    hostile_bash.chmod(0o755)
+    result = _run_hook(tmp_path, direct=True, extra_env={"PATH": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    assert "untrusted-PATH-shell" not in result.stderr
+    source = (ROOT / "scripts/ci/self_hosted/job_started_hook.sh").read_text()
+    assert source.startswith("#!/bin/bash")
+    assert "/usr/bin/env -i" in source
+    assert "/usr/bin/curl" in source and "/usr/bin/jq" in source
+
+
+@pytest.mark.parametrize(
+    ("cancelled", "dispatch_result", "expected"),
+    [
+        (False, "success", True),
+        (True, "success", False),
+        (False, "failure", False),
+    ],
+)
+def test_dependent_jobs_respect_cancellation_and_failed_admission(
+    cancelled: bool,
+    dispatch_result: str,
+    expected: bool,
+):
+    """Failed admission allows hosted CI, but cancellation or dispatch failure stops it."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    for name in ROUTED_JOBS:
+        expression = jobs[name]["if"].strip().removeprefix("${{").removesuffix("}}")
+        expression = (
+            expression.strip()
+            .replace("&&", "and")
+            .replace("||", "or")
+            .replace("!cancelled()", "not cancelled()")
+            .replace("dispatch-ownership", "dispatch_ownership")
+        )
+        context = {
+            "cancelled": cancelled,
+            "github": _github_context("push"),
+            "needs": {
+                "dispatch_ownership": {
+                    "result": dispatch_result,
+                    "outputs": {"run_full_ci": "true"},
+                },
+                "self_hosted_admission": {"result": "failure", "outputs": {}},
+            },
+        }
+        assert _evaluate_node(ast.parse(expression, mode="eval"), context) is expected, name

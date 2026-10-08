@@ -20,6 +20,12 @@ GitHub settings.
   `ll7` also starting any rerun, to `robot-sf-ci-ephemeral`. Forks, bots,
   `pull_request_target`, `workflow_run`, comments, and manual dispatch stay on
   `ubuntu-latest`. Do not add untrusted triggers to this route.
+- The trust anchor is `main`: PRs must target `main`, and pushes must have
+  `GITHUB_REF=refs/heads/main`. Stacked PRs and other branches/tags stay hosted
+  even when their selected range is owner-only or explicitly approved.
+  Main's content is trusted only while `ll7` is the only account able to merge
+  to main. Reopen this policy before another account gains that ability; a
+  ruleset or merge-authority decision belongs to the author, separately.
 - A hosted admission job checks every commit in the event range using GitHub's
   compare API: PR `base.sha..head.sha`, push `before..after`. Both the GitHub
   author account and committer account must be `ll7` (type `User`). Checking
@@ -44,19 +50,27 @@ GitHub settings.
   including when a workflow selects the private label directly. A hook cannot
   reschedule an assigned job: an API failure or revoked approval after routing
   rejects that job before steps. Rerun uses a fresh admission decision.
-- All API reads are anonymous HTTPS against this public repository; no new
-  credentials are required. Rate limiting therefore reduces availability and
-  can force hosted fallback (or rejection at the later hook). Unknown/zero/empty
+- Hosted routing uses the default read-only job token (`contents: read` and
+  `pull-requests: read`), passed to the API over stdin rather than command-line
+  arguments. Missing authentication and rate limits select hosted. The installed
+  hook discards inherited tokens and uses anonymous HTTPS; a later rate limit
+  rejects before steps and explicitly logs that the API budget was exhausted.
+  It cannot reschedule an assigned job. Unknown/zero/empty
   ranges, absent GitHub account mappings, malformed or incomplete responses,
   over 1,000 commits or 10,000+ approval-history events fail closed.
-- This is defense in depth, not cryptographic authorship proof. Git author and
-  committer email metadata can be forged to map to the owner's GitHub account;
-  signatures are not required. A collaborator with workflow write access, a
-  compromised owner account or a deliberately modified/old installed hook is
+- The first residual is forged Git author/committer email metadata mapping to
+  the owner's GitHub account. This remains defense in depth, not cryptographic
+  authorship proof; signatures are not required. A collaborator with workflow
+  write access, a compromised owner account or a deliberately modified/old installed hook is
   outside the protection claimed here. SHA approvals are explicit grants and
   are checked at admission time; GitHub does not provide an atomic transaction
   spanning approval reads and execution. Independent security review and a
   separately reviewed hook deployment remain required before activation.
+- The hook launches with absolute `/bin/bash`, re-executes under `env -i` with
+  only the event identity/range variables (including `GITHUB_REF`), and calls
+  `/usr/bin/curl` and `/usr/bin/jq`. Only routing forwards `GH_TOKEN`. Inherited
+  PATH, proxy, CA overrides and Bash startup environment are discarded; `-p`
+  prevents startup-file and exported-function imports in this launcher.
 - Routed jobs have `permissions: contents: read`, use only the default
   `GITHUB_TOKEN`, and must not receive repository secrets, SSH keys, cluster
   credentials, or private-ops files.

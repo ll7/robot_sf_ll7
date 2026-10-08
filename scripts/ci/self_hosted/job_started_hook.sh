@@ -1,6 +1,26 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # Shared hosted routing decision and installed pre-job execution boundary.
-# Public API reads require no credentials; errors/rate limits never grant access.
+# Routing uses the read-only job token; the installed hook stays credential-free.
+# Strip inherited proxies, CA overrides, shell options/functions and PATH before
+# any policy/tool execution. Only routing may carry GH_TOKEN into the clean shell.
+set +x
+if [[ "${1:-}" != --clean-env ]]; then
+  token_env=()
+  if [[ "$#" == 1 && "$1" == --route ]]; then
+    token_env+=("GH_TOKEN=${GH_TOKEN:-}")
+  fi
+  exec /usr/bin/env -i \
+    "GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-}" \
+    "GITHUB_ACTOR=${GITHUB_ACTOR:-}" \
+    "GITHUB_TRIGGERING_ACTOR=${GITHUB_TRIGGERING_ACTOR:-}" \
+    "GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME:-}" \
+    "GITHUB_EVENT_PATH=${GITHUB_EVENT_PATH:-}" \
+    "GITHUB_SHA=${GITHUB_SHA:-}" \
+    "GITHUB_REF=${GITHUB_REF:-}" \
+    "${token_env[@]}" \
+    /bin/bash --noprofile --norc -p "$0" --clean-env "$@"
+fi
+shift
 set -euo pipefail
 
 reject() {
@@ -9,14 +29,32 @@ reject() {
 }
 
 api() {
-  local response
-  response="$(curl --disable --fail --silent --show-error --proto '=https' \
-    --connect-timeout 5 --max-time 20 \
-    -H 'Accept: application/vnd.github+json' \
-    -H 'X-GitHub-Api-Version: 2022-11-28' \
-    "https://api.github.com/repos/ll7/robot_sf_ll7/$1")" || return 1
+  local result response http_status curl_status=0
+  # Feed the authorization header over stdin rather than putting it in argv.
+  result="$(
+    if [[ -n "${GH_TOKEN:-}" ]]; then
+      printf 'Authorization: Bearer %s\n' "$GH_TOKEN"
+    fi | /usr/bin/curl --disable --fail-with-body --silent --show-error --proto '=https' \
+      --connect-timeout 5 --max-time 20 --header @- \
+      -H 'Accept: application/vnd.github+json' \
+      -H 'X-GitHub-Api-Version: 2022-11-28' \
+      --write-out '\n%{http_code}' \
+      "https://api.github.com/repos/ll7/robot_sf_ll7/$1"
+  )" || curl_status=$?
+  http_status="${result##*$'\n'}"
+  response="${result%$'\n'*}"
+  if [[ "$http_status" == 429 ]] || { [[ "$http_status" == 403 ]] &&
+    /usr/bin/jq -e '.message | type == "string" and test("rate limit"; "i")' \
+      <<<"$response" >/dev/null 2>&1; }; then
+    reject 'GitHub API rate limit exhausted; self-hosted execution refused'
+    return 1
+  fi
+  if [[ "$curl_status" != 0 || "$http_status" != 200 ]]; then
+    reject 'GitHub API request failed'
+    return 1
+  fi
   # jq -e accepts an empty input stream: explicitly require one JSON document.
-  jq -e -s 'length == 1 and (.[0] | type == "object" or type == "array")' \
+  /usr/bin/jq -e -s 'length == 1 and (.[0] | type == "object" or type == "array")' \
     <<<"$response" >/dev/null 2>&1 || return 1
   printf '%s\n' "$response"
 }
@@ -24,7 +62,7 @@ api() {
 owner_approval() {
   local number="$1" head="$2" label="ci-owner:$2" pr events latest='' page
   pr="$(api "pulls/$number")" || { reject 'approval API unavailable'; return 1; }
-  jq -e --arg head "$head" --arg label "$label" --argjson number "$number" '
+  /usr/bin/jq -e --arg head "$head" --arg label "$label" --argjson number "$number" '
     .number == $number and .state == "open" and
     .head.sha == $head and .head.repo.full_name == "ll7/robot_sf_ll7" and
     (.labels | type == "array") and any(.labels[]; .name == $label)
@@ -35,7 +73,7 @@ owner_approval() {
     events="$(api "issues/$number/events?per_page=100&page=$page")" || {
       reject 'approval history unavailable'; return 1;
     }
-    jq -e '
+    /usr/bin/jq -e '
       type == "array" and length <= 100 and
       all(.[]; (.event | type == "string") and
         (if .event == "labeled" or .event == "unlabeled" then
@@ -45,18 +83,18 @@ owner_approval() {
          else true end))
     ' <<<"$events" >/dev/null 2>&1 || { reject 'invalid approval history'; return 1; }
     local matching
-    matching="$(jq -c --arg label "$label" '
+    matching="$(/usr/bin/jq -c --arg label "$label" '
       [.[] | select((.event == "labeled" or .event == "unlabeled") and
                     .label.name == $label)] | last // empty
     ' <<<"$events")" || return 1
     [[ -z "$matching" ]] || latest="$matching"
-    if [[ "$(jq length <<<"$events")" -lt 100 ]]; then
+    if [[ "$(/usr/bin/jq length <<<"$events")" -lt 100 ]]; then
       [[ -n "$latest" ]] || { reject 'missing approval event'; return 1; }
-      jq -e '.event == "labeled" and .actor.login == "ll7" and .actor.type == "User"' \
+      /usr/bin/jq -e '.event == "labeled" and .actor.login == "ll7" and .actor.type == "User"' \
         <<<"$latest" >/dev/null 2>&1 || { reject 'approval not applied by owner'; return 1; }
       # Re-read live state after pagination to catch changed head/removed label.
       pr="$(api "pulls/$number")" || { reject 'approval recheck unavailable'; return 1; }
-      jq -e --arg head "$head" --arg label "$label" '
+      /usr/bin/jq -e --arg head "$head" --arg label "$label" '
         .state == "open" and .head.sha == $head and
         .head.repo.full_name == "ll7/robot_sf_ll7" and
         (.labels | type == "array") and any(.labels[]; .name == $label)
@@ -75,14 +113,18 @@ admit() {
   [[ "${GITHUB_EVENT_NAME:-}" == push || "${GITHUB_EVENT_NAME:-}" == pull_request ]] || {
     reject 'event'; return 1;
   }
+  if [[ "$GITHUB_EVENT_NAME" == push && "${GITHUB_REF:-}" != refs/heads/main ]]; then
+    reject 'push ref must be refs/heads/main'; return 1;
+  fi
   [[ -f "${GITHUB_EVENT_PATH:-}" ]] || { reject 'missing event'; return 1; }
-  jq -e -s 'length == 1 and (.[0] | type == "object")' \
+  /usr/bin/jq -e -s 'length == 1 and (.[0] | type == "object")' \
     "$GITHUB_EVENT_PATH" >/dev/null 2>&1 || { reject 'invalid event JSON'; return 1; }
   local range base head number comparison total='' count=0 page seen='[]' owner_only=true
-  range="$(jq -er --arg event "$GITHUB_EVENT_NAME" '
+  range="$(/usr/bin/jq -er --arg event "$GITHUB_EVENT_NAME" '
     if .repository.full_name != "ll7/robot_sf_ll7" then error("repository")
     elif $event == "pull_request" then
-      if .pull_request.head.repo.full_name != "ll7/robot_sf_ll7" or
+      if .pull_request.base.ref != "main" or
+         .pull_request.head.repo.full_name != "ll7/robot_sf_ll7" or
          .pull_request.user.login != "ll7" or
          (.pull_request.number | type != "number") or
          .pull_request.number < 1 or
@@ -105,7 +147,7 @@ admit() {
     comparison="$(api "compare/$base...$head?per_page=100&page=$page")" || {
       reject 'commit API unavailable'; return 1;
     }
-    jq -e --arg base "$base" '
+    /usr/bin/jq -e --arg base "$base" '
       .base_commit.sha == $base and (.status == "ahead" or .status == "diverged") and
       (.total_commits | type == "number") and .total_commits > 0 and
       .total_commits <= 1000 and (.total_commits | floor) == .total_commits and
@@ -119,21 +161,21 @@ admit() {
         (.committer.type == "User" or .committer.type == "Bot"))
     ' <<<"$comparison" >/dev/null 2>&1 || { reject 'incomplete commit data'; return 1; }
     local page_total page_count
-    page_total="$(jq -r .total_commits <<<"$comparison")" || return 1
+    page_total="$(/usr/bin/jq -r .total_commits <<<"$comparison")" || return 1
     [[ -n "$total" ]] || total="$page_total"
     [[ "$total" == "$page_total" ]] || { reject 'changed commit total'; return 1; }
-    page_count="$(jq '.commits | length' <<<"$comparison")" || return 1
+    page_count="$(/usr/bin/jq '.commits | length' <<<"$comparison")" || return 1
     count=$((count + page_count))
-    seen="$(jq -c --argjson seen "$seen" '$seen + [.commits[].sha]' <<<"$comparison")" || return 1
-    jq -e 'length == (unique | length)' <<<"$seen" >/dev/null || {
+    seen="$(/usr/bin/jq -c --argjson seen "$seen" '$seen + [.commits[].sha]' <<<"$comparison")" || return 1
+    /usr/bin/jq -e 'length == (unique | length)' <<<"$seen" >/dev/null || {
       reject 'duplicate commit data'; return 1;
     }
-    if ! jq -e 'all(.commits[];
+    if ! /usr/bin/jq -e 'all(.commits[];
       .author.login == "ll7" and .author.type == "User" and
       .committer.login == "ll7" and .committer.type == "User")' \
       <<<"$comparison" >/dev/null; then owner_only=false; fi
     if ((count == total)); then
-      [[ "$(jq -r '.commits[-1].sha' <<<"$comparison")" == "$head" ]] || {
+      [[ "$(/usr/bin/jq -r '.commits[-1].sha' <<<"$comparison")" == "$head" ]] || {
         reject 'missing range head'; return 1;
       }
       if [[ "$owner_only" == true ]]; then return 0; fi
@@ -146,6 +188,11 @@ admit() {
 }
 
 if [[ "$#" == 1 && "$1" == --route ]]; then
+  if [[ -z "${GH_TOKEN:-}" ]]; then
+    reject 'routing requires the read-only job token' || true
+    echo 'self_hosted=false'
+    exit 0
+  fi
   if (admit); then echo 'self_hosted=true'; else echo 'self_hosted=false'; fi
 elif [[ "$#" == 0 ]]; then
   admit || exit 1

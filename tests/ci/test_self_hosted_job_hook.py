@@ -47,6 +47,8 @@ def _run_hook(
     responses: dict[str, Any] | None = None,
     route: bool = False,
     changes: dict[str, str] | None = None,
+    extra_env: dict[str, str] | None = None,
+    direct: bool = False,
 ) -> subprocess.CompletedProcess:
     """Execute the production boundary with an offline REST transport."""
     changes = changes or {}
@@ -59,6 +61,7 @@ def _run_hook(
     curl = tmp_path / "curl"
     curl.write_text(
         f"#!{sys.executable}\n"
+        + f"FIXTURES = {str(fixtures)!r}\nCALLS = {str(tmp_path / 'api-calls.txt')!r}\n"
         + r"""import json, os, sys
 from pathlib import Path
 url = sys.argv[-1]
@@ -66,27 +69,44 @@ prefix = "https://api.github.com/repos/ll7/robot_sf_ll7/"
 if not url.startswith(prefix):
     sys.exit(99)
 endpoint = url[len(prefix):]
-with open(os.environ["API_CALLS"], "a") as log:
+with open(CALLS, "a") as log:
     log.write(endpoint + "\n")
-responses = json.loads(Path(os.environ["API_FIXTURES"]).read_text())
+headers = sys.stdin.read() if "@-" in sys.argv else ""
+with open(CALLS + ".transport", "a") as log:
+    log.write(json.dumps({"authorized": "Authorization: Bearer " in headers,
+                         "environment": sorted(os.environ)}) + "\n")
+responses = json.loads(Path(FIXTURES).read_text())
 if endpoint not in responses:
     sys.exit(22)
 value = responses[endpoint]
 if isinstance(value, dict) and "_sequence" in value:
-    counter_path = Path(os.environ["API_FIXTURES"] + ".counts")
+    counter_path = Path(FIXTURES + ".counts")
     counts = json.loads(counter_path.read_text()) if counter_path.exists() else {}
     count = counts.get(endpoint, 0)
     counts[endpoint] = count + 1
     counter_path.write_text(json.dumps(counts))
     value = value["_sequence"][count % len(value["_sequence"])]
+http = 200
+if isinstance(value, dict) and "_http" in value:
+    http = value["_http"]
+    value = value["body"]
 if isinstance(value, dict) and "_raw" in value:
     print(value["_raw"])
 else:
     print(json.dumps(value))
+if "--write-out" in sys.argv:
+    print(http)
+if http != 200:
+    sys.exit(22)
 """,
         encoding="utf-8",
     )
     curl.chmod(0o755)
+    # Substitute only the fixed transport executable in a private script copy.
+    # Production has no environment-variable seam for overriding its tools.
+    test_hook = tmp_path / "job_started_hook.sh"
+    test_hook.write_text(HOOK.read_text().replace("/usr/bin/curl", str(curl)), encoding="utf-8")
+    test_hook.chmod(0o755)
     environment = {
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
         "API_FIXTURES": str(fixtures),
@@ -97,9 +117,12 @@ else:
         "GITHUB_EVENT_NAME": event_name,
         "GITHUB_EVENT_PATH": str(event_path),
         "GITHUB_SHA": changes.get("sha", HEAD),
+        "GITHUB_REF": changes.get("ref", "refs/heads/main"),
+        "GH_TOKEN": changes.get("token", "offline-test-value"),
     }
+    environment.update(extra_env or {})
     return subprocess.run(
-        ["bash", str(HOOK), *(["--route"] if route else [])],
+        [*([] if direct else ["/bin/bash", "-p"]), str(test_hook), *(["--route"] if route else [])],
         env=environment,
         capture_output=True,
         text=True,
@@ -120,7 +143,7 @@ def _event(
         "after": HEAD,
         "pull_request": {
             "number": 42,
-            "base": {"sha": BASE},
+            "base": {"sha": BASE, "ref": "main"},
             "head": {"sha": HEAD, "repo": {"full_name": head_repo}},
             "user": {"login": author},
         },
@@ -169,11 +192,17 @@ def test_job_hook_rejects_missing_or_malformed_event(tmp_path: Path) -> None:
         GITHUB_TRIGGERING_ACTOR="ll7",
         GITHUB_EVENT_NAME="push",
         GITHUB_EVENT_PATH=str(event_path),
+        GITHUB_REF="refs/heads/main",
+        GITHUB_SHA=HEAD,
     )
     for contents in (None, "not json"):
         if contents is not None:
             event_path.write_text(contents, encoding="utf-8")
         completed = subprocess.run(
-            ["bash", str(HOOK)], env=environment, capture_output=True, check=False
+            ["/bin/bash", "-p", str(HOOK)],
+            env=environment,
+            capture_output=True,
+            check=False,
+            timeout=10,
         )
         assert completed.returncode == 1

@@ -101,6 +101,7 @@ def _zone_reference_cached(
     obstacles_wkb: bytes,
     bounds: tuple[float, float, float, float],
     clip_obstacles: bool = True,
+    physical_contract: tuple[bytes, float] | None = None,
 ) -> float:
     """Exact polygonal robot-centre geodesic to a goal set, cached by reset identity.
 
@@ -118,7 +119,14 @@ def _zone_reference_cached(
         obstacles = obstacles.intersection(domain)
     zone = from_wkb(zone_wkb).intersection(domain).difference(obstacles)
     start_point = Point(start)
-    if zone.is_empty or not domain.covers(start_point) or obstacles.contains(start_point):
+    physical = from_wkb(physical_contract[0]) if physical_contract is not None else None
+    robot_radius = physical_contract[1] if physical_contract is not None else 0.0
+    blocked_start = (
+        start_point.distance(physical) < robot_radius - 1e-10
+        if physical is not None and not physical.is_empty
+        else obstacles.contains(start_point)
+    )
+    if zone.is_empty or not domain.covers(start_point) or blocked_start:
         return float("nan")
     if zone.covers(start_point):
         return 0.0
@@ -134,10 +142,33 @@ def _zone_reference_cached(
         for ring in [poly.exterior, *poly.interiors]:
             goal_edges.extend(LineString([a, b]) for a, b in pairwise(ring.coords))
     vertices = list(dict.fromkeys(vertices))
-    return _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domain)
+    return _shortest_visible_distance(
+        vertices,
+        goal_edges,
+        zone,
+        obstacle_parts,
+        domain,
+        physical=physical,
+        robot_radius=robot_radius,
+    )
 
 
-def _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domain) -> float:
+def _segment_is_clear(line, domain, obstacle_parts, physical, robot_radius) -> bool:
+    """Test a line against exact disc clearance, or the historical point geometry.
+
+    Returns:
+        Whether the line stays in the centre domain and outside solid geometry.
+    """
+    if not domain.covers(line):
+        return False
+    if physical is not None:
+        return physical.is_empty or line.distance(physical) >= robot_radius - 1e-10
+    return not any(line.relate_pattern(poly, "T********") for poly in obstacle_parts)
+
+
+def _shortest_visible_distance(
+    vertices, goal_edges, zone, obstacle_parts, domain, *, physical=None, robot_radius=0.0
+) -> float:
     """Search the continuous visibility graph, with the first vertex as the reset.
 
     Returns:
@@ -148,9 +179,7 @@ def _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domai
         if a == b:
             return True
         line = LineString([a, b])
-        return domain.covers(line) and not any(
-            line.relate_pattern(poly, "T********") for poly in obstacle_parts
-        )
+        return _segment_is_clear(line, domain, obstacle_parts, physical, robot_radius)
 
     distances = [float("inf")] * len(vertices)
     distances[0] = 0.0
@@ -213,6 +242,7 @@ def compute_completion_reference_length(
         return float("nan")
     polygons = [poly for obstacle in map_def.obstacles for poly in obstacle.iter_polygons()]
     obstacles = unary_union(polygons)
+    physical_wkb = obstacles.wkb if robot_radius else None
     if robot_radius:
         # Circumscribed 32-edge circles keep chord approximation outside the disc.
         obstacles = obstacles.buffer(robot_radius / np.cos(np.pi / 32), quad_segs=8)
@@ -231,6 +261,7 @@ def compute_completion_reference_length(
             max(ys) - robot_radius,
         ),
         clip_obstacles=robot_radius == 0,
+        physical_contract=(physical_wkb, robot_radius) if physical_wkb is not None else None,
     )
 
 

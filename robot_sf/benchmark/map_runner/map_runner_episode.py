@@ -136,7 +136,7 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
-from robot_sf.benchmark.obstacle_sampling import _iter_line_segments, sample_obstacle_points
+from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.paired_effect_metric_contract import evaluate_paired_effect_metric_fields
 from robot_sf.benchmark.path_utils import (
     compute_completion_reference_length,
@@ -1774,10 +1774,10 @@ def _compute_post_loop_metrics(  # noqa: C901, PLR0913
                     raise ValueError("robot force and input pedestrian cardinality differ")
                 ep.robot_force_presence[t, :count] = True
         if footprint_enabled(ep.episode_metadata):
-            ep.obstacle_segments = np.asarray(
-                _iter_line_segments(map_def.obstacles, map_def.bounds) if map_def else [],
-                dtype=float,
-            ).reshape(-1, 2, 2)
+            lines = np.asarray(map_def.obstacles_pysf if map_def else [], dtype=float).reshape(
+                -1, 4
+            )
+            ep.obstacle_segments = lines[:, [0, 2, 1, 3]].reshape(-1, 2, 2)
             ep.footprint_reference_length = compute_completion_reference_length(
                 map_def,
                 initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
@@ -2984,7 +2984,7 @@ def _step_snapshot_and_record(
         forces_arr = snapshot_total_forces(
             getattr(env.simulator, "last_ped_forces", None),
             peds,
-            required=slc.footprint_metrics,
+            required=False,
         )
     state.robot_positions.append(robot_pos)
     state.ped_positions.append(peds)
@@ -3002,7 +3002,11 @@ def _step_snapshot_and_record(
                     raise ValueError("missing pre-integration robot pose for force sample")
                 sample.update(
                     robot_pos=state.force_input_robot_position.tolist(),
-                    total_forces=forces_arr.tolist(),
+                    total_forces=snapshot_total_forces(
+                        getattr(env.simulator, "last_ped_forces", None),
+                        np.asarray(inputs["peds_pos"], dtype=float).reshape(-1, 2),
+                        required=True,
+                    ).tolist(),
                     force_pairing="pre-integration-inputs.v1",
                 )
             state.robot_force_samples.append(sample)

@@ -185,6 +185,7 @@ class CriticalIntervalReport:
     intervals: list[CriticalInterval] = field(default_factory=list)
     interval_metrics: list[IntervalMetrics] = field(default_factory=list)
     missing_anchors: list[dict[str, str]] = field(default_factory=list)
+    footprint_metric_schema_version: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1214,6 +1215,9 @@ def summarize_interval_metrics(
     """
 
     report = CriticalIntervalReport()
+    if footprint_enabled(trace):
+        trace_radii(trace)
+        report.footprint_metric_schema_version = trace["footprint_metric_schema_version"]
 
     # Whole-run metrics
     report.whole_run = _compute_interval_metrics_in_window(trace, start=0, end=None)
@@ -1312,10 +1316,15 @@ def report_to_dict(report: CriticalIntervalReport) -> dict[str, Any]:
             d[k] = v
         return d
 
-    return {
-        "ttc_convention": TTC_CONVENTION,
+    result = {
+        "ttc_convention": "disc_contact_seconds.v1"
+        if report.footprint_metric_schema_version
+        else TTC_CONVENTION,
         "whole_run": report.whole_run,
         "critical_intervals": [_interval_to_dict(iv) for iv in report.intervals],
         "interval_metrics": [_metrics_to_dict(m) for m in report.interval_metrics],
         "missing_anchors": report.missing_anchors,
     }
+    if report.footprint_metric_schema_version:
+        result["footprint_metric_schema_version"] = report.footprint_metric_schema_version
+    return result

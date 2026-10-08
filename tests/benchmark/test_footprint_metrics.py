@@ -12,6 +12,8 @@ from robot_sf.benchmark import metrics as m
 from robot_sf.benchmark.critical_intervals import (
     _compute_interval_metrics_in_window,
     extract_critical_intervals,
+    report_to_dict,
+    summarize_interval_metrics,
 )
 from robot_sf.benchmark.map_runner import map_runner_episode as producer
 from robot_sf.benchmark.near_miss_ttc import compute_ttc_near_miss_diagnostic
@@ -144,7 +146,7 @@ def test_reference_inflates_obstacle_and_separates_radius_cache_key():
 def test_map_producer_adds_separate_inflated_reference_and_preserves_v2():
     md = map_with_barrier(gap=True)
     result = producer._compute_post_loop_metrics(
-        robot_positions=[np.array([8.0, 4.5])],
+        robot_positions=[np.array([0.5, 4.5])],
         initial_robot_pos=np.array([1.0, 4.5]),
         robot_headings=[0.0],
         ped_positions=[np.empty((0, 2))],
@@ -179,6 +181,7 @@ def test_map_producer_adds_separate_inflated_reference_and_preserves_v2():
         "footprint_metrics", {"shortest_path_len": result.shortest_path}
     )
     assert math.isnan(current["shortest_path_len"])
+    assert current.get("wall_collisions", result.metrics_raw["wall_collisions"]) == 1
     assert result.metrics_raw["metric_schema_version"] == "robot-sf-metrics.v2"
 
 
@@ -353,3 +356,25 @@ def test_sweep_effectively_enables_footprint_definition(tmp_path):
         scenario["metadata"].get("footprint_metric_schema_version") == "robot-sf-footprint.v1"
         for scenario in scenarios
     )
+
+
+def test_interval_report_declares_changed_ttc_convention():
+    trace = {
+        **MARKER,
+        "robot_radius_m": 1.0,
+        "ped_radius_m": 0.4,
+        "robot_pos": [[0.0, 0.0], [0.0, 0.0]],
+        "peds_pos": [[[1.7, 0.0]], [[1.7, 0.0]]],
+        "dt": 0.1,
+    }
+    report = report_to_dict(summarize_interval_metrics(trace, []))
+    assert report["ttc_convention"] == "disc_contact_seconds.v1"
+    assert report["footprint_metric_schema_version"] == "robot-sf-footprint.v1"
+
+
+def test_physical_start_inside_polygon_approximation_band_stays_reachable():
+    md = map_with_barrier()
+    # Actual wall gap 1.003m exceeds the 1m radius; the circumscribed corner
+    # approximation must not reject this physically valid start.
+    start = [2.997, 2.0]
+    assert math.isfinite(radius_reference(md, start))

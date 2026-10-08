@@ -279,9 +279,7 @@ def build_derived_inputs(  # noqa: C901
         _write_authored_horizon_schedule(payload, scenarios, out_dir, suite)
     payload["seed_policy"] = {"mode": "fixed-list", "seeds": list(seeds)}
     payload["workers"] = int(workers)
-    payload["resume"] = False
-    payload["stop_on_failure"] = False
-    payload["export_publication_bundle"] = False
+    payload.update(resume=False, stop_on_failure=False, export_publication_bundle=False)
     # Dev diagnostics emit v2 rows; historical width anchors use v1 metrics.
     # Omit this unrelated scalar report without altering protected anchors.
     payload.update(paper_facing=False, snqi_weights=None, snqi_baseline=None)

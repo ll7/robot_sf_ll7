@@ -293,6 +293,17 @@ def _scenario_ped_radius_m(scenario_params: dict[str, Any]) -> float:
     if not isinstance(scenario_params, dict):
         return DEFAULT_BENCHMARK_PED_RADIUS_M
     for value in (
+        scenario_params.get("pedestrian_radius_m"),
+        _nested_value(scenario_params, "simulation_config", "pedestrian_radius_m"),
+        _nested_value(scenario_params, "sim_config", "pedestrian_radius_m"),
+    ):
+        if value is not None:
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise ValueError("pedestrian_radius_m must be positive and finite")
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError("pedestrian_radius_m must be positive and finite")
+            return float(value)
+    for value in (
         scenario_params.get("ped_radius"),
         scenario_params.get("pedestrian_radius"),
         _nested_value(scenario_params, "simulation_config", "ped_radius"),

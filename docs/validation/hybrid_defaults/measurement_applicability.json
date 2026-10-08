@@ -1,44 +1,83 @@
 {
-  "evidence_status": "diagnostic-only",
-  "measurement_producer_head": "a24bf6e04f293cce4722da4b34f365606684e0fe",
+  "all_bound_file_bytes_match_measurement": true,
   "bound_runtime_and_input_files": 1428,
-  "changed_bound_files": [
-    "robot_sf/_version.py",
-    "robot_sf/common/hybrid_defaults.py",
-    "robot_sf/common/legacy_hybrid_defaults.json",
-    "scripts/validation/run_hybrid_feasibility_diagnostics.py"
-  ],
-  "current_scope_functions_unchanged_ast": [
-    "active_default_policy",
-    "current_switch_default",
-    "defaults_for_source",
-    "has_active_default_policy",
-    "legacy_default_registry",
-    "source_default_policy"
-  ],
-  "direct_diagnostic_ast_unchanged": true,
-  "legacy_source_registry_dictionary_unchanged": true,
-  "configless_arm_count": 59,
-  "configless_identity_count": 25,
-  "explanation": "The comparison and missing-sensor probe scope defaults_for_source(None) and call native builders/policy directly. They do not call run_map_episode or its episode_default_policy decorator. Only that unused decorator and two new unused helpers change the legacy selection path. The diagnostic comment correction has identical AST. Generated package version labels are provenance, not planner/environment controls. All other bound file bytes match the measurement producer. Separate benchmark proxy/bridge corrections and test fixtures are outside the direct comparison call path. The ignored generated version file is verified to contain declarations and literal package labels only.",
-  "final_control_source_hashes": {
-    "robot_sf/common/hybrid_defaults.py": "b8ceb11c4c345886d5f24bcf7fee144cbd4d1893d2eb21e8e0638f035e5f7fd2",
-    "robot_sf/common/legacy_hybrid_defaults.json": "152172c0c6d322842ebd2b7967f6454e89ed5aef3277fa429d332dd7e9eb8790",
-    "scripts/validation/run_hybrid_feasibility_diagnostics.py": "0ced4ecb1b7e0bd5bcb9e437f42422ae519a9506c69419b2fb769771e1c9fd9d"
-  },
-  "generated_version_provenance": {
-    "path": "robot_sf/_version.py",
-    "current_sha256": "22ad84035b0cb336c2a6b6cfb1946e11291581cb302e8a7a9db65fc7e5908c25",
-    "ast_only_declarations_and_literal_version_labels": true,
-    "explanation": "The ignored vcs-versioning file refreshed during repository example tests. It supplies informational package labels, not planner or environment controls."
-  },
-  "additional_post_measurement_changes": {
-    "bound_control_changes": false,
-    "paths": [
-      "scripts/benchmark/run_fidelity_sensitivity_campaign.py",
-      "scripts/benchmark/sipp_native_command.py",
-      "scripts/benchmark/run_goal_posterior_planner_input_smoke_issue_4164.py"
+  "changed_bound_files": [],
+  "complete_crowded_episodes": 7200,
+  "complete_empty_episodes": 204,
+  "complete_mirror_episodes": 15,
+  "evidence_status": "diagnostic-only",
+  "explanation": "Every bound runtime and input file has the same bytes as the completed measurement producer. Final documentation and evidence commits do not change any measured control. No AST or generated-version exception is needed.",
+  "measurement_producer_head": "234fa6eda2e4333c7a51e78998dc915a471abebb",
+  "mirror_producer_head": "a635fb00e95e5446ea20e8dda49a879a899e2930",
+  "owned_simulation_workers": 2,
+  "root_cause_implementation_head": "a635fb00e95e5446ea20e8dda49a879a899e2930",
+  "safe_resume": {
+    "discarded_invalid_completed_cells": 0,
+    "disk_events": [
+      {
+        "action": "hourly-heartbeat",
+        "available_bytes": 247417245696,
+        "disk": "Avail\n 231G",
+        "lease_exit_code": 0,
+        "paused": false,
+        "time": "2026-10-08T08:56:42.046385+00:00",
+        "uptime": "10:56:42 up 30 days, 23:08,  9 users,  load average: 2.70, 3.19, 3.63"
+      },
+      {
+        "action": "hourly-heartbeat",
+        "available_bytes": 235606433792,
+        "disk": "Avail\n 220G",
+        "lease_exit_code": 0,
+        "paused": false,
+        "time": "2026-10-08T09:56:42.487735+00:00",
+        "uptime": "11:56:42 up 31 days, 8 min, 11 users,  load average: 23.09, 20.19, 16.35"
+      },
+      {
+        "action": "hourly-heartbeat",
+        "available_bytes": 234764636160,
+        "disk": "Avail\n 219G",
+        "lease_exit_code": 0,
+        "paused": false,
+        "time": "2026-10-08T10:56:42.944613+00:00",
+        "uptime": "12:56:42 up 31 days,  1:08, 11 users,  load average: 2.48, 4.93, 8.81"
+      },
+      {
+        "action": "hourly-heartbeat",
+        "available_bytes": 217357684736,
+        "disk": "Avail\n 203G",
+        "lease_exit_code": 0,
+        "paused": false,
+        "time": "2026-10-08T11:56:43.314870+00:00",
+        "uptime": "13:56:43 up 31 days,  2:08, 10 users,  load average: 2.91, 2.41, 2.82"
+      },
+      {
+        "action": "hourly-heartbeat",
+        "available_bytes": 220676685824,
+        "disk": "Avail\n 206G",
+        "lease_exit_code": 0,
+        "paused": false,
+        "time": "2026-10-08T12:56:43.801420+00:00",
+        "uptime": "14:56:43 up 31 days,  3:08, 10 users,  load average: 2.16, 2.38, 2.61"
+      },
+      {
+        "action": "hourly-heartbeat",
+        "available_bytes": 213428432896,
+        "disk": "Avail\n 199G",
+        "lease_exit_code": 0,
+        "paused": false,
+        "time": "2026-10-08T13:56:44.184252+00:00",
+        "uptime": "15:56:44 up 31 days,  4:08, 12 users,  load average: 2.80, 3.73, 4.52"
+      }
     ],
-    "explanation": "These separate benchmark bridges/proxies are not among the 1428 comparison inputs and are not called by either direct comparison program. They carry observed/declared validity; no hybrid planner or environment control changed."
-  }
+    "disk_pause_threshold_gib": 25,
+    "evidence": "resume_validation.json.gz",
+    "identical_producer_and_runtime": true,
+    "interruption": "external host disk exhaustion; not an episode failure",
+    "quarantined_partial_artifacts": 2,
+    "recomputed_remaining_cells": 2795,
+    "retained_cells": 4609,
+    "retained_output_hash_differences": []
+  },
+  "source_identity_unchanged_during_measurement": true,
+  "tracked_tree_clean_during_measurement": true
 }

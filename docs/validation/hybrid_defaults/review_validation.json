@@ -1,204 +1,1174 @@
 {
-  "status": "diagnostic-only; author decision required",
-  "full_suite": {
-    "head": "36aabb14c637039627772c00addf9fe2b46e309c",
-    "command": "scripts/dev/run_worktree_shared_venv.sh -- env -u PYTEST_XDIST_DIST -u PR_READY_ADVISORY ROBOT_SF_TEST_LANE=all uv run pytest -n 2 --cov=robot_sf --cov-report=json",
-    "invocations": 1,
-    "started_at": "2026-10-07T08:30:04.804186+00:00",
-    "completed_at": "2026-10-07T09:48:25.007897+00:00",
-    "exit_code": 1,
-    "passed": 42973,
-    "failed": 28,
-    "skipped": 69,
-    "xfailed": 7,
-    "collected": 43076,
-    "pytest_xdist_preflight_count": 9,
-    "mem_total_kib": 32642132,
-    "mem_available_kib": 14986752,
-    "failures": [
-      {
-        "node": "tests/benchmark/test_control_action_latency_sweep_cheap_lane.py::test_runner_executes_orca_and_hybrid_with_native_runtime[hybrid_rule_v0_minimal]",
-        "classification": "compact_benchmark_bridge_dropped_observed_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_frozen_comparator_native_command.py::test_frozen_comparator_native_command_runs_with_verified_geometry[hybrid_rule_v0_minimal-configs/algos/hybrid_rule_v0_minimal.yaml]",
-        "classification": "native_request_fixture_and_bridge_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_frozen_comparator_native_command.py::test_blocking_static_segment_changes_comparator_behavior[hybrid_rule_v0_minimal-configs/algos/hybrid_rule_v0_minimal.yaml]",
-        "classification": "native_request_fixture_and_bridge_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py::test_goal_posterior_smoke_report_has_planner_consumption_rows",
-        "classification": "synthetic_proxy_omitted_declared_successor_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py::test_goal_posterior_smoke_main_writes_json",
-        "classification": "synthetic_proxy_omitted_declared_successor_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_is_algorithm_aware",
-        "classification": "test_double_did_not_accept_absent_algorithm_config",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_effective_latency_profile_dt",
-        "classification": "test_double_did_not_accept_absent_algorithm_config",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_identity_benchmark_track",
-        "classification": "test_double_did_not_accept_absent_algorithm_config",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/metamorphic/test_mirror_symmetry.py::test_diagnostic_hybrid_v4_trace_is_mirror_equivariant",
-        "classification": "current_static_exclusion_breaks_diagnostic_mirror_relation",
-        "current_default_risk_remains": true
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_uses_open_profile_when_local_context_is_clear",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_v1_uses_neutral_profile_when_context_is_clear",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_uses_conservative_profile_near_humans",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_exposes_density_and_low_progress_reasons",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_uses_neutral_profile_for_constrained_passage",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_v1_uses_conservative_profile_for_constrained_passage",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_v1_reserves_open_for_sparse_low_progress",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_ignores_nonfinite_pedestrian_count",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_requires_positive_constrained_width",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_limited_reverse.py::test_hybrid_static_escape_reverses_but_rejects_a_rear_wall",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_fails_closed_without_required_inputs",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_records_fallback_only_status",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_candidate_source_missing_geometry_fails_without_configured_fallback",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_candidate_source_malformed_geometry_always_fails_closed",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_candidate_source_missing_geometry_uses_configured_diagnostic_fallback",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_candidate_required_can_fail_closed",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_records_selected_hypothesis_diagnostics",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_hypothesis_can_select_local_command_source",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      },
-      {
-        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_resets_stale_topology_decision",
-        "classification": "sparse_planner_fixture_omitted_validity",
-        "current_default_risk_remains": false
-      }
-    ]
-  },
-  "focused_corrections": {
-    "passed": 210,
-    "xfailed": 1,
-    "duration_s": 123.43,
-    "command": "pytest -n 2 --cov=robot_sf --cov-append --cov-report=json on the 12 affected planner, benchmark, metamorphic and compatibility files",
-    "final_compact_bridge": {
-      "passed": 22,
-      "duration_s": 61.93,
-      "files": [
-        "tests/benchmark/test_fidelity_sensitivity_campaign.py",
-        "tests/benchmark/test_control_action_latency_sweep_cheap_lane.py"
-      ]
-    },
-    "files": [
-      "tests/planner/test_adaptive_proxemic_selector.py",
-      "tests/planner/test_topology_guided_local_policy.py",
-      "tests/planner/test_limited_reverse.py",
-      "tests/benchmark/test_frozen_comparator_native_command.py",
-      "tests/benchmark/test_sipp_native_command.py",
-      "tests/benchmark/test_control_action_latency_sweep_cheap_lane.py",
-      "tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py",
-      "tests/benchmark/test_fidelity_sensitivity_campaign.py",
-      "tests/benchmark/test_map_runner_resume_identity.py",
-      "tests/metamorphic/test_mirror_symmetry.py",
-      "tests/planner/test_hybrid_default_compatibility.py",
-      "tests/planner/test_hybrid_default_review_regressions.py"
-    ]
+  "claim_boundary": "Full suite run once failed four cases; targeted corrections and infrastructure rechecks pass. Final runtime is identical to the completed five-arm producer. Default choice and release admission remain author decisions.",
+  "clean_tree_rechecks": {
+    "duration_s": 25.9,
+    "head": "234fa6eda2e4333c7a51e78998dc915a471abebb",
+    "log_sha256": "d0ca8716e600120664f0ae34878183e13187f799746535d5178d19b99e956458",
+    "passed": 3
   },
   "coverage": {
-    "threshold_passed": true,
-    "minimum_percent": 80,
-    "common_defaults_changed_lines_percent": 97.4,
-    "other_changed_runtime_lines_percent": 100,
-    "benchmark_scripts_omitted_by_repository_coverage_policy": true
+    "base": "origin/main",
+    "base_sha": "c9b2cb582c914565bc4d98de44b08ce8e03b1a72",
+    "coverage_artifact": {
+      "path": "<repo>/output/coverage/coverage.json",
+      "sha256": "94882f41d266a7abd8dc357aead7ed1227c0c1b52528e12a365ea5db7eb06d30"
+    },
+    "event": "local",
+    "exclude_patterns": [],
+    "failure_reasons": [],
+    "files": [
+      {
+        "changed_lines": [
+          240,
+          2617,
+          2639
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [
+          240
+        ],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [
+          240
+        ],
+        "file": "robot_sf/benchmark/map_runner/map_runner.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/benchmark/map_runner/map_runner.py",
+        "scope": "changed executable lines 1/1"
+      },
+      {
+        "changed_lines": [
+          88,
+          89,
+          90
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [],
+        "file": "robot_sf/benchmark/map_runner/map_runner_batch_plan.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/benchmark/map_runner/map_runner_batch_plan.py",
+        "scope": "changed executable lines 0/0"
+      },
+      {
+        "changed_lines": [
+          135
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [],
+        "file": "robot_sf/benchmark/map_runner/map_runner_env.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/benchmark/map_runner/map_runner_env.py",
+        "scope": "changed executable lines 0/0"
+      },
+      {
+        "changed_lines": [
+          212,
+          5603
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [
+          212,
+          5603
+        ],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [
+          212,
+          5603
+        ],
+        "file": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+        "scope": "changed executable lines 2/2"
+      },
+      {
+        "changed_lines": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149
+        ],
+        "coverage": 97.40259740259741,
+        "covered_changed_lines": [
+          8,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          20,
+          22,
+          23,
+          28,
+          29,
+          31,
+          36,
+          37,
+          43,
+          44,
+          47,
+          53,
+          55,
+          56,
+          57,
+          58,
+          59,
+          61,
+          63,
+          64,
+          65,
+          68,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          93,
+          95,
+          98,
+          107,
+          113,
+          116,
+          117,
+          119,
+          120,
+          121,
+          122,
+          124,
+          127,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          149
+        ],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [
+          8,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          20,
+          22,
+          23,
+          28,
+          29,
+          31,
+          36,
+          37,
+          43,
+          44,
+          47,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          61,
+          63,
+          64,
+          65,
+          68,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          93,
+          95,
+          98,
+          104,
+          107,
+          113,
+          116,
+          117,
+          119,
+          120,
+          121,
+          122,
+          124,
+          127,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          149
+        ],
+        "file": "robot_sf/common/hybrid_defaults.py",
+        "missing_changed_lines": [
+          54,
+          104
+        ],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/common/hybrid_defaults.py",
+        "scope": "changed executable lines 75/77"
+      },
+      {
+        "changed_lines": [
+          20,
+          247
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [
+          20,
+          247
+        ],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [
+          20,
+          247
+        ],
+        "file": "robot_sf/gym_env/unified_config.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/gym_env/unified_config.py",
+        "scope": "changed executable lines 2/2"
+      },
+      {
+        "changed_lines": [
+          23,
+          25,
+          31,
+          319,
+          320,
+          501,
+          567,
+          568,
+          623,
+          624,
+          625,
+          626,
+          627,
+          628,
+          629,
+          630,
+          631,
+          632,
+          633,
+          634,
+          635,
+          636,
+          637,
+          638,
+          639,
+          640,
+          641,
+          642,
+          643,
+          644,
+          645,
+          646,
+          647,
+          648,
+          649,
+          650,
+          651,
+          652,
+          653,
+          654,
+          655,
+          656,
+          657,
+          658,
+          659,
+          660,
+          661,
+          662,
+          663,
+          664,
+          665,
+          666,
+          667,
+          668,
+          691,
+          692,
+          693,
+          755,
+          1913,
+          1998,
+          2001,
+          2003,
+          2004,
+          2005,
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2780,
+          2781,
+          2802,
+          2803,
+          2804,
+          2805,
+          2806,
+          2807,
+          2808,
+          2809,
+          2810,
+          2811,
+          2812,
+          2876,
+          2877,
+          2878,
+          2879,
+          2880,
+          2881,
+          2882,
+          2883,
+          2916,
+          2917,
+          2918,
+          2919,
+          2920,
+          2921,
+          2922,
+          2923,
+          2924,
+          2925,
+          2926,
+          2927,
+          2928,
+          2929,
+          2930,
+          2931,
+          2932,
+          2933,
+          2934,
+          2935,
+          2936,
+          2937,
+          2938,
+          2939,
+          2940,
+          2941,
+          2942,
+          2943,
+          2944,
+          2945,
+          2946,
+          2947,
+          2948,
+          2949,
+          2950,
+          2951,
+          2952,
+          2953,
+          2954,
+          2955,
+          2956,
+          2972,
+          2973,
+          2974,
+          2975,
+          2985,
+          2986,
+          2987,
+          2988,
+          2989,
+          2991,
+          2992,
+          2993,
+          3150,
+          3151,
+          3152,
+          3153,
+          3880,
+          3881,
+          4269,
+          4270,
+          4277,
+          4278,
+          4279,
+          4280,
+          4281,
+          4282,
+          4283,
+          4284,
+          4285,
+          4286,
+          4287,
+          4288
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [
+          23,
+          25,
+          31,
+          319,
+          320,
+          501,
+          567,
+          568,
+          623,
+          629,
+          630,
+          631,
+          632,
+          636,
+          640,
+          646,
+          647,
+          648,
+          649,
+          650,
+          652,
+          658,
+          659,
+          660,
+          661,
+          662,
+          663,
+          664,
+          666,
+          667,
+          691,
+          692,
+          1913,
+          2003,
+          2010,
+          2876,
+          2879,
+          2916,
+          2924,
+          2925,
+          2926,
+          2927,
+          2933,
+          2934,
+          2935,
+          2936,
+          2937,
+          2938,
+          2941,
+          2942,
+          2943,
+          2953,
+          2954,
+          2955,
+          2972,
+          2973,
+          2974,
+          2975,
+          2985,
+          2993,
+          3153,
+          4278,
+          4284,
+          4285,
+          4287,
+          4288
+        ],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [
+          23,
+          25,
+          31,
+          319,
+          320,
+          501,
+          567,
+          568,
+          623,
+          629,
+          630,
+          631,
+          632,
+          636,
+          640,
+          646,
+          647,
+          648,
+          649,
+          650,
+          652,
+          658,
+          659,
+          660,
+          661,
+          662,
+          663,
+          664,
+          666,
+          667,
+          691,
+          692,
+          1913,
+          2003,
+          2010,
+          2876,
+          2879,
+          2916,
+          2924,
+          2925,
+          2926,
+          2927,
+          2933,
+          2934,
+          2935,
+          2936,
+          2937,
+          2938,
+          2941,
+          2942,
+          2943,
+          2953,
+          2954,
+          2955,
+          2972,
+          2973,
+          2974,
+          2975,
+          2985,
+          2993,
+          3153,
+          4278,
+          4284,
+          4285,
+          4287,
+          4288
+        ],
+        "file": "robot_sf/planner/hybrid_rule_local_planner.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/planner/hybrid_rule_local_planner.py",
+        "scope": "changed executable lines 66/66"
+      },
+      {
+        "changed_lines": [
+          1729,
+          1730,
+          1732,
+          1733,
+          1734,
+          1735,
+          1736,
+          1737
+        ],
+        "coverage": 100.0,
+        "covered_changed_lines": [
+          1732,
+          1733,
+          1734,
+          1735,
+          1736,
+          1737
+        ],
+        "declaration_only_proof": false,
+        "executable_changed_lines": [
+          1732,
+          1733,
+          1734,
+          1735,
+          1736,
+          1737
+        ],
+        "file": "robot_sf/training/scenario_loader.py",
+        "missing_changed_lines": [],
+        "rename_only_proof": false,
+        "resolved": "robot_sf/training/scenario_loader.py",
+        "scope": "changed executable lines 6/6"
+      }
+    ],
+    "head_sha": "234fa6eda2e4333c7a51e78998dc915a471abebb",
+    "include_patterns": [
+      "robot_sf/*.py",
+      "robot_sf/**/*.py"
+    ],
+    "no_merge": true,
+    "required": true,
+    "schema": "changed-coverage.v1",
+    "selected_paths": [
+      "robot_sf/benchmark/map_runner/map_runner.py",
+      "robot_sf/benchmark/map_runner/map_runner_batch_plan.py",
+      "robot_sf/benchmark/map_runner/map_runner_env.py",
+      "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "robot_sf/common/hybrid_defaults.py",
+      "robot_sf/gym_env/unified_config.py",
+      "robot_sf/planner/hybrid_rule_local_planner.py",
+      "robot_sf/training/scenario_loader.py"
+    ],
+    "skipped_paths": [
+      "docs/environment_config_reference.md",
+      "docs/release/0.1.0/decisions.md",
+      "docs/validation/hybrid_defaults/README.md",
+      "docs/validation/hybrid_defaults/comparison_episodes.json.gz",
+      "docs/validation/hybrid_defaults/comparison_manifest.json",
+      "docs/validation/hybrid_defaults/comparison_summary.json",
+      "docs/validation/hybrid_defaults/comparison_trace_identities.json.gz",
+      "docs/validation/hybrid_defaults/compatibility_audit.json",
+      "docs/validation/hybrid_defaults/diagnostic_amendment.json",
+      "docs/validation/hybrid_defaults/latest_main_integration_check.json",
+      "docs/validation/hybrid_defaults/learned_observation_check.json",
+      "docs/validation/hybrid_defaults/literal_goal_only.json.gz",
+      "docs/validation/hybrid_defaults/literal_goal_only_manifest.json",
+      "docs/validation/hybrid_defaults/main_integration_check.json",
+      "docs/validation/hybrid_defaults/measurement_applicability.json",
+      "docs/validation/hybrid_defaults/mirror_switch_probe.json.gz",
+      "docs/validation/hybrid_defaults/per_switch_decision.md",
+      "docs/validation/hybrid_defaults/per_switch_episodes.json.gz",
+      "docs/validation/hybrid_defaults/per_switch_manifest.json",
+      "docs/validation/hybrid_defaults/per_switch_scenarios.csv",
+      "docs/validation/hybrid_defaults/per_switch_scenarios.md",
+      "docs/validation/hybrid_defaults/per_switch_summary.json",
+      "docs/validation/hybrid_defaults/per_switch_trace_identities.json.gz",
+      "docs/validation/hybrid_defaults/post_comparison_source_review.json",
+      "docs/validation/hybrid_defaults/previous_per_switch_summary.json",
+      "docs/validation/hybrid_defaults/previous_review_validation.json",
+      "docs/validation/hybrid_defaults/released_arm_inventory.json",
+      "docs/validation/hybrid_defaults/review_fix_fail_before.txt",
+      "docs/validation/hybrid_defaults/review_fix_proof.json",
+      "docs/validation/hybrid_defaults/review_fix_proof.md",
+      "docs/validation/hybrid_defaults/review_validation.json",
+      "docs/validation/hybrid_defaults/root_cause_candidate_scores.json.gz",
+      "docs/validation/hybrid_defaults/root_cause_probe_identities.json",
+      "docs/validation/hybrid_defaults/root_cause_proof.json",
+      "docs/validation/hybrid_defaults/root_cause_proof.md",
+      "docs/validation/hybrid_defaults/root_cause_step_traces.json.gz",
+      "robot_sf/common/legacy_hybrid_defaults.json",
+      "scripts/benchmark/run_fidelity_sensitivity_campaign.py",
+      "scripts/benchmark/run_goal_posterior_planner_input_smoke_issue_4164.py",
+      "scripts/benchmark/sipp_native_command.py",
+      "scripts/validation/run_hybrid_default_comparison.py",
+      "scripts/validation/run_hybrid_feasibility_diagnostics.py",
+      "scripts/validation/run_hybrid_mirror_probe.py",
+      "scripts/validation/run_hybrid_missing_sensor_matrix.py",
+      "tests/benchmark/test_frozen_comparator_native_command.py",
+      "tests/benchmark/test_map_runner_resume_identity.py",
+      "tests/benchmark/test_map_runner_utils.py",
+      "tests/fixtures/hybrid_defaults/base_dataclasses.json.gz",
+      "tests/fixtures/hybrid_defaults/base_provenance.json",
+      "tests/fixtures/hybrid_defaults/base_released_arms.json.gz",
+      "tests/fixtures/hybrid_defaults/base_scenario_envs.json.gz",
+      "tests/fixtures/hybrid_defaults/fail_on_base.json",
+      "tests/fixtures/hybrid_defaults/fail_on_base_observer.json",
+      "tests/metamorphic/planner_arms.py",
+      "tests/planner/hybrid_rule_closed_loop_helpers.py",
+      "tests/planner/test_adaptive_proxemic_selector.py",
+      "tests/planner/test_hybrid_default_compatibility.py",
+      "tests/planner/test_hybrid_default_review_regressions.py",
+      "tests/planner/test_hybrid_failure_regressions.py",
+      "tests/planner/test_hybrid_feasibility_diagnostics.py",
+      "tests/planner/test_hybrid_rule_local_planner.py",
+      "tests/planner/test_hybrid_rule_local_planner_characterization.py",
+      "tests/planner/test_hybrid_rule_proxemic_costmap.py",
+      "tests/planner/test_hybrid_rule_v4_clearance_braking.py",
+      "tests/planner/test_limited_reverse.py",
+      "tests/planner/test_topology_guided_local_policy.py",
+      "tests/test_socnav_observation.py"
+    ],
+    "thresholds": {
+      "goal_percent": 100.0,
+      "minimum_percent": 80.0
+    },
+    "verdict": "passed"
+  },
+  "focused_corrections": {
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -n 2 tests/planner/test_hybrid_failure_regressions.py tests/planner/test_hybrid_default_compatibility.py tests/planner/test_hybrid_default_review_regressions.py tests/planner/test_hybrid_rule_local_planner.py tests/planner/test_hybrid_rule_v4_clearance_braking.py tests/planner/test_hybrid_rule_local_planner_characterization.py tests/planner/test_hybrid_feasibility_diagnostics.py -q",
+    "failed": 0,
+    "passed": 183,
+    "seconds": 110.59
+  },
+  "full_suite": {
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- env -u PYTEST_XDIST_DIST -u PR_READY_ADVISORY ROBOT_SF_TEST_LANE=all uv run pytest -n 2 --cov=robot_sf --cov-report=json --junitxml=<private-report>",
+    "completed_at": "2026-10-07T12:01:28.047289+00:00",
+    "elapsed_s": 4653.9,
+    "exit_code": 1,
+    "failed": 4,
+    "failures": [
+      {
+        "classification": "surface_gap_comfort_units_changed",
+        "node": "tests/planner/test_hybrid_feasibility_diagnostics.py::test_opt_in_clearance_preference_uses_surface_gap",
+        "resolution": "Original surface-gap contract restored in a635fb00; unchanged existing test passes in the 183-test focused check."
+      },
+      {
+        "classification": "tracked_evidence_written_during_suite",
+        "node": "tests/dev/test_software_candidate_materialization.py::test_real_materialized_candidate_build_has_only_supported_extras",
+        "resolution": "Evidence committed; same test passes on clean tracked tree at 234fa6eda."
+      },
+      {
+        "classification": "tracked_evidence_written_during_suite",
+        "node": "tests/dev/test_software_candidate_materialization.py::test_materialized_candidate_entrypoints_resist_hostile_regular_scripts_package",
+        "resolution": "Evidence committed; same test passes on clean tracked tree at 234fa6eda."
+      },
+      {
+        "classification": "pre_existing_walkthrough_output_not_fresh",
+        "node": "tests/examples/test_examples_run.py::test_example_runs_without_error[advanced/41_artifact_preservation.py]",
+        "resolution": "Prior output preserved separately; same test passes with a fresh default output directory."
+      }
+    ],
+    "head": "293fed3063cbb585002dffcb2a90d8c65653cae7",
+    "invocations": 1,
+    "passed": 43003,
+    "pytest_xdist_preflight_count": "2",
+    "skipped": 69,
+    "started_at": "2026-10-07T10:43:47.889601+00:00",
+    "uptime": "12:43:47 up 30 days, 55 min, 10 users,  load average: 2.98, 3.58, 3.45",
+    "xfailed": 7
   },
   "release_byte_audit": {
     "baseline_head": "9d8dac2a140f00dadf2c8c2621977bcee96c83e0",
-    "registry_sources": 60,
-    "verified_source_and_dependency_paths": 62,
-    "all_registered_source_bytes_equal_base": true,
-    "all_registry_source_hashes_match": true
+    "head": "a635fb00e95e5446ea20e8dda49a879a899e2930",
+    "path_checks": {
+      "configs/algos/guarded_ppo_camera_ready.yaml": {
+        "current_sha256": "d2b61082f11574b2f03c50a110cf5f945b908053df65968399a5c863e69ee854",
+        "matches_base_bytes": true
+      },
+      "configs/algos/guarded_ppo_camera_ready_cpu.yaml": {
+        "current_sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772",
+        "matches_base_bytes": true
+      },
+      "configs/algos/guarded_ppo_release_v0_0_8.yaml": {
+        "current_sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c",
+        "matches_base_bytes": true
+      },
+      "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": {
+        "current_sha256": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374",
+        "matches_base_bytes": true
+      },
+      "configs/algos/hybrid_rule_v4_clearance_braking.yaml": {
+        "current_sha256": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab",
+        "matches_base_bytes": true
+      },
+      "configs/algos/orca_release_v0_0_8.yaml": {
+        "current_sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+        "matches_base_bytes": true
+      },
+      "configs/algos/prediction_planner_camera_ready.yaml": {
+        "current_sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481",
+        "matches_base_bytes": true
+      },
+      "configs/algos/prediction_planner_release_v0_0_8.yaml": {
+        "current_sha256": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c",
+        "matches_base_bytes": true
+      },
+      "configs/algos/predictive_mppi_camera_ready.yaml": {
+        "current_sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb",
+        "matches_base_bytes": true
+      },
+      "configs/algos/predictive_mppi_release_v0_0_8.yaml": {
+        "current_sha256": "79f13475d9d66f0754c11038f6d52a15b3420965b6f639de7f000c5190ba820b",
+        "matches_base_bytes": true
+      },
+      "configs/algos/risk_dwa_camera_ready.yaml": {
+        "current_sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c",
+        "matches_base_bytes": true
+      },
+      "configs/algos/risk_dwa_release_v0_0_8.yaml": {
+        "current_sha256": "27d0b269e5a65572bdf2f5af069a5e0037eb0728d501ea12438597404e7e1527",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_release_v0_0_8.yaml": {
+        "current_sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_resolution_independent_v2.yaml": {
+        "current_sha256": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml": {
+        "current_sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35",
+        "matches_base_bytes": true
+      },
+      "configs/algos/social_force_terminal_goal_v1.yaml": {
+        "current_sha256": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb",
+        "matches_base_bytes": true
+      },
+      "configs/algos/socnav_release_v0_0_8.yaml": {
+        "current_sha256": "277c57a45caf213fdc4fb2abdb996062669f9ba05fb4e8adf3e47f90f0429b50",
+        "matches_base_bytes": true
+      },
+      "configs/algos/socnav_sampling_bounded_v2.yaml": {
+        "current_sha256": "9c52dc30d3894220caabaf1ac80d01561d6c1318d56c50e5ad7fa27d9c7999b3",
+        "matches_base_bytes": true
+      },
+      "configs/algos/socnav_sampling_release_v0_0_8.yaml": {
+        "current_sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6",
+        "matches_base_bytes": true
+      },
+      "configs/baselines/ppo_15m_grid_socnav.yaml": {
+        "current_sha256": "644b57e451cfc42b6ab5cf56ef6ec20fd6290a3bb9bae1be113a1aa6afb792ca",
+        "matches_base_bytes": true
+      },
+      "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": {
+        "current_sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
+        "matches_base_bytes": true
+      },
+      "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml": {
+        "current_sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml": {
+        "current_sha256": "43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml": {
+        "current_sha256": "43319acd6b426d9b34de316487a6c1eb3ce3ea9b9c93fd07b6435a0dbc3a4057",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v1.yaml": {
+        "current_sha256": "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml": {
+        "current_sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+        "current_sha256": "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": {
+        "current_sha256": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": {
+        "current_sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml": {
+        "current_sha256": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml": {
+        "current_sha256": "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml": {
+        "current_sha256": "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml": {
+        "current_sha256": "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml": {
+        "current_sha256": "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml": {
+        "current_sha256": "698b4bc44455a3fd4485b5b25b0bca16e47ca7d6ceaf62fd918aaba05df177d4",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml": {
+        "current_sha256": "a546df04e8f69896f001792d22931c184dd54d440f2828898049e57bdf92419b",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml": {
+        "current_sha256": "6471bc36db5806badd527701ca30b2f63f425dd3830d6b2b86cfa00ade1f5c46",
+        "matches_base_bytes": true
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml": {
+        "current_sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml": {
+        "current_sha256": "cf2e6844b3c8e8315c31e6cf115f66ea2c7051526ff2e1f9cfe3a1c5a3f23cc4",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+        "current_sha256": "3952b569bb8b5dbb2f4f895b393532b5fc58db2954282af7c68c894e04da4507",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
+        "current_sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml": {
+        "current_sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml": {
+        "current_sha256": "3129fed61da9b5edf571a76c4024ce18a1cc2b7e1ee2c026e45605531f1a3541",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml": {
+        "current_sha256": "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml": {
+        "current_sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+        "current_sha256": "d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml": {
+        "current_sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml": {
+        "current_sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml": {
+        "current_sha256": "6c60719a8b59a4eef1651dc94779cffa754c392dcf8641de31f96b9a7f675694",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml": {
+        "current_sha256": "4812a9cecf2a75c9d4b82ad9cf377f4e9406aa09dcd15897caa43932309d2887",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml": {
+        "current_sha256": "bfee5ca060ca8c00e5d84b46c1b7b183e66eb9f372a84486042d0d0b21e7d2ef",
+        "matches_base_bytes": true
+      },
+      "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml": {
+        "current_sha256": "7c5b4b1a51f7622368cd35926f2452cde0bdc6bac43b0c0d0bde1b45069acb65",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/classic_interactions_francis2023.yaml": {
+        "current_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": {
+        "current_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": {
+        "current_sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+        "current_sha256": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/single/francis2023_blind_corner.yaml": {
+        "current_sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": {
+        "current_sha256": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca",
+        "matches_base_bytes": true
+      },
+      "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": {
+        "current_sha256": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785",
+        "matches_base_bytes": true
+      }
+    },
+    "registry_sources": 60
   },
-  "claim_boundary": "The full suite was run once and failed. Focused corrections pass. The original diagnostic mirror controls are explicit; the new default static-exclusion symmetry risk remains for author review. No final-head full-suite or hosted CI pass is claimed."
+  "status": "diagnostic-only; author decision required",
+  "unresolved_work": {
+    "diagnosis": "remaining_hallway_probe.json.gz",
+    "item_2": "Narrow hallway collapse remains; 4 static and 5 all-on successes versus 26 off of 30. Current native witness does not establish a general fix.",
+    "not_merge_ready": true
+  }
 }

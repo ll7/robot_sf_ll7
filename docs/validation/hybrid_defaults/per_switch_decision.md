@@ -1,58 +1,66 @@
-# Hybrid defaults: decision after the review fixes
+# Hybrid defaults: author decision brief
 
-**The code retains the author's all-on ruling (author decision 2026-10-05).**
+**All-on remains in code.** Reason: **author decision 2026-10-05**.
+2026-10-07 direction: fix known failures before choosing the default.
 Reopen: **author: can still be discussed in more detail**.
+**AUTHOR_DECISION_REQUIRED; item 2 remains incomplete; draft not merge-ready.**
 
-Development diagnostics: 48 scenarios × dev1001–1030, five executable arms
-(7,200 episodes), plus 204 empty-world episodes. Two workers; matched budgets
-400–700 steps at 0.1 s. Literal goal-only raises before stepping in all 1,440
-cells. Flag order: physical exclusion / goal validity / validity sensor.
+Measured the same 48 scenarios × dev1001–1030 × five arms (7,200 episodes),
+204 empty-world episodes and 15 mirror episodes, with two simulation workers.
+Budgets: 400–700 steps, 0.1 s. Flag order: static exclusion / goal validity / sensor.
+Literal 010 fails closed; its previous missing-sensor proof is historical.
 
-| Option | Success / collision / timeout (1,440) | Success delta from base | Paired time-to-goal delta; common successes |
-| --- | ---: | ---: | ---: |
-| Base, all off (000) | 1,285 / 0 / 155 | — | — |
-| Static alone (100) | 1,262 / 1 / 177 | −23 | +1.039 s; 1,233 |
-| Sensor alone (001) | 1,285 / 0 / 155 | 0 | 0 s; 1,285 |
-| Validity with its required sensor (011) | 1,342 / 0 / 98 | +57 | −0.183 s; 1,283 |
-| All on, current default (111) | 1,318 / 1 / 121 | +33 | +0.679 s; 1,251 |
-| Literal validity alone (010) | 1,440 configuration errors | Not an outcome denominator | No environment steps |
+| Option | Before S / C / T | After S / C / T (1,440) | Δ successes vs off | Paired seconds vs off; common successes | Recovered / introduced vs off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| All off (000) | 1,285 / 0 / 155 | 1,285 / 0 / 155 | +0 | +0.000; 1,285 | 0 / 0 |
+| Static exclusion (100) | 1,262 / 1 / 177 | 1,250 / 0 / 190 | -35 | +0.492; 1,237 | 13 / 48 |
+| Validity sensor (001) | 1,285 / 0 / 155 | 1,285 / 0 / 155 | +0 | +0.000; 1,285 | 0 / 0 |
+| Goal validity with required sensor (011) | 1,342 / 0 / 98 | 1,346 / 0 / 94 | +61 | -0.231; 1,285 | 61 / 0 |
+| All on (current default) (111) | 1,318 / 1 / 121 | 1,319 / 0 / 121 | +34 | +0.190; 1,254 | 65 / 31 |
 
-Each highlighted cell below is success / collision / timeout out of 30.
+Highlighted scenario cells: **after S/C/T**, with before successes in parentheses.
 
 | Scenario | 000 | 100 | 001 | 011 | 111 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `francis2023_narrow_hallway` | 26/0/4 | 5/0/25 | 26/0/4 | 30/0/0 | 5/0/25 |
-| `francis2023_robot_crowding` | 19/0/11 | 15/1/14 | 19/0/11 | 19/0/11 | 18/1/11 |
-| `classic_bottleneck_high` | 30/0/0 | 29/0/1 | 30/0/0 | 30/0/0 | 29/0/1 |
-| `francis2023_exiting_room` | 30/0/0 | 30/0/0 | 30/0/0 | 29/0/1 | 29/0/1 |
+| `francis2023_narrow_hallway` | 26/0/4 (26) | 4/0/26 (5) | 26/0/4 (26) | 30/0/0 (30) | 5/0/25 (5) |
+| `francis2023_robot_crowding` | 19/0/11 (19) | 19/0/11 (15) | 19/0/11 (19) | 19/0/11 (19) | 19/0/11 (18) |
+| `classic_bottleneck_high` | 30/0/0 (30) | 29/0/1 (29) | 30/0/0 (30) | 30/0/0 (30) | 29/0/1 (29) |
+| `francis2023_exiting_room` | 30/0/0 (30) | 30/0/0 (30) | 30/0/0 (30) | 30/0/0 (29) | 30/0/0 (29) |
 
-Both collisions are robot-crowding seed 1013, in 100 and 111: pedestrian contact at
-5.8 s, zero robot displacement on contact, after 0.8 s continuously stationary
-in `PROTECTIVE_STOP`, with no feasible moving candidate. They remain collisions.
-A separate 15-episode dev1001 mirror probe also isolates static exclusion: 100
-and 111 break reflection symmetry by up to 0.374 m; 000, 001 and 011 meet 0.1 mm.
-All 724 outcome failures are classified; no fallback/degraded execution.
 
-The repaired hard `GOAL_STOP` uses navigator completion and passes 0.22 m.
-Two new 011 failures remain: exiting room/elevator, dev1026. These scorer
-livelocks prefer a zero route-guide command in `NORMAL` despite 59 feasible
-moving candidates. 011 recovers 59 failures and introduces two; 111 recovers
-67 and introduces 34. Sensor-only matches base in every cell.
+Continuous clearance fixes reflection (maximum 0.002211 mm; gate 0.1 mm).
+Separate swept physical and pedestrian/scoring rollouts remove both crowding
+contacts. Clearing both terminal guide thresholds and scoring current approach
+heading removes the reported room/elevator stalls. Six new regressions fail on
+9dd6009f and pass after; the full matrix refutes a general hallway repair.
 
-**Recommendation:** consider 011, which records 24 more successes and one fewer
-collision than 111. Keep physical exclusion opt-in until its narrow-hallway loss
-and contact case are addressed. If accepting no newly failing cells is required,
-001 or 000 are the measured alternatives while the two scorer livelocks are repaired.
+**Recommendation:** author should prefer 011: +61 successes, zero introduced
+failures versus off, and −0.231 s on common successes. Keep static exclusion
+opt-in pending hallway repair. This recommendation does not change the code.
+Hallway dev1003 diverges at step 22; later it stays at 0.15 m/s despite 56 moving
+candidates. Removing only the static comfort contribution finishes at 24.3 s;
+restoring raster lookup alone does not. The surface-gap unit regression still
+applies; no score-unit or weight change is adopted. [Counterfactual traces](remaining_hallway_probe.json.gz)
+are outside the matrix denominator.
 
-Empty-world 000→111: 88→100 successes of 102, zero contacts in both, 14→2 timeouts,
-+0.276 s over 88 common successes. The two-arm sweep cannot attribute gains per switch.
-All 183 release dumps and learned observation contracts remain unchanged;
-179 mapping digests match and four historical unfrozen guards stay blocking.
+All 731 failures are classified: 183 forced-stop, 461 moving-candidate horizon
+exhaustions, 87 low-progress/livelock timeouts; zero collisions or fallback.
+Empty-world off→all-on: 88→100 successes / 102, zero collisions, 14→2 timeouts;
+−0.108 s over 88 common successes. The two-arm sweep cannot isolate switches.
 
-[All 48 scenarios and times](per_switch_scenarios.md) ·
-[Every failure and paired deltas](per_switch_summary.json) ·
-[Source and budget identity](per_switch_manifest.json) ·
-[Final runtime applicability](measurement_applicability.json) ·
-[Tests and byte preservation](review_fix_proof.md).
+Released identities remain unchanged: 183 full dumps, 179 mappings plus four
+historical guards, nine frozen planner and 48 environment snapshots; 62 source
+files unchanged. Released learned observation spaces retain their contracts.
+All 1,440 crowded and 102 empty off controls match previous outcome/time cells;
+sensor-only matches off exactly. The full suite ran once: 43,003 passed, four
+classified failures. One scoring-unit regression was corrected; three clean/fresh
+infrastructure rechecks and 183 focused tests pass. No final-head full-suite claim.
 
-[Full-run classification and focused corrections](review_validation.json) · [Separate mirror probe](mirror_switch_probe.json.gz).
+External disk exhaustion interrupted the run. All 4,609 retained JSON/gzip pairs
+were verified; 2,795 remaining cells resumed under identical producer/input
+identities. All 7,404 pairs pass completion checks. No disk pauses were needed;
+the owned process group had a 25 GiB pause guard. [Integrity receipt](resume_validation.json.gz).
+
+[All 48 scenarios](per_switch_scenarios.md) · [Counts, paired times, recovered/introduced cells and classifications](per_switch_summary.json) ·
+[Root causes and test value](root_cause_proof.md) · [Applicability](measurement_applicability.json) ·
+[Suite qualifications](review_validation.json).

@@ -600,3 +600,25 @@ failures; focused input/bridge corrections pass. A separate dev1001 mirror
 probe isolates another static-exclusion consequence: 100 and 111 deviate by
 up to 0.374 m, while 000, 001 and 011 meet 0.1 mm. This remains author decision
 evidence, not an amendment of the all-on ruling or release admission.
+
+Author direction for D-023, **2026-10-07**: investigate and fix the known failures
+before choosing the default. The all-on implementation remains in code; this
+round does not amend **author decision 2026-10-05**. Reopen remains
+**author: can still be discussed in more detail**. Continuous geometry restores
+reflection symmetry, physical exclusion no longer replaces pedestrian/scoring
+rollout, and terminal tracking/scoring no longer prefers the reported zero-motion
+stalls. Enforcing tests: `test_physical_static_rollout_reflects_without_raster_score_bias`
+and `test_enabled_switch_completes_the_reproduced_failure_cell` in
+`tests/planner/test_hybrid_failure_regressions.py` (six baseline failures, then passes).
+The [updated decision brief](../../validation/hybrid_defaults/per_switch_decision.md)
+compares the same 7,200 crowded plus 204 empty-world episodes and fifteen mirror
+episodes. All 183 released dumps and recorded mapping identities are unchanged.
+These are development diagnostics for a new author ruling, not release admission.
+
+Completed development measurements, 2026-10-08: both crowding contacts and the
+reported terminal scorer stalls are removed; reflection meets the 0.1 mm gate.
+The hallway collapse remains (26/4/26/30/5 successes across the five arms), so
+item 2 is not fully resolved and the draft is not merge-ready. The decision brief
+recommends goal validity plus its sensor and static exclusion opt-in pending
+further repair. This is evidence for author reconsideration, not a new ruling;
+all-on remains in code and the reason/reopen clause above remain unchanged.

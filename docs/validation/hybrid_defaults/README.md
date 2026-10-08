@@ -9,6 +9,16 @@ explicit value still wins. The sensor flag adds structured `goal.next_valid`
 (and flat `goal_next_valid`) as a float32 vector of length one. It distinguishes
 an absent successor from a valid waypoint at world origin.
 
+## Current root-cause round (2026-10-07 to 2026-10-08)
+
+The [decision brief](per_switch_decision.md) and [root-cause proof](root_cause_proof.md)
+contain the completed new measurements. Later sections retain the initial
+3,084-episode history; `previous_per_switch_summary.json` retains the preceding
+7,404-episode measurements. Those historical numbers are superseded for the
+current default discussion. The narrow-hallway collapse remains unresolved;
+the draft is not merge-ready. The all-on default remains in code pending author
+ruling. No frozen or released identity was changed.
+
 ## Released configuration compatibility
 
 `robot_sf/common/legacy_hybrid_defaults.json` explicitly registers released

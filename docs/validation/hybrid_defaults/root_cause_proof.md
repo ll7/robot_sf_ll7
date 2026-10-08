@@ -3,7 +3,7 @@
 Author direction, 2026-10-07: fix the known failures before deciding defaults.
 The all-on code default remains unchanged. These are development diagnostics,
 not release admission. Baseline: `9dd6009f8499713925da65c2ecc0d4962a115031`;
-fixed producer: `a635fb00e95e5446ea20e8dda49a879a899e2930`.
+implementation producer: `a635fb00e95e5446ea20e8dda49a879a899e2930`.
 
 ## Reflection
 
@@ -110,3 +110,31 @@ being written during the run. The artifact walkthrough rejected a pre-existing
 output directory. The prior walkthrough output was preserved separately. The
 three infrastructure cases are rechecked on a clean tracked tree and fresh
 walkthrough output; their results accompany the completed measurement report.
+
+## Full-matrix qualification: hallway remains unresolved
+
+The completed 7,404-cell measurement removes both crowding contacts and the
+reported terminal scorer stalls, and passes the mirror gate. It does **not**
+resolve the hallway collapse: off/static/sensor/validity/all-on successes are
+26/4/26/30/5 of thirty. The dev1001 witness was insufficient to establish a
+general repair. Do not read its passing regression as a hallway-wide fix.
+
+In the remaining dev1003 static-only failure, the first command divergence is
+step 22: off chooses route-guide `[2.0, 0.402112]`; static chooses dynamic-window
+`[1.7999999, 0.145064]`. The changed approach subsequently enters the pedestrian
+speed cap. At steps 200, 300 and 399 the cap is 0.15 m/s despite 56 feasible moving
+candidates; final goal distance is 2.664846 m at 40 s. This is not a terminal
+GOAL_STOP or an all-candidates-rejected static gate.
+
+Three one-variable native counterfactuals keep the physical swept gate and all
+dynamic hard constraints: center-score normalization finishes at 24.3 s; restoring
+raster lookup while retaining surface-gap units times out at 40 s; removing only
+the static comfort weighted contribution finishes at 24.3 s. The center-score
+change would violate the existing surface-gap unit regression and is not adopted.
+No weight or default change is made from these probes. [Full counterfactual
+traces and intervention identity](remaining_hallway_probe.json.gz) are separate
+from the immutable matrix and support the remaining repair and author decision.
+
+The terminal state is AUTHOR_DECISION_REQUIRED; item 2 is not fully resolved and
+the draft is not merge-ready. The recommendation is validity with its sensor,
+with static exclusion opt-in pending further hallway repair.

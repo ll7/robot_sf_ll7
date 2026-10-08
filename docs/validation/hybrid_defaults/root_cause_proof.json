@@ -808,6 +808,24 @@
       37.0
     ]
   ],
+  "matrix_qualification": {
+    "collisions": 0,
+    "complete_episodes": 7404,
+    "general_hallway_repair_proven": false,
+    "hallway_successes_off_static_sensor_validity_all_on": [
+      26,
+      4,
+      26,
+      30,
+      5
+    ],
+    "not_merge_ready": true,
+    "outcome_failures": 731,
+    "producer_head": "234fa6eda2e4333c7a51e78998dc915a471abebb",
+    "remaining_probe": "remaining_hallway_probe.json.gz",
+    "remaining_probe_sha256": "04d5911fc2f35fe79985a0b3941d6ba9484d096b79fd4d0680757d6b4d7fe993",
+    "terminal_state": "AUTHOR_DECISION_REQUIRED"
+  },
   "mirror": {
     "after": [
       {

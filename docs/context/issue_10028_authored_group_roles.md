@@ -22,6 +22,9 @@ joining under the existing social-force law. It does not reduce pedestrian
 repulsion or change collision radii. The leave scenario starts h1/h2/h3 together;
 h1 leaves on the first behaviour step. Explicitly authored memberships restore
 on episode reset, including restoring the joiner's original singleton.
+The bound physics engine receives the restored membership and every role
+transition before group forces are evaluated; legacy unlabelled populations
+retain their existing path.
 
 These two common scenario files are imported transitively by the release matrix.
 **Running that matrix on main changes the pedestrian behaviour of its join and
@@ -30,7 +33,7 @@ edited, and released numbers are not recomputed or admitted by this diagnostic.
 
 ## Development evidence
 
-Runtime revision: `dea98a0249c7c1d2a703ab15349f0932f9405474`.
+Runtime revision: `670fe8417f0f35883cb253ca6879e412f6d41339`.
 Comparator: fresh main `dada635b40c32d72219229c807c9bd0fe215b3e9`.
 Matrix: `configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml`.
 Only development seeds 1001, 1002 and 1003 are used. The
@@ -43,7 +46,10 @@ all 144 scenario/seed reset observations and the two named scenarios after 40 s.
 | leave_group | `[1,1,1]` / `[1,1,1]` | `[3]` | `[1,2]` | 1 / 2/3 |
 
 On each dev seed, joining completes at 12.6 s. Scenarios with live multi-member
-groups at reset increase from **18/48 to 20/48**. Exactly **5/48** explicitly
+groups at reset increase from **18/48 to 20/48** (union across the three
+seeds). Per-seed counts are 14 to 16 (1001), 17 to 19 (1002), and 11 to 13
+(1003). Robot spawn jitter and pedestrian population streams are both seeded;
+a repeated fixed run returns identical observation rows. Exactly **5/48** explicitly
 request groups after the fix: the three classic_group_crossing density variants
 and these two authored scenarios (base: three explicit scenarios). The remaining
 46 scenarios' reset group statistics are identical across all three seeds.
@@ -76,7 +82,8 @@ must remain blocked until that gate and domain review are supplied; no success
 rate is used to tune the fix.
 
 The local all-roster attempt used two dev seeds (1001/1002), four workers, and
-`--suite both --no-step-trace` at the runtime revision above. Both suites passed
+`--suite both --no-step-trace` at the earlier runtime revision
+`dea98a0249c7c1d2a703ab15349f0932f9405474`. Both suites passed
 actor-free preflight. The main suite produced 96 prediction_planner rows and 17
 goal rows before the local attempt was stopped, because this heavy execution
 cannot satisfy the prescribed Slurm gate. The width suite was not executed.

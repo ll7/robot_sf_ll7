@@ -7,12 +7,14 @@ threshold. Independent review must verify the linked job and durable evidence.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import itertools
 import json
+import os
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +27,30 @@ TRIGGERS = (
     "robot_sf/robot/",
     "robot_sf/nav/",
     "robot_sf/gym_env/",
-    "fast-pysf/pysocialforce/",
+    "fast-pysf/",
+    "configs/algos/",
+    "configs/baselines/",
+    "configs/planners/",
+    "configs/robots/",
+    "model/",
+    "robot_sf/models/",
+    "robot_sf/sensor/",
+    "robot_sf/ped_npc/",
+    "robot_sf/common/",
+    "robot_sf/training/",
+    "robot_sf/prediction/",
+    "robot_sf/feature_extractors/",
+    "scripts/benchmark",
+    "scripts/classic_benchmark",
+    "scripts/run_social_navigation_benchmark",
+    "scripts/tools/run_camera_ready_benchmark",
+    "scripts/tools/run_split_camera_ready_campaign",
+    "scripts/tools/run_benchmark",
+    "scripts/tools/benchmark",
+    "scripts/tools/evaluate_",
+    "scripts/evaluate.py",
+    "scripts/training/",
+    "scripts/validation/run_empty_world_sweep.py",
     "maps/",
     "configs/scenarios/",
     "configs/benchmarks/",
@@ -44,7 +69,11 @@ BEHAVIOUR_FILES = {
 
 
 def current_head() -> str:
-    """Resolve the exact checkout evaluated by the contract workflow."""
+    """Bind the event source even when CI checks out a synthetic merge."""
+    source = os.environ.get("BEHAVIOUR_PR_HEAD_SHA")
+    if source is not None:
+        _require(_digest(source, 40), "invalid PR source SHA")
+        return source
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
 
@@ -252,28 +281,143 @@ def validate_receipt(
     )
 
 
-def check_receipt(body: str, changed_files: list[str], repo: str) -> list[str]:
-    """Fail closed for in-scope changes; prose and tooling paths are exempt."""
-    if not any(
-        path != SCOPE_FILE and (path in BEHAVIOUR_FILES or path.startswith(TRIGGERS))
-        for path in changed_files
-    ):
-        return []
-    matches = re.findall(r"<!--\s*behaviour-change-receipt:v1\s*\n(.*?)-->", body, re.DOTALL)
-    if len(matches) != 1:
-        return ["BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"]
-    if not SCOPE_PATH.is_file():
-        return [
-            "BLOCKER: reviewed scope inventory is not installed; merge the release "
-            "integration owner's inventory before enabling this gate"
-        ]
+# Deliberately separate, base-owned policy switch. An author ruling may disable
+# only this dependency rule without weakening production path triggers.
+DEPENDENCY_RECEIPTS_ENABLED = True
+DEPENDENCY_FILES = {"uv.lock", "pyproject.toml", "fast-pysf/uv.lock", "fast-pysf/pyproject.toml"}
+SENSITIVE_DEPENDENCIES = {"torch", "stable-baselines3", "numpy", "gymnasium"}
+MAX_ROWS_BYTES = 32 * 1024 * 1024
+
+
+def dependency_change_requires_receipt(changed_files: list[str], base_ref: str) -> bool:
+    """Use the Dependabot parser on exact source changes, excluding base drift."""
+    files = set(changed_files) & DEPENDENCY_FILES
+    if not DEPENDENCY_RECEIPTS_ENABLED or not files:
+        return False
+    from scripts.dev.check_dependabot_update_policy import (
+        _dependency_group_requirements_from_text,
+        _dependency_groups_from_text,
+        _project_dependency_rows_from_text,
+        changed_lock_package_names,
+        git_file_at_ref,
+        requirement_package_name,
+    )
+
+    head = current_head()
+    merge_base = subprocess.check_output(
+        ["git", "merge-base", base_ref, head], cwd=ROOT, text=True
+    ).strip()
+    changed = set()
+    for file in sorted(files):
+        if not file.endswith("uv.lock"):
+            continue
+        changed.update(
+            changed_lock_package_names(
+                git_file_at_ref(ROOT, merge_base, file) or "",
+                git_file_at_ref(ROOT, head, file) or "",
+            )
+        )
+    for file in sorted(files):
+        if not file.endswith("pyproject.toml"):
+            continue
+
+        def sensitive_rows(text: str) -> dict:
+            rows = _project_dependency_rows_from_text(text)
+            for group in _dependency_groups_from_text(text):
+                for requirement in _dependency_group_requirements_from_text(text, group) or []:
+                    name = requirement_package_name(requirement)
+                    rows[name] = (*rows.get(name, ()), f"{group}:{requirement}")
+            return {name: tuple(sorted(rows.get(name, ()))) for name in SENSITIVE_DEPENDENCIES}
+
+        before = sensitive_rows(git_file_at_ref(ROOT, merge_base, file) or "")
+        after = sensitive_rows(git_file_at_ref(ROOT, head, file) or "")
+        changed.update(name for name in SENSITIVE_DEPENDENCIES if before[name] != after[name])
+    return bool(changed & SENSITIVE_DEPENDENCIES)
+
+
+def load_receipt(header: dict, head: str) -> dict:
+    """Load committed rows/classifications at the source SHA and verify their bytes."""
+    import jsonschema
+
+    schema = json.loads(Path(__file__).with_name("behaviour_receipt.schema.json").read_text())
+    jsonschema.Draft202012Validator(schema["$defs"]["header"]).validate(header)
+    path = header["rows_artifact"]["path"]
+    relative = PurePosixPath(path)
+    _require(
+        not relative.is_absolute()
+        and ".." not in relative.parts
+        and path.startswith("receipts/behaviour/")
+        and path.endswith(".json")
+        and relative.as_posix() == path
+        and not any(ord(c) < 32 for c in path),
+        "receipt path must be a repository-relative receipts/behaviour JSON file",
+    )
+    entry = subprocess.check_output(
+        ["git", "ls-tree", head, "--", path], cwd=ROOT, text=True
+    ).split()
+    _require(
+        bool(entry) and entry[0] in {"100644", "100755"}, "receipt must be a committed regular file"
+    )
+    blob = f"{head}:{path}"
+    size = int(subprocess.check_output(["git", "cat-file", "-s", blob], cwd=ROOT, text=True))
+    _require(size <= MAX_ROWS_BYTES, "receipt payload exceeds the 32 MiB limit")
+    raw = subprocess.check_output(["git", "show", blob], cwd=ROOT)
+    _require(
+        hashlib.sha256(raw).hexdigest() == header["rows_artifact"]["sha256"],
+        "receipt payload digest mismatch",
+    )
+    payload = json.loads(raw)
+    jsonschema.Draft202012Validator(schema["$defs"]["rows_artifact"]).validate(payload)
+    classifications = payload["classifications"]
+    _require(
+        header["classifications"]
+        == {
+            "count": len(classifications),
+            "sha256": hashlib.sha256(
+                json.dumps(classifications, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+        },
+        "classification summary differs from the committed payload",
+    )
+    receipt = {key: value for key, value in header.items() if key != "rows_artifact"}
+    receipt.update(
+        schema_version="behaviour-change-receipt.v1",
+        rows=payload["rows"],
+        classifications=classifications,
+    )
+    return receipt
+
+
+def check_receipt(
+    body: str, changed_files: list[str], repo: str, base_ref: str = "origin/main"
+) -> list[str]:
+    """Fail closed for production changes, loading a compact header and source file."""
     import jsonschema
 
     try:
-        receipt = json.loads(matches[0])
+        path_trigger = any(
+            path != SCOPE_FILE
+            and path not in DEPENDENCY_FILES
+            and PurePosixPath(path).suffix.lower() != ".md"
+            and (path in BEHAVIOUR_FILES or path.startswith(TRIGGERS))
+            for path in changed_files
+        )
+        if not path_trigger and not dependency_change_requires_receipt(changed_files, base_ref):
+            return []
+        matches = re.findall(r"<!--\s*behaviour-change-receipt:v2\s*\n(.*?)-->", body, re.DOTALL)
+        if len(matches) != 1:
+            return ["BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"]
+        if not SCOPE_PATH.is_file():
+            return [
+                "BLOCKER: reviewed scope inventory is not installed; merge the release integration owner's inventory before enabling this gate"
+            ]
+        _require(len(body) <= 65536, "PR body exceeds GitHub's 65,536 character limit")
+        header = json.loads(matches[0])
+        head = current_head()
+        receipt = load_receipt(header, head)
         scope = json.loads(SCOPE_PATH.read_text())
         release = latest_release(repo)
-        validate_receipt(receipt, scope, current_head(), release, release_source(release))
+        validate_receipt(receipt, scope, head, release, release_source(release))
     except (
         OSError,
         ValueError,
@@ -283,6 +427,47 @@ def check_receipt(body: str, changed_files: list[str], repo: str) -> list[str]:
         jsonschema.ValidationError,
     ) as exc:
         return [
-            f"BLOCKER: behaviour receipt rejected ({type(exc).__name__}); verify scope, exact head, baseline, job and classification inventory"
+            f"BLOCKER: behaviour receipt rejected ({type(exc).__name__}); verify scope, exact head, baseline, job, payload digest and classification inventory"
         ]
     return []
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the base-owned validator against event metadata and source Git objects."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--github-event-path", type=Path, required=True)
+    parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--base-ref", required=True)
+    args = parser.parse_args(argv)
+    global ROOT
+    ROOT = args.repo_root.resolve()
+    event = json.loads(args.github_event_path.read_text())
+    pr = event["pull_request"]
+    _require(
+        os.environ.get("BEHAVIOUR_PR_HEAD_SHA") == pr["head"]["sha"],
+        "event source SHA is missing or contradictory",
+    )
+    head = current_head()
+    changed_files = (
+        subprocess.check_output(
+            ["git", "diff", "--name-only", "-z", "--no-renames", f"{args.base_ref}...{head}"],
+            cwd=ROOT,
+        )
+        .decode()
+        .split("\0")
+    )
+    blockers = check_receipt(
+        pr.get("body") or "",
+        [p for p in changed_files if p],
+        event["repository"]["full_name"],
+        args.base_ref,
+    )
+    for blocker in blockers:
+        print(blocker)
+    if not blockers:
+        print("Behaviour receipt gate: accepted or out of scope")
+    return 1 if blockers else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

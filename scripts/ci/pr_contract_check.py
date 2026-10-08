@@ -1376,12 +1376,8 @@ def run_all_checks(
     warnings = []
     infos = []
 
-    # Current admission requires a classified, source-bound behaviour receipt.
-    # Immutable historical contract probes retain their pre-enforcement scope.
-    if historical_numstat is _UNSET_NUMSTAT:
-        from scripts.ci.behaviour_receipt import check_receipt
-
-        blockers.extend(check_receipt(body, changed_files, repo))
+    # Behaviour receipts are enforced by the workflow's separate immutable-base
+    # validator step. Never import PR-head policy into current admission here.
 
     # 1. Closes-discipline
     commit_messages = None

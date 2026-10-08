@@ -1,4 +1,4 @@
-"""Behaviour-changing PRs must reach the real contract gate, without simulation."""
+"""Exercise receipt admission, Git source binding and immutable-base CI policy."""
 
 import hashlib
 import json
@@ -24,9 +24,15 @@ def _checks(monkeypatch, body, paths):
     ):
         monkeypatch.setattr(checker, name, lambda *a, **k: [])
     monkeypatch.setattr(checker, "check_worker_lane_provenance", lambda *a, **k: ("tooling", False))
-    return checker.run_all_checks(
-        "change", body, paths, "ll7/robot_sf_ll7", checker.PRDiffBases("origin/main"), None
-    )[0]
+    from scripts.ci import behaviour_receipt as adapter
+
+    blockers = adapter.check_receipt(body, paths, "ll7/robot_sf_ll7")
+    return (
+        blockers
+        + checker.run_all_checks(
+            "change", body, paths, "ll7/robot_sf_ll7", checker.PRDiffBases("origin/main"), None
+        )[0]
+    )
 
 
 @pytest.mark.parametrize(
@@ -112,6 +118,58 @@ def _receipt():
     }
 
 
+def _header(receipt, raw, path="receipts/behaviour/sweep.json"):
+    """Build the independently specified compact body around payload bytes."""
+    header = {
+        key: value for key, value in receipt.items() if key not in {"rows", "classifications"}
+    }
+    header["schema_version"] = "behaviour-change-receipt-header.v2"
+    header["rows_artifact"] = {"path": path, "sha256": hashlib.sha256(raw).hexdigest()}
+    header["classifications"] = {
+        "count": len(receipt["classifications"]),
+        "sha256": hashlib.sha256(
+            json.dumps(receipt["classifications"], sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+    return "<!-- behaviour-change-receipt:v2\n" + json.dumps(header) + "\n-->"
+
+
+def _commit_receipt(monkeypatch, tmp_path, receipt):
+    """Commit only rows/classifications, then bind event metadata to the resulting source."""
+    import subprocess
+
+    from scripts.ci import behaviour_receipt as adapter
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+
+    git("init", "-b", "main")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.invalid")
+    path = "receipts/behaviour/sweep.json"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    raw = json.dumps(
+        {
+            "schema_version": "behaviour-change-rows.v1",
+            "rows": receipt["rows"],
+            "classifications": receipt["classifications"],
+        }
+    ).encode()
+    file.write_bytes(raw)
+    git("add", path)
+    git("commit", "-m", "receipt payload")
+    head = git("rev-parse", "HEAD")
+    if receipt["head_sha"] == HEAD:
+        receipt["head_sha"] = head
+    receipt["scheduler"]["source_sha"] = head
+    receipt["interaction_audit"]["source_sha"] = head
+    receipt["refute_review"]["head_sha"] = head
+    monkeypatch.setattr(adapter, "ROOT", tmp_path)
+    monkeypatch.setenv("BEHAVIOUR_PR_HEAD_SHA", head)
+    return _header(receipt, raw)
+
+
 @pytest.mark.parametrize(
     "fault",
     [
@@ -139,7 +197,6 @@ def test_invalid_receipt_is_blocked_by_process_contract(monkeypatch, tmp_path, f
     policy = tmp_path / "scope.json"
     policy.write_text(json.dumps(scope))
     monkeypatch.setattr(adapter, "SCOPE_PATH", policy)
-    monkeypatch.setattr(adapter, "current_head", lambda: HEAD)
     monkeypatch.setattr(adapter, "latest_release", lambda repo: "0.0.7")
     monkeypatch.setattr(adapter, "release_source", lambda release: "c" * 40)
     receipt = _receipt()
@@ -170,7 +227,7 @@ def test_invalid_receipt_is_blocked_by_process_contract(monkeypatch, tmp_path, f
         receipt["baseline"]["release"] = "0.0.8"
     elif fault == "bad_seed":
         receipt["rows"][0]["seed"] = 999
-    body = "<!-- behaviour-change-receipt:v1\n" + json.dumps(receipt) + "\n-->"
+    body = _commit_receipt(monkeypatch, tmp_path, receipt)
     assert any(
         "behaviour receipt" in blocker.lower()
         for blocker in _checks(monkeypatch, body, ["robot_sf/planner/guarded_ppo.py"])
@@ -192,7 +249,6 @@ def test_complete_receipt_and_tooling_exemption(monkeypatch, tmp_path):
         )
     )
     monkeypatch.setattr(adapter, "SCOPE_PATH", policy)
-    monkeypatch.setattr(adapter, "current_head", lambda: HEAD)
     monkeypatch.setattr(adapter, "latest_release", lambda repo: "0.0.7")
     monkeypatch.setattr(adapter, "release_source", lambda release: "c" * 40)
     receipt = _receipt()
@@ -209,7 +265,7 @@ def test_complete_receipt_and_tooling_exemption(monkeypatch, tmp_path):
             "evidence": "https://example.org/trace.json",
         }
     ]
-    body = "<!-- behaviour-change-receipt:v1\n" + json.dumps(receipt) + "\n-->"
+    body = _commit_receipt(monkeypatch, tmp_path, receipt)
     assert _checks(monkeypatch, body, ["robot_sf/planner/guarded_ppo.py"]) == []
     assert _checks(monkeypatch, "", ["scripts/dev/affected_test_selection.py"]) == []
 
@@ -259,7 +315,7 @@ def test_contract_checkout_uses_source_identity_and_hydrates_release_tags(monkey
     checkout = next(
         s for s in workflow["jobs"]["pr-contract-check"]["steps"] if s.get("name") == "Checkout"
     )
-    assert checkout["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+    assert "ref" not in checkout["with"]
     assert checkout["with"]["fetch-depth"] == 0
 
     source = tmp_path / "source"
@@ -299,10 +355,12 @@ def test_contract_checkout_uses_source_identity_and_hydrates_release_tags(monkey
     )
     assert git(clone, "rev-parse", "HEAD") == merge != head
     assert git(clone, "tag") == ""
-    # checkout@ fetch-depth: 0 hydrates history/tags before resolving the event source.
+    # Full history/tag hydration retains the default merge identity.
     git(clone, "fetch", "--unshallow", "--tags", "origin")
-    git(clone, "checkout", "--detach", head)
+    monkeypatch.setenv("BEHAVIOUR_PR_HEAD_SHA", head)
     monkeypatch.setattr(adapter, "ROOT", clone)
+    assert git(clone, "rev-parse", "HEAD") == merge
+    assert adapter.current_head() == head
     receipt = _receipt()
     receipt["head_sha"] = receipt["scheduler"]["source_sha"] = head
     receipt["interaction_audit"]["source_sha"] = receipt["refute_review"]["head_sha"] = head
@@ -383,7 +441,7 @@ def test_missing_owner_inventory_is_explicit_blocker(monkeypatch, tmp_path):
     from scripts.ci import behaviour_receipt as adapter
 
     monkeypatch.setattr(adapter, "SCOPE_PATH", tmp_path / "missing.json")
-    body = "<!-- behaviour-change-receipt:v1\n" + json.dumps(_receipt()) + "\n-->"
+    body = _header(_receipt(), b"unread payload")
     blockers = adapter.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7")
     assert any("reviewed scope inventory" in b for b in blockers), blockers
 
@@ -402,6 +460,31 @@ def test_missing_owner_inventory_is_explicit_blocker(monkeypatch, tmp_path):
             True,
         ),
         (["configs/benchmarks/paper_experiment_matrix_v1.yaml"], True),
+        (["configs/algos/policy.yaml"], True),
+        (["configs/baselines/ppo.yaml"], True),
+        (["configs/planners/goal.yaml"], True),
+        (["configs/robots/body.yaml"], True),
+        (["model/policy.zip"], True),
+        (["model/registry.yaml"], True),
+        (["robot_sf/models/registry.py"], True),
+        (["robot_sf/sensor/raycast.py"], True),
+        (["robot_sf/ped_npc/force.py"], True),
+        (["robot_sf/common/seed.py"], True),
+        (["robot_sf/training/scenario_loader.py"], True),
+        (["robot_sf/prediction/model.py"], True),
+        (["robot_sf/feature_extractors/grid.py"], True),
+        (["fast-pysf/accelerator.py"], True),
+        (["scripts/benchmark/runner.py"], True),
+        (["scripts/benchmark_planner.py"], True),
+        (["scripts/tools/run_camera_ready_benchmark.py"], True),
+        (["scripts/tools/run_benchmark_release.py"], True),
+        (["scripts/tools/run_split_camera_ready_campaign.py"], True),
+        (["scripts/tools/benchmark_feature_extractors.py"], True),
+        (["robot_sf/planner/README.md"], False),
+        (["configs/algos/README.md"], False),
+        (["model/README.md"], False),
+        (["fast-pysf/README.md"], False),
+        (["scripts/benchmark/README.md"], False),
     ],
 )
 def test_real_diff_scope_controls(monkeypatch, tmp_path, paths, blocked):
@@ -495,6 +578,11 @@ def test_installed_owner_inventory_matches_sweep_inputs():
         ("francis2023_narrow_doorway", "differential_drive_r1m", "infeasible_by_design")
     ]
     # Exercise the actual validator with the installed roster, not only a template check.
+    adapter.validate_receipt(_inventory_receipt(scope), scope, HEAD, "0.0.7", "c" * 40)
+
+
+def _inventory_receipt(scope):
+    """Generate deterministic execution rows for all independently checked scope slots."""
     from robot_sf.benchmark.algorithm_metadata import (
         canonical_algorithm_name,
         enrich_algorithm_metadata,
@@ -525,4 +613,4 @@ def test_installed_owner_inventory_matches_sweep_inputs():
                     }
                 )
     receipt["totals"]["episodes"] = 21420
-    adapter.validate_receipt(receipt, scope, HEAD, "0.0.7", "c" * 40)
+    return receipt

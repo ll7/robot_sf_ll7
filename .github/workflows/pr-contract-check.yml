@@ -22,8 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Receipts bind the immutable PR source, never the synthetic merge ref.
-          ref: ${{ github.event.pull_request.head.sha }}
+          # Keep the default merge checkout for existing current-base checks.
           # The published software baseline must resolve by its immutable tag.
           fetch-depth: 0
 
@@ -93,6 +92,28 @@ jobs:
             --require-substantive-body \
             --require-open-issues \
             --advisory
+
+      - name: Validate behaviour receipt with base policy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEHAVIOUR_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Before first installation the gate is not active. Never substitute
+          # PR-head policy for missing base policy, schema or owner inventory.
+          git cat-file -e "$PR_BASE_SHA^{commit}"
+          if ! git cat-file -e "$PR_BASE_SHA:scripts/ci/behaviour_receipt.py"; then
+            echo "::notice::Behaviour receipt gate is not installed on the event base; activation follows installation"
+            exit 0
+          fi
+          TRUSTED_GATE="$RUNNER_TEMP/behaviour-gate-base"
+          git worktree add --detach "$TRUSTED_GATE" "$PR_BASE_SHA"
+          PYTHONPATH="$TRUSTED_GATE:$TRUSTED_GATE/fast-pysf" UV_NO_SYNC=1 \
+            uv run python "$TRUSTED_GATE/scripts/ci/behaviour_receipt.py" \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --base-ref "$PR_BASE_SHA"
 
       - name: Run PR Contract Check
         env:

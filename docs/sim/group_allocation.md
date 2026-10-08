@@ -51,3 +51,9 @@ rounding against an independent reachable-sum oracle without episodes. Run
 `uv run python scripts/validation/run_group_allocation_diagnostics.py --output
 <diagnostics.json>` for dev seeds 1001-1030 through the production map-runner
 reset path. These are development diagnostics, not benchmark performance claims.
+
+Development reset results at runtime commit `8f169aefcc698f5cb94521e84af5e29471e088f4`
+are preserved in [the diagnostic summary](group_allocation_diagnostics.json).
+For populations 2/3/4 at f=0.5, 30 seeds realised legacy fractions
+0.400/0.478/0.467 and exact fractions 1.000/0.667/0.500. Upward rounding of the
+infeasible one-member target explains the low-crowd result; it is not unbiased.

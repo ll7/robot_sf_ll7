@@ -691,6 +691,8 @@ def _step_respawn_diagnostic(env: Any, zero_action: np.ndarray) -> tuple[bool, b
     Returns:
         Current state termination and contact metadata (no Gym truncation).
     """
+    if len(env.simulator.robots) != 1:
+        raise ValueError("respawn diagnostic continuation requires exactly one robot")
     actions = [robot.parse_action(zero_action) for robot in env.simulator.robots]
     env.simulator.step_once(actions)
     env.state.step()
@@ -800,12 +802,21 @@ def _check_respawn_window(  # noqa: C901, PLR0912
             new_events = ledger[initial_event_counts[index] :]
             if new_events and first_event is None:
                 first_event = dict(new_events[0])
+        if step == 1 and contact_flags["is_pedestrian_collision"]:
+            return {
+                **observations,
+                "status": "invalid",
+                "reason": "pedestrian_contact_at_first_step",
+                "steps_checked": step,
+                "window_steps": window_steps,
+            }
         if terminated or truncated:
             # Only a positively identified pedestrian-only episode end permits
             # continuation. Missing cause metadata, timeout, goal completion,
             # other contacts and truncation remain fail-closed.
             pedestrian_only = (
                 terminated
+                and step > 1
                 and not truncated
                 and contact_flags["is_pedestrian_collision"]
                 and all(

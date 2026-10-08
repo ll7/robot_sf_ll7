@@ -11,11 +11,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
 from robot_sf.benchmark.footprint_metrics import FOOTPRINT_MARKER, FOOTPRINT_SCHEMA
@@ -165,6 +167,8 @@ def main() -> int:
     parser.add_argument("--seeds", nargs="+", type=int, default=list(range(1001, 1031)))
     parser.add_argument("--summarize-only", action="store_true")
     args = parser.parse_args()
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
     head = verify_head(args.head_sha)
     seeds = assert_dev_seeds(args.seeds)
     out = args.output_dir.resolve()

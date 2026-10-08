@@ -122,7 +122,7 @@ def _zone_reference_cached(
     physical = from_wkb(physical_contract[0]) if physical_contract is not None else None
     robot_radius = physical_contract[1] if physical_contract is not None else 0.0
     blocked_start = (
-        start_point.distance(physical) < robot_radius - 1e-10
+        start_point.distance(physical) <= robot_radius + 1e-10
         if physical is not None and not physical.is_empty
         else obstacles.contains(start_point)
     )
@@ -162,7 +162,7 @@ def _segment_is_clear(line, domain, obstacle_parts, physical, robot_radius) -> b
     if not domain.covers(line):
         return False
     if physical is not None:
-        return physical.is_empty or line.distance(physical) >= robot_radius - 1e-10
+        return physical.is_empty or line.distance(physical) > robot_radius + 1e-10
     return not any(line.relate_pattern(poly, "T********") for poly in obstacle_parts)
 
 
@@ -245,7 +245,7 @@ def compute_completion_reference_length(
     physical_wkb = obstacles.wkb if robot_radius else None
     if robot_radius:
         # Circumscribed 32-edge circles keep chord approximation outside the disc.
-        obstacles = obstacles.buffer(robot_radius / np.cos(np.pi / 32), quad_segs=8)
+        obstacles = obstacles.buffer((robot_radius + 1e-8) / np.cos(np.pi / 32), quad_segs=8)
     xs = [x for line in map_def.bounds for x in line[:2]]
     ys = [y for line in map_def.bounds for y in line[2:]]
     return _zone_reference_cached(

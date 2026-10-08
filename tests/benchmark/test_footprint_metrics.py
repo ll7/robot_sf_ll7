@@ -16,6 +16,7 @@ from robot_sf.benchmark.critical_intervals import (
     summarize_interval_metrics,
 )
 from robot_sf.benchmark.map_runner import map_runner_episode as producer
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.benchmark.near_miss_ttc import compute_ttc_near_miss_diagnostic
 from robot_sf.benchmark.path_utils import compute_completion_reference_length
 from robot_sf.benchmark.runner import _scenario_ped_radius_m, _scenario_robot_radius_m
@@ -378,3 +379,17 @@ def test_physical_start_inside_polygon_approximation_band_stays_reachable():
     # approximation must not reject this physically valid start.
     start = [2.997, 2.0]
     assert math.isfinite(radius_reference(md, start))
+
+
+def test_reference_rejects_contact_only_aperture():
+    md = map_with_barrier(gap=True)
+    md.obstacles[1] = Obstacle([(4, 6), (6, 6), (6, 10), (4, 10)])
+    # Door width 2m equals the diameter: traversing it requires wall contact.
+    assert math.isnan(radius_reference(md, [1.0, 5.0]))
+
+
+def test_aggregation_refuses_mixed_opt_in_definitions():
+    rows = [{"metric_schema_version": "robot-sf-metrics.v2", "metrics": {}} for _ in range(2)]
+    rows[1]["metrics"]["footprint_metrics"] = {"schema_version": "robot-sf-footprint.v1"}
+    with pytest.raises(ValueError, match="footprint metric definitions"):
+        require_uniform_metric_schema(rows)

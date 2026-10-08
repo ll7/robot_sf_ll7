@@ -1112,6 +1112,7 @@ _LEGACY_FAST_FILES = {
     "test_aggregate.py",
     "test_aggregate_provenance.py",
     "test_metric_layers.py",
+    "test_footprint_metrics.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",
     # Offline metric/schema and shortest-path contracts measured below 3s per file;

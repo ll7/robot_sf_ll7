@@ -40,6 +40,8 @@ from typing import Any, Literal
 import numpy as np
 import yaml
 
+from robot_sf.benchmark.footprint_metrics import disc_contact_ttc, footprint_enabled, trace_radii
+
 # ---------------------------------------------------------------------------
 # Schema constants
 # ---------------------------------------------------------------------------
@@ -64,6 +66,7 @@ VALID_ANCHORS = frozenset(
         "stuck_oscillation_onset",
     ]
 )
+
 
 DEFAULT_NEAR_MISS_DIST = 0.7  # metres, aligned with benchmark constants
 
@@ -472,6 +475,7 @@ def _pairwise_ttc_s(
     robot_vel: np.ndarray,
     ped_pos: np.ndarray,
     ped_vel: np.ndarray,
+    contact_radius: float | None = None,
 ) -> float | None:
     """Return physical constant-velocity TTC in seconds for one pair.
 
@@ -509,6 +513,9 @@ def _pairwise_ttc_s(
     ``ttc = dist**2 / dot(v_rel, d_vec)``
     """
     d_vec = ped_pos - robot_pos
+    if contact_radius is not None:
+        value = float(disc_contact_ttc(d_vec, robot_vel - ped_vel, contact_radius))
+        return value if np.isfinite(value) else None
     dist = float(np.linalg.norm(d_vec))
 
     # Overlap/contact counts as zero TTC
@@ -567,6 +574,7 @@ def _detect_ttc_threshold_crossing(
     threshold_s: float,
     dt: float,
     ped_vel: np.ndarray | None = None,
+    contact_radius: float | None = None,
 ) -> int | None:
     """Return the first step where TTC drops below *threshold_s*.
 
@@ -598,6 +606,7 @@ def _detect_ttc_threshold_crossing(
                 robot_vel=robot_vel[t],
                 ped_pos=peds_pos[t, k],
                 ped_vel=ped_vel[t, k],
+                contact_radius=contact_radius,
             )
             if ttc is not None and ttc < threshold_s:
                 return t
@@ -612,6 +621,7 @@ def _compute_window_min_ttc_s(
     peds_pos: np.ndarray,
     ped_vel: np.ndarray | None,
     dt: float,
+    contact_radius: float | None = None,
 ) -> float | None:
     """Compute the minimum finite TTC over all steps and pedestrians.
 
@@ -645,6 +655,7 @@ def _compute_window_min_ttc_s(
                 robot_vel=robot_vel[t],
                 ped_pos=peds_pos[t, k],
                 ped_vel=ped_vel[t, k],
+                contact_radius=contact_radius,
             )
             if ttc is not None:
                 if min_ttc is None or ttc < min_ttc:
@@ -726,6 +737,7 @@ def _detect_collision_or_near_miss(
     peds_pos: np.ndarray,
     *,
     near_miss_dist: float = DEFAULT_NEAR_MISS_DIST,
+    radii: tuple[float, float] | None = None,
 ) -> int | None:
     """Return the first step where any robot-pedestrian pair is a near-miss or closer."""
 
@@ -735,6 +747,9 @@ def _detect_collision_or_near_miss(
 
     diffs = robot_pos[:, np.newaxis, :] - peds_pos
     dists = np.linalg.norm(diffs, axis=2)
+    if radii is not None:
+        dists = dists - sum(radii)
+        near_miss_dist = 0.5
 
     for t in range(robot_pos.shape[0]):
         if np.any(dists[t] < near_miss_dist):
@@ -916,6 +931,7 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
                     threshold_s=threshold_s,
                     dt=dt,
                     ped_vel=ped_vel,
+                    contact_radius=sum(trace_radii(trace)) if footprint_enabled(trace) else None,
                 )
                 if anchor_step is None:
                     status = "missing_anchor"
@@ -963,7 +979,11 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
                     status = "available"
                     source = ANCHOR_SOURCE_STEP_EVENT
                 else:
-                    anchor_step = _detect_collision_or_near_miss(robot_pos, peds_pos)
+                    anchor_step = _detect_collision_or_near_miss(
+                        robot_pos,
+                        peds_pos,
+                        radii=trace_radii(trace) if footprint_enabled(trace) else None,
+                    )
                     if anchor_step is None:
                         status = "missing_anchor"
                         reason = (
@@ -974,7 +994,11 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
                         source = ANCHOR_SOURCE_CENTER_DISTANCE
 
         elif anchor == "recovery_after_avoidance":
-            nm_step = _detect_collision_or_near_miss(robot_pos, peds_pos)
+            nm_step = _detect_collision_or_near_miss(
+                robot_pos,
+                peds_pos,
+                radii=trace_radii(trace) if footprint_enabled(trace) else None,
+            )
             if nm_step is None or peds_pos.size == 0:
                 status = "missing_anchor"
                 reason = "no near-miss to recover from"
@@ -1070,6 +1094,12 @@ def _compute_interval_metrics_in_window(  # noqa: C901, PLR0912, PLR0915
         near_miss_d = trace.get("near_miss_dist_m", DEFAULT_NEAR_MISS_DIST)
         result["near_miss_count"] = int(np.sum(np.min(dists, axis=1) < near_miss_d))
         result["collision_flag"] = bool(np.any(np.min(dists, axis=1) < 0.3))
+        if footprint_enabled(trace):
+            gaps = min_dist_per_step - sum(trace_radii(trace))
+            result["footprint_metric_schema_version"] = trace["footprint_metric_schema_version"]
+            result["min_clearance_m"] = float(gaps.min())
+            result["near_miss_count"] = int(np.count_nonzero((gaps > 0) & (gaps < 0.5)))
+            result["collision_flag"] = bool(np.any(gaps <= 0))
     else:
         result["min_distance_m"] = None
         result["min_clearance_m"] = None
@@ -1100,6 +1130,7 @@ def _compute_interval_metrics_in_window(  # noqa: C901, PLR0912, PLR0915
             peds_pos=sub_peds_pos,
             ped_vel=ped_vel_arr,
             dt=dt,
+            contact_radius=sum(trace_radii(trace)) if footprint_enabled(trace) else None,
         )
     else:
         result["min_ttc_s"] = None

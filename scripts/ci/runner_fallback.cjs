@@ -14,7 +14,7 @@ function eligible(context, enabled) {
     context.repo.repo === 'robot_sf_ll7' && context.actor === 'll7' &&
     process.env.GITHUB_TRIGGERING_ACTOR === 'll7' &&
     process.env.GITHUB_RUN_ATTEMPT === '1' &&
-    (context.eventName === 'push' || (context.eventName === 'pull_request' &&
+    ((context.eventName === 'push' && context.ref === 'refs/heads/main') || (context.eventName === 'pull_request' &&
       pr?.base?.ref === 'main' && pr?.head?.repo?.full_name === 'll7/robot_sf_ll7' && pr?.user?.login === 'll7'));
 }
 

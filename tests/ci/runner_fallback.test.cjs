@@ -8,7 +8,7 @@ const hosted = Object.fromEntries(names.map(name => [name, false]));
 const runner = id => ({ id, status: 'online', busy: false, os: 'linux',
   labels: ['self-hosted', 'Linux', 'X64', 'robot-sf-ci-ephemeral'].map(name => ({ name })) });
 const context = { repo: { owner: 'll7', repo: 'robot_sf_ll7' }, actor: 'll7',
-  eventName: 'push', payload: {} };
+  eventName: 'push', ref: 'refs/heads/main', payload: {} };
 const core = { info() {}, setOutput() {} };
 
 test('allocate only healthy idle registered capacity; no runners or bad inventory is hosted', () => {
@@ -78,6 +78,36 @@ test('a hung inventory call falls back after five seconds', async () => {
   process.env.GITHUB_RUN_ATTEMPT = '1';
   const github = { rest: { actions: { listSelfHostedRunnersForRepo: () => new Promise(() => {}) } } };
   assert.deepEqual(await route({ github, context, core, enabled: 'true', provenance: 'true' }), hosted);
+});
+
+test('non-main pushes cannot probe even with stale positive provenance', async () => {
+  process.env.GITHUB_TRIGGERING_ACTOR = 'll7';
+  process.env.GITHUB_RUN_ATTEMPT = '1';
+  let calls = 0;
+  const github = { rest: { actions: { async listSelfHostedRunnersForRepo() {
+    calls++;
+    return { data: { total_count: 1, runners: [runner(1)] } };
+  } } } };
+  assert.deepEqual(await route({ github, context: { ...context, ref: 'refs/heads/topic' },
+    core, enabled: 'true', provenance: 'true' }), hosted);
+  assert.equal(calls, 0);
+});
+
+test('permission denial and rate limits select hosted without retry or response logging', async () => {
+  process.env.GITHUB_TRIGGERING_ACTOR = 'll7';
+  process.env.GITHUB_RUN_ATTEMPT = '1';
+  for (const status of [403, 429]) {
+    let calls = 0;
+    const logs = [];
+    const github = { rest: { actions: { async listSelfHostedRunnersForRepo() {
+      calls++;
+      throw Object.assign(new Error('sensitive response'), { status });
+    } } } };
+    assert.deepEqual(await route({ github, context, core: { ...core, info(x) { logs.push(x); } },
+      enabled: 'true', provenance: 'true' }), hosted);
+    assert.equal(calls, 1);
+    assert.equal(logs.some(x => x.includes('sensitive response')), false);
+  }
 });
 
 const target = { id: 123, workflow_id: 9, run_attempt: 1, head_sha: 'a'.repeat(40),

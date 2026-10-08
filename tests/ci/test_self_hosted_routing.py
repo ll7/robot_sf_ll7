@@ -218,15 +218,16 @@ def test_inventory_token_and_recovery_authority_stay_in_hosted_trusted_jobs() ->
     assert "needs.self-hosted-admission.outputs.self_hosted == 'true'" in probe["if"]
     assert "needs.self-hosted-admission.result == 'success'" in probe["if"]
     assert "github.event.pull_request.base.ref == 'main'" in probe["if"]
+    assert "github.ref == 'refs/heads/main'" in probe["if"]
+    assert probe["with"]["github-token"] == "${{ github.token }}"
+    assert "secrets." not in str(router)
     checkout = router["steps"][0]
     assert "pull_request.base.sha" in checkout["with"]["ref"]
     assert "pull_request.head.sha" not in checkout["with"]["ref"]
     assert checkout["with"]["persist-credentials"] is False
     for name in ROUTED_JOBS:
         assert "secrets." not in str(jobs[name])
-        assert jobs[name]["if"].startswith(
-            "always() && needs.dispatch-ownership.result == 'success'"
-        )
+        assert "always()" not in jobs[name]["if"]
         assert "!cancelled()" in jobs[name]["if"]
         assert "needs.dispatch-ownership.result == 'success'" in jobs[name]["if"]
     watchdog = yaml.safe_load(

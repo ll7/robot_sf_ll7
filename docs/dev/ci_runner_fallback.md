@@ -27,14 +27,18 @@ incomplete pagination, malformed inventory, duplicate IDs, API errors and
 timeouts select hosted. Each singleton costs one idle slot; the six test shards
 cost six slots. Inventory is a snapshot, not a reservation across workflow runs.
 
-The repository runner-list endpoint requires Administration **read**, which the
-normal `GITHUB_TOKEN` cannot request. The optional `CI_RUNNER_READ_TOKEN` must be
-a fine-grained token limited to this repository with Administration read only,
-or an equivalently scoped installation token. It is consumed only by the hosted
-probe step. With no token, the normal job token is tried; a denied response
-selects hosted. This PR neither creates credentials nor enables acceleration.
+The probe authenticates with only the read-only `github.token`; it never calls
+anonymously, references a repository secret or retries a denied request. The
+repository runner-list endpoint documents Administration **read**, which the
+normal `GITHUB_TOKEN` cannot request. An inaccessible inventory therefore keeps
+CI hosted even when machines exist. Rate limits (403/429), permission denial
+and all other API failures select hosted without logging response bodies.
+Supporting acceleration where that token cannot read inventory would require
+a separately reviewed inventory-access design; no extra credential is introduced
+or requested by this change. This PR neither changes permissions beyond read-only
+probe access nor enables acceleration.
 The probe step runs only for the author as both actor and rerun initiator, on
-push or an author-owned same-repository PR targeting main, and only on attempt one. Forks,
+main push or an author-owned same-repository PR targeting main, and only on attempt one. Forks,
 bots, manual dispatch, privileged events and every retry stay hosted.
 
 ## Queue recovery
@@ -70,26 +74,30 @@ pre-merge PR CI stays hosted if its base lacks the routing module.
 ## Threat note for independent review
 
 - **Tokens:** workload jobs retain their read-only job permissions and no
-  inventory token. Checkout credential persistence is disabled. The hosted
+  extra inventory credential. Both hosted provenance routing and availability
+  use the read-only job token. The installed start hook remains credential-free
+  and preserves its cleaned environment and absolute tool paths.
+  Checkout credential persistence is disabled. The hosted
   router reads trusted PR base code; it never imports the writable PR head.
   Inventory/error responses and runner names are never logged. The watchdog
   has repository `actions: write` only for cancel/rerun, plus `contents: read`;
   no registration, settings, secret, deployment or repository write authority.
-  A repository secret remains accessible to write collaborators who can edit
-  workflows: the main-base checkout is defense in depth, not protection from
-  existing repository write authority. Scope the optional token to this single
-  repository and read only. Stronger protection would require a separately
-  authorized environment or default-branch inventory service.
+  No repository-secret reference remains in the availability job. Main-base
+  checkout is defense in depth; existing repository write collaborators can
+  still edit workflows. No new credential authority is granted to contributions.
 - **Who may execute self-hosted:** the existing author/event/repository
   expression and immutable runner hook remain necessary admission boundaries.
   Availability never expands trust. A contributor can edit a workflow, so the
   execution hook must reject direct-label attempts. Commit provenance work in
   issue #10210 is supplied by the lower provenance PR in the stack. Its
   execution hook and hosted admission policy are preserved without changes.
-  The inventory token must never be added to workload jobs or the runner image.
+  No extra credential may be added to workload jobs or the runner image.
 - **Fail closed:** missing inputs, credentials, routing output, trust fields,
   complete inventory or heartbeat select hosted. A broken hosted probe job
-  does not skip admitted workload jobs. Recovery refuses stale/ambiguous state
+  does not skip admitted workload jobs. Workload and probe admission use
+  `!cancelled()` rather than `always()`; cancelled runs launch no additional
+  routing/workload jobs. Non-main pushes and non-main PR bases cannot probe.
+  Recovery refuses stale/ambiguous state
   and never promotes an untrusted run or loops on its own retry.
 - **Residual races:** inventory may change before scheduling; the watchdog
   repairs that liveness failure. GitHub has no compare-and-swap cancel endpoint;
@@ -98,7 +106,7 @@ pre-merge PR CI stays hosted if its base lacks the routing module.
   claim stronger atomicity than the API supports.
 - **Activation:** independent security review must cover the exact final SHA,
   both hosted authority jobs, all five expressions, fixtures and this note.
-  Settings/credential activation remains a separate owner action. No live
+  Settings activation remains a separate owner action. No live
   cancellation or rerun is exercised by local tests.
 
 ## Heavy jobs and hosted capacity proposal

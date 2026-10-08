@@ -28,7 +28,7 @@ def _evaluate_node(node: ast.AST, context: dict[str, Any]) -> Any:
     if isinstance(node, ast.Expression):
         return _evaluate_node(node.body, context)
     if isinstance(node, ast.Name):
-        assert node.id in {"github", "vars"}
+        assert node.id in {"github", "vars", "needs"}
         return context[node.id]
     if isinstance(node, ast.Attribute):
         parent = _evaluate_node(node.value, context)
@@ -57,14 +57,23 @@ def _evaluate_bool_op(node: ast.BoolOp, context: dict[str, Any]) -> Any:
     return result
 
 
-def _resolve_runs_on(expression: str, github: dict[str, Any], *, enabled: bool = True) -> str:
+def _resolve_runs_on(
+    expression: str, github: dict[str, Any], *, enabled: bool = True, provenance: str = "true"
+) -> str:
     assert expression.startswith("${{") and expression.endswith("}}")
-    inner = expression[3:-2].strip().replace("&&", "and").replace("||", "or")
+    inner = (
+        expression[3:-2]
+        .strip()
+        .replace("&&", "and")
+        .replace("||", "or")
+        .replace("self-hosted-admission", "self_hosted_admission")
+    )
     resolved = _evaluate_node(
         ast.parse(inner, mode="eval"),
         {
             "github": github,
             "vars": {"ROBOT_SF_SELF_HOSTED_CI_ENABLED": "true" if enabled else ""},
+            "needs": {"self_hosted_admission": {"outputs": {"self_hosted": provenance}}},
         },
     )
     assert isinstance(resolved, str)

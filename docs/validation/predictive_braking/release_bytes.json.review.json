@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking/release_bytes.json",
+  "artifact_sha256": "d6e591246fa3ad8a1406f59524c8b9213102847a6835ce64ac24db387997ef53",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

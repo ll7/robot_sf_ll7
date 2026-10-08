@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking/empty_before.csv",
+  "artifact_sha256": "fce2d4d34d084d752a9c7e2a20e5a7283c1688fe559e3afec2bc282168599919",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

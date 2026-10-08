@@ -46,7 +46,7 @@ from robot_sf.common.types import (
     Zone,
     ZoneAssignments,
 )
-from robot_sf.nav.map_config import GlobalRoute
+from robot_sf.nav.map_config import GlobalRoute, SocialGroupDefinition
 from robot_sf.ped_npc.ped_archetypes import assign_archetype_speed_factors, validate_composition
 from robot_sf.ped_npc.ped_behavior import (
     CrowdedZoneBehavior,
@@ -1381,13 +1381,25 @@ def _attach_single_pedestrian_behavior(
     single_offset: int,
     time_step_s: float,
     single_ped_goal_threshold: float | None,
+    social_groups: list[SocialGroupDefinition],
 ) -> None:
-    """Register single-member groups and the single-pedestrian behavior controller.
+    """Register authored memberships and the single-pedestrian behavior controller.
 
-    Single pedestrians start as single-member groups for optional join/leave behaviors.
+    Unassigned pedestrians retain their singleton groups for optional join/leave behaviors.
     """
     for ped_id in range(single_offset, single_offset + len(single_pedestrians)):
         groups.new_group({ped_id})
+    ids = {ped.id: single_offset + idx for idx, ped in enumerate(single_pedestrians)}
+    assigned: set[int] = set()
+    for group in social_groups:
+        members = {ids[member] for member in group.members}
+        if assigned & members:
+            raise ValueError("A pedestrian cannot belong to multiple runtime social groups")
+        assigned.update(members)
+        # Existing singleton ids are stable across reset and can become empty safely.
+        target = groups.group_by_ped_id[min(members)]
+        for member in sorted(members):
+            groups.add_to_group(member, target)
     ped_behaviors.append(
         SinglePedestrianBehavior(
             pysf_state,
@@ -1417,6 +1429,7 @@ def populate_simulation(  # noqa: PLR0913
     sampler_capture: SpawnSamplerCapture | None = None,
     robot_reaction_buffer: float = 0.0,
     crowd_spawn_reserved_zones: list[Zone] | None = None,
+    social_groups: list[SocialGroupDefinition] | None = None,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -1432,6 +1445,7 @@ def populate_simulation(  # noqa: PLR0913
         single_pedestrians: Optional SinglePedestrianDefinition objects for explicit goals.
         time_step_s: Simulation step time in seconds (used for wait behavior).
         single_ped_goal_threshold: Optional distance threshold for waypoint arrival.
+        social_groups: Authored group memberships among the single pedestrians.
         add_ego_state: If True, adds an ego-agent pedestrian state at the array end.
         map_bounds: Optional free-space bounds for geometry-less forced backgrounds.
         reserved_zones: Robot zones excluded from synthesized background placement.
@@ -1491,7 +1505,7 @@ def populate_simulation(  # noqa: PLR0913
     if single_pedestrians:
         _attach_single_pedestrian_behavior(
             ped_behaviors, pysf_state, groups, single_pedestrians, single_offset,
-            time_step_s, single_ped_goal_threshold,
+            time_step_s, single_ped_goal_threshold, social_groups or [],
         )
     if add_ego_state:
         groups.new_group({pysf_state.num_peds - 1})  # Add ego_ped to groups

@@ -359,6 +359,7 @@ class SinglePedestrianBehavior:
     _runtimes: list[SinglePedestrianRuntime] = field(init=False, default_factory=list)
     _id_to_global: dict[str, int] = field(init=False, default_factory=dict)
     _warned_missing_targets: set[int] = field(init=False, default_factory=set)
+    _initial_memberships: dict[int, int] = field(init=False, default_factory=dict)
     _pysf_peds: "PedState | None" = field(init=False, default=None, repr=False)
     _start_delay_max_speeds: dict[int, float] = field(
         init=False,
@@ -373,6 +374,8 @@ class SinglePedestrianBehavior:
         for idx, ped in enumerate(self.single_pedestrians):
             global_id = self.single_offset + idx
             self._id_to_global[ped.id] = global_id
+            if global_id in self.groups.group_by_ped_id:
+                self._initial_memberships[global_id] = self.groups.group_by_ped_id[global_id]
             waits = {rule.waypoint_index: rule.wait_s for rule in ped.wait_at or []}
             self._runtimes.append(
                 SinglePedestrianRuntime(
@@ -427,7 +430,9 @@ class SinglePedestrianBehavior:
             self._advance_trajectory(runtime)
 
     def reset(self) -> None:
-        """Reset per-pedestrian runtime state for a new episode."""
+        """Reset per-pedestrian runtime state and authored membership for a new episode."""
+        for ped_id, group_id in self._initial_memberships.items():
+            self.groups.add_to_group(ped_id, group_id)
         for runtime in self._runtimes:
             runtime.waypoint_index = 0
             runtime.pending_waits = {
@@ -684,7 +689,9 @@ class SinglePedestrianBehavior:
         Returns:
             bool: ``True`` when the join role controls the pedestrian goal.
         """
-        target_group = runtime.joined_group_id or self._resolve_target_group_id(runtime)
+        target_group = runtime.joined_group_id
+        if target_group is None:
+            target_group = self._resolve_target_group_id(runtime)
         if target_group is None or not self.groups.groups.get(target_group):
             return False
         target_pos = self.groups.group_centroid(target_group)

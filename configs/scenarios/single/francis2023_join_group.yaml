@@ -18,6 +18,13 @@ scenarios:
     role: join
     role_target_id: h1
     note: join group near h1
+  social_groups:
+  - group_id: anchors
+    type: conversation
+    members: [h1, h2]
+    formation: cluster
+    centroid: [13.5, 11.25]
+    radius: 1.2
   robot_config: {}
   metadata:
     figure: 7p

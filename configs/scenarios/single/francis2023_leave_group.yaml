@@ -17,6 +17,13 @@ scenarios:
     goal: null
     role: wait
     note: group anchor (static)
+  social_groups:
+  - group_id: anchors
+    type: conversation
+    members: [h1, h2, h3]
+    formation: cluster
+    centroid: [13.0, 10.833333333333334]
+    radius: 1.2
   robot_config: {}
   metadata:
     figure: 7q

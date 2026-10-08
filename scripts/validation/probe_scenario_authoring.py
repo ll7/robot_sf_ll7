@@ -187,6 +187,10 @@ def main() -> None:
                 "loader_sha256": hashlib.sha256(
                     Path("robot_sf/training/scenario_loader.py").read_bytes()
                 ).hexdigest(),
+                "probe_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                "tracked_changes": subprocess.check_output(
+                    ["git", "diff", "--name-only", "HEAD"], text=True
+                ).splitlines(),
                 "comparison": "Input matrices on one runtime; base-loader speed rows require a separate base checkout.",
                 "rows": rows,
             },

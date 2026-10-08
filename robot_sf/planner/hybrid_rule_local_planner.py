@@ -575,6 +575,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Hybrid v4 additionally reads the robot drive's acceleration, braking and
         speed limits here, so rollouts and braking checks use the real drive.
         """
+        if self.config.v4_predictive_braking_enabled and not isinstance(
+            _bound_robot_config(env), DifferentialDriveSettings
+        ):
+            raise ValueError("Predictive braking requires a bound differential-drive robot")
         if self._v4_clearance_braking:
             self._drive_limits = _resolve_drive_limits(env)
             self._v4_bound_timestep = _bound_timestep(env)

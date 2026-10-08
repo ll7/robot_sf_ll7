@@ -1,5 +1,7 @@
 """Behavioural counterexamples for the opt-in stopping bound (#10111)."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -96,6 +98,17 @@ def test_disabled_switch_preserves_legacy_cap():
     """An unchanged 0.0.8 mapping retains its present-position speed band."""
     p = planner(v4_predictive_braking_enabled=False)
     assert p._v4_human_speed_cap(state()) == pytest.approx(0.15)
+
+
+def test_predictive_certificate_rejects_a_different_drive_model():
+    """The differential-drive proof must not silently admit bicycle odometry."""
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    p = planner()
+    with pytest.raises(ValueError, match="bound differential-drive"):
+        p.bind_env(SimpleNamespace(config=SimpleNamespace(robot_config=BicycleDriveSettings())))
+    p.bind_env(SimpleNamespace(config=SimpleNamespace(robot_config=DifferentialDriveSettings())))
 
 
 @pytest.mark.parametrize(

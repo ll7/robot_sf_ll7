@@ -10,4 +10,3 @@ action_space: unicycle
 v_max: 2.0
 omega_max: 1.0
 fallback_to_goal: false
-

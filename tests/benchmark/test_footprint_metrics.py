@@ -45,7 +45,9 @@ def episode(*, distance=1.7, velocity=(2, 0)):
 def block(data):
     """Exercise the public dispatcher, using base scalars for a meaningful red receipt."""
     values = m.compute_all_metrics(data, horizon=10, shortest_path_len=10)
-    return values.get("footprint_metrics", values)
+    return values.get(
+        "footprint_metrics", {**values, "agent_collisions": values["agent_collision_count"]}
+    )
 
 
 def test_sparse_wall_segment_contact_between_endpoints():

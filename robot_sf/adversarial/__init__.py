@@ -9,6 +9,10 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
+from robot_sf.adversarial._objective_registry import install_builtin_objective_registration
+
+install_builtin_objective_registration()
+
 __all__ = [  # noqa: F822 - names resolve through module-level __getattr__.
     "ADMISSIBILITY_VERDICTS",
     "ADMISSIBLE_FEASIBILITY_UNKNOWN",
@@ -135,7 +139,9 @@ def __getattr__(name: str) -> Any:
     if name not in __all__ and name != "register_constraints_first_lexicographic_v2":
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    if name in {"production_candidate_evaluator", "run_adversarial_search"}:
+    if name == "register_constraints_first_lexicographic_v2":
+        module = import_module("robot_sf.adversarial.objectives_v2")
+    elif name in {"production_candidate_evaluator", "run_adversarial_search"}:
         module = import_module("robot_sf.adversarial.search")
     else:
         module = import_module("robot_sf.adversarial._api")

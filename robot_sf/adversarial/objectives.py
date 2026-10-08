@@ -287,10 +287,6 @@ def unregister_objective(name: str) -> None:
 
 def get_objective(name: str) -> ObjectiveFn:
     """Return a registered objective function."""
-    if name == "constraints_first_lexicographic_v2" and name not in _OBJECTIVES:
-        from robot_sf.adversarial.objectives_v2 import register_constraints_first_lexicographic_v2  # noqa: PLC0415
-
-        register_constraints_first_lexicographic_v2()
     try:
         return _OBJECTIVES[name]
     except KeyError as exc:
@@ -299,6 +295,5 @@ def get_objective(name: str) -> ObjectiveFn:
 
 
 def list_objectives() -> tuple[str, ...]:
-    """Return registered objective names, including lazily loaded built-ins."""
-    get_objective("constraints_first_lexicographic_v2")
+    """Return registered objective names."""
     return tuple(sorted(_OBJECTIVES))

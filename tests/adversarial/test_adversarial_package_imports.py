@@ -15,6 +15,7 @@ def test_adversarial_package_import_does_not_eagerly_load_search() -> None:
         "import sys\n"
         "import robot_sf.adversarial\n"
         "assert 'robot_sf.adversarial.search' not in sys.modules\n"
+        "assert 'robot_sf.adversarial.objectives' not in sys.modules\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
 
@@ -36,11 +37,11 @@ def test_objectives_import_resolves_v2_without_loading_deferred_api() -> None:
     "first_module", ["robot_sf.adversarial.objectives", "robot_sf.adversarial.objectives_v2"]
 )
 def test_fresh_objective_registry_enumerates_builtins(first_module: str) -> None:
-    """Enumeration includes v2 before any lookup, regardless of scorer import order."""
+    """Fresh discovery and unknown-name diagnostics list built-ins in either import order."""
     code = (
         "import importlib, sys\n"
         f"importlib.import_module({first_module!r})\n"
-        "from robot_sf.adversarial.objectives import list_objectives\n"
+        "from robot_sf.adversarial.objectives import get_objective, list_objectives\n"
         "expected = (\n"
         "    'constraints_first_lexicographic_v1',\n"
         "    'constraints_first_lexicographic_v2',\n"
@@ -48,6 +49,14 @@ def test_fresh_objective_registry_enumerates_builtins(first_module: str) -> None
         "    'temporal_robustness',\n"
         "    'worst_case_snqi',\n"
         ")\n"
+        "try:\n"
+        "    get_objective('definitely_missing')\n"
+        "except ValueError as exc:\n"
+        "    message = str(exc)\n"
+        "    assert message.startswith(\"Unknown adversarial objective 'definitely_missing'.\"), message\n"
+        "    assert message.split('Available: ', 1)[1] == ', '.join(expected), message\n"
+        "else:\n"
+        "    raise AssertionError('unknown objective must be rejected')\n"
         "assert list_objectives() == expected, list_objectives()\n"
         "assert list_objectives() == expected\n"
         "assert 'robot_sf.adversarial._api' not in sys.modules\n"

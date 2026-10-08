@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import random
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,62 @@ from robot_sf.training.scenario_loader import build_robot_config_from_scenario, 
 BASE = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
 SUCCESSOR = Path("configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml")
 NAMES = ("classic_realworld_double_bottleneck_high", "classic_station_platform_medium")
+
+
+def speed_caps(matrix: Path, seed: int) -> list[dict]:
+    """Measure native caps and explicit typical requests for every loaded scenario.
+
+    Refused requests have no effective speed. This mode also runs with the base
+    loader, so its before rows cannot accidentally use the fixed loader.
+    """
+    if seed not in range(1001, 1031):
+        raise ValueError("This diagnostic only permits development seeds 1001-1030.")
+    rows = []
+    for source in load_scenarios(matrix):
+        for requested in (None, "typical"):
+            random.seed(seed)
+            np.random.seed(seed)
+            scenario = dict(source)
+            scenario["simulation_config"] = dict(source.get("simulation_config") or {})
+            if requested:
+                scenario["simulation_config"]["ped_speed_tier"] = requested
+            row = {
+                "scenario": source["name"],
+                "seed": seed,
+                "requested_tier": requested,
+                "authored_tier": source.get("simulation_config", {}).get("ped_speed_tier"),
+            }
+            try:
+                config = build_robot_config_from_scenario(scenario, scenario_path=matrix)
+            except ValueError as error:
+                if (
+                    requested
+                    and str(error) == "simulation_config contains unknown keys: ped_speed_tier"
+                ):
+                    rows.append({**row, "status": "rejected", "reason": str(error)})
+                    continue
+                raise
+            config.sim_config.pedestrian_seed = seed
+            config.sim_config.route_spawn_seed = seed
+            config.sim_config.desired_speed_seed = seed
+            map_def = next(iter(config.map_pool.map_defs.values()))
+            sim = init_simulators(config, map_def)[0]
+            caps = sim.pysf_sim.peds.max_speeds.copy()
+            rows.append(
+                {
+                    **row,
+                    "status": "applied",
+                    "pedestrians": len(caps),
+                    "effective_tier": config.sim_config.ped_speed_tier,
+                    "desired_speed_mean": config.sim_config.desired_speed_mean,
+                    "desired_speed_std": config.sim_config.desired_speed_std,
+                    "caps_mean_mps": float(caps.mean()) if len(caps) else None,
+                    "caps_min_mps": float(caps.min()) if len(caps) else None,
+                    "caps_max_mps": float(caps.max()) if len(caps) else None,
+                    "caps_sha256": hashlib.sha256(caps.tobytes()).hexdigest(),
+                }
+            )
+    return rows
 
 
 def measure(matrix: Path, name: str, seed: int, tier: str | None = None) -> dict:
@@ -100,22 +157,37 @@ def main() -> None:
     """Write a small reproducible before/after artifact."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mode", choices=("authoring", "speed-caps"), default="authoring")
+    parser.add_argument("--matrix", type=Path, default=SUCCESSOR)
+    parser.add_argument("--seed", type=int, default=1001)
     args = parser.parse_args()
     logger.remove()
-    rows = [
-        measure(matrix, name, seed)
-        for seed in range(1001, 1006)
-        for name in NAMES
-        for matrix in (BASE, SUCCESSOR)
-    ]
-    rows.extend(measure(SUCCESSOR, NAMES[0], 1001, tier) for tier in ("typical",))
+    rows = (
+        speed_caps(args.matrix, args.seed)
+        if args.mode == "speed-caps"
+        else [
+            measure(matrix, name, seed)
+            for seed in range(1001, 1006)
+            for name in NAMES
+            for matrix in (BASE, SUCCESSOR)
+        ]
+    )
+    if args.mode == "authoring":
+        rows.append(measure(SUCCESSOR, NAMES[0], 1001, "typical"))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(
             {
                 "classification": "diagnostic-only",
-                "robot_action": [0, 0],
-                "baseline_revision": "66df3de19",
+                "mode": args.mode,
+                "robot_action": [0, 0] if args.mode == "authoring" else None,
+                "execution_revision": subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], text=True
+                ).strip(),
+                "loader_sha256": hashlib.sha256(
+                    Path("robot_sf/training/scenario_loader.py").read_bytes()
+                ).hexdigest(),
+                "comparison": "Input matrices on one runtime; base-loader speed rows require a separate base checkout.",
                 "rows": rows,
             },
             indent=2,

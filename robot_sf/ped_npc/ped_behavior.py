@@ -189,6 +189,7 @@ class FollowRouteBehavior:
                 sec_id + 1,
                 self.goal_proximity_threshold,
                 group_pos,
+                require_final_waypoint=True,
             )
 
     def set_robot_exclusion(

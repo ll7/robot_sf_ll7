@@ -3299,6 +3299,12 @@ def _write_run_level_files(
     """Write run_meta.json, manifest.json, and campaign_manifest.json."""
     campaign_root = paths.campaign_root
     git_meta = paths.git_meta
+    if cfg.numerical_mode is not None and outcome.benchmark_success:
+        from robot_sf.benchmark.numerical_mode import (  # noqa: PLC0415
+            validate_campaign_numerical_manifest,
+        )
+
+        validate_campaign_numerical_manifest(paths.manifest_payload, campaign_root)
     run_meta = _build_run_meta(
         cfg,
         paths=paths,
@@ -3316,6 +3322,12 @@ def _write_run_level_files(
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
     }
+    if cfg.numerical_mode is not None:
+        run_manifest["numerical_mode"] = paths.manifest_payload["numerical_mode"]
+        run_manifest["numerical_kernel_context"] = paths.manifest_payload[
+            "numerical_kernel_context"
+        ]
+        run_meta["numerical_mode"] = run_manifest["numerical_mode"]
     _write_json(campaign_root / "run_meta.json", run_meta)
     _write_json(campaign_root / "manifest.json", run_manifest)
     _write_json(

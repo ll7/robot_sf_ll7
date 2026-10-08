@@ -1760,6 +1760,19 @@ def _assemble_campaign_config(
     Returns:
         Fully constructed campaign configuration dataclass.
     """
+    mode = payload.get("numerical_mode")
+    if mode is not None:
+        from robot_sf._numerical_mode import PINNED_MODE  # noqa: PLC0415
+
+        if mode != PINNED_MODE:
+            raise ValueError("Unsupported campaign numerical_mode")
+        for planner in parsed.planner_specs:
+            if planner.algo in {"ppo", "guarded_ppo"}:
+                arm = yaml.safe_load(planner.algo_config_path.read_text())
+                if arm.get("numerical_mode") != mode:
+                    raise ValueError(
+                        "Campaign numerical_mode does not match learned planner config"
+                    )
     return CampaignConfig(
         name=parsed.name,
         scenario_matrix_path=parsed.scenario_matrix_path,
@@ -1773,6 +1786,7 @@ def _assemble_campaign_config(
         workers=int(payload.get("workers", 1)),
         horizon=(int(payload["horizon"]) if payload.get("horizon") is not None else None),
         horizon_policy=payload.get("horizon_policy"),
+        numerical_mode=payload.get("numerical_mode"),
         protocol_version=payload.get("protocol_version"),
         dt=(float(payload["dt"]) if payload.get("dt") is not None else None),
         record_forces=bool(payload.get("record_forces", True)),

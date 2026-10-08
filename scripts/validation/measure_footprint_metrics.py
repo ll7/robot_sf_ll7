@@ -107,6 +107,8 @@ def summarize(root: Path) -> dict[str, Any]:  # noqa: C901 - explicit paired ava
             raise ValueError("missing opted-in footprint metric block")
         for key in METRICS:
             before = metrics.get(key)
+            if key == "agent_collisions":
+                before = metrics.get("agent_collision_count")
             if key == "space_compliance":
                 before = current.get("legacy_comparison", {}).get(key)
             if key == "shortest_path_len":
@@ -144,10 +146,16 @@ def summarize(root: Path) -> dict[str, Any]:  # noqa: C901 - explicit paired ava
             "after": float(arr[:, 1].mean()) if len(pairs) else None,
             "mean_change": float(np.diff(arr, axis=1).mean()) if len(pairs) else None,
         }
+    execution_failures = []
+    for file in sorted(root.glob("*/runs/*/summary.json")):
+        for failure in json.loads(file.read_text()).get("failures", []):
+            execution_failures.append({"arm": file.parent.name, **failure})
     return {
         "status": "diagnostic-only",
         "episodes": len(rows),
+        "episode_source_heads": sorted({row["git_hash"] for row in rows}),
         "metrics": table,
+        "execution_failures": execution_failures,
         "episode_non_successes": failures,
         "unavailable_references": unavailable_references,
     }

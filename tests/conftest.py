@@ -1466,6 +1466,8 @@ def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ign
 # This shell-driver contract is cheap; the rest of its large file stays in the
 # full suite. Match the exact function and all of its parameter cases.
 _FAST_NODE_IDS = {
+    "tests/benchmark/test_spawn_preflight_respawn_window.py::test_contact_continuation_preserves_negative_controls",
+    "tests/benchmark/test_spawn_preflight_respawn_window.py::test_release_step1_collision_is_measured",
     "tests/test_ci_script_contract.py::test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed",
 }
 

@@ -359,6 +359,7 @@ class SinglePedestrianBehavior:
     _runtimes: list[SinglePedestrianRuntime] = field(init=False, default_factory=list)
     _id_to_global: dict[str, int] = field(init=False, default_factory=dict)
     _warned_missing_targets: set[int] = field(init=False, default_factory=set)
+    _initial_group_memberships: dict[int, int] = field(init=False, default_factory=dict)
     _pysf_peds: "PedState | None" = field(init=False, default=None, repr=False)
     _start_delay_max_speeds: dict[int, float] = field(
         init=False,
@@ -370,6 +371,11 @@ class SinglePedestrianBehavior:
         """Initialize runtime state for each single pedestrian."""
         if self.goal_proximity_threshold is None:
             self.goal_proximity_threshold = 0.2
+        if any(ped.initial_group_id is not None for ped in self.single_pedestrians):
+            self._initial_group_memberships = {
+                self.single_offset + idx: self.groups.group_by_ped_id[self.single_offset + idx]
+                for idx in range(len(self.single_pedestrians))
+            }
         for idx, ped in enumerate(self.single_pedestrians):
             global_id = self.single_offset + idx
             self._id_to_global[ped.id] = global_id
@@ -428,6 +434,8 @@ class SinglePedestrianBehavior:
 
     def reset(self) -> None:
         """Reset per-pedestrian runtime state for a new episode."""
+        for ped_id, group_id in self._initial_group_memberships.items():
+            self.groups.add_to_group(ped_id, group_id)
         for runtime in self._runtimes:
             runtime.waypoint_index = 0
             runtime.pending_waits = {
@@ -690,7 +698,10 @@ class SinglePedestrianBehavior:
         target_pos = self.groups.group_centroid(target_group)
         self.states.redirect(runtime.ped_id, target_pos)
         pos = self.states.pos_of(runtime.ped_id)
-        if dist(pos, target_pos) <= self.goal_proximity_threshold:
+        join_distance = runtime.definition.join_distance_m
+        if join_distance is None:
+            join_distance = self.goal_proximity_threshold
+        if dist(pos, target_pos) <= join_distance:
             self.groups.add_to_group(runtime.ped_id, target_group)
             runtime.joined_group_id = target_group
         return True

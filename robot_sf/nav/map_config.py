@@ -143,6 +143,8 @@ class SinglePedestrianDefinition:
             deadlocks if the robot stalls or never approaches. Defaults to ~6.0s in the behavior
             controller when a proximity hold is configured but no timeout is given.
         metadata (dict[str, Any]): Optional JSON/YAML-safe attribution metadata.
+        initial_group_id (str | None): Optional shared initial runtime membership label.
+        join_distance_m (float | None): Optional join radius around the target group centroid.
     """
 
     id: str
@@ -160,6 +162,8 @@ class SinglePedestrianDefinition:
     hold_ref_point: Vec2D | None = None
     hold_timeout_s: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    initial_group_id: str | None = None
+    join_distance_m: float | None = None
 
     def __post_init__(self):
         """
@@ -183,7 +187,25 @@ class SinglePedestrianDefinition:
         self._validate_role_offset()
         self._validate_proximity_hold()
         self._validate_metadata()
+        self._validate_group_role_settings()
         self._warn_if_static()
+
+    def _validate_group_role_settings(self) -> None:
+        """Validate opt-in membership and join distance without changing legacy defaults."""
+        if self.initial_group_id is not None:
+            if not isinstance(self.initial_group_id, str) or not self.initial_group_id.strip():
+                raise ValueError("initial_group_id must be a non-empty string")
+            self.initial_group_id = self.initial_group_id.strip()
+        if self.join_distance_m is not None:
+            if (
+                isinstance(self.join_distance_m, bool)
+                or not isinstance(self.join_distance_m, (int, float))
+                or not isfinite(self.join_distance_m)
+                or self.join_distance_m <= 0
+            ):
+                raise ValueError("join_distance_m must be finite and positive")
+            if self.role != "join":
+                raise ValueError("join_distance_m requires role='join'")
 
     def _validate_id(self):
         """Validate pedestrian ID is a non-empty string."""
@@ -1554,6 +1576,8 @@ def _parse_single_pedestrians(
                 hold_ref_point=hold_ref_point,
                 hold_timeout_s=hold_timeout_s,
                 metadata=dict(metadata),
+                initial_group_id=ped_def.get("initial_group_id"),
+                join_distance_m=ped_def.get("join_distance_m"),
             )
         )
     return single_pedestrians

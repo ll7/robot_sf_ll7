@@ -6,10 +6,12 @@ scenarios:
     ped_density: 0.0
   single_pedestrians:
   - id: h1
+    initial_group_id: anchors
     goal: null
     role: wait
     note: group anchor (static)
   - id: h2
+    initial_group_id: anchors
     goal: null
     role: wait
     note: group anchor (static)
@@ -17,6 +19,7 @@ scenarios:
     goal: null
     role: join
     role_target_id: h1
+    join_distance_m: 0.8  # Centroid distance; reachable without defeating social repulsion.
     note: join group near h1
   robot_config: {}
   metadata:

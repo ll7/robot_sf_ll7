@@ -1,7 +1,9 @@
 """Real authored group scenarios must perform their named membership transitions."""
 
+import random
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from robot_sf.sim.simulator import init_simulators
@@ -16,9 +18,16 @@ def build_group_scenario(role, seed=1001):
     scenario = load_scenarios(path)[0]
     config = build_robot_config_from_scenario(scenario, scenario_path=path)
     config.sim_config.pedestrian_seed = seed
-    return init_simulators(
-        config, next(iter(config.map_pool.map_defs.values())), random_start_pos=False
-    )[0]
+    random_state, numpy_state = random.getstate(), np.random.get_state()
+    try:
+        random.seed(seed)
+        np.random.seed(seed)
+        return init_simulators(
+            config, next(iter(config.map_pool.map_defs.values())), random_start_pos=False
+        )[0]
+    finally:
+        random.setstate(random_state)
+        np.random.set_state(numpy_state)
 
 
 def memberships(sim):

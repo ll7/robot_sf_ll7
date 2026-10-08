@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import subprocess
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 from loguru import logger
 
 from robot_sf.sim.simulator import init_simulators
@@ -43,6 +45,9 @@ def main() -> None:
     rows = []
     for scenario in scenarios:
         for seed in args.seeds:
+            # Robot spawn jitter still uses the legacy process-global streams.
+            random.seed(seed)
+            np.random.seed(seed)
             config = build_robot_config_from_scenario(scenario, scenario_path=args.matrix)
             config.sim_config.pedestrian_seed = seed
             sim = init_simulators(

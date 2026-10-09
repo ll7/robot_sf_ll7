@@ -206,6 +206,8 @@ class SinglePedestrianDefinition:
         if self.join_radius_m is not None:
             if self.role != "join":
                 raise ValueError("join_radius_m requires role='join'")
+            if isinstance(self.join_radius_m, bool):
+                raise ValueError("join_radius_m must be positive and finite")
             self.join_radius_m = float(self.join_radius_m)
             if not isfinite(self.join_radius_m) or self.join_radius_m <= 0:
                 raise ValueError("join_radius_m must be positive and finite")

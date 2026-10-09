@@ -1,10 +1,12 @@
 """Exercise authored join/leave scenarios through real pedestrian physics (#10028)."""
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.common.seed import set_global_seed
 from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.sim.simulator import init_simulators
@@ -84,3 +86,31 @@ def test_join_uses_authored_radius_instead_of_waypoint_threshold(group_simulator
     sim.ped_pos[2] = center + (0.79, 0.0)
     behavior.step()
     assert sim.groups.group_by_ped_id[2] == anchor_group
+
+
+@pytest.mark.parametrize("role", ["join", "leave"])
+def test_authored_group_benchmark_writes_pedestrian_present_row(role, tmp_path):
+    """Keep string authoring labels out of integer runtime group IDs in real JSONL rows."""
+    path = Path(f"configs/scenarios/single/francis2023_{role}_group.yaml").resolve()
+    scenario = load_scenarios(path)[0]
+    scenario["seeds"] = [1001]
+    output = tmp_path / "episodes.jsonl"
+    summary = run_map_batch(
+        [scenario],
+        output,
+        "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        scenario_path=path,
+        algo="goal",
+        horizon=1,
+        workers=1,
+        resume=False,
+        record_simulation_step_trace=True,
+    )
+    assert summary["written"] == 1
+    assert summary["failed_jobs"] == 0
+    row = json.loads(output.read_text())
+    trace = row["algorithm_metadata"]["simulation_step_trace"]
+    assert len(trace["steps"]) == 1
+    assert len(trace["steps"][0]["pedestrians"]) == 3
+    assert row["algorithm_metadata"]["status"] == "ok"
+    assert not row["integrity"]["effective_view"]["degraded"]

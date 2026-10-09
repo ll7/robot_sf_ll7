@@ -445,6 +445,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 
 ### Simulation & UI
 
+* [Pedestrian group allocation](./sim/group_allocation.md) - Opt-in exact counts and legacy compatibility
+
 * **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
 * **[LiDAR Configuration Reference](./lidar_configuration.md)** - Canonical robot and ego-pedestrian scan defaults, including ray count, field of view, range, and noise
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets

@@ -574,6 +574,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
         map_def.ped_crowded_zones,
         obstacle_polygons=get_prepared_obstacles(map_def),
         single_pedestrians=map_def.single_pedestrians,
+        social_groups=map_def.social_groups,
         time_step_s=config.time_per_step_in_secs,
         single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
         add_ego_state=add_ego_state,

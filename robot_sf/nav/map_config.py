@@ -481,12 +481,12 @@ class InfrastructureZone:
 class SocialGroupDefinition:
     """A scenario-declared social pedestrian group with a shared interaction space.
 
-    This is diagnostic/social-space metadata for social-navigation benchmarking
+    This declares runtime membership and social-space metadata for social-navigation benchmarking
     (issue #3972). It declares that a set of pedestrians form a socially related
     group (for example a standing conversation) whose shared "o-space" the robot
-    should ideally not cut through. It does not by itself change pedestrian
-    physics; it is consumed by group-space intrusion metrics and, in a later
-    slice, by a group-avoidance planner wrapper.
+    should ideally not cut through. Named single pedestrians share runtime group
+    membership (including group forces) while retaining their individual roles.
+    The space geometry is also consumed by group-space intrusion metrics.
 
     Attributes:
         group_id (str): Unique, non-empty identifier for the group.

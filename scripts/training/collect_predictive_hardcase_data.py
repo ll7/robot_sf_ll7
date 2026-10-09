@@ -364,7 +364,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_identity_v2.npz"),
+        default=Path(
+            "output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_identity_v2.npz"
+        ),
     )
     return parser.parse_args()
 

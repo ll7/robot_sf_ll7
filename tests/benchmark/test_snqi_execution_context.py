@@ -19,6 +19,13 @@ EVIDENCE = ROOT / "docs/context/evidence/2026-10-04_freeze008_calibration"
 ENV = "ROBOT_SF_SNQI_V2_CALIBRATION_CONTEXT"
 
 
+@pytest.fixture(autouse=True)
+def single_thread_context(monkeypatch):
+    """Give synthetic admission contexts explicit, caller-independent thread caps."""
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(variable, "1")
+
+
 def test_worker_refuses_context_difference_before_episode_setup(monkeypatch):
     """Base reaches the setup fence; the fixed worker must refuse without setup/reset."""
     context = build_execution_context_provenance()

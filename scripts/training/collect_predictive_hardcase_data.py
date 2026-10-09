@@ -24,13 +24,13 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_map,
     predictive_feature_schema_metadata,
 )
-from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.predictive_supervision import (
     PREDICTIVE_DATASET_SCHEMA,
     identity_match_indices,
     observation_episode_ids,
     supervision_metadata,
 )
+from robot_sf.training.scenario_loader import load_scenarios
 
 
 @dataclass

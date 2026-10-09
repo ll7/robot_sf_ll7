@@ -203,9 +203,18 @@ jobs:
       - name: Freeze matrix duration input
         id: freeze-durations
         if: steps.decision.outputs.run_full_ci == 'true'
+        env:
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
-          python scripts/dev/merge_test_durations.py \
+          # An older PR head may not support this workflow's helper arguments.
+          # Keep scheduling code paired with the exact workflow revision.
+          if ! git cat-file -e "${WORKFLOW_SHA}:scripts/dev/merge_test_durations.py"; then
+            git fetch --no-tags origin "${WORKFLOW_SHA}"
+          fi
+          git show "${WORKFLOW_SHA}:scripts/dev/merge_test_durations.py" \
+            > "$RUNNER_TEMP/merge_test_durations.py"
+          python "$RUNNER_TEMP/merge_test_durations.py" \
             --snapshot-input .test_durations --output .test_durations
 
       - name: Upload frozen test durations

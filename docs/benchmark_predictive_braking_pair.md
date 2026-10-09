@@ -103,3 +103,9 @@ statistical significance or population safety. Fallback/degraded rows, mixed
 settings, missing fields, duplicate/unmatched pairs and non-development seeds
 are rejected. These outputs are diagnostic-only development evidence; release,
 paper admission, allowance calibration and a near-miss budget remain separate.
+
+The [development diagnostic record](validation/predictive_braking_pair/README.md)
+preserves the paired station slice, actor-free gate, producer manifests and
+individual failure classifications. Its full Euclidean bound rates retain their
+arm-specific nearby-window denominators and must not be treated as population
+safety probabilities.

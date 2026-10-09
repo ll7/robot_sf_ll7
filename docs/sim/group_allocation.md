@@ -3,7 +3,10 @@
 `simulation_config.groups` is a target fraction of background pedestrians in
 multi-member groups. `group_allocation_mode: legacy` is the default, including
 when the key is omitted. It preserves the existing size law and seeded random
-draw order. No scenario opts into the new law automatically.
+draw order. Default serialized settings omit the new mode key to preserve legacy
+configuration hashes. Explicit exact mode is included by `SimulationSettings.to_dict()`
+and the environment identity serializer, and survives configuration copying.
+No scenario opts into the new law automatically.
 
 Set `group_allocation_mode: exact_small_crowd_v1` and `groups: <fraction>` to
 allocate a nearest-feasible count. For a spawning pool of size n, choose G

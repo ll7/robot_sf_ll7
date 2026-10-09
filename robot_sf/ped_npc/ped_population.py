@@ -172,9 +172,9 @@ class PedSpawnConfig:
     response_law_composition: dict[str, float] | None = None
     response_law_seed: int | None = None
     force_population_size: int | None = None
+    rng: np.random.Generator | None = field(default=None, repr=False)
     group_allocation_mode: str = "legacy"
     group_fraction: float | None = None
-    rng: np.random.Generator | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """

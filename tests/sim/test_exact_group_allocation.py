@@ -102,3 +102,27 @@ def test_scenario_override_reaches_spawner():
         assert sum(len(g) for g in sim.groups.groups_as_lists if len(g) > 1) == 2
     finally:
         env.close()
+
+
+def test_group_mode_preserves_default_bytes_and_explicit_identity():
+    """Legacy omits the new key; exact mode survives serialization, copying and hashing."""
+    from dataclasses import asdict, replace
+
+    from robot_sf.gym_env.env_config import EnvSettings
+    from robot_sf.gym_env.robot_env import _stable_config_hash
+
+    legacy = SimulationSettings(groups=0.5)
+    exact = SimulationSettings(groups=0.5)
+    exact.group_allocation_mode = "exact_small_crowd_v1"
+    assert "group_allocation_mode" not in asdict(legacy)
+    assert "group_allocation_mode" not in legacy.to_dict()
+    assert exact.to_dict().get("group_allocation_mode") == "exact_small_crowd_v1"
+    assert SimulationSettings(**exact.to_dict()) == exact
+    assert replace(exact).group_allocation_mode == "exact_small_crowd_v1"
+    assert _stable_config_hash(EnvSettings(sim_config=exact)) != _stable_config_hash(
+        EnvSettings(sim_config=legacy)
+    )
+    explicitly_legacy = replace(legacy, group_allocation_mode="legacy")
+    assert _stable_config_hash(EnvSettings(sim_config=explicitly_legacy)) == _stable_config_hash(
+        EnvSettings(sim_config=legacy)
+    )

@@ -2,6 +2,7 @@
 
 import hashlib
 
+import numpy as np
 import pytest
 
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_crowded_zones
@@ -62,17 +63,31 @@ def test_nearest_feasible_partition(maximum):
             assert sum(len(g) for g in groups if len(g) > 1) == expected
 
 
-def test_seeded_replay_and_legacy_bytes():
-    """Replay includes state and membership; default output matches fresh-main bytes."""
+@pytest.mark.parametrize("trig_ulp_shift", [False, True])
+def test_seeded_replay_and_legacy_bytes(monkeypatch, trig_ulp_shift):
+    """Replay is byte-identical locally; legacy state matches main to nine decimals."""
+    if trig_ulp_shift:
+        import robot_sf.ped_npc.ped_population as population
+
+        # Model a different platform's libm rounding without changing RNG draws.
+        for name in ("cos", "sin"):
+            original = getattr(population, name)
+            monkeypatch.setattr(
+                population,
+                name,
+                lambda angle, original=original: np.nextafter(original(angle), np.inf),
+            )
     for mode in ("legacy", "exact_small_crowd_v1"):
         first = _spawn(12, 0.5, mode=mode)
         second = _spawn(12, 0.5, mode=mode)
         assert first[0].tobytes() == second[0].tobytes()
         assert first[1:] == second[1:]
     state, groups, zones = _spawn(12, 0.5, mode="legacy")
+    # Fresh origin/main baseline: ignore sub-nanounit libm differences, with a
+    # fixed byte order so this oracle is also independent of host endianness.
     assert (
-        hashlib.sha256(state.tobytes()).hexdigest()
-        == "5b97cae6653cbf7d2af25151391760a2eadf651c8e456cd9f7bb57cdc046a247"
+        hashlib.sha256(np.asarray(np.round(state, 9), dtype="<f8").tobytes()).hexdigest()
+        == "9c412e19f296ef15ef900db322eeba53754c6ecc9cd680ea31dcb50d50cfa7a6"
     )
     assert [sorted(g) for g in groups] == [[0], [1], [2], [3], [4, 5, 6], [7], [8], [9], [10], [11]]
     assert len(zones) == 12

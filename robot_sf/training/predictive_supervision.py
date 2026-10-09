@@ -126,6 +126,26 @@ def validate_supervision_metadata(
             "unmarked/legacy rows are not identity-corrected. "
             "Use --allow-legacy-supervision only to reproduce historical training."
         )
+    required = {"state", "target", "mask", "target_mask"}
+    missing = required - set(raw.files)
+    if missing:
+        raise ValueError(
+            f"Identity-corrected predictive dataset {path} requires explicit state, target, "
+            f"mask and target_mask; missing: {sorted(missing)}"
+        )
+    target = raw["target"]
+    state = raw["state"]
+    mask = raw["mask"]
+    target_mask = raw["target_mask"]
+    if (
+        state.ndim != 3
+        or target.ndim != 4
+        or target.shape[-1] != 2
+        or mask.shape != state.shape[:2]
+        or target.shape[:2] != state.shape[:2]
+        or target_mask.shape != target.shape[:3]
+    ):
+        raise ValueError(f"Malformed identity-corrected predictive supervision array shapes: {path}")
     expected = supervision_metadata(str(metadata.get("collector_id", "")))
     for key in (*CONTRACT_KEYS, "pedestrian_id_scope"):
         if metadata.get(key) != expected[key]:

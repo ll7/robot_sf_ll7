@@ -36,3 +36,5 @@ pedestrian calibration require separate evaluation on their eventual source.
 Keep frozen artifacts, release scenarios and released checkpoint metadata
 unchanged. New-policy checkpoint metadata must declare its actual action
 semantics; use acceleration for the previously trained failed checkpoints.
+
+The full candidate uses 15,032,320 aggregate transitions and 983,040-step selection intervals, both whole rollouts. This avoids SB3 rounding every segment upward while the schedule labels a smaller budget. The pilot remains exactly 983,040 transitions.

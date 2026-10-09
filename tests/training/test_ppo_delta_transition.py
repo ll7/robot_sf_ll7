@@ -47,9 +47,12 @@ def test_configured_delta_actions_apply_velocity_change():
 
 def test_recovery_recipes_load_disjoint_selection_manifest():
     """Campaign preflight must accept the authored pilot and full recipes."""
-    for name, expected_steps in [("pilot", 983040), ("15m", 15000000)]:
+    for name, expected_steps in [("pilot", 983040), ("15m", 15032320)]:
         recipe = load_expert_training_config(f"configs/training/ppo/dev_delta_recovery_{name}.yaml")
         assert recipe.total_timesteps == expected_steps
+        rollout_steps = recipe.num_envs * recipe.ppo_hyperparams["n_steps"]
+        assert recipe.total_timesteps % rollout_steps == 0
+        assert all(every % rollout_steps == 0 for _, every in recipe.evaluation.step_schedule)
         pool = set(recipe.scenario_sampling["episode_seed_pool"])
         selection = set(recipe.evaluation.evaluation_seeds)
         assert len(pool) == 20

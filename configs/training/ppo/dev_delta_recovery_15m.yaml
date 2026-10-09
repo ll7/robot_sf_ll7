@@ -5,7 +5,7 @@ policy_id: ppo_dev_delta_recovery_15m
 scenario_config: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
 seeds: [1001]
 randomize_seeds: false
-total_timesteps: 15000000
+total_timesteps: 15032320
 num_envs: 20
 worker_mode: subproc
 ppo_hyperparams:
@@ -39,7 +39,7 @@ evaluation:
   evaluation_episodes: 480
   randomize_seeds: false
   step_schedule:
-    - every_steps: 1000000
+    - every_steps: 983040
   full_policy_analysis_on_new_best: false
   full_policy_analysis_videos: false
 tracking:

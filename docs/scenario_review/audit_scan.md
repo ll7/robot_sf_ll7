@@ -98,7 +98,8 @@ An unassignable rejected observation appears under `unassigned` and conservative
 gates every cell because its relevance cannot be ruled out. Assigned losses in
 other compatibility cells do not contaminate complete cells. Direct detector calls
 also check raw cohort admission; the scan supplies its authoritative counts through
-the optional `detect(..., cohort_dropped_counts=...)` argument.
+ the optional `detect(..., cohort_dropped_counts=...)` argument.
+ Release rows must be scanned through the release adapter (raw rows fail closed on config_identity aliases).
 Planner/scenario incidence and shift channels also require one row per seed per
 planner and identical seed sets across planners, even without a manifest. Repeated,
 absent, missing or different seeds return `unavailable / cohort_seed_coverage_incomplete`
@@ -147,6 +148,11 @@ Within-outcome outliers are accompanied by independent default channels:
   or equating planner-specific config hashes. Outcomes, intended planner behavior
   and different configurations can explain the differences; no causal inference
   follows. With no external control it stays unavailable.
+   Operating point for `planner_cohort_shift`: reliable for shifts of about
+   1.5 per-episode SD or more at 30 paired seeds; observed null
+   false-positive rate about 0 (conservative by design: every-peer
+   requirement + Bonferroni). The power table is in the review report
+   referenced by the issue.
 - `horizon_consistency` validates every recorded `steps` / `episode_steps` alias
   at row, metrics and operational-metrics paths; conflicting counts flag with
   `conflicting_recorded_step_counts`. More than one independently recorded terminal

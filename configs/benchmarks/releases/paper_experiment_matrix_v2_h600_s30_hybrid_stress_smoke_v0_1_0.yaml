@@ -1,0 +1,310 @@
+schema_version: benchmark-release-manifest.v0.1
+benchmark_protocol_version: 0.1.0
+release_id: paper_matrix_v2_h600_hybrid_stress_smoke_v0_1_0
+release_tag: paper-matrix-v2-h600-hybrid-stress-smoke-v0.1.0
+maturity: diagnostic
+release_kind: benchmark-stress-smoke
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_hybrid_stress_smoke_v0_1_0.yaml
+campaign_config_sha256: db937ad9a5b3b1e5ede73656836405365e0eee5091501bafe13c748655bbfbd8
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: diagnostic-stress-no-ranking
+scenario:
+  matrix_path: ../../scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke_v0_1_0.yaml
+  matrix_sha256: f4b29da941435e397d1c913b0ade8b395ff9431c7f96787ff5c27b016f47a8f0
+  suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
+  suite_policy_sha256: b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395
+  route_certification_path: ../route_clearance_certifications_v1.yaml
+  route_certification_sha256: 8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+  seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+metrics:
+  snqi_claim_policy: advisory_no_ranking
+  snqi_v2_binding:
+    weights:
+      path: ../snqi_v2/weights.v2.0.json
+      sha256: 684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25
+    anchors:
+      path: ../snqi_v2/anchors.v2.0.json
+      sha256: bb1a526c818efca16c6d4237127c27dc7812947758f78a18c8f1d28c2a65fa4c
+    family:
+      path: ../snqi_v2/family.v2.0.yaml
+      sha256: 6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942
+    acquisition_config:
+      path: ../snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml
+      sha256: fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3
+planners:
+  keys:
+  - prediction_planner
+  - goal
+  - social_force
+  - orca
+  - ppo
+  - socnav_sampling
+  - sacadrl
+  - scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+  - scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+  - hybrid_rule_v4_fast_progress_static_escape
+  - hybrid_rule_v4_fast_progress_static_escape_continuous
+  - guarded_ppo
+  - predictive_mppi
+  - risk_dwa
+  groups:
+    prediction_planner: experimental
+    goal: core
+    social_force: core
+    orca: core
+    ppo: experimental
+    socnav_sampling: experimental
+    sacadrl: experimental
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard_v4: experimental
+    hybrid_rule_v4_fast_progress_static_escape: experimental
+    hybrid_rule_v4_fast_progress_static_escape_continuous: experimental
+    guarded_ppo: experimental
+    predictive_mppi: experimental
+    risk_dwa: experimental
+kinematics:
+  matrix:
+  - differential_drive
+matrix:
+  planner_arms: 14
+  scenarios: 5
+  seeds: 1
+  expected_episode_cells: 70
+  horizon_steps: 600
+  dt: 0.1
+  scenario_horizons: ../horizon_schedules/release_0_0_8_authored_v1.yaml
+  scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
+stress_smoke_contract:
+  schema_version: hybrid-release-stress-smoke.v1
+  review_base_commit: dada635b40c32d72219229c807c9bd0fe215b3e9
+  source_commit_policy: exact-immutable-worktree-sha-required
+  expected_episode_cells: 70
+  expected_horizon_steps: 600
+  expected_dt: 0.1
+  expected_kinematics: differential_drive
+  required_hybrid_arms:
+  - scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+  - scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+  - hybrid_rule_v4_fast_progress_static_escape
+  - hybrid_rule_v4_fast_progress_static_escape_continuous
+  branch_witnesses:
+  - kind: scenario_cell
+    arm: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+    scenario: francis2023_leave_group
+    algorithm: orca
+    branch_key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4|francis2023_leave_group|orca
+    config_path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml
+    config_sha256: 28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458
+  - kind: scenario_cell
+    arm: scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+    scenario: francis2023_leave_group
+    algorithm: orca
+    branch_key: scenario_adaptive_hybrid_orca_v2_collision_guard_v4|francis2023_leave_group|orca
+    config_path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml
+    config_sha256: 54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94
+  forbidden_row_markers:
+  - fallback
+  - degraded
+  - unavailable
+  - failed
+  forbidden_runtime_markers:
+  - selected_source=all_candidates_rejected
+  - selected_source=static_reorient
+  - planner_mode=EMERGENCY_STOP
+  - planner_mode=REORIENT
+  - fallback_count>0
+  - emergency_stop_count>0
+  fail_closed: true
+  historical_sources:
+  - issue7742/job14730
+  - issue4365/job13376-original
+  - issue4365/job13378-original
+  representative_cells:
+  - scenario_id: classic_urban_crossing_medium
+    seed: 1001
+    mechanism: urban-crossing
+  - scenario_id: classic_cross_trap_high
+    seed: 1001
+    mechanism: cross-trap
+  - scenario_id: classic_doorway_high
+    seed: 1001
+    mechanism: doorway
+  - scenario_id: francis2023_exiting_elevator
+    seed: 1001
+    mechanism: elevator-exit
+  - scenario_id: francis2023_robot_crowding
+    seed: 1001
+    mechanism: robot-crowding
+  pinned_assets:
+    seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+    seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    route_certification_path: ../route_clearance_certifications_v1.yaml
+    route_certification_sha256: 8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a
+  scenario_sources:
+  - path: ../../scenarios/archetypes/classic_bottleneck.yaml
+    sha256: 74882625aaa863ef6e9d4e9a57f7709e00c57d483344f91025ce79c8b91017ac
+  - path: ../../scenarios/archetypes/classic_cross_trap.yaml
+    sha256: 2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060
+  - path: ../../scenarios/archetypes/classic_doorway.yaml
+    sha256: 2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0
+  - path: ../../scenarios/archetypes/classic_group_crossing.yaml
+    sha256: 370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8
+  - path: ../../scenarios/archetypes/classic_head_on_corridor.yaml
+    sha256: e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8
+  - path: ../../scenarios/archetypes/classic_merging.yaml
+    sha256: eb1c80372a6c0d96fdfe36d5523980bb5461475abbca8db0d7f8a04b0cfd9023
+  - path: ../../scenarios/archetypes/classic_overtaking.yaml
+    sha256: fdd789f19e833039cee0bd4f5fceeb2f273dedb9925c58f41b26246cdfee9f74
+  - path: ../../scenarios/archetypes/classic_realworld_bottleneck.yaml
+    sha256: b6210d3a11fd2270ae1e8729b1d4e5b9045cc5e036249f822f4b34ea445fee34
+  - path: ../../scenarios/archetypes/classic_station_platform.yaml
+    sha256: 7f093fdb6406f4043e07b4a8d4113defd4cb17ec4bc793bf3583f12960b77228
+  - path: ../../scenarios/archetypes/classic_t_intersection.yaml
+    sha256: 97d7f9a95c57ac58814df6271d518aec84d4233fb027c1ca397250b06b0fecde
+  - path: ../../scenarios/archetypes/classic_urban_crossing.yaml
+    sha256: ea65d720fd8765bb725fedba0f50ccc9bbd1e609aa24a80c8ad9711666550161
+  - path: ../../scenarios/classic_interactions.yaml
+    sha256: 5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5
+  - path: ../../scenarios/classic_interactions_francis2023.yaml
+    sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  - path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml
+    sha256: 8a8aa9adb2b098f039a3e92a4849e16eb8d3665e928211f08e0c689584c9f389
+  - path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
+    sha256: 03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c
+  - path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml
+    sha256: 288167cafd18c6ec2c3835fe794ede9a4a1aeb9416ae17a129a64da0ac830419
+  - path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml
+    sha256: e2a3dd66c02f05ed3b82c0960fecd31ac62f6ed47bc60f9ef254002c07130162
+  - path: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+    sha256: af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f
+  - path: ../../scenarios/francis2023.yaml
+    sha256: f60ccf7235d1c965e2d1989ae157024734366d0ed6f4db5acdc83127f0325f56
+  - path: ../../scenarios/single/francis2023_accompanying_peer.yaml
+    sha256: c5c1dc3d171e0defdce2916dc28213bf16220e98dd31657f7fab1e79cfcad4f9
+  - path: ../../scenarios/single/francis2023_blind_corner.yaml
+    sha256: 5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb
+  - path: ../../scenarios/single/francis2023_circular_crossing.yaml
+    sha256: 58a627b73ed74510f339a9cc8a3614701a4c5d94e237b3f8554fbdab7fd52967
+  - path: ../../scenarios/single/francis2023_crowd_navigation.yaml
+    sha256: 84fcb9fb8b640f8340488b2baddc259778c7df3f0b3b8f1b182a9680b8167cef
+  - path: ../../scenarios/single/francis2023_down_path.yaml
+    sha256: 0aa47e6267475b391c80a7bf0afe0efcc02b128149cb2b9646238eabc5a8db6d
+  - path: ../../scenarios/single/francis2023_entering_elevator.yaml
+    sha256: d9b2abd060b66eaff0ac4f84a5309b03700f7cc6850a9b3338298354fa3b82fe
+  - path: ../../scenarios/single/francis2023_entering_room.yaml
+    sha256: 23d3a835d031007891b6ef71bca8262dbfc8ca7bfca49b8dff3343e12968da7a
+  - path: ../../scenarios/single/francis2023_exiting_elevator.yaml
+    sha256: d4b59fcc296e09352f5166fda1c03aea21caebcd78644539f738c50fe4e30a68
+  - path: ../../scenarios/single/francis2023_exiting_room.yaml
+    sha256: 0871fd8c769b342cd7f923c90d652ff96b9afa2c64fb6955f601689f35c6bfe6
+  - path: ../../scenarios/single/francis2023_following_human.yaml
+    sha256: 82aa88231fcbd1775703950f0a3d64f205235bab1ab9bfea0e170fb8e5616655
+  - path: ../../scenarios/single/francis2023_frontal_approach.yaml
+    sha256: d2d5680764c487969d4c3a623b6ace3dd69918185d77004a0c3a4e76432cb5b0
+  - path: ../../scenarios/single/francis2023_intersection_no_gesture.yaml
+    sha256: 3e01b2173d2c5f567328af422c647fe931561ca0c1d7712a141cf0fdbbb7b4d7
+  - path: ../../scenarios/single/francis2023_intersection_proceed.yaml
+    sha256: a9a4ec7c49d1121a319a3c7c85936d1caec30de181a2f785d6860a8e2615df7b
+  - path: ../../scenarios/single/francis2023_intersection_wait.yaml
+    sha256: 608fc06727c57731febd214a9c84a3839b799701f53eaaf3d6cd9e329648ba75
+  - path: ../../scenarios/single/francis2023_join_group.yaml
+    sha256: a1139933e4acf2b6066fe0a9d66c7e69e58ea6596ead7df92dd65e61bc15a208
+  - path: ../../scenarios/single/francis2023_leading_human.yaml
+    sha256: a30b54b4677086968d10742edba95db4f1ba7157e39329c5244b562f0658d7b8
+  - path: ../../scenarios/single/francis2023_leave_group.yaml
+    sha256: 4427dc9f9afa38a9ae76254d9ec8dbdb44706da4fccec8c93f1bb0c8e8f6cb43
+  - path: ../../scenarios/single/francis2023_narrow_doorway.yaml
+    sha256: d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671
+  - path: ../../scenarios/single/francis2023_narrow_hallway.yaml
+    sha256: 94662d62415766f229b8b80d09d3eea59d71977add85bd58728be47f6939f984
+  - path: ../../scenarios/single/francis2023_parallel_traffic.yaml
+    sha256: 51ab362a25e38ad20726ff50208d5fbe5e01331cbd55c5889591df40c8f9a387
+  - path: ../../scenarios/single/francis2023_pedestrian_obstruction.yaml
+    sha256: b76535a0060a6c4ebd9dfa4170b61621c0459fce7d0228c734c08a04059847be
+  - path: ../../scenarios/single/francis2023_pedestrian_overtaking.yaml
+    sha256: f009319422d3602d918a1677d9c7efaa1377036650e6c472175d1ad271e4e0d5
+  - path: ../../scenarios/single/francis2023_perpendicular_traffic.yaml
+    sha256: cd9dab418641d5a1dc5e0755ab405ed15f8d3e1a0858a0729c3317026f63aa8f
+  - path: ../../scenarios/single/francis2023_robot_crowding.yaml
+    sha256: a6da0946bbdae3d5818efb15d7148d313252e8ff477f1bbeaa88097520223de7
+  - path: ../../scenarios/single/francis2023_robot_overtaking.yaml
+    sha256: 92f6dadfa4ce7aba13d6f0506e6d4d189fedc2c9fb2ba8a6cde07bd12f8b17dc
+  hybrid_configs:
+  - planner_key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+    path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458
+  - planner_key: scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+    path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94
+  - planner_key: hybrid_rule_v4_fast_progress_static_escape
+    path: ../../policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811
+  - planner_key: hybrid_rule_v4_fast_progress_static_escape_continuous
+    path: ../../policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888
+  evidence_class: diagnostic-runtime-stress-smoke
+  target_release_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml
+  target_release_config_sha256: de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5
+  effective_horizon_steps:
+    classic_urban_crossing_medium: 600
+    classic_cross_trap_high: 600
+    classic_doorway_high: 500
+    francis2023_exiting_elevator: 400
+    francis2023_robot_crowding: 400
+  diagnostic_algorithm_differences: []
+  algorithm_sources:
+  - path: ../../algos/hybrid_rule_v4_clearance_braking.yaml
+    sha256: 5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab
+  - path: ../../algos/issue707_orca_tuned.yaml
+    sha256: 47774774e20614d5fcb65576dcf7762f252ecc851c2c294c8e8aa488e390d634
+  - path: ../../policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888
+  - path: ../../policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811
+  - path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458
+  - path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml
+    sha256: 54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94
+  map_sources:
+  - path: ../../../maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg
+    sha256: 8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f
+  - path: ../../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+    sha256: d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8
+  - path: ../../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+    sha256: 81f9bba890418075d0801b4463bef4c2f72a812dd81ab4d3d4d1900e16827897
+  - path: ../../../maps/successor_svg_maps/issue_9762_classic_urban_crossing_goal_zone_entry_v2.svg
+    sha256: 2c64b74d6b2da4b9e53e0a0247e8cebbdcac33cb822c6aa0e821b8bf281035af
+  - path: ../../../maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg
+    sha256: 4d176eca64ea8528f5eabd9df4e0314a4a3b0b7ba615736933cd3a5697d3eb1d
+artifacts:
+  required_paths:
+  - campaign_manifest.json
+  - manifest.json
+  - run_meta.json
+  - preflight/validate_config.json
+  - preflight/preview_scenarios.json
+  - reports/campaign_summary.json
+  - reports/campaign_report.md
+  - reports/matrix_summary.json
+  - reports/campaign_table.md
+  - reports/snqi_diagnostics.json
+claim_boundary:
+  evidence_class: diagnostic-runtime-stress-smoke
+  benchmark_data_release: false
+  software_release: false
+  snqi: advisory-no-ranking
+  fallback_or_degraded_evidence: prohibited
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: 10.5281/zenodo.<stress-smoke-not-published>
+  source_commit_policy: exact-immutable-worktree-sha-required
+  review_base_commit: dada635b40c32d72219229c807c9bd0fe215b3e9
+  result_policy: require-one-exact-source-sha
+  publication_authorized: false
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../docs/RELEASE.md

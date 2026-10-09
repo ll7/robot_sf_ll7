@@ -153,3 +153,39 @@ campaign root even on a non-zero exit so a rejected smoke remains auditable.
 - A code/config correction always requires a new immutable source SHA, fresh
   checkpoint receipt, fresh smoke id, and a rerun of this contract before the
   20,160-cell campaign.
+
+## 0.1.0 successor on main
+
+The versioned [campaign](../configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke_v0_1_0.yaml),
+[scenario set](../configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke_v0_1_0.yaml),
+and [manifest](../configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1_0.yaml)
+target the authored 0.0.8 release inputs for diagnostic validation on main. They
+include the release scenario matrix, then select the original five identities;
+they do not independently include historical single-scenario definitions.
+The loader equality regression compares the complete effective definitions,
+including successor maps, nested overrides and `wrapped_v2`.
+
+The reviewed roster retains all 14 target release arms and their algorithm paths.
+The four hybrid arms are `scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4`,
+`scenario_adaptive_hybrid_orca_v2_collision_guard_v4`,
+`hybrid_rule_v4_fast_progress_static_escape`, and
+`hybrid_rule_v4_fast_progress_static_escape_continuous`. Each uses the target's
+existing frozen config. There are **no diagnostic algorithm differences**.
+Effective-config tests cover all target scenarios, including the two adaptive
+arms' `francis2023_leave_group` ORCA branches. Manifest branch witnesses, include
+lineage, selected map bytes and nested algorithm bases are pinned together.
+
+The axes are five scenarios × 14 arms × dev seed **1001**, differential drive,
+`dt=0.1`, four workers, and 70 diagnostic cells. The H600 name denotes the maximum
+budget: the release's authored schedule preserves 600 steps for urban crossing
+and cross trap, 500 for doorway, and 400 for elevator exit and robot crowding.
+Protocol `0.1.0` declares that schedule explicitly, without a fixed-horizon
+simulator override. Target SNQI-v2 assets are retained, legacy SNQI is disabled,
+and all scoring remains advisory with no ranking claim.
+
+The claim boundary remains diagnostic runtime compatibility and fail-closed
+recovery evidence. This successor does not authorize publication, full-release
+performance claims, rankings, or inference of v4 coverage from legacy results.
+Historical stress files, 0.0.2/0.0.7 artifacts, 0.0.8 release inputs and frozen
+algorithm files remain unchanged. No campaign is required to validate the input
+contract; use preflight on seed 1001 before any separately authorized run.

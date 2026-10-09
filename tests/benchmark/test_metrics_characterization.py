@@ -495,3 +495,30 @@ def test_compute_all_metrics_opt_in_keys_absent_by_default() -> None:
     assert "ped_impact_accel_delta_mean" not in values
     assert "human_proxy_available" not in values
     assert "near_misses_ttc" not in values
+
+
+def test_path_motion_metrics_on_straight_line() -> None:
+    """Pin path/energy/jerk/curvature/efficiency values on a unit straight-line episode."""
+    data = _straight_line_episode()
+    assert path_length(data) == pytest.approx(3.0)
+    assert avg_speed(data) == pytest.approx(1.0)
+    assert energy(data) == pytest.approx(0.0)  # zero acceleration
+    assert jerk_mean(data) == pytest.approx(0.0)
+    assert curvature_mean(data) == pytest.approx(0.0)
+    assert path_efficiency(data, 3.0) == pytest.approx(1.0)
+    assert socnavbench_path_length(data) == pytest.approx(3.0)
+
+
+def test_force_quantiles_and_mean_on_known_magnitude() -> None:
+    """Single sample of magnitude 5 (3-4-5 force vector) at all quantiles/mean."""
+    forces = np.array([[[3.0, 4.0]]])  # ||(3,4)|| = 5
+    data = _episode(robot_pos=np.zeros((1, 2)), peds_pos=np.zeros((1, 1, 2)), ped_forces=forces)
+    assert has_force_data(data) is True
+    q = force_quantiles(data)
+    assert q["force_q50"] == pytest.approx(5.0)
+    assert q["force_q90"] == pytest.approx(5.0)
+    assert q["force_q95"] == pytest.approx(5.0)
+    assert ped_force_mean(data) == pytest.approx(5.0)
+    # comfort threshold default 2.0 -> 1 exceed event over 1 (t,k) sample.
+    assert force_exceed_events(data) == pytest.approx(1.0)
+    assert comfort_exposure(data) == pytest.approx(1.0)

@@ -1,8 +1,10 @@
 """Small manifest-bound release-drift alarms; never run release episodes here.
 
-The synthetic numbers come from tests at freeze source 66f402ba, not acquisition
+The synthetic numbers come from tests at historical F2 source 66f402ba, not acquisition
 receipts. They keep a few absolute checks alongside paired tests, which cannot
 notice shared drift. Rebaseline only at a release and record the moving commit.
+The 0.0.8 F3 freeze is 373dbfde4f39667cf9e8732dabe7df5118bdeab1.
+Any manifest byte change intentionally invalidates every sentinel association.
 Existing release evidence and historical scoring/replay tests remain untouched.
 """
 

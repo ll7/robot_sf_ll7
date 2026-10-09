@@ -13,8 +13,8 @@ A decimal literal is not by itself a saved physics result.
 | --- | --- |
 | `test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle` (5 cases) | Moving-main native episodes: replace the saved IDs, steps, speeds and progress counts with same-commit paired execution. All five original config/planner/dev-seed combinations remain. |
 | `test_metrics_characterization.py::test_mean_distance_and_clearance_average_min_per_step` | Synthetic nearest-distance arithmetic: replace with far-pedestrian invariance and a controlled nearest-pedestrian displacement, independently deriving min/mean deltas. |
-| `test_metrics_characterization.py::test_path_motion_metrics_on_straight_line`, `test_path_motion_metrics_on_curved_nonuniform_trajectory` | Synthetic motion goldens: replace with positive nonzero unit-scaling controls, detour direction checks, and translation/rotation invariants (also for separation/radii). Four small absolute values survive in the release sentinel fixture. |
-| `test_metrics_characterization.py::test_force_quantiles_and_mean_on_known_magnitude` | Synthetic force magnitude: replace with independent scaling and rotation controls for q50/q90/q95 and mean. |
+| `test_metrics_characterization.py::test_path_motion_metrics_on_straight_line`, `test_path_motion_metrics_on_curved_nonuniform_trajectory` | Retain the hand-derived straight-line definition (path = 3, speed = 1, energy/jerk/curvature = 0, efficiency = 1). Replace bent-trajectory literals with nonzero unit-scaling controls, detour checks and rigid-frame invariants. Four absolute motion values also survive in the release sentinel fixture. |
+| `test_metrics_characterization.py::test_force_quantiles_and_mean_on_known_magnitude` | Independent hand-calculated definition: retain the 3-4-5 vector, all quantiles and mean = 5, exceed and comfort = 1. Add scaling and rotation controls alongside it; homogeneous controls alone miss a constant multiplicative error. |
 | Remaining `test_metrics_characterization.py` cases | Keep discrete collision/near-miss boundaries, success/timeout semantics, one-sample/empty/NaN guards, per-ped aggregation arithmetic, independently calculated SNQI and stability boundaries. These assert definitions, not physics at a main commit. |
 | `test_curvature_v2.py::test_historical_v1_rows_keep_exact_values`; `test_fxm_metric_definitions.py`, `test_fxm2_metrics.py` | Keep historical schema dispatch and source-trace/reset/goal replay checks. These protect old-number recomputation and defect-specific definitions. |
 | `test_metric_output_golden.py`, `test_metric_output_golden_surfaces.py` and `tests/fixtures/benchmark/golden/` | Keep end-to-end aggregate, summary, CSV/Markdown/LaTeX/Parquet serialization contracts on four fixed input records. They consume static episodes; simulator changes cannot rebaseline them. Never blessed in this task. |
@@ -44,8 +44,9 @@ physics or scorer drift. It is not a substitute for absolute definition tests.
 ## Retained release drift alarm
 
 `tests/benchmark/fixtures/release_0_0_8_metric_sentinels.json` retains four small
-synthetic values already present in `test_metrics_characterization.py` at freeze
-source `66f402ba`: straight path length and average speed, bent jerk and v2
+synthetic values already present in `test_metrics_characterization.py` at the historical F2 source
+`66f402ba` (not the 0.0.8 F3 freeze, which is
+`373dbfde4f39667cf9e8732dabe7df5118bdeab1`): straight path length and average speed, bent jerk and v2
 curvature. Its source commit, concrete three-width 0.0.8 manifest path and SHA256,
 metric schema and tolerance are explicit. The manifest bytes were checked equal
 to the freeze-source blob before creating the fixture. Tests read that manifest;
@@ -81,3 +82,11 @@ leaves all five native pairs green while failing the release-pinned speed alarm.
 Final pristine selection: 75 passed; focused integration: 148 passed. Ruff and
 diff whitespace checks passed. Exact commands, mutations, failure excerpts and
 source/test digests are in [the receipt](issue_10089_metric_oracle_mutations.json).
+
+Review follow-up: #10260 tracks the reported hosted/local native-episode drift and the sealed ledger's stale enforcement reference. Paired comparisons and synthetic definitions cannot detect all native physics drift.
+
+Review-fix validation (2026-10-09): the restored force definition rejects a temporary
+`ped_force_mean` multiplier of 2 (10 versus expected 5; one assertion failure).
+After byte-for-byte restoration, the three changed test files pass 90 cases;
+`tests/unit` passes 854 cases with four workers. The local PR contract passes.
+This supplements the original mutation receipt, whose bytes remain unchanged.

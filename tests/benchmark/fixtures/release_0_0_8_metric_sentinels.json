@@ -1,5 +1,5 @@
 {
-  "description": "Small synthetic metric sentinels retained from the 0.0.8 freeze source; these are not acquired release episode numbers. Update only at a release, recording previous and moving source commits.",
+  "description": "Small synthetic metric sentinels retained from historical F2 source 66f402ba; the 0.0.8 F3 freeze is 373dbfde4f39667cf9e8732dabe7df5118bdeab1; these are not acquired release episode numbers. Update only at a release, recording previous and moving source commits.",
   "source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
   "manifest_path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml",
   "manifest_sha256": "1d71f06d1203d287d5955004db87a481918758f9c23af756ca7bfea7958700e9",

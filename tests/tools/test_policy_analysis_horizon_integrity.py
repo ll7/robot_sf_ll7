@@ -7,14 +7,15 @@ from scripts.tools import policy_analysis_run as analysis
 
 
 @pytest.mark.parametrize("planner", ["ppo", "goal", "orca"])
-@pytest.mark.parametrize("terminal", ["collision", "success"])
+@pytest.mark.parametrize("terminal", ["collision", "success", "timeout"])
 def test_horizon_preserves_terminal_event(monkeypatch, planner, terminal):
     """The real record assembler emits exactly one outcome at the last step."""
     collision = terminal == "collision"
+    success = terminal == "success"
     monkeypatch.setattr(
         analysis,
         "compute_all_metrics",
-        lambda *a, **kw: {"success": float(not collision), "collisions": float(collision)},
+        lambda *a, **kw: {"success": float(success), "collisions": float(collision)},
     )
     monkeypatch.setattr(analysis, "post_process_metrics", lambda metrics, **kw: metrics)
     monkeypatch.setattr(analysis, "sample_obstacle_points", lambda *a: None)
@@ -32,7 +33,7 @@ def test_horizon_preserves_terminal_event(monkeypatch, planner, terminal):
         map_def=map_def,
         goal_vec=np.array([1.0, 0.0]),
         trajectory=trajectory,
-        reached_goal_step=None if collision else 1,
+        reached_goal_step=1 if success else None,
         wall_time=1.0,
         max_steps=1,
         dt=0.1,
@@ -41,18 +42,18 @@ def test_horizon_preserves_terminal_event(monkeypatch, planner, terminal):
         ped_radius=0.3,
         ts_start="2026-10-09T00:00:00+00:00",
         video_path=None,
-        terminated=True,
-        truncated=False,
+        terminated=terminal != "timeout",
+        truncated=terminal == "timeout",
         reached_max_steps=True,
         last_info={
             "meta": {
                 "is_obstacle_collision": collision,
-                "is_route_complete": not collision,
+                "is_route_complete": success,
                 "is_timesteps_exceeded": True,
             }
         },
     )
     assert record["termination_reason"] == terminal
-    assert record["outcome"]["timeout_event"] is False
+    assert record["outcome"]["timeout_event"] is (terminal == "timeout")
     assert record["outcome"]["collision_event"] is collision
-    assert record["outcome"]["route_complete"] is (not collision)
+    assert record["outcome"]["route_complete"] is success

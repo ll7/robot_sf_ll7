@@ -145,7 +145,9 @@ def validate_supervision_metadata(
         or target.shape[:2] != state.shape[:2]
         or target_mask.shape != target.shape[:3]
     ):
-        raise ValueError(f"Malformed identity-corrected predictive supervision array shapes: {path}")
+        raise ValueError(
+            f"Malformed identity-corrected predictive supervision array shapes: {path}"
+        )
     expected = supervision_metadata(str(metadata.get("collector_id", "")))
     for key in (*CONTRACT_KEYS, "pedestrian_id_scope"):
         if metadata.get(key) != expected[key]:

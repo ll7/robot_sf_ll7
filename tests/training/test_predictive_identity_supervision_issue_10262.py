@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -21,6 +21,9 @@ from scripts.training import build_predictive_mixed_dataset as mixed_builder
 from scripts.training import collect_predictive_hardcase_data as hardcase
 from scripts.training import collect_predictive_planner_data as base
 from scripts.training import train_predictive_planner as trainer
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture(params=[base, hardcase], ids=["base", "hardcase"])

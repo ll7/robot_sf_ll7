@@ -19,6 +19,35 @@ For the full concept + architecture + implementation walkthrough, see:
 - Model training and checkpoint selection
 - Hard-seed diagnostics and campaign evaluation
 
+## Identity-supervision admission (#10262, prerequisite for #10033)
+
+- The legacy nearest-neighbor predictive collectors **do not preserve person identity**
+  during crossings. Their previous v1 datasets remain immutable and **must not be
+  described as identity-corrected**.
+- Both collectors now take an *oracle-side*, observation-aligned simulator source-slot
+  mapping from `SocNavObservationFusion.current_source_indices`. This is distinct from
+  the optional observation-derived tracker and does not change planner-facing features.
+  IDs are namespaced per reset episode. The target join uses those IDs only; absent
+  identities have `target_mask=0` instead of borrowing another pedestrian’s target.
+  Collection fails closed if that mapping is missing or invalid. Observation memory
+  extrapolations must be disabled for identity-supervised collection.
+- The new datasets embed `supervision_metadata_json`, including
+  `dataset_schema=predictive_planner_dataset_v2_identity`, collector ID/version,
+  `matching_method=episode_scoped_simulator_source_slot`, identity source, and
+  `velocity_coordinate_frame=robot_ego_xy_rotation_only`. NPZ manifests and summaries
+  retain the same contract; pedestrian velocities are already rotated into ego axes
+  by SOCNAV, not additionally rotated by either collector.
+- The mixed builder rejects any unmarked/corrected mixture. Training and model
+  registration reject unmarked or incompatible supervision by default. The explicit
+  `--allow-legacy-supervision` option is solely for reproducing historical, unverified
+  data/training; it never allows legacy rows mixed with corrected rows.
+- Outputs default to separate `_identity_v2.npz` filenames and refuse replacing an
+  existing NPZ; do not overwrite archived datasets or checkpoints.
+- **Hold retraining under #10033** until both collectors pass the crossing,
+  reordering, disappearance/reappearance, reset, source-index and mixed-provenance
+  regression tests, and the expected collector/manifest evidence is reviewed.
+  None of these fixes by themselves establishes a planner or model improvement.
+
 ## Prerequisites
 
 - `uv sync --all-extras`
@@ -98,7 +127,7 @@ Base rollout data:
 ```bash
 uv run python scripts/training/collect_predictive_planner_data.py \
   --episodes 200 \
-  --output output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz
+  --output output/tmp/predictive_planner/datasets/predictive_rollouts_full_identity_v2.npz
 ```
 
 Hard-case-focused data:
@@ -107,23 +136,23 @@ Hard-case-focused data:
 uv run python scripts/training/collect_predictive_hardcase_data.py \
   --scenario-matrix configs/scenarios/classic_interactions.yaml \
   --seed-manifest configs/benchmarks/predictive_hard_seeds_v1.yaml \
-  --output output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_v1.npz
+  --output output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_identity_v2.npz
 ```
 
 Mixed dataset:
 
 ```bash
 uv run python scripts/training/build_predictive_mixed_dataset.py \
-  --base-dataset output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz \
-  --hardcase-dataset output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_v1.npz \
-  --output output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz
+  --base-dataset output/tmp/predictive_planner/datasets/predictive_rollouts_full_identity_v2.npz \
+  --hardcase-dataset output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_identity_v2.npz \
+  --output output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_identity_v2.npz
 ```
 
 ## 2) Train predictive model
 
 ```bash
 uv run python scripts/training/train_predictive_planner.py \
-  --dataset output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz \
+  --dataset output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_identity_v2.npz \
   --output-dir output/tmp/predictive_planner/training/predictive_proxy_selected_v2 \
   --select-by-proxy \
   --proxy-scenario-matrix configs/scenarios/classic_interactions.yaml \

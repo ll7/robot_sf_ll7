@@ -8105,3 +8105,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10233_pinned_numerical_mode
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

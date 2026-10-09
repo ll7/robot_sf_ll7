@@ -20,6 +20,7 @@ def _frame(
     goal_current: tuple[float, float] = (1.0, 0.0),
     ped_positions: list[tuple[float, float]] | None = None,
     ped_velocities: list[tuple[float, float]] | None = None,
+    ped_ids: tuple[str, ...] | None = None,
 ) -> collect.Frame:
     """Build one rollout frame for predictive-planner dataset tests."""
     positions_source = [(1.0, 0.0)] if ped_positions is None else ped_positions
@@ -43,6 +44,11 @@ def _frame(
         ped_positions_world=positions,
         ped_velocities_ego=velocities,
         ped_count=int(positions.shape[0]),
+        ped_ids=(
+            ped_ids
+            if ped_ids is not None
+            else tuple(f"episode-0:slot-{i}" for i in range(positions.shape[0]))
+        ),
     )
 
 
@@ -59,7 +65,7 @@ def test_extract_frame_reads_robot_velocity_xy_and_goal_from_flat_observation() 
         "pedestrians_count": [2],
     }
 
-    frame = collect._extract_frame(obs, max_agents=4)
+    frame = collect._extract_frame(obs, max_agents=4, ped_ids=("episode-0:slot-0", "episode-0:slot-1"))
 
     assert np.allclose(frame.robot_pos, np.array([1.0, 2.0], dtype=np.float32))
     assert frame.robot_heading == 0.5

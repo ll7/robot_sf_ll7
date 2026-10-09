@@ -36,19 +36,25 @@ def _frame(
     collector,
     positions: list[tuple[float, float]],
     ids: tuple[str, ...],
+    *,
+    robot_heading: float = 0.0,
+    pedestrian_velocity_ego: tuple[float, float] = (0.0, 0.0),
 ):
     """Produce a real collector Frame from the supported nested SOCNAV payload."""
     obs = {
         "robot": {
             "position": [0.0, 0.0],
-            "heading": [0.0],
+            "heading": [robot_heading],
             "speed": [0.0, 0.0],
             "velocity_xy": [0.0, 0.0],
         },
         "goal": {"current": [5.0, 0.0]},
         "pedestrians": {
             "positions": np.asarray(positions, dtype=np.float32).reshape(-1, 2),
-            "velocities": np.zeros((len(positions), 2), dtype=np.float32),
+            "velocities": np.broadcast_to(
+                np.asarray(pedestrian_velocity_ego, dtype=np.float32),
+                (len(positions), 2),
+            ).copy(),
             "count": np.asarray([len(positions)]),
         },
     }
@@ -84,6 +90,25 @@ def test_observation_reordering_does_not_permute_targets(collector) -> None:
     _, target, _, target_mask = _sample(collector, frames)
     np.testing.assert_allclose(target[0, :2, 0, 0], [0.7, 0.1])
     np.testing.assert_array_equal(target_mask[0, :2, 0], [1.0, 1.0])
+
+
+def test_pedestrian_velocity_is_already_ego_rotated(collector) -> None:
+    """The source velocity feature must not be rotated twice at nonzero robot heading."""
+    identity = "reset-1:A"
+    frames = [
+        _frame(
+            collector,
+            [(0.0, 1.0)],
+            (identity,),
+            robot_heading=float(np.pi / 2),
+            pedestrian_velocity_ego=(0.3, -0.2),
+        ),
+        _frame(collector, [(0.0, 2.0)], (identity,)),
+    ]
+    state, target, _, target_mask = _sample(collector, frames)
+    np.testing.assert_allclose(state[0, 0, 2:4], [0.3, -0.2])
+    np.testing.assert_allclose(target[0, 0, 0], [2.0, 0.0], atol=1e-6)
+    assert target_mask[0, 0, 0] == 1.0
 
 
 def test_missing_and_reappearing_identity_is_masked_not_stolen(collector) -> None:

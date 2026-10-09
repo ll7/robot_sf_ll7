@@ -47,6 +47,8 @@ accepting and discarding that new flag then delegates to the exact base guard:
 
 ```python
 original = runtime_seed_guard.check_simulation_seed
+
+
 def legacy_seed_policy(seed, *, boundary, authorization=None, dev_only=False):
     return original(seed, boundary=boundary, authorization=authorization)
 ```

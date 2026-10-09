@@ -257,6 +257,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Opt-in Footprint Metrics](./metrics/footprint_v1.md)** - Versioned contact geometry, force-input pairing and robot-sized references for 0.1.0, preserving released scalar definitions
 * **[Benchmark Scenario And Model Governance](./benchmark_governance.md)** - PR review contract for scenarios, metrics, model profiles, versioned schemas, release-bound evidence, and deprecated/superseded scenarios
 * **[Assurance Fragments](./assurance_fragments.md)** - Machine-readable claim-argument-evidence fragments for campaign artifacts, including release-gate to GSN argument-node mapping
 * **[Scenario Zoo Index](./scenario_zoo/index.md)** - Family-oriented scenario catalog with links to source configs, maps, benchmark surfaces, and caveats

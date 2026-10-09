@@ -63,6 +63,7 @@ from robot_sf.benchmark.constants import (
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
+from robot_sf.benchmark.footprint_metrics import compute_footprint_metrics, footprint_enabled
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
@@ -174,6 +175,10 @@ class EpisodeData:
     route_waypoints: np.ndarray | None = None
     # Sample cardinality declares presence independently of force validity.
     robot_force_presence: np.ndarray | None = None
+    obstacle_segments: np.ndarray | None = None
+    other_agents_radii: np.ndarray | None = None
+    footprint_reference_length: float | None = None
+    footprint_max_speed: float | None = None
 
 
 def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
@@ -3520,6 +3525,10 @@ def compute_all_metrics(  # noqa: PLR0913
             human_proxy_yield_speed_mps=human_proxy_yield_speed_mps,
         )
     )
+    if footprint_enabled(data.episode_metadata):
+        values["footprint_metrics"] = compute_footprint_metrics(
+            data, legacy_reference_length=shortest_path_len
+        )
     values["distributional_disruption"] = build_distributional_disruption_block(data, control_data)
     values["social_compliance"] = build_social_compliance_episode_block(
         data,

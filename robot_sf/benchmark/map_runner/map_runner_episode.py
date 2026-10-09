@@ -30,6 +30,12 @@ from robot_sf.benchmark.analysis_trace import (
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
+from robot_sf.benchmark.footprint_metrics import (
+    FOOTPRINT_MARKER,
+    FOOTPRINT_SCHEMA,
+    footprint_enabled,
+    snapshot_total_forces,
+)
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
 from robot_sf.benchmark.interaction_exposure import (
     InteractionExposureError,
@@ -726,6 +732,8 @@ def _episode_metadata_for_benchmark_metrics(
         Optional merged episode metadata for benchmark metrics.
     """
     episode_metadata = _episode_metadata_for_signal_metrics(scenario) or {}
+    if footprint_enabled(scenario.get("metadata")):
+        episode_metadata[FOOTPRINT_MARKER] = FOOTPRINT_SCHEMA
     group_specs = group_specs_from_map(map_def) if map_def is not None else []
     if group_specs:
         episode_metadata = deepcopy(episode_metadata)
@@ -1598,7 +1606,7 @@ class _MetadataFinalizationOptions:
     record_simulation_step_trace: bool
 
 
-def _compute_post_loop_metrics(  # noqa: PLR0913
+def _compute_post_loop_metrics(  # noqa: C901, PLR0913
     *,
     robot_positions: list[np.ndarray],
     initial_robot_pos: np.ndarray | None = None,
@@ -1765,6 +1773,22 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
                 if count != len(sample["peds_pos"]):
                     raise ValueError("robot force and input pedestrian cardinality differ")
                 ep.robot_force_presence[t, :count] = True
+        if footprint_enabled(ep.episode_metadata):
+            lines = np.asarray(map_def.obstacles_pysf if map_def else [], dtype=float).reshape(
+                -1, 4
+            )
+            ep.obstacle_segments = lines[:, [0, 2, 1, 3]].reshape(-1, 2, 2)
+            ep.footprint_reference_length = compute_completion_reference_length(
+                map_def,
+                initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
+                goal_vec,
+                goal_zone=goal_zone,
+                completion_policy=completion_policy,
+                scenario_id=str(scenario.get("name", "")),
+                seed=seed,
+                robot_radius=ep.robot_radius,
+            )
+            ep.footprint_max_speed = _robot_max_speed(config)
         metrics_raw = compute_all_metrics(
             ep,
             horizon=horizon_val,
@@ -2026,6 +2050,7 @@ class _StepLoopState:
     ped_positions: list[np.ndarray] = field(default_factory=list)
     ped_forces: list[np.ndarray] = field(default_factory=list)
     robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
+    force_input_robot_position: np.ndarray | None = None
     collision_events: list[dict[str, Any]] = field(default_factory=list)
     visibility_trace: list[np.ndarray | None] = field(default_factory=list)
     track_confidence_trace: list[np.ndarray | None] = field(default_factory=list)
@@ -2216,6 +2241,7 @@ class _StepLoopConfig:
     hybrid_source_field: str | None
     active_harness: Any
     collision_event_context: _CollisionEventContext
+    footprint_metrics: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -2908,6 +2934,10 @@ def _step_convert_and_execute(
         )
     if slc.active_harness is not None:
         slc.active_harness.end_cycle()
+    if slc.footprint_metrics:
+        state.force_input_robot_position = np.array(
+            env.simulator.robot_pos[0], dtype=float, copy=True
+        )
     obs, reward, terminated, truncated, info = env.step(action)
     state.obs = obs
     return (
@@ -2951,13 +2981,11 @@ def _step_snapshot_and_record(
     peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
     forces_arr: np.ndarray | None = None
     if slc.record_forces:
-        forces = getattr(env.simulator, "last_ped_forces", None)
-        if forces is None:
-            forces_arr = np.zeros_like(peds, dtype=float)
-        else:
-            forces_arr = np.array(forces, dtype=float, copy=True)
-            if forces_arr.shape != peds.shape:
-                forces_arr = np.zeros_like(peds, dtype=float)
+        forces_arr = snapshot_total_forces(
+            getattr(env.simulator, "last_ped_forces", None),
+            peds,
+            required=False,
+        )
     state.robot_positions.append(robot_pos)
     state.ped_positions.append(peds)
     if slc.record_forces and forces_arr is not None:
@@ -2968,7 +2996,20 @@ def _step_snapshot_and_record(
             component = np.array(component, dtype=float, copy=True)
             if component.shape != peds.shape:
                 raise ValueError("recorded robot force shape differs from pedestrian snapshot")
-            state.robot_force_samples.append({**inputs, "forces": component.tolist()})
+            sample = {**inputs, "forces": component.tolist()}
+            if slc.footprint_metrics:
+                if state.force_input_robot_position is None:
+                    raise ValueError("missing pre-integration robot pose for force sample")
+                sample.update(
+                    robot_pos=state.force_input_robot_position.tolist(),
+                    total_forces=snapshot_total_forces(
+                        getattr(env.simulator, "last_ped_forces", None),
+                        np.asarray(inputs["peds_pos"], dtype=float).reshape(-1, 2),
+                        required=True,
+                    ).tolist(),
+                    force_pairing="pre-integration-inputs.v1",
+                )
+            state.robot_force_samples.append(sample)
     heading = _observation_heading(obs, default=state.previous_trace_heading)
     state.robot_headings.append(float(heading))
     (
@@ -3694,6 +3735,7 @@ def _make_step_loop_config(  # noqa: PLR0913
     hybrid_source_field: str | None,
     active_harness: Any,
     collision_event_context: _CollisionEventContext,
+    footprint_metrics: bool = False,
 ) -> _StepLoopConfig:
     """Build the read-only step-loop configuration bundle.
 
@@ -3702,6 +3744,7 @@ def _make_step_loop_config(  # noqa: PLR0913
     """
     return _StepLoopConfig(
         config=config,
+        footprint_metrics=footprint_metrics,
         policy_fn=policy_fn,
         planner_native_action=planner_runtime.planner_native_action,
         noise_spec=noise.spec,
@@ -3859,6 +3902,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             hybrid_source_field=args.hybrid_source_field,
         )
         slc = _make_step_loop_config(
+            footprint_metrics=footprint_enabled((args.scenario or {}).get("metadata")),
             config=args.config,
             policy_fn=policy_fn,
             planner_runtime=args.planner_runtime,
@@ -4422,6 +4466,12 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 sampler_capture=sampler_capture,
             ),
         }
+        if footprint_enabled(scenario.get("metadata")):
+            algo_meta["simulation_step_trace"].update(
+                footprint_metric_schema_version=FOOTPRINT_SCHEMA,
+                robot_radius_m=reset_robot_radius_m,
+                ped_radius_m=reset_ped_radius_m,
+            )
         attach_pedestrian_control_trace(
             cast("dict[str, Any]", algo_meta),
             scenario=scenario,

@@ -77,6 +77,7 @@ from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility e
 )
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.event_ledger import validate_record_event_ledger
+from robot_sf.benchmark.footprint_metrics import footprint_enabled
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
@@ -110,8 +111,10 @@ from robot_sf.benchmark.utils import (
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import set_global_seed
 from robot_sf.planner.protocol import BaselineStepToLocalAdapter, normalize_planner_diagnostics
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.dynamics import RobotDynamicsState, UnicycleDynamics
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
+from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
 
@@ -281,6 +284,9 @@ def _scenario_robot_radius_m(scenario_params: dict[str, Any]) -> float:
         radius = _positive_float_or_default(value, float("nan"))
         if np.isfinite(radius):
             return radius
+
+    if footprint_enabled(scenario_params.get("metadata")):
+        return float(DifferentialDriveSettings().radius)
     return DEFAULT_BENCHMARK_ROBOT_RADIUS_M
 
 
@@ -302,6 +308,9 @@ def _scenario_ped_radius_m(scenario_params: dict[str, Any]) -> float:
         radius = _positive_float_or_default(value, float("nan"))
         if np.isfinite(radius):
             return radius
+
+    if footprint_enabled(scenario_params.get("metadata")):
+        return float(SimulationSettings().ped_radius)
     return DEFAULT_BENCHMARK_PED_RADIUS_M
 
 

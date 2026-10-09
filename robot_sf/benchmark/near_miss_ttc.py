@@ -60,6 +60,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.benchmark.footprint_metrics import contact_ttc_matrix, footprint_enabled
+
 # Reuse the canonical pedestrian-velocity primitive so this diagnostic does not
 # fork the finite-difference convention used by the benchmark metrics.
 from robot_sf.benchmark.metrics import _compute_ped_velocities
@@ -1141,6 +1143,9 @@ def compute_ttc_near_miss_diagnostic(
     # min over pedestrians ignores diverging/static pairs.
     ttc_matrix = np.full_like(d_mag, np.inf)
     ttc_matrix[valid] = d_mag[valid] / v_rel_mag[valid]
+    if footprint_enabled(data.episode_metadata):
+        ttc_matrix = contact_ttc_matrix(data)
+        base_result["near_miss_ttc__definition"] = "robot-sf-footprint.v1"
 
     # Closing speed along the line of approach (severity proxy), only where the
     # approach direction is numerically defined.

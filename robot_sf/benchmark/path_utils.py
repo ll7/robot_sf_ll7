@@ -13,6 +13,7 @@ from shapely import from_wkb
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
+from robot_sf.benchmark.footprint_metrics import require_radius
 from robot_sf.planner.classic_global_planner import (
     ClassicGlobalPlanner,
     ClassicPlannerConfig,
@@ -99,6 +100,8 @@ def _zone_reference_cached(
     zone_wkb: bytes,
     obstacles_wkb: bytes,
     bounds: tuple[float, float, float, float],
+    clip_obstacles: bool = True,
+    physical_contract: tuple[bytes, float] | None = None,
 ) -> float:
     """Exact polygonal robot-centre geodesic to a goal set, cached by reset identity.
 
@@ -111,16 +114,27 @@ def _zone_reference_cached(
         Shortest distance in metres, or NaN if the goal set is unreachable.
     """
     domain = box(*bounds)
-    obstacles = from_wkb(obstacles_wkb).intersection(domain)
+    obstacles = from_wkb(obstacles_wkb)
+    if clip_obstacles:
+        obstacles = obstacles.intersection(domain)
     zone = from_wkb(zone_wkb).intersection(domain).difference(obstacles)
     start_point = Point(start)
-    if zone.is_empty or not domain.covers(start_point) or obstacles.contains(start_point):
+    physical = from_wkb(physical_contract[0]) if physical_contract is not None else None
+    robot_radius = physical_contract[1] if physical_contract is not None else 0.0
+    blocked_start = (
+        start_point.distance(physical) <= robot_radius + 1e-10
+        if physical is not None and not physical.is_empty
+        else obstacles.contains(start_point)
+    )
+    if zone.is_empty or not domain.covers(start_point) or blocked_start:
         return float("nan")
     if zone.covers(start_point):
         return 0.0
     obstacle_parts = list(_polygon_parts(obstacles))
     goal_edges = []
     vertices = [start]
+    if zone.geom_type == "Point":
+        vertices.append(tuple(zone.coords[0]))
     for poly in [*obstacle_parts, *_polygon_parts(zone)]:
         for ring in [poly.exterior, *poly.interiors]:
             vertices.extend(tuple(p) for p in list(ring.coords)[:-1])
@@ -128,10 +142,33 @@ def _zone_reference_cached(
         for ring in [poly.exterior, *poly.interiors]:
             goal_edges.extend(LineString([a, b]) for a, b in pairwise(ring.coords))
     vertices = list(dict.fromkeys(vertices))
-    return _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domain)
+    return _shortest_visible_distance(
+        vertices,
+        goal_edges,
+        zone,
+        obstacle_parts,
+        domain,
+        physical=physical,
+        robot_radius=robot_radius,
+    )
 
 
-def _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domain) -> float:
+def _segment_is_clear(line, domain, obstacle_parts, physical, robot_radius) -> bool:
+    """Test a line against exact disc clearance, or the historical point geometry.
+
+    Returns:
+        Whether the line stays in the centre domain and outside solid geometry.
+    """
+    if not domain.covers(line):
+        return False
+    if physical is not None:
+        return physical.is_empty or line.distance(physical) > robot_radius + 1e-10
+    return not any(line.relate_pattern(poly, "T********") for poly in obstacle_parts)
+
+
+def _shortest_visible_distance(
+    vertices, goal_edges, zone, obstacle_parts, domain, *, physical=None, robot_radius=0.0
+) -> float:
     """Search the continuous visibility graph, with the first vertex as the reset.
 
     Returns:
@@ -142,9 +179,7 @@ def _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domai
         if a == b:
             return True
         line = LineString([a, b])
-        return domain.covers(line) and not any(
-            line.relate_pattern(poly, "T********") for poly in obstacle_parts
-        )
+        return _segment_is_clear(line, domain, obstacle_parts, physical, robot_radius)
 
     distances = [float("inf")] * len(vertices)
     distances[0] = 0.0
@@ -178,6 +213,7 @@ def compute_completion_reference_length(
     goal_zone: np.ndarray | None = None,
     scenario_id: str = "",
     seed: int | None = None,
+    robot_radius: float = 0.0,
 ) -> float:
     """Return the completion-policy reference shared by efficiency and ideal time.
 
@@ -185,20 +221,31 @@ def compute_completion_reference_length(
     radius retains the historical Theta* point reference. Geometry joins the cache
     key so a reused scenario/seed with changed map or reset cannot reuse old values.
     """
-    if completion_policy != "goal_zone_entry_v1":
+    robot_radius = require_radius(robot_radius)
+    if completion_policy != "goal_zone_entry_v1" and robot_radius == 0:
         return compute_shortest_path_length(map_def, start, goal)
-    if map_def is None or goal_zone is None or not np.isfinite(start).all():
+    if map_def is None or not np.isfinite(start).all():
         return float("nan")
-    corners = np.asarray(goal_zone, dtype=float)
+    if completion_policy == "goal_zone_entry_v1" and goal_zone is None:
+        return float("nan")
+    corners = np.asarray(
+        goal_zone if completion_policy == "goal_zone_entry_v1" else [goal], dtype=float
+    )
     if not np.isfinite(corners).all():
         return float("nan")
     if len(corners) == 3:
         corners = np.vstack([corners, corners[0] + corners[2] - corners[1]])
-    zone = Polygon(corners)
+    zone = Polygon(corners) if len(corners) > 1 else Point(corners[0])
     if not zone.is_valid or zone.is_empty:
+        return float("nan")
+    if robot_radius * 2 >= min(map_def.width, map_def.height):
         return float("nan")
     polygons = [poly for obstacle in map_def.obstacles for poly in obstacle.iter_polygons()]
     obstacles = unary_union(polygons)
+    physical_wkb = obstacles.wkb if robot_radius else None
+    if robot_radius:
+        # Circumscribed 32-edge circles keep chord approximation outside the disc.
+        obstacles = obstacles.buffer((robot_radius + 1e-8) / np.cos(np.pi / 32), quad_segs=8)
     xs = [x for line in map_def.bounds for x in line[:2]]
     ys = [y for line in map_def.bounds for y in line[2:]]
     return _zone_reference_cached(
@@ -207,7 +254,14 @@ def compute_completion_reference_length(
         tuple(map(float, start)),
         zone.wkb,
         obstacles.wkb,
-        (min(xs), min(ys), max(xs), max(ys)),
+        (
+            min(xs) + robot_radius,
+            min(ys) + robot_radius,
+            max(xs) - robot_radius,
+            max(ys) - robot_radius,
+        ),
+        clip_obstacles=robot_radius == 0,
+        physical_contract=(physical_wkb, robot_radius) if physical_wkb is not None else None,
     )
 
 

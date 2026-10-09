@@ -90,6 +90,7 @@
     "figures",
     "finite_checks.py",
     "flint_chart.py",
+    "footprint_metrics.py",
     "force_coupled_comparator.py",
     "forecast",
     "freeze_manifest.py",

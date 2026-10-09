@@ -71,6 +71,22 @@ CSV is the durable review artifact. Histogram columns map group size to live
 group count; empty retired containers are excluded. Empty after-40-s histograms
 mean those 46 scenarios were only inventoried at reset.
 
+## October 9 refresh
+
+Rebased without conflicts onto main
+`f42f769e08a102f44bbf2edce85746d3f8f2dc60`. Runtime revision
+`de833bad6925ce8e21ea7e57f148fe713c558d66` reproduces all 144 fixed
+observation rows above exactly, and the fresh-main comparator reproduces the
+original base observations. The same six scenario/seed rows differ between base
+and fix; the other 46 scenarios are unchanged at reset. The existing CSV remains
+valid for these observations. Focused checks pass all 96 tests. All nine new
+group regression cases still fail on fresh main with only tests copied in.
+
+The technical choice remains explicit per-scenario membership and the assumed
+0.8 m join distance. This completes the diagnosed transition under unchanged
+force parameters and preserves the historical threshold for other scenarios.
+No local diagnostic substitutes for the outstanding gate or domain approval.
+
 ## Behaviour gate status
 
 Pending: [#10000](https://github.com/ll7/robot_sf_ll7/issues/10000) requires an

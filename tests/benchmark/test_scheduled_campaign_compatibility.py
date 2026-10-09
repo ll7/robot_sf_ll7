@@ -57,6 +57,11 @@ def test_historical_schedule_preserves_all_main_scenario_bytes(protocol):
         "status": "recommended",
         "bucket": "long",
     }
+    # The immutable oracle predates 0.1.0 group authoring.
+    for row in scenarios:
+        for ped in row.get("single_pedestrians", []):
+            ped.pop("initial_group_id", None)
+            ped.pop("join_radius_m", None)
     canonical = json.dumps(scenarios, sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(canonical).hexdigest() == ORACLE["scenarios_sha256"]
 

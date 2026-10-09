@@ -91,15 +91,31 @@ def test_real_simulator_budget_timeout_and_terminal_controls(
     assert row["scenario_params"]["run_horizon"] == 500
 
 
-def test_all_scheduled_budgets_survive_rounding_sensitive_dt_grid():
+def test_all_scheduled_budgets_survive_rounding_sensitive_dt_grid(monkeypatch):
     """All 48 runner budgets agree with simulator limits on the 181-value dt grid.
 
     The previous 0.05/0.2 controls miss round-trip division just above an integer.
     This observes production context binding, without planner or environment steps.
     """
+    import robot_sf.benchmark.map_runner.map_runner_episode as episode
+
+    # Config construction (including SVG parsing) precedes the dt override and
+    # does not depend on it. Build once per scenario, then clone the unbound config
+    # so dt assignment and horizon binding still run independently at every point.
+    build_env_config = episode._build_env_config
+    configs = {}
+
+    def cached_build_env_config(scenario, *, scenario_path):
+        key = (scenario["name"], scenario_path)
+        if key not in configs:
+            configs[key] = build_env_config(scenario, scenario_path=scenario_path)
+        return deepcopy(configs[key])
+
+    monkeypatch.setattr(episode, "_build_env_config", cached_build_env_config)
     cfg = load_campaign_config(TEMPLATE)
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
     assert len(scenarios) == 48
+    assert len({scenario["name"] for scenario in scenarios}) == len(scenarios)
     for scenario in scenarios:
         budget = scenario["simulation_config"]["max_episode_steps"]
         for millis in range(20, 201):

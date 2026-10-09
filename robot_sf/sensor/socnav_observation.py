@@ -895,7 +895,9 @@ class SocNavObservationFusion:
 
         ped_positions = ped_positions[: self.max_pedestrians]
         ped_velocities = ped_velocities[: self.max_pedestrians]
-        self._current_source_indices = tuple(int(index) for index in source_indices[: self.max_pedestrians])
+        self._current_source_indices = tuple(
+            int(index) for index in source_indices[: self.max_pedestrians]
+        )
         if ped_track_ids is not None:
             ped_track_ids = ped_track_ids[: self.max_pedestrians]
         return ped_positions, ped_velocities, ped_track_ids

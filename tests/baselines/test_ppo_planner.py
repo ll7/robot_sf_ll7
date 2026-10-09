@@ -497,3 +497,57 @@ def test_load_model_resolution_failure_falls_back(monkeypatch):
     planner = PPOPlanner(_planner_config(model_id="ppo_demo", model_path="unused.zip"))
     assert planner.get_metadata()["status"] == "fallback"
     assert planner.get_metadata()["fallback_reason"] == "model_resolution_failed"
+
+
+def test_ppo_backfill_warns_once_and_records_nested_checkpoint_keys():
+    """Compatibility defaults remain in bounds and visible in runtime provenance."""
+    from robot_sf.benchmark.map_runner.map_runner import _checkpoint_runtime_metadata
+
+    planner = PPOPlanner(_planner_config(obs_mode="dict"), defer_model_loading=True)
+    planner._model = SimpleNamespace(
+        observation_space=spaces.Dict(
+            {
+                "sensor": spaces.Dict({"required": spaces.Box(2.0, 4.0, (1,), np.float32)}),
+            }
+        ),
+    )
+    messages = []
+    sink = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        for _ in range(2):
+            converted = planner._build_model_obs_dict({"sensor": {"other": [1.0]}})
+            np.testing.assert_array_equal(converted["sensor"]["required"], [2.0])
+    finally:
+        logger.remove(sink)
+    assert len(messages) == 1
+    assert "sensor.required" in messages[0]
+    assert _checkpoint_runtime_metadata(planner, {})["observation_backfilled_keys"] == [
+        "sensor.required"
+    ]
+    planner.configure(_planner_config(obs_mode="dict"))
+    assert "observation_backfilled_keys" not in _checkpoint_runtime_metadata(planner, {})
+
+
+@pytest.mark.parametrize("profile", ["paper", "paper-baseline"])
+@pytest.mark.parametrize("typed_observation", [False, True])
+def test_ppo_paper_profile_rejects_backfill_before_prediction(profile, typed_observation):
+    """Paper profiles cannot hide missing keys behind goal fallback or prediction."""
+    from robot_sf.benchmark.map_runner.map_runner import _ppo_planner_config
+
+    config = _ppo_planner_config(
+        {
+            "profile": profile,
+            "obs_mode": "dict",
+            "fallback_to_goal": True,
+        }
+    )
+    planner = PPOPlanner(config, defer_model_loading=True)
+    predictions = []
+    planner._model = SimpleNamespace(
+        observation_space=spaces.Dict({"required": spaces.Box(-1.0, 1.0, (1,), np.float32)}),
+        predict=lambda obs, **kwargs: (predictions.append(obs) or np.zeros(2), None),
+    )
+    observation = _obs() if typed_observation else {"other": np.array([1.0])}
+    with pytest.raises(KeyError, match="missing.*required"):
+        planner.step(observation)
+    assert not predictions

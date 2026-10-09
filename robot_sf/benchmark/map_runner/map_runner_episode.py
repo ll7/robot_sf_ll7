@@ -3833,9 +3833,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
     env = make_robot_env(config=args.config, seed=int(args.seed), debug=False)
     state: _StepLoopState | None = None
     try:
-        adapter = getattr(policy_fn, "_planner_adapter", None)
-        if adapter is not None:
-            warn_unsupported_reverse(adapter, bound_drive_settings(env))
+        warn_unsupported_reverse(policy_fn, bound_drive_settings(env))
         active_harness = LatencyMeasurementHarness.get_current()
         if active_harness is not None:
             policy_fn = active_harness.wrap_policy(policy_fn)

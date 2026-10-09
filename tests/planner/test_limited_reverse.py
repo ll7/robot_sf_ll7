@@ -475,3 +475,27 @@ def test_non_adapter_policy_has_no_misnamed_reverse_warning(monkeypatch, kind):
     finally:
         logger.remove(sink)
     assert not [message for message in messages if "not reverse-aware" in message], messages
+
+
+@pytest.mark.parametrize("kind", ["none", "closure", "partial"])
+def test_reverse_warning_helper_ignores_unbound_policies(kind):
+    """Direct helper callers must not warn or mutate an unbound policy."""
+    from functools import partial
+
+    from loguru import logger
+
+    from robot_sf.robot.reverse_drive import warn_unsupported_reverse
+
+    def policy(obs):
+        return obs
+
+    target = {"none": None, "closure": policy, "partial": partial(policy)}[kind]
+    messages = []
+    sink = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        warn_unsupported_reverse(target, _drive())
+        warn_unsupported_reverse(target, _drive())
+    finally:
+        logger.remove(sink)
+    assert not messages
+    assert not getattr(target, "_limited_reverse_warning_emitted", False)

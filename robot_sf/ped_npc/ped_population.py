@@ -1382,12 +1382,20 @@ def _attach_single_pedestrian_behavior(
     time_step_s: float,
     single_ped_goal_threshold: float | None,
 ) -> None:
-    """Register single-member groups and the single-pedestrian behavior controller.
+    """Register authored memberships and the single-pedestrian behavior controller.
 
-    Single pedestrians start as single-member groups for optional join/leave behaviors.
+    Unlabelled single pedestrians retain their historical single-member groups.
+    Shared initial_group_id labels apply only within this authored population.
     """
-    for ped_id in range(single_offset, single_offset + len(single_pedestrians)):
-        groups.new_group({ped_id})
+    authored_groups: dict[str, set[int]] = {}
+    for offset, pedestrian in enumerate(single_pedestrians):
+        ped_id = single_offset + offset
+        if pedestrian.initial_group_id is None:
+            groups.new_group({ped_id})
+        else:
+            authored_groups.setdefault(pedestrian.initial_group_id, set()).add(ped_id)
+    for members in authored_groups.values():
+        groups.new_group(members)
     ped_behaviors.append(
         SinglePedestrianBehavior(
             pysf_state,

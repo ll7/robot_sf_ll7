@@ -18,6 +18,8 @@ mirrors the fail-closed shape of :mod:`robot_sf.benchmark.orca_preflight` and of
   the file exists. This catches unknown / mistyped ``model_id`` values and missing ``model_path``
   files instantly without touching the network, and is safe to call from the always-on campaign
   preflight (including offline preflight-only workflows).
+  Learned predictive bindings additionally require local checkpoint bytes to verify their actual
+  forecast window through the runtime loader; an unstaged remote reference fails closed.
 * ``stage=True`` (enforced pre-submit staging): every checkpoint is actually resolved -- downloading
   and checksum-verifying registry artifacts into the durable cache via ``resolve_model_path`` -- so
   the compute node loads a validated file instead of discovering a corrupt or incomplete cache 14h
@@ -49,7 +51,8 @@ from robot_sf.errors import RobotSfError
 # Config keys, at any nesting depth of an arm's algo_config, that name a policy checkpoint.
 # ``model_id`` resolves through the registry; ``model_path`` is a direct filesystem reference.
 # ``model_id`` wins when both appear at the same mapping level, mirroring
-# ``PPOPlanner._load_model`` runtime semantics.
+# ``PPOPlanner._load_model`` runtime semantics. Predictive checkpoint paths instead win over
+# model IDs, matching PredictionPlannerAdapter._resolve_checkpoint_path.
 _CHECKPOINT_REFERENCE_KEY_PAIRS: tuple[tuple[str, str], ...] = (
     ("model_id", "model_path"),
     ("sacadrl_model_id", "sacadrl_checkpoint_path"),
@@ -108,8 +111,8 @@ class ArmCheckpointResolution:
 def _iter_mapping_checkpoint_keys(node: Any) -> list[tuple[str, str]]:
     """Return ``(kind, value)`` checkpoint references found anywhere in a parsed algo_config.
 
-    Each mapping level contributes at most one reference, preferring ``model_id`` over
-    ``model_path`` to mirror runtime loading semantics, and nested mappings/sequences are walked so
+    Each mapping level contributes at most one reference per key pair, preferring ``model_id`` over
+    ``model_path`` except for explicit predictive checkpoint paths, and nested mappings are walked so
     a nested prior-policy checkpoint is still covered.
 
     Returns:
@@ -120,7 +123,13 @@ def _iter_mapping_checkpoint_keys(node: Any) -> list[tuple[str, str]]:
         for model_id_key, model_path_key in _CHECKPOINT_REFERENCE_KEY_PAIRS:
             model_id = node.get(model_id_key)
             model_path = node.get(model_path_key)
-            if isinstance(model_id, str) and model_id.strip():
+            if (
+                model_path_key == "predictive_checkpoint_path"
+                and isinstance(model_path, str)
+                and model_path.strip()
+            ):
+                references.append(("model_path", model_path.strip()))
+            elif isinstance(model_id, str) and model_id.strip():
                 references.append(("model_id", model_id.strip()))
             elif isinstance(model_path, str) and model_path.strip():
                 references.append(("model_path", model_path.strip()))
@@ -502,6 +511,16 @@ def check_campaign_arm_checkpoints_preflight(
     Raises:
         CampaignCheckpointPreflightError: When one or more arm checkpoints are unresolvable.
     """
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (  # noqa: PLC0415
+        check_campaign_predictive_horizons_preflight,
+    )
+
+    predictive_horizons = check_campaign_predictive_horizons_preflight(
+        cfg,
+        stage=stage,
+        registry_path=registry_path,
+        cache_dir=cache_dir,
+    )
     references = iter_campaign_arm_checkpoint_references(cfg)
     if not references:
         logger.debug(
@@ -557,6 +576,7 @@ def check_campaign_arm_checkpoints_preflight(
         "stage": bool(stage),
         "metadata_resolvable": not failures,
         "submit_safe": submit_safe,
+        "predictive_horizons": predictive_horizons,
         "arms": [
             {
                 "planner_key": resolution.reference.planner_key,

@@ -47,6 +47,8 @@ _TRAINING_FAMILY = "prediction_planner"
 _DEFAULT_PREFETCH_FACTOR = 2
 
 
+from robot_sf.training.predictive_supervision import validate_supervision_metadata
+
 def _is_near_constant(arr: np.ndarray, *, tol: float = 1e-6) -> bool:
     """Return True when array spread is effectively zero."""
     if arr.size == 0:
@@ -122,6 +124,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional expected predictive feature schema; defaults to dataset metadata.",
     )
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument(
+        "--allow-legacy-supervision",
+        action="store_true",
+        help="Historical reproduction only; v1 labels do not satisfy identity-corrected retraining.",
+    )
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
@@ -975,7 +982,15 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             raise FileNotFoundError(f"Training summary not found: {args.training_summary}")
         if not args.dataset.exists():
             raise FileNotFoundError(f"Dataset not found: {args.dataset}")
+        with np.load(args.dataset) as registration_data:
+            registration_supervision = validate_supervision_metadata(
+                registration_data,
+                path=Path(args.dataset),
+                allow_legacy=bool(args.allow_legacy_supervision),
+            )
         summary = json.loads(args.training_summary.read_text(encoding="utf-8"))
+        if summary.get("supervision_metadata") != registration_supervision:
+            raise ValueError("Registration summary supervision does not match dataset contract")
         if not isinstance(summary, dict):
             raise TypeError(f"Expected JSON object at {args.training_summary}")
         _validate_checkpoint_registration_inputs(
@@ -1026,6 +1041,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     common.set_global_seed(args.seed)
 
     raw = np.load(args.dataset)
+    supervision = validate_supervision_metadata(
+        raw,
+        path=Path(args.dataset),
+        allow_legacy=bool(args.allow_legacy_supervision),
+    )
     state = np.asarray(raw["state"], dtype=np.float32)
     target = np.asarray(raw["target"], dtype=np.float32)
     mask = np.asarray(raw["mask"], dtype=np.float32)
@@ -1371,6 +1391,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         "peak_cuda_memory_reserved_bytes": peak_cuda_memory_reserved_bytes,
         "model_id": args.model_id,
         "dataset": str(args.dataset),
+        "supervision_metadata": supervision,
+        "supervision_status": "identity_corrected" if supervision else "legacy_unverified",
         "checkpoint": str(checkpoint_path),
         "split_sha256": _loader_split_sha256(train_loader),
         "device": str(device),

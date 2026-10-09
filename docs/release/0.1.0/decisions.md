@@ -624,7 +624,7 @@ recommends goal validity plus its sensor and static exclusion opt-in pending
 further repair. This is evidence for author reconsideration, not a new ruling;
 all-on remains in code and the reason/reopen clause above remain unchanged.
 
-#### D-023 author ruling, 2026-10-08
+#### Author ruling for D-023, 2026-10-08
 
 - **Source:** Author ruling in chat to the orchestrator, 2026-10-08, explicitly
   superseding **author decision 2026-10-05** under that decision's reopen clause.

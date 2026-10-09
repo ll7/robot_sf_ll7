@@ -99,13 +99,20 @@ def test_registered_release_full_dataclasses_and_mapping_match_base(source):
     with defaults_for_source(ROOT / source):
         planner = build_hybrid_rule_local_planner_config(raw)
         env = RobotSimulationConfig()
+    # Main added these opt-in fields after the immutable release snapshots.
+    # Pin their inactive values and still compare every built planner field.
+    expected_planner = {
+        **SNAPSHOTS[source],
+        "v4_predictive_braking_enabled": False,
+        "v4_prediction_speed_error": 0.2,
+    }
     assert json.dumps(_json_ready(asdict(planner)), sort_keys=True) == json.dumps(
-        SNAPSHOTS[source], sort_keys=True
+        expected_planner, sort_keys=True
     )
     assert json.dumps(
         _json_ready(asdict(build_hybrid_rule_local_planner_config(raw, source_path=ROOT / source))),
         sort_keys=True,
-    ) == json.dumps(SNAPSHOTS[source], sort_keys=True)
+    ) == json.dumps(expected_planner, sort_keys=True)
     env_dump = json.dumps(_json_ready(asdict(env)), sort_keys=True).replace(str(ROOT), "<repo>")
     assert env_dump == json.dumps(SNAPSHOTS["environment"], sort_keys=True)
     assert json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False) == before

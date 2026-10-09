@@ -266,6 +266,33 @@ def test_unmarked_legacy_requires_explicit_training_optin(tmp_path) -> None:
         trainer.main(["--dataset", str(dataset), "--output-dir", str(tmp_path / "out")])
 
 
+def test_identity_corrected_dataset_requires_explicit_target_mask(tmp_path) -> None:
+    """The legacy mask-to-target_mask fallback must not mislabel absent v2 targets."""
+    path = tmp_path / "incomplete_identity_v2.npz"
+    _npz(path, marker=supervision_metadata("base"))
+    with np.load(path) as raw:
+        payload = {name: raw[name] for name in raw.files if name != "target_mask"}
+    np.savez_compressed(path, **payload)
+    with np.load(path) as raw:
+        with pytest.raises(ValueError, match="target_mask"):
+            validate_supervision_metadata(raw, path=path)
+
+
+def test_explicit_zero_count_rejects_padded_phantom_actors(collector) -> None:
+    obs = {
+        "robot": {"position": [0.0, 0.0]},
+        "goal": {"current": [2.0, 0.0]},
+        "pedestrians": {
+            "positions": [[0.0, 0.0], [0.0, 0.0]],
+            "velocities": [[0.0, 0.0], [0.0, 0.0]],
+            "count": [0],
+        },
+    }
+    frame = collector._extract_frame(obs, max_agents=2, ped_ids=())
+    assert frame.ped_count == 0
+    assert frame.ped_ids == ()
+
+
 def test_manifest_mismatch_is_not_silently_trusted(tmp_path) -> None:
     dataset = tmp_path / "corrected.npz"
     _npz(dataset, marker=supervision_metadata("base"))

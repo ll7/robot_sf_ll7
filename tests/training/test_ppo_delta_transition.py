@@ -43,3 +43,15 @@ def test_configured_delta_actions_apply_velocity_change():
         np.testing.assert_array_equal(env.action_space.high, [2.0, 1.0])
     finally:
         env.close()
+
+
+def test_recovery_recipes_load_disjoint_selection_manifest():
+    """Campaign preflight must accept the authored pilot and full recipes."""
+    for name, expected_steps in [("pilot", 983040), ("15m", 15000000)]:
+        recipe = load_expert_training_config(f"configs/training/ppo/dev_delta_recovery_{name}.yaml")
+        assert recipe.total_timesteps == expected_steps
+        pool = set(recipe.scenario_sampling["episode_seed_pool"])
+        selection = set(recipe.evaluation.evaluation_seeds)
+        assert len(pool) == 20
+        assert len(selection) == 10
+        assert pool.isdisjoint(selection)

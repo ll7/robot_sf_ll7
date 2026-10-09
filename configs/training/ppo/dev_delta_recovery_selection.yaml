@@ -1,1 +1,12 @@
-seeds: [1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030]
+schema_version: robot-sf-evaluation-seed-manifest.v1
+evaluation_seeds:
+- 1021
+- 1022
+- 1023
+- 1024
+- 1025
+- 1026
+- 1027
+- 1028
+- 1029
+- 1030

@@ -40,14 +40,13 @@ from robot_sf.planner.predictive_model import (
     masked_trajectory_loss,
     save_predictive_checkpoint,
 )
+from robot_sf.training.predictive_supervision import validate_supervision_metadata
 from robot_sf.training.scenario_loader import load_scenarios
 
 _CONTRACT_VERSION = "benchmark-reset-v2"
 _TRAINING_FAMILY = "prediction_planner"
 _DEFAULT_PREFETCH_FACTOR = 2
 
-
-from robot_sf.training.predictive_supervision import validate_supervision_metadata
 
 def _is_near_constant(arr: np.ndarray, *, tol: float = 1e-6) -> bool:
     """Return True when array spread is effectively zero."""

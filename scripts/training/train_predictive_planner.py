@@ -126,7 +126,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--allow-legacy-supervision",
         action="store_true",
-        help="Historical reproduction only; v1 labels do not satisfy identity-corrected retraining.",
+        help=(
+            "Historical reproduction only; v1 labels do not satisfy identity-corrected retraining."
+        ),
     )
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=3e-4)

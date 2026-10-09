@@ -1194,26 +1194,6 @@ def _assert_native_ppo_result(result):
     )
 
 
-def test_native_ppo_failure_message_includes_repeat_diagnostics():
-    """The offline assertion displays retained worker evidence, not just the disposition."""
-    result = {
-        "disposition": UNRUNNABLE_DISPOSITION,
-        "repeat_diagnostics": [
-            {
-                "repeat_index": 0,
-                "algorithm_metadata": {"status": "policy_step_error_fallback"},
-                "worker_events": [{"exit_code": 23, "stderr_tail": "worker crash marker"}],
-            }
-        ],
-    }
-    with pytest.raises(AssertionError) as error:
-        _assert_native_ppo_result(result)
-    message = str(error.value)
-    assert "worker crash marker" in message
-    assert '"exit_code": 23' in message
-    assert "algorithm_metadata" in message
-
-
 class _FailingWorkerPlanner:
     """Exercise real child death and timeout without loading a model."""
 

@@ -1,4 +1,5 @@
-base_config: expert_ppo_release_contract_b_seed1001.yaml
+# Share the release parent so each release-contract config remains runnable.
+base_config: expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 policy_id: ppo_dev_fixed_objective_5m
 scenario_config: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
 seeds:
@@ -9,6 +10,18 @@ num_envs: 20
 worker_mode: subproc
 ppo_hyperparams:
   n_steps: 256
+env_overrides:
+  ppo_action_semantics: velocity_delta
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 2.0
+    max_angular_speed: 1.0
+    allow_backwards: false
+    max_linear_accel: 1.0
+    max_linear_decel: 1.0
+    max_angular_accel: 1.0
+  sim_config:
+    time_per_step_in_secs: 0.1
 env_factory_kwargs:
   reward_name: route_completion_v3
   reward_kwargs:

@@ -128,6 +128,7 @@ from robot_sf.prediction.oracle_transition_trace import (
     TransitionBoundary,
     TransitionBoundaryKind,
 )
+from robot_sf.sim.pedestrian_force_profiles import apply_pedestrian_force_profile
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -551,6 +552,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
         config, "social_force_kernel_version", None
     )
     _apply_ped_desired_speed_config(pysf_config, config)
+    robot_force_config = apply_pedestrian_force_profile(
+        pysf_config, config.prf_config, getattr(config, "pedestrian_force_profile", None)
+    )
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
         config.max_peds_per_group,
@@ -621,7 +625,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
             sf_config,
             robots,
             peds_have_obstacle_forces,
-            config.prf_config,
+            robot_force_config,
             config.apf_config,
             pedestrian_response_multipliers,
         ),

@@ -2889,6 +2889,9 @@ _PRF_CONFIG_OVERRIDE_FIELDS = (
     "robot_radius",
     "activation_threshold",
     "force_multiplier",
+    "law_version",
+    "edge_onset",
+    "steering_factor",
 )
 
 
@@ -2935,9 +2938,36 @@ def _apply_prf_config_override(
         kwargs["force_multiplier"] = _coerce_finite_float(
             overrides["force_multiplier"], field_name="prf_config.force_multiplier"
         )
-    from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig  # noqa: PLC0415
+    config.sim_config.prf_config = _resolve_prf_override(config, base, kwargs, overrides)
 
-    config.sim_config.prf_config = PedRobotForceConfig(**kwargs)
+
+def _resolve_prf_override(config, base, kwargs, overrides):
+    """Resolve new-law knobs without changing legacy scenario defaults.
+
+    Returns:
+        A legacy or explicit v2 robot force config.
+    """
+    from robot_sf.ped_npc.ped_robot_force import (  # noqa: PLC0415
+        PedRobotForceConfig,
+        PedRobotForceV2Config,
+    )
+
+    law = overrides.get("law_version", getattr(base, "law_version", None))
+    if law is not None:
+        kwargs["law_version"] = law
+    if law is not None or config.sim_config.pedestrian_force_profile is not None:
+        for name in ("edge_onset", "steering_factor"):
+            if name in overrides:
+                kwargs[name] = _coerce_finite_float(
+                    overrides[name], field_name=f"prf_config.{name}"
+                )
+            elif hasattr(base, name):
+                kwargs[name] = getattr(base, name)
+        return PedRobotForceV2Config(**kwargs)
+    if "edge_onset" in overrides or "steering_factor" in overrides:
+        raise ValueError("edge_onset and steering_factor require the anticipatory_v2 robot law")
+
+    return PedRobotForceConfig(**kwargs)
 
 
 def _apply_residual_adversary_override(
@@ -2973,6 +3003,7 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "robot_goal_sampling_policy",
     "pedestrian_model",
     "social_force_kernel_version",
+    "pedestrian_force_profile",
     "ttc_predictive_force",
     "zanlungo_collision_prediction",
     "anisotropic_fov",

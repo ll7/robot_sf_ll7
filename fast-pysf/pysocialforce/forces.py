@@ -984,7 +984,13 @@ class GroupRepulsiveForce:
 
             member_pos = self.peds.pos()[group, :]
 
-            forces[group, :] += group_repulsive_force(member_pos, threshold)
+            law = getattr(self.config, "law_version", None)
+            if law == "unit_vectors_v2":
+                forces[group, :] += group_repulsive_force_v2(member_pos, threshold)
+            elif law is None:
+                forces[group, :] += group_repulsive_force(member_pos, threshold)
+            else:
+                raise ValueError(f"Unsupported group repulsive law: {law!r}")
 
         # Multiply the forces by a scaling factor from the configuration and return the result.
         return forces * self.config.factor
@@ -1014,6 +1020,61 @@ def group_repulsive_force(member_pos: np.ndarray, threshold: float) -> np.ndarra
             if dist_sq <= threshold_sq:
                 forces[ped_idx, 0] += diff_x
                 forces[ped_idx, 1] += diff_y
+    return forces
+
+
+@njit(nogil=True)
+def group_repulsive_force_v2(member_pos: np.ndarray, threshold: float) -> np.ndarray:
+    """Sum unit vectors away from nearby members (Moussaid 2010, Eq. 4).
+
+    At coincident centres the direction is undefined; contribute zero rather than
+    inventing a preferred direction. Contact resolution remains a separate law.
+
+    Returns:
+        Per-member unit-vector sums with shape (N, 2).
+    """
+    size = member_pos.shape[0]
+    forces = np.zeros((size, 2))
+    for i in range(size):
+        for j in range(i + 1, size):
+            displacement = member_pos[i] - member_pos[j]
+            distance = np.sqrt(np.sum(displacement * displacement))
+            if 0.0 < distance <= threshold:
+                direction = displacement / distance
+                forces[i] += direction
+                forces[j] -= direction
+    return forces
+
+
+@njit(nogil=True)
+def group_gaze_force_v2(
+    member_pos: np.ndarray, member_velocities: np.ndarray, fov_phi: float
+) -> np.ndarray:
+    """Apply ``-alpha * velocity`` (Moussaid 2010, Eq. 2), before beta scaling.
+
+    Alpha is the minimum head turn to place the other members' centroid inside
+    the FOV, whose half-angle is ``fov_phi`` degrees. Stationary pedestrians and
+    coincident centroids need no braking. No waypoint distance enters this law.
+
+    Returns:
+        Per-member braking accelerations before strength scaling.
+    """
+    size = member_pos.shape[0]
+    forces = np.zeros((size, 2))
+    if size <= 1:
+        return forces
+    total = np.sum(member_pos, axis=0)
+    phi = fov_phi * np.pi / 180.0
+    for i in range(size):
+        relative = (total - member_pos[i]) / (size - 1) - member_pos[i]
+        speed = np.sqrt(np.sum(member_velocities[i] ** 2))
+        distance = np.sqrt(np.sum(relative**2))
+        if speed == 0.0 or distance == 0.0:
+            continue
+        cosine = np.sum(member_velocities[i] * relative) / (speed * distance)
+        angle = np.arccos(min(1.0, max(-1.0, cosine)))
+        alpha = max(0.0, angle - phi)
+        forces[i] = -alpha * member_velocities[i]
     return forces
 
 
@@ -1048,6 +1109,18 @@ class GroupGazeForceAlt:
             return forces
 
         ped_positions = self.peds.pos()
+        law = getattr(self.config, "law_version", None)
+        if law == "moussaid_2010_v2":
+            if not np.isfinite(self.config.fov_phi) or not 0.0 <= self.config.fov_phi <= 180.0:
+                raise ValueError("fov_phi must be a finite half-angle in [0, 180] degrees")
+            for group in self.peds.groups:
+                if len(group) > 1:
+                    forces[group, :] = group_gaze_force_v2(
+                        ped_positions[group, :], self.peds.vel()[group, :], self.config.fov_phi
+                    )
+            return forces * self.config.factor
+        if law is not None:
+            raise ValueError(f"Unsupported group gaze law: {law!r}")
         # Calculate desired directions and distances for the group gaze force.
         directions, dist = desired_directions(self.peds.state)
 

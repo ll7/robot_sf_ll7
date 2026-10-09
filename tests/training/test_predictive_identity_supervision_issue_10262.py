@@ -163,7 +163,10 @@ def test_sensor_source_sidechannel_uses_sorted_original_indices() -> None:
     np.testing.assert_array_equal(rows[:, 0], [0.0, 0.8])
     assert fusion.current_source_indices == (1, 0)
     fusion.simulator.ped_pos = positions
-    env = SimpleNamespace(state=SimpleNamespace(sensors=SimpleNamespace(wrapped_adapter=fusion)), simulator=fusion.simulator)
+    env = SimpleNamespace(
+        state=SimpleNamespace(sensors=SimpleNamespace(wrapped_adapter=fusion)),
+        simulator=fusion.simulator,
+    )
     assert observation_episode_ids(env, episode_id="reset-1") == (
         "reset-1:simulator-slot-1", "reset-1:simulator-slot-0",
     )

@@ -8109,3 +8109,19 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10028_authored_group_behavior.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10028_authored_group_behavior.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10028_authored_group_behavior.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10028_authored_group_behavior.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

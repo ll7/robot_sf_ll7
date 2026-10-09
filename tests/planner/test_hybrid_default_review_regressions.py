@@ -258,3 +258,20 @@ def test_unknown_configless_hybrid_on_released_assets_uses_current_defaults():
     )
     assert params["algo_config"] is None
     assert dispatched["algorithm_metadata"]["hybrid_default_policy"] == {"default_set": "current"}
+
+
+def test_v3_planner_does_not_require_the_v4_goal_validity_sensor():
+    """A v3 planner must continue moving on observations without the v4 sentinel."""
+    planner = HybridRuleLocalPlannerAdapter(
+        build_hybrid_rule_local_planner_config(
+            {
+                "planner_variant": "hybrid_rule_v3_teb_like_rollout",
+                "goal_next_validity_enabled": True,
+            }
+        )
+    )
+    observation = _obs(goal=(4.0, 0.0))
+    observation["goal"].pop("next_valid", None)
+    linear, angular = planner.plan(observation)
+    assert linear > 0.0
+    assert np.isfinite([linear, angular]).all()

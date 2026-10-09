@@ -237,7 +237,11 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.common.artifact_paths import get_repository_root
-from robot_sf.common.hybrid_defaults import active_default_policy
+from robot_sf.common.hybrid_defaults import (
+    active_default_policy,
+    configless_release_source,
+    source_default_policy,
+)
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
@@ -3315,6 +3319,10 @@ def _compute_resume_identity_payload(
     Returns:
         Identity payload dict used to compute the episode ID for deduplication.
     """
+    # Match the worker: an absent algorithm file and empty parsed mapping stay absent.
+    identity_source = ctx.algo_config_path
+    if identity_source is None and not ctx.raw_policy_cfg:
+        identity_source = configless_release_source(ctx.scenario_path, ctx.algo)
     identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
     identity_algo, identity_cfg = _policy_resolution.resolve_episode_policy_runtime(
         default_algo=ctx.algo,
@@ -3344,6 +3352,7 @@ def _compute_resume_identity_payload(
         identity_scenario,
         algo=identity_algo,
         algo_config=identity_cfg,
+        default_set=source_default_policy(identity_source)["default_set"],
         horizon=ctx.horizon,
         dt=ctx.dt,
         record_forces=ctx.record_forces,

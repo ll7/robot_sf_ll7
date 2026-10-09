@@ -25,11 +25,13 @@ from robot_sf.benchmark.tracking_precision_contract import (
     tracking_precision_hash,
 )
 from robot_sf.benchmark.utils import _config_hash
+from robot_sf.common.hybrid_defaults import active_default_policy
 
 _MAP_RUNNER_SCENARIO_IDENTITY_FIELDS = frozenset(
     {
         "algo",
         "algo_config_hash",
+        "hybrid_default_set",
         "record_forces",
         "observation_mode",
         "observation_level",
@@ -144,6 +146,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     horizon: int | None,
     dt: float | None,
     record_forces: bool,
+    default_set: str | None = None,
     observation_mode: str | None = None,
     observation_level: str | None = None,
     benchmark_track: str | None = None,
@@ -173,6 +176,12 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     payload.setdefault("id", scenario_id)
     payload["algo"] = str(algo)
     payload["algo_config_hash"] = _config_hash(algo_config)
+    # Released rows keep their historical IDs; current typed defaults affect execution.
+    payload.update(
+        {"hybrid_default_set": "current"}
+        if (default_set or active_default_policy()["default_set"]) == "current"
+        else {}
+    )
     payload["record_forces"] = bool(record_forces)
     if observation_mode is not None:
         payload["observation_mode"] = str(observation_mode)

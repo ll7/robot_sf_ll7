@@ -654,16 +654,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             Whether v4 should track the terminal goal instead of its successor.
         """
-        if not self.config.goal_next_validity_enabled:
+        if not self._v4_clearance_braking or not self.config.goal_next_validity_enabled:
             return False
         if "next_valid" not in goal_state:
             raise ValueError(
                 "goal_next_validity_enabled requires observation next_valid; "
                 "enable include_goal_next_valid on the environment"
             )
-        return self._v4_clearance_braking and not bool(
-            self._as_1d_float(goal_state["next_valid"], pad=1)[0]
-        )
+        return not bool(self._as_1d_float(goal_state["next_valid"], pad=1)[0])
 
     def _terminal_goal_reached(self, state: dict[str, Any], goal_distance: float) -> bool:
         """Use environment completion for terminal tracking, preserving the legacy rule.

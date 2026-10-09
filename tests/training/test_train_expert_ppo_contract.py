@@ -794,3 +794,27 @@ def test_evaluate_policy_logs_single_progress_marker_for_ten_episodes(
     assert progress_messages == [
         "PPO evaluation progress step=60000 episode=10/10 scenario=scenario_a steps=1 success=0.000"
     ]
+
+
+def test_training_factory_honors_goal_validity_sensor_override() -> None:
+    """Checkpoint-compatible observation spaces must honor the explicit sensor setting."""
+    scenario_path = _REPO_ROOT / "configs/scenarios/single/planner_sanity_simple.yaml"
+    scenario = train_ppo.load_scenarios(scenario_path)[0]
+    for enabled in (False, True):
+        factory = train_ppo._make_training_env(
+            1001,
+            scenario=scenario,
+            scenario_definitions=None,
+            scenario_path=scenario_path,
+            exclude_scenarios=(),
+            suite_name="ppo_sensor_contract",
+            algorithm_name="ppo",
+            env_overrides={"observation_mode": "socnav_struct", "include_goal_next_valid": enabled},
+            env_factory_kwargs={},
+            scenario_sampling={},
+        )
+        env = factory()
+        try:
+            assert ("next_valid" in env.observation_space["goal"].spaces) is enabled
+        finally:
+            env.close()

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
 from robot_sf.benchmark.map_runner import map_runner
+from robot_sf.common.hybrid_defaults import defaults_for_source
 
 SCHEMA_PATH = str(
     Path(__file__).resolve().parents[2] / "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -781,3 +784,63 @@ def test_resume_identity_uses_identity_benchmark_track(
         resume=True,
     )
     assert second["written"] == 1
+
+
+def test_resume_runs_current_defaults_with_a_legacy_result_present(tmp_path: Path) -> None:
+    """Source-bound typed defaults must distinguish otherwise identical resumed jobs."""
+    root = Path(__file__).resolve().parents[2]
+    matrix = root / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = _minimal_map_scenario()
+    scenario["seeds"] = [1001]
+    ctx = SimpleNamespace(
+        algo="goal",
+        algo_config_path=None,
+        raw_policy_cfg={},
+        scenario_path=matrix,
+        batch_observation_mode=None,
+        observation_level=None,
+        horizon=5,
+        dt=None,
+        record_forces=True,
+        benchmark_track=None,
+        track_schema_version=None,
+        noise_spec=None,
+        tracking_precision_spec=None,
+        actuation_profile=None,
+        latency_profile=None,
+        safety_wrapper=None,
+        cbf_safety_filter=None,
+        record_planner_decision_trace=False,
+        record_simulation_step_trace=False,
+        out_path=tmp_path / "episodes.jsonl",
+        jobs=[(scenario, 1001)],
+    )
+    with defaults_for_source(matrix):
+        legacy_payload = map_runner._compute_resume_identity_payload(ctx, scenario, 1001)
+        legacy_id = map_runner._compute_map_episode_id(legacy_payload, 1001)
+    # Recorded on PR base 0ca61efee with development seed 1001.
+    assert legacy_id == "resume-identity-smoke--1001--26366e490e464c9d"
+    ctx.out_path.write_text(json.dumps({"episode_id": legacy_id}) + "\n")
+    map_runner._filter_resumed_jobs(ctx)
+    assert ctx.jobs == []
+    # The same mapping on an unregistered source selects current constructor defaults.
+    ctx.scenario_path = tmp_path / "new-scenarios.yaml"
+    ctx.jobs = [(scenario, 1001)]
+    map_runner._filter_resumed_jobs(ctx)
+    assert ctx.jobs == [(scenario, 1001)]
+    current_payload = map_runner._compute_resume_identity_payload(ctx, scenario, 1001)
+    assert current_payload["hybrid_default_set"] == "current"
+    assert "hybrid_default_set" not in legacy_payload
+    assert map_runner._compute_map_episode_id(current_payload, 1001) != legacy_id
+    with defaults_for_source(None):
+        write_payload = map_runner._scenario_identity_payload(
+            map_runner._scenario_with_episode_seed_defaults(scenario, seed=1001),
+            algo="goal",
+            algo_config={},
+            horizon=5,
+            dt=None,
+            record_forces=True,
+            observation_mode=current_payload["observation_mode"],
+            observation_level=current_payload["observation_level"],
+        )
+    assert write_payload == current_payload

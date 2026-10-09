@@ -201,6 +201,7 @@ class ScenarioSwitchingEnv(Env):
         seed: int | None = None,
         density_curriculum: DensityCurriculumSchedule | None = None,
         domain_randomization: DomainRandomization | None = None,
+        episode_seed_pool: tuple[int, ...] | None = None,
     ) -> None:
         """Initialize a wrapper that swaps scenarios between episodes."""
         super().__init__()
@@ -220,6 +221,17 @@ class ScenarioSwitchingEnv(Env):
         self._density_curriculum = density_curriculum
         self._domain_randomization = domain_randomization
         self._curriculum_timestep = 0
+        self._episode_seed_pool = (
+            tuple(episode_seed_pool) if episode_seed_pool is not None else None
+        )
+        if self._episode_seed_pool is not None:
+            if not self._episode_seed_pool or any(
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+                for value in self._episode_seed_pool
+            ):
+                raise ValueError("episode_seed_pool must contain non-negative integer seeds")
+            if seed is not None and seed not in self._episode_seed_pool:
+                raise ValueError("seed must belong to episode_seed_pool")
         self._rng = np.random.default_rng(seed)
         self._scenario_coverage: dict[str, int] = {}
         self._current_env: Env | None = None
@@ -269,7 +281,16 @@ class ScenarioSwitchingEnv(Env):
             self._domain_randomization,
             rng=self._rng,
         )
-        env_seed = int(seed) if seed is not None else int(self._rng.integers(0, 2**31 - 1))
+        env_seed = (
+            int(seed)
+            if seed is not None
+            else (
+                int(self._rng.choice(self._episode_seed_pool))
+                if self._episode_seed_pool is not None
+                else int(self._rng.integers(0, 2**31 - 1))
+            )
+        )
+        self._active_episode_seed = env_seed
         env = self._env_factory(
             config=self._config_builder(scenario),
             seed=env_seed,
@@ -297,6 +318,8 @@ class ScenarioSwitchingEnv(Env):
             Reset observation and info from the active environment.
         """
         if seed is not None:
+            if self._episode_seed_pool is not None and seed not in self._episode_seed_pool:
+                raise ValueError("seed must belong to episode_seed_pool")
             self._rng = np.random.default_rng(seed)
 
         if self._current_env is None:
@@ -337,7 +360,12 @@ class ScenarioSwitchingEnv(Env):
             self._activate_env(new_env, new_scenario_id)
 
         self._has_reset = True
-        return self._current_env.reset(seed=seed, options=options)
+        reset_seed = (
+            (seed if seed is not None else self._active_episode_seed)
+            if self._episode_seed_pool is not None
+            else seed
+        )
+        return self._current_env.reset(seed=reset_seed, options=options)
 
     def step(self, action) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
         """Step the active scenario environment.

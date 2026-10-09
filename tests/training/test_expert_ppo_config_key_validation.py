@@ -290,11 +290,13 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # bound successor leaves for the exact shared evaluation-seed contract.
     # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain) adds four release-robot leaves; their issue-791 parent becomes
     # a shared intermediate base, so the runnable inventory grows by three.
-    assert len(config_paths) == 146
+    # The 2026-10-08 dev policy candidates for the training seed pool add the
+    # dev_safety_objective_5m leaf; its dev_fixed_objective_5m parent is a runnable
+    # leaf, but release-contract-b seed1001 becomes its shared intermediate base.
+    assert len(config_paths) == 147
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",
-        "configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml",
         "configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml",
     }
     assert release_robot_leaves <= {

@@ -106,9 +106,7 @@ def _goal_policy(obs: dict, max_speed: float) -> np.ndarray:
     return np.array([v, omega], dtype=np.float32)
 
 
-def _extract_frame(
-    obs: dict, max_agents: int, *, ped_ids: tuple[str, ...] | None = None
-) -> Frame:
+def _extract_frame(obs: dict, max_agents: int, *, ped_ids: tuple[str, ...] | None = None) -> Frame:
     """Convert observation payload to a compact frame container."""
     robot, goal, peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
@@ -171,7 +169,7 @@ def _world_to_ego(
     return np.stack([x_ego, y_ego], axis=1).astype(np.float32)
 
 
-def _frames_to_samples(
+def _frames_to_samples(  # noqa: C901
     frames: list[Frame],
     *,
     max_agents: int,
@@ -371,7 +369,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901
     """Collect hard-case trajectories and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     scenarios = load_scenarios(args.scenario_matrix)

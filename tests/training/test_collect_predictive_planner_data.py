@@ -65,7 +65,9 @@ def test_extract_frame_reads_robot_velocity_xy_and_goal_from_flat_observation() 
         "pedestrians_count": [2],
     }
 
-    frame = collect._extract_frame(obs, max_agents=4, ped_ids=("episode-0:slot-0", "episode-0:slot-1"))
+    frame = collect._extract_frame(
+        obs, max_agents=4, ped_ids=("episode-0:slot-0", "episode-0:slot-1")
+    )
 
     assert np.allclose(frame.robot_pos, np.array([1.0, 2.0], dtype=np.float32))
     assert frame.robot_heading == 0.5

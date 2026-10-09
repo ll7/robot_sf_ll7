@@ -27,6 +27,10 @@ For the full concept + architecture + implementation walkthrough, see:
 - Both collectors now take an *oracle-side*, observation-aligned simulator source-slot
   mapping from `SocNavObservationFusion.current_source_indices`. This is distinct from
   the optional observation-derived tracker and does not change planner-facing features.
+  A route respawn (`FollowRouteBehavior.respawn_group_at_start`) teleports a group to its
+  route start while keeping its simulator row, so each respawn gives the row a new identity
+  (`...:simulator-slot-N:respawn-K`, counted in `FollowRouteBehavior.respawn_epochs`) and the
+  pre-respawn target is masked.
   IDs are namespaced per reset episode. The target join uses those IDs only; absent
   identities have `target_mask=0` instead of borrowing another pedestrian’s target.
   Collection fails closed if that mapping is missing or invalid. Observation memory
@@ -40,7 +44,8 @@ For the full concept + architecture + implementation walkthrough, see:
 - The mixed builder rejects any unmarked/corrected mixture. Training and model
   registration reject unmarked or incompatible supervision by default. The explicit
   `--allow-legacy-supervision` option is solely for reproducing historical, unverified
-  data/training; it never allows legacy rows mixed with corrected rows.
+  data/training; it never allows legacy rows mixed with corrected rows. Re-registering an existing v1
+  checkpoint (`--checkpoint-only-register`) against its v1 dataset needs the same flag.
 - Outputs default to separate `_identity_v2.npz` filenames and refuse replacing an
   existing NPZ; do not overwrite archived datasets or checkpoints.
 - **Hold retraining under #10033** until both collectors pass the crossing,

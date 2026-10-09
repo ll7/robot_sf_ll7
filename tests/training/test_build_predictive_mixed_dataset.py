@@ -14,8 +14,8 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     predictive_feature_schema_metadata,
 )
-from scripts.training import build_predictive_mixed_dataset as mixed_builder
 from robot_sf.training.predictive_supervision import supervision_metadata
+from scripts.training import build_predictive_mixed_dataset as mixed_builder
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -990,10 +990,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
                 allow_legacy=bool(args.allow_legacy_supervision),
             )
         summary = json.loads(args.training_summary.read_text(encoding="utf-8"))
-        if summary.get("supervision_metadata") != registration_supervision:
-            raise ValueError("Registration summary supervision does not match dataset contract")
         if not isinstance(summary, dict):
             raise TypeError(f"Expected JSON object at {args.training_summary}")
+        if summary.get("supervision_metadata") != registration_supervision:
+            raise ValueError("Registration summary supervision does not match dataset contract")
         _validate_checkpoint_registration_inputs(
             summary=summary,
             checkpoint_path=args.checkpoint_only_register,

@@ -10,8 +10,10 @@ cross-episode joins. Do not substitute observation-derived tracking IDs here.
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 PREDICTIVE_DATASET_SCHEMA = "predictive_planner_dataset_v2_identity"
 COLLECTOR_VERSION = "predictive_collectors_identity_v2"
@@ -28,7 +30,11 @@ CONTRACT_KEYS = (
 
 
 def supervision_metadata(collector_id: str) -> dict[str, Any]:
-    """Version a corrected collector without impersonating immutable v1 artifacts."""
+    """Version a corrected collector without impersonating immutable v1 artifacts.
+
+    Returns:
+        The versioned supervision contract mapping for this collector.
+    """
     if collector_id not in {"base", "hardcase", "mixed"}:
         raise ValueError(f"Unexpected predictive collector: {collector_id!r}")
     return {
@@ -73,14 +79,40 @@ def observation_episode_ids(env: Any, *, episode_id: str) -> tuple[str, ...]:
     if positions is None or any(index >= len(positions) for index in indices):
         raise ValueError("Pedestrian source indices exceed the current simulator population")
     # Current simulator rows are fixed within an episode, unlike the sorted SOCNAV rows.
-    return tuple(f"{episode_id}:simulator-slot-{index}" for index in indices)
+    # A route respawn teleports the row to a new start, so it gets a new identity.
+    epochs = _respawn_epochs(simulator)
+    return tuple(
+        f"{episode_id}:simulator-slot-{index}"
+        + (f":respawn-{epochs[index]}" if epochs.get(index, 0) else "")
+        for index in indices
+    )
+
+
+def _respawn_epochs(simulator: Any) -> dict[int, int]:
+    """Collect per-simulator-row route respawn counts from the pedestrian behaviors.
+
+    Returns:
+        Mapping from simulator pedestrian row to respawns this episode (absent means 0).
+    """
+    epochs: dict[int, int] = {}
+    for behavior in getattr(simulator, "peds_behaviors", ()) or ():
+        offset = int(getattr(behavior, "global_ped_offset", 0) or 0)
+        counts = getattr(behavior, "respawn_epochs", None)
+        if isinstance(counts, dict):
+            for local_id, count in counts.items():
+                epochs[offset + int(local_id)] = int(count)
+    return epochs
 
 
 def identity_match_indices(
     source_ids: tuple[str, ...],
     target_ids: tuple[str, ...],
 ) -> dict[int, int]:
-    """Join by episode-scoped actor ID only; absent IDs have no future target."""
+    """Join by episode-scoped actor ID only; absent IDs have no future target.
+
+    Returns:
+        Mapping from source row to target row for identities present in both frames.
+    """
     for ids in (source_ids, target_ids):
         if any(not isinstance(value, str) or not value for value in ids):
             raise ValueError("Missing or invalid pedestrian identity in predictive frame")
@@ -110,13 +142,17 @@ def _parse_embedded_metadata(raw: Any, *, path: Path) -> dict[str, Any] | None:
     return result
 
 
-def validate_supervision_metadata(
+def validate_supervision_metadata(  # noqa: C901
     raw: Any,
     *,
     path: Path,
     allow_legacy: bool = False,
 ) -> dict[str, Any] | None:
-    """Verify the NPZ and, when present, its sidecar. Legacy is opt-in only."""
+    """Verify the NPZ and, when present, its sidecar. Legacy is opt-in only.
+
+    Returns:
+        The validated metadata, or None for an explicitly allowed legacy dataset.
+    """
     metadata = _parse_embedded_metadata(raw, path=path)
     if metadata is None:
         if allow_legacy:
@@ -157,8 +193,10 @@ def validate_supervision_metadata(
             )
     if metadata["collector_id"] == "mixed":
         sources = metadata.get("source_collectors")
-        if not isinstance(sources, list) or len(sources) != 2 or any(
-            source not in {"base", "hardcase"} for source in sources
+        if (
+            not isinstance(sources, list)
+            or len(sources) != 2
+            or any(source not in {"base", "hardcase"} for source in sources)
         ):
             raise ValueError(f"Invalid mixed predictive source_collectors in {path}")
     manifest_path = path.with_suffix(path.suffix + ".manifest.json")
@@ -180,7 +218,11 @@ def compatible_mixed_supervision(
     *,
     allow_legacy: bool = False,
 ) -> dict[str, Any] | None:
-    """Refuse legacy/corrected mixing even with historical opt-in enabled."""
+    """Refuse legacy/corrected mixing even with historical opt-in enabled.
+
+    Returns:
+        The mixed-dataset metadata, or None when both inputs are explicitly legacy.
+    """
     if base is None or hardcase is None:
         if base is None and hardcase is None and allow_legacy:
             return None

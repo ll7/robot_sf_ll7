@@ -25,7 +25,6 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_map,
     predictive_feature_schema_metadata,
 )
-
 from robot_sf.training.predictive_supervision import (
     PREDICTIVE_DATASET_SCHEMA,
     identity_match_indices,
@@ -91,9 +90,7 @@ def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
     return robot, goal, peds
 
 
-def _extract_frame(
-    obs: dict, max_agents: int, *, ped_ids: tuple[str, ...] | None = None
-) -> Frame:
+def _extract_frame(obs: dict, max_agents: int, *, ped_ids: tuple[str, ...] | None = None) -> Frame:
     """Convert observation payload to a compact frame container."""
     robot, goal, peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
@@ -178,7 +175,7 @@ def _world_to_ego(
     return np.stack([x_ego, y_ego], axis=1).astype(np.float32)
 
 
-def _frames_to_samples(
+def _frames_to_samples(  # noqa: C901
     frames: list[Frame],
     *,
     max_agents: int,
@@ -384,7 +381,7 @@ def _reset_with_min_goal(
     return obs, skipped
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901
     """Collect dataset and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     logger.remove()

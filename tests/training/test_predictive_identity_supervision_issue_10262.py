@@ -188,7 +188,9 @@ def test_sensor_source_sidechannel_uses_sorted_original_indices() -> None:
         robot_pos=np.asarray((0.0, 0.0), dtype=np.float32),
         heading=0.0,
     )
-    np.testing.assert_array_equal(rows[:, 0], [0.0, 0.8])
+    np.testing.assert_allclose(
+        rows[:, 0], np.asarray([0.0, 0.8], dtype=np.float32), rtol=0, atol=1e-7
+    )
     assert fusion.current_source_indices == (1, 0)
     fusion.simulator.ped_pos = positions
     env = SimpleNamespace(
@@ -196,10 +198,12 @@ def test_sensor_source_sidechannel_uses_sorted_original_indices() -> None:
         simulator=fusion.simulator,
     )
     assert observation_episode_ids(env, episode_id="reset-1") == (
-        "reset-1:simulator-slot-1", "reset-1:simulator-slot-0",
+        "reset-1:simulator-slot-1",
+        "reset-1:simulator-slot-0",
     )
-    assert observation_episode_ids(env, episode_id="reset-2")[0] != (
-        observation_episode_ids(env, episode_id="reset-1")[0]
+    assert (
+        observation_episode_ids(env, episode_id="reset-2")[0]
+        != (observation_episode_ids(env, episode_id="reset-1")[0])
     )
 
 
@@ -217,6 +221,70 @@ def test_missing_or_duplicate_sensor_source_index_fails_closed() -> None:
     del sensor.current_source_indices
     with pytest.raises(ValueError, match="requires SocNavObservationFusion"):
         observation_episode_ids(env, episode_id="episode-1")
+
+
+def _route_behavior_env(offset: int = 0):
+    """Real FollowRouteBehavior (one two-pedestrian group) behind a stub env."""
+    from robot_sf.nav.global_route import GlobalRoute
+    from robot_sf.ped_npc.ped_behavior import FollowRouteBehavior
+    from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
+
+    states = np.zeros((2 + offset, 7))
+    groups = PedestrianGroupings(PedestrianStates(lambda: states))
+    gid = groups.new_group({0, 1})
+    route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(4.0, 2.0), (30.0, 2.0)],
+        spawn_zone=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)),
+        goal_zone=((29.0, 0.0), (31.0, 0.0), (31.0, 2.0)),
+    )
+    behavior = FollowRouteBehavior(
+        groups,
+        {gid: route},
+        [0],
+        rng=np.random.default_rng(1),
+        guard_rng=np.random.default_rng(2),
+        global_ped_offset=offset,
+    )
+    sensor = SimpleNamespace(
+        current_source_indices=(offset, offset + 1),
+        env_config=SimpleNamespace(observation_visibility=SimpleNamespace()),
+    )
+    env = SimpleNamespace(
+        state=SimpleNamespace(sensors=sensor),
+        simulator=SimpleNamespace(ped_pos=np.zeros((2 + offset, 2)), peds_behaviors=[behavior]),
+    )
+    return behavior, gid, env
+
+
+@pytest.mark.parametrize("offset", [0, 3])
+def test_route_respawn_changes_identity_and_reset_clears_it(offset) -> None:
+    behavior, gid, env = _route_behavior_env(offset)
+    before = observation_episode_ids(env, episode_id="e1")
+    behavior.respawn_group_at_start(gid, guard_robot=False)
+    after = observation_episode_ids(env, episode_id="e1")
+    assert not set(before) & set(after)
+    assert behavior.respawn_epochs == {0: 1, 1: 1}
+    behavior.respawn_group_at_start(gid, guard_robot=False)
+    assert observation_episode_ids(env, episode_id="e1") not in (before, after)
+    behavior.reset()
+    assert observation_episode_ids(env, episode_id="e1") == before
+
+
+def test_respawn_between_t_and_t_plus_k_masks_target(collector) -> None:
+    """A teleported (respawned) pedestrian must not be matched to its pre-respawn self."""
+    behavior, gid, env = _route_behavior_env()
+    ids_t = observation_episode_ids(env, episode_id="e1")
+    behavior.respawn_group_at_start(gid, guard_robot=False)
+    ids_k = observation_episode_ids(env, episode_id="e1")
+    frames = [
+        _frame(collector, [(0.0, 0.0), (0.8, 0.0)], ids_t),
+        _frame(collector, [(30.0, 0.0), (30.0, 1.0)], ids_k),
+    ]
+    _, target, _mask, target_mask = _sample(collector, frames)
+    np.testing.assert_array_equal(target_mask[0, :2, 0], [0.0, 0.0])
+    np.testing.assert_array_equal(target[0, :2, 0], np.zeros((2, 2)))
 
 
 def _npz(path: Path, *, marker: dict | None) -> None:

@@ -17,7 +17,6 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_DIM,
     predictive_ego_motion_channel_producer_key,
 )
-
 from robot_sf.training.predictive_supervision import (
     compatible_mixed_supervision,
     validate_supervision_metadata,
@@ -256,10 +255,16 @@ def _resolve_mixed_feature_schema(
 
 
 def _load_npz(
-    path: Path, *, allow_legacy_supervision: bool = False,
+    path: Path,
+    *,
+    allow_legacy_supervision: bool = False,
 ) -> tuple[
-    np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-    dict[str, Any] | None, dict[str, Any] | None,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
 ]:
     """Load arrays plus optional feature-schema metadata from a dataset NPZ."""
     with np.load(path) as raw:

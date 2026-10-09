@@ -53,7 +53,7 @@ def test_horizon_preserves_terminal_event(monkeypatch, planner, terminal):
             }
         },
     )
-    assert record["termination_reason"] == terminal
+    assert record["termination_reason"] == ("truncated" if terminal == "timeout" else terminal)
     assert record["outcome"]["timeout_event"] is (terminal == "timeout")
     assert record["outcome"]["collision_event"] is collision
     assert record["outcome"]["route_complete"] is success

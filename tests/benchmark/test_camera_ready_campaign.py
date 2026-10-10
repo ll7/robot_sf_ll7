@@ -3794,6 +3794,8 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
         "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
+    predictor_config = tmp_path / "prediction_baseline.yaml"
+    predictor_config.write_text("forecast_variant: constant_velocity\n", encoding="utf-8")
 
     config_path = tmp_path / "campaign_continue_on_failure.yaml"
     config_path.write_text(
@@ -3808,6 +3810,7 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
                 "planners:",
                 "  - key: prediction_planner",
                 "    algo: prediction_planner",
+                f"    algo_config: {predictor_config.as_posix()}",
                 "  - key: goal",
                 "    algo: goal",
             ],

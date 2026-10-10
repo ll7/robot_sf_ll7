@@ -502,6 +502,8 @@ def check_campaign_arm_checkpoints_preflight(
         registry_path: Optional model-registry path override (useful for tests/fixtures).
         cache_dir: Optional cache directory override for staged downloads.
         fail_closed_implicit: Whether implicit registry defaults are blocking when unresolved.
+            Learned predictive checkpoints always require verified forecast windows, including
+            implicit defaults, regardless of this option.
         suppress_not_submit_safe_warning: Suppress the metadata-only warning when a caller has
             independently admitted an authoritative staged-checkpoint receipt. This does not
             change the metadata-only ``submit_safe`` result.
@@ -514,6 +516,7 @@ def check_campaign_arm_checkpoints_preflight(
         CampaignCheckpointPreflightError: When one or more arm checkpoints are unresolvable.
     """
     from robot_sf.benchmark.campaign.predictive_horizon_preflight import (  # noqa: PLC0415
+        PredictiveHorizonPreflightError,
         check_campaign_predictive_horizons_preflight,
     )
 
@@ -523,6 +526,17 @@ def check_campaign_arm_checkpoints_preflight(
         registry_path=registry_path,
         cache_dir=cache_dir,
     )
+    for binding in predictive_horizons:
+        if binding["status"] == "unverified":
+            raise PredictiveHorizonPreflightError(
+                f"Campaign checkpoint preflight refuses unverified predictor for "
+                f"arm '{binding['planner_key']}' (algo={binding['algo']}, "
+                f"scenario={binding['scenario']}, family={binding['family']}), "
+                f"checkpoint='{binding['checkpoint']}': {binding['unverified_reason']}. "
+                "Stage the declared checkpoint before campaign startup/submission; "
+                "no forecast window was admitted.",
+                binding=binding,
+            )
     references = iter_campaign_arm_checkpoint_references(cfg)
     if not references:
         logger.debug(

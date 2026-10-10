@@ -8,8 +8,8 @@ No sub-agents or Slurm submissions were used for this preparation.
 The [study config](../../../configs/benchmarks/pedestrian_sensitivity_10190.yaml)
 consumes the authored 0.0.8 release matrix (48 scenarios), 14 planner bindings and
 scenario-specific horizons unchanged. It replaces the release seed policy with
-1001–1030, and refuses every other seed, including retired 111–140 and sealed
-50036–59019. Repeats, booleans, floats and missing seeds are also refused.
+1001–1030, and refuses every other seed, including retired 111–140 and the sealed
+evaluation seed band. Repeats, booleans, floats and missing seeds are also refused.
 
 ## Opt-in definitions and sources
 

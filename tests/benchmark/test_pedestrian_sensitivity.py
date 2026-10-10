@@ -72,7 +72,7 @@ def test_exact_speed_profile_overrides(mean):
 
 
 @pytest.mark.parametrize(
-    "seed", [0, 1, 110, 111, 140, 141, 311, 1000, 1031, 50036, 59019, None, True, 1001.0]
+    "seed", [0, 1, 110, 111, 140, 141, 311, 1000, 1031, 9001, 9002, None, True, 1001.0]
 )
 def test_dev_only_seed_guard(seed):
     """Catch admitting an arbitrary non-held-out seed or coercing a non-integer."""
@@ -219,7 +219,7 @@ def test_plan_inventory_and_pre_dispatch_seed_guard():
     assert len(planners) == 14
     assert cfg["selected_seeds"] == list(range(1001, 1031))
     with pytest.raises(ValueError, match="non-development seed"):
-        prepare(DEFAULT_CONFIG, seeds=[50036], check_dependencies=False)
+        prepare(DEFAULT_CONFIG, seeds=[9001], check_dependencies=False)
 
 
 def test_default_settings_bytes_and_profile_roundtrip():

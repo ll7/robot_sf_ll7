@@ -22,7 +22,7 @@ regression and the closest coverage gap; parametrizations share these answers.
 | `test_combined_profile_dependency_is_not_silently_ignored` | Combined needs #10073; when present its real law/gain reach substrate | Silently deleting missing wall selection | #10073 selector tests cover its profile alone, not combined measured size/speed |
 | `test_legacy_profile_retains_default_kernel_and_geometry` | Legacy geometry 0.40/0.35 and nominal speed 0.65 persist | Opt-in binding applied globally | Existing speed tests do not jointly check force/placement radius |
 | `test_native_goal_seconds_reconstructed_without_failure_imputation` | Native successful normalized goal time becomes 30.8 s; failure stays null | Treating omitted raw seconds as absent success data | Existing metrics cover native normalization, not this study extractor |
-| `test_plan_inventory_and_pre_dispatch_seed_guard` | Plan resolves 48 × 14 × 30; sealed seed refused before dispatch | Accidentally inheriting release seed policy or shrinking roster | Existing release tests intentionally use a different seed policy |
+| `test_plan_inventory_and_pre_dispatch_seed_guard` | Plan resolves 48 × 14 × 30; non-dev sentinel refused before dispatch | Accidentally inheriting release seed policy or shrinking roster | Existing release tests intentionally use a different seed policy |
 | `test_default_settings_bytes_and_profile_roundtrip` | Default serialized hash unchanged; explicit controls survive replace | New fields changing default identity, or InitVar lost on copy | `sim_config_test.py` does not freeze this base-to-branch digest |
 
 ## Before / after
@@ -89,10 +89,30 @@ The dependency test verifies its live surface-distance law, .001 gain and .25 ra
 The default settings digest was independently measured on base and matched on
 branch: `0d054279f4a6e090d40e1fa54accaf58e955e624a3309472b44107f8790bb78d`.
 
-CLI negative check with `--mode smoke --seeds 50036 1001` refused before output
-creation: `non-development seed 50036 at pedsens; use 1001..1030`.
+CLI negative check rerun with non-dev sentinel 9001: `--mode smoke --seeds 9001 1001` refused before output
+creation: `non-development seed 9001 at pedsens; use 1001..1030`.
 Plan-only resolution wrote 120,960 intended episodes without dispatch.
 
 Full test suite, Slurm behavior gate and complete 14-arm study were not run.
 The scope is preparation and bounded smoke; these checks do not establish model
 adoption, realistic pedestrians, or benchmark ranking conclusions.
+
+
+## Sentinel rejection proof after independent review
+
+The current rejection cases use non-development sentinels `9001` and `9002`,
+not sealed seed-shaped literals. The CLI check above was rerun with `9001`
+and refused before creating its output directory.
+
+A process-local negative control delegates to the production admission function
+with `dev_only=False`, disabling only the study whitelist while preserving
+ordinary type and held-out validation. No production source is changed and no
+episode is dispatched. Running the two sentinel guard cases and the planning
+rejection case gives **3 failed**, each with `DID NOT RAISE ValueError`. The
+ordinary implementation passes these same cases in the targeted suite.
+
+These checks protect direct admission and the real `prepare()` boundary. A
+removed whitelist or ignored `dev_only` flag admits the sentinels and fails the
+tests. Prior sealed/retired blacklist cases could reject for a different reason;
+these non-held-out sentinels isolate the study whitelist. The control is entirely
+test-process-local and adds no production test-only seam.

@@ -1421,12 +1421,17 @@ def _attach_single_pedestrian_behavior(
     time_step_s: float,
     single_ped_goal_threshold: float | None,
 ) -> None:
-    """Register single-member groups and the single-pedestrian behavior controller.
-
-    Single pedestrians start as single-member groups for optional join/leave behaviors.
-    """
-    for ped_id in range(single_offset, single_offset + len(single_pedestrians)):
-        groups.new_group({ped_id})
+    """Register authored initial groups; unlabelled single pedestrians start alone."""
+    authored_groups: dict[str, int] = {}
+    for index, ped in enumerate(single_pedestrians):
+        ped_id = single_offset + index
+        label = ped.initial_group_id
+        if label is not None and label in authored_groups:
+            groups.add_to_group(ped_id, authored_groups[label])
+        else:
+            group_id = groups.new_group({ped_id})
+            if label is not None:
+                authored_groups[label] = group_id
     ped_behaviors.append(
         SinglePedestrianBehavior(
             pysf_state,

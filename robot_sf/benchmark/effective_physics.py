@@ -246,7 +246,7 @@ def _episode_physics_sample(row: dict[str, Any]) -> dict[str, Any]:
 def _retain_sample(
     samples: dict[tuple[str, str, str], dict[str, Any]], sample: dict[str, Any]
 ) -> None:
-    """Keep the latest complete row for one episode identity across resume attempts."""
+    """Upgrade missing witnesses on retry, rejecting conflicting recorded physics."""
     identity = _sample_identity(sample)
     existing = samples.get(identity)
     if existing is None or existing == sample:
@@ -256,7 +256,7 @@ def _retain_sample(
         raise ValueError("conflicting physics for episode identity")
     existing_witness = existing.get("physics_witness", "recorded")
     new_witness = sample.get("physics_witness", "recorded")
-    if new_witness == "recorded":
+    if existing_witness == "missing" and new_witness == "recorded":
         samples[identity] = sample
         return
     if existing_witness == "recorded" and new_witness == "missing":

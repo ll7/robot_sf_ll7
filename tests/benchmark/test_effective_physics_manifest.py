@@ -325,14 +325,29 @@ def test_manifest_reports_mixed_witnesses_as_incomplete(tmp_path, native_physics
         validate_campaign_physics(manifest)
 
 
-def test_manifest_keeps_complete_retry_for_same_episode_identity(tmp_path, native_physics_row):
+def test_manifest_rejects_conflicting_recorded_retry_for_same_episode_identity(
+    tmp_path, native_physics_row
+):
+    """Conflicting recorded physics cannot replace a witness for the same source episode."""
+    first = copy.deepcopy(native_physics_row)
+    conflicting = copy.deepcopy(first)
+    conflicting["effective_physics"]["radius_roles"]["placement_m"] = 0.51
+    with pytest.raises(ValueError, match="conflicting physics for episode identity"):
+        _manifest_from_rows(tmp_path, [first, conflicting])
+
+
+@pytest.mark.parametrize("later_missing", [False, True])
+def test_manifest_keeps_complete_retry_for_same_episode_identity(
+    tmp_path, native_physics_row, later_missing
+):
     """A resumed retry can replace an older unwitnessed row for the same source episode."""
     missing = copy.deepcopy(native_physics_row)
     missing.pop("effective_physics")
     missing.pop("release_design_parameters")
     complete = copy.deepcopy(native_physics_row)
     complete["effective_physics"]["radius_roles"]["placement_m"] = 0.51
-    manifest = _manifest_from_rows(tmp_path, [missing, complete])
+    rows = [missing, complete, missing] if later_missing else [missing, complete]
+    manifest = _manifest_from_rows(tmp_path, rows)
     assert manifest["schema_version"] == "benchmark-camera-ready-campaign.v2"
     assert manifest["effective_physics_status"] == "complete"
     assert manifest["effective_physics_episode_count"] == 1

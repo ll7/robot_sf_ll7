@@ -338,8 +338,8 @@ jobs:
       contents: read
       actions: read
     timeout-minutes: 45
-    # Split complete admission across six runners and combine exact-head coverage.
-    # Uncertain dependencies intentionally select every slow test on pull requests.
+    # Split fast tests plus affected slow witnesses across six runners.
+    # Shared CI/collection changes and unmapped inputs retain complete admission.
     strategy:
       fail-fast: false
       matrix:
@@ -357,7 +357,7 @@ jobs:
       PYTEST_XDIST_DIST: worksteal
       PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
-      ROBOT_SF_SHARD_INCLUDE_SLOW: "1"
+      ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       # Reuse the setup decision only after default admission is installed.
       ROBOT_SF_AFFECTED_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
       ROBOT_SF_AFFECTED_SELECTION_FILE: ${{ github.event_name == 'pull_request' && 'output/ci/affected-selection.json' || '' }}

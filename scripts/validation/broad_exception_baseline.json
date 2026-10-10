@@ -2,7 +2,7 @@
   "counts": {
     "by_path": {
       "robot_sf/benchmark/camera_ready/campaign.py": 1,
-      "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
+      "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 3,
       "robot_sf/benchmark/candidate_trace_resolution.py": 1,
       "robot_sf/benchmark/doctor.py": 2,
       "robot_sf/benchmark/forecast/forecast_lane_inventory.py": 1,
@@ -116,7 +116,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 206
+    "total": 207
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -125,16 +125,25 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "e53eb792397aafba",
       "handler": "Exception",
-      "lineno": 603,
+      "lineno": 709,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:  # noqa: BLE001 - campaign fault isolation: failed arm, not crash"
+    },
+    {
+      "col_offset": 4,
+      "context": "_run_single_arm_subprocess",
+      "fingerprint": "5e149482ce2b7529",
+      "handler": "Exception",
+      "lineno": 294,
+      "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - preserve partial rows for any ordinary runner error"
     },
     {
       "col_offset": 4,
       "context": "_main_subprocess_worker",
       "fingerprint": "f52dd654553d63c5",
       "handler": "Exception",
-      "lineno": 396,
+      "lineno": 419,
       "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
       "source": "except Exception as exc:  # noqa: BLE001 - worker must always emit structured output (#4826)"
     },
@@ -143,7 +152,7 @@
       "context": "_main_subprocess_worker",
       "fingerprint": "a5a4fb83bfe617b4",
       "handler": "Exception",
-      "lineno": 409,
+      "lineno": 432,
       "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
       "source": "except Exception:  # noqa: BLE001 - cleanup must never mask the original error"
     },
@@ -251,7 +260,7 @@
       "context": "_preflight_policy",
       "fingerprint": "7a3a2d000b9eb0a0",
       "handler": "Exception",
-      "lineno": 914,
+      "lineno": 915,
       "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
@@ -260,7 +269,7 @@
       "context": "_preflight_policy",
       "fingerprint": "e1451027dc4d2b28",
       "handler": "Exception",
-      "lineno": 944,
+      "lineno": 945,
       "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
@@ -377,7 +386,7 @@
       "context": "_planner_foresight_diagnostics",
       "fingerprint": "b01bac98938ef3e3",
       "handler": "Exception",
-      "lineno": 387,
+      "lineno": 399,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution"
     },
@@ -386,7 +395,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "9e9cfa53c3234921",
       "handler": "Exception",
-      "lineno": 474,
+      "lineno": 486,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors"
     },
@@ -395,7 +404,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "36fb8c6067433ca9",
       "handler": "Exception",
-      "lineno": 496,
+      "lineno": 508,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation"
     },
@@ -404,7 +413,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2661,
+      "lineno": 2724,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -413,7 +422,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "3e85dca65fdc0caf",
       "handler": "Exception",
-      "lineno": 2663,
+      "lineno": 2726,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -422,7 +431,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2679,
+      "lineno": 2742,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -431,7 +440,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2766,
+      "lineno": 2829,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -440,7 +449,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "83f25d3b1aad5e1e",
       "handler": "Exception",
-      "lineno": 2768,
+      "lineno": 2831,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -449,7 +458,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2784,
+      "lineno": 2847,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -467,7 +476,7 @@
       "context": "SimulatorCounterfactualModel.restore",
       "fingerprint": "1c3f85c3c4e03e51",
       "handler": "Exception",
-      "lineno": 1249,
+      "lineno": 1251,
       "path": "robot_sf/benchmark/simulator_counterfactual_adapter.py",
       "source": "except Exception:"
     },
@@ -476,7 +485,7 @@
       "context": "SimulatorCounterfactualModel.restore",
       "fingerprint": "c71c47980076b858",
       "handler": "Exception",
-      "lineno": 1258,
+      "lineno": 1260,
       "path": "robot_sf/benchmark/simulator_counterfactual_adapter.py",
       "source": "except Exception as rollback_exc:"
     },
@@ -485,7 +494,7 @@
       "context": "cmd_recompute_weights",
       "fingerprint": "e7ad3d5797bafa46",
       "handler": "Exception",
-      "lineno": 92,
+      "lineno": 93,
       "path": "robot_sf/benchmark/snqi/cli.py",
       "source": "except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)"
     },
@@ -494,7 +503,7 @@
       "context": "cmd_ablation_analysis",
       "fingerprint": "49241cc52bf46241",
       "handler": "Exception",
-      "lineno": 254,
+      "lineno": 257,
       "path": "robot_sf/benchmark/snqi/cli.py",
       "source": "except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)"
     },
@@ -503,7 +512,7 @@
       "context": "cmd_inventory_weights",
       "fingerprint": "6a71587141a70ebe",
       "handler": "Exception",
-      "lineno": 322,
+      "lineno": 325,
       "path": "robot_sf/benchmark/snqi/cli.py",
       "source": "except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)"
     },
@@ -530,7 +539,7 @@
       "context": "run_manifest_preflight",
       "fingerprint": "8294b89b899cb6f6",
       "handler": "Exception",
-      "lineno": 1247,
+      "lineno": 1308,
       "path": "robot_sf/benchmark/spawn_preflight.py",
       "source": "except Exception as exc:  # noqa: BLE001"
     },
@@ -755,7 +764,7 @@
       "context": "run_benchmark_pipeline",
       "fingerprint": "0aa035d993001eac",
       "handler": "Exception",
-      "lineno": 160,
+      "lineno": 175,
       "path": "scripts/benchmark_repro_check.py",
       "source": "except Exception as e:"
     },
@@ -764,7 +773,7 @@
       "context": "run_benchmark_pipeline",
       "fingerprint": "0aa035d993001eac",
       "handler": "Exception",
-      "lineno": 190,
+      "lineno": 205,
       "path": "scripts/benchmark_repro_check.py",
       "source": "except Exception as e:"
     },
@@ -1304,7 +1313,7 @@
       "context": "_run_episode",
       "fingerprint": "bdceeefdd4af008c",
       "handler": "Exception",
-      "lineno": 1827,
+      "lineno": 1898,
       "path": "scripts/tools/policy_analysis_run.py",
       "source": "except Exception as exc:"
     },
@@ -1313,7 +1322,7 @@
       "context": "_close_env",
       "fingerprint": "f8c007baf8252556",
       "handler": "Exception",
-      "lineno": 1865,
+      "lineno": 1936,
       "path": "scripts/tools/policy_analysis_run.py",
       "source": "except Exception as exc:"
     },
@@ -1322,7 +1331,7 @@
       "context": "_apply_video_termination_suffix",
       "fingerprint": "e4107f15258f0159",
       "handler": "Exception",
-      "lineno": 1896,
+      "lineno": 1967,
       "path": "scripts/tools/policy_analysis_run.py",
       "source": "except Exception as exc:"
     },
@@ -1493,7 +1502,7 @@
       "context": "_reset_with_min_goal",
       "fingerprint": "9a41a2b6fe874211",
       "handler": "Exception",
-      "lineno": 403,
+      "lineno": 391,
       "path": "scripts/training/collect_predictive_planner_data.py",
       "source": "except Exception:"
     },

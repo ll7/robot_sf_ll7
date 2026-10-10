@@ -70,6 +70,8 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
 from robot_sf.benchmark.camera_ready._run_state import (
     _build_arm_rollup,
     _campaign_success_counters,
+    _count_episode_rows_written_since,
+    _episode_jsonl_snapshot,
     validate_campaign_integrity,
 )
 from robot_sf.benchmark.camera_ready._summaries import (
@@ -657,6 +659,7 @@ def _execute_campaign_planner_batch(
         if cfg.retained_metric_contract_path is not None
         else {}
     )
+    episode_file_before = _episode_jsonl_snapshot(run.episodes_path)
     try:
         summary = dependencies.run_batch(
             run.scoped_scenarios,
@@ -710,7 +713,10 @@ def _execute_campaign_planner_batch(
             "status": "failed",
             "error": repr(exc),
             "total_jobs": 0,
-            "written": 0,
+            "written": _count_episode_rows_written_since(
+                run.episodes_path,
+                episode_file_before,
+            ),
             "failed_jobs": 0,
             "failures": [],
         }
@@ -906,7 +912,52 @@ def _resolve_campaign_planner_batch_result(
     return _execute_campaign_planner_batch(context, planner, run)
 
 
-def _run_campaign_planner_variant(  # noqa: PLR0915
+def _set_arm_invocation_metadata(
+    summary: dict[str, Any],
+    *,
+    status: str,
+    resume_verdict: ArmResumeVerdict | None,
+    planner_started_at_utc: str,
+    planner_start: float,
+    kinematics: str,
+) -> tuple[str, str, float, bool]:
+    """Annotate an arm result with current-invocation and timing provenance.
+
+    Returns:
+        Start/end timestamps, elapsed runtime, and whether the arm was cached.
+    """
+    cached_complete_resume = resume_verdict is not None
+    if cached_complete_resume:
+        planner_started_at_utc = str(summary.get("started_at_utc") or planner_started_at_utc)
+        planner_finished_at_utc = str(summary.get("finished_at_utc") or planner_started_at_utc)
+        runtime_sec = float(summary.get("runtime_sec", 0.0))
+        # This invocation bypassed execution; persisted ``written`` is historical.
+        episodes_written = 0
+    else:
+        planner_finished_at_utc = _utc_now()
+        runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
+        episodes_written = int(summary.get("written", 0))
+
+    summary["status"] = status
+    summary["started_at_utc"] = planner_started_at_utc
+    summary["finished_at_utc"] = planner_finished_at_utc
+    summary["runtime_sec"] = runtime_sec
+    summary["episodes_written_this_invocation"] = episodes_written
+    if not cached_complete_resume:
+        summary["episodes_per_second"] = (
+            (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
+        )
+    summary["kinematics"] = kinematics
+    summary["benchmark_availability"] = availability_payload(summary)
+    return (
+        planner_started_at_utc,
+        planner_finished_at_utc,
+        runtime_sec,
+        cached_complete_resume,
+    )
+
+
+def _run_campaign_planner_variant(
     context: _CampaignPlannerMatrixContext,
     *,
     planner: PlannerSpec,
@@ -947,28 +998,22 @@ def _run_campaign_planner_variant(  # noqa: PLR0915
     warnings.extend(batch_result.warnings)
     aggregates: dict[str, Any] | None = None
 
-    if resume_verdict is None:
-        planner_finished_at_utc = _utc_now()
-        runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
-        episodes_written = int(summary.get("written", 0))
-    else:
-        planner_started_at_utc = str(summary.get("started_at_utc") or planner_started_at_utc)
-        planner_finished_at_utc = str(summary.get("finished_at_utc") or planner_started_at_utc)
-        runtime_sec = float(summary.get("runtime_sec", 0.0))
-        episodes_written = int(summary.get("written", 0))
-    summary["status"] = status
-    summary["started_at_utc"] = planner_started_at_utc
-    summary["finished_at_utc"] = planner_finished_at_utc
-    summary["runtime_sec"] = runtime_sec
-    summary["episodes_per_second"] = (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
-    summary["kinematics"] = kinematics
-    summary["benchmark_availability"] = availability_payload(summary)
-    _write_json(run.planner_dir / "summary.json", summary)
-
+    (
+        planner_started_at_utc,
+        planner_finished_at_utc,
+        runtime_sec,
+        cached_complete_resume,
+    ) = _set_arm_invocation_metadata(
+        summary,
+        status=status,
+        resume_verdict=resume_verdict,
+        planner_started_at_utc=planner_started_at_utc,
+        planner_start=planner_start,
+        kinematics=kinematics,
+    )
     records: list[dict[str, Any]] = []
     if run.episodes_path.exists() and run.episodes_path.stat().st_size > 0:
         records = read_jsonl(str(run.episodes_path))
-        summary["episodes_total"] = len(records)
         if status == "ok":
             for record in records:
                 annotated = dict(record)
@@ -989,6 +1034,10 @@ def _run_campaign_planner_variant(  # noqa: PLR0915
             warnings.append(
                 f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
             )
+
+    summary["episodes_total"] = len(records)
+    if not cached_complete_resume:
+        _write_json(run.planner_dir / "summary.json", summary)
 
     row = _planner_report_row(
         planner,
@@ -1390,6 +1439,10 @@ def _run_campaign_planner_variant_subprocess(
         status=status,
         context=context,
         warnings=warnings,
+    )
+    summary["episodes_total"] = len(records)
+    summary["episodes_written_this_invocation"] = int(
+        summary.get("episodes_written_this_invocation", summary.get("written", 0))
     )
     row = _planner_report_row(
         planner,
@@ -1840,6 +1893,7 @@ class _CampaignOutcomeState:
     campaign_finished_at_utc: str
     runtime_sec: float
     total_episodes: int
+    episodes_written_this_invocation: int
     campaign_outcome: Any
     successful_runs: int
     campaign_status_axes: Any
@@ -2204,6 +2258,23 @@ def _write_parity_table(
     )
 
 
+def _campaign_episode_counts(run_entries: list[dict[str, Any]]) -> tuple[int, int]:
+    """Return retained JSONL rows and rows newly written by this invocation.
+
+    The retained count describes artifact contents, while the invocation count
+    is the campaign-throughput numerator. They intentionally diverge on resume.
+    """
+    retained_rows = 0
+    invocation_rows = 0
+    for entry in run_entries:
+        summary = entry.get("summary")
+        if not isinstance(summary, dict):
+            continue
+        retained_rows += int(summary.get("episodes_total", 0))
+        invocation_rows += int(summary.get("episodes_written_this_invocation", 0))
+    return retained_rows, invocation_rows
+
+
 def _compute_campaign_outcome_state(
     cfg: CampaignConfig,
     *,
@@ -2220,15 +2291,7 @@ def _compute_campaign_outcome_state(
     """
     campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
-    total_episodes = sum(
-        int(
-            entry.get("summary", {}).get(
-                "episodes_total",
-                entry.get("summary", {}).get("written", 0),
-            )
-        )
-        for entry in run_entries
-    )
+    total_episodes, episodes_written_this_invocation = _campaign_episode_counts(run_entries)
     campaign_outcome = summarize_campaign_outcome(
         {"runs": run_entries, "planner_rows": planner_rows}
     )
@@ -2269,6 +2332,7 @@ def _compute_campaign_outcome_state(
         campaign_finished_at_utc=campaign_finished_at_utc,
         runtime_sec=runtime_sec,
         total_episodes=total_episodes,
+        episodes_written_this_invocation=episodes_written_this_invocation,
         campaign_outcome=campaign_outcome,
         successful_runs=successful_runs,
         campaign_status_axes=campaign_status_axes,
@@ -2778,9 +2842,12 @@ def _build_campaign_execution_metadata(
         "invoked_command": invoked_command,
         "runtime_sec": outcome.runtime_sec,
         "episodes_per_second": (
-            (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
+            (outcome.episodes_written_this_invocation / outcome.runtime_sec)
+            if outcome.runtime_sec > 0
+            else 0.0
         ),
         "total_episodes": outcome.total_episodes,
+        "episodes_written_this_invocation": outcome.episodes_written_this_invocation,
         "successful_runs": outcome.successful_runs,
         "total_runs": len(run_entries),
         "seed_count": len(paths.resolved_seeds),
@@ -3138,6 +3205,46 @@ def _build_run_meta_seed_variability_metrics(
     }
 
 
+def _run_meta_throughput_definition() -> dict[str, str]:
+    """Describe campaign-wide invocation throughput and retained-row fields.
+
+    Returns:
+        Mapping that names the numerator, denominator, rate, units, and scope.
+    """
+    return {
+        "scope": "campaign_all_planner_arms",
+        "numerator_field": "episodes_written_this_invocation",
+        "numerator_unit": "episode_rows",
+        "numerator_semantics": "episode_rows_newly_written_during_this_campaign_invocation",
+        "retained_count_field": "total_episodes",
+        "retained_count_semantics": "complete_serialized_episode_rows_retained_across_resume",
+        "denominator_field": "runtime_sec",
+        "denominator_unit": "seconds",
+        "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
+        "rate_field": "episodes_per_second",
+        "rate_unit": "episode_rows/second",
+    }
+
+
+def _campaign_throughput_metadata(outcome: _CampaignOutcomeState) -> dict[str, Any]:
+    """Build invocation-throughput counts and their explicit measurement contract.
+
+    Returns:
+        Counts, interval, rate, and throughput definition for run metadata.
+    """
+    return {
+        "runtime_sec": outcome.runtime_sec,
+        "total_episodes": outcome.total_episodes,
+        "episodes_written_this_invocation": outcome.episodes_written_this_invocation,
+        "episodes_per_second": (
+            (outcome.episodes_written_this_invocation / outcome.runtime_sec)
+            if outcome.runtime_sec > 0
+            else 0.0
+        ),
+        "throughput_definition": _run_meta_throughput_definition(),
+    }
+
+
 def _build_run_meta(
     cfg: CampaignConfig,
     *,
@@ -3211,10 +3318,7 @@ def _build_run_meta(
         "started_at_utc": paths.campaign_started_at_utc,
         "finished_at_utc": outcome.campaign_finished_at_utc,
         "invoked_command": invoked_command,
-        "runtime_sec": outcome.runtime_sec,
-        "episodes_per_second": (
-            (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
-        ),
+        **_campaign_throughput_metadata(outcome),
     }
     return _snqi_public_payload(payload, snqi)
 
@@ -3322,8 +3426,11 @@ def _write_run_level_files(
         "scenario_matrix_hash": paths.scenario_hash,
         "runtime_sec": outcome.runtime_sec,
         "episodes_per_second": (
-            (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
+            (outcome.episodes_written_this_invocation / outcome.runtime_sec)
+            if outcome.runtime_sec > 0
+            else 0.0
         ),
+        "episodes_written_this_invocation": outcome.episodes_written_this_invocation,
     }
     if cfg.numerical_mode is not None and outcome.benchmark_success:
         run_manifest["numerical_mode"] = paths.manifest_payload["numerical_mode"]
@@ -4171,8 +4278,7 @@ def _build_orchestrator_return(
     reports_dir = paths.reports_dir
     outcome = artifacts.outcome
     snqi = artifacts.snqi
-    campaign_outcome = outcome.campaign_outcome
-    campaign_status_axes = outcome.campaign_status_axes
+    campaign_outcome, campaign_status_axes = outcome.campaign_outcome, outcome.campaign_status_axes
     logger.info(
         "Camera-ready campaign finished id={} runs={} episodes={} out={}",
         paths.campaign_id,
@@ -4227,6 +4333,7 @@ def _build_orchestrator_return(
         "core_successful_runs": outcome.success_counters["core_successful_runs"],
         "core_total_runs": outcome.success_counters["core_total_runs"],
         "total_episodes": outcome.total_episodes,
+        "episodes_written_this_invocation": outcome.episodes_written_this_invocation,
         "runtime_sec": outcome.runtime_sec,
         "publication_bundle": publication_payload,
         "campaign_integrity": campaign_integrity,

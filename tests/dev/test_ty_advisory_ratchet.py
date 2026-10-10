@@ -357,6 +357,173 @@ def test_baseline_refresh_allows_decrease_and_preserves_exact_exceptions(
     assert refreshed["exceptions"] == previous["exceptions"]
 
 
+def _refresh_case_with_recorded_counts(with_exceptions: bool) -> tuple[dict, list[dict]]:
+    """A hand-counted baseline with two ordinary findings and one excluded import."""
+    ordinary = _finding("scripts/ordinary.py")
+    optional = _finding(
+        "scripts/optional.py",
+        check_name="unresolved-import",
+        description="unresolved-import: Cannot resolve imported module `refresh_probe`",
+    )
+    findings = [
+        ordinary,
+        _finding("scripts/assignment.py", check_name="invalid-assignment"),
+        optional,
+    ]
+    previous = {
+        "schema_version": tyratchet.SCHEMA_VERSION,
+        "summary": {
+            "general_findings": 2,
+            "optional_import_findings_excluded": 1,
+            "total_findings": 3,
+            "module_count": 1,
+        },
+        "modules": {"scripts": {"general": 2, "optional_import_excluded": 1, "total": 3}},
+        "rules": {"invalid-argument-type": 1, "invalid-assignment": 1, "unresolved-import": 1},
+    }
+    if with_exceptions:
+        findings.extend(_finding("scripts/evidence.py", line=i + 1) for i in range(2))
+        previous["exceptions"] = _exception_baseline()["exceptions"]
+        previous["summary"].update(general_findings=4, total_findings=5)
+        previous["modules"]["scripts"].update(general=4, total=5)
+        previous["rules"]["invalid-argument-type"] = 3
+    return previous, findings
+
+
+@pytest.mark.parametrize("with_exceptions", [True, False])
+@pytest.mark.parametrize(
+    ("growth", "diagnostics"),
+    [
+        (
+            "excluded-and-total",
+            ("summary.optional_import_findings_excluded", "summary.total_findings"),
+        ),
+        ("excluded-offset-general", ("summary.optional_import_findings_excluded",)),
+        (
+            "clean-module-excluded",
+            ("modules.clean_optional.optional_import_excluded", "summary.module_count"),
+        ),
+        ("module-total", ("modules.scripts.total",)),
+        ("new-general-rule", ("rules.invalid-return-type",)),
+        ("existing-general-rule", ("rules.invalid-argument-type",)),
+        ("new-excluded-rule", ("rules.unresolved-import",)),
+    ],
+)
+def test_baseline_refresh_refuses_recorded_count_growth_without_writing(
+    tmp_path, monkeypatch, capsys, growth: str, diagnostics: tuple[str, ...], with_exceptions: bool
+) -> None:
+    """Every stored count is downward-only, even when other buckets decrease."""
+    previous, findings = _refresh_case_with_recorded_counts(with_exceptions)
+    ordinary, assignment, optional = findings[:3]
+
+    if growth == "excluded-and-total":
+        findings.append({**optional, "fingerprint": "extra-optional"})
+    elif growth == "excluded-offset-general":
+        findings.remove(ordinary)
+        findings.append({**optional, "fingerprint": "replacement-optional"})
+    elif growth == "clean-module-excluded":
+        optional["location"]["path"] = "clean_optional/probe.py"
+    elif growth == "module-total":
+        previous["modules"]["other"] = {
+            "general": 0,
+            "optional_import_excluded": 1,
+            "total": 1,
+        }
+        previous["summary"].update(
+            optional_import_findings_excluded=2,
+            total_findings=previous["summary"]["total_findings"] + 1,
+            module_count=2,
+        )
+        previous["rules"]["unresolved-import"] = 2
+        findings.append({**optional, "fingerprint": "moved-optional"})
+    elif growth == "new-general-rule":
+        ordinary["check_name"] = "invalid-return-type"
+    elif growth == "existing-general-rule":
+        assignment["check_name"] = "invalid-argument-type"
+    else:
+        # The previously general deprecated finding is now an excluded import.
+        previous["summary"]["general_findings"] += 1
+        previous["summary"]["optional_import_findings_excluded"] = 0
+        previous["modules"]["scripts"]["general"] += 1
+        previous["modules"]["scripts"]["optional_import_excluded"] = 0
+        previous["rules"]["deprecated"] = 1
+        previous["rules"].pop("unresolved-import")
+
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(previous))
+    before = baseline.read_bytes()
+    report.write_text(json.dumps(findings))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+    args = [
+        "--root",
+        str(tmp_path),
+        "--write-baseline",
+        "--baseline",
+        str(baseline),
+        "--ty-output",
+        str(report),
+    ]
+
+    assert tyratchet.main(args) == 1
+    assert baseline.read_bytes() == before
+    stderr = capsys.readouterr().err
+    for diagnostic in diagnostics:
+        assert diagnostic in stderr
+
+
+@pytest.mark.parametrize("with_exceptions", [True, False])
+@pytest.mark.parametrize("decrease", ["general", "excluded", "module"])
+def test_baseline_refresh_allows_recorded_count_decreases(
+    tmp_path, monkeypatch, decrease: str, with_exceptions: bool
+) -> None:
+    """Lower buckets, rules and module counts remain writable with exact caps intact."""
+    previous, findings = _refresh_case_with_recorded_counts(with_exceptions)
+    if decrease == "general":
+        findings.pop(0)
+        expected_general, expected_excluded = (3 if with_exceptions else 1), 1
+    elif decrease == "excluded":
+        findings.pop(2)
+        expected_general, expected_excluded = (4 if with_exceptions else 2), 0
+    else:
+        previous["modules"]["other"] = {
+            "general": 1,
+            "optional_import_excluded": 0,
+            "total": 1,
+        }
+        previous["summary"]["general_findings"] += 1
+        previous["summary"]["total_findings"] += 1
+        previous["summary"]["module_count"] = 2
+        previous["rules"]["invalid-key"] = 1
+        expected_general, expected_excluded = (4 if with_exceptions else 2), 1
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(previous))
+    report.write_text(json.dumps(findings))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+    args = [
+        "--root",
+        str(tmp_path),
+        "--write-baseline",
+        "--baseline",
+        str(baseline),
+        "--ty-output",
+        str(report),
+    ]
+
+    assert tyratchet.main(args) == 0
+    refreshed = json.loads(baseline.read_text())
+    assert refreshed["summary"] == {
+        "general_findings": expected_general,
+        "optional_import_findings_excluded": expected_excluded,
+        "total_findings": expected_general + expected_excluded,
+        "module_count": 1,
+    }
+    assert refreshed.get("exceptions") == previous.get("exceptions")
+    for rule, count in refreshed["rules"].items():
+        assert count <= previous["rules"].get(rule, 0)
+
+
 def test_aggregate_splits_optional_and_general_buckets() -> None:
     """Optional-import findings land in the excluded bucket; others in general."""
     findings = [

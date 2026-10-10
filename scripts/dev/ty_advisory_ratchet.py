@@ -691,13 +691,34 @@ def _report_check(
     return 0
 
 
+def _refresh_count_failures(previous: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    """Refresh is monotonic in all recorded counts, not only the general gate."""
+    groups = [
+        (section, payload[section], previous[section])
+        for section in ("summary", "rules")
+        if section in previous
+    ]
+    groups.extend(
+        (f"modules.{module}", counts, previous["modules"].get(module, {}))
+        for module, counts in payload["modules"].items()
+    )
+    failures = []
+    for group, counts, limits in groups:
+        for key, count in counts.items():
+            limit = int(limits.get(key, 0))
+            if count > limit:
+                failures.append(f"recorded count {group}.{key} increased from {limit} to {count}.")
+    return failures
+
+
 def _refresh_baseline(
     baseline_path: Path, payload: dict[str, Any], findings: list[dict[str, Any]]
 ) -> int:
-    """Refresh downward from committed limits, preserving reviewed exception caps."""
+    """Refresh every recorded count downward, preserving reviewed exception caps."""
     if baseline_path.exists():
         previous = load_baseline(baseline_path)
         failures, _ = check_against_baseline(findings, previous)
+        failures.extend(_refresh_count_failures(previous, payload))
         if failures:
             print("ERROR: findings exceed committed limits; refusing refresh:", file=sys.stderr)
             print("\n".join(failures), file=sys.stderr)

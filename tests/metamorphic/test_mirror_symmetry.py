@@ -514,6 +514,21 @@ def test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant() -> None:
     assert set(outcomes.values()) == {(True, False, False)}, outcomes
 
 
+@pytest.mark.parametrize(
+    ("scenario", "escape_speed"),
+    [("metamorphic", 0.3), ("francis2023_perpendicular_traffic", 0.6)],
+)
+def test_diagnostic_hybrid_v4_preserves_historical_controls(
+    scenario: str, escape_speed: float
+) -> None:
+    """Diagnostic controls stay historical while scenario overrides still apply."""
+    algo, config = release_arm(HYBRID_V4_DIAGNOSTIC_ARM, scenario=scenario)
+    assert algo == "hybrid_rule_local_planner"
+    assert config.get("physical_static_exclusion_enabled") is False
+    assert config.get("goal_next_validity_enabled") is False
+    assert config["static_clearance_escape_max_speed"] == pytest.approx(escape_speed)
+
+
 def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
     """The explicitly bound v4 diagnostic arm preserves reflected traces."""
     base = run_arm_episode(

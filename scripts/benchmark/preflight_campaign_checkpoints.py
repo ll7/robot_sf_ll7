@@ -52,6 +52,9 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight_from_config,
 )
+from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+    PredictiveHorizonPreflightError,
+)
 from robot_sf.benchmark.checkpoint_staging_receipt import CHECKPOINT_STAGING_RECEIPT_SCHEMA
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.models.registry import DEFAULT_REGISTRY_PATH
@@ -175,29 +178,20 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - gate plus checkp
         )
     except CampaignCheckpointPreflightError as exc:
         print(str(exc), file=sys.stderr)
+        blocked = {
+            "status": "blocked",
+            "mode": checkpoint_preflight_mode,
+            "stage": bool(args.stage),
+            "arms": list(exc.arms),
+        }
+        if isinstance(exc, PredictiveHorizonPreflightError):
+            blocked["predictive_horizons"] = [exc.binding]
         if args.json:
-            print(
-                json.dumps(
-                    {
-                        "status": "blocked",
-                        "mode": checkpoint_preflight_mode,
-                        "arms": list(exc.arms),
-                    },
-                    indent=2,
-                )
-            )
+            print(json.dumps(blocked, indent=2))
         if args.report_path is not None:
             args.report_path.parent.mkdir(parents=True, exist_ok=True)
             args.report_path.write_text(
-                json.dumps(
-                    {
-                        "status": "blocked",
-                        "mode": checkpoint_preflight_mode,
-                        "stage": bool(args.stage),
-                        "arms": list(exc.arms),
-                    },
-                    indent=2,
-                ),
+                json.dumps(blocked, indent=2),
                 encoding="utf-8",
             )
         return EXIT_BLOCKED

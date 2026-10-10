@@ -353,6 +353,7 @@ def test_training_summary_manifest_records_effective_loader_settings(
         str(output_dir),
         "--epochs",
         "1",
+        "--allow-legacy-supervision",
         "--batch-size",
         "16",
         "--seed",

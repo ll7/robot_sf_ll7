@@ -74,6 +74,7 @@ BLOCKING_LABELS = frozenset(
         "needs-triage",
         "state:blocked",
         "state:hold",
+        "state:blocked-dependency",
         "state:blocked-no-code-slice",
         "state:parked",
         "state:deferred",
@@ -1090,6 +1091,12 @@ def _classify_issue(  # noqa: PLR0913 - explicit gate inputs keep precedence aud
             "review",
             "the issue is already in review",
             "covering_pr_open",
+        ),
+        (
+            "state:blocked-dependency" in labels,
+            "blocked",
+            "a dependency blocking label is present: state:blocked-dependency",
+            "dependency_missing",
         ),
         (
             bool(blocking_present),

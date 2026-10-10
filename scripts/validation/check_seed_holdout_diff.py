@@ -28,6 +28,8 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
 
 RELEASE_CONFIGS = frozenset(
@@ -66,8 +68,6 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "tests/benchmark/test_sealed_runtime_sources.py",
         "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
         # Reviewed guard policy and refusal witnesses (#10053; 2026-10-01 ruling).
-        "tests/support/seedguard_boundaries.py",
-        "tests/test_heldout_seed_guard.py",
     ]
 )
 SEALED_REFERENCE = re.compile(
@@ -89,11 +89,11 @@ RELEASE_EVALUATION_PREFIXES = (
 SEALED_SEED_PATTERN = "(?:" + "|".join(map(str, sorted(HELD_OUT_SEEDS))) + ")"
 SEED = re.compile(rf"(?<![\w.]){SEALED_SEED_PATTERN}(?![\w.])")
 SEED_FIELD = re.compile(
-    r"(?i)(?:^|[\s,({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
+    r"(?i)(?:^|[\s,.({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
     r"eval_seeds|evaluation_seeds|pilot_seeds|diagnostic_seeds|base_seed|"
     r"master_seed|episode_seed|scenario_seed|simulator_seed|simulation_seed|"
     r"environment_seed|env_seed|world_seed|run_seed|rollout_seed|task_seed|"
-    r"map_seed|spawn_seed)['\"]?\s*[:=]"
+    r"map_seed|spawn_seed|pedestrian_seed|desired_speed_seed|route_spawn_seed|archetype_seed|response_law_seed)['\"]?\s*[:=]"
 )
 SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
 EPISODE_SEED_LOOP = re.compile(
@@ -420,14 +420,119 @@ def _yaml_bounds_overlap(path: str, text: str, before: list[str], after: list[st
     )
 
 
+RUNTIME_POLICY_LINES = {
+    "robot_sf/benchmark/runtime_seed_guard.py": frozenset(
+        [
+            "if value not in seed_bands.HELD_OUT_SEEDS:",
+            "if value in seed_bands.EVAL_SEEDS_0_0_8 and value in identity.resolved_seeds:",
+        ]
+    ),
+    "tests/test_runtime_seed_guard.py": frozenset(
+        [
+            'monkeypatch.setattr(seed_bands, "HELD_OUT_SEEDS", frozenset({SENTINEL}))',
+            "seed_bands.HELD_OUT_SEEDS = frozenset({1030})",
+            # These reviewed policy doubles use development seeds and never execute episodes.
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (SENTINEL,))',
+            'monkeypatch.setattr(protocol, "EVAL_SEEDS_0_0_8", (SENTINEL,))',
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (1001,))',
+        ]
+    ),
+    "tests/support/seedguard_boundaries.py": frozenset(
+        [
+            "FALLBACK_HELD_OUT_SEEDS = frozenset(range(111, 141)) | frozenset(",
+            "HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+            "global HELD_OUT_SEEDS, _POLICY_RESOLVED  # seed-holdout: setup-only (guard policy metadata)",
+            "HELD_OUT_SEEDS as canonical,  # seed-holdout: setup-only (guard policy metadata)",
+            "HELD_OUT_SEEDS = frozenset(",
+            "return HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+            "if value in FALLBACK_HELD_OUT_SEEDS and module.__name__ not in _LEGACY_RESTORE_STATES:",
+            "if _LEGACY_SEEDS.get(name) in FALLBACK_HELD_OUT_SEEDS:",
+            "from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+        ]
+    ),
+    "tests/test_heldout_seed_guard.py": frozenset(
+        [
+            '"guard.HELD_OUT_SEEDS = frozenset({1030})\\n"',
+            '"guard.FALLBACK_HELD_OUT_SEEDS = frozenset({1030})\\n"',
+            'monkeypatch.setattr(guard, "HELD_OUT_SEEDS", guard.resolve_held_out_seeds() | {SENTINEL})',
+            'guard, "FALLBACK_HELD_OUT_SEEDS", guard.FALLBACK_HELD_OUT_SEEDS | {SENTINEL}',
+            "guard.HELD_OUT_SEEDS = frozenset({SENTINEL})",
+            "guard.FALLBACK_HELD_OUT_SEEDS = frozenset({SENTINEL})",
+            "assert seedguard_boundaries.resolve_held_out_seeds() == frozenset(policy.HELD_OUT_SEEDS)",
+            "assert seedguard_boundaries.HELD_OUT_SEEDS == frozenset(policy.HELD_OUT_SEEDS)",
+            "from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",
+        ]
+    ),
+    "tests/validation/test_seed_hardening.py": frozenset(
+        [
+            'text = "for seed in EVAL_SEEDS_0_0_8:\\n    env.reset(seed=seed)\\n"',
+            '"from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)",',
+            "assert all(str(seed) not in source for seed in seed_bands.EVAL_SEEDS_0_0_8)",
+        ]
+    ),
+}
+
+
 def _unallowlisted_sealed_reference(path: str, content: str) -> bool:
     """Named release identities need explicit review outside their static consumers."""
     return bool(
         _eligible(path)
         and SEALED_REFERENCE.search(content)
         and path not in SEALED_REFERENCE_ALLOWLIST
+        and content.strip() not in RUNTIME_POLICY_LINES.get(path, ())
         and not path.startswith("docs/")
     )
+
+
+def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with cycle guards
+    path: str, number: int, content: str, lines: list[str]
+) -> bool:
+    """Inspect the resolved value of an added YAML merge or seed alias."""
+    if not path.endswith((".yaml", ".yml")) or "*" not in content:
+        return False
+    try:
+        root = yaml.compose("\n".join(lines), Loader=yaml.SafeLoader)
+    except yaml.YAMLError:
+        return bool("<<:" in content or SEED_FIELD.search(content))
+
+    def contains_seed(node, seen):
+        if id(node) in seen:
+            return False
+        seen = seen | {id(node)}
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                if SEED_FIELD.search(key.value + ":"):
+                    resolved = yaml.safe_load(yaml.serialize(value))
+                    values = resolved if isinstance(resolved, list) else [resolved]
+                    if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
+                        return True
+                if contains_seed(value, seen):
+                    return True
+        elif isinstance(node, yaml.SequenceNode):
+            return any(contains_seed(value, seen) for value in node.value)
+        return False
+
+    def visit(node, seen):
+        if id(node) in seen:
+            return False
+        seen = seen | {id(node)}
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                if key.start_mark.line == number - 1:
+                    if contains_seed(value, set()):
+                        return True
+                    if SEED_FIELD.search(key.value + ":"):
+                        resolved = yaml.safe_load(yaml.serialize(value))
+                        values = resolved if isinstance(resolved, list) else [resolved]
+                        if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
+                            return True
+                if visit(value, seen):
+                    return True
+        elif isinstance(node, yaml.SequenceNode):
+            return any(visit(value, seen) for value in node.value)
+        return False
+
+    return visit(root, set()) if root is not None else False
 
 
 def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
@@ -437,7 +542,7 @@ def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
     return lines, _marked_block_lines(lines, path)
 
 
-def _reference_finding(path: str, number: int, content: str) -> Finding | None:
+def _reference_finding(path: str, number: int, content: str, lines: list[str]) -> Finding | None:
     """Report misplaced markers and unreviewed named release-seed consumers."""
     if _eligible(path) and _misplaced_release_marker(path, content):
         return Finding(
@@ -445,7 +550,9 @@ def _reference_finding(path: str, number: int, content: str) -> Finding | None:
             number,
             f"{content.strip()}  [release-evaluation marker outside release manifests]",
         )
-    if _unallowlisted_sealed_reference(path, content):
+    if _unallowlisted_sealed_reference(path, content) or _yaml_alias_holdout(
+        path, number, content, lines
+    ):
         return Finding(path, number, content.strip())
     return None
 
@@ -471,7 +578,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                     before = file_lines[: line_number - 1]
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
-            reference = _reference_finding(path, line_number, content)
+            reference = _reference_finding(path, line_number, content, file_lines)
             if reference is not None:
                 findings.append(reference)
             elif (

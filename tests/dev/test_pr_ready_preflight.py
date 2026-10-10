@@ -39,6 +39,7 @@ _UNRELATED_OPTIONAL_IMPORTS = (
 )
 
 _POST_PREFLIGHT_SCRIPTS = [
+    "fetch_test_fixture_sources.sh",
     "check_pr_followups.py",
     "check_perf_evidence.py",
     "check_fast_results_claim_map.py",
@@ -886,6 +887,7 @@ def _pr_ready_environment(
         "PR_READY_FINAL",
         "PR_READY_MODE",
         "PR_READY_SKIP_PREFLIGHT",
+        "PR_READY_TERMINATION_RECEIPT",
         "ROBOT_SF_TEST_ENV",
         "SLURM_CLUSTER_NAME",
         "SLURM_JOB_ID",
@@ -2684,6 +2686,64 @@ def test_valid_base_ref_is_used_unchanged(preflight_repo: Path) -> None:
     assert "Attempting git fetch" not in result.stderr
 
 
+@pytest.mark.parametrize("behind_base", [False, True])
+def test_final_pr_contract_check_receives_merge_base_budget_sha(
+    preflight_repo: Path,
+    behind_base: bool,
+) -> None:
+    """Budget accounting excludes base-only changes when the feature is behind."""
+    _make_fake_bin(preflight_repo, fail=False)
+    _git(preflight_repo, "update-ref", "refs/heads/preflight-base", "HEAD")
+
+    changed_test = preflight_repo / "tests" / "unit" / "test_budget_base.py"
+    changed_test.parent.mkdir(parents=True, exist_ok=True)
+    changed_test.write_text("print('budget base integration')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "budget base integration")
+
+    expected_base_sha = subprocess.run(
+        ["git", "rev-parse", "preflight-base"],
+        cwd=preflight_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if behind_base:
+        _git(preflight_repo, "checkout", "-q", "preflight-base")
+        base_only = preflight_repo / "base-only.txt"
+        base_only.write_text("base-only change\n" * 500, encoding="utf-8")
+        _git(preflight_repo, "add", "base-only.txt")
+        _git(preflight_repo, "commit", "-q", "-m", "advance base without feature")
+        _git(preflight_repo, "checkout", "-q", "-")
+
+    args_log = preflight_repo / ".home" / "pr-contract-args.log"
+    fake_uv = preflight_repo / "bin" / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$*" == *"pr_contract_check.py"* ]]; then\n'
+        '  printf "%s\\n" "$*" >> "$PR_CONTRACT_ARGS_LOG"\n'
+        "fi\n"
+        'if [[ "$1" == "run" ]]; then shift; exec "$@"; fi\n'
+        f'exec "{shutil.which("uv") or "uv"}" "$@"\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={
+            "BASE_REF": "preflight-base",
+            "PR_READY_MODE": "final",
+            "PR_CONTRACT_ARGS_LOG": str(args_log),
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    args = args_log.read_text(encoding="utf-8")
+    assert "pr_contract_check.py" in args
+    assert f"--budget-base-sha {expected_base_sha}" in args
+
+
 def test_preflight_passes_when_modules_available(preflight_repo: Path) -> None:
     """Preflight should pass silently when python reports no missing modules."""
     _make_fake_bin(preflight_repo, fail=False)
@@ -3007,3 +3067,49 @@ def test_stop_process_group_kills_descendants_after_parent_exit(tmp_path: Path) 
         if process.poll() is None:
             process.kill()
         process.communicate()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="SIGTERM is POSIX-specific")
+@pytest.mark.parametrize("outer_exists", [False, True], ids=["absent", "sentinel"])
+def test_nested_readiness_does_not_use_outer_termination_receipt(
+    preflight_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    outer_exists: bool,
+) -> None:
+    """A nested controller writes its own receipt and leaves outer custody untouched."""
+    outer = tmp_path / "outer-termination.json"
+    if outer_exists:
+        outer.write_text("outer custody sentinel", encoding="utf-8")
+    monkeypatch.setenv("PR_READY_TERMINATION_RECEIPT", str(outer))
+    _write_signal_lane_stub(preflight_repo)
+    ready = tmp_path / "nested-ready"
+    process = _start_pr_ready(
+        preflight_repo,
+        env_overrides={
+            "PR_READY_MODE": "interim",
+            "PR_READY_SIGNAL_CORE_READY": str(ready),
+            "PR_READY_SIGNAL_CORE_RELEASE": str(tmp_path / "nested-release"),
+        },
+    )
+    try:
+        _wait_for_marker(ready, process, timeout=60.0)
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process, timeout=60.0)
+        assert process.returncode == 143, stdout + stderr
+        if outer_exists:
+            assert outer.read_text(encoding="utf-8") == "outer custody sentinel"
+        else:
+            assert not outer.exists()
+        assert str(outer) not in stdout + stderr
+        receipts = list(
+            (preflight_repo / "output/validation/pr_ready").glob("pr_ready_termination_*.json")
+        )
+        assert len(receipts) == 1
+        payload = json.loads(receipts[0].read_text(encoding="utf-8"))
+        assert payload["signal"]["exit_code"] == 143
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["controller_pid"] == process.pid
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process, timeout=60.0)

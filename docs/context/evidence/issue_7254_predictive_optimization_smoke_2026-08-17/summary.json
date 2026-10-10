@@ -8,7 +8,7 @@
   "runtime_commit_sha": "74a55c43f46edca6d1d928074a8a890e608065af",
   "config_path": "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml",
   "config_sha256": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
-  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py --config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml --output-root output/review_issue7254_corrected_final_v2",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py --config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml --output-root <scratch-root>/review_issue7254_corrected_final_v2",
   "host": {
     "gpu_name": "NVIDIA GeForce RTX 3080",
     "nvidia_smi": "NVIDIA GeForce RTX 3080, 580.159.03, 10240",
@@ -141,5 +141,7 @@
   "result_classification": "equivalent_smoke",
   "throughput_interpretation": "Both optimized arms were slower than the control in this run; no default-performance recommendation is supported.",
   "local_comparison_json_sha256": "799b8347365703465faa10b1050ab296ac9af99793f825d0fa73be582b5322f0",
-  "local_comparison_markdown_sha256": "30d924f12069397a8b8a1bb446f1922d662ce7b8a0ef385dc85dac086cc07854"
+  "local_comparison_markdown_sha256": "30d924f12069397a8b8a1bb446f1922d662ce7b8a0ef385dc85dac086cc07854",
+  "command_is_reproduction_template": true,
+  "raw_artifact_disposition": {"storage": "disposable git-ignored worktree-local scratch", "retained": false, "durable_retrieval_pointer": null}
 }

@@ -118,6 +118,8 @@ def _config_hash_payload(cfg: Any) -> dict[str, Any]:
     """
     spec = getattr(cfg, "snqi_v2_spec", None)
     payload = asdict(replace(cfg, snqi_v2_spec=None)) if spec is not None else asdict(cfg)
+    if payload.get("numerical_mode") is None:
+        payload.pop("numerical_mode", None)
     payload.pop("snqi_v2_spec", None)
     if getattr(cfg, "snqi_v2_binding", None) is None:
         payload.pop("snqi_v2_binding", None)

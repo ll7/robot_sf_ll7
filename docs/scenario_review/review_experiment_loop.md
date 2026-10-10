@@ -83,10 +83,10 @@ uv run python -m robot_sf.analysis_workbench.review_experiment_loop \
   --autonomous
 ```
 
-The fixture narrows the selected prefix to the two supported speed candidates
-so the smoke can complete without claiming support for the known
-`single_pedestrian_start_delay_offset` limitation. Its source remains the
-SREV-22 tiny crossing fixture; that is provenance for a diagnostic smoke only.
+The fixture narrows the selected prefix to the two speed candidates so the
+SREV-24 smoke stays bounded. It makes no claim about
+`single_pedestrian_start_delay_offset` behavior. Its source remains the SREV-22
+tiny crossing fixture; that is provenance for a diagnostic smoke only.
 
 The output directory contains:
 

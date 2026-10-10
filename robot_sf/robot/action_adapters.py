@@ -112,7 +112,11 @@ def unicycle_velocity_target_to_acceleration(
 
     Returns:
         Requested linear and angular accelerations for this step.
+
+    Raises:
+        ValueError: If the timestep is nonfinite or nonpositive.
     """
-    return (np.asarray(target, dtype=float) - np.asarray(current_speed, dtype=float)) / max(
-        float(dt), 1e-6
-    )
+    dt = float(dt)
+    if not np.isfinite(dt) or dt <= 0.0:
+        raise ValueError("timestep must be finite and positive")
+    return (np.asarray(target, dtype=float) - np.asarray(current_speed, dtype=float)) / dt

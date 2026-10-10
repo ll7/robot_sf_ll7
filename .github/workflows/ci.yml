@@ -319,6 +319,14 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
     env:
+      # Browser witnesses run once on the hosted Node lane.
+      PYTEST_ADDOPTS: >-
+        --deselect=tests/render/test_audit_workbench.py::test_browser_controller_runtime_covers_normal_and_missing_media_cases
+        --deselect=tests/render/test_audit_workbench.py::test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics
+        --deselect=tests/render/test_review_editor.py::test_python_generated_model_can_save_storyboard_in_browser_runtime
+        --deselect=tests/render/test_review_editor.py::test_node_browser_controller_honours_typing_shortcut_suppression
+        --deselect=tests/render/test_review_sessions.py::test_node_browser_runtime_is_offline_and_has_no_implicit_start
+        --deselect=tests/test_review_workbench.py::test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime
       # Redistribute queued release-validation checks instead of stranding a tail.
       PYTEST_XDIST_DIST: worksteal
       PYTEST_SHARD_COUNT: 6
@@ -355,6 +363,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
         with:
+          node: "false"
           install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
 
       - name: Prime uv cache metadata for offline software-candidate checks
@@ -437,6 +446,36 @@ jobs:
           path: output/coverage/.coverage.${{ matrix.shard }}
           if-no-files-found: error
           include-hidden-files: true
+
+  browser-witnesses:
+    needs: dispatch-ownership
+    if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact evaluated head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python and browser runtime
+        uses: ./.github/actions/setup-ci-python
+        with:
+          node: "true"
+
+      - name: Run browser witnesses
+        run: |
+          uv run pytest -q \
+            tests/render/test_audit_workbench.py::test_browser_controller_runtime_covers_normal_and_missing_media_cases \
+            tests/render/test_audit_workbench.py::test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics \
+            tests/render/test_review_editor.py::test_python_generated_model_can_save_storyboard_in_browser_runtime \
+            tests/render/test_review_editor.py::test_node_browser_controller_honours_typing_shortcut_suppression \
+            tests/render/test_review_sessions.py::test_node_browser_runtime_is_offline_and_has_no_implicit_start \
+            tests/test_review_workbench.py::test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime
 
   changed-coverage-gate:
     runs-on: ubuntu-latest
@@ -615,6 +654,7 @@ jobs:
       - name: Set up matrixed compatibility CI environment
         uses: ./.github/actions/setup-ci-python
         with:
+          node: "true"
           python-version: ${{ matrix.python }}
           # Slim profile (issue #9355): base + viz + maps extras cover the full
           # compat test closure (proven by check_compat_import_profile.py plus a
@@ -782,6 +822,8 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          node: "true"
 
       - name: Run new tests against the base commit (advisory)
         env:
@@ -1147,6 +1189,7 @@ jobs:
     needs:
       - dispatch-ownership
       - fast-feedback
+      - browser-witnesses
       - changed-coverage-gate
       - coverage-gate
       - compat-matrix
@@ -1174,9 +1217,11 @@ jobs:
           (needs.dispatch-ownership.result != 'success' ||
           needs.dispatch-ownership.outputs.run_full_ci == 'true') }}
         env:
+          BROWSER_WITNESSES_RESULT: ${{ needs.browser-witnesses.result }}
           CI_NEEDS_JSON: ${{ toJSON(needs) }}
           CI_LANE_OUTPUTS: ${{ toJSON(needs.dispatch-ownership.outputs) }}
         run: |
+          test "$BROWSER_WITNESSES_RESULT" = success || test "$BROWSER_WITNESSES_RESULT" = cancelled
           python scripts/dev/check_ci_needs.py \
             --event-name "${{ github.event_name }}" \
             --treat-cancelled-as-superseded \

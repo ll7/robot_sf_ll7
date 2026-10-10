@@ -819,20 +819,23 @@ class _NativeCommandPolicy:
     def _parse_response(self, raw: str) -> np.ndarray:
         """Parse a JSON velocity command into a (2,) velocity array.
 
-        Accepts ``{"v","omega"}`` (unicycle) or ``{"vx","vy"}`` (holonomic world).
+        Accepts one complete unicycle key pair or a two-element velocity array.
 
         Returns:
             The velocity command array.
         """
         payload = json.loads(raw)
         if isinstance(payload, dict):
+            pairs = (("linear_velocity", "angular_velocity"), ("linear", "angular"), ("v", "omega"))
+            if set(payload) not in [set(pair) for pair in pairs]:
+                raise ValueError("native_command response has unknown or ambiguous command keys")
             linear = payload.get(
                 "linear_velocity",
-                payload.get("linear", payload.get("v", payload.get("vx"))),
+                payload.get("linear", payload.get("v")),
             )
             angular = payload.get(
                 "angular_velocity",
-                payload.get("angular", payload.get("omega", payload.get("vy"))),
+                payload.get("angular", payload.get("omega")),
             )
             if linear is not None and angular is not None:
                 command = np.array([float(linear), float(angular)], dtype=float)

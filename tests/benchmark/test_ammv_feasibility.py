@@ -256,3 +256,19 @@ def test_layout_neutral_names_match_deprecated_aliases() -> None:
     assert neutral_report["min_stability_margin"] == pytest.approx(
         legacy_report["min_stability_margin"]
     )
+
+
+def test_deprecated_geometry_alias_properties_warn() -> None:
+    """Deprecated geometry property aliases remain available during the transition."""
+    params = AmmvFeasibilityParams(two_wheel_axle_track_m=0.9, single_wheel_axle_to_cog_m=0.4)
+
+    with pytest.warns(DeprecationWarning, match="track_width_m"):
+        assert params.track_width_m == pytest.approx(0.9)
+    with pytest.warns(DeprecationWarning, match="front_axle_to_cog_m"):
+        assert params.front_axle_to_cog_m == pytest.approx(0.4)
+
+
+def test_layout_neutral_params_reject_unknown_aliases() -> None:
+    """Unexpected constructor aliases must fail instead of being silently ignored."""
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        AmmvFeasibilityParams(rear_axle_to_cog_m=0.4)

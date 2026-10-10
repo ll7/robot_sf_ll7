@@ -4,7 +4,7 @@
   "execution_class": "local_analysis",
   "title": "Surviving local analysis environment (CPU-only, read-only artifact access)",
   "verification_status": "verified",
-  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "deddfcadf5a7a62b8f4a478c91aab031acf0dd9f1276cb4f440d50fca0fb2d2c"},
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "a3a4d60ae3dc677aa33f94e412cf3743885c82ecd0ef230a755051f583d87c21"},
   "prerequisites": [
     {"id": "uv", "kind": "binary", "identity": "uv>=0.11", "probe": {"argv": ["uv", "--version"], "expect_exit_code": 0}},
     {"id": "python", "kind": "binary", "identity": "python3>=3.11", "probe": {"argv": ["python3", "--version"], "expect_exit_code": 0}}

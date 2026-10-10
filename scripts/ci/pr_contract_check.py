@@ -1389,6 +1389,9 @@ def run_all_checks(
     # so malformed machine-readable declarations cannot pass this standalone gate.
     blockers.extend(check_pr_contract_v2(body))
 
+    # Behaviour receipts are enforced by the workflow's separate immutable-base
+    # validator step. Never import PR-head policy into current admission here.
+
     # 1. Closes-discipline
     commit_messages = None
     commit_messages_checked = False
@@ -1553,13 +1556,13 @@ def get_changed_files(changed_files_file: Path | None, base_ref: str) -> list[st
     if base_ref_is_resolvable(base_ref):
         try:
             res = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                ["git", "diff", "--name-only", "-z", "--no-renames", f"{base_ref}...HEAD"],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             if res.returncode == 0:
-                return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+                return [path for path in res.stdout.split("\0") if path]
         except _BEST_EFFORT_ERRORS:
             pass
 

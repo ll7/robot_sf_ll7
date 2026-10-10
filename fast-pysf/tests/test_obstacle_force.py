@@ -21,6 +21,7 @@ from pysocialforce.config import (
 )
 from pysocialforce.forces import (
     ObstacleForce,
+    all_obstacle_forces_body_edge_exponential,
     all_obstacle_forces_for_law,
     obstacle_force,
     obstacle_force_body_edge_exponential,
@@ -405,9 +406,22 @@ def test_default_wall_force_does_not_balance_lone_walker_before_narrow_doorway()
                 dtype=float,
             )
 
-    braking_force_x = -float(ObstacleForce(ObstacleForceConfig(), _Simulation())()[0, 0])
+    for law in (BODY_EDGE_EXPONENTIAL_V3, "body_edge_exponential_v3_multi_segment"):
+        braking_force_x = -float(
+            ObstacleForce(ObstacleForceConfig(law_version=law), _Simulation())()[0, 0]
+        )
+        assert braking_force_x < 1.30
 
-    assert braking_force_x < 1.30
+
+def test_multi_segment_wall_law_keeps_both_distinct_nearby_surfaces():
+    """A nearer wall must not suppress a different nearby wall's normal response."""
+    edges = np.array([[0.4, -1.0, 0.4, 1.0, 1.0, 0.0], [-1.0, -0.5, 1.0, -0.5, 0.0, -1.0]])
+    force = np.zeros((1, 2))
+    all_obstacle_forces_body_edge_exponential(
+        force, np.array([[0.0, 0.0]]), edges, 0.4, "body_edge_exponential_v3_multi_segment"
+    )
+    expected = [-0.3 * (1.0 - math.exp(-5.0)), 0.3 * (math.exp(-2.5) - math.exp(-5.0))]
+    np.testing.assert_allclose(force[0], expected, rtol=1e-12, atol=1e-12)
 
 
 def test_corrected_point_force_is_finite_and_monotonic_near_contact():

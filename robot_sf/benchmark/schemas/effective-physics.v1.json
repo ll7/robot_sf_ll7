@@ -200,7 +200,8 @@
                       "body_edge_exponential_v3",
                       "body_edge_exponential_v3_range_only",
                       "body_edge_exponential_v3_physical_margin",
-                      "body_edge_exponential_v3_contact_stiff"
+                      "body_edge_exponential_v3_contact_stiff",
+                      "body_edge_exponential_v3_multi_segment"
                     ]
                   }
                 }

@@ -26,6 +26,7 @@ from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_LAW_VERSIONS,
     BODY_EDGE_EXPONENTIAL_V3,
     BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
     BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
     BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     LEGACY_SHIFTED_GRADIENT_V1,
@@ -485,7 +486,11 @@ class ObstacleForce:
         enabled = factor != 0.0
         law_version = resolve_obstacle_force_law(getattr(self.config, "law_version", None))
         if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
-            geometry_convention = "nearest_finite_segment_surface"
+            geometry_convention = (
+                "all_nearby_distinct_surface_points"
+                if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT
+                else "nearest_finite_segment_surface"
+            )
             radius_convention = "physical_body_edge_clearance"
             parameters = {
                 "factor": factor,
@@ -717,7 +722,12 @@ def all_obstacle_forces_body_edge_exponential(
     ped_radius: float,
     law_version: Any = BODY_EDGE_EXPONENTIAL_V3,
 ):
-    """Populate forces from only the nearest finite obstacle segment per pedestrian."""
+    """Populate nearest-surface forces, or the named distinct-nearby-surfaces candidate."""
+    if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT:
+        all_obstacle_forces_distinct_surface_points(
+            out_forces, ped_positions, obstacles, ped_radius
+        )
+        return
     obstacle_segments = obstacles[:, :4]
     ortho_vecs = obstacles[:, 4:]
     num_peds = ped_positions.shape[0]
@@ -752,6 +762,52 @@ def all_obstacle_forces_body_edge_exponential(
         )
         out_forces[i, 0] += force_x
         out_forces[i, 1] += force_y
+
+
+@njit(nogil=True)
+def all_obstacle_forces_distinct_surface_points(
+    out_forces: np.ndarray,
+    ped_positions: np.ndarray,
+    obstacles: np.ndarray,
+    ped_radius: float,
+):
+    """Sum finite-range segments once per shared closest point (including corners)."""
+    for i in range(ped_positions.shape[0]):
+        point = ped_positions[i]
+        accepted = np.empty((obstacles.shape[0], 2))
+        count = 0
+        for j in range(obstacles.shape[0]):
+            edge = obstacles[j]
+            if not np.all(np.isfinite(edge)):
+                continue
+            closest_x, closest_y = closest_point_on_segment(edge[:4], point)
+            distance = euclid_dist(point[0], point[1], closest_x, closest_y)
+            if not np.isfinite(distance) or distance - ped_radius >= BODY_EDGE_EXPONENTIAL_RANGE_M:
+                continue
+            duplicate = False
+            for k in range(count):
+                if (
+                    euclid_dist(closest_x, closest_y, accepted[k, 0], accepted[k, 1])
+                    <= OBSTACLE_FORCE_DISTANCE_FLOOR
+                ):
+                    duplicate = True
+                    break
+            if duplicate:
+                continue
+            accepted[count, 0] = closest_x
+            accepted[count, 1] = closest_y
+            count += 1
+            fx, fy = body_edge_exponential_force(
+                distance,
+                point[0] - closest_x,
+                point[1] - closest_y,
+                ped_radius,
+                edge[4],
+                edge[5],
+                BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+            )
+            out_forces[i, 0] += fx
+            out_forces[i, 1] += fy
 
 
 @njit(fastmath=True, nogil=True)

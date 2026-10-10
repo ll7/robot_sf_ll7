@@ -21,6 +21,7 @@ from pysocialforce import forces as pf_forces
 from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_LAW_VERSIONS,
     BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
     BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
     OBSTACLE_FORCE_DISTANCE_FLOOR,
     resolve_obstacle_force_law,
@@ -140,7 +141,9 @@ class FastPysfWrapper:
             law_version,
             site="fast_pysf_wrapper",
             geometry_convention=(
-                "nearest_finite_segment_surface"
+                "all_nearby_distinct_surface_points"
+                if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT
+                else "nearest_finite_segment_surface"
                 if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS
                 else "map_line_endpoints_orthogonal_vector"
             ),
@@ -385,6 +388,18 @@ class FastPysfWrapper:
         if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
             try:
                 raw_obs = np.asarray(raw_obs, dtype=float)
+                if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT:
+                    forces = np.zeros((1, 2))
+                    pf_forces.all_obstacle_forces_for_law(
+                        forces,
+                        np.asarray(p, dtype=float).reshape(1, 2),
+                        raw_obs,
+                        ped_radius,
+                        law_version,
+                    )
+                    if self._obstacle_force_enabled():
+                        self._obstacle_force_applied = True
+                    return forces[0] * float(self.sim.config.obstacle_force_config.factor)
                 closest = np.asarray(
                     [pf_forces.closest_point_on_segment(tuple(row[:4]), p) for row in raw_obs]
                 )

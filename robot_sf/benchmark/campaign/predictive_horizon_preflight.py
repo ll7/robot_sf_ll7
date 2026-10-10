@@ -8,13 +8,21 @@ entire authored sequence horizon. Neither planner's configuration is rewritten h
 from __future__ import annotations
 
 import json
+import pickle
+import zipfile
+from collections import OrderedDict
+from dataclasses import fields
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
 )
 from robot_sf.models import resolve_model_path
-from robot_sf.planner.predictive_mppi import build_predictive_mppi_config
+from robot_sf.planner.obstacle_features import (
+    infer_predictive_feature_schema,
+    validate_predictive_feature_schema_metadata,
+)
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS, SocNavPlannerConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,6 +30,54 @@ if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
 _PREDICTIVE_ALGOS = frozenset({"predictive_mppi", "prediction_planner", "gap_prediction"})
+_PREDICTIVE_CONFIG_DEFAULT_HORIZON_STEPS = 8
+_PREDICTIVE_MODEL_DEFAULT_INPUT_DIM = 4
+
+
+class _TensorPayloadPlaceholder:
+    """Placeholder for tensor payloads while reading torch-save metadata only."""
+
+
+def _tensor_payload_placeholder(*_args: Any, **_kwargs: Any) -> _TensorPayloadPlaceholder:
+    """Return a sentinel for torch tensor rebuild calls in pickle metadata."""
+    return _TensorPayloadPlaceholder()
+
+
+class _PredictiveCheckpointMetadataUnpickler(pickle.Unpickler):
+    """Restricted unpickler for the metadata dict stored by ``torch.save`` checkpoints."""
+
+    _ALLOWED_GLOBALS = {
+        ("collections", "OrderedDict"): OrderedDict,
+        ("torch._utils", "_rebuild_tensor"): _tensor_payload_placeholder,
+        ("torch._utils", "_rebuild_tensor_v2"): _tensor_payload_placeholder,
+        ("torch._utils", "_rebuild_tensor_v3"): _tensor_payload_placeholder,
+        ("torch._utils", "_rebuild_parameter"): _tensor_payload_placeholder,
+    }
+
+    def find_class(self, module: str, name: str) -> Any:
+        """Allow only inert helpers needed to deserialize torch-save metadata.
+
+        Returns:
+            Callable or placeholder class used while unpickling metadata.
+        """
+        key = (module, name)
+        if key in self._ALLOWED_GLOBALS:
+            return self._ALLOWED_GLOBALS[key]
+        if module == "torch" and name.endswith("Storage"):
+            return _TensorPayloadPlaceholder
+        if module == "torch.storage" and name == "_load_from_bytes":
+            return _tensor_payload_placeholder
+        raise pickle.UnpicklingError(
+            f"blocked global while reading checkpoint metadata: {module}.{name}"
+        )
+
+    def persistent_load(self, _pid: Any) -> _TensorPayloadPlaceholder:
+        """Replace serialized tensor storage references with inert sentinels.
+
+        Returns:
+            Placeholder standing in for an uninterpreted tensor storage.
+        """
+        return _TensorPayloadPlaceholder()
 
 
 class PredictiveHorizonPreflightError(CampaignCheckpointPreflightError):
@@ -31,6 +87,71 @@ class PredictiveHorizonPreflightError(CampaignCheckpointPreflightError):
         """Retain binding identity and verification status without parsing error prose."""
         super().__init__(message, arms=(binding["planner_key"],))
         self.binding = binding
+
+
+def _load_torch_save_metadata(path: Path) -> dict[str, Any]:
+    """Read the top-level metadata dict from a zip-format torch checkpoint without torch.
+
+    Returns:
+        The top-level checkpoint payload with tensor values replaced by placeholders.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"Predictive checkpoint not found: {path}")
+    if not zipfile.is_zipfile(path):
+        raise ValueError(f"Predictive checkpoint is not a zip-format torch checkpoint: {path}")
+    with zipfile.ZipFile(path) as archive:
+        try:
+            data_member = next(
+                name
+                for name in archive.namelist()
+                if name == "data.pkl" or name.endswith("/data.pkl")
+            )
+        except StopIteration as exc:
+            raise ValueError(
+                f"Predictive checkpoint has no data.pkl metadata member: {path}"
+            ) from exc
+        with archive.open(data_member) as handle:
+            payload = _PredictiveCheckpointMetadataUnpickler(handle).load()
+    if not isinstance(payload, dict):
+        raise TypeError(f"Predictive checkpoint metadata must be a mapping: {path}")
+    return payload
+
+
+def _checkpoint_forecast_steps(
+    path: Path,
+    *,
+    expected_feature_schema_name: str | None,
+) -> int:
+    """Return saved forecast horizon from checkpoint metadata without importing torch."""
+    payload = _load_torch_save_metadata(path)
+    config = payload.get("config", {})
+    if not isinstance(config, dict):
+        raise TypeError(f"Predictive checkpoint config must be a mapping: {path}")
+    input_dim = int(config.get("input_dim", _PREDICTIVE_MODEL_DEFAULT_INPUT_DIM))
+    feature_schema = payload.get("feature_schema")
+    if not isinstance(feature_schema, dict):
+        feature_schema = infer_predictive_feature_schema(input_dim)
+    validate_predictive_feature_schema_metadata(
+        feature_schema,
+        input_dim=input_dim,
+        expected_schema_name=expected_feature_schema_name,
+    )
+    return int(config.get("horizon_steps", _PREDICTIVE_CONFIG_DEFAULT_HORIZON_STEPS))
+
+
+def _predictive_planner_requirements(raw: dict[str, Any]) -> tuple[SocNavPlannerConfig, int]:
+    """Build only the torch-free planner fields needed for horizon compatibility.
+
+    Returns:
+        SocNav predictive config plus the MPPI sequence horizon.
+    """
+    socnav_allowed = {
+        field.name for field in fields(SocNavPlannerConfig)
+    } | _SOCNAV_CONFIG_INIT_KEYS
+    socnav = SocNavPlannerConfig(
+        **{key: value for key, value in raw.items() if key in socnav_allowed}
+    )
+    return socnav, int(raw.get("horizon_steps", _PREDICTIVE_CONFIG_DEFAULT_HORIZON_STEPS))
 
 
 def _effective_configs(
@@ -123,10 +244,7 @@ def _check_binding(
     """
     from pathlib import Path  # noqa: PLC0415
 
-    from robot_sf.planner.predictive_model import load_predictive_checkpoint  # noqa: PLC0415
-
-    config = build_predictive_mppi_config(raw)
-    predictor = config.socnav
+    predictor, sequence_horizon_steps = _predictive_planner_requirements(raw)
     # PredictionPlannerAdapter gives an explicit path priority over the registered ID.
     checkpoint_ref = predictor.predictive_checkpoint_path or predictor.predictive_model_id
     scenario, family = contexts[0]["scenario"], contexts[0]["family"]
@@ -155,14 +273,10 @@ def _check_binding(
             )
         )
         binding["resolved_path"] = str(checkpoint)
-        model, _metadata = load_predictive_checkpoint(
+        forecast_steps = _checkpoint_forecast_steps(
             checkpoint,
-            map_location="cpu",
             expected_feature_schema_name=predictor.predictive_feature_schema_name,
         )
-        # The runtime loader validates state_dict shapes against the saved model config;
-        # a planner YAML horizon override cannot change the checkpoint output head.
-        forecast_steps = int(model.config.horizon_steps)
     except (KeyError, OSError, RuntimeError, ValueError, TypeError) as exc:
         binding.update(
             status="unverified",
@@ -177,7 +291,7 @@ def _check_binding(
         ) from exc
 
     if algo == "predictive_mppi":
-        required_steps = int(config.horizon_steps)
+        required_steps = int(sequence_horizon_steps)
     else:
         # Match PredictionPlannerAdapter._effective_rollout_steps, including the existing
         # forecast-bound adaptive boost. This boost does not alter MPPI's sequence length.

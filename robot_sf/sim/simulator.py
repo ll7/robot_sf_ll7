@@ -243,9 +243,12 @@ def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
         std=settings.desired_speed_std,
         seed=settings.desired_speed_seed,
         sampling_metadata=peds.effective_desired_speed_parameters,
+        truncate=settings.desired_speed_truncated,
     )
     # Direct assignment: works with both new pysf (``assign_desired_speeds`` already ran,
     # this overwrites with identical values) and old pysf (no explicit-speed support).
+    if settings.desired_speed_truncated:
+        peds.assign_desired_speeds(desired_speeds)
     peds.max_speeds = desired_speeds.copy()
     # Compat: encode into initial_speeds so legacy _update_state recomputation preserves them.
     initial_speeds = getattr(peds, "initial_speeds", None)
@@ -539,6 +542,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
     )
     response_law_seed = config.response_law_seed
     pysf_config = PySFSimConfig()
+    if config.ped_force_radius is not None:
+        pysf_config.scene_config.agent_radius = config.ped_force_radius
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
     # Set this before PedState construction so delayed behaviors cache the configured cap.

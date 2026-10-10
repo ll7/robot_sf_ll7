@@ -95,6 +95,13 @@ ACCEPTED_SKIPS = {
 # are in PROFILE_IMPORTS are still checked for availability; only the
 # intentionally out-of-profile adapters below use this exception.
 OWNER_RUNTIME_IMPORT_EXEMPTIONS = {
+    "robot_sf/_numerical_mode.py": {
+        "torch": "optional pinned learned-planner runtime validation",
+        "threadpoolctl": "optional pinned learned-planner kernel inspection",
+    },
+    "robot_sf/baselines/pinned_actor.py": {
+        "torch": "optional pinned learned-planner checkpoint adapter",
+    },
     "robot_sf/baselines/distributional_rl.py": {
         "torch": "training-only checkpoint adapter",
     },

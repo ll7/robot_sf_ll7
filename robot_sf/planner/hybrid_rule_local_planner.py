@@ -1150,7 +1150,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         accel = max(float(limits["max_linear_accel"]), _EPS)
         maximum = self._v4_effective_max_speed()
         minimum = self._min_linear_speed(maximum)
-        speed = float(np.clip(state["current_speed"], minimum, maximum))
+        speed = float(state["current_speed"])
         robot_fields, _, _ = self._socnav_fields(state.get("observation", {}))
         angular = float(
             self._as_1d_float(
@@ -1159,9 +1159,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         pos = np.array(state["robot_pos"], dtype=float)
         heading = float(state["heading"])
-        count = (
-            reaction_steps + int(np.ceil(max(maximum, abs(minimum)) / (min(accel, decel) * dt))) + 1
-        )
+        braking_peak = max(maximum, abs(minimum), abs(speed))
+        count = reaction_steps + int(np.ceil(braking_peak / (min(accel, decel) * dt))) + 1
         error = float(self.config.v4_prediction_speed_error)
         positions = [pos.copy()]
         paddings = []

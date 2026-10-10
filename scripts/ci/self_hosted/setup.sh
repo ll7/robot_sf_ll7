@@ -119,6 +119,26 @@ ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]
 DOCKERFILE
 }
 
+check_tmpdir() {
+  local scratch="${TMPDIR:-/tmp}" filesystem block_size blocks
+  # stat -f follows symlinks and queries the containing filesystem, so nested
+  # mounts and TMPDIR overrides cannot hide a small tmpfs behind a disk path.
+  local mount_stats
+  if ! mount_stats="$(stat -f -c '%T %S %b' -- "$scratch")"; then
+    echo "Could not inspect TMPDIR filesystem" >&2
+    return 1
+  fi
+  read -r filesystem block_size blocks <<<"$mount_stats"
+  if [[ -z "$filesystem" || ! "$block_size" =~ ^[1-9][0-9]*$ || ! "$blocks" =~ ^[0-9]+$ ]]; then
+    echo "Invalid TMPDIR filesystem capacity" >&2
+    return 1
+  fi
+  if [[ "$filesystem" == tmpfs ]] && (( block_size * blocks < 2147483648 )); then
+    echo "TMPDIR tmpfs must have at least 2 GiB capacity" >&2
+    return 1
+  fi
+}
+
 run_container() {
   local runner_name="$1"
   local token
@@ -132,6 +152,7 @@ run_container() {
   install -d -m 700 /home/runner/_work/_temp /home/runner/_work/_uv_cache \
     /home/runner/_work/_tmp /home/runner/_work/_pip_cache \
     /home/runner/_tool
+  check_tmpdir
   ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
@@ -149,6 +170,8 @@ supervise() {
       sleep 60
       continue
     fi
+    # TMPDIR uses the disk-backed work volume, outside the small /tmp and
+    # credential-scratch tmpfs mounts. Container startup verifies its capacity.
     # Keep the host lock through container startup: the next slot must count
     # this container when it checks capacity. --rm removes its work volume.
     if ! lock_disk_admission; then

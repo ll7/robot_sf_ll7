@@ -57,6 +57,11 @@ def test_historical_schedule_preserves_all_main_scenario_bytes(protocol):
         "status": "recommended",
         "bucket": "long",
     }
+    # The immutable oracle predates 0.1.0 group authoring.
+    for row in scenarios:
+        for ped in row.get("single_pedestrians", []):
+            ped.pop("initial_group_id", None)
+            ped.pop("join_radius_m", None)
     canonical = json.dumps(scenarios, sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(canonical).hexdigest() == ORACLE["scenarios_sha256"]
 
@@ -92,8 +97,19 @@ def test_historical_scheduled_episode_matches_main_row_contract(protocol, name):
     # Check the real stop first so the timeout case exposes the label regression.
     assert row["steps"] == expected["steps"]
     assert row["termination_reason"] == expected["termination_reason"]
-    # Main's metric-v2 rows add this schema field; retain the historical oracle bytes.
-    assert sorted(row) == sorted([*expected["row_fields"], "metric_schema_version"])
+    # Additive metric and runtime-physics witnesses retain every legacy row field.
+    assert sorted(row) == sorted(
+        [
+            *expected["row_fields"],
+            "metric_schema_version",
+            "effective_physics",
+            "release_design_parameters",
+        ]
+    )
+    from robot_sf.benchmark.effective_physics import validate_effective_physics
+
+    validate_effective_physics(row["effective_physics"])
+    assert row["release_design_parameters"] == row["effective_physics"]["release_design_parameters"]
     assert row["metric_schema_version"] == "robot-sf-metrics.v2"
     assert row["config_hash"] == expected["config_hash"]
     assert row["episode_id"] == expected["episode_id"]

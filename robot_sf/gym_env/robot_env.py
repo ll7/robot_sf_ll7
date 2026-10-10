@@ -598,7 +598,7 @@ class RobotEnv(BaseEnv):
             self.map_def,
         )
 
-        semantics = env_config.ppo_action_semantics
+        semantics = getattr(env_config, "ppo_action_semantics", "acceleration")
         if semantics not in {"acceleration", "velocity_delta"}:
             raise ValueError(f"Unsupported PPO action semantics: {semantics}")
         if semantics == "velocity_delta":
@@ -1138,7 +1138,7 @@ class RobotEnv(BaseEnv):
         action = self._apply_action_latency(requested_action)
         if (
             not self.debug_without_robot_movement
-            and self.config.ppo_action_semantics == "velocity_delta"
+            and getattr(self.config, "ppo_action_semantics", "acceleration") == "velocity_delta"
         ):
             # Resolve delayed deltas against the speed and timestep at actuation.
             robot = self.simulator.robots[0]

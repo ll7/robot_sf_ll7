@@ -17,6 +17,7 @@ from robot_sf.research.zanlungo_corridor_acceptance import (
     load_acceptance_config,
     render_acceptance_markdown,
     run_acceptance,
+    run_corridor_trace,
     write_acceptance_report,
 )
 from robot_sf.sim.pedestrian_model_variants import (
@@ -37,8 +38,9 @@ def config() -> AcceptanceConfig:
 
 @pytest.fixture(scope="module")
 def report(config: AcceptanceConfig) -> dict:
-    """Run the bounded CPU acceptance matrix once for contract assertions."""
-    return run_acceptance(config)
+    """Run the frozen geometry on a development seed without editing its packet."""
+    development_config = replace(config, fixture=replace(config.fixture, seed=1001))
+    return run_acceptance(development_config)
 
 
 def test_canonical_config_predeclares_fixture_and_parameter_bookkeeping(
@@ -59,15 +61,30 @@ def test_canonical_config_predeclares_fixture_and_parameter_bookkeeping(
     assert all(case.relative_to_reference is not None for case in config.cases[1:])
 
 
-def test_cpu_harness_labels_reference_yielding_and_control_collision_proxy(
+def test_cpu_harness_labels_reference_yielding_and_control_pass_through(
     report: dict,
 ) -> None:
-    """The predeclared reference yields while the reactive control misses clearance."""
+    """The reference yields without requiring distant walls to squeeze the control."""
     by_id = {row["case_id"]: row for row in report["rows"]}
     assert by_id["zanlungo_paper_reference"]["metrics"]["outcome_label"] == "yielding"
-    assert by_id["social_force_control"]["metrics"]["outcome_label"] == "collision_proxy"
+    assert by_id["social_force_control"]["metrics"]["outcome_label"] == "pass_through"
+    assert by_id["social_force_control"]["metrics"]["collision_proxy_avoided"] is True
     assert report["acceptance_checks"]["reference_outcome_is_yielding"] is True
     assert report["acceptance_met"] is True
+
+
+def test_default_corridor_control_preserves_body_clearance_at_walls(
+    config: AcceptanceConfig,
+) -> None:
+    """A passing pairwise label must not hide disabled pedestrian-wall interaction."""
+    fixture = replace(config.fixture, seed=1001)
+    control = next(case for case in config.cases if case.case_id == "social_force_control")
+    trace = run_corridor_trace(fixture, control)
+    wall_clearance = np.minimum(
+        trace.positions[:, :, 1] - fixture.corridor_min_y_m,
+        fixture.corridor_max_y_m - trace.positions[:, :, 1],
+    )
+    assert np.min(wall_clearance) >= SimulationSettings().ped_radius - 1e-9
 
 
 def test_every_parameter_row_has_exact_replay_and_explicit_non_benchmark_metadata(

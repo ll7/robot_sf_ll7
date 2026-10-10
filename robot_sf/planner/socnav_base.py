@@ -59,7 +59,10 @@ _PREDICTIVE_SCORING_VERSIONS = {
     "predictive_heading_lattice_version": frozenset({"per_step_v1", "horizon_scaled_v2"}),
 }
 
-_SOCNAV_PRIVATE_SELECTORS = frozenset(_PREDICTIVE_SCORING_VERSIONS) | {"sampling_repulsion_weight"}
+_SOCNAV_PRIVATE_SELECTORS = frozenset(_PREDICTIVE_SCORING_VERSIONS) | {
+    "sampling_repulsion_weight",
+    "sacadrl_max_goal_distance",
+}
 
 
 def _resolve_private_selector(name: str, value: Any) -> Any:
@@ -368,7 +371,6 @@ class SocNavPlannerConfig:
     sacadrl_model_id: str = _SACADRL_MODEL_ID
     sacadrl_checkpoint_path: str | None = None
     sacadrl_pref_speed: float = 1.0
-    sacadrl_max_goal_distance: float | None = None
     sacadrl_max_other_agents: int = 3
     sacadrl_sorting_method: str = "closest_first"
     predictive_model_id: str = _PREDICTIVE_MODEL_ID
@@ -499,6 +501,8 @@ class SocNavPlannerConfig:
     predictive_occupancy_version: InitVar[str] = field(default="pedestrians_v1", kw_only=True)
     # A4: distinct horizon headings without changing historical config identity.
     predictive_heading_lattice_version: InitVar[str] = field(default="per_step_v1", kw_only=True)
+    # Keep the optional transfer cap out of historical dataclass/config identity.
+    sacadrl_max_goal_distance: InitVar[float | None] = field(default=None, kw_only=True)
     # Pedestrians whose surface distance (centre distance minus robot and
     # pedestrian radius) is at most this value keep the full, uncapped legacy
     # repulsion.  1.6 m equals a 3.0 m centre distance at the release radii
@@ -596,6 +600,8 @@ class SocNavPlannerConfig:
             self.predictive_occupancy_version = init_vars[3]
         if len(init_vars) > 4:
             self.predictive_heading_lattice_version = init_vars[4]
+        if len(init_vars) > 5:
+            self.sacadrl_max_goal_distance = init_vars[5]
 
     def __getattribute__(self, name: str) -> Any:
         """Expose the resolved kernel selector without serializing its default.
@@ -613,9 +619,9 @@ class SocNavPlannerConfig:
                 return object.__getattribute__(self, "_predictive_clearance_model")
             except AttributeError:
                 return "center_v1"
-        if name == "sampling_repulsion_weight":
+        if name in {"sampling_repulsion_weight", "sacadrl_max_goal_distance"}:
             try:
-                return object.__getattribute__(self, "_sampling_repulsion_weight")
+                return object.__getattribute__(self, "_" + name)
             except AttributeError:
                 return None
         if name in {"predictive_occupancy_version", "predictive_heading_lattice_version"}:
@@ -638,6 +644,8 @@ class SocNavPlannerConfig:
             overrides["predictive_clearance_model"] = self.predictive_clearance_model
         if self.sampling_repulsion_weight is not None:
             overrides["sampling_repulsion_weight"] = self.sampling_repulsion_weight
+        if self.sacadrl_max_goal_distance is not None:
+            overrides["sacadrl_max_goal_distance"] = self.sacadrl_max_goal_distance
         if self.predictive_occupancy_version != "pedestrians_v1":
             overrides["predictive_occupancy_version"] = self.predictive_occupancy_version
         if self.predictive_heading_lattice_version != "per_step_v1":

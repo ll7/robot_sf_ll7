@@ -1,5 +1,6 @@
 """Focused coverage for the extracted SA-CADRL planner-family module."""
 
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -241,6 +242,22 @@ def test_far_goal_uses_actual_distance_by_default() -> None:
 
     assert vector[0, 1] == pytest.approx(30.0)
     assert true_distance == pytest.approx(30.0)
+
+
+def test_goal_cap_serialization_preserves_legacy_defaults_and_opt_in_identity() -> None:
+    """The transfer opt-in is absent by default but survives config round trips."""
+    default = sacadrl.SocNavPlannerConfig()
+    selected = sacadrl.SocNavPlannerConfig(sacadrl_max_goal_distance=10.0)
+
+    assert default.sacadrl_max_goal_distance is None
+    assert "sacadrl_max_goal_distance" not in asdict(default)
+    assert "sacadrl_max_goal_distance" not in default.to_dict()
+    assert selected.to_dict()["sacadrl_max_goal_distance"] == 10.0
+    assert sacadrl.SocNavPlannerConfig(**selected.to_dict()) == selected
+    assert selected != default
+    selected.sacadrl_max_goal_distance = None
+    assert selected == default
+    assert selected.to_dict() == default.to_dict()
 
 
 def test_opt_in_goal_cap_changes_only_network_distance() -> None:

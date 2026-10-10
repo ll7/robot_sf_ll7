@@ -17,7 +17,19 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
+# Read only the numerical policy before importing any scientific library.
+import yaml
+
+from robot_sf._numerical_mode import bootstrap_numerical_mode
+
+_early_parser = argparse.ArgumentParser(add_help=False)
+_early_parser.add_argument("--config", type=Path)
+_early_args, _ = _early_parser.parse_known_args()
+if _early_args.config is not None:
+    _early_payload = yaml.safe_load(_early_args.config.read_text())
+    bootstrap_numerical_mode(_early_payload.get("numerical_mode"))
+
+from robot_sf._numerical_thread_env import pin_thread_env_for_determinism  # noqa: E402
 
 # Apply process-wide numerical thread caps before importing camera-ready modules,
 # which transitively import NumPy and may initialize BLAS/OpenMP runtimes.

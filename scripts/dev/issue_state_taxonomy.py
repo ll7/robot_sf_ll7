@@ -30,6 +30,7 @@ STATE_QUALIFIER_LABELS = frozenset(
     {
         "state:author-decision",
         "state:blocked-human-decision",
+        "state:blocked-dependency",
         "state:blocked-no-code-slice",
         "state:deferred",
         "state:needs-artifact-promotion",

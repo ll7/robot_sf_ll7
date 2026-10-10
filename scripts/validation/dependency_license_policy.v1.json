@@ -755,11 +755,11 @@
       ]
     },
     {
-      "id": "geopandas-1-1-4-external-install",
+      "id": "geopandas-1-2-0-external-install",
       "package": "geopandas",
-      "version": "1.1.4",
+      "version": "1.2.0",
       "license_expression": "BSD-3-Clause",
-      "python_requires": ">=3.10",
+      "python_requires": ">=3.11",
       "target": {
         "os": "linux",
         "architecture": "x86_64",
@@ -770,21 +770,21 @@
       },
       "source": {
         "registry": "https://pypi.org/simple",
-        "metadata_url": "https://pypi.org/pypi/geopandas/1.1.4/json"
+        "metadata_url": "https://pypi.org/pypi/geopandas/1.2.0/json"
       },
       "artifacts": [
         {
           "kind": "sdist",
-          "filename": "geopandas-1.1.4.tar.gz",
-          "sha256": "06f2890a07e1a239047daa14b486a7c6ae5ce82dcf7405e13c46bf31f5d0dd66",
-          "size": 337445,
+          "filename": "geopandas-1.2.0.tar.gz",
+          "sha256": "72425b0dec1b77122b1e00f72c2b3b91f320cf0331ae236d37e26865e8808628",
+          "size": 337713,
           "platform_tags": []
         },
         {
           "kind": "wheel",
-          "filename": "geopandas-1.1.4-py3-none-any.whl",
-          "sha256": "1a0c459cbdb1537cd154dafe6174be20d1760844b7f1c967dc8520b180f2e773",
-          "size": 343292,
+          "filename": "geopandas-1.2.0-py3-none-any.whl",
+          "sha256": "948fd57df4f713697d5cce149333c0e4714965320c9f5ffa411666c577962eba",
+          "size": 368068,
           "platform_tags": [
             "py3",
             "none",
@@ -794,17 +794,17 @@
       ],
       "upstream": {
         "repository": "https://github.com/geopandas/geopandas",
-        "tag": "v1.1.4",
+        "tag": "v1.2.0",
         "notice_paths": [
-          "https://github.com/geopandas/geopandas/blob/91ec4af3c502be268ee147a3a832387534c0be3d/LICENSE.txt",
-          "https://github.com/geopandas/geopandas/tree/91ec4af3c502be268ee147a3a832387534c0be3d"
+          "https://github.com/geopandas/geopandas/blob/199fc53c8a1b87fe4f11d7a8f69f0d1408d9ef71/LICENSE.txt",
+          "https://github.com/geopandas/geopandas/tree/199fc53c8a1b87fe4f11d7a8f69f0d1408d9ef71"
         ],
         "archive_notice_paths": [
-          "geopandas-1.1.4/LICENSE.txt",
-          "geopandas-1.1.4.dist-info/licenses/LICENSE.txt"
+          "geopandas-1.2.0.dist-info/licenses/LICENSE.txt",
+          "geopandas-1.2.0/LICENSE.txt"
         ],
         "archive_notice_absences": [],
-        "commit_sha": "91ec4af3c502be268ee147a3a832387534c0be3d"
+        "commit_sha": "199fc53c8a1b87fe4f11d7a8f69f0d1408d9ef71"
       },
       "profiles": [
         "all"
@@ -832,8 +832,7 @@
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
-        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "scripts/validation/geopandas_1.2.0_archive_evidence.v1.json"
       ]
     },
     {

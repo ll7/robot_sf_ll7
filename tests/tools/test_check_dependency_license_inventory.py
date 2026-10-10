@@ -798,12 +798,11 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
     expected = selected_policy_pending_package_count(selected_rows)
 
-    # 125 = 119 baseline + 6 net-new rows from dependabot bumps 2f393da1d (tqdm
+    # 124 = 119 baseline + 5 net-new rows from dependabot bumps 2f393da1d (tqdm
     # 4.70.1), 51e189474 (wandb 0.30.0 plus 6 transitive otel/googleapis rows,
-    # minus dropped sentry-sdk), ca470a58d (optuna-dashboard 0.21.0), plus the
-    # geopandas 1.2.0 row pending this PR's license admission. Earlier licenses
-    # were verified unchanged/new-permissive via PyPI metadata (issue #9341).
-    assert expected == 125
+    # minus dropped sentry-sdk), ca470a58d (optuna-dashboard 0.21.0). Licenses
+    # verified unchanged/new-permissive via PyPI metadata (issue #9341).
+    assert expected == 124
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
@@ -829,10 +828,10 @@ def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
             row.get("policy_disposition") == "external_dependency_not_redistributed"
             for row in selected_rows
         )
-        == 36
+        == 37
     )
-    assert selected_policy_pending_package_count(selected_rows) == 125  # 119 + 6 net-new
-    # dependabot rows, see above; pending policy rows unchanged.
+    assert selected_policy_pending_package_count(selected_rows) == 124  # 119 + 5 net-new
+    # dependabot rows, see above; policy rows (36/37) unchanged.
 
 
 def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:

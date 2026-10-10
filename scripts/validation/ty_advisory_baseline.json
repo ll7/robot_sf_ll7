@@ -8,7 +8,7 @@
     ],
     "rule": "Findings with check_name='unresolved-import' and description prefix 'unresolved-import: Cannot resolve imported module...' are treated as the optional-import category: recorded but EXCLUDED from the ratchet gate (owned by #4990/#4995)."
   },
-  "generated_at": "2026-10-10T11:27:18Z",
+  "generated_at": "2026-10-10T11:42:08Z",
   "modules": {
     "docs": {
       "general": 4,
@@ -136,9 +136,9 @@
       "total": 35
     },
     "robot_sf/render": {
-      "general": 102,
+      "general": 101,
       "optional_import_excluded": 1,
-      "total": 103
+      "total": 102
     },
     "robot_sf/research": {
       "general": 37,
@@ -210,7 +210,7 @@
     "not-subscriptable": 268,
     "possibly-missing-submodule": 6,
     "redundant-cast": 10,
-    "too-many-positional-arguments": 3,
+    "too-many-positional-arguments": 2,
     "unknown-argument": 6,
     "unresolved-attribute": 1832,
     "unresolved-import": 201,
@@ -220,10 +220,10 @@
   },
   "schema_version": 1,
   "summary": {
-    "general_findings": 6446,
+    "general_findings": 6445,
     "module_count": 36,
     "optional_import_findings_excluded": 168,
-    "total_findings": 6614
+    "total_findings": 6613
   },
   "ty_version": "ty 0.0.58"
 }

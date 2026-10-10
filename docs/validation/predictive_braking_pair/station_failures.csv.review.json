@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking_pair/station_failures.csv",
+  "artifact_sha256": "b834b77158e5a750e330f10e1d8a65a5a8089a3b683f3eb15a9713effbca8fba",
+  "preserved_exact_bytes": false,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

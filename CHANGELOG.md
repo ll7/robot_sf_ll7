@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+* **0.1.0 prediction-planner default (#10181).** Binding a differential-drive environment
+  selects native-motion prediction; binding static geometry also makes the
+  `native_motion_static_footprint_v2` swept-footprint veto always on, with no opt-in flag.
+  The accepted development gate (48 empty-world scenarios, seeds 1001–1030) improves
+  successes from 1,138 to 1,407 and reduces static-contact slots from 302 to 9, with
+  269 failure-to-success conversions, no success losses and no new contact slots.
+  The cost remains explicit: 24 new contact-free stopped timeouts, all in
+  `francis2023_narrow_doorway`, replace wall-contact failures; 124 shared successes
+  take 1–4 extra steps (0.1–0.4 simulation seconds). Stopping instead of hitting a
+  wall is the accepted safer failure for 0.1.0. This is development diagnostic evidence,
+  not a populated-scenario, full-roster, release or global safety proof; nine contacts
+  remain. A populated-scenario or full-roster run showing success losses or new contacts
+  reopens the 2026-10-08 ruling. Populated bounded-sampler grids also reject missing or
+  out-of-range static obstacle channels rather than supplying infinite clearance;
+  absent and zero-sized grids retain their compatibility behavior.
+
 * **Overtaking parked-goal clearance (OVTFIX2, #10063).** h1 passes the slower robot along the original lane before exiting up and back from (33, 6.6) to park at (20, 9.9). Parking retreats longitudinally from the final approach as well as laterally; the upper exit provides wall clearance. This addresses parked-pedestrian influence in guarded PPO's unbounded tracked-agent observations as well as physical obstruction. The robot route, pedestrian start and initial speed and 0.7 m/s cap are retained; the author-granted 600-step budget now lives in the source scenario and is inherited by the release matrix. The guarded-PPO cell carries its out-of-training-speed-range reporting caveat. Historical evidence remains identified by its original source; development verification is reported with PR #10067.
 
 * **0.0.8 endpoint overlap repair (#10063).** Versioned release maps narrow the pedestrian-overtaking robot spawn to y=4.0–4.5, move the pedestrian lane from y=6 to y=6.6 (1.6 m passing separation from the unchanged robot route). The pedestrian keeps its original start x=1.5 and 0.8 m/s initial speed (effective SFM target 1.04 m/s); a 0.7 m/s robot cap and 600-step budget preserve an actual overtake from behind. Station-platform reverse-flow crowd spawn moves to y=16.5–19.5, clear of the robot goal; its bend at x=74 also clears the full 3 m route-spawn spread; the 4 m detour changes the density-derived population from 26 to 27; robot-crowding spawn moves to x=6.5–14.5, with density 0.21 preserving 24 pedestrians. Historical maps remain intact. CI audits every full robot spawn/goal rectangle across all 48 release scenarios and three doorway widths against radius-expanded single-pedestrian lanes and crowd spawn zones and the actual axis-clipped route-anchor spawn support; intended interactions require exact geometry-bound dispositions, including forced-population overrides so dormant zones cannot silently activate.

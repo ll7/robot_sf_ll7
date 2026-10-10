@@ -25,7 +25,7 @@ ISSUE_8163_BATCH = {
     "cma": ("4.4.4", "BSD-3-Clause"),
     "cyclopts": ("4.18.0", "Apache-2.0"),
     "fsspec": ("2026.2.0", "BSD-3-Clause"),
-    "geopandas": ("1.1.4", "BSD-3-Clause"),
+    "geopandas": ("1.2.0", "BSD-3-Clause"),
     "idna": ("3.11", "BSD-3-Clause"),
     "imageio": ("2.37.2", "BSD-2-Clause"),
     "joblib": ("1.5.3", "BSD-3-Clause"),

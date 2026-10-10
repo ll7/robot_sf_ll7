@@ -184,7 +184,15 @@ def _occupancy_observation(
             "speed": speed,
             "angular_velocity": angular_velocity,
         },
-        "goal": {"current": goal_current, "next": goal_next},
+        "goal": {
+            "current": goal_current,
+            "next": goal_next,
+            **(
+                {"next_valid": _vector(goal["next_valid"], "goal.next_valid", 1)}
+                if "next_valid" in goal
+                else {}
+            ),
+        },
         "pedestrians": {
             "positions": ped_positions,
             "velocities": ped_velocities,

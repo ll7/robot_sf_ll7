@@ -553,7 +553,143 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 
 See 0.0.8 D-080 for the approved decision-record policy; its tooling is a separate later lane.
 
-### D-023: Author real initial groups and a reachable join radius
+### D-023: Enable the hybrid planner repairs by default
+- **Status of 2026-10-05 choice:** Superseded by the author ruling of 2026-10-08 below. The original entry and evidence are retained.
+- **Date:** 2026-10-05
+- **Question:** Should the three independent hybrid repair switches remain opt-in for 0.1.0?
+- **Choice:** Current inputs default to planner `physical_static_exclusion_enabled: true`, planner `goal_next_validity_enabled: true`, and environment `include_goal_next_valid: true`. Explicit values always win. Registered released/frozen inputs through 0.0.8 retain false fill-in at the typed builders, with unchanged resolved mappings and canonical digests.
+- **Reason:** author decision 2026-10-05.
+- **Decided by:** author for activation; orchestrator (delegated) for the builder-level compatibility registry and provenance ruling in the implementing lane.
+- **Alternatives:** Retain opt-in defaults; edit frozen YAML; add compatibility keys to hash-bound mappings. Frozen YAML and recorded identities remain protected.
+- **Evidence:** #10145, linked #10105 and #9668; [implementation and diagnostic evidence](../../validation/hybrid_defaults/README.md). Development comparisons require every failure classified; they are not release evaluation evidence.
+- **Implemented in:** `robot_sf/common/hybrid_defaults.py`, its explicit source registry, typed planner/environment fill-in, and map-runner source context/provenance. Released learned-policy spaces are covered by the same registry. A later 0.1.0 freeze must explicitly record these new defaults together with the other observation migrations.
+- **Enforced by:** `test_current_defaults_enable_all_three_switches`; `test_each_explicit_switch_overrides_the_selected_defaults`; `test_scenario_validity_override_wins_or_rejects_non_boolean`; `test_registered_release_full_dataclasses_and_mapping_match_base`; `test_registry_requires_known_source_and_matching_bytes`; `test_release_registry_covers_learned_observation_contract`; `test_release_scenario_environment_dataclasses_match_full_base_dumps`; `test_native_episode_records_legacy_and_current_builder_default_sets` in `tests/planner/test_hybrid_default_compatibility.py`, plus the paired behavior-change comparison gate and `test_missing_candidate_probe_skips_initial_goal_stop_without_speed_cap` for its observer integrity.
+- **Reopen:** author: can still be discussed in more detail. Reopen the technical compatibility ruling if a reviewer shows it changes any recorded 0.0.8 identity or behavior.
+
+Development evidence for D-023: `docs/validation/hybrid_defaults/README.md` records the full 3,084-episode comparison. Empty-world has no new failures; the crowded matrix gains 32 net successes but introduces one pedestrian contact and 35 newly failing cells. These diagnostics require review and do not admit a release.
+
+Review correction for D-023: the hard terminal stop now waits for actual
+navigator completion; missing validity observations fail closed; both typed
+builders share the source selector, and the released-arm registry covers absent
+algorithm inputs and the older PPO source. The author default choice above is
+unchanged. Additional enforcement: `test_terminal_goal_at_022_m_keeps_tracking_before_environment_success`,
+`test_enabled_validity_rejects_a_missing_sensor_field`,
+`test_new_env_and_planner_share_defaults_on_registered_release_scenario`,
+`test_released_002_ppo_constructor_uses_legacy_sensor_defaults`,
+`test_worker_preserves_absent_algorithm_config_for_release_default_selection`,
+and `test_every_release_arm_keeps_full_base_environment_and_mapping_dumps` in
+`tests/planner/test_hybrid_default_review_regressions.py`. Per-switch evidence
+will support discussion under the existing reopen clause; diagnostic outcomes
+remain distinct from release admission.
+
+Completed review evidence for D-023: [per-switch decision brief](../../validation/hybrid_defaults/per_switch_decision.md),
+7,200 crowded and 204 empty-world episodes on development seeds, plus 1,440
+first-call configuration errors for literal goal-only. All-off / static / sensor /
+validity with sensor / all-on successes are 1,285 / 1,262 / 1,285 / 1,342 / 1,318
+of 1,440; static and all-on each contact one pedestrian while stationary.
+Narrow-hallway successes are 26 / 5 / 26 / 30 / 5 of 30. Two validity-arm
+seed-1026 preferred-stop livelocks remain for discussion. The reason remains
+**author decision 2026-10-05** and the reopen clause remains
+**author: can still be discussed in more detail**; the default choice is unchanged.
+Additional enforcing test: `test_unknown_configless_hybrid_on_released_assets_uses_current_defaults`,
+which runs the actual direct episode and serialized worker. The registry binds
+25 reviewed config-less identities; all 183 full environment dumps and all nine
+frozen planner dumps retain their base bytes after root redaction.
+
+Additional review validation: the once-only full suite records 28 classified
+failures; focused input/bridge corrections pass. A separate dev1001 mirror
+probe isolates another static-exclusion consequence: 100 and 111 deviate by
+up to 0.374 m, while 000, 001 and 011 meet 0.1 mm. This remains author decision
+evidence, not an amendment of the all-on ruling or release admission.
+
+Author direction for D-023, **2026-10-07**: investigate and fix the known failures
+before choosing the default. The all-on implementation remains in code; this
+round does not amend **author decision 2026-10-05**. Reopen remains
+**author: can still be discussed in more detail**. Continuous geometry restores
+reflection symmetry, physical exclusion no longer replaces pedestrian/scoring
+rollout, and terminal tracking/scoring no longer prefers the reported zero-motion
+stalls. Enforcing tests: `test_physical_static_rollout_reflects_without_raster_score_bias`
+and `test_enabled_switch_completes_the_reproduced_failure_cell` in
+`tests/planner/test_hybrid_failure_regressions.py` (six baseline failures, then passes).
+The [updated decision brief](../../validation/hybrid_defaults/per_switch_decision.md)
+compares the same 7,200 crowded plus 204 empty-world episodes and fifteen mirror
+episodes. All 183 released dumps and recorded mapping identities are unchanged.
+These are development diagnostics for a new author ruling, not release admission.
+
+Completed development measurements, 2026-10-08: both crowding contacts and the
+reported terminal scorer stalls are removed; reflection meets the 0.1 mm gate.
+The hallway collapse remains (26/4/26/30/5 successes across the five arms), so
+item 2 is not fully resolved and the draft is not merge-ready. The decision brief
+recommends goal validity plus its sensor and static exclusion opt-in pending
+further repair. This is evidence for author reconsideration, not a new ruling;
+all-on remains in code and the reason/reopen clause above remain unchanged.
+
+#### Author ruling for D-023, 2026-10-08
+
+- **Source:** Author ruling in chat to the orchestrator, 2026-10-08, explicitly
+  superseding **author decision 2026-10-05** under that decision's reopen clause.
+- **Choice:** Current/0.1.0 missing fields use
+  `physical_static_exclusion_enabled: false`, `goal_next_validity_enabled: true`,
+  and `include_goal_next_valid: true`. Each explicit value wins. Static exclusion
+  stays available with `physical_static_exclusion_enabled: true` in the algorithm
+  config. Released/frozen inputs through 0.0.8 retain their original defaults,
+  full constructor/environment dumps, resolved mappings and frozen identities.
+- **Reason:** Validity plus its required sensor had the most successes: 1,346 of
+  1,440, against 1,285 all off and 1,319 all on. It recovered 61 episodes and
+  introduced none. Every arm had zero collisions in this development sample.
+  Static exclusion reduced `francis2023_narrow_hallway` success from 26/30 to
+  4/30 and introduced 48 failures overall. Keep it opt-in until that problem is
+  fixed. This is a development default choice, not a safety guarantee or release
+  admission. The remaining hallway repair stays open.
+- **Enforcing tests:** `test_010_defaults_follow_author_ruling_20261008`,
+  `test_each_explicit_switch_overrides_the_selected_defaults`,
+  `test_registry_requires_known_source_and_matching_bytes`,
+  `test_registered_release_full_dataclasses_and_mapping_match_base`,
+  `test_release_scenario_environment_dataclasses_match_full_base_dumps`,
+  `test_release_registry_covers_learned_observation_contract` in
+  `tests/planner/test_hybrid_default_compatibility.py`;
+  `test_every_release_arm_keeps_full_base_environment_and_mapping_dumps`,
+  `test_new_env_and_planner_share_defaults_on_registered_release_scenario`,
+  `test_enabled_validity_rejects_a_missing_sensor_field` in
+  `tests/planner/test_hybrid_default_review_regressions.py`.
+- **Reopen:** Reopen if a fixed static exclusion beats validity plus sensor without introducing failures.
+
+Evidence produced at `234fa6eda2e4333c7a51e78998dc915a471abebb`:
+7,200 crowded and 204 empty-world episodes, development seeds 1001–1030 only.
+Historical `current_defaults` labels mean all-on; the selected new default is the
+explicit `goal_validity_with_sensor` arm. New selection applicability is recorded
+in `docs/validation/hybrid_defaults/ruling_applicability.json`.
+
+| Evidence path | SHA-256 |
+| --- | --- |
+| `docs/validation/hybrid_defaults/per_switch_summary.json` | `2a73832581917c79bf702dd743f1b84168462adcfd3cb2bee8c8d58a3372e92d` |
+| `docs/validation/hybrid_defaults/per_switch_manifest.json` | `b6d23532e12bf14b3d4a0c55dc25bf96c3077504ef2b9fa4e42fe8859ec2bd5b` |
+| `docs/validation/hybrid_defaults/per_switch_scenarios.csv` | `a151dc99d3a3d5b3edeae11b91d841d6fa4e6e1cd5b7ed2b5e23820563f45f04` |
+| `docs/validation/hybrid_defaults/per_switch_episodes.json.gz` | `b452e8d11c0afe4bccc5845b71af67522e2b7a9f4f5c101af7996866c2f9f3a7` |
+| `docs/validation/hybrid_defaults/per_switch_trace_identities.json.gz` | `54cb37ef56d784c2ff995edd1d724385b51f3681ce42dfc4148e213bf736b0d7` |
+| `docs/validation/hybrid_defaults/resume_validation.json.gz` | `dfa9fabff3dff93922a23235f6de3472f74460c9422d88d259b12efd69cb6b2e` |
+| `docs/validation/hybrid_defaults/preservation_manifest.json.gz` | `1f102b1dc78932cc4196f1dcbcae341a45c1918b1aa28e677e71ce822da2f4e7` |
+
+**Preservation:** Complete 14,808 raw JSON/gzip files, original campaign manifest,
+per-episode and per-scenario tables, every failure classification and completion
+audit are bound by the SHA-256 manifest above. The uncompressed bundle manifest
+has SHA-256 `0a838a7c733580d12294b7ec2968a4f9abbfb08fe9b19464dcffd1fa1fd67afa`.
+Storage locations: `wandb://ll7/robot_sf/campaign-hybrid_defaults_010_20261008:v0`
+and `imech192:~/evidence/hybrid_defaults_010_20261008/`. The second location is
+the verified cluster login-node copy requested by the author. No cluster jobs run.
+The repository preservation route is
+[the approved W&B backend](../../context/issue_3075_durable_artifact_backend.md)
+and [restore-tested custody](../../context/artifact_retention_and_cleanup.md).
+Read-back results and commands are recorded in
+`docs/validation/hybrid_defaults/preservation_receipt.json`.
+
+**Follow-up, independent review 2026-10-08:** The remaining opt-in static
+exclusion narrow-hallway defect is tracked in
+[#10242](https://github.com/ll7/robot_sf_ll7/issues/10242). It does not block the
+validity-plus-sensor default above. Domain-Aware Approval remains pending until
+an independent reviewer grants it; the builder cannot approve its own work.
+
+### D-024: Author real initial groups and a reachable join radius
 - **Date:** 2026-10-09
 - **Question:** Which correction should make the named join/leave scenarios perform their group transitions?
 - **Choice:** Keep #10216: optional string `initial_group_id` labels local to authored pedestrians, integer runtime group IDs, and an optional `join_radius_m`. Join anchors begin together; leave begins as a triple. Only the join scenario opts into a 0.8 m radius. Reset restores authored membership. Reject malformed labels and nonpositive, nonfinite or boolean radii.

@@ -1,0 +1,10 @@
+{
+  "root_case_debug.py": "bdf59121aeb9c629e4436f812833f3808c50770fec587e07fa27f0d7ce6e1c48",
+  "root_crowding_rollout_only.py": "846b90ce08a472683679955a758486ac27079904f7c4b31c88d99358355fcf82",
+  "root_goal_after_probe.py": "94acfa4a6d0dd2d941adfb838f1dfe11c35ee2c98cd43876b2d0e5cc9dbbb793",
+  "root_goal_alignment_probe.py": "f3468cc654ca0ce8d5bfaea2b757c89d9fd2825575a6b29ead43b908ae3a29d3",
+  "root_isolation_probe.py": "1ecb2a129dcc3118a890d05fa931dac13b1590af800a76901729909079219174",
+  "root_mirror_debug.py": "923f32a22ad9254efde31efd836b418fb7eaa3b90f91c70ea80330f4d8760746",
+  "root_mirror_exact_probe.py": "820c274d9023d0d246f696da6b53d384b2e1c5a7dd125dd767deae43f3e2e28e",
+  "root_surface_probe.py": "b14a6ef53ca543debe1ef7fc8b7732536e7f799da680931da54b4d21c44dc8cb"
+}

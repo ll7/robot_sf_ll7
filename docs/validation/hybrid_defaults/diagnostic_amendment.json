@@ -1,0 +1,20 @@
+{
+  "original_head": "80d6bd3cc4894c107777d952a748dedc13f568af",
+  "resumed_head": "97b93aa67039bf9246e4aecde8aa678588c92bf9",
+  "retained_completed_episodes": 1738,
+  "changed_bound_file": "scripts/validation/run_hybrid_feasibility_diagnostics.py",
+  "original_file_sha256": "23d0bc87b886cca70f19a950beb59db15ac8f4a8c1fe4af43ef83744c8f87c01",
+  "resumed_file_sha256": "b28e7cd25e9f56c309046ce6646a03e7e900f3e8a14b8d2232cff07dd3171bc7",
+  "change": "Skip the counterfactual reporting probe when the first goal-stop decision has no speed-cap diagnostics.",
+  "ast_verification": "All original module syntax is identical after removing exactly the leading None-cap return guard.",
+  "native_runtime_and_all_other_bound_inputs_unchanged": true,
+  "failed_cell": {
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1011,
+    "arm": "current_defaults",
+    "empty": false
+  },
+  "failure_stage": "diagnostic observer before environment step",
+  "exception": "TypeError: 'NoneType' object is not subscriptable",
+  "retry_reason": "The identified reporting fault is fixed and has a real-path base-failing regression test."
+}

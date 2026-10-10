@@ -1726,7 +1726,15 @@ def build_robot_config_from_scenario(
 
     _reject_required_platform_semantic_consumers(scenario)
 
+    # Scenario assets do not choose defaults. Both typed builders use the same
+    # explicit execution-source scope, or current defaults outside that scope.
     config = RobotSimulationConfig()
+    env_overrides = scenario.get("env_overrides", {})
+    if isinstance(env_overrides, Mapping) and "include_goal_next_valid" in env_overrides:
+        value = env_overrides["include_goal_next_valid"]
+        if not isinstance(value, bool):
+            raise ValueError("env_overrides.include_goal_next_valid must be boolean")
+        config.include_goal_next_valid = value
     consumed_inputs: list[dict[str, str]] | None = [] if runtime_input_records is not None else None
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))

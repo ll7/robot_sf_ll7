@@ -29,6 +29,7 @@ from robot_sf.benchmark.map_runner.map_runner import (
     _scenario_with_episode_seed_defaults,
 )
 from robot_sf.benchmark.termination_reason import route_complete_success
+from robot_sf.common.hybrid_defaults import active_default_policy
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.hybrid_rule_local_planner import HybridRuleCandidate
 from robot_sf.training.scenario_loader import load_scenarios
@@ -52,6 +53,15 @@ TARGETS = (
     "classic_t_intersection_medium",
     "francis2023_narrow_doorway_width_2p20",
 )
+ARM_SWITCHES = {
+    "off": (False, False, False),
+    "static_only": (True, False, False),
+    "sensor_only": (False, False, True),
+    "goal_validity_with_sensor": (False, True, True),
+    "static_plus_goal_validity": (True, True, True),
+    "current_defaults": (False, True, True),
+    "orca": (False, False, False),
+}
 
 
 def load_cells(names):
@@ -74,10 +84,8 @@ def hybrid_config(scenario, enabled=False, goal_validity=False):
     )
     assert algo == "hybrid_rule_local_planner"
     cfg["debug_candidate_evaluator"] = True
-    if enabled:
-        cfg["physical_static_exclusion_enabled"] = True
-    if goal_validity:
-        cfg["goal_next_validity_enabled"] = True
+    cfg["physical_static_exclusion_enabled"] = bool(enabled)
+    cfg["goal_next_validity_enabled"] = bool(goal_validity)
     return cfg
 
 
@@ -128,7 +136,11 @@ def replay_segment(planner, obs, state, candidate, endpoint):
 def motion_metrics(rows, dt):
     """Measure stationary time and sustained low displacement (diagnostic units: seconds)."""
     stopped = sum(r["displacement_m"] / dt <= 0.05 for r in rows)
-    forced = sum(r["debug"]["feasible_moving_count"] == 0 for r in rows if r.get("debug"))
+    forced = sum(
+        r["debug"]["feasible_moving_count"] == 0
+        for r in rows
+        if (r.get("debug") or {}).get("candidate_count", 0) > 0
+    )
     longest = current = 0
     # A robot that moves less than 0.5 m net over 10 s is stuck/oscillating.
     width = int(np.floor(10 / dt)) + 1  # strictly more than 10 s
@@ -163,6 +175,8 @@ def evaluate_orca_step(shadow, obs, state, command, end):
 
 def missing_candidate_probe(planner, obs, state, command):
     """Find an admissible forward action excluded by the scalar proximity speed cap."""
+    if planner._last_v4_speed_safety is None:
+        return None
     cap = planner._last_v4_speed_safety["speed_cap"]
     _, reachable, _, _ = planner._dynamic_window(
         state["current_speed"], planner._v4_effective_max_speed()
@@ -197,17 +211,22 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     scenario = _scenario_with_episode_seed_defaults(dict(scenario, seeds=[seed]), seed=seed)
     if empty:
         scenario = remove_pedestrians(scenario, [seed])
-    # Fixed 60 s comparison budget from #10092, independent of release authored budgets.
+    # Apply the admitted scenario horizon without changing recorded release inputs.
     scenario["simulation_config"] = dict(
         scenario.get("simulation_config") or {}, max_episode_steps=horizon
     )
     cfg = _build_env_config(scenario, scenario_path=matrix)
+    static, validity, sensor = ARM_SWITCHES[arm]
     hcfg = hybrid_config(
         scenario,
-        enabled=arm in {"static_only", "static_plus_goal_validity"},
-        goal_validity=arm == "static_plus_goal_validity",
+        enabled=static,
+        goal_validity=validity,
     )
-    cfg.include_goal_next_valid = bool(hcfg.get("goal_next_validity_enabled", False))
+    if arm == "current_defaults":
+        hcfg.pop("physical_static_exclusion_enabled")
+        hcfg.pop("goal_next_validity_enabled")
+    else:
+        cfg.include_goal_next_valid = sensor
     algo = "orca" if arm == "orca" else "hybrid_rule_local_planner"
     pcfg = (
         yaml.safe_load((ROOT / "configs/algos/orca_release_v0_0_8.yaml").read_text())
@@ -225,7 +244,7 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         policy._planner_bind_env(env)
         policy._planner_reset(seed=seed)
         next_valid_observed = "next_valid" in planner._socnav_fields(obs)[1]
-        if hcfg.get("goal_next_validity_enabled", False) and not next_valid_observed:
+        if planner.config.goal_next_validity_enabled and not next_valid_observed:
             raise RuntimeError("Enabled successor validity did not reach the planner")
         if arm == "orca":
             shadow_policy, _ = _build_policy(
@@ -266,6 +285,15 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
                 "displacement_m": float(np.linalg.norm(end - pre)),
                 "goal_distance_m": float(np.linalg.norm(env.simulator.goal_pos[0] - end)),
                 "collision": contact,
+                "collision_types": [
+                    k
+                    for k in (
+                        "is_pedestrian_collision",
+                        "is_obstacle_collision",
+                        "is_robot_collision",
+                    )
+                    if meta.get(k, False)
+                ],
                 "pedestrian_separation_m": (
                     float(meta["min_distance"])
                     if np.isfinite(meta.get("min_distance", float("nan")))
@@ -303,10 +331,21 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
         if runtime.get("fallback_count", 0) or runtime.get("degraded_count", 0):
             raise RuntimeError(f"Fallback/degraded execution: {runtime}")
         result = {
+            "default_policy": {
+                **active_default_policy(),
+                "explicit_switch_overrides": arm != "current_defaults",
+            },
             "execution_head": subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
             ).strip(),
             "next_valid_field_observed": next_valid_observed,
+            "effective_switches": {
+                "physical_static_exclusion_enabled": bool(
+                    planner.config.physical_static_exclusion_enabled
+                ),
+                "goal_next_validity_enabled": bool(planner.config.goal_next_validity_enabled),
+                "include_goal_next_valid": bool(cfg.include_goal_next_valid),
+            },
             "scenario": name,
             "seed": seed,
             "arm": arm,
@@ -338,12 +377,14 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     finally:
         env.close()
     path = Path(output) / f"{name}__{seed}__{arm}__{'empty' if empty else 'crowd'}"
-    with gzip.open(path.with_suffix(".jsonl.gz"), "wt") as stream:
+    trace_tmp = path.with_suffix(".jsonl.gz.tmp")
+    with gzip.open(trace_tmp, "wt") as stream:
         for row in rows:
             stream.write(json.dumps(_json_ready(row), allow_nan=False) + "\n")
-    path.with_suffix(".json").write_text(
-        json.dumps(_json_ready(result), indent=2, allow_nan=False) + "\n"
-    )
+    trace_tmp.replace(path.with_suffix(".jsonl.gz"))
+    result_tmp = path.with_suffix(".json.tmp")
+    result_tmp.write_text(json.dumps(_json_ready(result), indent=2, allow_nan=False) + "\n")
+    result_tmp.replace(path.with_suffix(".json"))
     print(f"{name} {seed} {arm} {result['outcome']}", flush=True)
     return result
 

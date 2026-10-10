@@ -148,9 +148,13 @@ def release_arm(key: str, *, scenario: str = "metamorphic") -> tuple[str, dict[s
         Effective algorithm key and config for the synthetic test scenario.
     """
     if key == HYBRID_V4_DIAGNOSTIC_ARM:
-        return resolve_release_algo_config(
+        algo, config = resolve_release_algo_config(
             "hybrid_rule_local_planner", HYBRID_V4_DIAGNOSTIC_CONFIG, scenario
         )
+        # Keep this historical diagnostic relation on its original controls.
+        # Current-default symmetry failures remain separate decision evidence.
+        config.update(physical_static_exclusion_enabled=False, goal_next_validity_enabled=False)
+        return algo, config
     matches = [entry for entry in release_campaign_planners() if entry["key"] == key]
     assert matches, f"release roster has no arm {key!r}"
     entry = matches[-1]
@@ -408,6 +412,8 @@ def run_arm_episode(
         ped_density=ped_density,
         social_force_kernel_version=social_force_kernel_version,
     )
+    if arm == HYBRID_V4_DIAGNOSTIC_ARM:
+        config.include_goal_next_valid = False
     env = make_robot_env(config=config, seed=seed)
     policy, meta = build_map_policy(algo, dict(algo_config), robot_kinematics="differential_drive")
     poses: list[tuple[float, float, float]] = []

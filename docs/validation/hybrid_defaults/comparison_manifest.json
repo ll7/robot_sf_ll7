@@ -1,0 +1,2662 @@
+{
+  "status": "diagnostic-only",
+  "python": "3.13.13 (main, May  4 2026, 21:09:13) [Clang 22.1.3 ]",
+  "dependencies": [
+    [
+      "Farama-Notifications",
+      "0.0.4"
+    ],
+    [
+      "ImageIO",
+      "2.37.2"
+    ],
+    [
+      "Jinja2",
+      "3.1.6"
+    ],
+    [
+      "Mako",
+      "1.3.10"
+    ],
+    [
+      "Markdown",
+      "3.10.2"
+    ],
+    [
+      "MarkupSafe",
+      "3.0.3"
+    ],
+    [
+      "PyOpenGL",
+      "3.1.10"
+    ],
+    [
+      "PyYAML",
+      "6.0.3"
+    ],
+    [
+      "PyYAML-ft",
+      "8.0.0"
+    ],
+    [
+      "Pygments",
+      "2.19.2"
+    ],
+    [
+      "QtPy",
+      "2.4.3"
+    ],
+    [
+      "SQLAlchemy",
+      "2.0.46"
+    ],
+    [
+      "Send2Trash",
+      "2.1.0"
+    ],
+    [
+      "Werkzeug",
+      "3.1.5"
+    ],
+    [
+      "absl-py",
+      "2.4.0"
+    ],
+    [
+      "alembic",
+      "1.18.4"
+    ],
+    [
+      "annotated-types",
+      "0.7.0"
+    ],
+    [
+      "anyio",
+      "4.12.1"
+    ],
+    [
+      "argon2-cffi",
+      "25.1.0"
+    ],
+    [
+      "argon2-cffi-bindings",
+      "25.1.0"
+    ],
+    [
+      "arrow",
+      "1.4.0"
+    ],
+    [
+      "ast_serialize",
+      "0.6.0"
+    ],
+    [
+      "astroid",
+      "4.0.4"
+    ],
+    [
+      "asttokens",
+      "3.0.1"
+    ],
+    [
+      "astunparse",
+      "1.6.3"
+    ],
+    [
+      "async-lru",
+      "2.1.0"
+    ],
+    [
+      "attrs",
+      "25.4.0"
+    ],
+    [
+      "babel",
+      "2.18.0"
+    ],
+    [
+      "beautifulsoup4",
+      "4.14.3"
+    ],
+    [
+      "bleach",
+      "6.3.0"
+    ],
+    [
+      "bottle",
+      "0.13.4"
+    ],
+    [
+      "certifi",
+      "2026.1.4"
+    ],
+    [
+      "cffi",
+      "2.0.0"
+    ],
+    [
+      "cfgv",
+      "3.5.0"
+    ],
+    [
+      "charset-normalizer",
+      "3.4.4"
+    ],
+    [
+      "click",
+      "8.3.1"
+    ],
+    [
+      "cloudpickle",
+      "3.1.2"
+    ],
+    [
+      "cma",
+      "4.4.4"
+    ],
+    [
+      "colorlog",
+      "6.10.1"
+    ],
+    [
+      "comm",
+      "0.2.3"
+    ],
+    [
+      "contourpy",
+      "1.3.3"
+    ],
+    [
+      "coverage",
+      "7.13.4"
+    ],
+    [
+      "cuda-bindings",
+      "13.3.1"
+    ],
+    [
+      "cuda-pathfinder",
+      "1.5.6"
+    ],
+    [
+      "cuda-toolkit",
+      "13.0.3.0"
+    ],
+    [
+      "cycler",
+      "0.12.1"
+    ],
+    [
+      "cyclopts",
+      "4.18.0"
+    ],
+    [
+      "debugpy",
+      "1.8.20"
+    ],
+    [
+      "decorator",
+      "5.2.1"
+    ],
+    [
+      "defusedxml",
+      "0.7.1"
+    ],
+    [
+      "dill",
+      "0.3.7"
+    ],
+    [
+      "distlib",
+      "0.4.0"
+    ],
+    [
+      "dm-tree",
+      "0.1.9"
+    ],
+    [
+      "docstring_parser",
+      "0.18.0"
+    ],
+    [
+      "duckdb",
+      "1.5.5"
+    ],
+    [
+      "execnet",
+      "2.1.2"
+    ],
+    [
+      "executing",
+      "2.2.1"
+    ],
+    [
+      "faiss-cpu",
+      "1.14.3"
+    ],
+    [
+      "fastjsonschema",
+      "2.21.2"
+    ],
+    [
+      "filelock",
+      "3.20.3"
+    ],
+    [
+      "flatbuffers",
+      "25.12.19"
+    ],
+    [
+      "fonttools",
+      "4.61.1"
+    ],
+    [
+      "fqdn",
+      "1.5.1"
+    ],
+    [
+      "fsspec",
+      "2026.2.0"
+    ],
+    [
+      "gast",
+      "0.7.0"
+    ],
+    [
+      "geopandas",
+      "1.1.4"
+    ],
+    [
+      "gherkin-official",
+      "29.0.0"
+    ],
+    [
+      "google-pasta",
+      "0.2.0"
+    ],
+    [
+      "googleapis-common-protos",
+      "1.75.3"
+    ],
+    [
+      "greenlet",
+      "3.3.1"
+    ],
+    [
+      "grpcio",
+      "1.78.0"
+    ],
+    [
+      "gymnasium",
+      "1.1.1"
+    ],
+    [
+      "h11",
+      "0.16.0"
+    ],
+    [
+      "h5py",
+      "3.14.0"
+    ],
+    [
+      "httpcore",
+      "1.0.9"
+    ],
+    [
+      "httpx",
+      "0.28.1"
+    ],
+    [
+      "hypothesis",
+      "6.168.1"
+    ],
+    [
+      "identify",
+      "2.6.16"
+    ],
+    [
+      "idna",
+      "3.11"
+    ],
+    [
+      "imageio-ffmpeg",
+      "0.6.0"
+    ],
+    [
+      "iniconfig",
+      "2.3.0"
+    ],
+    [
+      "ipykernel",
+      "7.2.0"
+    ],
+    [
+      "ipython",
+      "9.10.0"
+    ],
+    [
+      "ipython_pygments_lexers",
+      "1.1.1"
+    ],
+    [
+      "ipywidgets",
+      "8.1.8"
+    ],
+    [
+      "isoduration",
+      "20.11.0"
+    ],
+    [
+      "isort",
+      "7.0.0"
+    ],
+    [
+      "jedi",
+      "0.19.2"
+    ],
+    [
+      "joblib",
+      "1.5.3"
+    ],
+    [
+      "json5",
+      "0.13.0"
+    ],
+    [
+      "jsonpointer",
+      "3.0.0"
+    ],
+    [
+      "jsonschema",
+      "4.26.0"
+    ],
+    [
+      "jsonschema-specifications",
+      "2025.9.1"
+    ],
+    [
+      "jupyter",
+      "1.1.1"
+    ],
+    [
+      "jupyter-console",
+      "6.6.3"
+    ],
+    [
+      "jupyter-events",
+      "0.12.0"
+    ],
+    [
+      "jupyter-lsp",
+      "2.3.0"
+    ],
+    [
+      "jupyter_client",
+      "8.8.0"
+    ],
+    [
+      "jupyter_core",
+      "5.9.1"
+    ],
+    [
+      "jupyter_server",
+      "2.17.0"
+    ],
+    [
+      "jupyter_server_terminals",
+      "0.5.4"
+    ],
+    [
+      "jupyterlab",
+      "4.5.4"
+    ],
+    [
+      "jupyterlab_pygments",
+      "0.3.0"
+    ],
+    [
+      "jupyterlab_server",
+      "2.28.0"
+    ],
+    [
+      "jupyterlab_widgets",
+      "3.0.16"
+    ],
+    [
+      "keras",
+      "3.13.2"
+    ],
+    [
+      "kiwisolver",
+      "1.4.9"
+    ],
+    [
+      "lark",
+      "1.3.1"
+    ],
+    [
+      "lazy-loader",
+      "0.5"
+    ],
+    [
+      "libclang",
+      "18.1.1"
+    ],
+    [
+      "libcst",
+      "1.8.6"
+    ],
+    [
+      "librt",
+      "0.13.0"
+    ],
+    [
+      "linkify-it-py",
+      "2.1.0"
+    ],
+    [
+      "llvmlite",
+      "0.49.0"
+    ],
+    [
+      "loguru",
+      "0.7.3"
+    ],
+    [
+      "lz4",
+      "4.4.5"
+    ],
+    [
+      "markdown-it-py",
+      "4.2.0"
+    ],
+    [
+      "matplotlib",
+      "3.11.1"
+    ],
+    [
+      "matplotlib-inline",
+      "0.2.1"
+    ],
+    [
+      "mccabe",
+      "0.7.0"
+    ],
+    [
+      "mdit-py-plugins",
+      "0.6.1"
+    ],
+    [
+      "mdurl",
+      "0.1.2"
+    ],
+    [
+      "mistune",
+      "3.2.0"
+    ],
+    [
+      "ml_dtypes",
+      "0.5.4"
+    ],
+    [
+      "moviepy",
+      "2.2.1"
+    ],
+    [
+      "mpmath",
+      "1.3.0"
+    ],
+    [
+      "msgpack",
+      "1.1.2"
+    ],
+    [
+      "mutmut",
+      "3.7.0"
+    ],
+    [
+      "mypy",
+      "2.3.1"
+    ],
+    [
+      "mypy_extensions",
+      "1.1.0"
+    ],
+    [
+      "namex",
+      "0.1.0"
+    ],
+    [
+      "narwhals",
+      "2.22.1"
+    ],
+    [
+      "nbclient",
+      "0.10.4"
+    ],
+    [
+      "nbconvert",
+      "7.17.0"
+    ],
+    [
+      "nbformat",
+      "5.10.4"
+    ],
+    [
+      "nest-asyncio",
+      "1.6.0"
+    ],
+    [
+      "networkx",
+      "3.6.1"
+    ],
+    [
+      "nodeenv",
+      "1.10.0"
+    ],
+    [
+      "notebook",
+      "7.5.3"
+    ],
+    [
+      "notebook_shim",
+      "0.2.4"
+    ],
+    [
+      "numba",
+      "0.67.0"
+    ],
+    [
+      "numpy",
+      "2.4.6"
+    ],
+    [
+      "nvidia-cublas",
+      "13.1.1.3"
+    ],
+    [
+      "nvidia-cuda-cupti",
+      "13.0.85"
+    ],
+    [
+      "nvidia-cuda-nvrtc",
+      "13.0.88"
+    ],
+    [
+      "nvidia-cuda-runtime",
+      "13.0.96"
+    ],
+    [
+      "nvidia-cudnn-cu13",
+      "9.20.0.48"
+    ],
+    [
+      "nvidia-cufft",
+      "12.0.0.61"
+    ],
+    [
+      "nvidia-cufile",
+      "1.15.1.6"
+    ],
+    [
+      "nvidia-curand",
+      "10.4.0.35"
+    ],
+    [
+      "nvidia-cusolver",
+      "12.0.4.66"
+    ],
+    [
+      "nvidia-cusparse",
+      "12.6.3.3"
+    ],
+    [
+      "nvidia-cusparselt-cu13",
+      "0.8.1"
+    ],
+    [
+      "nvidia-ml-py",
+      "13.590.48"
+    ],
+    [
+      "nvidia-nccl-cu13",
+      "2.29.7"
+    ],
+    [
+      "nvidia-nvjitlink",
+      "13.3.33"
+    ],
+    [
+      "nvidia-nvshmem-cu13",
+      "3.4.5"
+    ],
+    [
+      "nvidia-nvtx",
+      "13.0.85"
+    ],
+    [
+      "opencv-python-headless",
+      "5.0.0.93"
+    ],
+    [
+      "opentelemetry-api",
+      "1.44.0"
+    ],
+    [
+      "opentelemetry-exporter-otlp-proto-common",
+      "1.44.0"
+    ],
+    [
+      "opentelemetry-exporter-otlp-proto-http",
+      "1.44.0"
+    ],
+    [
+      "opentelemetry-proto",
+      "1.44.0"
+    ],
+    [
+      "opentelemetry-sdk",
+      "1.44.0"
+    ],
+    [
+      "opentelemetry-semantic-conventions",
+      "0.65b0"
+    ],
+    [
+      "opt_einsum",
+      "3.4.0"
+    ],
+    [
+      "optree",
+      "0.18.0"
+    ],
+    [
+      "optuna",
+      "4.9.0"
+    ],
+    [
+      "optuna-dashboard",
+      "0.21.0"
+    ],
+    [
+      "orjson",
+      "3.12.0"
+    ],
+    [
+      "ormsgpack",
+      "1.7.0"
+    ],
+    [
+      "osmnx",
+      "2.1.1"
+    ],
+    [
+      "osqp",
+      "1.1.0"
+    ],
+    [
+      "packaging",
+      "26.0"
+    ],
+    [
+      "pandas",
+      "3.0.5"
+    ],
+    [
+      "pandocfilters",
+      "1.5.1"
+    ],
+    [
+      "parse",
+      "1.22.1"
+    ],
+    [
+      "parse_type",
+      "0.6.6"
+    ],
+    [
+      "parso",
+      "0.8.6"
+    ],
+    [
+      "pathspec",
+      "1.0.4"
+    ],
+    [
+      "pexpect",
+      "4.9.0"
+    ],
+    [
+      "pillow",
+      "11.3.0"
+    ],
+    [
+      "platformdirs",
+      "4.5.1"
+    ],
+    [
+      "playwright",
+      "1.63.0"
+    ],
+    [
+      "pluggy",
+      "1.6.0"
+    ],
+    [
+      "pooch",
+      "1.9.0"
+    ],
+    [
+      "pre_commit",
+      "4.6.2"
+    ],
+    [
+      "proglog",
+      "0.1.12"
+    ],
+    [
+      "prometheus_client",
+      "0.24.1"
+    ],
+    [
+      "prompt_toolkit",
+      "3.0.52"
+    ],
+    [
+      "protobuf",
+      "6.33.5"
+    ],
+    [
+      "psutil",
+      "7.2.2"
+    ],
+    [
+      "ptyprocess",
+      "0.7.0"
+    ],
+    [
+      "pure_eval",
+      "0.2.3"
+    ],
+    [
+      "pyarrow",
+      "25.0.1"
+    ],
+    [
+      "pyassimp",
+      "5.2.5"
+    ],
+    [
+      "pycparser",
+      "3.0"
+    ],
+    [
+      "pydantic",
+      "2.12.5"
+    ],
+    [
+      "pydantic_core",
+      "2.41.5"
+    ],
+    [
+      "pyee",
+      "13.0.1"
+    ],
+    [
+      "pygame",
+      "2.6.1"
+    ],
+    [
+      "pylint",
+      "4.0.8"
+    ],
+    [
+      "pyogrio",
+      "0.12.1"
+    ],
+    [
+      "pyparsing",
+      "3.3.2"
+    ],
+    [
+      "pyproj",
+      "3.7.2"
+    ],
+    [
+      "pyrvo2",
+      "0.0.0"
+    ],
+    [
+      "pytest",
+      "9.1.1"
+    ],
+    [
+      "pytest-bdd",
+      "8.1.0"
+    ],
+    [
+      "pytest-cov",
+      "7.1.0"
+    ],
+    [
+      "pytest-split",
+      "0.11.0"
+    ],
+    [
+      "pytest-timeout",
+      "2.4.0"
+    ],
+    [
+      "pytest-xdist",
+      "3.8.0"
+    ],
+    [
+      "python-dateutil",
+      "2.9.0.post0"
+    ],
+    [
+      "python-dotenv",
+      "1.2.1"
+    ],
+    [
+      "python-json-logger",
+      "4.0.0"
+    ],
+    [
+      "python-motion-planning",
+      "2.0.1"
+    ],
+    [
+      "pyvisgraph",
+      "0.2.1"
+    ],
+    [
+      "pyvista",
+      "0.48.4"
+    ],
+    [
+      "pyvistaqt",
+      "0.11.4"
+    ],
+    [
+      "pyzmq",
+      "27.1.0"
+    ],
+    [
+      "ray",
+      "2.53.0"
+    ],
+    [
+      "referencing",
+      "0.37.0"
+    ],
+    [
+      "requests",
+      "2.32.5"
+    ],
+    [
+      "rfc3339-validator",
+      "0.1.4"
+    ],
+    [
+      "rfc3986-validator",
+      "0.1.1"
+    ],
+    [
+      "rfc3987-syntax",
+      "1.1.0"
+    ],
+    [
+      "rfc8785",
+      "0.1.4"
+    ],
+    [
+      "rich",
+      "15.0.0"
+    ],
+    [
+      "rich-rst",
+      "2.0.1"
+    ],
+    [
+      "robot_sf",
+      "0.0.7.dev1070+g303ddac87.d20261005"
+    ],
+    [
+      "rpds-py",
+      "0.30.0"
+    ],
+    [
+      "ruff",
+      "0.16.7"
+    ],
+    [
+      "sb3_contrib",
+      "2.9.0"
+    ],
+    [
+      "scalene",
+      "2.3.0"
+    ],
+    [
+      "scikit-fmm",
+      "2025.6.23"
+    ],
+    [
+      "scikit-image",
+      "0.26.0"
+    ],
+    [
+      "scikit-learn",
+      "1.9.1"
+    ],
+    [
+      "scipy",
+      "1.17.1"
+    ],
+    [
+      "scooby",
+      "0.11.2"
+    ],
+    [
+      "seaborn",
+      "0.13.2"
+    ],
+    [
+      "setproctitle",
+      "1.3.7"
+    ],
+    [
+      "setuptools",
+      "83.0.0"
+    ],
+    [
+      "shapely",
+      "2.1.2"
+    ],
+    [
+      "six",
+      "1.17.0"
+    ],
+    [
+      "sortedcontainers",
+      "2.4.0"
+    ],
+    [
+      "soupsieve",
+      "2.8.3"
+    ],
+    [
+      "stable_baselines3",
+      "2.9.0"
+    ],
+    [
+      "stack-data",
+      "0.6.3"
+    ],
+    [
+      "svgelements",
+      "1.9.6"
+    ],
+    [
+      "sympy",
+      "1.14.0"
+    ],
+    [
+      "tensorboard",
+      "2.21.0"
+    ],
+    [
+      "tensorboard-data-server",
+      "0.7.2"
+    ],
+    [
+      "tensorboardX",
+      "2.6.4"
+    ],
+    [
+      "tensorflow",
+      "2.21.0"
+    ],
+    [
+      "termcolor",
+      "3.3.0"
+    ],
+    [
+      "terminado",
+      "0.18.1"
+    ],
+    [
+      "textual",
+      "8.2.8"
+    ],
+    [
+      "threadpoolctl",
+      "3.6.0"
+    ],
+    [
+      "tifffile",
+      "2026.6.1"
+    ],
+    [
+      "tinycss2",
+      "1.4.0"
+    ],
+    [
+      "tomlkit",
+      "0.14.0"
+    ],
+    [
+      "torch",
+      "2.13.0"
+    ],
+    [
+      "tornado",
+      "6.5.4"
+    ],
+    [
+      "tqdm",
+      "4.70.1"
+    ],
+    [
+      "traitlets",
+      "5.14.3"
+    ],
+    [
+      "triton",
+      "3.7.1"
+    ],
+    [
+      "typing-inspection",
+      "0.4.2"
+    ],
+    [
+      "typing_extensions",
+      "4.15.0"
+    ],
+    [
+      "tzdata",
+      "2025.3"
+    ],
+    [
+      "uc-micro-py",
+      "2.0.0"
+    ],
+    [
+      "uri-template",
+      "1.3.0"
+    ],
+    [
+      "urllib3",
+      "2.6.3"
+    ],
+    [
+      "virtualenv",
+      "20.36.1"
+    ],
+    [
+      "vtk",
+      "9.6.2"
+    ],
+    [
+      "wandb",
+      "0.30.0"
+    ],
+    [
+      "wcwidth",
+      "0.6.0"
+    ],
+    [
+      "webcolors",
+      "25.10.0"
+    ],
+    [
+      "webencodings",
+      "0.5.1"
+    ],
+    [
+      "websocket-client",
+      "1.9.0"
+    ],
+    [
+      "wheel",
+      "0.46.3"
+    ],
+    [
+      "widgetsnbextension",
+      "4.0.15"
+    ],
+    [
+      "wrapt",
+      "1.17.3"
+    ],
+    [
+      "xxhash",
+      "3.6.0"
+    ]
+  ],
+  "head": "97b93aa67039bf9246e4aecde8aa678588c92bf9",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "empty_seeds": [
+    1001,
+    1002
+  ],
+  "workers": 2,
+  "expected_episodes": 3084,
+  "standard_scenarios": [
+    "classic_bottleneck_low",
+    "classic_bottleneck_medium",
+    "classic_bottleneck_high",
+    "classic_realworld_double_bottleneck_high",
+    "classic_station_platform_medium",
+    "classic_cross_trap_low",
+    "classic_cross_trap_medium",
+    "classic_cross_trap_high",
+    "classic_doorway_low",
+    "classic_doorway_medium",
+    "classic_doorway_high",
+    "classic_group_crossing_low",
+    "classic_group_crossing_medium",
+    "classic_group_crossing_high",
+    "classic_head_on_corridor_low",
+    "classic_head_on_corridor_medium",
+    "classic_merging_low",
+    "classic_merging_medium",
+    "classic_overtaking_low",
+    "classic_overtaking_medium",
+    "classic_t_intersection_low",
+    "classic_t_intersection_medium",
+    "classic_urban_crossing_medium",
+    "francis2023_frontal_approach",
+    "francis2023_pedestrian_obstruction",
+    "francis2023_pedestrian_overtaking",
+    "francis2023_robot_overtaking",
+    "francis2023_down_path",
+    "francis2023_intersection_no_gesture",
+    "francis2023_blind_corner",
+    "francis2023_narrow_hallway",
+    "francis2023_narrow_doorway",
+    "francis2023_entering_room",
+    "francis2023_exiting_room",
+    "francis2023_entering_elevator",
+    "francis2023_exiting_elevator",
+    "francis2023_intersection_wait",
+    "francis2023_intersection_proceed",
+    "francis2023_following_human",
+    "francis2023_leading_human",
+    "francis2023_accompanying_peer",
+    "francis2023_join_group",
+    "francis2023_leave_group",
+    "francis2023_crowd_navigation",
+    "francis2023_parallel_traffic",
+    "francis2023_perpendicular_traffic",
+    "francis2023_circular_crossing",
+    "francis2023_robot_crowding"
+  ],
+  "empty_width_scenarios": [
+    "francis2023_narrow_doorway_width_2p20",
+    "francis2023_narrow_doorway_width_2p80",
+    "francis2023_narrow_doorway_width_3p60"
+  ],
+  "hashes": {
+    "scripts/validation/run_hybrid_default_comparison.py": "c2fdd8791b5bafad373f32ecea3a7142bca967e212e718cf721ccca6b47b8c6e",
+    "scripts/validation/run_hybrid_feasibility_diagnostics.py": "b28e7cd25e9f56c309046ce6646a03e7e900f3e8a14b8d2232cff07dd3171bc7",
+    "robot_sf/common/hybrid_defaults.py": "a7ff57a5d08cb1d6e63c128413c112b7373769b3b69cc3473eaf9e8bd3c01fda",
+    "robot_sf/common/legacy_hybrid_defaults.json": "dc77b39f2e594f93387ebbe14abab2482fed9981935b4e982b0b79a491ec1751",
+    "robot_sf/planner/hybrid_rule_local_planner.py": "1b3c83e16f4768e2638bd1c23c9906ec565112143d0efb78421eb5a26b318b6a",
+    "robot_sf/gym_env/unified_config.py": "b0176e0ff616afbeb0a2f99710459ead2df5ab4b363fd311bbb0a844966b4d1c",
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+    "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778",
+    "robot_sf/__init__.py": "c267afe42152e2b94e1c800feecc7991230bec90530a4fbbe3c0c8f385206922",
+    "robot_sf/_execution_context.py": "319fd92c622e3cf80a820e4c1c35bc35a12884af7f3ec1f93c7d14d7585df84a",
+    "robot_sf/_numerical_thread_env.py": "375dae36943ff84959ec9d80bba0f9381f481bcf952b0b43afab6bd4973603ef",
+    "robot_sf/_version.py": "18b3cfd63cf2139ac658b986788a8cc7a84ea9ca1c6b1016e1d43ba566faddd2",
+    "robot_sf/adversarial/__init__.py": "fa425bfd40bbaf02efdc2846ea6664443eb0c840aa7f7645384170a7369f28c1",
+    "robot_sf/adversarial/archive.py": "502d400681617ce7eeba0b7364a5aee28db7f8f0ef11ea493b308d09a8a7ffda",
+    "robot_sf/adversarial/attribution.py": "1ff6f243447f9167c702f6fed78683df10ecfb1fe8bb2ce0d772a003f499dfdb",
+    "robot_sf/adversarial/batch_certification.py": "a6a5ef83db5b9e5943ce512829e83a0ce869b2e70cb1aa195de978f594c34d0f",
+    "robot_sf/adversarial/bundle.py": "7f068d1d5719c46dd75f09ab86148da6cb2dcc4abea1ecfe4373f04438f86482",
+    "robot_sf/adversarial/certification.py": "075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8",
+    "robot_sf/adversarial/certification_types.py": "ebbdefa803b02c7ceef029960439a54854c08ec6a9a00c66a1d51177414227cb",
+    "robot_sf/adversarial/cma_me.py": "15c70c733efd66f891ba04d81598d17394abae7456bc676723bf429c184b917e",
+    "robot_sf/adversarial/config.py": "c5f462930874cda58855411b574b4bed90f38fc743c3927993ab657398654c5e",
+    "robot_sf/adversarial/disjoint_evaluation.py": "111da4434dc2c2336ce8bdbf8ff93b8c138af92eb77016b84e7a190c747231aa",
+    "robot_sf/adversarial/eligibility.py": "7c0dfd8ea09b25883097bfce32a79bd861f9bc5567132aa55275e4066fd57942",
+    "robot_sf/adversarial/falsification_report.py": "474a6e4f94c2f4cf6fbe1ce8ca1ec9a63474e0f8c4ec32742532e0500608aebe",
+    "robot_sf/adversarial/feasibility_first.py": "79345a3b6469c9b78850720801ce7feed41003b9330b5ade9e544694f6e9a053",
+    "robot_sf/adversarial/feasibility_first_real.py": "f2b782528fbef8a30b7c98932528458142ce3883c19f9c7a2032cfd3d3510871",
+    "robot_sf/adversarial/held_out_preflight.py": "c3acd2ba9d8f6e164ac8b5c190fe6d9394cadcd4b5544396c4cecdcb86e5dce2",
+    "robot_sf/adversarial/independent_outcomes.py": "fccd18d8fe0747fc792661ef3f6062a46eda69bd5f14044cc479efbdb1303260",
+    "robot_sf/adversarial/io.py": "94fc13089c7a9f015f7291cae74abbccf0dd98634107a24f18b87f19ede9382a",
+    "robot_sf/adversarial/manifest_quality.py": "05f1c03a90a23ea7d87df75741c0f6fa381c3927e21df04067f523ab69fbe4ed",
+    "robot_sf/adversarial/matched_budget_packet.py": "4d9550a5103380cb2a82764876a15185de9d5e8645ed2967e1e187aae3efcc27",
+    "robot_sf/adversarial/matched_compute.py": "06abb1cddd7af21019526fd62cd652f33e934ce78ce3b6d2ea18ca84e2b5e702",
+    "robot_sf/adversarial/materialize.py": "f304205d5d8ff2d48ce895f4133c64428f40711d5d07190df1167261c3c7b8a1",
+    "robot_sf/adversarial/objectives.py": "19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8",
+    "robot_sf/adversarial/objectives_v2.py": "9726e69cb6d571f36f6c3050a2369cf8890ae4337e2954d2b44a34b527436c0e",
+    "robot_sf/adversarial/proposal_model.py": "92ab9b12635ce7801675e971b4c6a2d327d8bf6f86bfc5298c9a7aa98a5d8610",
+    "robot_sf/adversarial/provenance.py": "2989f32eb791d6fc6987055a3e1f27830a071ba9ce9a331f2b88f551f923e17e",
+    "robot_sf/adversarial/public_projection.py": "b23ebbcc9e05215ed4f3af92cce959bc5c33886d6cd66b9bb687a4c64233712e",
+    "robot_sf/adversarial/qd.py": "cf90345bc0ebd383d6c5838a4b97d771c1c27fe353ccc682d4964acccfa85786",
+    "robot_sf/adversarial/replay_gallery.py": "c85cf7efeeb1ecca65e616fd2a24d778f90979e4fd099b36db9960358e90f3c3",
+    "robot_sf/adversarial/robustness.py": "5d81c02c99255f632e2a0682c524db8b8da542fef6efd3bd9383ac783220eb3d",
+    "robot_sf/adversarial/runtime.py": "c75fdc6834f77b3ccfafd363f1dcc84616c18843114a0f009c10d1d9199f9d50",
+    "robot_sf/adversarial/samplers.py": "238526f91a7d94adaf3247245ae3958edc315ccec0bb2981513d35accebf168f",
+    "robot_sf/adversarial/scenario_admissibility.py": "d20047c8fa0e3a71e6d371b4f75f0e8ba1f2feb248cb2a072c39fa83b12e04ae",
+    "robot_sf/adversarial/scenario_manifest.py": "c4e42e7ec21a6115980e902763241ccc20bb07cb957e8016642d81aa27f23078",
+    "robot_sf/adversarial/search.py": "19969c9692d9ff449c20191f35cbf3e29d4df2b667df0490d667ea5758a097d5",
+    "robot_sf/adversarial/search_evidence_packet.py": "b38815a07ed21aa5a8442ea21c20cc8370979e321df77c9efb33c75181d11d6d",
+    "robot_sf/adversarial/search_harness.py": "511d488e1614a7d301abd16a87447a2fc8d60f0263ed271945b0421ef50013b9",
+    "robot_sf/adversarial/seed_sensitivity.py": "706abad9a5a3e9c7a3fdcdda89693ace96b8c8628595efd33aef90606484f5a0",
+    "robot_sf/adversarial/transfer_matrix.py": "4623e5801d9b16088d0e3745eb97fe48b2733b473ba5f9cbd02e661263101f8b",
+    "robot_sf/adversarial/transfer_schema.py": "ef35c4a39b8712d86357823a6280dcab13406f3726134c6660059143b2f07565",
+    "robot_sf/adversarial/warm_start.py": "5b0d99220e9deab341881b29e77cbe401053cc9014fbbd3cbce36b4a44917340",
+    "robot_sf/analysis/__init__.py": "6115819f673c3dbaa0307c624b56ec84a11534d465f06742d75206f9118943a1",
+    "robot_sf/analysis/run_annotation.py": "a856a7c34ace94d60373a2f52cdf17ec34ea13c85b257e53ab7ec82d100e789e",
+    "robot_sf/analysis/topology_diagnostic_report.py": "aa49b32ed4c50646677d8690c5d53eeb810b991cd911a8f3ec6025da9e1b45d0",
+    "robot_sf/analysis_workbench/__init__.py": "5900f58c70080b9c873e7e1b48e97d91d0d6d62dff1afd408c4c3911151cce24",
+    "robot_sf/analysis_workbench/audit_authority.py": "fc4157775fbf6962e6134ab0f5869ef0b4677902f108d5f2db5b3dda0fb017b6",
+    "robot_sf/analysis_workbench/audit_codex.py": "53f088663e73c9d6bf0382dd0fc36077f73c8d1dc2cddda68e286d51a2a811de",
+    "robot_sf/analysis_workbench/audit_codex_app_server.py": "e09c3c2e9fbcacc005c862922ce3c0dc1183c45ee6e5aca37ff87445de77f5ee",
+    "robot_sf/analysis_workbench/audit_contracts.py": "f4fd803fa48e318660965b860fcaccbd3ef838ae428335d58105c59ef259a1f9",
+    "robot_sf/analysis_workbench/audit_coverage.py": "5c899289030dac33935621ec05ff50a97fb3aac8cb9f5185c2561c12e2a28365",
+    "robot_sf/analysis_workbench/audit_detectors.py": "eaa99bd13d2b46e1785db441909aeffd206b9f029a7d77dd1d88af6f40770b5d",
+    "robot_sf/analysis_workbench/audit_findings.py": "7cd9dfd518764519f9eab8d8aea2ca73888336c12e0a53b22a64fd159f474757",
+    "robot_sf/analysis_workbench/audit_github.py": "2b312ff8d2241c8f34992062e521fe66a7230d1242bed976aa2044b7fba1a2aa",
+    "robot_sf/analysis_workbench/audit_github_rest.py": "36c11f292e8d9b47aa0e1b787cabfa33bc3ff46ddc4a67fb1227c4ab8be6cb93",
+    "robot_sf/analysis_workbench/audit_materialize.py": "1175faeeb4fd3ea47f895c112ed658050fa9be92abc13a938799c1af765199b6",
+    "robot_sf/analysis_workbench/audit_mcp.py": "5fadbc99eda3d28b1bdb80e6fec7e37b56bc9fc421398d7f8437e8bb51be4851",
+    "robot_sf/analysis_workbench/audit_mcp_stdio.py": "f039eac01a1f5ad4a97a1ed27e92df1b927e6f250f4d93225c17ff1f26f6ff97",
+    "robot_sf/analysis_workbench/audit_native_diagnostic.py": "aba1a42b28173976a54e783b10b34318a12ecfb743571a2cc44841972504962c",
+    "robot_sf/analysis_workbench/audit_queue.py": "44079a5a26a1f297138a3293483b6e0a42bca81c69b175bed13a8f97164ed532",
+    "robot_sf/analysis_workbench/audit_release_adapter.py": "33539bfbafc0d611e1cd6fb45952072a53301e1a29d2f01d41bf0d5764235879",
+    "robot_sf/analysis_workbench/audit_scan.py": "515bbe6afe6e4e3dba22b3408197269bb2c8c04e06ab72f88f6a832bb403892b",
+    "robot_sf/analysis_workbench/audit_service.py": "ac7b59f328cd7fa8ca76f2f4f2d5d7d971a6fa9d1d0300e8024d919d2f65a102",
+    "robot_sf/analysis_workbench/audit_service_adapters.py": "ce6c54bf9de938f2b6fbda9a5e6a530b21e6d618dcd26be72049385e7cfd888f",
+    "robot_sf/analysis_workbench/audit_similarity.py": "dd72e83eb9d33a257333f71f28cd43fcd0032dd804ccb3a03407882d61a93da8",
+    "robot_sf/analysis_workbench/audit_store.py": "f3e6a87e146195cf2bc35a70527b3cd5e9da7b6688f1038850bb90ca698fde4a",
+    "robot_sf/analysis_workbench/episode_phases.py": "da058b40669c2b2680d2d7ed2dfecc1d0194bf1e3fd6b7ea8c082a042fc52562",
+    "robot_sf/analysis_workbench/event_alignment.py": "d033db71a686850f1079d37631a5f49d1b51328d0c82d760c84981a715237cef",
+    "robot_sf/analysis_workbench/interaction_coordinates.py": "4a54bb704f7fa318924cc75bb387d15337acf1aac9ff1d8cd5b294cf4ad2d38c",
+    "robot_sf/analysis_workbench/process_trace_receipt.py": "b7f19d6dcf56130ac4227ba00f8e1ef3ad978c14cebcd02c297abbb0f7f756d4",
+    "robot_sf/analysis_workbench/real_trace_source_discovery.py": "959dbf7bf836d979c52c51f21d686f3752ca6610e7ee5dd2cb2cc7954f67e6aa",
+    "robot_sf/analysis_workbench/real_trace_validation_contract.py": "87069c2eeec3d92a8d456ada90299f9a9645fc5cedd6f8f7a02bf23ee669f8b4",
+    "robot_sf/analysis_workbench/release_row_anomalies.py": "170548b108655aae1087bfcd1827160bef619a94b532d1d4c5adc449d69b8044",
+    "robot_sf/analysis_workbench/release_row_bundle.py": "4402201606d32005a2fa3dd431391205408fe6277114c337874395ae5427cce3",
+    "robot_sf/analysis_workbench/review_ai.py": "6d7e7b9b0770049adc32c47456a0296257a123350caa1b55deb0b1e72dacda09",
+    "robot_sf/analysis_workbench/review_alignment.py": "20fc78ce9d00281c9da42b7b94417cbfdd99e787a3a451ccfe560cb65c60f448",
+    "robot_sf/analysis_workbench/review_context.py": "482611201776094f2b0431900c0a3ae6f751e6caa5eacd6588600552b6742539",
+    "robot_sf/analysis_workbench/review_contracts.py": "80716e92748f3cc9c8603bec1f210287834351a838ebc00a25f06daac2abea00",
+    "robot_sf/analysis_workbench/review_events.py": "e7d5408d8d433ccfbd82b5a87f13060059b5987d05697f4f97e153a36bd8df6b",
+    "robot_sf/analysis_workbench/review_execute.py": "9aee3eb55240a133d1fc2e0722f02161661645cd392ca885a4e4f80fab3fce8e",
+    "robot_sf/analysis_workbench/review_experiment_loop.py": "d20283ef7c3429cc71e849293c85a69711a1fca0d5fec1c30764d898b8050ec2",
+    "robot_sf/analysis_workbench/review_experiment_report.py": "1eea9bd093b68972ab8f63c62765527818e57c810d9182196744771980c30b10",
+    "robot_sf/analysis_workbench/review_hypotheses.py": "a410599b5cc2bb51ea998bfcc6c843582048413c22284c970cf523c8450deb90",
+    "robot_sf/analysis_workbench/review_import.py": "a20eaaf9418143696cc319bd10f264c169d0cc0816bf833a9ce43b3267a7233e",
+    "robot_sf/analysis_workbench/review_package.py": "ca7a0b9c255d3570e1e1f4feeb4f51bd4e2cf79620c0bbe7492ba408f974575a",
+    "robot_sf/analysis_workbench/review_registry.py": "42982e807426dbcd745ad228e49d906cc79a6efe9b4738046f06afc7acbbf69e",
+    "robot_sf/analysis_workbench/review_report.py": "2b4afaeef7bc3c0c201ab98a62a49114a437b67fa45c418f803a43b4f83703f1",
+    "robot_sf/analysis_workbench/review_storyboard.py": "eb5d249b6e7c42cfc97f2876c3708e92041b0bc8d16cdffd6912de2e5376c226",
+    "robot_sf/analysis_workbench/safety_surrogates.py": "86167bc82a64582aa022e3440e8668ba556d74b2855a157f627bb84b9d1f5ba2",
+    "robot_sf/analysis_workbench/simulation_timeline.py": "6d9d8448d13d33a3a7feb4af8a03d4e8a18b7c802bdd25c03f5cdedc3299a076",
+    "robot_sf/analysis_workbench/simulation_trace_export.py": "cfd48b2c80582dc9cd8353e44ca706283f66454f88bb08a01567e3a1a585d18e",
+    "robot_sf/analysis_workbench/trace_annotation.py": "7f0aedba351d042a0e147897dbd70d29707d1eb7e992ac8c1e94ff1217293571",
+    "robot_sf/analysis_workbench/trace_dossier_renderer.py": "f0764a665e0a2fa0288514edb0e7755b91ef4d75e95430abc09441497322ead2",
+    "robot_sf/analysis_workbench/trace_failure_predicates.py": "4e6a83036a3eefa95f6800296f3261adc491ad6932e9ee41cd4ed5a36c08c0d9",
+    "robot_sf/api.py": "d111b3a02072cea6816fab6356b9ecbd4c2f2b1ecb3df62028d8b13a14592b0b",
+    "robot_sf/baselines/__init__.py": "83e0169363de7c892dbeb51b437ac8b348599d99cd122a508625fc55ea0ee005",
+    "robot_sf/baselines/brne.py": "431b88a7da612241a0a2625f0ccb90cf269242fe11d55d2cf5f40d60c0ac6cd8",
+    "robot_sf/baselines/distributional_rl.py": "dedde16af32d6819db9aaa019dfd33443b273ed3ae5e75329f78cdcababe656b",
+    "robot_sf/baselines/dr_mpc.py": "a88cfee338b53e7c7391174dae02cbee2fe21a857046ac5e8245d97cd7b14ebf",
+    "robot_sf/baselines/drl_vo.py": "38cdd174ca318db9a335024013290a9f9e5a230f2eeffe72d56cd636aea1a006",
+    "robot_sf/baselines/interface.py": "a44bbc0e4c32e1cd2eb3940201c2fbfc13fc891cd4ea63c1581d238863b54a0f",
+    "robot_sf/baselines/orca.py": "ba2b625bb8f8d257c7e84efff0ab35719d208b343ba5f7aa8874dfa929097233",
+    "robot_sf/baselines/ppo.py": "5d2bc0eaf9fc2b922130d0614d81f37fa2346cfd72851145d4c725e96adaff9c",
+    "robot_sf/baselines/random_policy.py": "dbad6b0962c1820f56f3073931dd9f901b02580efd9b003784086d8cd5b704b7",
+    "robot_sf/baselines/sac.py": "09264b3eda166fda3637cf44b0dfb9b742d4de93ed6666b30ec2b7aa9e2f281d",
+    "robot_sf/baselines/sicnav.py": "f15fbe40eac9c644b17c62e24a9876db9026ece97e8070acd22175f3c66075a1",
+    "robot_sf/baselines/social_force.py": "2857f8dc8468fd40c113020127ffbb6cb12f8b5ce1eba2aae9782b0b39e73817",
+    "robot_sf/benchmark/__init__.py": "db41b868eb0e448d53e6a711ea1b3543f098a93f9fffe3dc4dc9af69cb75ba96",
+    "robot_sf/benchmark/_runtime_smoke_planner_keys.py": "0a991365979bc7935561a6b821977ce07aea05603e7715afaefd8fbfd6be9143",
+    "robot_sf/benchmark/ablation.py": "df0d390000fd762ebeae52c35d1d2e3885cdf03eae4ae9b2a6cb742298689112",
+    "robot_sf/benchmark/actuator_feasibility.py": "27bd52c933a20486331aa221bedc7d9db78e0afbfbfc3d7cc0007cc78f7a2cff",
+    "robot_sf/benchmark/adversarial/__init__.py": "c3d5d63aca27db17de57424cc0f628853728a7e1f56c94ca91d30f357350fcac",
+    "robot_sf/benchmark/adversarial/adversarial_package_b_confirmation.py": "87191f23c5a7f55e41a12ea9067e23955340140ee6a60aeaf661a950fae88ff0",
+    "robot_sf/benchmark/adversarial/adversarial_package_b_gap_packet.py": "e1ae04979ce8100d2b8ae7d7d9d5b9938fa87631112e88e3e354271e1d48553e",
+    "robot_sf/benchmark/adversarial/adversarial_package_b_preflight.py": "33d38c4da7ca34b9d46f112e6be4ae315a3b44a7249f4fd1710ffea809b44839",
+    "robot_sf/benchmark/adversarial/adversarial_package_b_report.py": "dee8b3c057586735cbf91c82302fc51225413d197905901bd8711d28f1ccdf6c",
+    "robot_sf/benchmark/agent_figure_interpretation_eval.py": "7b24f245b4c6d618f35f726106d9562df4b5e124e8d0911aa1240baa686340d1",
+    "robot_sf/benchmark/aggregate.py": "143d6617c4db7b6c5d902ab31f807558e63214364227c9f1eab19fb6bff6f12e",
+    "robot_sf/benchmark/algorithm_contract.py": "5e6a8102d87d536d5734eb9d0c6b4fee803a61548865ec9bd2e670f89082f963",
+    "robot_sf/benchmark/algorithm_metadata.py": "bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7",
+    "robot_sf/benchmark/algorithm_readiness.py": "63060e8fb021c7ddde2176aaa61b2f603fcdc10f2ca7b5924995baa38bef886b",
+    "robot_sf/benchmark/ammv_feasibility.py": "b22ec2e769995d3362cc5fee147839be2da606db35f19d0c944a2e834d891802",
+    "robot_sf/benchmark/amv_calibration_readiness.py": "79c41febadd61f41ded21f9ceaf0be72dcaaccac15c1b6add03e97dbddb4c4f5",
+    "robot_sf/benchmark/amv_calibration_source_manifest.py": "87c76a6117e636983c2ad47819976d246c26fbc2ee3c8daf4ec6dc60cdeeee06",
+    "robot_sf/benchmark/analysis_trace.py": "82eadd34e06b7eccedc13d4d319ce48db2730459acbff86c664be4bf436d3c86",
+    "robot_sf/benchmark/analysis_trace_overhead_reconciliation.py": "6075eb5f0ac8f73f0a43c4051ee235aafdcbbaca7e2663b57f71cbae76c9bb77",
+    "robot_sf/benchmark/artifact_catalog.py": "e92398973fa3782107dd37fa3202f6e324eb989397beeb0d5e1e0098a6dc8401",
+    "robot_sf/benchmark/artifact_publication.py": "169d6f77caa342949b63ef5e3ca251ec802954759d16f9d933cb744f06087d07",
+    "robot_sf/benchmark/assurance_fragment.py": "b4080ac8b60aba3bae85dff8f3a80e77043ed51e2822d297105c92aedfe680be",
+    "robot_sf/benchmark/baseline_stats.py": "1f1b166c02495219a0ecadc7d6f8dc90b73e10dcea75ae73ac44037b712f1577",
+    "robot_sf/benchmark/benchmark_claim.py": "8ea1a98f89c60a65b96c11819b2ea8c3a1ba211c12064c51c298261afd2ed32b",
+    "robot_sf/benchmark/benchmark_protocol.py": "b24c9ad8dc9de9751316563f0d39e37e7c5c1667713ff34e37dbff0a0ccbdf54",
+    "robot_sf/benchmark/benchmark_row_claim.py": "648b3139100e43811bad3bcbeed5e3211731801f7a04290e4a3cbb759291b651",
+    "robot_sf/benchmark/braking_authority_sensitivity.py": "91f2d68fc31ea9c35800eeca4b0f0af33c9817d161f53602e6551a7fd16f3ed6",
+    "robot_sf/benchmark/camera_ready/__init__.py": "7185986b3590914f3f9a0bb2f0ec9c3b9ef9e1ba2b1a32ba8055c52a4d8d2c37",
+    "robot_sf/benchmark/camera_ready/_artifacts.py": "8e39f6daa29dda1e78539c9c0d8e20675cdf0fc7265c30bd0a50765859f34840",
+    "robot_sf/benchmark/camera_ready/_config.py": "f1b8558a93da72a289c99960b355e2931104da1ba8fc76ddf607d0a4302143de",
+    "robot_sf/benchmark/camera_ready/_config_types.py": "e59b784079246dc6e10a41ea8ee325c455b1bd806ece2d116f6a9f989f1751be",
+    "robot_sf/benchmark/camera_ready/_crosswalk_producer.py": "15162c9f0fd3891e1251287bb2278be77b5b02378502a5ac98447ada340972af",
+    "robot_sf/benchmark/camera_ready/_historical_horizons.py": "afc3134e34f087ed44267c5f197a7772c957abf8e72d4a83fd19bf28703a8ded",
+    "robot_sf/benchmark/camera_ready/_legacy_campaign_facade.py": "5a0867a6bbac14d1781e92d2f0f4a5d7890d8fa3b1cf46c6d5858b586016546c",
+    "robot_sf/benchmark/camera_ready/_preflight.py": "82b208f51c40d072849d5496fd876dcaa9516306c94b292b871df01e8648165f",
+    "robot_sf/benchmark/camera_ready/_reporting.py": "de1e7045fcea3280c8801c481941486df27da966ed9281a8c1db6c8feb970c5a",
+    "robot_sf/benchmark/camera_ready/_resume_plan.py": "0adfaeb63d6b4f08ff3d44c4aaceb0c3dfe950359219a3140e8ecb5a275d8abd",
+    "robot_sf/benchmark/camera_ready/_route_clearance.py": "e9a3dbab89a645be16bb7887bc83c927bc606cb63c678cf15d803c5afaa06f6c",
+    "robot_sf/benchmark/camera_ready/_run_state.py": "e5134a4c02e6b458e797c437924e7171ea3bea8a56c9fb7b3ddd2a16439eb96d",
+    "robot_sf/benchmark/camera_ready/_runtime_identity.py": "e61140ebabe77491fe6bcbb966637617fe30e0554b4bf5e82211b4a8d77a17f7",
+    "robot_sf/benchmark/camera_ready/_summaries.py": "cb6928ee20e86b966166c4d2e3ec7a0e1085a056c211d37e4274b287f101583a",
+    "robot_sf/benchmark/camera_ready/_util.py": "8d8d3591518c60241e9412d8b766cde3fc75bab30c9f9d3ef2e728c79359c32d",
+    "robot_sf/benchmark/camera_ready/campaign.py": "c7449797a8bd13e79462084cf7674dc71a10fcc33777f8f3f371d54206dbde98",
+    "robot_sf/benchmark/camera_ready/resource_lifecycle.py": "f1f8448debad84bfc2c1b13daf4a2ed6ba53017169996732be82427d8e8bf111",
+    "robot_sf/benchmark/camera_ready_campaign.py": "50dc1ae9850580c4a9fcab189683af6b17d3266dbb8fe55c26adaec444f8d9ee",
+    "robot_sf/benchmark/camera_ready_campaign_config.py": "2c908b1199b939506ef558f58ed9627b5433a628802dc48962ae38ac83cfc4de",
+    "robot_sf/benchmark/campaign/__init__.py": "2c4abed8b0b5f1dd35004e11eb596a48e7a98b3b47b28491a886157624299bd6",
+    "robot_sf/benchmark/campaign/campaign_arm_admission.py": "1af8f445f588776830147d01bd0bda1ef2a0d3934613df98532bcf95c43bd4e6",
+    "robot_sf/benchmark/campaign/campaign_atlas.py": "575f4c7c7069013e0a3c563f4d5bf98c6e5c0e73784ea8abf9e4b10dee9de948",
+    "robot_sf/benchmark/campaign/campaign_checkpoint_preflight.py": "cfa5a385cfa3590596f8f55ba9fa42f102375c51c723f5ca05f647d05f88a392",
+    "robot_sf/benchmark/campaign/campaign_logging.py": "517d639d196ad0a803034737bb54e7d200fb94375926797ce7afdc198e34f4d7",
+    "robot_sf/benchmark/campaign/campaign_runtime_preflight.py": "1b6c4a013e2975156c59941fd4b422c915079fee096ae65ec04c2ae552ff7b32",
+    "robot_sf/benchmark/campaign_arm_admission.py": "467a33308388cc0146592a78c5387afde04480ac8ac4ad0bdab28b266ea16936",
+    "robot_sf/benchmark/campaign_atlas.py": "778b25b72a0aec4be9fecf8a6110601a403a0e01f5b01742f547aeb639c2c8ba",
+    "robot_sf/benchmark/campaign_checkpoint_preflight.py": "718f5579b8faa6035f1e3cd39a8cebeec4900777fa400632f6b9e2a2f5d1b897",
+    "robot_sf/benchmark/campaign_logging.py": "19543571dd61993df95c642f57838b69a8a0b35fc95907c76de698aefa592f66",
+    "robot_sf/benchmark/campaign_runtime_preflight.py": "75a897919e067352ef4b61c0b2e34a3c7f131cdcafba99ac8544d5cb9df982d8",
+    "robot_sf/benchmark/canary_rollout.py": "5238ef463275ae0b4d922bbea5fa3126bfa495f9556a046ea200fb74437e8b00",
+    "robot_sf/benchmark/candidate_trace_resolution.py": "590438717d7ff0001865529b19074a0ae05502c8246537e8d6b5a53ab98483a1",
+    "robot_sf/benchmark/canonical_table_export.py": "00a3834a499bc66f0107f0210d1e9de57d5b6f4ef8f38fa1f7e577e84118fc56",
+    "robot_sf/benchmark/case_capsules.py": "a67cd46eeb6f3c68e22b40afe6d69918d7c7760f1455fa5415647c1de9a75a95",
+    "robot_sf/benchmark/case_dossier_figure.py": "d1199785bb769be005f2e941ec34c9bb92a1a97be29439c9646107a296d4f01e",
+    "robot_sf/benchmark/case_portfolio.py": "0c2df95f75e4cc2565f680cf2e411ab5273eda9d8a006fd1b8fd8f50cb068af0",
+    "robot_sf/benchmark/case_publication_figure.py": "5421220d3d87848348109961eb587ff79ce7f8eb212220f218fccc78252dd4d6",
+    "robot_sf/benchmark/case_workbench.py": "cbf4272029e362930f04a86e24364dfa80ead736c1dac37e6069d8e800f8b391",
+    "robot_sf/benchmark/certification_transfer.py": "e3887ec4156ca86c12c6c69f64bd45c6f621cd6ab88c66fccbbb8f235cea9e08",
+    "robot_sf/benchmark/checkpoint_staging_receipt.py": "725f0d9ffbce6023f489983760b6e736d479db0ff57cab67d7e1908556b7895b",
+    "robot_sf/benchmark/circuit_breaker.py": "44f8e9e876f2d06035bcfe62200bad2689edf7dc4ff275bd3d93be0fed3622b2",
+    "robot_sf/benchmark/classic_interactions_loader.py": "702e5295e56cb80f7b3a463dc069b5cf60bce6984a33aac3dfc0a705c456266e",
+    "robot_sf/benchmark/clearance_semantics.py": "b6d0e91bf44f5c6df9a6839d0eeffbed3a6c32563df27edb00bb93e54a59c392",
+    "robot_sf/benchmark/cli.py": "dd56a1e5f6cdc78a8d04153dbe4ef3664844027e4ed89ae2338e905cdb0ff6ad",
+    "robot_sf/benchmark/collision/__init__.py": "c4997e583daf51ba562ddc07c2a79b7d5329ef8b467c2b4a2b6959f76bda389a",
+    "robot_sf/benchmark/collision/collision_causal_report.py": "02da0c9f9a36a26a27f42b55447dcee7de8936d056ba0fcb16c02591e46e0667",
+    "robot_sf/benchmark/collision/collision_cause_analyser.py": "8e5e2de4850362a7ef75a411ccf02a83ec06cc14a7d45b4fdb035998b3e755c8",
+    "robot_sf/benchmark/collision/collision_cause_attribution.py": "c11d5317bd3b4001a02b7b3c3cbf4025325fea88f1c38764bae7e6876fa11706",
+    "robot_sf/benchmark/collision/collision_definition_inventory.py": "33e61e8f06a5f56ed9c4a371cf8a1d4ea7cf1833afa67f329981d6c466614e8b",
+    "robot_sf/benchmark/collision/collision_pressure_report.py": "a819019614b692621e1cce2544a3c482a82b6b2db7bb74b0a0ecff2ca204307f",
+    "robot_sf/benchmark/collision/collision_scenario_similarity.py": "fab64619558100908ff5b66efd46c07b0c0d7268d77d898be5dde4148464982e",
+    "robot_sf/benchmark/collision/incident_scenario_provenance.py": "aa93e37ec8870ff63ff6d64221835a36e3678e9c858f56ef75371e83b217bafc",
+    "robot_sf/benchmark/constants.py": "a848590cb91fddc0639eb484c9e95a1e885f8f91f219ff2a52f14f49a64987f5",
+    "robot_sf/benchmark/constraint/__init__.py": "446130d659d0472435ede3d8f85cb8f804c9b1fe2aaf517278757e5f474d6158",
+    "robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_readiness.py": "86c5fcd37b5ca56a7c9ac4b6f86e3c492a543d714a09e18de960919e1dca3ce7",
+    "robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py": "2a69690527fb0b019f275d3bdfcfce940de795e12d98904ecae4b8ff35503737",
+    "robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_summary.py": "d7921814dd73bac31eb1ed5771764cd215c48e30e5be2cf3cd71774a565172ad",
+    "robot_sf/benchmark/constraints_first_scoring.py": "4ad910a22262d91026a320f24f0b991b9ef05232f3ce064a79f05a3b742c1627",
+    "robot_sf/benchmark/continual_adaptation_campaign.py": "5149a418fd7a53d14aa1a5f84469ad6ac49c2e0e84af09e2c0cc85933b324618",
+    "robot_sf/benchmark/continuation_experiment_plan.py": "778058e13832fe486f80ca911df6cfa8837757ca586128a05007ab09ba4ee50d",
+    "robot_sf/benchmark/counterfactual_pair.py": "6f8ba5b16651a15397656ca98ce41d6d96ee6711744561a1d96840ae13e83a22",
+    "robot_sf/benchmark/critical_intervals.py": "0371633e7bdf3e2bb0f1289b0186b980a1b65907866d0b4be4a77e0a1c7ab3c8",
+    "robot_sf/benchmark/cross_benchmark_metrics.py": "7e562de505aa33bf826ac0e9a8c7d8293a5023130ae74c1d8f5642016bc22025",
+    "robot_sf/benchmark/diagnostic_report.py": "75880f3f65665d17524b53a0ef430ffa873ce1b62321248bc919942acb683419",
+    "robot_sf/benchmark/distributions.py": "e47c6055c59f25cb442c98cd198bf8cb11527bf3589b6f67598f90477dcdca55",
+    "robot_sf/benchmark/doctor.py": "3be337537bfb9722f24621851996b16b402f050b41abe5f777b20d30af80c3d7",
+    "robot_sf/benchmark/dwa_diagnostic_harness.py": "7dd6baf0492c0398446434b9528da2795c1f44b250bef88ea4dbf631d5a939a1",
+    "robot_sf/benchmark/dynamics_sensitivity.py": "359a52f25d35188955ca2e32d30d61d9233c2b63b40dbc29cec0285e36d630d8",
+    "robot_sf/benchmark/effective_algorithm_branches.py": "1c3997b7b4b0cd579699f133561d23b06de76ebd867d04ed0dcde95f0e275043",
+    "robot_sf/benchmark/episode_replay_figure.py": "59f35cc52a9608ab79a9b41460a5222af511acf5459cd497276fcbcc37de48f5",
+    "robot_sf/benchmark/errors.py": "d94e0d98889151faab3e98019690ab8d95541f0cb0b4be374ca17ca2c47ce379",
+    "robot_sf/benchmark/event_ledger.py": "381bf94f0daf9877f854ea0d9b9ae458390e7f49dfb3fe3493dff26c8d355ea3",
+    "robot_sf/benchmark/event_ledger_reconciliation.py": "c1b4a37c918d88ac1fc962094286d73c157f3f3b5675cbc36a3f6bb0291af4cf",
+    "robot_sf/benchmark/exact_repeat_campaign.py": "39a617edcf1a74b2ae221f74e1e05d01fecce4bd208d31c569a5edb6b77c23b7",
+    "robot_sf/benchmark/exemplar_selection.py": "4a9a7f216dc30b84e4da0663dc5339c4febb6ca456a391d2aee3cd309fc059e6",
+    "robot_sf/benchmark/failure_archive_rerun_closure.py": "c499edb1e82305fa50715e43c49050694d637e770f76c52a0bc6e6ccb7661584",
+    "robot_sf/benchmark/failure_archive_rerun_readiness.py": "ac1703d85bfd9f1534e89c83bbc00f11333e4aeb4b65cd5c6ab8e9acb3e71505",
+    "robot_sf/benchmark/failure_diagnosis.py": "615cddc7d06e6b2a0486279d8793f434f6b525858f9875df12a68b2228b11339",
+    "robot_sf/benchmark/failure_diagnosis_comparison.py": "8530038337e538d0b25a67d76f1964536b6f755fcb168fa10931c60855b39be0",
+    "robot_sf/benchmark/failure_diagnosis_fixture.py": "cfbe5f5205f2dfa487222fdad3232b8a83e9c1c0d1c963d33dc384c4f2acad16",
+    "robot_sf/benchmark/failure_extractor.py": "9851bcbd193ea579ed541cf08faf2a9ed35874989fdd2a4066760ef86defd479",
+    "robot_sf/benchmark/failure_mechanism_classifier.py": "f5b5ef7b31be6244a15bdec6b8720a7688ba57f2f2b60bdeec4039ddb541869f",
+    "robot_sf/benchmark/failure_mechanism_taxonomy.py": "015726082721f146e36fd191eb4f88f5ed811f8feb7e1d8a5d3d208fef7fa530",
+    "robot_sf/benchmark/fairness_contract.py": "1345c74bd0db527223eaafdc623bc672f4a04ad3c47a4f26e5ee031942fc9eae",
+    "robot_sf/benchmark/fallback_policy.py": "ecc6c9c7e8d775db3ec1b5feb4398c3ede287b29d63360945390f3d751bed148",
+    "robot_sf/benchmark/false_positive_injection_readiness.py": "3fbbd450ada42e06a8e7fa863510955df16fb5f5ba6a18b44fc9c46371ea33d0",
+    "robot_sf/benchmark/false_positive_matrix_readiness.py": "ac06eea5d0545276e6323ed532ff4644d04df388ac24eac7011b0b2a08f47cce",
+    "robot_sf/benchmark/false_positive_replay_report.py": "f22087658c10eaa134f7fb4a3d3515a5f12267435964af5a44b0933d6559ccb2",
+    "robot_sf/benchmark/fidelity_fixed_scope_preflight.py": "79e283c56068b316d69635dd236ed3cf066e184f627a2f58359ff861627177e9",
+    "robot_sf/benchmark/fidelity_rank_stability.py": "003d660dcd9c8456c494d6b2b9913c7639f94b345a7484c149f1f349d35fec1f",
+    "robot_sf/benchmark/fidelity_sensitivity.py": "c5dbb62db196437f62c32025a4e89ceb2e3c372c682c074848466469c8cbad74",
+    "robot_sf/benchmark/fidelity_sweep_manifest.py": "36ab5540e516fa812122067714f108f338a713ad90bdaf7b0ebc051b8a595334",
+    "robot_sf/benchmark/figure_qa.py": "57aafa38e7ea7dc74c634554ae9f754dd7f03e15734beac880356b76151ea31e",
+    "robot_sf/benchmark/figures/__init__.py": "4abb778020421d44a4dc97450a2b01d6dbbbc6bd9d79c59211c969fc472e0371",
+    "robot_sf/benchmark/figures/export.py": "4ae82dc61c30ccec9e8ed49b7cf8b4df477368c16f5be2d3cfa41ce483d97789",
+    "robot_sf/benchmark/figures/force_field.py": "d53a58ece62c1a9bac2fa86b1304e78af5de33d46c2b2c8183d53fc11a1627fd",
+    "robot_sf/benchmark/figures/provenance.py": "6a9fdfb0c08a6ed1313e8fd4b454168a663301ff0e4fd48fd98f177c591bdd37",
+    "robot_sf/benchmark/figures/style.py": "7c64165a8b0b55059e9052c273e54ff040db5548ebc39827df12ae6f6a51a0b4",
+    "robot_sf/benchmark/figures/thumbnails.py": "255e347c16600aca2ba9d1ccd3ec35d39bbb67778e7392ed060e86ed7efcbad9",
+    "robot_sf/benchmark/finite_checks.py": "4cb52ee3afba424ea5e58f0c7192d6b70592f104eedc8a5c5366065a6116d78c",
+    "robot_sf/benchmark/flint_chart.py": "1031a23a3f247ba8ded0346754839216f5fb3d8cb92b26e264e02f560a1a99ec",
+    "robot_sf/benchmark/force_coupled_comparator.py": "37360e3c317fa967cecfbae7b18925c66b763b61fe26e2e5a6e532cedded67d4",
+    "robot_sf/benchmark/forecast/__init__.py": "4a607c6cb75a4c637c3b913a6debe5b804eb589adc8dba394e8dce6c4868bfbe",
+    "robot_sf/benchmark/forecast/forecast_baseline_comparison.py": "97106431fbc910485d52140da3abd99338337b91aa50d1e0b4b15fd26c3df8e9",
+    "robot_sf/benchmark/forecast/forecast_batch.py": "d735399279b398165fe08e9b54607ff62b7cbd2efca95118c7241f7cb58fb427",
+    "robot_sf/benchmark/forecast/forecast_calibration_report.py": "9a5560fc971d2c6fcbb81620416d3100e8c49fd698a4709b7faffb165e65aaad",
+    "robot_sf/benchmark/forecast/forecast_conformal_pilot.py": "f0816e71ffdd3cff2ff119b51d9bbf098b87d9e6b23f9b05ddeebe67016c0c8a",
+    "robot_sf/benchmark/forecast/forecast_dataset_recorder.py": "32b7057b36f2150a9bb4992a1d1724a65d84b662550a840775a1b9b6953722a3",
+    "robot_sf/benchmark/forecast/forecast_heavy_model_adapter.py": "46dff25d7a4272b63294ceefb153acec4125e4ec2b455c0955f649c4c0063971",
+    "robot_sf/benchmark/forecast/forecast_lane_inventory.py": "4b10398ff36d50ba3b9d8425430b64f55633a9668635cf00f8b752fbd763d319",
+    "robot_sf/benchmark/forecast/forecast_metrics.py": "69bad95cb240ec05fd8541f87cf03e29fb53cd6349b8fd4baa0858d66157f58b",
+    "robot_sf/benchmark/forecast/forecast_observation_adapters.py": "f15f5bbd3ff68f1afbe1b5edf23b5adcb4366440ab5c8b9bed1a34f945871827",
+    "robot_sf/benchmark/forecast/forecast_preparation.py": "284cf114a7ca4c2f7bef1a3ce3e9744d92f1c350d264232612966708a8358776",
+    "robot_sf/benchmark/forecast/forecast_risk_adapter.py": "a1b0a002eb99a11b5fa92603c1262bb1777e34dc3c2e354335349f14e0782f93",
+    "robot_sf/benchmark/forecast/forecast_transferability_stress_matrix.py": "c5dde9aca3984310d83010f2c98c0cd818ea3d1c6493a85ca121586b5ac144dd",
+    "robot_sf/benchmark/freeze_manifest.py": "72c126ff68fef2244f26f66ee40905757b1d8ab5adb1357ff98fc955ef9c9271",
+    "robot_sf/benchmark/frozen_trace_reconciliation.py": "3daa9a318511f84c55bec95e94f04ef26a6a90e8842bd535e09968dbd1a4b131",
+    "robot_sf/benchmark/full_classic/__init__.py": "a79db117f487cd8b5083a1e251dfb4305e96a4a1b7f656fd263601d0d176e97b",
+    "robot_sf/benchmark/full_classic/aggregation.py": "0f1137f871e8019eab4233dfc6283ad351077ef01bb75874d3e643d43ee5ff15",
+    "robot_sf/benchmark/full_classic/context.py": "67607ddf682ef704597b9f91505712bdfb245fefffba8e1fb9828b6a5cb88b7c",
+    "robot_sf/benchmark/full_classic/effects.py": "476005fb4eb3edd2f8b4bbe20b042c72cc70a07af63e059774adda9a08bc57d6",
+    "robot_sf/benchmark/full_classic/encode.py": "ed38cc05bad08e00f090efb9d416bc3695c85c8e7db28262caee6132cf24e3ad",
+    "robot_sf/benchmark/full_classic/execution.py": "18a0f468f3da95e5cb2dc607e20fed7b7ab7653bb64a812704c9fd36caea5327",
+    "robot_sf/benchmark/full_classic/finalizer.py": "713c8fe3473165d40fb3161ae36dea358e0c7ecf2fa5064e2b2911c449bed931",
+    "robot_sf/benchmark/full_classic/io_utils.py": "6dececd0cb95ca7cb37e572d73058c74e6c7d22bab87f542626a0fac44457802",
+    "robot_sf/benchmark/full_classic/orchestrator.py": "3089e6d65794f2ce92238debd9f92b19e66e031ac6cf5159cbcd2fcfb88672ce",
+    "robot_sf/benchmark/full_classic/planning.py": "b6e2afc36608f29fe7fd28d55454ea628bb55abbcd939f90b12f9d23a3891952",
+    "robot_sf/benchmark/full_classic/plots.py": "c56404c5f67b8bb6b5c74acfc2fae479fe1d0469937c30b68e746884fd3ba4aa",
+    "robot_sf/benchmark/full_classic/precision.py": "c2b3f3a3d7fd1af912d535a6b8610f83d17417cc63a5b6edb37edcddd589f0ed",
+    "robot_sf/benchmark/full_classic/render_sim_view.py": "b69413bd71a9e28f8d57b0fade14c43df6524b66e74ddb373c12b2975f434f8e",
+    "robot_sf/benchmark/full_classic/render_synthetic.py": "06f521fc40570d0b7a96bb8d659bf28571709b20cf72cd9c26d9693cd89d597a",
+    "robot_sf/benchmark/full_classic/replay.py": "606939cc48bb9f238d3428168157f3210ee3df91b3d0fb804505ef287080798a",
+    "robot_sf/benchmark/full_classic/scheduler.py": "e6b5e5ce1bafa010fba14ae55d3dc2e9b40daf2d836e26219d151203637f9de5",
+    "robot_sf/benchmark/full_classic/state_builder.py": "1b415fe496d05b3c2b3d63759938470eceee429d6ff81eb9ea617d52aa47a477",
+    "robot_sf/benchmark/full_classic/validation.py": "5051a991163571d7a5fd87c641d19ea23e07b1cff8e16e68b858a7c4702bc712",
+    "robot_sf/benchmark/full_classic/videos.py": "8334ad0e2bf586adfdafb0ed24bd3ed758b394d46bc4030ce77bc4076152307d",
+    "robot_sf/benchmark/full_classic/visual_constants.py": "675de27e5b4d55cf2115736c2ab76889a21368d07243caff94fc4c550e2b5334",
+    "robot_sf/benchmark/full_classic/visual_deps.py": "2cbaab51826bbf0e728ebecf5a45d868536d5bb31e4ca6caa517eb27846fad0a",
+    "robot_sf/benchmark/full_classic/visuals.py": "ed3dff697d664e6f84df7829e2a2a6cb7a829d393cfe407fca03c6c11140bc09",
+    "robot_sf/benchmark/group_space_metrics.py": "291e2c534526cc9c6a16976d54eeb0f71c6d8582a46e840fc3879e36fc7235b0",
+    "robot_sf/benchmark/grouping.py": "f60bdc7da24d0706d92ad3c29816cde2dce5289e792a9985fb5e33846aa8497c",
+    "robot_sf/benchmark/hazard_odd_coverage.py": "661d1bb2de6c74ffdc117d03f66540f1f3a304b6179c647dda62b4148679f4ba",
+    "robot_sf/benchmark/hazard_traceability.py": "3ea7d4f4aacb3a134d2b15df2e9f57d92db134522d1fd7c9a7305da4a720d7ad",
+    "robot_sf/benchmark/helper_catalog.py": "e3ee15c897d1108512f5ecab1ab1d416742477e04cf6af5b584a7a02831e5fc3",
+    "robot_sf/benchmark/helper_registry.py": "8ac823000510ba89e5c1474156bae1d2f58b100ee24608ce85f3f3b8dc146e65",
+    "robot_sf/benchmark/heterogeneous_population_ablation.py": "ed0cdcb7906f509aac361a7301f7f76eb55a8cfe3f30615765da04a3bf2c1934",
+    "robot_sf/benchmark/heterogeneous_population_ablation_runner.py": "7ad62ec7817cdca1ba5fee508f46cbed314fdd2462767bed0227f0c583697cda",
+    "robot_sf/benchmark/heterogeneous_population_metrics.py": "d39f72ef9141aa0273101fb9db1d0a71e4d3d6ac58f3f543f6ba7df4da768893",
+    "robot_sf/benchmark/heterogeneous_rank_sensitivity.py": "35b534b440ddc7df2d78934d5c6db813833e4b12b0cfbd4d0f30d69c7f524bf7",
+    "robot_sf/benchmark/hierarchical_paired_release_analysis.py": "eef3262c3c0d18c0fb75979425aac1f55037e436ab9dd73505e3b91c2c03f0fa",
+    "robot_sf/benchmark/hierarchical_paired_release_inputs.py": "6fac529e6f8cca6fb19865f08e1ec86decae81b6002226bb2929e48ecf3ddc4d",
+    "robot_sf/benchmark/hybrid_evidence_matrix.py": "ae3e4d8435da61c77b1299b08170274d396319b51affdb2ff1c2ec47a29861c4",
+    "robot_sf/benchmark/hybrid_global_rl_diagnostic.py": "979bcb122c56638fb499d15794df67a40d87a1a6cf19316269e447c5fddec0fe",
+    "robot_sf/benchmark/identity/__init__.py": "f93af7d86d2502c5a11c265a67aec8732a71d803d1644e229b5104ae3fefcfbd",
+    "robot_sf/benchmark/identity/hash_utils.py": "966688d0468589a8bd583aa590f520e9aa0fc0b269ce8f3505e58102f2cea4e2",
+    "robot_sf/benchmark/imitation_manifest.py": "30ae6931c8971f4d330af2bb01e7499e95ec6031851877e18e1c6f8c54c581fa",
+    "robot_sf/benchmark/infeasible_probe_safe_failure.py": "034904cb4a521a08f2138058d4c01dc9b9c1fdbbe01759f9855c9283340b6325",
+    "robot_sf/benchmark/interaction_exposure.py": "4df37e8a7da608ac0a399e35f80ff24d9507ae3b6246b641ca4855670f392d11",
+    "robot_sf/benchmark/issue_2557_replica_readiness.py": "b08227e658237062d26600ca3f1238d4af8c989311c8f686d93301798f00a8c1",
+    "robot_sf/benchmark/issue_5302_oracle_gap.py": "4ef527242e97e7ecacf917c73090d23e3366c7b55da510b483c9ea306cbcacca",
+    "robot_sf/benchmark/issue_5303_search_promotion_analysis.py": "a8fe9e70249a924e2f4b6dd0334ad2ef34cfc10a11bc6d1e21e7d077d6146812",
+    "robot_sf/benchmark/issue_5303_search_promotion_preflight.py": "ea0f734b4e498efc7de2e4687b65bf9e0255350cebedb0c6cea0e548d729a9ab",
+    "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py": "d51d9d20f187955095eea406d0d290af1ae6baeafbeba4822a080def84b2e791",
+    "robot_sf/benchmark/issue_5303_search_promotion_preregistration_v2.py": "07114a074cef65ba69b194e4f8f4c663ccacc1a134e8733a4fac717bd4a23901",
+    "robot_sf/benchmark/issue_5409_campaign_identity.py": "a2eb72e0d86fe89f687af472a041cc6303802edfaf8c5b9ad400ca93366088c5",
+    "robot_sf/benchmark/issue_5578_speed_tier_synthesis.py": "afa123c030849e8d1df4a42be412feb3555aad3efb1a63fc7cae0eedfc2cb97c",
+    "robot_sf/benchmark/issue_6412_real_reexport.py": "8c2a641bbbe8f08bbf8a7ad23d72fd119e0e272fc8e362284a7240e6aaf79e48",
+    "robot_sf/benchmark/issue_6814_trace_reexport.py": "e8281ca51e2bbac36cc6d650e66ffda7eabd78add5d65a914b22fc7990433ae0",
+    "robot_sf/benchmark/issue_6971_safety_wrapper_preregistration.py": "d29a29eb0f02e4accd2a39d329c11c2828fc4ee0bd1e27906162b1fe116e30dc",
+    "robot_sf/benchmark/last_avoidable_fixtures.py": "12261ee5320249defbdec70951355916650d40613fb1290ed7f018f0d9faa648",
+    "robot_sf/benchmark/last_avoidable_replay.py": "9725a89d91c5040df6a2bd22efb28cc0f3485a8af424c2cfe65ea63628b000a2",
+    "robot_sf/benchmark/latency/__init__.py": "44e3e8df9b665b3adbef32c0414173a178063898cf0c50b8f9df7f4c4242abd2",
+    "robot_sf/benchmark/latency/actuation_latency_measurement_manifest.py": "3a877c60319fb8fcc913220304869710fa9ec320dc1caa667d2ae9b6f7eb5602",
+    "robot_sf/benchmark/latency/control_action_latency_evidence.py": "224b8a339a54b73999d4f66e9b62db3b59f94963180fd3bfb862c5a031aa548a",
+    "robot_sf/benchmark/latency/control_action_latency_preflight.py": "918c2368f2c4f7cfd1a38598e10e5ac66fa38d38203cd314a9065f5ba276ae74",
+    "robot_sf/benchmark/latency/control_action_latency_snqi.py": "2c2de24218e327647b780410b22d2bf426c3c894e22c53beb647e5980ad9fbc3",
+    "robot_sf/benchmark/latency/latency_stress.py": "be3a363583e0b68ca038f0fbfadf02cea41109335b171fc31c48a173dcff5118",
+    "robot_sf/benchmark/learned_policy_transfer_metadata.py": "c4b83aba99284ba81004860535a8d18383f5781066cdf970589494d452df9e28",
+    "robot_sf/benchmark/learned_prediction_mpc_comparator.py": "82de7e1f8b35b8ff50296464cf7567a5f02cd9d287f74ddc9e4ab9d200953757",
+    "robot_sf/benchmark/learned_predictor_capability_inventory.py": "4aef452be645e7151b5c42a1b5c02bde79c104c41b57bd6f169933e53ed665a2",
+    "robot_sf/benchmark/live_forecast_replay_gate.py": "575c7a10d92d1728b64fa59e81edfab76a33d64f3a49d5766a5480861440b12a",
+    "robot_sf/benchmark/local_model_artifacts.py": "faebe564be785ac8d3a18b7e7b17ba48dbd33ee926d61dc8b272b1ee4f574b25",
+    "robot_sf/benchmark/long_horizon_route.py": "17b94644f616e1afa22ae6a8ffd78df2cf73ef283d23867aeb553300a0da95ac",
+    "robot_sf/benchmark/maneuver_authority_sweep_manifest.py": "22acc8401a55794edec9fa8d71e38ae784efe4a129166d9019301d857dd01dfe",
+    "robot_sf/benchmark/manifest.py": "ef0848540a4d140f40a884667e5de863b18740ed364d0e0971a0b53c19c626e4",
+    "robot_sf/benchmark/manifest_lineage.py": "fd289a2b9bd4ec94f71c280dc5cef69677e276085c3c00a61986744c71ee511f",
+    "robot_sf/benchmark/manifest_lineage_backfill.py": "d5df49dc4c15c686da02c847b19ef18dc5be50c6bdc02f84b29dfb50f5fa8a30",
+    "robot_sf/benchmark/manifest_lineage_graph.py": "66fb667d36abdbdaeebd341b6b16a87fffabb977278c6b71f2a279d0a20788b4",
+    "robot_sf/benchmark/map_runner/__init__.py": "3ada40c74da3d29f94c6de1b2b8dff03e6e93f4540346192e843c2f548352e25",
+    "robot_sf/benchmark/map_runner/map_runner.py": "6220ad0c86ddcd69215b9addfe43b4cc3a722ca81b8e14bf0cc5ba7c4adcb025",
+    "robot_sf/benchmark/map_runner/map_runner_batch_plan.py": "6c8d64fa1beaf1b418518aaffd4d88162001572e49a2b0157262b056da09a0dc",
+    "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": "50069cc6b5679a9db21caa04ccbeafa1ef4e7bb4a6a8e683efe495abd4973d9b",
+    "robot_sf/benchmark/map_runner/map_runner_batch_summary.py": "1190a462d90d8960739199af5555e8d05dba7646c5ee3b1b62bef60ae18da7b5",
+    "robot_sf/benchmark/map_runner/map_runner_env.py": "267a25849f3e784b6b8faa8bff8b75389378869e41c571cad623ca6c5d100d01",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "b2b50f854d8da62c3c6ca93c6949cc6d76251f5de9d06fcc0c6d0858caad72a4",
+    "robot_sf/benchmark/map_runner/map_runner_identity.py": "c88886e6b5050f26d4e82e3092125a99db09a7724b367af7128de0b7c098bf09",
+    "robot_sf/benchmark/map_runner/map_runner_jsonl.py": "fe09dcdab81182395f6d574b1fa1ede3e4caa45592a5d23c3caaa3676ae56d1a",
+    "robot_sf/benchmark/map_runner/map_runner_metrics.py": "76dee9d7c79791b4912b3758b5035f28c3678a25800f46fa8540f4dc1220cfd8",
+    "robot_sf/benchmark/map_runner/map_runner_native_command.py": "78d8ae6b69d135ae831e5a35f1b223d3cdc54f9c5ce801fb9298125e8c71acb7",
+    "robot_sf/benchmark/map_runner/map_runner_observations.py": "25394f4ea92478e336db210b28ff8ba3e106bd10a610e394ca522e04d1be208a",
+    "robot_sf/benchmark/map_runner/map_runner_provenance.py": "2ed074986f254a4ce5ea3197e9dc59248aaaaf173e3ed38dcc1226367e076fb0",
+    "robot_sf/benchmark/map_runner/map_runner_static_deadlock.py": "53bc30e029ca5f61324cd36d25990d5d4713d92b654b4d024bd2d121849d9fb9",
+    "robot_sf/benchmark/map_runner/map_runner_trace.py": "81d5950dce1250cedb9c4fed6a2dc2100e0610970090f19c9ae558e4ea803c2d",
+    "robot_sf/benchmark/map_runner/map_runner_view_integrity.py": "4a5b734c2cbd10202d20a96855d87d2df848c180aa3b7df604ddc15e88de02a0",
+    "robot_sf/benchmark/map_runner/map_runner_worker.py": "c8cca8616475a7257465d0526e85a4197f14ac4166b0438a2cb7827cca4779b5",
+    "robot_sf/benchmark/map_runner_actions.py": "22023d0610a46991bf7c11ea1620fd4791f9f7f72511ccf5fe21f123047ee15d",
+    "robot_sf/benchmark/map_runner_batch_plan.py": "7cfdf2672bc880b9f0797236bf0765e04efc103fb5a0e5ad1ae76b7dca89c9cf",
+    "robot_sf/benchmark/map_runner_batch_runner.py": "ac09f5ba54e168f774e9e104407cd988846378aed8eafc6ca891962416f7d86d",
+    "robot_sf/benchmark/map_runner_batch_summary.py": "ee85e2ee51012b89e784fc192b04b844aad91d27693d5960b88cbabad47abaac",
+    "robot_sf/benchmark/map_runner_env.py": "05e53695a89ac5e02198db14f806904dd0b8f40e314e8c3afd8b31aaddec61ba",
+    "robot_sf/benchmark/map_runner_episode.py": "d7101e9c710822e3ec3b77f7e6490bd5ab52b64b17fedc72116aa8721a9a278d",
+    "robot_sf/benchmark/map_runner_identity.py": "06a588a33379e2122f2374596a0348aa28893627ec89a89489e0304d4fb4eea5",
+    "robot_sf/benchmark/map_runner_jsonl.py": "b7c4d9eff7c5baf4898fb2a0ec761f223ce7ee47e21e0826e1b4f2e21b0a51ca",
+    "robot_sf/benchmark/map_runner_metrics.py": "626e1fdf3ef3ea3326fd2afd0784787bc26477d2fd1eaa716e56544c6c3c9042",
+    "robot_sf/benchmark/map_runner_native_command.py": "e90ad6e3e3fed5370ec17d19307ef223d25806f8679d1e9480849c6bfe60e593",
+    "robot_sf/benchmark/map_runner_observations.py": "31e3ff90d32225333fbb22a267ac150a5c1a50d3c71433eab022b6926dd0cfed",
+    "robot_sf/benchmark/map_runner_policies/__init__.py": "e1725ede94f6449609571c6fbf386cb0c6b0a3fbe017c7b2493c08833b5d08ac",
+    "robot_sf/benchmark/map_runner_policies/adapters.py": "997203a2d4cc629ea86ff379d554fd58c84c2432c74d86498f88280df7888b77",
+    "robot_sf/benchmark/map_runner_policies/adaptive_proxemic.py": "a9a7a9b435a36e88fab07668e72d06f33236412dee53f706ff06a1f16e340c54",
+    "robot_sf/benchmark/map_runner_policies/brne.py": "8bf5ef0feff4e3e19ceb35363f0db8c9d3064a63b0e34d27b1eee84e84390e84",
+    "robot_sf/benchmark/map_runner_policies/diffusion_policy.py": "ff6b205a8e6b998aaffd0f1f44ae003eaa5176f65a987b682fef5dcb176d1a96",
+    "robot_sf/benchmark/map_runner_policies/distributional_rl.py": "451ebeabf6ce63d62ad7f6b6d4c6e088a1d54a4bdd86e791fc61c74025e03c0c",
+    "robot_sf/benchmark/map_runner_policies/gap_reference.py": "29aa9cbc727ad91d0770a9330485ddfa0cb931eb63b6978080e9cc7ac3680af1",
+    "robot_sf/benchmark/map_runner_policies/goal.py": "63b7b429d7244a70f0e4be532b9b813f43eac0982861e798c01393a7cb5e0eb7",
+    "robot_sf/benchmark/map_runner_policies/group_avoidance.py": "8149b3aec613f96c20602b44b58748102fb5593b9e7a2a4b131f631e56ef93e2",
+    "robot_sf/benchmark/map_runner_policies/hybrid_global_rl.py": "bb608f21f00d40025dfad4a2766735838a4ecc95511dde1895c8520950f3818e",
+    "robot_sf/benchmark/map_runner_policies/map_runner_actions.py": "a17b3ad094ab63fd79f9c7a48d7899cf33c6dbd76e5bbfa62703e06c64c9c89a",
+    "robot_sf/benchmark/map_runner_policies/map_runner_policy_actions.py": "3527c160613adef0ccde9b56e75a9f276cc4a088a5613cc559c317b3a55f4f8d",
+    "robot_sf/benchmark/map_runner_policies/map_runner_policy_common.py": "165a2c8c6b3edd6bc2bf161de75814cb4aee2a7af7745d935a6f4cc7dcab573a",
+    "robot_sf/benchmark/map_runner_policies/map_runner_policy_metadata.py": "6d9b783dfbd58fa816591642d13959535da95016711f85b0990c864fe5f94894",
+    "robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py": "b136b5666e9b28728bdc3d9bfdfb31492d667e5414715830ee8d32b80d9e2f8e",
+    "robot_sf/benchmark/map_runner_policies/map_runner_profile_metadata.py": "b1ad9c0502d1190148c29dc8491a75bcf8cf201b096fbfe1743c937dbbde5cfd",
+    "robot_sf/benchmark/map_runner_policies/registry.py": "2ea8c9c3905df234ae6152d768cbbe440daefd456dee99cd9146347a57b2d3e7",
+    "robot_sf/benchmark/map_runner_policies/rule_and_grid.py": "63ddcb901174bb454cb061b8af495b432c26c7046f34c49e4d617f56dfad34df",
+    "robot_sf/benchmark/map_runner_policies/safety_barrier.py": "63eb897ae75d7ff12fb44e03995775c20b48570e6e1dc858cf22cbb4c9f0136a",
+    "robot_sf/benchmark/map_runner_policies/socnav_family.py": "823b62f76d10176a043cc6caedda020880d221ca6281f9c00a5c572091cc185c",
+    "robot_sf/benchmark/map_runner_policy_actions.py": "ce83f229a651843b138fd47eaef28d793c480ec842defe558cffa05b2d2d3b70",
+    "robot_sf/benchmark/map_runner_policy_common.py": "6d8aa76ffc701f8b64a3c055b3ea130a9c1a6215e731df7033d8026aa94b9f7f",
+    "robot_sf/benchmark/map_runner_policy_metadata.py": "041703a159a21d58ef541fd592ed77c90fab78b8757ac1460e7843d69e8db739",
+    "robot_sf/benchmark/map_runner_policy_resolution.py": "c651d1ea8fc12717ed665ab2a2af5a3f7f5bfa62dcbb7744fa02e06e85d7e5ab",
+    "robot_sf/benchmark/map_runner_profile_metadata.py": "2be44375a3fdeb6ff005198927ed3889329a5c5879008a4bc51cc0c63344ad0d",
+    "robot_sf/benchmark/map_runner_provenance.py": "981743ab5d12e1bab0d536090447ff955895758eb3f358e356710bedd7d3633a",
+    "robot_sf/benchmark/map_runner_static_deadlock.py": "3e1c07f2c7a1cd1ecb9b92110e6ac4d1c9a010f265355921ef45012547d30024",
+    "robot_sf/benchmark/map_runner_trace.py": "f52f954b2dd7b6ad84dbd3545b3f7f447f662f9d246aa10743a386e556b50bd2",
+    "robot_sf/benchmark/map_runner_view_integrity.py": "e023080aaff00821ab0ac4d5ba4021c95822c6f80c90c55f07d84e4b515d4c7a",
+    "robot_sf/benchmark/map_runner_worker.py": "d61523529bdd97507a642ee831f78ad618775bff8c4aa4732f2a2502427f3093",
+    "robot_sf/benchmark/mapf_oracle.py": "b57406c07aa71e60ce9c7489b9997111bcd3365f4d13d8250a41c5658cc058cf",
+    "robot_sf/benchmark/mechanism_boundary_atlas.py": "b8870772b42f8b6a71d0bb85c919abae2c0bcc597b15bf2e305a192cddc7436d",
+    "robot_sf/benchmark/mechanism_trace.py": "1cc41f1a3ba531978a0da1f272c1ad13ad843316e62c554f804d972054df1ff4",
+    "robot_sf/benchmark/metric_definitions.py": "ecc6563816f3780b351126f816f634caf0709e7d6d87235eeb53cfac3f1ef524",
+    "robot_sf/benchmark/metric_layers.py": "1be4ee0cfc869188e98bcaf3d1255e4e42d959ad9c744e6bf1d2c96a4d4c83f4",
+    "robot_sf/benchmark/metrics/constants.py": "e9196f9d1b2ec6bd0f2521b836dd1c7ffba9d7e652fa72da66b41c454156c2c4",
+    "robot_sf/benchmark/metrics/types.py": "8e756c0c061630a99df54ef97808b1881b2cf0c789074de9ee9de58425be6135",
+    "robot_sf/benchmark/metrics.py": "d41765885486e081434fcb00dde0fc54d487e788ccfa396c5b81460945851f62",
+    "robot_sf/benchmark/mpc_tuning_sensitivity.py": "37f8764a9395a07ea3b8f420fa698e60bcc40aa1f75ae7643711d1e54d112768",
+    "robot_sf/benchmark/multi_amv.py": "46224146b566c9dfff610d1738bceaee8e9b70fb76b4b47a610f650ade7914e4",
+    "robot_sf/benchmark/multi_planner_overlay.py": "4ae3b5ed88defbfe341f0e2fae88df47442a0fe21e8b7ab99ec16aa4ba8bc974",
+    "robot_sf/benchmark/narrow_doorway_geometry_family.py": "502c601d3ce1a0a08f7f04a466220429297a9407831759655edd945acbb136bd",
+    "robot_sf/benchmark/narrow_doorway_radius_audit.py": "b1822842cef863ea0800181f479e8de55f2f54f5861a4976129fd4dd5206d4fc",
+    "robot_sf/benchmark/near_miss_determinism.py": "2bc604e6feaf560532c826f0524b5c3389ca39c385b13bc957492160469d81ac",
+    "robot_sf/benchmark/near_miss_ttc.py": "b90b0149df125ac4af92ae1fb3a2c1d3804854f26ba36726955a0ea243d8771a",
+    "robot_sf/benchmark/near_parity_promotion_gate.py": "871fba2a3541d54c1c2f28fa6de3180d736991bb901a63a095c6941d264dc0bd",
+    "robot_sf/benchmark/observation_levels.py": "501a10529e9c9fad1d02bdf62a909a385858e2816e97999447215f9d0f721482",
+    "robot_sf/benchmark/observation_noise.py": "72949c77f1e89cc51db878f8f09b4084239dff08311b6f7f8fa707e953de13cd",
+    "robot_sf/benchmark/observation_noise_mechanism_classifier.py": "82b585d9826fd2e5eb651a7ffbf5589b677c5f53cb0c7bfffc67cd29ab8a698f",
+    "robot_sf/benchmark/observation_perturbation.py": "db6177244414b525c16d399e84c77042c4ca96329ada13b12821ab3d362994ff",
+    "robot_sf/benchmark/observation_quality.py": "f1e227dd88a3d93e308f7ce783c0818bdeabbe9437e3708ba730d109de704e83",
+    "robot_sf/benchmark/obstacle_sampling.py": "2af60b0c04db00aaaac9c11ac8ed88d3783e461d5c2e3aa0fb59c550093784d5",
+    "robot_sf/benchmark/odd_contract.py": "b8b2a56566785be38a34a9baa1bcf4da664dfd2a94ce5161d917a74a14eda76c",
+    "robot_sf/benchmark/odd_hazard_coverage_matrix.py": "ab0a852405c8fce12b32b0d06106bc53a460c74bdaa63a3f1b20b370e71bbc54",
+    "robot_sf/benchmark/operational_quantities.py": "87ccc5be8cb926c017be35c9989453a70484fc92ed100b3c3e1683a2a87caff1",
+    "robot_sf/benchmark/orca_preflight.py": "8f7a882af94b54b356f23a753aed9ab0312df789b06f77e1d63b8f9c3b28cdc4",
+    "robot_sf/benchmark/orca_residual_lane_readiness.py": "b3a08c52ef030d45c9c29fe74369433062893910c37031c9c6b2b5f17b2db5f7",
+    "robot_sf/benchmark/paired_effect_metric_contract.py": "2aac91419a97927ce1223ee4583c43a494b5b7a59b229fdfa66a61ad743d9489",
+    "robot_sf/benchmark/paper_results_handoff.py": "7b95da938f3be3af762b88c9dadd5f717bf3963be93342a96e2ef2a99564d07d",
+    "robot_sf/benchmark/parquet_export.py": "0abff8708879a61439e7900110fb8ef59d2c52a38f12063c9616975821bcc535",
+    "robot_sf/benchmark/passing_clearance.py": "88809c49fea6a6203518107f593599d842d244dc43a0c912be3d370061ae5be1",
+    "robot_sf/benchmark/path_utils.py": "77dbd9c6dd6312ecdc71555e239c1d2a1d597225ce1b52a90f557e7634f74b3b",
+    "robot_sf/benchmark/ped_model_sensitivity.py": "7ec2822fe5264174408d3ee796dc35c9f6d279f86e8a13f09cd464fe5a87e73c",
+    "robot_sf/benchmark/ped_trajectory_quality.py": "3e5f49fe33604bc600fee06c1ffd5805a7be1f0e0956bf41b7eee047b27f0832",
+    "robot_sf/benchmark/pedestrian_control_trace.py": "a490764932d4165d1589f86ab8757125012c6e374ccc6975904e8980782d1099",
+    "robot_sf/benchmark/pedestrian_flow_validation.py": "6e85bed87a83373ae6d1f0262390d00de153448f74de89f379ac03087c9a9a11",
+    "robot_sf/benchmark/pedestrian_forecast.py": "929965db0f5da576224c1ace06800e8398083e5f40d91d3ddf185dc5a51a4f58",
+    "robot_sf/benchmark/pedestrian_model_fixture_diagnostics.py": "a60fd81db4900800524d3d455bc0898f64e0bcbff88036c51d9398ae9bd33bfa",
+    "robot_sf/benchmark/pedestrian_prior_extraction.py": "4c0f1a767aa9a962a36e8df4d330395b71f03ae30f9c690648a31b3b5a784859",
+    "robot_sf/benchmark/pedestrian_prior_extraction_manifest.py": "5edf81358f7d04dac2a18270a038c3b973cb0c61dc491e5e9d7cd811f5cc0163",
+    "robot_sf/benchmark/pedestrian_realism_validation.py": "a1a13cd43c8c93d7104f68d6af31b8f0de2c2d4cc211733becdc53b492328cfc",
+    "robot_sf/benchmark/perf_cold_warm.py": "6e11e9cf7932fda70be7e327886528b6e101120bb465ecb8a25c8c66fb02781f",
+    "robot_sf/benchmark/perf_scenario_cache.py": "691e55592018db7b1246206dfe009108781b043b8670320a853189409749361e",
+    "robot_sf/benchmark/perf_trend.py": "138acd21614fd7f0ecc71fa32b3cb8cfa1083b471e5e3e64c34237c55b5fca36",
+    "robot_sf/benchmark/planner_capability.py": "eb969be3906f52a92819378f37cb2880a595e69799d66aff7841f952007b4ec3",
+    "robot_sf/benchmark/planner_command_contract.py": "e3903c4732eaeef668ee437ab1839292c2bddbb88e38990ac23335bcfc0b7a91",
+    "robot_sf/benchmark/planner_inclusion.py": "9a71c431488af8ad60de51016e8a02c8e6fd021d0cf80fc23dd57a9dd8a81e63",
+    "robot_sf/benchmark/planner_tradeoff_plot.py": "b007de3351611825eef73e453810be7388278b572b983784221eca3ac4857f18",
+    "robot_sf/benchmark/plots.py": "0950e57e0b659ddd024f050729b2460719b82f6d7a0337029a27821d62e2d8c2",
+    "robot_sf/benchmark/plotting_style.py": "f80d31db85db4ef9e2adcf1882bfd15a54c2c3af4b8050aafab517d0c9018071",
+    "robot_sf/benchmark/policy_builders.py": "d29260cd9162b19c849e55abad15467199e57d0c8f9f8b0b7445216a16333c7e",
+    "robot_sf/benchmark/policy_search_manifest.py": "1481f7d366cee10fad4535f35b55c3fea4d8f9e3e9a093fd1f9290838b9341ff",
+    "robot_sf/benchmark/post_execution_release_doctor.py": "57eb047a9bd4d5def8c71081e8cdf2eec6b7322b57381947084145d1544588dd",
+    "robot_sf/benchmark/prediction_mpc_factorial_preregistration.py": "99a28abb505a67fe641d202ae2568598e4163b326d1f2e8426985521c077007f",
+    "robot_sf/benchmark/prediction_open_closed_eval.py": "e480dff6975c2b4a89a9dab31e92e2c5ef386261f079cb2f1fb729b5c04a43a0",
+    "robot_sf/benchmark/predictive/__init__.py": "d7ee667515e1e397595a6a6684ed8f1432e458663fa3fa4ef229d41a217b3f0c",
+    "robot_sf/benchmark/predictive/predictive_checkpoint_schema_audit.py": "731715fa830accad595c7267bfc71ab31416cd56b03cf20a49ed597d78976318",
+    "robot_sf/benchmark/predictive/predictive_planner_config.py": "3d3ff191eb64449c849a057e58388366e29233e18cb9855c7f1c8d02f87f9a94",
+    "robot_sf/benchmark/predictive/predictive_same_seed_row_summary.py": "b369a5e82e68f42fc390a86d6143a49330fbd2ca1b75d5659be68680ccba11a5",
+    "robot_sf/benchmark/predictive/predictive_v2_comparison_readiness.py": "c3d0fe60799471a16ae49655b1725c5f13290f5c082de86824e3da09fb3f1c73",
+    "robot_sf/benchmark/predictive_baseline_contract.py": "aba0c9ce7ad0bd77189e822a86ae34bfdcf55d09118183bf3a5697c8f26facd0",
+    "robot_sf/benchmark/proxemic_ablation_report.py": "1fd5072be35871e6cc121676ace9222d352d92eaae0a709de1a3e0a40353378a",
+    "robot_sf/benchmark/public_requirement_events.py": "65fcb9a66efb9b73b239f10545dbecbc75c701349e383c31accd6b1d82cf84b3",
+    "robot_sf/benchmark/published_release_audit.py": "543245a361439ff44c641294c13bf06373ac6612f1524b66c37d478902ba90f8",
+    "robot_sf/benchmark/radius_binding_canary.py": "c0eeeedff529dac1670aa6b69b5bce26e514fb93f17841f2ad1fbd996d499b90",
+    "robot_sf/benchmark/radius_rank_stability.py": "739dabd0280bc25792690295f71033cb220fa3bcee71112c2ff533b543312bc5",
+    "robot_sf/benchmark/radius_sensitivity_gate0_audit.py": "22c960bd37f446dce61f1157f24586d9f5503d3153f5e594887176ffd51ec766",
+    "robot_sf/benchmark/radius_sweep_manifest.py": "c98175273bab0ca993c7b508dfda7e1acd4a3fd882d15809363265b6f883885e",
+    "robot_sf/benchmark/radius_sweep_summary.py": "d647d8ebe8e8c5f26f30a62e1e45f6098f7777b6d94ae014a1dc234e88fbf83b",
+    "robot_sf/benchmark/rank_metrics.py": "9684876769aafe5ddd284e1e94572bc227d46c3416a2082bad63471fab2ac56a",
+    "robot_sf/benchmark/ranking.py": "af2fbfe7fb39de0af90c993aa257b7867a31f15adbb7ee2032125cc1d6e0ead3",
+    "robot_sf/benchmark/rare_event_sampling.py": "cf4182c14b3fcee32a5a3e6e95dde187589c92826d5ccfe25f476cadc9161539",
+    "robot_sf/benchmark/reactivity_ablation.py": "5a1d4c0f706f30f899fa1b0eb793978d69466c3e8ee892304398db181716d278",
+    "robot_sf/benchmark/reactivity_replay_preflight.py": "299d0469240d22f80aedda8e85b3cbe745c15224a2f591e59385e39abd4eb509",
+    "robot_sf/benchmark/realism_validation_contract.py": "56ca32c8de85530d2f776158a814d02128ca8b50a0a210d34987ef60c2c8663c",
+    "robot_sf/benchmark/release_acceptance.py": "5d26ccde54aba630c0a4fdb304e2bf6ca62e70a183e73c10105a52f4b2449a5f",
+    "robot_sf/benchmark/release_assurance_case.py": "f9bdce727018e96d617f6eab9423e64bd66aca9c921cbbc392bca0ceed526f72",
+    "robot_sf/benchmark/release_candidate.py": "bde3ad0d5f4d14d8b41de50c8b8b46621e718fe1196baa80a8d6d56ce801df47",
+    "robot_sf/benchmark/release_doctor.py": "31e1dc7018b9206ffaccb0e5c6435739d52a092a2d576cee6f5bc9e465193e39",
+    "robot_sf/benchmark/release_erratum.py": "167a193282627fab65a7a92ea77ee415232300f184711e5386da39dd45e1cdca",
+    "robot_sf/benchmark/release_gates.py": "7b85d4b91e57b2aae73f9e5649e6579b84b422b9cbf8c446bcd231369b2ae72c",
+    "robot_sf/benchmark/release_map_mirror.py": "7763437c87e15d0d0f1dadc6556c1f0cfa8ffb62254c60bc665ee9f8f9fda045",
+    "robot_sf/benchmark/release_notes.py": "00038e109d82baeba556df1a58269567c667d6c254ac1e0d41b7219fd29163e8",
+    "robot_sf/benchmark/release_parameter_freeze.py": "b8fd7df44cb5a41da8d72b3dfe9242492435bb615f2a580a3e01f90fecc7dd4e",
+    "robot_sf/benchmark/release_preflight.py": "e0d99378823f06fde1cdb838e6629d688c5dbc2eccaed916921e58003e411087",
+    "robot_sf/benchmark/release_protocol.py": "615629b8dabe9498505233b43bf47aa6a8db78cfbd71b53f678eebaf4a8a8e76",
+    "robot_sf/benchmark/release_publication_contract.py": "2b47d31b779012b6b1b7dcf133be4e11546cc31a896103131d55dd247549dfdc",
+    "robot_sf/benchmark/release_resume_admission.py": "96d7cb5fc36bd54967bc4fb0977f80392be156b317df00b5516bbe6d8c583aa2",
+    "robot_sf/benchmark/release_suite_contract.py": "d2e5395295c21b1c1dee5b3f01749e24424b5970bdf0afb06519bc9d1acbbda1",
+    "robot_sf/benchmark/release_suite_reference_validation.py": "6a1feb98b69ce4ba7174fad2acc00cd827f557806b3f073472d1de0a4bab8e4f",
+    "robot_sf/benchmark/release_tag_identity.py": "94d0f1e1cdef3adeb574d12dacd498602aa934b1383f4b7b8c8e0686a00b909f",
+    "robot_sf/benchmark/relevance_windows.py": "35589712ec2694d1ec9b91383980b8454a49ce925232a89ebb0dbc4f50c3266c",
+    "robot_sf/benchmark/report_crosswalk.py": "64948bda96e327d39971d05caafb474d8ed094e3addcf590b48c1919cb7a721c",
+    "robot_sf/benchmark/report_table.py": "3eb86310e62d068e1421858090116350d26a8797924f4a1e0b2910ee3b5de831",
+    "robot_sf/benchmark/research_answerability.py": "bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3",
+    "robot_sf/benchmark/result_interpretation_packet.py": "300944c0ae817b638fa939835bf0e0fe07f966cb9e88fc5c8236950405eb8a13",
+    "robot_sf/benchmark/result_job_durability.py": "b0ea7f42e1e1fbb2f742531948502ba317c35f951957f2c1937433b8be98726f",
+    "robot_sf/benchmark/result_provenance.py": "7c211af8f1df3fd7f3cdaf6c522587d96a15c1a6e2b673e393d62aa2a45508d2",
+    "robot_sf/benchmark/risk_layer_ablation.py": "3a8ec89b20ce5c5ccc19b1312d0304e8c0ccbde91f4e4cb2d5d46d012698f29f",
+    "robot_sf/benchmark/rl_trajectory_dataset.py": "983552f2c86fb19a568657447a9361b5f46ebf3611bafce4d34f0c54ed6b1d5a",
+    "robot_sf/benchmark/robot_force_contract.py": "934f87f7f9bb75450207617c70c726a2a4436f9227fae6b423d6a5da14e1a4cd",
+    "robot_sf/benchmark/robot_force_kernel.py": "01e171e64a0e4662455a4c884dac2ad61ce7b578db25eef8e2786f0cf584e655",
+    "robot_sf/benchmark/robustness_delta.py": "a67bee6b957b83d1958d0d92deec86241c2bca7fe702451f35b797f4df0ce90a",
+    "robot_sf/benchmark/route_choice_observability.py": "f38b67943ffef8d38d56e299e8301dae6081c86636dc795ec7c209d318855554",
+    "robot_sf/benchmark/run_config_provenance.py": "4ef84a4f477e55fbac9d40b4ec78d8253402fc60faa3382463c20938b48fc3cb",
+    "robot_sf/benchmark/runner.py": "61abdba84c5c5c73d7986f10b30454e10ef4929d0ff38948bb5a976ca64c6d8f",
+    "robot_sf/benchmark/runtime_smoke_admission.py": "c0b0812b0502e52795ba9ab07c4ad2e08549d889299b6a47cdb2399254de399c",
+    "robot_sf/benchmark/safety/__init__.py": "62deb5e114ca6ccb01dce8a1ab5bb14fa64eb8aa6974857e1dde73ddae774418",
+    "robot_sf/benchmark/safety/cbf_safety_filter_runtime.py": "bf4fbe9ce2deae3c3c81010f850839a6bc3b5e0f1250e00a5a85e426822d1a7d",
+    "robot_sf/benchmark/safety/prediction_planning_safety.py": "6a6d4475e0928ee18759d68cfa90a41f5f0777fd5d22b4cc3aaafeb408f974e0",
+    "robot_sf/benchmark/safety/safety_margin_calibration.py": "258fee3a5ab8d0f3998e98c4465de9d2fbbe966e3d795b8ee0e567cea4dee47b",
+    "robot_sf/benchmark/safety/safety_predicates.py": "938c8374cb7b224aa9ca823815701a470f728b59396712c9343fe4ede76d4253",
+    "robot_sf/benchmark/safety/safety_wrapper_ablation_manifest.py": "4da94c534ff899aa11fed445be7385947d130a2c17ef517794e2624db782ffd1",
+    "robot_sf/benchmark/safety/safety_wrapper_factorial_preregistration.py": "6443eeb16df6ff444d130efd249f7368f2018c18f26c6a0eb55bb1e29fe757bd",
+    "robot_sf/benchmark/safety/safety_wrapper_factorial_report.py": "bbaceebbf38d9b427a7c8b7fe9ed7bd04357bcdbb4684eb3c5610b8269c89ada",
+    "robot_sf/benchmark/safety/safety_wrapper_runtime.py": "a8941e1344c7d566636d0a9938275dafc55659635bd62b18e5f00d0d05f3b155",
+    "robot_sf/benchmark/scenario/__init__.py": "82429e187ac0e3c5bb77544bfa0998ff39252ee8130d224e15d7432500983b6c",
+    "robot_sf/benchmark/scenario/scenario_coverage.py": "a17e00c0f5790648d61fa8726c50e15782f28548e67f701aa98a751c595bcfc6",
+    "robot_sf/benchmark/scenario/scenario_failure_cause.py": "2882fabbed2e09de4ea811317cc8869f7fade2aec8e559bb9220eb7376854a53",
+    "robot_sf/benchmark/scenario/scenario_schema.py": "3daccc03b988a53d8402b0e1163fc01689e27a763fa150c0d0ab5928cb78d3c4",
+    "robot_sf/benchmark/scenario/scenario_staging.py": "a5fce5df10961f4b66ac21e1281d425d5e1ab161afa3300a6180b5205f6d643d",
+    "robot_sf/benchmark/scenario_belief_policy_hook.py": "284dee4c3d1c4bd9aa656e908d573b010a135a421643f2bcc8235871be089805",
+    "robot_sf/benchmark/scenario_belief_screening.py": "f51fce3c0774d7825443c2e95017a4ce42105647be3f79e9de90a4b883ad4814",
+    "robot_sf/benchmark/scenario_contract.py": "03cde14801448ba87cae31914e54d9b93c4a3a6e855bbeb2412bb1c518ca6fb2",
+    "robot_sf/benchmark/scenario_coverage.py": "961377b9f6173cd76e74da34a21eb582262b2ce97069800db116af52de727c85",
+    "robot_sf/benchmark/scenario_criticality_objective.py": "fa5756f0c0a1b63e95cbd3778980ca5c3aee7deaa75b65dc0885d9405d4ac67d",
+    "robot_sf/benchmark/scenario_denominator_manifest.py": "6b022d7c54a4b4934c81f536aca8c820eb755af6f472dd5c7bfd06d9fe434c3c",
+    "robot_sf/benchmark/scenario_difficulty.py": "5024075832bd5f4961cef5218f99e942a327e6878b4b670c04d4b13aca578df0",
+    "robot_sf/benchmark/scenario_evidence_crosswalk.py": "22b0e1e03345cce82bda7a4433d5537090e63808d53b071d637245d05e003c83",
+    "robot_sf/benchmark/scenario_failure_cause.py": "4b47e87625268e3f85a082738d851828e5c3339e051887c68aa26ffe2b84b4ad",
+    "robot_sf/benchmark/scenario_flakiness.py": "aaef21d6b202c71f271d78176f054c4938deab5fa9e00034b5aba5ef69c74178",
+    "robot_sf/benchmark/scenario_generation/__init__.py": "e3bf288406439d62cac07cb3c6456d1f8b5d627b5173b1d3fbc46bfef67c3853",
+    "robot_sf/benchmark/scenario_generation/adaptive_selector.py": "2236b4044b459ab142185e1b4184deb12648752cdb442eeb72e3787cb5a86046",
+    "robot_sf/benchmark/scenario_generation/archive_sampler.py": "7626f8c3b44917d9ae2a0c8143c7e67c6f893301a0b838d92647ea5e71824825",
+    "robot_sf/benchmark/scenario_generation/candidate_runner.py": "5a102de9d1ef0601bf6572365ae7a07278f5c70b11da6f5e8ff64889c2387706",
+    "robot_sf/benchmark/scenario_generation/catalog_schema.py": "3629347199d46cc78c2bc63c143828c28deee4c214dc41399250867a900c60f1",
+    "robot_sf/benchmark/scenario_generation/catalog_writer.py": "b4587e396b73763b72aa0a59509b752f0494f31ac696565025773e488f239ddf",
+    "robot_sf/benchmark/scenario_generation/persistence_gate.py": "a6d43c4bf4b9203a7e6ece1bf0f4b4df0e95a7800f186df59bf751385348fb81",
+    "robot_sf/benchmark/scenario_generation/pipeline.py": "9a94253367e763868ab4410c544f7330caed7c9e70a539235795618c3ac90921",
+    "robot_sf/benchmark/scenario_generation/portfolio_selector.py": "40af27a6f30ab6b3b92942fbd60cba5e1e775fc85abe03524d4f3fb40930d9e5",
+    "robot_sf/benchmark/scenario_generation/random_sampler.py": "53e9f27f09787c96624c973397e44a38228b4b43bc4f635e1bb597a4eaacbb3b",
+    "robot_sf/benchmark/scenario_generation/replay_adapter.py": "f6632a94b9797a41d49d3d2eed7b6a8fd4526edc9e29dc1d9379d7ab81f2b8fe",
+    "robot_sf/benchmark/scenario_generation/replay_validation.py": "62ac8eb2315d628b721d2ccaedf3034990092fdf574bd7156137807053f313ab",
+    "robot_sf/benchmark/scenario_generation/review_manifest.py": "3287673d56c0af2b1f3df6bf41d124f6f21538f209c9e4d41c41f93ca02a25bc",
+    "robot_sf/benchmark/scenario_generation/segment_extraction.py": "0a54aad3ea8caeea609d6c6b9d11a0956f46ca18593e4502d3fda09c40ce3b14",
+    "robot_sf/benchmark/scenario_generator.py": "d3c13a6ec365dafec9dc9e60335d42133a5fd623c01a3d567f8e0794568f0206",
+    "robot_sf/benchmark/scenario_horizon_readiness.py": "5b1c7687486f10bec0c7277b0dfc23248b32bcb401e5b814709cd1aab82b97d2",
+    "robot_sf/benchmark/scenario_interop.py": "74a3abf881e5ab06bc18626934ca4b38bf7cbe3f4bf01cf10a056fde9c443a58",
+    "robot_sf/benchmark/scenario_schema.py": "d7ec71061a5da8f5fdaf8777f63a52a03dd740d0f80b84146f796750fb890f84",
+    "robot_sf/benchmark/scenario_staging.py": "4981df34a618f95f022b0e00a9e816ff78fb0d25d08308457e2dbe44c16a0f80",
+    "robot_sf/benchmark/scenario_thumbnails.py": "845693ecc77cc9b44afd0428b1e0c10ea330c19c61f218dfff3e2feeb3864081",
+    "robot_sf/benchmark/schema_loader.py": "4da368c4ecdb4ed14c19c0037b113965724cfce940f7e0bf7c716c4f9d61fecf",
+    "robot_sf/benchmark/schema_reference.py": "aaf8406d4fbcb1806888e955901b44df3cbd6f31f7080942077184e76032476c",
+    "robot_sf/benchmark/schema_validator.py": "5b475ae9675a5cb347b7c77ad8009b3df2a27adb656ff9e49cbf45cb02050d46",
+    "robot_sf/benchmark/schema_version.py": "92f3786426262cdd6a259255f58e10bb563d26aa7b10397459eea905cd08b0f3",
+    "robot_sf/benchmark/schemas/__init__.py": "9e1c9a27ac529e10ad7a19725ae92721a11730c4c46a71fb5d4f918f76f604d0",
+    "robot_sf/benchmark/schemas/episode_schema.py": "c59801f01bee17a57a170cc300e846ea0c557258580bdc0c95970f62271b1791",
+    "robot_sf/benchmark/schemas/forecast_batch_schema.py": "95e743b61fdf1a19bdcfc69eb349627310c37854c884a1e611455059281c2f3e",
+    "robot_sf/benchmark/schemas/rl_trajectory_dataset_schema.py": "8db71cf962b8291291e6d1bb22ea579fe797b4c6c8b3221728869d54dda14a29",
+    "robot_sf/benchmark/seed_bands.py": "bb52b22d9581ae21e485d18c6cf87c3a2dc4f89a23d66ac44c49aefc8d452d9e",
+    "robot_sf/benchmark/seed_distribution_report.py": "0f03020d2ae6bbbe1a8a2a063b97890d653d498dd50367f313c3809b842a3662",
+    "robot_sf/benchmark/seed_flip_mining.py": "3c62742274e2ffcd52955390ae89101ca37aa5183fc6116c6d01b074b8bbca58",
+    "robot_sf/benchmark/seed_variance.py": "16578fbd3c1c74234db9cd27b515312f15ddbc879c46989e43e77a718e090364",
+    "robot_sf/benchmark/signal_metrics.py": "1837e7f065091d2a4d750bac0fd1541b3c8e3b262ddd48ab32b2f7afad0198b6",
+    "robot_sf/benchmark/simulator_counterfactual_adapter.py": "814aeafdde7ee6ab1b93bfe9ebcb39f54d36f378d482aa345871386532638efd",
+    "robot_sf/benchmark/simulator_dependence_validity_boundary.py": "fe42110764fc14351eeb2b288cf02119acb4c0fa542a930469de5040e6713557",
+    "robot_sf/benchmark/slurm_closeout_receipt.py": "7dac057599d8e1f8a6b665a8dac9ae43d2fc03069e7f276c54e9302b38bcbcb5",
+    "robot_sf/benchmark/slurm_launch_manifest.py": "916415eef45c131679f1101d559390a5ae11aaf8ed0d55bdb89437841d2b8039",
+    "robot_sf/benchmark/snqi/__init__.py": "8d3532600e3f7470882718322306151c22ee255431ffef308493089c4cce9ed9",
+    "robot_sf/benchmark/snqi/bootstrap.py": "3ff5947214a00294b9aee68a1a21bd3f0ebd55a58569794923ec10b56397629b",
+    "robot_sf/benchmark/snqi/calibration.py": "0e9d7a93407087156196f61fd3fc9e2cc7fb9009a747cf54bd5ecb6487c8d140",
+    "robot_sf/benchmark/snqi/campaign_contract.py": "ebbaf30dca023ca1b1fa9f17b9eae2b7afbf40f39c9b90064e10aac32bc3ce60",
+    "robot_sf/benchmark/snqi/cli.py": "f2912da2988d34fc30477dbd3265dbd5f8f179cc63777877b2cf2819b4b604b8",
+    "robot_sf/benchmark/snqi/compute.py": "7772748d3a46c21fc627bbf6f044a4d6ec7454c159c9bb0f2833df6d94d0d93f",
+    "robot_sf/benchmark/snqi/evaluation_seeds.py": "7b84a922baea474de16c7308dd178bab5a8266ea0259bc216efb2b43837a7f91",
+    "robot_sf/benchmark/snqi/execution_context.py": "7ac6f4d103c8d38b506c75f8f367dda698399a37c6c7b72708a0694fd8e3fc39",
+    "robot_sf/benchmark/snqi/exit_codes.py": "270a99e021bc00a4b775fdd9dd80c847731f5735d16d3fb50f92cae7800cd6cd",
+    "robot_sf/benchmark/snqi/normalization_inventory.py": "12aebf2213bc5a839c983b6f1bb5f30cc5d86ff4cbdf3ba347dfd96fce8b22f6",
+    "robot_sf/benchmark/snqi/schema.py": "0a639578246844934f0b24d282b7e2bb73880e7aab35eb6071895226f30005f5",
+    "robot_sf/benchmark/snqi/types.py": "64183c1114dd373097fd3684186cd978fb09c3f6025d36e4d7d673f62664c40a",
+    "robot_sf/benchmark/snqi/v2_binding.py": "d7b17fb415d068232905576ac2cb6990ed7f539f164910a9a5c74416e9bd066d",
+    "robot_sf/benchmark/snqi/v2_calibration.py": "ff21b5a7a01e15eab8f7a562aa9a0d071c9da2928e05d637ce1f8efb3de1d677",
+    "robot_sf/benchmark/snqi/v2_reports.py": "8abbae19375265715114eb947740dac9cffc649e9a3ad963fbcda3e8cbfca25c",
+    "robot_sf/benchmark/snqi/v2_spec.py": "2766e33966ba76f0d4b206d414d7018c727c57ecb9b2cd6c0ad33764b0c55c24",
+    "robot_sf/benchmark/snqi/weights_inventory.py": "b55a43973547780ca62cd02fda73aa5a1c1c3dc793ea15d7e687bf0d3073ded7",
+    "robot_sf/benchmark/snqi/weights_validation.py": "5f7fb7a1360638b30711f13586f9125df9794e62e4285e487076a0d7a3769704",
+    "robot_sf/benchmark/snqi_scalarization_sensitivity.py": "0aa04330ae75e0e61593b17336808b9d0c5af778225845c31b8bb8792c62ed62",
+    "robot_sf/benchmark/social_compliance.py": "f220025bc55c81ee268807daeeabae60863110adfcd20954e90728491bbd4562",
+    "robot_sf/benchmark/social_preference_labels.py": "34ccf29616e7a34014695832e1f717ec8b2387792626acfe98a891ad52671102",
+    "robot_sf/benchmark/socnavbench_canary.py": "e29afc37d57be45b8b81bf2c6276691bba4988c5313562ddcf382c09bc536b48",
+    "robot_sf/benchmark/source_bound_component_contrasts.py": "24be6fbb2b36db6048f58d39aadedb6278faa5cb39991a373573f4be77b793c1",
+    "robot_sf/benchmark/spawn_preflight.py": "e26c25107dc96174e28370728581194eb776e7764dc801fa62934101f46540c9",
+    "robot_sf/benchmark/spawn_validity.py": "161e5c0d36c0446f89f7bfbf25348cbd67a9840f83967dcd08c26ced24967de2",
+    "robot_sf/benchmark/step_trace_comparator.py": "387c6204f77645c548bf69482358920e3e86839b70a4a16eb5ab05636e12ecd2",
+    "robot_sf/benchmark/step_trace_invariants.py": "6806612aa2623828a7004bb77c905f82b1a5716943efb83ee555523ba2c8fb75",
+    "robot_sf/benchmark/stress_uncertainty_coverage.py": "0ecc94a4136fc680aac2213a7e685a428a6384a7b5a034f47f1f397dfb4d20c3",
+    "robot_sf/benchmark/summary.py": "401631ba38b5377f0475f847a5a655475132259312dbab5ad6c724e869274621",
+    "robot_sf/benchmark/sustained_flow_preflight.py": "e2e12c88dcdac4dda27d952ff211032a2ae4a0054869d060f0ceb2e341fb40b5",
+    "robot_sf/benchmark/sustained_flow_revival_gate.py": "7348f61defb883dd8cf04504ffa17cdce3d5a355c72066da8627dca8cab4cddc",
+    "robot_sf/benchmark/synthetic_actuation.py": "b598b31cdb07e08399781b66bed69885aded908f1fded48e596ee53a982ed5bc",
+    "robot_sf/benchmark/termination_reason.py": "b5cb01d28d773a7b4899236fbb28a03af26b92b41faa6750f1a506e2afc856d5",
+    "robot_sf/benchmark/three_width_doorway_application.py": "1c5f78eaae1ecca5697e3e3fc096fcab0dcaf60bc7b71ed4e3f6aeb8c5313c8e",
+    "robot_sf/benchmark/threshold_sensitivity.py": "33665860b61ec0785f5056163bc92d1f11f9deb931731bb364104a36cd5a9a5b",
+    "robot_sf/benchmark/thresholds.py": "c02974348d956dae9b7410b2cd3d0725ad526f12ed6249b7dd55efdcb886f12a",
+    "robot_sf/benchmark/tie_aware_ranking.py": "50d1d54224df9a61392ba7f2fbc90858a9da60b3cbae9a9ba7ccf7fe589b7aa4",
+    "robot_sf/benchmark/topology_gate_paired_preregistration.py": "b5b0d68ca76ed0fc30a6688496e84eb9d2001b49d1e7cfd482a0f86cd3532e4f",
+    "robot_sf/benchmark/trace_dossier_cell_binding.py": "2e2ba0cf84e024e0d8e22a79487c8a29ce7e963d9a89d271d1679be280b63b41",
+    "robot_sf/benchmark/trace_dossier_package.py": "12b03400d67e4a1e8b5862aa5be8deb24ff6b14c46c66fbf9a287b4b137ea042",
+    "robot_sf/benchmark/trace_dossier_selection.py": "d6506a3ee3a4cb8faf2d4f904132b2ba45c727f359f9e1787e6651058da730e7",
+    "robot_sf/benchmark/trace_exemplar_interest.py": "2090b14e3008afb98e81557767f940c4ac23757f88830e082633e70991ff4b93",
+    "robot_sf/benchmark/trace_predicate_export.py": "bf69a59b27e23afd370677736d4a672739305c758d5435e7def9e16f562932e2",
+    "robot_sf/benchmark/trace_reexport_packaging.py": "af5221fc1edeb64d32cb25898f775a475d8d3c618525462fc192888f42539222",
+    "robot_sf/benchmark/trace_scene_figure.py": "86cf2a8e5b5c674874017bcfdcd7756f041fabd49a9ee477d108fc9289d6239a",
+    "robot_sf/benchmark/tracking_precision_contract.py": "dd8af6e99594e82f1af57c3d5f65721bf7a208495de39f4e58896eb06f203a4a",
+    "robot_sf/benchmark/trajectory_panels.py": "96c57252edd980bbba1a26b21bad3f185d490add40a9b26a09cbea466ed792a4",
+    "robot_sf/benchmark/trajectory_verifier.py": "67d4bafc0b7378e29977828758b3c9d8e7b07b610865554ada3f366f8225d514",
+    "robot_sf/benchmark/tuning_effort_history.py": "dfbcab2c09ea7b92e087fa16f7ba7f6b7c2208e291f958a8601692600bbdcf4f",
+    "robot_sf/benchmark/tuning_run_provenance.py": "817ab319b9bb469e333d7ade3564f198e7759db28bdf7d30d6367c5da5097c1b",
+    "robot_sf/benchmark/typed_snapshot.py": "e93c30c59adc9f6aaad375e4e0c83e3e975e5997b72325f4e70cec8c5284d0a1",
+    "robot_sf/benchmark/types.py": "034cddd6ac26b64a7a4ee5ffacf1ddc9ae95a4dcaea6a3d0a933290c9b931d10",
+    "robot_sf/benchmark/uncertainty_safety.py": "748fce0e34bf31313a7e91531350589f140a4981babc3f774a069956b0b90ee7",
+    "robot_sf/benchmark/uncertainty_source_readiness.py": "86c390b88855a4a5d105531c31504465f780de1f7147cdbe6a2896dd58265d75",
+    "robot_sf/benchmark/utils.py": "7146031cdff2925fcc4c7988ccab39b2b67e4d387fcba856ea36343d35669b4d",
+    "robot_sf/benchmark/validation/trajectory_dataset.py": "2fff4d27421bca0ec108d02bf21a501329e7c4deff3b9e29899aa7638a49c6cd",
+    "robot_sf/benchmark/validation_utils.py": "9a08ea93941035abdecd54242c806dc04410b9c11d6de72595ddf0018f6a405e",
+    "robot_sf/benchmark/version_utils.py": "5e8f20e4aefda609f9234528af3ac89587e6294fba5ca6363c566eee5f93e613",
+    "robot_sf/benchmark/visualization.py": "e390108a5cd450e0b2839db57b63d9e471ac0104e77da068cd3d146c93aaa07d",
+    "robot_sf/benchmark/zenodo_publisher.py": "d199f0ccae45cf4e10ac20cb31bdb56d20182b41ce3ac8880bf1da23b99908fc",
+    "robot_sf/cli.py": "9238cb2fc4ab740324f37c299a9bb6bc6b707fc16e8b4b78e37a6fb966f7d2ff",
+    "robot_sf/cli_datasets.py": "990671e27c58cf81e975eb1b2cae06c96c7a903117ebdb3df44f4c22fbcad6a4",
+    "robot_sf/cli_envs.py": "8da097d6dcdccf8e808f3738bb97ed0cf3a5c455b93bfe37b38fd5eff4c1990e",
+    "robot_sf/cli_models.py": "534fcaf542342372ecf1ace623300007d25cd661173daf88ed5acf627d013763",
+    "robot_sf/cli_planners.py": "948ffc03583fc5a2409a9106df918c466f0f2c31d1fd270e3ba1bd00bd717237",
+    "robot_sf/cli_scenarios.py": "ea29f9f6589108a8997b4cea2e1a4dc308bf2e8dc24324cdf875b4c098f1b614",
+    "robot_sf/common/__init__.py": "dde3ff84f3d9d0671d404ea12fcb4bddffd40e632a7e98adee3f9a7b26d49df8",
+    "robot_sf/common/artifact_paths.py": "465a4019a71c1cf89a86730abdb75c7b4dc652b18f57b63a3f4b2c789bd6ec05",
+    "robot_sf/common/artifacts.py": "89b6b1cfa3f320d7ab3e4983620971b9068fa39f8a16b3c519f002fbf7d33d48",
+    "robot_sf/common/atomic_io.py": "0171cefc26972668bbda0d0a9ee431e1b8b433442e7f2802aa154fde63efc9db",
+    "robot_sf/common/compat.py": "201bf6634f2f3b44f422a511ed0e1ff37b4700f955f9d4b2e811de3b23d49331",
+    "robot_sf/common/errors.py": "1854100f452983e7b6a5783a4c4e0f6140b1ef03a108128da71e97dffcff7e90",
+    "robot_sf/common/forecast_variants.py": "b45f1d3f0327b4cc02140e6560bd8690176a213d4f738dd3dffa45a77283074e",
+    "robot_sf/common/geometry.py": "7546bf8962c24d26ae6b2545897784b1f551e823bded99d968b25b69a47c6e76",
+    "robot_sf/common/hardware.py": "267b9944d74e3b5b21b7f3d411d0ef5344b55cdc982f190e4f10378aa54e1663",
+    "robot_sf/common/issue_provenance.py": "de6ad002f47b27423eb28451072ef7c863e8b96c15acf882e88883cbd0085955",
+    "robot_sf/common/json_pointer.py": "2654b5376dff3944ab88579a498f2015f0caab0ff30ccd086d2318e4ac614241",
+    "robot_sf/common/logging.py": "0b40182eb6ae51cc6489feac76eda3a4479da8e65406b7d57d9016c54166549d",
+    "robot_sf/common/math_utils.py": "fab1a79c68b77db6102599bab3fe79254899b526dc46ae48c0f2f8c3584c637f",
+    "robot_sf/common/matplotlib_utils.py": "3cd6b0d4c27dc7d8efa747ba364f62b3970c9934c4f286040e15d021f106eee5",
+    "robot_sf/common/metrics_utils.py": "1dffa023595ad95a180657c743e35d725ca0ebf01254bd8abc77cf9bb3b876cd",
+    "robot_sf/common/optional_import.py": "573463a558711533cb4c84d19bebaf019e04bfd59b45fdd19ee4c8b77053589e",
+    "robot_sf/common/pysf_geometry.py": "04708a5cb07ad48d7f0079012c880ca5636d35bd98810457e6fbe2626d28afcb",
+    "robot_sf/common/robot_defaults.py": "789fc4f8e869be9cd1358540c0487c176dac05c26f4fd445bda1a8e57f3d326a",
+    "robot_sf/common/safe_pickle.py": "0a7a3c92bd8dbbfb7f9a06ca073aeb6208b61e89ef2bbda16198548204d0d989",
+    "robot_sf/common/seed.py": "367d005cf7650a7382a04d563614240795561861838cc8078cfd1cd671050d5b",
+    "robot_sf/common/string_validation.py": "e62d918c715d9cd63a5651416f17e4c27fe718d10449504ebb07250660400225",
+    "robot_sf/common/types.py": "9f69818be957a13266ced51163a87e129bc2aea0ec53c1fe90fd4b20268254d2",
+    "robot_sf/common/validation.py": "5b57e6c773fbbbf41b7d5142df45dcfc9857f65a6685b1fcd9198da98af1f263",
+    "robot_sf/core/__init__.py": "7c51bcd20fc0f345e3e8fa835af1f0745dd03be148b4ce7fab75e31044cbcc54",
+    "robot_sf/core/contract.py": "34539d15383659f31fa4a77bd3a8c74916f140909f4b6374d49c3e414fe0b5b6",
+    "robot_sf/core/time.py": "4783aad7dfcf6eb1523f44a43c4aa4c1be7f49720448c1885ac963d79bf04fc6",
+    "robot_sf/coverage_tools/__init__.py": "e2399c1f6d57033700ea7b073fdb252410ce38cefc9bd39b81fa8f4bc23a6f9e",
+    "robot_sf/coverage_tools/baseline_comparator.py": "d25813dd408c68768f0d673f5419b6f1bbc979e5d7e3726632985882727ae781",
+    "robot_sf/coverage_tools/report_formatter.py": "1689e21dbb016ecc4ac06250aa52283081fd76775b317385000224817c41441d",
+    "robot_sf/data/__init__.py": "0b4f5f8dbaf65033d68bb3367418638ca1b4f2b94e52ae1aca9d7c556235eb73",
+    "robot_sf/data/external/__init__.py": "a7ad4bbc09935895b5025b26d0d03c2664b15452501661e18a4374c17bd8b348",
+    "robot_sf/data/external/atc.py": "18f59e7eb1d5990fdb2a9adebc6eabbfc4217911abc578487501de5c910868b2",
+    "robot_sf/data/external/crowdbot.py": "767f75459888ff09658e8b36a0ba3a7cb90d36dc36e7b407cabf10b5844d8ff9",
+    "robot_sf/data/external/eth_ucy.py": "6d8b3739cfb6ba1a4529f5a896b8cc00783611fb7a9c62dd51e32be7f83ade66",
+    "robot_sf/data/external/eth_ucy_trajectories.py": "a062eb3c3d6e4c807c98316827027d8938e9a2cd0763500346e1ca0cfa9452c4",
+    "robot_sf/data/external/ind.py": "e723938c5abf1108532723c155c1063c43fd1f4de1dd745f94b23b2fac56d8c1",
+    "robot_sf/data/external/paths.py": "1390d10abe91a57f30d133f8c7df11988d41451814742367030b8eefb82de56e",
+    "robot_sf/data/external/provenance.py": "bca76a29ef37a5ac0c67bb8607c89841bb0538bdd426dcdfea2ff10ff80fa868",
+    "robot_sf/data/external/recording_shape_contract.py": "d0326f95bca569ac73ede44b9ea2de277f388b090d5260be16aefc8c606da27f",
+    "robot_sf/data/external/scand.py": "3a2b20a41568063ccbee9a9a925ed7489389d4760d8828e379cc0ca5d7207f3e",
+    "robot_sf/data/external/sdd_trajectories.py": "e258b3546365b25dc8a23d0f2dd035cdfb234a0d189e3e98de17fd6d37e29965",
+    "robot_sf/data/external/socnavbench_eth.py": "39129bd98eeb00ee594c7bb6d3471a2e28c10c674f1675a35ffd21c68db2e14f",
+    "robot_sf/data_analysis/extract_json_from_pickle.py": "2f62e9559082991bb415618de64c185a656a64f489e0a5aeeb015886bba95617",
+    "robot_sf/data_analysis/extract_obj_from_pickle.py": "7df18a6c0be98944c4445eb19b0abc1b9d19cd8e0f8795bab3ffd8865c6144af",
+    "robot_sf/data_analysis/pickle_utils.py": "b3cd2f4dc9a6ebf1f04d23c6bc184b945fa82d43dbac2482ddfd159efc2580a6",
+    "robot_sf/data_analysis/plot_dataset.py": "8af02132aee8d9c50b0145d4634249bdeb2bb871070097d893438ac52fcb71c7",
+    "robot_sf/data_analysis/plot_kernel_density.py": "5d93899769e0b18ed724793a0de199e2a3710f9863908bb20e8496bf39c9fe58",
+    "robot_sf/data_analysis/plot_npc_trajectory.py": "cd005485a7e4e4fd421098911a56b1b6c818fecd34b75773d8ef6e95028b1d80",
+    "robot_sf/data_analysis/plot_utils.py": "1553097ae88c282db51d042d96a3a5b4952dc09f7558eb0a951e336c942edd2d",
+    "robot_sf/data_analysis/recording_analysis.py": "305beb4d011530779fe54340ccee799a8f1808d3fc49d9da380490ac9cb08773",
+    "robot_sf/data_ingestion/__init__.py": "aaf3eb162cab4e8338da1c63124dfd1a3627ec027f43e641ad4cb9c052f6cd51",
+    "robot_sf/data_ingestion/real_trajectory_contract.py": "2b56867607fded010f283eb276d3deda2e7450f6e4a78ebb4ff0c12f5db25aac",
+    "robot_sf/docs/__init__.py": "3f817c1091a59dff4f0722b7b80584ac84992e017d0f496dc7ea29b5280ae855",
+    "robot_sf/docs/helper_catalog.py": "bedcedfdb7aaf3a2d09d27ab20f8ace792905e21573db01c08a1cb828aa0219d",
+    "robot_sf/errors.py": "44e913eff80a274d1bb10b26df41ecdc77239920235877e0cac45201935bee43",
+    "robot_sf/eval.py": "37394666ac7950578b9237d673b8ab3d2d8cdf4795e416b3c31e172cb8205112",
+    "robot_sf/evidence/__init__.py": "80cf9e6f9cd5217dd698f66146c85fa9531757d9a6ae00e1ff2f422fc8d8cab3",
+    "robot_sf/evidence/distance_convention.py": "6eb54de66f28861b75daec4c295b9113e9972047352ce1dfa86f95cd6d8e03da",
+    "robot_sf/evidence/environment_manifest.py": "98efeb0b8eead2805c10329b735619cf7a71f14a19639e30cb9595201204511e",
+    "robot_sf/evidence/historical_bindings.py": "1e404d868492c1ed1ba35329349eabfbc832c59fa06a6a73e47e1257a22155ba",
+    "robot_sf/evidence/writers.py": "3fe2212348be7ecbcb9cd5c68d7c480192bb1f2e1c26acbc3008cf9b946a9153",
+    "robot_sf/examples/__init__.py": "7801a973396b2980b28698b34940ed9dd4ffb85cc51e07292c57e9cdf8de4933",
+    "robot_sf/examples/manifest_loader.py": "7242fe8b3ae57d0f62c46492e15b552ae23a49c86fa89d8b70d4595ae97bda78",
+    "robot_sf/examples/prerequisites.py": "d4afaef51ff63527ef2d39ffb4ba909ed1623ba0acc1be481a1c793b543d2477",
+    "robot_sf/examples_cli.py": "0d6a67535bb205df7c81cae14e641ff8eccea8150c0bb3ddf3ded9910d0ee50b",
+    "robot_sf/feature_extractor.py": "6507a280cccaf5134c51132a568da9f5474928c84c17f56d4a1bf98ba5e7a63e",
+    "robot_sf/feature_extractors/__init__.py": "ce2a0ad7331de1d686e8968a6083387dfbf44ad134420dd99682055063088875",
+    "robot_sf/feature_extractors/attention_extractor.py": "18ed7cd2f73c79806c80cd4f29d8fd84d7081a1706873f33107421e165d27f02",
+    "robot_sf/feature_extractors/config.py": "a1e59a384171b4563e417b038d8aa3e7f41ac1450134b41d7b460c49f94aa617",
+    "robot_sf/feature_extractors/grid_socnav_extractor.py": "2696fa866f8e67704cef868a81035f78091dfa29f0910dd5c22ab6831f0c6fc4",
+    "robot_sf/feature_extractors/lightweight_cnn_extractor.py": "b144f423e02101c9618da07ad15107ea743981f2c96d741fee6f2232cec2e6af",
+    "robot_sf/feature_extractors/lstm_extractor.py": "5df3268d44d7484153499d2d24510a0daa95ba921b17c35b7cba46e81072d191",
+    "robot_sf/feature_extractors/mamba_extractor.py": "8120c8d5ceca670e1b8201bd6f464fe36f2ae7db5d1bc9e0ed64aed4b8a47fb6",
+    "robot_sf/feature_extractors/mlp_extractor.py": "775c71cbd917aa003d6083ab644c43525cbf1290c01f370732a4c131f01da7e8",
+    "robot_sf/gallery/__init__.py": "cfe2e8703b9cfc4eee8d8760f972f1f79bf3300fb610291070321de951880f3f",
+    "robot_sf/gallery/builder.py": "71e766574e548a327507aab8ec7e0211a3e1e1e4f8aeedde0b76747b4a5f7f65",
+    "robot_sf/gym_env/_stub_robot_model.py": "b85e275487a2096f92da85bf753f04f857d5317f61390aa732ef8523f35e8205",
+    "robot_sf/gym_env/abstract_envs.py": "ee4fd59c0e55991e86ea59659415a2e3149e110a382f4f266721679fff86fa21",
+    "robot_sf/gym_env/base_env.py": "809f464cf177c0bdd0f0990bcb544e0f4fdb88e90c64b81a29d6b194e2eff793",
+    "robot_sf/gym_env/config_validation.py": "45feea84fe258c1798661a9a5d78b4497030ee3c35a1707dff0651a745b1b5b7",
+    "robot_sf/gym_env/crowd_sim_env.py": "a9b9dbf65b786a672b444206b9227080c90f1e5a8ae368ba77734bc41cf677bd",
+    "robot_sf/gym_env/env_config.py": "422bb95bfb60d457fcfc71bae51b9b8c5a44b28fcc5ecf95e4ed1c6aa200d187",
+    "robot_sf/gym_env/env_registry.py": "d2883dfec7ca536b6d8e4cfe391169a6e7cd20227af34cc064addaf2a5e53c5b",
+    "robot_sf/gym_env/env_util.py": "967b5f19b47080075fcdc3944051e514cddd4f9da1b362d3e9f7dde8cfb62976",
+    "robot_sf/gym_env/environment_factory.py": "67b52c39bec4922d68fd1b26f61c57d17b6f25e655023e4286e4032d057fed58",
+    "robot_sf/gym_env/multi_robot_env.py": "9d9874b0018216fbd3b6d8eb8c7a65e91b279bcf6ce01ea42b94787669687c66",
+    "robot_sf/gym_env/observation_config.py": "f605979804e45bf4534458024cfa75ac6aa2745ed24744ca1745767a2c1285ad",
+    "robot_sf/gym_env/observation_mode.py": "4f041620b9d96bd5468c6d3027ee22ff23a02f161995bd25ba50ffcaa0844789",
+    "robot_sf/gym_env/options.py": "63947fa7df63e840acad1fbc99c0e4e8c6d1fd9f6cadf567e27699a8f917eb30",
+    "robot_sf/gym_env/pedestrian_env.py": "dd82562630546c9003d1e9b313ea2cfc1c40129952dc2de7b1579d89a72987ec",
+    "robot_sf/gym_env/reset_metadata.py": "f99b3523f1576fe5b9f52a95ad05986c79fbb0fed049e67f13714e40269d1981",
+    "robot_sf/gym_env/reward.py": "c0c4b04d75ee3024c92e2c3bf3160d6b5cfcdf153aef34e989eae182737361b5",
+    "robot_sf/gym_env/reward_alyassi.py": "eddaf15bd95a140b73f891b9cd8a054b9eaf3b2cb04d475e3e7ad12fcb46c4b7",
+    "robot_sf/gym_env/robot_env.py": "6684e721060986759efff99446b432d6d74e71a87cdc9b7d99358d362398ec7e",
+    "robot_sf/gym_env/robot_env_with_image.py": "0e77d86d67c7a9155f1fa992dddab591ba6840a633eb9fc9ea4d6612966c88f3",
+    "robot_sf/gym_env/robot_env_with_pedestrian_obstacle_forces.py": "dfc90b062063eb02c80d68cff04eaaaa2e9e8a48f2e7c993c514340febd0cafc",
+    "robot_sf/gym_env/shared_world.py": "7826080d2a3b7a8caa1695b9fdda4f48e62ea1d60b38572a02f302ca96733fe8",
+    "robot_sf/gym_env/snqi_proxy.py": "7cc6c34a7a7df40d7fffd83f28cc0af7c850bd068ba9c667f2b95078bdec5fbf",
+    "robot_sf/gym_env/telemetry_config.py": "b9b013dece7281504a2256fa8e98c3c7d114ff7c3c303d00e881b0b9538137be",
+    "robot_sf/manual_control/__init__.py": "e1b0ba80e22337088aa63b3fcd1500d40500ca0504f749ebfba19ec19a1a0d02",
+    "robot_sf/manual_control/baseline.py": "fcad3b4625296db3c269ed944d896091fe596b2ee1e44892eec7f2ba3ad48ce4",
+    "robot_sf/manual_control/config.py": "737c5a8b002493e6eb58d73eb59dcee65771803cce4e6c1642b2605687daf0f0",
+    "robot_sf/manual_control/export.py": "0a624d7c804a60bc5c722112c5283362852e77b62f55adaef1fe35f530f2f745",
+    "robot_sf/manual_control/input_mapping.py": "8982115d3ddc617f81ff0dcd316e5e9c2778d2939d73001f6bdfd7551420c8f5",
+    "robot_sf/manual_control/manifest.py": "43635b1ea6d03d7921ab578da47471d44c26912f456a5b6346a144c0f08a5caa",
+    "robot_sf/manual_control/modes.py": "148c9bc43257a0e7ba3cd61b7301dbb162c894ba30b2e275310bbef89ecf91cc",
+    "robot_sf/manual_control/profile.py": "f7f9bebc07b7adf7f0aee24cde1eff873c535748f999fb7cc72b5dda9fd670e0",
+    "robot_sf/manual_control/pygame_runner.py": "0854a313eb6d5741046a058127e952853920ff0a4afd54216195b6426765bfd2",
+    "robot_sf/manual_control/recording.py": "280dd95d89a2664b456a1142aa0dd2be8237c6004e418d97963f716201b5fd84",
+    "robot_sf/manual_control/replay.py": "1cf855d7c614a962191f7029a8d5d18ac054d25b68bc3d963082f755cddfa608",
+    "robot_sf/manual_control/rewind.py": "290609814c762036d80a528d9a2e87052811de4998c258cc431b62f2ac44408d",
+    "robot_sf/manual_control/session.py": "cbe42cec6df0f226f6986ae1f8a2d26b2f6cbc44a8670a5d6b91407b7b5adffa",
+    "robot_sf/maps/__init__.py": "584419e5993a118e9fd9963dc233050e1178ec1c09ec6e71a1d817ce0384f0a1",
+    "robot_sf/maps/import_svg_from_osm.py": "0bbc3fca099370ae2a5ba2a0098a2634c1e2ddc89534811b1e75761c0f1439c4",
+    "robot_sf/maps/map_visualizer.py": "bb0b223af2d96350a0c7c894bc4df9efc18245e295618159ce2b64c8f3432df0",
+    "robot_sf/maps/osm_background_renderer.py": "8d181038b7d8bf896aac3e052ca7e66c3d5abd3e325698133b5f0c7fafb57dfb",
+    "robot_sf/maps/osm_zones_config.py": "9f7c555332ba9574c81511d06210edef458c864f12373acffc7bad6acc5d0feb",
+    "robot_sf/maps/osm_zones_editor.py": "e10c3661f05e5fab0a148b348e795ecd34192d1dbed27d774529233740703bdc",
+    "robot_sf/maps/osm_zones_yaml.py": "2e0df7a72d1ba7b6dad26027dbe30133e5d48452b6b9637afd41f144a3ca9ba4",
+    "robot_sf/maps/verification/__init__.py": "823532da68fff7c03ca2b92cc1caf44b0990bc7e2d3818e5a7076b0603420485",
+    "robot_sf/maps/verification/context.py": "f9988538bfbe710706aad5162821f403eb2276c5dfaa1f9d4635880855d730f7",
+    "robot_sf/maps/verification/manifest.py": "3101f5e463db402b21364dc37de3f9b6fcbfe3bca3fee7bed1a849b44d508bfc",
+    "robot_sf/maps/verification/map_inventory.py": "6d17bb90bcf1148874ce3f5fa8ee3b19976a403ab37aaa48a49cf329a3e4f267",
+    "robot_sf/maps/verification/rules.py": "c0a79f86df9ad92657af7577f7b8bad10b91c6768b2d07373659169f18d0377e",
+    "robot_sf/maps/verification/runner.py": "481f6744c8fc5e17f4f18377241f982bb38dd9b18fe9881b04ed81568db360fc",
+    "robot_sf/maps/verification/scope_resolver.py": "d1f0773b16eb59535b62489cb1e09e36f22f7d3de33f4ed63d05912a451c3152",
+    "robot_sf/maps/verification/svg_inspection.py": "38c453abf05a9314e51100e8aeb1546849606858b9aeeb9940c514b63f3e4881",
+    "robot_sf/models/__init__.py": "90c7241e502a203ba940110c9a0af4f2dcec53b84cf37323abef77230c49356b",
+    "robot_sf/models/preflight.py": "57837cdc454fd192557550c030fc20fd86496facb76c09c7cf3a5cea0755151e",
+    "robot_sf/models/registry.py": "a876f8c5052d25021ae011d7d0f2b264a0d40c96482f8e34084c0dfbe1a526d3",
+    "robot_sf/nav/__init__.py": "db14e98caaed73235b342d3c21501ef36c25a6f2e93da310485f9a9ebf9ad1f1",
+    "robot_sf/nav/adversarial_route_generation.py": "a1914253e57e3786a1f1e845707249cd374347de42f2ef41d50f7ce19c7d6410",
+    "robot_sf/nav/baseline_probabilistic_predictor.py": "838de20e26b52e55dd1629ba3efdecfeafa68a2d21bc3e0e7d57540b1686843f",
+    "robot_sf/nav/biased_route_generator.py": "bf83d3f5f5ff398114b9ddda03cf4b5fe561998a2e8f4f2e2ab74423c354ada6",
+    "robot_sf/nav/footprint_diagnostic.py": "5207872cbcce5cede9c521a06402b829cce7ba44890e6ec2ceeb31c736f1dcde",
+    "robot_sf/nav/force_residual_intent_predictor.py": "64d3ce52fdd44084b4bc1c1bd7165326e1649abaab16578cf87cf3d522afd3eb",
+    "robot_sf/nav/free_space_sampling.py": "ba708d590053ab314bfe42089840b4879f5aa9b8c735fe465c3c2eace344ed15",
+    "robot_sf/nav/geojson_map_builder.py": "c25d3207b5081212bf137ddd90d76266c5d4a811590178bc7541537e47566460",
+    "robot_sf/nav/geojson_map_provenance.py": "395dec694cc9259ebc12d33a7f1690ee7842c28e0822f104a1f14455bd34cd12",
+    "robot_sf/nav/global_route.py": "62ab6fd13c8f029f6ae9ff84d87332793ce0648fc3fabc1621512942e4c290c4",
+    "robot_sf/nav/map_config.py": "c3c8eaa2819e77da7dcef544bf22ae746e34ebe18fde0f78ff4ee388b2aa662c",
+    "robot_sf/nav/motion_planning_adapter.py": "7cbb871baf88ff6df22fe37bc5f7ff34d6135427c2152f96ed974af51e0e6245",
+    "robot_sf/nav/nav_types.py": "81272ecf5f6c9e4b211013add9f81aef834a311cfc5a3898d2714ac0c717c1b5",
+    "robot_sf/nav/navigation.py": "8edcf2ad7e017e5ca6c70e4c54ac1d4c8a77fb704ce25df0d29f1d8769ef0762",
+    "robot_sf/nav/obstacle.py": "4b40fe57483e2e39733817ecc301f1f9d1237d1b2c8c5f26b6b6635117537e55",
+    "robot_sf/nav/occupancy.py": "8b9b6f7a52ec4fb20ec22636f9f9c2b33875bc001e4bd76fc587a4366b43203b",
+    "robot_sf/nav/occupancy_grid.py": "ce05d06b89343e031f5bf9182b038ee2ce23bae77e031a634db2acf0d7f045bb",
+    "robot_sf/nav/occupancy_grid_rasterization.py": "6e211b1b49bf94b9f15ed9eb4361869514b39d105ff188883944612604a5f86a",
+    "robot_sf/nav/occupancy_grid_utils.py": "b7345333b482059675f7d88b276f6dcb8bbd4951d048196e635ed9ee4a26275b",
+    "robot_sf/nav/osm_map_builder.py": "968f9a7999c6020912039303f4206083542f60fa2e9d2f2364b02d2638998b22",
+    "robot_sf/nav/predictive_types.py": "1726c351e81090670fec25f1df897b6d014c7ba5a7d958b98b6fe1580c7c8bc5",
+    "robot_sf/nav/proxemic_costmap.py": "72289e7cbe980ad2e4d87d66481c7f7e68c39ba1c58e6e510bcab009a1e820c5",
+    "robot_sf/nav/spawn_clearance.py": "ae708b1d689a6206906bb72e4ef28b74af8a9252526c97bf0c8f087a4e64e9f9",
+    "robot_sf/nav/svg_map_parser.py": "9d6b1e71d2f2d60a3b9de831a8c5244c6d4b83735c7f1efe9854dd34c551a135",
+    "robot_sf/nav/uncertainty_envelope.py": "4c6e8d775808d92501205ed60e03dd77f7f48cceb68e832a4965b7193605a95f",
+    "robot_sf/ped_ego/pedestrian_state.py": "9b108ee9e88a0aaa85f4c58b318160d68aa031a7c51b4373135d721923de627f",
+    "robot_sf/ped_ego/unicycle_drive.py": "7111e13ca913cdf68690aba631cde4bc8072b801e14178e7625764aae5a55470",
+    "robot_sf/ped_npc/__init__.py": "3fb387c9cee988b9f70f77b69a9beffae22d9d8536bd111046cbc2d11613807e",
+    "robot_sf/ped_npc/adversial_ped_force.py": "5a670c12a2eb8116ef50d2b5de1c4bdb67b2a3408a6cf5352e314b1036eef7bc",
+    "robot_sf/ped_npc/ped_archetypes.py": "be60411bbbbfd8dd53a69fd909ac2cdc1de2d28b2bda8611250c46a03c56919d",
+    "robot_sf/ped_npc/ped_behavior.py": "34ebb6394ef831829bc76704980af44e15c63a90cf6416e3bfa9329cf938348c",
+    "robot_sf/ped_npc/ped_grouping.py": "7eca787967191cb245ec805336ac82f6b94304abf46ab12a346520e22c730dd8",
+    "robot_sf/ped_npc/ped_population.py": "3305a492e670f4a0535556150e0348788727aae55c65372c20a4152a5c91cdea",
+    "robot_sf/ped_npc/ped_robot_force.py": "73ec0e40987f1a2636e970dcc3640377070af784346b55c08484692fbee1c70e",
+    "robot_sf/ped_npc/ped_zone.py": "52b0fd9b158517368acb1d586d4fd6f52ce8d9e8605a8bad405b5ef45a065bb2",
+    "robot_sf/ped_npc/residual_adversary.py": "2d51b2236b9c6c98fa70b1946d21013b9764724dcd9ca0b3d74f55ed50fc15b3",
+    "robot_sf/ped_npc/residual_search.py": "61682dd7c970af1ad1922aa6376341e4d7caa479c25fa1a1d2c1e0d74a89a4c3",
+    "robot_sf/ped_npc/spawn_capture.py": "8b849519f469b7e96e3ae9b7d90798661295a44c10360f213190ff48f0b10938",
+    "robot_sf/planner/__init__.py": "d15d82bfa45b4bc48059ca27802757d0b2ae3c86c34a10427ce4d7a26aa85293",
+    "robot_sf/planner/adaptive_proxemic_selector.py": "58382dd73403c74d913fe2df910ed58a9447ae49c6d504ace15f0bd3a066c3f8",
+    "robot_sf/planner/anisotropic_gaussian_cost.py": "01850e8db5e6b23b82d93069e3eaded556379a8d1577477d874da9b5c1448e22",
+    "robot_sf/planner/cbf_safety_filter.py": "971d741692748b413e57c9d5deb627733dbf70d5217d5785b101f168301d71ef",
+    "robot_sf/planner/chance_constrained_mpc.py": "ae9dd032531ad60242b97d28bb3714b6f9cb3004d6f18de944771c30304e0faa",
+    "robot_sf/planner/chance_constrained_mpc_provider.py": "24ac4f80ee386afffb4dcbc7859238c4c142afd551efafcce4224a495374a129",
+    "robot_sf/planner/classic_global_planner.py": "d8608c1cd45766267698dc2db1916bc0338138c34264f5d474f2f6d1a1ecc438",
+    "robot_sf/planner/classic_planner_adapter.py": "c7e4d59870962bd04cf21f79481b28c8bf379386863aca136ad1706e1b13b8ff",
+    "robot_sf/planner/clearance_geometry.py": "aa7c2257766999bf95346bfe7def8c182fcc7f4e439b742f97f4cfb754fa03ce",
+    "robot_sf/planner/constants.py": "607e581ac4e50109cfe42282efe89f18d50981559b409b9608b8bbc2c79dcfd5",
+    "robot_sf/planner/crowdnav_height.py": "f655fcd612184c1da370fedf5c7776e514491209082a16a79b748033c3104952",
+    "robot_sf/planner/crowdnav_pred_attng.py": "f4b8e32d08d8b7614658e9e053cbf82b7a280b590dc461403623b4d9b8762e15",
+    "robot_sf/planner/diffusion_policy.py": "38b0187bb47806525ac74ed4026ade7da63090ec227ed3991430b80328e9f48e",
+    "robot_sf/planner/drive_rollout.py": "2958d3a104f46a39be3cafa7ffbb85102661572e7a25ab57e9596e8c3a565f24",
+    "robot_sf/planner/dwa.py": "1a4e7a710fe0032986e26a0a2f59f6cfd8195cd3dc5b98aa12cebd59513f3a02",
+    "robot_sf/planner/fast_pysf_planner.py": "17633fd271f5926d66f80edccd0253f7a7ad66daad49f3f47d91b9f10e24a6d5",
+    "robot_sf/planner/force_coupled_potential_field.py": "fbd2c7bd24dbf565f14d24d9f07b5e9a0c073eeef18122b8a9781f58e8b31a9a",
+    "robot_sf/planner/gap_prediction.py": "50fcdadd112420f70def6396fc090327a323b9234301ac8fd3292480609bcd88",
+    "robot_sf/planner/goal_target.py": "89c696816db525eefc9ef332591447fbdf5d5c303cbaf80bd23cb3c369181f54",
+    "robot_sf/planner/grid_route.py": "a6403115ffa6db25ea2cf8704786f1ac42a91693a436aa2b67b5dafd1ee37322",
+    "robot_sf/planner/group_avoidance.py": "3b6a73eedccb88770423b794128f913733b44ade1383fca2a2973ac23cf74e84",
+    "robot_sf/planner/guarded_ppo.py": "5805182501285225a16ebe7c1a01e0f6ce4a2f8af58bb271d2eeeaaadd9c8ff0",
+    "robot_sf/planner/hybrid_global_rl.py": "49553d2c44b52694cf4eaedc28eeb871e5233bcfc3b6d0253131b9e839e09310",
+    "robot_sf/planner/hybrid_orca_sampler.py": "e377b836f5705ba110de70ee9425e4b5a49513c403fd5ca038f5dbb238c13a95",
+    "robot_sf/planner/hybrid_portfolio.py": "6b931b7f4f854b8974723773a35a3e75ab4769adb03acb8453869efd16b9ab4d",
+    "robot_sf/planner/hybrid_route_corridor.py": "1fd322da5f4b52ac3cc743e93c2365550db9fa0af3ac113571134c64b9c709fa",
+    "robot_sf/planner/kinematics_model.py": "f7edde06e07f157667eb0a1a6fa463b6e99df3af69d68088498b15e350b577ec",
+    "robot_sf/planner/learned_gmm_predictor.py": "76de0fdec37799506cf993fa856b1e1df2f4545efd3febbec5531e8dad2fbde2",
+    "robot_sf/planner/learned_policy_adapter.py": "6bf7188212218d6a0f99a7c60aa7290f64e597bf5d4a7aeda631a8e3d2a40fb5",
+    "robot_sf/planner/learned_prediction_mpc.py": "b357166b5690e532b5c49aac1fab99014832ae5cc5a94e26fdf8ec07a0f15597",
+    "robot_sf/planner/learned_risk_surface.py": "5726e18885100c5191c9afae2e3d2bea3fe1b7df5853cf422891ebde44933def",
+    "robot_sf/planner/learned_short_horizon_predictor.py": "4973731bf55d77070404e1b5b06635d845a224087fcdba2a03cd14bf5224d8fc",
+    "robot_sf/planner/learned_short_horizon_trainer.py": "242e06d63c29ea9b2b697480aa002bcb83a940cbe98adc869ebf1ca724b9f506",
+    "robot_sf/planner/lidar_occupancy.py": "9f7bbde7862dac48c755eb439c96eb018e55773c9d5c797e6397a5d2f99895ea",
+    "robot_sf/planner/lidar_occupancy_grid.py": "7e9705110f3264b0d893be659e93905133ced33c139794d64c1561118f7e31a7",
+    "robot_sf/planner/lidar_tracked_agents.py": "111833bf0ea96dc3da5f3499e49ef70e147983d1fab004487b856017c6774fd7",
+    "robot_sf/planner/maneuver_candidates.py": "9cb240bf22ebed5b68735a9549a627595648d8eed436269fae253016aef0100f",
+    "robot_sf/planner/mppi_social.py": "dc59fe2d2e1fabf89cda3cdc04568e0473fbd864247eb873f99947cc3d6eb770",
+    "robot_sf/planner/multimodal_trajectory_arbitrator.py": "d2689e7d021f19516dab4eff43c7beba8a5ece401c12b564c56a1b03f73f8044",
+    "robot_sf/planner/nmpc_social.py": "335c4cbb806035be58045ec06a32773fdf3cf25af527a7e43100b71a8d5ac874",
+    "robot_sf/planner/obstacle_features.py": "9d3ea632d251d0dc2b08d760aa672fefb7a2c2f78e749ffb4ebead0980ebab49",
+    "robot_sf/planner/ompl_geometric_adapter.py": "0d89255fd42d3b87ef3c1921a89ecfb4acbaadc869e13b1f2323cca873df6f3c",
+    "robot_sf/planner/ompl_smoke.py": "f8ac6bb440c2267a0cccea6997fc2d23a5c2f87bed5537af1a89eb3efdb3ee88",
+    "robot_sf/planner/path_smoother.py": "be65526ebbd62e19d3e41e12d13b0fa18dc42ab6c59941eb75e6603db981946e",
+    "robot_sf/planner/planner_selector_v2_diagnostic.py": "c3ecb4c3d1f9dcabef289341e724bbcf4f0dc7b635b770ffb8df86b202e2ce22",
+    "robot_sf/planner/poi_sampler.py": "f8c03fb484390262d88842c30aca96397978b8e7967ac53a1cfa3521a23ae2d5",
+    "robot_sf/planner/policy_stack_v1.py": "a0b37a2102bec982b3ab260266c4666c815230bb6177ce2c18b7481e2cfe8e80",
+    "robot_sf/planner/prediction_mpc.py": "67773067d0933999eb8359ed3436e3654e1515fdddfa56626650b5844d10b2c0",
+    "robot_sf/planner/predictive_foresight.py": "2a20f5d6881accd0ab4e37dfdbc2698bcc0f11a742c2b81934cd59b93c256ecb",
+    "robot_sf/planner/predictive_human_cost.py": "fdd2c47727d5980310af2e73a92d9c25d21655b625a54a1dd36ea49aaad2c7ae",
+    "robot_sf/planner/predictive_model.py": "7302e6f9581382903091cd6e85abff4eb384cbd92546bb974d3de79644934f26",
+    "robot_sf/planner/predictive_mppi.py": "39c6b9ee5aff186a37d87822c2e7025e9647da9bb87b66edff484e444b77f308",
+    "robot_sf/planner/protocol.py": "5e9261a912a7ddb8e5dd825df53084236b90f3deef03569898115f01748e6ee5",
+    "robot_sf/planner/recurrent_ppo_learned_adapter.py": "54dea7111c33eceb20fc59cf2223fd4133a8b0b7f461ed0f2a9359b7934df040",
+    "robot_sf/planner/risk_aware_trajectory_ranker.py": "0fe537d3556f566631b16f02bdc08327b87895b4544a08545f4cc85d08aa9060",
+    "robot_sf/planner/risk_dwa.py": "ad942a12a83a76faa09e6d41e42db05dc2597aec3a91f63c20fe5469d1095698",
+    "robot_sf/planner/safety_barrier.py": "67fc3fdb91574a95d9fe2b561e6581babc62647842966441fdb75f000920c6a8",
+    "robot_sf/planner/safety_shield.py": "41f5f019c10dd5aa0770991e8a5dbfc86ed7a80f464300eefbb6cecbbfabf441",
+    "robot_sf/planner/scenario_belief_adapter.py": "c8b1d88ca2428af6a8e6020a1217584c4450e39adc76642ddfe07f0e44a3c832",
+    "robot_sf/planner/sipp_lattice.py": "884ffc54a7ef096f44923b663b4b10001b7c48383c8febd2cbcb9b797522e734",
+    "robot_sf/planner/social_navigation_pyenvs_force_model.py": "7a2cfc92c52b42db4472fb4f8179c22bd6711aa3c65c4d96b538fe9449d8b567",
+    "robot_sf/planner/social_navigation_pyenvs_hsfm.py": "4762a717e09f7bd9424f7227e1f7c2a0cdff66c1c317f4a244e16c0624e807b3",
+    "robot_sf/planner/social_navigation_pyenvs_orca.py": "32c28dd35b4d02bfac06e5cc72bf5f8d25ea029c3ff033ae172bf65c72dc9867",
+    "robot_sf/planner/socnav.py": "6c44c3eb50b1af77c1f731e789bf9d1df2145d9684ed0fb1cdf6b586e3b234f7",
+    "robot_sf/planner/socnav_base.py": "bbf137076732c0aa101ff6801680ed353600b376733fc6af2f5d57af1656c2d2",
+    "robot_sf/planner/socnav_occupancy.py": "f596677c2a70d62cd2f5898990af16fbf3c1abd733e7081eda921a29f1004894",
+    "robot_sf/planner/socnav_orca.py": "88a27eece259b3d6a57881f7ecf55bbce483d5d0e78b26c161aa6429c87f54f2",
+    "robot_sf/planner/socnav_prediction.py": "717d0cd52ba60dd011fa48038081ed0cdb72b18bb6c8f523de1ff2c6feb7efbf",
+    "robot_sf/planner/socnav_sacadrl.py": "c59697eaa5fa186c67af87e01dccd07594fd90f7d064eb3bd16ad6a8bbb244e6",
+    "robot_sf/planner/socnav_sampling_v2.py": "247e85dfb8a5eb0c0cfd71ff45681d3e664cdcba5d5a74c5004a300f969e15a0",
+    "robot_sf/planner/socnav_social_force.py": "1188355afc3ae52f58b3aa1f946d5c7b78e0e9cafbb7285172a21ed32c062f43",
+    "robot_sf/planner/sonic_crowdnav.py": "b07b71385fce56b95f4763efdfef8def0d5461abc06e1ad2c3c69facd28402aa",
+    "robot_sf/planner/stream_gap.py": "d06362afd79f1d672e765cc43880e0d2b82b230d66229b0205d2a1201c4e6986",
+    "robot_sf/planner/stream_gap_gate_calibration.py": "e0687a2ff95bf873bcb01bcb9e1994972c01708a85f8bc3b3f568d7f19b1fbd5",
+    "robot_sf/planner/teb_commitment.py": "b6f5f90ccc4f5d329b99143c8f9a94622f85bdc22d596fbcbfd9346d1d84382e",
+    "robot_sf/planner/theta_star_v2.py": "ca9317ab36a7d6e7b90b35b59366fa6d17df35de2428ab3c8549b2878fb67fb2",
+    "robot_sf/planner/topology_guided_local_policy.py": "31eadd27acc47d9bf28e495668a21243440ede10159ef0b5b70658a91d85a4e9",
+    "robot_sf/planner/topology_parallel_nmpc.py": "ccdf2f3391d803aa531068a0a68265ca5a1571a94b4e258bec1d409290c38480",
+    "robot_sf/planner/visibility_graph.py": "f5321f5079ee05b0beed0e78ccea7d6fce4d9ce019342e51489aee4cdeec9cd7",
+    "robot_sf/planner/visibility_planner.py": "7baaf32c98d282f5b4fe7942739dc1a6137e2609145ec4b83214cb60a2c347f0",
+    "robot_sf/planner/visualization.py": "0f682dc9ded026ab0e0ec7ecd63378a3c3f3a6d94c335de6583f5b1df8ecfbe8",
+    "robot_sf/prediction/__init__.py": "568d95f4b7bfc1643668e98ceb66e46c64b70f5888eb71e054bc0e7e266028a5",
+    "robot_sf/prediction/_contract_utils.py": "823b07989acf448aa6e3f9e7503d16fa5debe6b6e66f6eb3b077dcc639a42178",
+    "robot_sf/prediction/goal_belief_contract.py": "9dc803aa71fe98b3a21da2cb5e270b20b538a5d654868c4576c3fce3e0e9750a",
+    "robot_sf/prediction/goal_candidate_coverage.py": "3c94e7691ec2e960d408155de59e7e2ae386499ec601ab7f9a575a61e65be80a",
+    "robot_sf/prediction/goal_candidate_provider.py": "4091218b3b571f4bb6585cc68e848c123aa902581bf7bfd553ee2e2f0a1849b9",
+    "robot_sf/prediction/goal_force_inverse_dynamics.py": "8cb8f1b54ee4133b631ab3cb979f036c76b10ccaa3e0d3ebeb4c1cf659baf249",
+    "robot_sf/prediction/goal_intention.py": "f495a3ba38447b70f4bd20bb623349f1626c9e935d7ceeaa524f8fe552414a12",
+    "robot_sf/prediction/oracle_transition_trace.py": "5a271b8fb8fc97b887469c9169b0085bde4b3d24c8e962c3117fb689b8bf0a40",
+    "robot_sf/prediction/tracker_goal_belief_adapter.py": "392df25142f9a6f2f1dddb67761e7452cad57ed9d47cebfe53f4e47627715e68",
+    "robot_sf/recipes/__init__.py": "0f4f6071dcc1bd164811e670af6b752adc84a6b6e6b775dd3b5c32a1298c63d3",
+    "robot_sf/recipes/catalog.py": "5f8d23941cc717dce0fd6e53c5067ffdbd7bc9c410adde6be643ebe22bbd9431",
+    "robot_sf/recipes/cli.py": "396441eb32d4d74d5b19ca762b8c982e7a12a27802b65a943ce87d9e676423d5",
+    "robot_sf/recipes/recipe.py": "105c3f3d379414b31399c4a8c193b30c2a5a24761c3ec46fc236b9b957153264",
+    "robot_sf/release_cli.py": "4f84885b33df3857e01fb61315227a5618dd366199ef1c95ee04f1eed0dc0414",
+    "robot_sf/render/__init__.py": "fb023a2292d98fae52742f58fd2252236a7eb7ba2a06b88ebbaa10d1b916aa11",
+    "robot_sf/render/audit_trace_projection.py": "4738c4c0e5cfb6cfef81b016086d47725d81c925f4945402714c60646aa72382",
+    "robot_sf/render/audit_workbench.py": "a6f502d5ff7c836ea25a049a67307514ee772b9a2ad38b4f03710e3c83795e42",
+    "robot_sf/render/audit_workbench_launch.py": "2a0691cad3d7a6b67cd5b2a87b907f39f7c51d03d6cf66519e09935f1fbc19cf",
+    "robot_sf/render/audit_workbench_server.py": "3d3f6745087cc173dd2c2b27c7a7b14b35004d0c24743c306497225b2bf1ffbe",
+    "robot_sf/render/frame_export.py": "337df36bea43cb2e2736bd7c47db6d39bb70634a07dba7be24608e8c08766b3f",
+    "robot_sf/render/helper_catalog.py": "5841e4b90464e93f0bdc173de50c15d16c3fc96baa5b1d40417cbcdac51b406c",
+    "robot_sf/render/interactive_playback.py": "0308ea1e222da941ab4f251ba117d21fda472daf6bba7e7f65b5af7624bb5550",
+    "robot_sf/render/jsonl_playback.py": "620eeefdd418fd714afd74cfc37708a86ce645bb00c02a86474189f346b11434",
+    "robot_sf/render/jsonl_recording.py": "4f02221671cbcf9d29ea65fe174015b21deaa32b5fff60ddd3902c528a7b2c49",
+    "robot_sf/render/lazy_sim_view.py": "a10fb26af6906973441d8a3a7e65451ad5ea4276eec97e558d1f83bffb0e7961",
+    "robot_sf/render/lidar_visual.py": "4d32cbe982e2a4ce7a49f9b7bf9384b204148e3694fbdd05df44eac403946d85",
+    "robot_sf/render/playback_recording.py": "c8ca36306283230d93d88eb979e410ad8b6c6800899243de9f139585e5bfe265",
+    "robot_sf/render/presentation_scene.py": "d1d8e2e0c9cdc157ba6f272f615228273af62dc4f2ad4e4380a74007219c06e9",
+    "robot_sf/render/presentation_style.py": "0b3153eaac918ea23e8073e388030e737a6271ccff9aabe25e28517cbd603fcd",
+    "robot_sf/render/review_camera.py": "761498f6429e96889a93595037f8972dcb3265da24fa6a86d00b9d4a157db056",
+    "robot_sf/render/review_diagnostics.py": "3615547163cd15adba7e2aef03ba95f6c4ecf2de655961b0529d686eba2b2d84",
+    "robot_sf/render/review_editor.py": "85d366a28101f5edde32607a82fc1ff0778b4c0cfadb4b20e6c5aeef50a28bfd",
+    "robot_sf/render/review_encode.py": "8f53978a3567cedc4f7ef207645ad126d26d725a06b82a4ffef78f9289647811",
+    "robot_sf/render/review_media_qa.py": "67ad6b8af9027e25df00f8e34d4cfbb4d26e779fa5d3b06fd6a9f75ee68299e3",
+    "robot_sf/render/review_overlays.py": "d861b1eee2f41b6ecc6fd08aac9a118884b76f6cd74b24c79883c3b166ce09de",
+    "robot_sf/render/review_panels.py": "bef04e87437d313487b29f3618b8fd7575f475ea80d32189cdebc9c550dd20c2",
+    "robot_sf/render/review_rerun.py": "e91c32d5cff58553fca4d80e74e58f6f2347877b83d7ce808dc3b3829a8f75cd",
+    "robot_sf/render/review_scene.py": "818f75c7452092b25d2b87449dd62b17b4f890df61271804e2bb6fc414960b2d",
+    "robot_sf/render/review_sessions.py": "9f5e4007ce01426a2b1485d67519c0dc1885183a593c57b04a12bdb470f0cd3e",
+    "robot_sf/render/review_workbench.py": "69f9bf71856dd4aaf0d404893573461dbdb04d819186b7df054ddba899e5cc50",
+    "robot_sf/render/sim_state.py": "fb7212c12df6c98658c52b377a4aedc9febcc0c042c023489cc3ca0b75ea582c",
+    "robot_sf/render/sim_view.py": "b0ce3eee43c45a104123d1ce358d6cb36a0902eac37f645d55147a93160216d8",
+    "robot_sf/render/sim_view_text_overlay.py": "ed3190afdaeef5e4dcf1547666c50dc212d40c0a738ee4fbb20230222b095f7e",
+    "robot_sf/render/threejs_viewer.py": "f1e7f33e1e1be006bced77831e03f173e4d4132a045f30463c5d1b6ac4ba7e1c",
+    "robot_sf/render/trace_viewer.py": "850deb9ba44056b7b70ca2797753c008d4c596e60504c6a48e558b12ba7d82d4",
+    "robot_sf/render/video_sync.py": "15b8002dd5c92cb074596ba0b85f9ef66b46dc1c7e852d154f53354c26b085e8",
+    "robot_sf/render/web_assets/__init__.py": "7573e3d45ac84eafe06a2c588898cdcdeafa62b0f52fc92af0aea03c3006a474",
+    "robot_sf/representation/__init__.py": "05e22cbc82ea5195c0907000bc52706822185a69418b776ab287705b567a6fef",
+    "robot_sf/representation/scenario_belief.py": "b3fee093ecb145f74d0378df3958cf38ca2c4b3a9b28e86fd6a0f8f5809c595d",
+    "robot_sf/representation/uncertainty_source_generalization.py": "1f6a5b785ce031d1d7c98c46028f0ca7086b72a1dad20ac015be92375fd43396",
+    "robot_sf/research/__init__.py": "80357c29fabeb867f6334daf66279318e7313e80cb343950167cf802ab69a805",
+    "robot_sf/research/aggregation.py": "f15a12f72036fbed6998184f80b4240723248ed042a15a138667b36c61e5fc13",
+    "robot_sf/research/amv_command_response_trace_manifest.py": "b3c7adb211bcd52d508b445bb52c8a634642979c0c7daf62e504ecb772147e8d",
+    "robot_sf/research/artifact_paths.py": "fb2c320cddfc7837b86305b627c234f3b1a03dca95e473c9cacd75343fc8b86d",
+    "robot_sf/research/ch8_statistics.py": "31eff89ee66ba6631265f49ba1083e57b23f527ca2ebdbcb89611391b39de667",
+    "robot_sf/research/cli_args.py": "e9d23f0240df9efeea5f914b4b3aa8016fbadf351eda938448d56c2d4af0e699",
+    "robot_sf/research/collision_risk/__init__.py": "984dc00c2be9cb0906fcf9d889aa9614be6f6658797ebd32502810ffa4827c16",
+    "robot_sf/research/collision_risk/calibration.py": "bb0984617c9470d82a85c48c4da479d3f0c3c93d45d051d0750ec5b4961f7cd0",
+    "robot_sf/research/collision_risk/estimators.py": "9cd19f20c79fbafd2a3483b3c2018698a88363901be509bb5990ccd12428a972",
+    "robot_sf/research/collision_risk/schema.py": "fc26a42966904c0a8478d0fb0d209d7fafb93b85380c92497a277bfe40786b2a",
+    "robot_sf/research/continual_adaptation_launcher.py": "22bd52b116778f51eeab4742c90fa03b752bcb93ce4275ae66cea25c22779874",
+    "robot_sf/research/continual_adaptation_manifest.py": "16d358b4eb95c8d1aae859593d2e24b05a7c5145678936b1d509f42ba64899a2",
+    "robot_sf/research/continual_adaptation_protocol.py": "dce1bda0475ab44d69f49f2ea54ca8714e50f18eef2142621130bf4ad5ccd669",
+    "robot_sf/research/emergent_phenomena.py": "3a29af53b0a88b55c9c3ddbb18b32c1f77a666d736d32b9f6dee5cbd64efa0bb",
+    "robot_sf/research/emergent_phenomena_campaign.py": "6765021d9b0d5f4fcc8d63f32705242faf18459956e252da64387ffa68cc7d25",
+    "robot_sf/research/evidence_integration_inventory.py": "292a88ce511a02cca80f0e55c843dae8f247128f2653b7643b2d8900dd38219b",
+    "robot_sf/research/exceptions.py": "e235eef90fa503000ab114a0a820a3b4454ff56c6e8f6e06dc68e77900e2f9a7",
+    "robot_sf/research/extractor_report.py": "7d0f9645dc0d41e20e366549507f9cd312c40d76019925791b3ca61b3ddb49e1",
+    "robot_sf/research/figures.py": "b213efb031ad3f8f2607de052fd75e7e48fd40eeea0172e79efa14472a30a093",
+    "robot_sf/research/forecast_heavy_model_inventory.py": "da4dff2a87092a4f5ca300773ff024d8db905ceeb0d1c25185ebe0f5c025a46b",
+    "robot_sf/research/imitation_report.py": "fbc812926cc7cae3e7851dc183490d04fdf52d66bfe524d8398b36c32328f87e",
+    "robot_sf/research/lane_formation_parameter_screen.py": "21bf9edaa7e34487f0a96c1a72969d98a6d14719c8c97c951fb83639227987ca",
+    "robot_sf/research/lane_formation_reference.py": "28d81a4f820aceef8e0b8f388ad81ce06c260adb8ac9d838ccad2ae556f01e5c",
+    "robot_sf/research/lane_formation_sensitivity.py": "2d2471f8dd5b4ca5958aa66a6228bba5be0375624b97e6d7b96ebc9db5c060b9",
+    "robot_sf/research/metadata.py": "7e4e1ecfc3eca51dbc130697f3490504460f997fada50b30af3434b8d773dea3",
+    "robot_sf/research/open_dreamer_adapter.py": "a827d306af034f335c9502568dc1eccb4ed3c2ad105dd9412a6859073ebaac54",
+    "robot_sf/research/open_dreamer_dynamics.py": "3d04d347e2b0913f59acbda1ca4f794ff7ac53827f85ce3da28608de90de5e56",
+    "robot_sf/research/open_dreamer_model_quality.py": "f9e55df605a5e367b4e65c7d7e0449d9e51e781db4fa21ff3e7b658dc19a0f7f",
+    "robot_sf/research/orchestrator.py": "31ec142b23dcadf21a1e1601de2bbad3bd92eb7d3ade2347099f8dac4a726b8c",
+    "robot_sf/research/package_registry.py": "97902fd80a27b0d747fb4b757ba1559a01af4775fdf8eb4d61fc9c1a70192f53",
+    "robot_sf/research/ped_model_assumption_inventory.py": "597f10861065796303972171288c51af85577653546c6153fc24ccc6b0c6cdd6",
+    "robot_sf/research/ppo_continual_adaptation_manifest.py": "1ff17aeae9e7d39c0b5483915773a13e0bb8990493368a950f71ca2f9af0e0f2",
+    "robot_sf/research/report_template.py": "17a3f3a1f9200b0976991c7fcf8fb096e54baa2782b248216d8d0406cb1b6781",
+    "robot_sf/research/representative_selection.py": "a56c7773958eceea1a067d01c122e8fb5571c4c9653af68915e7b436bf40031a",
+    "robot_sf/research/scenario_prior_staging_contract.py": "5881c44b2b43123a74c736d9567583ae47067bc1a403f7a934b43b64d27d3ef2",
+    "robot_sf/research/schema_loader.py": "df64ea460103fa3016fa1ac28557ee37e490a0c944e888ec103fb7f13316be5c",
+    "robot_sf/research/statistics.py": "5a99b5679305f2b50c1a511e72c7641b3fc9e16d85429c8d3e86418e465ebb84",
+    "robot_sf/research/tracker_manifest.py": "2268029260efb35822080cf3c0f1f1b5f2e262d2ef364f56c42e6f453a03979b",
+    "robot_sf/research/zanlungo_corridor_acceptance.py": "7cb718c7f115e210330872d070993a956b647cdc46432c24f1fb3e7ab119ca24",
+    "robot_sf/robot/__init__.py": "3ec8502c645930c1d700bfb316dc205eb93ec2871cddf46a03914a35d9c19f84",
+    "robot_sf/robot/action_adapters.py": "a8503c11b9002bbec063a2f5aa38a8f074abce9887914c0d2cb07d536b63efdf",
+    "robot_sf/robot/actuation_envelope.py": "812faccb868a0606239596323b947b6516109a031e1e55429916aae0f6524556",
+    "robot_sf/robot/bicycle_drive.py": "b77d6708ee4aec623cc3bd778e85145c09715b60e5e7f7e45b7a7f9290392ca4",
+    "robot_sf/robot/differential_drive.py": "b8519115c9cc41b8d6450df8412d3999a34b805c8c26fb6782d11ca3c89e7814",
+    "robot_sf/robot/dynamics.py": "3476f40c617cfe55db83204d7b9645d6a076eba106c5e8adfc207c53cc4e4210",
+    "robot_sf/robot/holonomic_drive.py": "864eaceeb30ed3877cc25de73075d4fcfab8f1bf63c257de6c07ec0a14b6e315",
+    "robot_sf/robot/reverse_drive.py": "bfb2b7f5e8f3f926d7c78ec0126d2801869f44c94e4fc7c16d2a89a214470380",
+    "robot_sf/robot/robot_state.py": "bfaf323b40d9c148a8be44ced31f0858f7db1b72ca31fd9d975080478cd51e06",
+    "robot_sf/robot/rollover_proxy.py": "5345692d88c0c8fd48889e65f263d03ed4677f49e5af969be718f9ade77c6592",
+    "robot_sf/robot/safety_wrapper.py": "2a1f037667799f50b884e2bf44128f420376bd5899f7677514e8be1cfef536e9",
+    "robot_sf/scenario_certification/__init__.py": "259c153af09e0d157ad211a2931588821177a78d0fa506d339efb303435a10ce",
+    "robot_sf/scenario_certification/criticality_summary.py": "870ad32c20b3e91e8cee1c3eaa61c7b827e146ba19b0a85f3e09a8043aa25d01",
+    "robot_sf/scenario_certification/failure_cause.py": "ccd1409686fb53349c5f7e09238500e5cdf8e79c3d2a20d211345150b5df9391",
+    "robot_sf/scenario_certification/feasibility_diagnostics.py": "eaad96be0af89ba5f4c69333cdae6c91b5368b6b0fb7b3b5475146361c15786f",
+    "robot_sf/scenario_certification/feasibility_oracle.py": "41e0f90daeff3448ab6669146d046cb92cfc866e3f78dc2f9b1f6f0042526930",
+    "robot_sf/scenario_certification/input_identity.py": "75d950b2627072018566b1934db574b0d6f7e18ef0909416459736a2a533df0e",
+    "robot_sf/scenario_certification/perturbation_family_registry.py": "b16d83836ae9a205914ad709130df26c145f87dda08d41da9c9fe951776e4ec1",
+    "robot_sf/scenario_certification/perturbation_preflight.py": "0faf2b7974091481052627e6a7ccd5635577ca41ab554c2d3a3fa2fbcabffd6b",
+    "robot_sf/scenario_certification/recertification.py": "e94f53aaf727fbbcc206ed2f1100e83989edffea1b3ce20e7ab4376b74349eb2",
+    "robot_sf/scenario_certification/sustained_flow.py": "396bc45d911cbbbb5459cac263dfbf7edc86955fe506acb2244f020cfcd06376",
+    "robot_sf/scenario_certification/v1.py": "be3a14afafcbc3b95722c4af28fb07e3f627e303b7391b86b1b167b3a4750b3b",
+    "robot_sf/sensor/__init__.py": "83457a1b318a2f77131218fe87c4332c0f671705faaefd6bd0902d8a67c9cf38",
+    "robot_sf/sensor/base.py": "6ebb5e7a82e2b979a009adf5f08dd5f1d85be19ddd2a410bf18106ffeacac94f",
+    "robot_sf/sensor/dummy_constant.py": "177b0f96738660fec065413945e41a0095f71b2db021ce4c98725c906608de2d",
+    "robot_sf/sensor/fusion_adapter.py": "8bd7ae91fdde14bce3179792ef2395e2cfe805ee4942f6e1c719cb0094dad314",
+    "robot_sf/sensor/goal_sensor.py": "bf05f74688d5fb6d121dcf651d32cc597dc3b47d99ea488434658b1f5aa6c863",
+    "robot_sf/sensor/history_stack.py": "eae62a60045c585e26f0501c3ff3f250d250d95d90d338bd8b72f137047e6b7f",
+    "robot_sf/sensor/image_sensor.py": "f864d830274eb024df518c18a72fa7c87f9992461b805fe2dd6f11b748a8f272",
+    "robot_sf/sensor/image_sensor_fusion.py": "5c1ac7db4c7a89ef551b5a0e625169ae8fbafcaedb50b96c493bcd31483eb218",
+    "robot_sf/sensor/pedestrian_tracking.py": "cbcd79c8c83eb8508e208695c38c4cbae3b53b90da3ba032cf5b816452631641",
+    "robot_sf/sensor/range_sensor.py": "f97ed9b5bbec2b7cd41255ff6d82b1eb1d204526b07244b3c38c4a76051f291d",
+    "robot_sf/sensor/registry.py": "8ab11850ea1c8b389ca5b2c8272574dddaf2ac9d6787a49191e9ba2b4b8b9355",
+    "robot_sf/sensor/sensor_fusion.py": "804b94494e2d6518ba3d7cb2630a90738e28216bfc461856ce019c089c961956",
+    "robot_sf/sensor/social_graph_observation.py": "1ea708d97bf7a3ef312a0594e97b58a465babef778166cf488cc94291fc29bcb",
+    "robot_sf/sensor/socnav_observation.py": "7a184d63dabee2fc9fa03fb5c4867161be038f4989749dc952b9c8414f5bf86f",
+    "robot_sf/sim/__init__.py": "0a90a67b43c6b190b2cf76c82a33cadb8f4163565534f224ca83456f0ae9b248",
+    "robot_sf/sim/backends/__init__.py": "132376c1b3afbcc7d03aa4efe3917b61c5c70e583f4fd2b41b6fb03cbbdf8261",
+    "robot_sf/sim/backends/dummy_backend.py": "6f2bfe8881dd7d0f5fb6b7593b6372b3d6f63d6e63bdafd11e2b61cb46a64591",
+    "robot_sf/sim/backends/fast_pysf_backend.py": "33e18d9425d8d519fe39439e7abf5cf4b71597cc5df9586a39e6d21b2b9885fa",
+    "robot_sf/sim/facade.py": "7209dae46ae2713b126e2382af50b57fab0d84e46d4f6d641258c5ec07a16073",
+    "robot_sf/sim/fast_pysf_wrapper.py": "09ef6e0bf6f5f28ad7f754cf7e66efc98026a03aa94cdc67ffa54185048046fd",
+    "robot_sf/sim/pedestrian_model_variants.py": "f2c527360bb6967714b398ce59498e89de617f149db8327116b4ee212087748b",
+    "robot_sf/sim/pedestrian_speed_tiers.py": "99d2eb88f62f92d582999a35744dff05a1b89ef89df96c0daa56a9b34cbbf5f3",
+    "robot_sf/sim/registry.py": "22914f72c9b0e08fb7636fa1a7cc4774b227184fcbbeb147e3bef6affaafa50c",
+    "robot_sf/sim/sim_config.py": "a15072310285399cd6f24b138ffcfbac809285120e250182957ace8af774a4e4",
+    "robot_sf/sim/simulator.py": "7e06929cf37b539ef8ed50b8248bc691666eff82e17618bf135dd18118842f15",
+    "robot_sf/sim/spawn_validation.py": "fe211644ab9e7f80d65e4c97230c0d880c1d6ed62db6588103ac52d9deedd13b",
+    "robot_sf/tb_logging.py": "a78f4968808aedfd218e32eaf5ca4e1b89e6f5f00436e06d2b4b2c98c63d7470",
+    "robot_sf/telemetry/__init__.py": "32a781ec3a97183ff4fba6a41a997144d4e36025c36dc9c5a0496dd23f1c89da",
+    "robot_sf/telemetry/config.py": "9aff7a824d7ade2674614e09030ef8613755034acf72af01746ba29c243de4de",
+    "robot_sf/telemetry/gpu.py": "0896b5d731f30f839d0f8319a15c71bbd21d9fd3cfab11f5c8224c51f7973104",
+    "robot_sf/telemetry/history.py": "996211781f0870da96b7957b652bf87023b6a63c89e6f29402c3e6c17073dfa0",
+    "robot_sf/telemetry/manifest_writer.py": "170ff6a8b4a23bc1f1f234fbd2759d5aa6bff139183b47a25aff3497829a5980",
+    "robot_sf/telemetry/models.py": "c1c2f25bb453ad7b26469f71da7fef431809f9a8755fe5500f6f5aa642e94b89",
+    "robot_sf/telemetry/pane.py": "d59e6a0af3233bcb4157c7fcf48e3c93c78c628e7e3e3333a2008353e8476a68",
+    "robot_sf/telemetry/progress.py": "b7743286914c00398e38acbb4bf0096989611764dbc5853bf3544d288202c75a",
+    "robot_sf/telemetry/recommendations.py": "1d5ea1560031479db20a62c01cd583b9918c71fab0228b2c124e566ed17cdfc1",
+    "robot_sf/telemetry/run_registry.py": "e420c5dad975e81c00bf981072b149178abd1924e6e8670c46c70b13090a2322",
+    "robot_sf/telemetry/sampler.py": "95bae8aad0e2d79b4fc9856a9ebe43a694f53bc3cbdbcb192c722b79c7ca4a41",
+    "robot_sf/telemetry/tensorboard_adapter.py": "11204aa0bea19668191c2d36b8b0293f92b3df686adb37c13296050e8fc9875f",
+    "robot_sf/telemetry/visualization.py": "31f3b80cef1b10ac5cc1f1280fc0ff94c98eb49f99281b4899e35e13380cda90",
+    "robot_sf/training/__init__.py": "cda986314132a2918be083b6f366abc49cb5b7753c5ede564b6b2729f3d226ad",
+    "robot_sf/training/action_bin_accounting.py": "08514c3b265ec5a68dca2fa5e913b77747b0d83a092dcd07f86a95d64a7ee55f",
+    "robot_sf/training/balanced_oracle_dataset_collector.py": "a8de4d992c6e2a8a726155c2af88e4119bcbd1ac924debd6b2be4b41e41c78d7",
+    "robot_sf/training/constrained_reward_wrapper.py": "70d997d5331bcd5d0707d5857e26a265df521d7fafb969bf9a8c0dccc15a07f6",
+    "robot_sf/training/density_curriculum.py": "9d6ea6e7528c9de7e9d204e603b4a0c16da7c7a55751c46bddf513da15299529",
+    "robot_sf/training/density_curriculum_readiness.py": "0fc12c2a05f4af0b1a19969e90b355567f0f0a2154ad8b80a773ae9b45660881",
+    "robot_sf/training/diffusion_policy.py": "cd663d89b11e436be2bdd35266410c74a5ddf27dd9e9f1cd9ee7f34e1e552d2d",
+    "robot_sf/training/discrete_action_lattice.py": "4921144dd21f6e37a02bee7486edefbd831d1012e1d962fab87fadf4183c6e93",
+    "robot_sf/training/distributional_rl.py": "b586119e009b85cfd9f79e964c0481c3b67551da385a69c9ec621bc9f585f85d",
+    "robot_sf/training/hardware_probe.py": "540c34a7a12428ce1585e1c485b73789bbb7b1fdc473070b6312933653fe5d97",
+    "robot_sf/training/hybrid_replay_buffer.py": "55767d7f7332c9a52bae30a215c6295445f0f0ae2b67ed08112e78d889f4dacd",
+    "robot_sf/training/imitation_analysis.py": "8417a5b169952972200e9c5209598d9c181ca1ae70a3ec8305208a2a90a27f6c",
+    "robot_sf/training/imitation_config.py": "54a8b560271f477efc71ec7f2a09dff8a109d5122391af017f3d6a88f74fcc06",
+    "robot_sf/training/learned_risk_campaign_readiness.py": "2f61281d84952294f108b8efc7cd813df23b6181830c4e2202204ef32f1286f9",
+    "robot_sf/training/learned_risk_launch_packet.py": "91e2c5d470e89bceee09563f4815fab195529eafa1a49ae95b5635782466d7c7",
+    "robot_sf/training/learned_risk_trace_manifest.py": "725145edbcdfd03ea4a11780637cf5e7c0bbdae58c7cdddd925fdef4b2134532",
+    "robot_sf/training/learned_risk_trainer.py": "ce94221f99f384a0d1e54f6e8d63e3889adcae6ac5c4ad0f4a70882e9c37cc69",
+    "robot_sf/training/multi_extractor_analysis.py": "00cb789a148326682991941ee16f70b44264e9f1bd132af682ae9b8d0fcde44f",
+    "robot_sf/training/multi_extractor_models.py": "7cb04b448d25fbb3fe13bfc592c3354b08d707648b8fa24c7c7c350b5850ed40",
+    "robot_sf/training/multi_extractor_paths.py": "07b7b24879c7830d31d6c934e00c32c6bd45b6d9fef943801cfceaf4f37a77a6",
+    "robot_sf/training/multi_extractor_summary.py": "8799897b61710ac9c364a28689c5fd4a7f8b894a4b9ebf6670050148d5ef3a39",
+    "robot_sf/training/multi_map_protocol.py": "0e22a653879453e822e4c0901601e5d2ee188d9a436e107adb743e7e7a02c1d4",
+    "robot_sf/training/observation_wrappers.py": "8501d7787d840348da6e9d7ed08829a433074675fc71007df5e9cef2917d5ab7",
+    "robot_sf/training/offline_online_rl.py": "6ef455d2583b641c7d037373eedcdff523784d5931a059813bc2eece35491bec",
+    "robot_sf/training/offline_pretraining_manifest.py": "a2db67a2ff87c6b83c4bbdfd309e7026fa542c569f286ca5231c0c80091075a2",
+    "robot_sf/training/optuna_objective.py": "3ffab369255a1224637d3643db8b313c70420412b9e51413e59266183e4e9660",
+    "robot_sf/training/optuna_provenance.py": "0487f1ec856c8e6fb520f5a0de658fd03119fab5b61a7e623dcd2533ffd3686e",
+    "robot_sf/training/optuna_search_space.py": "da3cf1c3afd7ff0aaad2815b6f30324d866f609b0afd2f7720900f114a12f5c5",
+    "robot_sf/training/oracle_imitation_bc_smoke.py": "948bfa9538828160ec7921746e2481b7997150a8224bb50eaa03c3f50266a308",
+    "robot_sf/training/oracle_imitation_comparison.py": "d1818f8012ff9ba5574a694c7642ff5305f3a72da8c05815e87162874f567bad",
+    "robot_sf/training/oracle_imitation_launch_packet.py": "42b210c47335f095ff3e4ab44d5b36d78f45066ecfd32a2992a6871c1df18408",
+    "robot_sf/training/oracle_imitation_warm_start_readiness.py": "1f4c03298c2f05e5970d9a5e8f545a8f35ee533feb05441d167abbb0e19f23fc",
+    "robot_sf/training/oracle_trace_uri_registry.py": "eab036cc9b47561d71945152923189de604408efd9484fad2749fee1444a17a8",
+    "robot_sf/training/orca_residual_lineage_packet.py": "39fa0d2d8a125a9c9949e3122d8cc362d4e3485e1af7af44c7a3511f8fa6bfe3",
+    "robot_sf/training/parametric_curriculum.py": "c1ff29ccc8c5801ab1292594bf5b863d63be17f45cb792fd52246c070c4f9a9b",
+    "robot_sf/training/ppo_diagnostics.py": "cd465011d031b27b86c6e8daf99be77dbbb475c29a486d81efdc23675453b68d",
+    "robot_sf/training/ppo_policy.py": "abe5855b8422946401f9f85c0888f777e17da76154f32f4a0fad1b23ee2266be",
+    "robot_sf/training/predictive_retrain_preflight.py": "5e7b68646f475afc2d4cb1a331c00f7ace88a5aa5e289295599a47874bc1cadf",
+    "robot_sf/training/predictive_retraining_readiness.py": "d04e0362924384c433c811cff828774f33eb24ad33172229f8a7baf2c5fedeef",
+    "robot_sf/training/progress_weighted_bc.py": "1abac4d343700aa1c0299bd24500d46a65a76dcab91a3a31909f75fffec48719",
+    "robot_sf/training/recurrent_runtime.py": "42f6a86e14612ca6b9e9cdbe47bf5000b29c03ddba5cd99d809960ad4487d5d8",
+    "robot_sf/training/risk_objectives.py": "19febd2d28aa484cdf53f4580bd80ae27797a3827a866093e44a2739a3dc165c",
+    "robot_sf/training/rllib_env_wrappers.py": "da91e3c9dee23ef8c03c640a3b9da0a0164cdbb0c3d50e944695a5f7f15303e3",
+    "robot_sf/training/runtime_helpers.py": "12f471b55724bf69615eb2d949bffe5b3224d37f0cf5dff1de3d0b2c9bdbdc70",
+    "robot_sf/training/safety_constraints.py": "f6cf629f7999fdafe773dd22bdc17e1985ddf12a58863a849f0f514ff812883b",
+    "robot_sf/training/scenario_loader.py": "768579804c91654b4f0be2f8b2ff49218b54e38d190c9011fd3c0e016444dfab",
+    "robot_sf/training/scenario_sampling.py": "04881d69447e75741efdf699b7730c08d90fec769c6fa0c72f10645b3da4e84d",
+    "robot_sf/training/scenario_split.py": "085a744e61419eb6ad327305ee90f103599e87dd93a380ae1634ba6b552f2a74",
+    "robot_sf/training/shielded_ppo_launch_packet.py": "e399d41cbe42005fb8c81f6cda2c5becbc3b16d197fd6af9cae668bdb92087ca",
+    "robot_sf/training/snqi_utils.py": "aa1db65d61f2523e80ca17bdacc9c7e4eed2aa4895308a2fcbe5c1606f8273bd",
+    "robot_sf/training/task_bundles.py": "bfcbe5d9f1e29b43b30346e8a48cd11da2eb0d3f34c77d89d6251041d1df2d5f",
+    "robot_sf/training/threaded_vec_env.py": "af019c7267e6256fa42efbe31d374216f8382c8900a0b326d59f0cdc0e700bfc",
+    "robot_sf/maps/uni_campus_big.svg": "89ed595197d9fc7c89d1eddd519a59e3e1103aeef7b6f0c4efe00c12b65b9023",
+    "fast-pysf/pysocialforce/__init__.py": "212569a084a817232a0bf599bfde27cf455d01b2ea727e4c70d6285a3ccec6df",
+    "fast-pysf/pysocialforce/config.py": "e1062d3a702b815c3af0bda94e929d5ad0d56fa0849c14aef55154677246b26d",
+    "fast-pysf/pysocialforce/force_trace.py": "d0ed6ee8dc59b8d1dc5e4a272dd68edf9a3fb3b924ab60165353462fcb17c884",
+    "fast-pysf/pysocialforce/forces.py": "59adf658fd6e439732829e2a04a98aed3debe07c6a690dacebb7edb8c34296e0",
+    "fast-pysf/pysocialforce/logging.py": "f3b268b8630f811470d7f315b00eddecdfc0623cee3f8a8f9c5e566f2e114d86",
+    "fast-pysf/pysocialforce/map_config.py": "71116a8879036e945d2402b7d30184059718e873efa5797c654c7d1feb827838",
+    "fast-pysf/pysocialforce/map_loader.py": "f337ac599d276e0098a178a9b18e7066ca93f8e6a8306d67a6c2e954d15f6cb4",
+    "fast-pysf/pysocialforce/map_loader_svg.py": "a419dbb2c5263345947429d868a0a8f4ca85f9acf1fcc7f8a82d88a0ec094005",
+    "fast-pysf/pysocialforce/map_osm_converter.py": "8581e52e63ac99bff07dfe92b937fb236eaee265ea35fce0be4a210e1bc33b66",
+    "fast-pysf/pysocialforce/navigation.py": "74e3f046050b8647887e4871e90d7c305d1e74694787598fe33da22d4b8c50e2",
+    "fast-pysf/pysocialforce/ped_behavior.py": "7d86c9c3ef9850ab454ce27f16592c46e274394bc366fb3ffc9fc7d09caaedb8",
+    "fast-pysf/pysocialforce/ped_grouping.py": "40da27b831d6a3732c82586b2399de5c253849adedb8367d8044894e6ddf57ab",
+    "fast-pysf/pysocialforce/ped_population.py": "f51bad5a723a4277c44e01d3ad49a2c6b86ae88333bb83aabbd49217da114593",
+    "fast-pysf/pysocialforce/scene.py": "229371ec27c21df2315735daafcf957a9a3da8c8538c31a2ee938836117458d6",
+    "fast-pysf/pysocialforce/sim_view.py": "d15f50ca150178c50cb4890cd372e494398bbd882c190e1fa67012e896c6f0bf",
+    "fast-pysf/pysocialforce/simulator.py": "74eb61b486b8730eedb499f755a3c433845d1a73887042d66c15de1ccbbdcf16",
+    "maps/obstacle_svg_maps/uni_campus_1350_obstacles.svg": "c65b64fc9ab4943a673fac92fed7d5b9cb394f2891bb6f9b7a3e58ee86653b8b",
+    "maps/obstacle_svg_maps/uni_campus_1350_obstacles_lake_traverse.svg": "86da23341bd08b85b1b04e04e0c14b875c4b7283ebd46eab7870d36e5a23a1a4",
+    "maps/obstacle_svg_maps/uni_campus_1350_obstacles_lake_traverse_with_simple_routes.svg": "3de084e473a7c686cc7e7608bb660843f6777be261bc331a7c13324dd5ed6a16",
+    "maps/obstacle_svg_maps/uni_campus_with_lake_as_obstacle_and_routes.svg": "0deea5c592fa8b157b5058a9b80eea0952158b0c48a4c06d23263077c0f23a65",
+    "maps/osm_svg_maps/uni_campus_1350.svg": "b2f80e43e5892d3b8730060000bb5ddcfafb58933acdc69dedab93dfaa4ade54",
+    "maps/successor_svg_maps/classic_station_platform_v2.svg": "6a106e4e1a44ea927ffe1fa0089d865991d97c9ae85fe4a1608d5c8fd78f136c",
+    "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "maps/successor_svg_maps/issue_9348_francis2023_narrow_doorway_2p20_v1.svg": "1f396dbdf772bb40b1a8b67c596366ceb4ad9b526f8bafb9cb0f4fc9c6018050",
+    "maps/successor_svg_maps/issue_9348_francis2023_narrow_doorway_2p80_v1.svg": "d3b38e97864e1d068f0a01a9f9e517b748807bac1d68d16ba1efc99a9ec643d7",
+    "maps/successor_svg_maps/issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg": "06724b2d79fda03fd86194384a295a925e74d5765c662f6d37a6ea39e4c0d115",
+    "maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg": "6a6e6c9936608a8d62c6ef1f11301159f2015a61d37a97ff72ba6e34e2cafcb5",
+    "maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg": "08df3c25d6371a7b4202d0f6b678d16266fbb7e0411e9eaf0e0f967ab4229768",
+    "maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg": "0e5acaff4e020b802828365658127b96748441a12da1da08e4538faa7a1be4ad",
+    "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg": "81f9bba890418075d0801b4463bef4c2f72a812dd81ab4d3d4d1900e16827897",
+    "maps/successor_svg_maps/issue_9762_classic_group_crossing_goal_zone_entry_v2.svg": "419b5ba296dcfb0decd84484ae8c558578c80c44cf28d30348578e7d483c49d0",
+    "maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "maps/successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg": "2e212026ff213b9a24663f0aa315be11e20f5f9cf8a68f6fc3acbfbf6ce7d070",
+    "maps/successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg": "d3724df310d603d8ec1ee8426f55615112f97a2d0446aec6ce30ffba8e999e18",
+    "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4",
+    "maps/successor_svg_maps/issue_9762_classic_station_platform_goal_zone_entry_v2.svg": "a9759c1a305373b89d9f1b5a15cf6f6951012efe22dc7ecdd59699644ec8c1b4",
+    "maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "maps/successor_svg_maps/issue_9762_classic_urban_crossing_goal_zone_entry_v2.svg": "2c64b74d6b2da4b9e53e0a0247e8cebbdcac33cb822c6aa0e821b8bf281035af",
+    "maps/successor_svg_maps/issue_9762_francis2023_blind_corner_goal_zone_entry_v2.svg": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "maps/successor_svg_maps/issue_9762_francis2023_circular_crossing_goal_zone_entry_v2.svg": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "maps/successor_svg_maps/issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2.svg": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "maps/successor_svg_maps/issue_9762_francis2023_exiting_elevator_goal_zone_entry_v2.svg": "10ad90b9ee7dac2d84ec0ec8017575b9ab5b2549d249e215ec88b64d88db9019",
+    "maps/successor_svg_maps/issue_9762_francis2023_exiting_room_goal_zone_entry_v2.svg": "3e84da29278394078098cf393e7e6fe54914b7365aa99621468b3ade4ffd2fbf",
+    "maps/successor_svg_maps/issue_9762_francis2023_frontal_approach_goal_zone_entry_v2.svg": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "maps/successor_svg_maps/issue_9762_francis2023_join_group_goal_zone_entry_v2.svg": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "maps/successor_svg_maps/issue_9762_francis2023_leave_group_goal_zone_entry_v2.svg": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "maps/successor_svg_maps/issue_9762_francis2023_narrow_doorway_goal_zone_entry_v2.svg": "c9bbcf0c580654c8f8c81786742cf498bab9f95f9ddcaea0a67bfcd43862ef10",
+    "maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "maps/successor_svg_maps/issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2.svg": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "maps/successor_svg_maps/issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2.svg": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "maps/successor_svg_maps/issue_9762_francis2023_ped_overtaking_goal_zone_entry_v2.svg": "f9a66152858c7d73aaad61125e4fe37dfef681dd0ba8ec01adb349f6b5c43634",
+    "maps/successor_svg_maps/issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2.svg": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "maps/successor_svg_maps/issue_9762_francis2023_robot_crowding_goal_zone_entry_v2.svg": "6f106cf9c01ce396ff682c09594ccf46886c5ed4b64449c8224debdc543606cb",
+    "maps/successor_svg_maps/issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2.svg": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "maps/successor_svg_maps/issue_9856_francis2023_entering_elevator_route_width_v1.svg": "1b486a22cbd1ee1677732bd9d3086892e83d7c6e86f6ad380db921c621597563",
+    "maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg": "4d176eca64ea8528f5eabd9df4e0314a4a3b0b7ba615736933cd3a5697d3eb1d",
+    "maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "maps/successor_svg_maps/socnavbench_eth_v2.svg": "8114f827c12ef670aada409906081a5e9128c938fd5035c51b91ee26491ec1ea",
+    "maps/svg_maps/02_simple_maps.svg": "884184e8ed4a4081f89801d9b8afc1bca436ac46d41957e86ac2c96a36c6d0e0",
+    "maps/svg_maps/MIT_corridor.svg": "f305f36734b670e88b97d2df6ed5372168479905dd2dbb89ca534b6dfe03201b",
+    "maps/svg_maps/atomic_corner_90_test.svg": "7f29daba3f02b4fa27aeabeabfcdf9ef1b4693d7ce0151cd778ae24d45062842",
+    "maps/svg_maps/atomic_corridor_test.svg": "a39ed50e06a6eb9bb5e3666d08c7ad6dd838721ef6edf9bceb2e69ae1d97aa0c",
+    "maps/svg_maps/atomic_empty_frame_test.svg": "692c81005b8519ce59ca17ba450343e213abc84dc82811ff393e494031d50f40",
+    "maps/svg_maps/atomic_goal_close_test.svg": "c1235bdc867d704791c36ac205737be1ebb82755bca144bfd04852d5016e081e",
+    "maps/svg_maps/atomic_goal_inside_obstacle_invalid.svg": "d3de519aac0d5153a132b921b57efd86408c1711b80f6c532d85c154d84833d6",
+    "maps/svg_maps/atomic_line_wall_obstacle.svg": "678724d1265a82df457e1f4765eb6bf69fb99de8ef5ce817bf5bc8d7fe6d9cce",
+    "maps/svg_maps/atomic_narrow_passage_test.svg": "f512212ef68b2629daa9dd273eb0efa4c4ed89a25d9732ecc7ad0d660d8600f0",
+    "maps/svg_maps/atomic_single_circle_obstacle.svg": "1e4303fc272b10830015351d48f6b579b3380bc6116af8f5a0ac08e247704dba",
+    "maps/svg_maps/atomic_single_rectangle_obstacle.svg": "71b65eda2fdda677da88ca0550779f1c5369b0769dd1641fb4511f7067a291f6",
+    "maps/svg_maps/atomic_start_near_obstacle_test.svg": "df573c2f4548c95b7cef3e41e9ff019ee04379a0b2b3ac51290051e944004e67",
+    "maps/svg_maps/atomic_symmetry_split_test.svg": "683587955964d53fe51bb5a26092df023b7515863da49b69fe9ea4b540d2bb02",
+    "maps/svg_maps/atomic_u_trap_test.svg": "56edca7212dd8868b517920fb1cae15de5cceaa340c3500b63668674a683b9cc",
+    "maps/svg_maps/classic_bottleneck.svg": "65772c0ec5ef521b9ee1332fdee433e8bfa25b8c06753692ea1bf2c667b74357",
+    "maps/svg_maps/classic_bottleneck_high.svg": "bf074d4cbf53a9b6785604f32053d44b6694caa41e5222aa66e59ce90b7b4403",
+    "maps/svg_maps/classic_bottleneck_medium.svg": "d8401829a4828fca80083f506096389218b5d1178c4f3c4ac35f47340bdbdc4b",
+    "maps/svg_maps/classic_crossing.svg": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "maps/svg_maps/classic_doorway.svg": "42f3911d15c8a2edc61e177d2d25fbb8416810ba937b2ec5009ad6220308cb48",
+    "maps/svg_maps/classic_group_crossing.svg": "fcd08b528c091e4b929f06dd5e268f8e092e89ac75df348d2a7346445420476b",
+    "maps/svg_maps/classic_head_on_corridor.svg": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "maps/svg_maps/classic_merging.svg": "3a9d1d566542d60a3a9feab57e7c225b818eb37a3e26c1ca30f12a469e22397a",
+    "maps/svg_maps/classic_overtaking.svg": "dbcbaaf8eb96b89017451b5dbd8cc1806c610a2c29b39c132a9fa71e7cd47153",
+    "maps/svg_maps/classic_realworld_bottleneck.svg": "6219c0dc6e8ede2ea91bd0916c1224ff43df3bacb6332bdabcc7eba829095c11",
+    "maps/svg_maps/classic_station_platform.svg": "5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156",
+    "maps/svg_maps/classic_t_intersection.svg": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "maps/svg_maps/classic_urban_crossing.svg": "305261b242008fcaa9b298cdc5fa0334ddaf96bf7a2c83c11d49f5ea0fdaf5e0",
+    "maps/svg_maps/construction_corridor_detour.svg": "c064dc499d60c6d5b012e53aedc1149eff5c7843c66a6fd92d6927e30f0965dd",
+    "maps/svg_maps/construction_corridor_narrowing.svg": "4e7256b4e902e7e7f1dad997ca83f0127b597a97f0291773105199c27a6e72af",
+    "maps/svg_maps/construction_corridor_zigzag.svg": "fbfb5200789863dfc72d480eb7e640ee3f5f612b15e99193f0ef11cf6a847445",
+    "maps/svg_maps/crossing.svg": "3eb08faaddac30d6af06a01b6cafce3e6a71be9d6da20a66a8680564d504e688",
+    "maps/svg_maps/debug_05.svg": "53735a51208f7fdb2a64d96405b234da58348f6e6527cb65f10711f72f15a0f5",
+    "maps/svg_maps/debug_06.svg": "2c5b000a59bdf05c1c4cccefc0abfd4489d8fd941f7acc85d1a29ef516d0bea0",
+    "maps/svg_maps/debug_07.svg": "4ec9cc819cf0972800643a0c4d901d8991ec47c26e9cba0c3b1b2e5bf02b0f8d",
+    "maps/svg_maps/door_passing.svg": "5efa5c1a0acbbd9fb18a1133656008dfdb7be321caaf202ee383e1c59f6b0031",
+    "maps/svg_maps/example_map.svg": "2e86036ffe26c64c5f287e6c1e313ff878d9240f1233c9857d4724c20dd4c9ff",
+    "maps/svg_maps/example_map_with_obstacles.svg": "818cca2f176c57cc0364f97cb08173c60620121b0728702431173fcd7027b0f0",
+    "maps/svg_maps/francis2023/francis2023_blind_corner.svg": "8359a5d5999552b8abd9781c82ee7cad4b2052bb458b94d348578e5dda586ef8",
+    "maps/svg_maps/francis2023/francis2023_circular_crossing.svg": "c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a",
+    "maps/svg_maps/francis2023/francis2023_crowd_navigation.svg": "90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4",
+    "maps/svg_maps/francis2023/francis2023_down_path.svg": "a195335ea021714a93a2aaab6e8494580d7c442f84d648b995a003104ff1c519",
+    "maps/svg_maps/francis2023/francis2023_entering_elevator.svg": "fa52e7b55bae9ae8a1fdfc0c13cd3e18e43d2c005cb325fe9a978fa1c39f6c10",
+    "maps/svg_maps/francis2023/francis2023_entering_room.svg": "3d18c06ee133949b14e4274c548b19b61f10ed518c105b5a94f660b53376c945",
+    "maps/svg_maps/francis2023/francis2023_exiting_elevator.svg": "3e09a3ef263b0ba0b2f0ad68a33157db6c78bb8794535675f4db33457cf76e75",
+    "maps/svg_maps/francis2023/francis2023_exiting_room.svg": "6968e1d3459f213638406340a258a3b61c7e80bf56976802b110491cd9d4d6fc",
+    "maps/svg_maps/francis2023/francis2023_frontal_approach.svg": "685092e88811f450f47e5350965122f9a4cc8aff084b2584a628804a96f20e33",
+    "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg": "416caeb391a0f8a12d25c6346a38d023e210c173c9275e08823171fbce172723",
+    "maps/svg_maps/francis2023/francis2023_join_group.svg": "787bddcc270cc56e0703616ff2d9ad9a1a63890227fbbc6257670c1503aa8c7a",
+    "maps/svg_maps/francis2023/francis2023_leave_group.svg": "869256f3d5d3b32810873dd3ab668678774a86b043d1612c58e8492d4c9c02a7",
+    "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+    "maps/svg_maps/francis2023/francis2023_narrow_hallway.svg": "d592f0fff7fe604119db92fba6146acee6f55f99c360e8768cd5c6a8bf670467",
+    "maps/svg_maps/francis2023/francis2023_parallel_traffic.svg": "df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f",
+    "maps/svg_maps/francis2023/francis2023_ped_obstruction.svg": "5360ced91b6bb3f2d36510988c0b23a69a7baa40c3bf909f1816bce4eb9a35bc",
+    "maps/svg_maps/francis2023/francis2023_ped_overtaking.svg": "76f0746da014d61f50ee0f96914cb2d42c11aa78f0ecfe2022d0e4ddff7344d1",
+    "maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+    "maps/svg_maps/francis2023/francis2023_robot_crowding.svg": "202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617",
+    "maps/svg_maps/francis2023/francis2023_robot_overtaking.svg": "13f5927f1aec35b8653b2daa13d0e2832f300b1d808ce7a9a317a8fa93d264fe",
+    "maps/svg_maps/issue_2728_semantic_boundaries.svg": "818e6b41286ff7405eadbabb42a32b226fd8aa8846bae80cd099f6999e0bebdc",
+    "maps/svg_maps/issue_3233_near_field_observation_noise.svg": "16330a3bb8ad289f87ffb897f21f46a7da1568a492825f77e9bc1096d8484fb7",
+    "maps/svg_maps/issue_5303_classic_group_crossing_medium_v2.svg": "6ca72854707c8681a413eb931f31d3f9b1ba44d254c0989bbd53aae4d31b5d53",
+    "maps/svg_maps/labeled_example.svg": "862c979be70fdcabd673b9403069c0aee527b28bb13796ac4e98f77ac9f1882d",
+    "maps/svg_maps/map3_1350_buildings_inkscape.svg": "aa24d28e056a20562f7343fb2b3163fe90ed1f12bfc6187d5b61dc1cf9b446fe",
+    "maps/svg_maps/masterthesis/corner.svg": "72f0ec83bd4cd6445dcb79553ff21740d49653d3d2eab78885ced599320d8ec4",
+    "maps/svg_maps/masterthesis/headon.svg": "86938f446e57fe8cf8baf5bcd88a231fe7783139030d5fe332825f84f0bf83a9",
+    "maps/svg_maps/masterthesis/intersection.svg": "8032a60bd76f9cee0688908a6e25cc5df0dd3ff8f664d899062e4b0dc6346ea6",
+    "maps/svg_maps/narrow_corridor.svg": "457352cc0d2705d29177eb830c95aaf621f0e14183b633c6656cdfb85420b9a3",
+    "maps/svg_maps/narrow_corridor2.svg": "de87e286d917f6fae3d722d99c972d687d113836acbd552a7ab0b194ed628de1",
+    "maps/svg_maps/overtaking.svg": "90030ef2709d72c9a6470db14433b180ca0d4ba41cc0f79983e768f1d76d8916",
+    "maps/svg_maps/paper_bench.svg": "4974d1a2cb0da9497c7d6aa639a049cd5eac48ca8d8255e05bcdde3ea8cf4e10",
+    "maps/svg_maps/ped_metrics_example.svg": "58dec00cc513a08547e86988ff80c6cebc4be5c7dc710f329b20c17c0eb2603f",
+    "maps/svg_maps/planner_comparison.svg": "f7a8f9512c1097b79bc30ed1de6468a2cf50dd6061427ae5d21aefbe794dfd80",
+    "maps/svg_maps/planner_sanity_open.svg": "69332a2331fc5aa4ca0d94688fa336f659145305b0cf5fb6ac4f658c6d13f729",
+    "maps/svg_maps/planner_test_corridor.svg": "fffc5ae36b682950929cb044f205c47257a29b0a5e09913c92108c476e31fcbc",
+    "maps/svg_maps/planner_test_simple.svg": "5d3f1485d78af6d48b91be160c94dec63b3af815ef1da5e87ba7896ff0d64b21",
+    "maps/svg_maps/smg_curb_ramp_conflict.svg": "707bae1e82288634e390868f81dbe061ec95917684dc1140e3f842dc24b5fb11",
+    "maps/svg_maps/socnavbench/socnavbench_eth.svg": "9fb9e126fac37b1c24c8849aeee47dfcccc5ef71fd7fc4e0fea7f78f19d1858d",
+    "maps/svg_maps/static_humans.svg": "01820511fdfd90ef5ffa2bc572c2adeda64b5bdae66a414c2eb3ab2e831ca7a8",
+    "maps/svg_maps/test_spawn_in_obstacle.svg": "f87015c9e4f6c5f9596e3205cfacd8db7d05e08423920d8ed3e5efdde6584723",
+    "maps/templates/map_template.svg": "72bb6789020fd76d73d3e1629da6def5b08f67da449d66eaaa0f954150d6102e",
+    "configs/scenarios/archetype_validation_waivers.yaml": "5bd911fa35aab0751c6e479014771e086547b3d0bcf84b0abcd355de5df93cc4",
+    "configs/scenarios/archetypes/classic_bottleneck.yaml": "74882625aaa863ef6e9d4e9a57f7709e00c57d483344f91025ce79c8b91017ac",
+    "configs/scenarios/archetypes/classic_cross_trap.yaml": "2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060",
+    "configs/scenarios/archetypes/classic_crossing.yaml": "b1b0aaf551d7e5e58c47ccc9ce188a5275e1dce687bbfe6e4de97e04cfff326c",
+    "configs/scenarios/archetypes/classic_density_tier_index.yaml": "e8dc30ca416ef7f10296545490429cfb524eab9eb19c8d3572ebf38bdd2484c2",
+    "configs/scenarios/archetypes/classic_doorway.yaml": "2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0",
+    "configs/scenarios/archetypes/classic_group_crossing.yaml": "370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8",
+    "configs/scenarios/archetypes/classic_head_on_corridor.yaml": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
+    "configs/scenarios/archetypes/classic_merging.yaml": "eb1c80372a6c0d96fdfe36d5523980bb5461475abbca8db0d7f8a04b0cfd9023",
+    "configs/scenarios/archetypes/classic_overtaking.yaml": "fdd789f19e833039cee0bd4f5fceeb2f273dedb9925c58f41b26246cdfee9f74",
+    "configs/scenarios/archetypes/classic_realworld_bottleneck.yaml": "b6210d3a11fd2270ae1e8729b1d4e5b9045cc5e036249f822f4b34ea445fee34",
+    "configs/scenarios/archetypes/classic_station_platform.yaml": "7f093fdb6406f4043e07b4a8d4113defd4cb17ec4bc793bf3583f12960b77228",
+    "configs/scenarios/archetypes/classic_t_intersection.yaml": "97d7f9a95c57ac58814df6271d518aec84d4233fb027c1ca397250b06b0fecde",
+    "configs/scenarios/archetypes/classic_urban_crossing.yaml": "ea65d720fd8765bb725fedba0f50ccc9bbd1e609aa24a80c8ad9711666550161",
+    "configs/scenarios/archetypes/issue_4974_field_observed_ped_robot.yaml": "216978d35c58eed4bb94a5a455256ca37c70b423762053102035086a1a22ce6e",
+    "configs/scenarios/archetypes/issue_596_dynamic.yaml": "59d49cef23b58fb040dbc5a7e4dd230b19b2e9f0ec1ac3bcaa7e958aa50c35c7",
+    "configs/scenarios/archetypes/issue_596_frame_consistency.yaml": "a62f3f2fe934b1db7292b7bde8f99de48a2a9d633f8014f76e7550a0e7375da5",
+    "configs/scenarios/archetypes/issue_596_robustness.yaml": "67263401d630e2f265918a8b7da3dd673c4a32e5318dbd4881bfd73bf305a840",
+    "configs/scenarios/archetypes/issue_596_static_obstacles.yaml": "439f649de47c4d0f6b744632ba0c453f9ce4a5f3fd8d07c0c8916a74e6ca70b3",
+    "configs/scenarios/archetypes/issue_596_topology.yaml": "a5884e7f0367de7c153529ffa245908832c05500472c24737fb4050dd69f54db",
+    "configs/scenarios/archetypes/social_mini_games.yaml": "426c9aceb104f73055843e6f28e1975518ab4c6b5482cbde0a4ef4e9e6c59eec",
+    "configs/scenarios/archetypes/temporary_construction_corridor.yaml": "6250ee2ac08d643ecfd5423dee687e123651a384694510d512701c40dc5709f8",
+    "configs/scenarios/benchmark_map_redundancy_3maps.yaml": "b979c17ff5d3b86fc54fcda9ddce116bd88fe3820bff7c70d2909fc69d9d971f",
+    "configs/scenarios/canary_corridor.yaml": "aaf94b6ea8b7aa7675fa87611e3f1b1e43317690ed5ebec4fec2c6d66d61b11b",
+    "configs/scenarios/classic_interactions.yaml": "5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5",
+    "configs/scenarios/classic_interactions_francis2023.yaml": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml": "214d0ce7830ab263a73d94525e7530cc015a7a2e87dd0cbc28680acdde1e4719",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml": "8a8aa9adb2b098f039a3e92a4849e16eb8d3665e928211f08e0c689584c9f389",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml": "288167cafd18c6ec2c3835fe794ede9a4a1aeb9416ae17a129a64da0ac830419",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml": "e2a3dd66c02f05ed3b82c0960fecd31ac62f6ed47bc60f9ef254002c07130162",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3_feasible_doorway_v1.yaml": "c4aa035f16532b810c146cd5d830bc7599f7d6db7a9f83b5b65b2e348958e573",
+    "configs/scenarios/collision_sanity.yaml": "6ce54f1a622fbdc83623ef6c7c9804e5cd0a3294234df5b86929e1fdefce1d76",
+    "configs/scenarios/confirmation_v1.yaml": "dbcdc2484e6032d0d6da8665920a1598d02800c824afd9b8ac2cb659625dcf42",
+    "configs/scenarios/contracts/intent_conditioned_behavior_issue2472_contracts.yaml": "f6435e2e066c563a4de2b42902dda29a19ba079e692f1198b486b3db177f86dd",
+    "configs/scenarios/contracts/issue_2164_amv_cross_trap_contracts.yaml": "40ad14f7132598bbe7a2232c8a15172bcdabbfce8acf69fd0c058e3a91ef0c89",
+    "configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml": "e276768fb3a7e2f6d8f992feed3a1da673c2807dec720485605c51bf33da75d6",
+    "configs/scenarios/contracts/issue_6054_regulation_source_example.yaml": "7c8303c93d38358b22f70039661f56e8f0d6a2708b7aa7e22bbe04231f316b33",
+    "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml": "de78e540dac67b962ba472ee1211d4eff3954d98c7f4a4900a8cc19a7c843f98",
+    "configs/scenarios/debug_scenario.yaml": "70af4a132954de9dc0f4fa2e968af5e424b8c312665f90c025063afbd4a652de",
+    "configs/scenarios/event_disruption.yaml": "e1fab624ef5a821b5ab6138fdd1953a37210ae9f0d6cb63ee3f4cd07aeee1f46",
+    "configs/scenarios/francis2023.yaml": "f60ccf7235d1c965e2d1989ae157024734366d0ed6f4db5acdc83127f0325f56",
+    "configs/scenarios/generated/generated-2931e2af37766dfe.yaml": "4cf7a6bd57988643980cf4fc1abf595a6c6661f3c61b6c143c8adcd6f1ef5724",
+    "configs/scenarios/generated/generated-c64c6ffba1e4a51f.yaml": "21bc7cef8c2cd1a1bc2d639ab833d1fbea0e79dba7cd0d0f1481fbd1f261414a",
+    "configs/scenarios/generated/issue_4932_rare_event_demo_archive.yaml": "2ec1dc97f298323622c8b07b57be6dc95b2915e83e2fdb7f05f970bb0a010c4a",
+    "configs/scenarios/generated/issue_5264_generated_replay_catalog.yaml": "80dc2302cbc730d8fa69d354003e2d308d69c01c5ed2c95767d8a53bac917971",
+    "configs/scenarios/generated/issue_5264_review_manifest.yaml": "43c134c89a52dafad02d15e820dc47ee2ce2ad1fe745ebe97d13bde1013fb59e",
+    "configs/scenarios/issue_2155_research_v1_ammv.yaml": "33b48301efc67b755b57f12c3f6f615c7dd2e818084c00ef7b3c31e1fc5daacd",
+    "configs/scenarios/issue_2168_ammv_social_force_pair.yaml": "6e4ab3ea3d080d651ba0549af6074771664e0cd3ad3d3bd8b3cbd4c91fd8c8fd",
+    "configs/scenarios/issue_2434_ammv_trace_selection.yaml": "8b640404d8c03cf1cdc81659c53598ef3767dd5b752e7acdc90cb532f42f0f31",
+    "configs/scenarios/issue_6464_brne_corridor_diagnostic.yaml": "67cf1eb61f295e91bdb63e3e4377bb06d21a1d5f9a8b84512d37eba2331295aa",
+    "configs/scenarios/issue_6474_social_compliance_nominal.yaml": "8c87eac284b51108d992521b1cdbef3edc28d13a3e0c5c34933a76f076ce3d6f",
+    "configs/scenarios/issue_6481_social_compliance_preflight.yaml": "968a3b590c9547cefac177a543022cbba3ab600f915750fc0dd04dc370505376",
+    "configs/scenarios/issue_9764_kernel_paired_legacy_v1.yaml": "142c15d3f61477644c754897bbae43732a7e7c2e1ea79b16f458307bc11c0aea",
+    "configs/scenarios/issue_9764_kernel_paired_wrapped_v2.yaml": "1014b8cbeaa529301128726637d92d2feb9fddde7baf604d43374172e11d6c62",
+    "configs/scenarios/issue_9860_corrected_diagnostic_v1.yaml": "89e38c84af12a467599f0b76a60e5f80f7f5946b5438116378cfc4b2dee414ad",
+    "configs/scenarios/lightweight_cnn_issue_835_repro.yaml": "87e15d90c53fe43c595d818e7c32847860c1b59f5f6e612556e737845922578f",
+    "configs/scenarios/maps/issue_2926_pedestrian_only_cut.yaml": "1b132c161ec15976589442a41bdd46c79a5682e52d5c581ceb4e8768c37275c4",
+    "configs/scenarios/maps/issue_2926_signalized_crossing_wait_box.yaml": "fc2af6943c0bfc4e53dc8edc35dd3608218765f5621bf8691982e41c19c47042",
+    "configs/scenarios/maps/issue_2926_stair_access.yaml": "e8c9d660bc658cfe781d676e2c6474dfc417495b2219eb3556809ffbd5a54ed3",
+    "configs/scenarios/multi_extractor_default.yaml": "3cba3fba384f9faeef631a1d685622c56b0836cf1e09485b93f67dacdbcb81fa",
+    "configs/scenarios/multi_extractor_eval_193.yaml": "1b5fc371a878293a6c68d975390634b2d3f79e4b804e7a80cbc181cffda52723",
+    "configs/scenarios/multi_extractor_gpu.yaml": "19aedae5bc9ab3c41e580b00f15248f299866eb6b320c1f4c2e9abdfbc2a9452",
+    "configs/scenarios/nominal_v1.yaml": "cc3555543e7ca905cb13f8576094ef6098fea88193657f4cadf03f8c46289423",
+    "configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml": "49aff86c6184481269f3c655f8bb3bc2770cfd2dbbdab65c8c3879868efb7864",
+    "configs/scenarios/perturbations/issue_1610_ped_route_offset_pilot_v1.yaml": "fb24bb4ecbfeccc95d4eb58eebab86f5168a6c512734062d30c94fbdb738915d",
+    "configs/scenarios/perturbations/issue_1610_ped_speed_pilot_v1.yaml": "ccf041695d3f6b3abb3f308b6d7d657eefacf94a6994ec8b21f5fff778eac4d1",
+    "configs/scenarios/perturbations/issue_1610_ped_timing_phase_pilot_v1.yaml": "14b0f714465bce0962f3f3a5e533a84510065fbf40047eb900ec6d51d554f4b9",
+    "configs/scenarios/perturbations/issue_1610_ped_wait_duration_pilot_v1.yaml": "6154224952f08bae3a3dc88f2f3e77965f3d79c6b06d9700a29ab72cccb850f0",
+    "configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml": "5278f63bf0e6c6c594bfe1549b1fe50e390d1413de40b9a5b4d3a2571e32e70a",
+    "configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml": "2fd50e13b4bbb432302abfc904933aaaa6debb7337a85a787480a243ffd3c02f",
+    "configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml": "5da32b5c2846f30ee0d0b20c4fe907d0492b2c4a988cae116cd5ad2070cad7cf",
+    "configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml": "cd0a95ff4e26744e43fd2a27d0bfae2c7a2ef4a77ca46e13863049908f24dbe7",
+    "configs/scenarios/planner_sanity_matrix_v1.yaml": "fc03ad80f2aa9ba13ac34263bbbd3d29503dc26524b1fb0f5c114e0ef41af3ac",
+    "configs/scenarios/release_0_0_8_endpoint_dispositions.yaml": "8e28e07b3c2cca8a822025200fdc5c9e113e2e1131dbd7380ee0b2a87944959c",
+    "configs/scenarios/route_overrides/issue_1878/classic_head_on_corridor_low_guided_1502.yaml": "adaa945cc76f7637605e4f8cb4435561312a0f241e467e2ca37a6dfc3922d621",
+    "configs/scenarios/route_overrides/issue_3323/occluded_emergence_near_field_h1.yaml": "c1f0ad5e5e8ec5950018798f2fb9671123d60c071189faf49e6290ac106c0211",
+    "configs/scenarios/route_overrides/issue_3977/emergency_reaction.yaml": "ccf1554cc1f30877408ac45cb407602ca749143445d5c34f55348baa7e62fc36",
+    "configs/scenarios/route_overrides/issue_3977/safe_braking.yaml": "ccf1554cc1f30877408ac45cb407602ca749143445d5c34f55348baa7e62fc36",
+    "configs/scenarios/route_overrides/issue_3977/visibility_and_intent.yaml": "947b4d86c09d7b947b3b87c03fe60595ebda0d3e5146cbd336d5799609d69c42",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml": "f9cba83fd5109b36f9b9ad76ddc38a3bc338ee068bc2e4c623f9bc8891263156",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_north.yaml": "353861928dcb4579df96bd34628996fe44f88e6a24fbcc38c8f6bf3b8801e92a",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_northeast.yaml": "e443ce0d3aeb9b1f36cbdcc28179e43f9edd48315228f574ce601f99b03072e4",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_northwest.yaml": "92e56523c0f7848c3384e48fd9452103e15589c8b2e830f50f53ad484ee9d8b6",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_south.yaml": "42ee73b701cda02a136f54b7f7cddb188b0d4b66938a0d2605f591cd26a3f624",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_southeast.yaml": "24d3671c2236c0cca5277d83c45eb0de2e1f9755470fe03c8dadbffbc6ec8347",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_southwest.yaml": "803587359cdf3480f6037ae05a25f97298fe80327a15a7c872a036757b8a18ea",
+    "configs/scenarios/route_overrides/issue_596/empty_goal_west.yaml": "d0b1ea5ee001e7406863cbefdda048c8c7dd3d0d42d5778f3b7bfec948d2b114",
+    "configs/scenarios/route_overrides/issue_596/goal_behind_robot.yaml": "6f616c0e72eff1856449b2f656311985066b55b5e83e2501b48c4658a3dc0e8d",
+    "configs/scenarios/route_overrides/issue_596/small_angle_precision.yaml": "0e067fda50aa6eee37e07e45ea3c1134556e516daf3700afe22dcdd76f86cc1f",
+    "configs/scenarios/sanity_v1.yaml": "00d235f975cf8a99241e319417b6b07137b0758c734fc0c2561af2b70d2589a1",
+    "configs/scenarios/sets/atomic_navigation_minimal_full_v1.yaml": "adbc3a62e4d821d8dcea77f28d76d683f685e78aaaac8263f818ee3014b58c0e",
+    "configs/scenarios/sets/atomic_navigation_validation_fixtures_v1.yaml": "c6103c0229bae83483d36cd876a928ce0fbc3848b8a10358f9e32bc43ac6ab47",
+    "configs/scenarios/sets/classic_cross_trap_subset.yaml": "fc5c2ccec86d2bf8eac069f04fb24ecb742705844adc11b59d34c0faad685726",
+    "configs/scenarios/sets/classic_crossing_subset.yaml": "a5baf5cd4b6aebd333a30f76e319646dd3f3451406db1678ef55d5ea3b972db6",
+    "configs/scenarios/sets/cross_kinematics_v1.yaml": "fce317fb08fc9ecb1f2eb6d54907fbe63a64834924f71beeebe6e8c26b8b5fcd",
+    "configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml": "b6d012794479121ead05668176020f81e5ce95b6ebea7d8fedfcc62062786960",
+    "configs/scenarios/sets/issue_1878_head_on_replay.yaml": "e3a9e15cb3fc8c41fb7a33c14161e26e29bd2c80937cde9f7ded22e9e40ee9be",
+    "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml": "02f50c2c819af4a958db023b4f381fbe81e45907b61e20d450707330a92a00ec",
+    "configs/scenarios/sets/issue_2128_heldout_family_transfer_training_pool.yaml": "b01873184f883681eb03ab63336fe8830044d7b2911a132fd7d6d7a5b6951fdd",
+    "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml": "f1ed96a44fae2c9f41389881835e366acaf9141db14c8c218e19c464cee1fa03",
+    "configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml": "d0f165d139e4d512bd0c49601b388a35bc01fa272fe6b95b6f6644867faf028d",
+    "configs/scenarios/sets/issue_2590_escape_recenter_static_deadlock_controlled_trace.yaml": "465880ad2fc060744386b0001174469a330f3d5fa8ee6c202d439792f58d984e",
+    "configs/scenarios/sets/issue_2592_static_deadlock_active_row_h500.yaml": "89d1f700c3616a30e7c719ccde3ecec97efa22c500eaeac9e0c0b6871c543d4a",
+    "configs/scenarios/sets/issue_2594_static_deadlock_broader_h500.yaml": "70ef3af6b92db23471121d7d2357cfb6f999bda270bac7c4d546bf49d688f175",
+    "configs/scenarios/sets/issue_2653_static_deadlock_activation_capable_h500.yaml": "6dc9a00f2b9207f418490825aebdfc68e78654efe792203990da553305c7120a",
+    "configs/scenarios/sets/issue_2926_shared_space_infrastructure_smoke.yaml": "6199a0bee60bd6851140bb81edc4ce2a230be4b7cdae13755947aa646dcc16f4",
+    "configs/scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml": "f4e742484b443c528373c5dae7722839f0a289870ecb9ac0426056797c7fc10a",
+    "configs/scenarios/sets/issue_3202_ammv_anticipatory_conflict.yaml": "5eab9f0080b23967d0234fc257fc6d82f08bbe8b8f03fd5da7b1d474d2735d4c",
+    "configs/scenarios/sets/issue_3206_heterogeneous_pedestrian_smoke.yaml": "93894f765492084359036bdf00d31b493e44c0fc9359fbdb5aaa5d02e5f6e44f",
+    "configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml": "5202e066c4eb01ff5ad7b8341dbe126df97a9fe2b995f948e441cc8519ffba71",
+    "configs/scenarios/sets/issue_3300_false_positive_single_ped_smoke.yaml": "cf5d1d07817b51abca9405cb0e842287d19f4a4ca3e426faf8f597e052104278",
+    "configs/scenarios/sets/issue_3300_false_positive_stronger_structured_matrix.yaml": "0cac7c7922b6bf690cf91f011b0a106d2f0618ea63f0596007bb6e0ac5c37967",
+    "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml": "80712a1673ce451a97d068b8738de966418659dfa9984a5d6446c8f688e5d1d8",
+    "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml": "de397196bb8642a14c2092b1ec2dabfdf522dbe074573f80716f76acf3bff7f4",
+    "configs/scenarios/sets/issue_3556_near_safe_occlusion_bearing_crossing.yaml": "1556276118d4182aac5754a57f7d96d11fd6b018a308c63f98988dca5e704420",
+    "configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml": "a2b3a8a195a2c88158f28005236050c999f9f2ef24791f380c70cb4c93e9700c",
+    "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml": "ee12f1c6cf319d2d250cc36404a4b6e06523f941f4f887e157c9e489c1ac29ac",
+    "configs/scenarios/sets/issue_3977_public_requirements.yaml": "b45f5a62ae45ab28f73e3033aac239f2e84bf4ba055257288d1e0a33cc7b07e5",
+    "configs/scenarios/sets/issue_4142_dense_dynamic_cbf_v1.yaml": "70c2833f35519e50cf62d0586f2f35c6627189f951cd9a38860b71927a6faab9",
+    "configs/scenarios/sets/issue_5034_latency_sweep_cpu_v1.yaml": "9d887451046741d13159252e95889d117281771f2607f89d3b1c15afe5cbd1bc",
+    "configs/scenarios/sets/issue_5504_mean_matched_two_geometry_smoke.yaml": "a406bc12750b89317520ded9b97cb6741cd518ca8555825f53be8eee685ffe76",
+    "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml": "6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07",
+    "configs/scenarios/sets/issue_6054_regulation_to_scenario.yaml": "3f18964e838da749126786e29e8a6411a75c5b9d626da180aba30c55f7d1d65b",
+    "configs/scenarios/sets/issue_805_teb_topology_slice.yaml": "1764d70a92e41bcfeb1f622bec2ed6ee0e7656355dc94132eb8fd561156f7d78",
+    "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml": "ad73440c92103eb6a3a20aaa380f990e82972d76167231460288286b6ac7ffb1",
+    "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml": "61592a6eea90e169f14b01afce2147777d5ab7e206dd0b8aca3bdf9421bd9ab0",
+    "configs/scenarios/sets/paper_cross_kinematics_v1.yaml": "a099886ab4e197eda04ed580dd8415d356f2384cad9d77b3fa9be949bf8503b6",
+    "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9",
+    "configs/scenarios/sets/paper_seed_variability_pilot_v1.yaml": "0b8668fdba5f80735ed30038386bc698c6d5b1a9e1639d4348939c3cb1aa265e",
+    "configs/scenarios/sets/ppo_all_available_training_v1.yaml": "4aacdc2fef506560dcfd72dae1f6d53140beae42c22ef169b19caf56e6da426e",
+    "configs/scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml": "1c295b6bdbfa0a37eccdc925c5dc57080c46f09687628501a76d82c461b2465d",
+    "configs/scenarios/sets/ppo_all_available_training_v1_horizon500.yaml": "9e21713882ae738e97f3fcfd761ab268eed8b627bd96544f9392ad52ac9d6d85",
+    "configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml": "91a0f9fb70673e9bd965b344bd306926b60417df848e91b9995ecc167382581d",
+    "configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml": "84bbb7e639ae928328e96b8f03b4a17f3a6d24ca4850751e897070d3615479c5",
+    "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml": "4fde34d246bcf8933bd2fd68aed5f0367185f995a3fa373d381461134d522322",
+    "configs/scenarios/sets/safety_barrier_static_slice_v1.yaml": "b5b4f379c1e1130278b490a0c838cbe592c7bca130252689f3245e2d576c9bcc",
+    "configs/scenarios/sets/social_mini_games_v0.yaml": "5102764cc9a9910c4526e35240d809ee50cbc5a72734e8bd24e90dc8dcea37f3",
+    "configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml": "3c9d786f1f775420640f4b4e4d1346f94ec203ed5b98c9a0a8a4a253561ec64e",
+    "configs/scenarios/sets/temporary_construction_corridor_v1.yaml": "2e1e799011ecb171daf30916d617dee65f2502c2dcbea21e07dc73b9af242d27",
+    "configs/scenarios/sets/verified_simple_subset_v1.yaml": "fa8b6ddefdfdc3d56259ccc706a661645e260e055634087b2efcb847982874c7",
+    "configs/scenarios/sets/vulnerable_user_proxy_pack_v0_deferred_issue3654.yaml": "b31bda3b11051e2bd0f675a779f02d461640dd380c5f84557bac766fc89919b4",
+    "configs/scenarios/single/dense_pedestrian_stress.yaml": "572b557c6b35c8d25a9bcd8c0cdf71124bc386e9c892d8739c139eb6620f055e",
+    "configs/scenarios/single/event_disruption_public_exit.yaml": "a3d667ee6bbe00c69c225c44faec9ef8e08e58dabe536449ec78526e72fb61e4",
+    "configs/scenarios/single/francis2023_accompanying_peer.yaml": "c5c1dc3d171e0defdce2916dc28213bf16220e98dd31657f7fab1e79cfcad4f9",
+    "configs/scenarios/single/francis2023_blind_corner.yaml": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb",
+    "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_kernel_wrapped_v2.yaml": "cb58d1aa6daa77395010be39747d5675e3b6a3c664c71ad1ab7d6465029b897b",
+    "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca",
+    "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785",
+    "configs/scenarios/single/francis2023_circular_crossing.yaml": "58a627b73ed74510f339a9cc8a3614701a4c5d94e237b3f8554fbdab7fd52967",
+    "configs/scenarios/single/francis2023_crowd_navigation.yaml": "84fcb9fb8b640f8340488b2baddc259778c7df3f0b3b8f1b182a9680b8167cef",
+    "configs/scenarios/single/francis2023_down_path.yaml": "0aa47e6267475b391c80a7bf0afe0efcc02b128149cb2b9646238eabc5a8db6d",
+    "configs/scenarios/single/francis2023_entering_elevator.yaml": "d9b2abd060b66eaff0ac4f84a5309b03700f7cc6850a9b3338298354fa3b82fe",
+    "configs/scenarios/single/francis2023_entering_room.yaml": "23d3a835d031007891b6ef71bca8262dbfc8ca7bfca49b8dff3343e12968da7a",
+    "configs/scenarios/single/francis2023_exiting_elevator.yaml": "d4b59fcc296e09352f5166fda1c03aea21caebcd78644539f738c50fe4e30a68",
+    "configs/scenarios/single/francis2023_exiting_room.yaml": "0871fd8c769b342cd7f923c90d652ff96b9afa2c64fb6955f601689f35c6bfe6",
+    "configs/scenarios/single/francis2023_following_human.yaml": "82aa88231fcbd1775703950f0a3d64f205235bab1ab9bfea0e170fb8e5616655",
+    "configs/scenarios/single/francis2023_frontal_approach.yaml": "d2d5680764c487969d4c3a623b6ace3dd69918185d77004a0c3a4e76432cb5b0",
+    "configs/scenarios/single/francis2023_intersection_no_gesture.yaml": "3e01b2173d2c5f567328af422c647fe931561ca0c1d7712a141cf0fdbbb7b4d7",
+    "configs/scenarios/single/francis2023_intersection_proceed.yaml": "a9a4ec7c49d1121a319a3c7c85936d1caec30de181a2f785d6860a8e2615df7b",
+    "configs/scenarios/single/francis2023_intersection_wait.yaml": "608fc06727c57731febd214a9c84a3839b799701f53eaaf3d6cd9e329648ba75",
+    "configs/scenarios/single/francis2023_join_group.yaml": "a1139933e4acf2b6066fe0a9d66c7e69e58ea6596ead7df92dd65e61bc15a208",
+    "configs/scenarios/single/francis2023_leading_human.yaml": "a30b54b4677086968d10742edba95db4f1ba7157e39329c5244b562f0658d7b8",
+    "configs/scenarios/single/francis2023_leave_group.yaml": "4427dc9f9afa38a9ae76254d9ec8dbdb44706da4fccec8c93f1bb0c8e8f6cb43",
+    "configs/scenarios/single/francis2023_narrow_doorway.yaml": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
+    "configs/scenarios/single/francis2023_narrow_hallway.yaml": "94662d62415766f229b8b80d09d3eea59d71977add85bd58728be47f6939f984",
+    "configs/scenarios/single/francis2023_parallel_traffic.yaml": "51ab362a25e38ad20726ff50208d5fbe5e01331cbd55c5889591df40c8f9a387",
+    "configs/scenarios/single/francis2023_pedestrian_obstruction.yaml": "b76535a0060a6c4ebd9dfa4170b61621c0459fce7d0228c734c08a04059847be",
+    "configs/scenarios/single/francis2023_pedestrian_overtaking.yaml": "f009319422d3602d918a1677d9c7efaa1377036650e6c472175d1ad271e4e0d5",
+    "configs/scenarios/single/francis2023_perpendicular_traffic.yaml": "cd9dab418641d5a1dc5e0755ab405ed15f8d3e1a0858a0729c3317026f63aa8f",
+    "configs/scenarios/single/francis2023_robot_crowding.yaml": "a6da0946bbdae3d5818efb15d7148d313252e8ff477f1bbeaa88097520223de7",
+    "configs/scenarios/single/francis2023_robot_overtaking.yaml": "92f6dadfa4ce7aba13d6f0506e6d4d189fedc2c9fb2ba8a6cde07bd12f8b17dc",
+    "configs/scenarios/single/issue_2526_cyclist_vru_smoke.yaml": "8954c5315eca84c129f1642f4b8a3f814ecd9d2449d3873e98bda72f1e8e2f23",
+    "configs/scenarios/single/issue_2527_waiting_then_crossing.yaml": "ed28f7c7957ff33c17d9db32489d045940cc682ee19802d347a8de330dc97346",
+    "configs/scenarios/single/issue_2727_fast_bicycle_dynamic_actor.yaml": "2a43b8c22ce6de7343218f35616511df8d50a0da0ec8b4b9fea5f20954b56f13",
+    "configs/scenarios/single/issue_2728_semantic_boundaries.yaml": "d639a72bc0d3d234fc463611f43a52771644ed0f1e8af315e39a4ab0d22c28a3",
+    "configs/scenarios/single/issue_2756_occluded_emergence_live.yaml": "f1f40808973f8801ff0862665e692cb3e9a88cde5c0669f8948c061773bcddae",
+    "configs/scenarios/single/issue_2799_signalized_runtime_smoke.yaml": "1825fe3b07486df774bfd010ca8b17d3d04e0b6190b68ce12ac9c4fa22ef4ad5",
+    "configs/scenarios/single/issue_2925_cyclist_micromobility_actor_fixtures.yaml": "63ae16e50bd362b375a631e24596ab874a8892015d4f868ace96c602d20a5898",
+    "configs/scenarios/single/issue_3233_near_field_observation_noise.yaml": "9b7d7d1aaebd300fbebb359ba761384b6cdbbb83526cd6bb5409915d5db9fb19",
+    "configs/scenarios/single/issue_3323_occluded_emergence_near_field_live.yaml": "7317d88e43690d3c00cd58eb818ec8b0ceec2be394cf90ad534d222278d1ce7d",
+    "configs/scenarios/single/issue_3556_near_safe_occlusion_bearing_crossing.yaml": "8ffc4e62fb865b96639e25738ed5327b740bf5b67fbdd4fea9440d80125e4d05",
+    "configs/scenarios/single/issue_3635_near_safe_occlusion_bearing_crossing.yaml": "4eadc345c48daa377e716a8a846868fd94f5a351467bc201c8cff553cc44390b",
+    "configs/scenarios/single/issue_3977_emergency_reaction.yaml": "17a74d7354ef4a72b0746cc645ec28a36d0e1cbb198552b36d328ee522f9335c",
+    "configs/scenarios/single/issue_3977_safe_braking.yaml": "65b8eca2bf8446c51de8951c6da6b069d2797f409de603ae5c8cadce2153d21d",
+    "configs/scenarios/single/issue_3977_speed_limit.yaml": "3385b1fb71ea9842401e0762d28221146ba516b4ff0d5eaeddac6998fcf2eccf",
+    "configs/scenarios/single/issue_3977_visibility_and_intent.yaml": "74c8b891df861dbd1286bf5f26f9bf8573772cb2e34fcff32bbc9fccbb8ef483",
+    "configs/scenarios/single/issue_4207_interacting_smoke.yaml": "af4da04c9f90bdd625a45480b1088da58e05a0e72fac6016e6f6f35794c7f817",
+    "configs/scenarios/single/issue_596_goal_inside_obstacle_invalid.yaml": "9c81e266e554ad628ab04c13f0e89df4ad49ed7b557d97872678bfad02dec6ce",
+    "configs/scenarios/single/issue_6054_regulation_to_scenario.yaml": "b2879597422c7d06dbe4e3ca2ba4b6a61677d691b2cba9ed0901790f40762b0e",
+    "configs/scenarios/single/issue_7742_classic_bottleneck_high_seed114.yaml": "b46f5b7d02222569fc854a03e6358f13cd4739f14063ca4fddf4470680283436",
+    "configs/scenarios/single/multi_amv_minimal_smoke.yaml": "839b25f5aa2a214cffac9593ec8c30852896d59cf756374a217cc20b0e35ae84",
+    "configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml": "9f72d482fa873e24e8990e4b0d112f1a1a16587819a7ca2b8090895ee3f63ba6",
+    "configs/scenarios/single/ovgu_campus_walk.yaml": "7e4d435dfd5cfedfcf5bcfb6a8a72eee6758e8079d057d99ec2a2c09bcfeb503",
+    "configs/scenarios/single/planner_sanity_simple.yaml": "c83c05bb7c8bc90547c51453fa256b107377a8343b8c147bb0c387f15c027ab4",
+    "configs/scenarios/single/pr_promoted_planner_smoke.yaml": "e75459dfa7d809e68f890f0348533a2f862b7a9c6a9aecbe6274f45b52ab5f19",
+    "configs/scenarios/single/quickstart_demo.yaml": "fe6fe49ebbc0103cc07de08a6c3aa96f8bec3db91aa29f88d57a256e03270585",
+    "configs/scenarios/single/socnavbench_eth_smoke.yaml": "c18bf18806f7d5655e5cc099c9831f02c5bd1b587e0455fbda6cfef69c2040ee",
+    "configs/scenarios/single/socnavbench_eth_smoke_v2.yaml": "023360ea2e021e7413fbb973c9828f3f7f50c73a29076cb07d62a0837c74a74e",
+    "configs/scenarios/templates/crossing_ttc.yaml": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+    "docs/context/policy_search/candidate_registry.yaml": "a780591fc498934748b09af5720314cc170e2ea15861436df643254b59199747",
+    "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml": "d4fbb7a9186b8950249cc2b4a24aec49dc49f0bb0829cce89b8ebab8508045e3",
+    "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab",
+    "scripts/validation/run_empty_world_sweep.py": "a21d31f0a5774acd4b6b617ea8cd7c2479a0a0621aca951d934dc533cfa17411",
+    "scripts/validation/run_policy_search_candidate.py": "3f4d29da2d46569c909c2020cbfefc08bbae6eb9789e96d1ddc351a3c85813ff",
+    "scripts/validation/run_policy_search_step_diagnostics.py": "15405c8f85e8c74c4a5ef6e1c6841effaf2ef0c0ec788203dd0012ecb2a9a5f2",
+    "uv.lock": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+    "pyproject.toml": "b11cbfe2991534f01234d07afd46a85c4f33eba7dd68a4ad86388201f3db3ff3"
+  }
+}

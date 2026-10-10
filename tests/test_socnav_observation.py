@@ -185,6 +185,7 @@ def test_flat_socnav_observation_preserves_declared_frames() -> None:
         "robot_radius",
         "goal_current",
         "goal_next",
+        "goal_next_valid",
         "pedestrians_positions",
         "pedestrians_velocities",
         "pedestrians_radius",

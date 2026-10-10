@@ -92,6 +92,8 @@ def test_v4_continuous_static_acceptance_still_checks_pedestrian_collision(
 ) -> None:
     """Coarse grid clearance must not bypass v4's independent pedestrian gate."""
     planner = _v4_planner(
+        # This witness isolates the legacy continuous gate with a geometry stub.
+        physical_static_exclusion_enabled=False,
         continuous_static_clearance_enabled=True,
         rollout_horizon=0.4,
         v4_braking_check_enabled=False,
@@ -122,6 +124,8 @@ def test_v4_route_guide_candidate_hits_static_collision_gate(
 ) -> None:
     """A direct route-guide command cannot bypass v4 rollout collision checks."""
     planner = _v4_planner(
+        # Keep the synthetic geometry witness on the legacy continuous gate.
+        physical_static_exclusion_enabled=False,
         continuous_static_clearance_enabled=True,
         rollout_horizon=0.4,
         v4_braking_check_enabled=False,
@@ -376,7 +380,11 @@ def test_v4_decision_and_episode_metadata_record_speed_safety() -> None:
                 "speed": np.array([0.5]),
                 "radius": np.array([ROBOT_RADIUS]),
             },
-            "goal": {"current": np.array([10.0, 0.0]), "next": np.array([10.0, 0.0])},
+            "goal": {
+                "current": np.array([10.0, 0.0]),
+                "next": np.array([10.0, 0.0]),
+                "next_valid": np.array([1.0]),
+            },
             "pedestrians": {
                 "positions": np.array([[3.0, 0.0]]),
                 "velocities": np.array([[0.0, 0.0]]),
@@ -431,6 +439,7 @@ def _flat_obs(
         "robot_radius": np.array([ROBOT_RADIUS], dtype=np.float32),
         "goal_current": (ahead * 20.0).astype(np.float32),
         "goal_next": (ahead * 20.0).astype(np.float32),
+        "goal_next_valid": np.array([1.0], dtype=np.float32),
         "pedestrians_positions": np.array([ped], dtype=np.float32),
         "pedestrians_velocities": np.array([ego], dtype=np.float32),
         "pedestrians_count": np.array([1.0], dtype=np.float32),

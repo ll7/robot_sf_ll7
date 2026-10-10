@@ -576,6 +576,7 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
     for key in (
         "use_occupancy_grid",
         "include_grid_in_observation",
+        "include_goal_next_valid",
         "show_occupancy_grid",
         "use_planner",
         "planner_backend",

@@ -350,6 +350,39 @@ def test_remote_metadata_alone_cannot_admit_predictive_window(tmp_path):
         )
 
 
+def test_prediction_planner_missing_default_model_is_unverified_not_blocking(tmp_path):
+    """Missing non-MPPI predictor defaults are reported without admitting a forecast window."""
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        check_campaign_predictive_horizons_preflight,
+    )
+
+    config_path = tmp_path / "prediction.yaml"
+    config_path.write_text(yaml.safe_dump({"predictive_model_id": "absent_prediction_model"}))
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": []}))
+    cfg = load_campaign_config(DOORWAY)
+    arm = next(a for a in cfg.planners if a.algo == "predictive_mppi")
+    arm = replace(arm, algo="prediction_planner", algo_config_path=config_path)
+
+    records = check_campaign_predictive_horizons_preflight(
+        replace(cfg, planners=(arm,)), registry_path=registry
+    )
+
+    assert records == [
+        {
+            "planner_key": arm.key,
+            "algo": "prediction_planner",
+            "scenario": "base",
+            "family": "all",
+            "contexts": [{"scenario": "base", "family": "all"}],
+            "algo_config_path": str(config_path),
+            "checkpoint": "absent_prediction_model",
+            "status": "unverified",
+            "unverified_reason": "missing_checkpoint",
+        }
+    ]
+
+
 def test_scan_continues_after_refusal_without_loading_seed_inventory(tmp_path, predictor_registry):
     """The census reports later bindings even when the first arm refuses and seeds are unavailable."""
     from scripts.benchmark.scan_predictive_horizons import scan_predictive_horizons

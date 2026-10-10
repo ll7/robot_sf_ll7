@@ -199,6 +199,12 @@ def _check_binding(
             if isinstance(exc, (FileNotFoundError, KeyError))
             else "checkpoint_error",
         )
+        if (
+            binding["unverified_reason"] == "missing_checkpoint"
+            and algo != "predictive_mppi"
+            and not predictor.predictive_checkpoint_path
+        ):
+            return binding
         raise PredictiveHorizonPreflightError(
             f"Predictive horizon preflight cannot verify {identity}: {exc}. "
             "Stage the declared checkpoint before submission; no forecast window was admitted.",

@@ -288,11 +288,15 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # runnable-leaf inventory is one smaller without dropping a config file.
     # Issue #7849 keeps the original four candidates and adds four manifest-
     # bound successor leaves for the exact shared evaluation-seed contract.
-    # author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by the release-robot retrain) adds four release-robot leaves; their issue-791 parent becomes
-    # a shared intermediate base, so the runnable inventory grows by three.
+    # The author decision of 2026-10-01 (0.0.8 ledger: plain PPO arm replaced by
+    # the release-robot retrain) adds four release-robot leaves; their issue-791
+    # parent becomes a shared intermediate base, so the runnable inventory grows
+    # by three.
     # The 2026-10-08 dev policy candidates add two runnable leaves, including
     # dev_fixed_objective_5m with its own execution controls. Both use the
     # shared release parent without dropping any of the four release leaves.
+    # PR #10263 adds the delta-recovery pilot leaf while making one
+    # release-contract config a shared base, so the runnable inventory grows by one.
     assert len(config_paths) == 148
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
@@ -300,9 +304,13 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
         "configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml",
         "configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml",
     }
-    assert release_robot_leaves <= {
-        path.relative_to(_REPO_ROOT).as_posix() for path in config_paths
+    delta_recovery_leaves = {
+        "configs/training/ppo/dev_delta_recovery_15m.yaml",
+        "configs/training/ppo/dev_delta_recovery_pilot.yaml",
     }
+    canonical_paths = {path.relative_to(_REPO_ROOT).as_posix() for path in config_paths}
+    assert release_robot_leaves <= canonical_paths
+    assert delta_recovery_leaves <= canonical_paths
 
     failures: list[str] = []
     for config_path in config_paths:

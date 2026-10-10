@@ -17,6 +17,7 @@ a deliberate follow-up; this evaluator is pure and side-effect free.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -37,32 +38,97 @@ class AmmvFeasibilityParams:
 
     Stability geometry defaults match ``metrics.evaluate_stability_margin`` so the tip-over margin
     is identical to the benchmark-surface column. The curvature limit is a proxy non-holonomic bound.
+    The geometry names are layout-neutral: ``two_wheel_axle_track_m`` is the track ``t_w`` of the
+    axle with two wheels, and ``single_wheel_axle_to_cog_m`` is the distance ``a`` from the axle
+    with one wheel to the centre of gravity. The single wheel may be at the front or at the
+    rear. The deprecated aliases ``track_width_m`` and ``front_axle_to_cog_m`` remain accepted
+    for one release and emit a ``DeprecationWarning``.
 
     Attributes:
-        track_width_m: ``t_w`` for the stability margin.
+        two_wheel_axle_track_m: ``t_w`` for the stability margin.
         wheelbase_m: ``L`` for the stability margin.
         cog_height_m: ``h_c`` for the stability margin.
-        front_axle_to_cog_m: ``a`` for the stability margin.
+        single_wheel_axle_to_cog_m: ``a`` for the stability margin.
         max_curvature_per_m: Proxy maximum path curvature ``|ω| / v`` while moving (1 / min radius).
         in_place_yaw_rate_max: Proxy maximum yaw rate permitted at near-zero speed.
         zero_speed_eps: Speed below which the in-place yaw limit applies instead of curvature.
     """
 
-    track_width_m: float = 0.80
+    two_wheel_axle_track_m: float = 0.80
     wheelbase_m: float = 1.20
     cog_height_m: float = 0.60
-    front_axle_to_cog_m: float = 0.50
+    single_wheel_axle_to_cog_m: float = 0.50
     max_curvature_per_m: float = 1.0
     in_place_yaw_rate_max: float = 0.5
     zero_speed_eps: float = 1e-6
 
+    def __init__(
+        self,
+        two_wheel_axle_track_m: float = 0.80,
+        wheelbase_m: float = 1.20,
+        cog_height_m: float = 0.60,
+        single_wheel_axle_to_cog_m: float = 0.50,
+        max_curvature_per_m: float = 1.0,
+        in_place_yaw_rate_max: float = 0.5,
+        zero_speed_eps: float = 1e-6,
+        **kwargs: Any,
+    ) -> None:
+        """Create proxy params, accepting deprecated aliases for one release."""
+        if "track_width_m" in kwargs:
+            warnings.warn(
+                "track_width_m is deprecated; use two_wheel_axle_track_m instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            two_wheel_axle_track_m = kwargs.pop("track_width_m")
+        if "front_axle_to_cog_m" in kwargs:
+            warnings.warn(
+                "front_axle_to_cog_m is deprecated; use single_wheel_axle_to_cog_m instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            single_wheel_axle_to_cog_m = kwargs.pop("front_axle_to_cog_m")
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs))
+            raise TypeError(
+                f"AmmvFeasibilityParams.__init__() got unexpected keyword(s): {unexpected}"
+            )
+        object.__setattr__(self, "two_wheel_axle_track_m", two_wheel_axle_track_m)
+        object.__setattr__(self, "wheelbase_m", wheelbase_m)
+        object.__setattr__(self, "cog_height_m", cog_height_m)
+        object.__setattr__(self, "single_wheel_axle_to_cog_m", single_wheel_axle_to_cog_m)
+        object.__setattr__(self, "max_curvature_per_m", max_curvature_per_m)
+        object.__setattr__(self, "in_place_yaw_rate_max", in_place_yaw_rate_max)
+        object.__setattr__(self, "zero_speed_eps", zero_speed_eps)
+        self.__post_init__()
+
+    @property
+    def track_width_m(self) -> float:
+        """Deprecated alias for ``two_wheel_axle_track_m`` (kept for one release)."""
+        warnings.warn(
+            "track_width_m is deprecated; use two_wheel_axle_track_m instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.two_wheel_axle_track_m
+
+    @property
+    def front_axle_to_cog_m(self) -> float:
+        """Deprecated alias for ``single_wheel_axle_to_cog_m`` (kept for one release)."""
+        warnings.warn(
+            "front_axle_to_cog_m is deprecated; use single_wheel_axle_to_cog_m instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.single_wheel_axle_to_cog_m
+
     def __post_init__(self) -> None:
         """Validate the proxy parameters."""
         for name in (
-            "track_width_m",
+            "two_wheel_axle_track_m",
             "wheelbase_m",
             "cog_height_m",
-            "front_axle_to_cog_m",
+            "single_wheel_axle_to_cog_m",
             "max_curvature_per_m",
             "in_place_yaw_rate_max",
         ):
@@ -75,10 +141,10 @@ def _stability_margin(v: float, omega: float, params: AmmvFeasibilityParams) -> 
     return evaluate_stability_margin(
         v,
         omega,
-        t_w=params.track_width_m,
+        t_w=params.two_wheel_axle_track_m,
         L=params.wheelbase_m,
         h_c=params.cog_height_m,
-        a=params.front_axle_to_cog_m,
+        a=params.single_wheel_axle_to_cog_m,
     )
 
 

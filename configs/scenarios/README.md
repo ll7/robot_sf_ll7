@@ -78,10 +78,10 @@ campaign tables are unchanged unless a scenario explicitly enables it.
 metadata:
   rollover_stability:
     enabled: true
-    t_w: 0.8     # rear track width in meters
+    t_w: 0.8     # track of the axle with two wheels in meters
     L: 1.2       # wheelbase in meters
     h_c: 0.6     # center-of-gravity height in meters
-    a: 0.5       # center-of-gravity distance from the front axle in meters
+    a: 0.5       # center-of-gravity distance from the axle with one wheel in meters
 ```
 
 When enabled, metric rows may include `rollover_critical_count`,

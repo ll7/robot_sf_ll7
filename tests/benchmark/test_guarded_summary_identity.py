@@ -118,6 +118,7 @@ def test_unbound_contributor_halts_guarded_campaign(
             record.update(
                 episode_id=f"smoke-{index}",
                 scenario_id="smoke",
+                config_hash="identity-smoke-config",
                 seed=1001,
                 scenario_params={"algo": "guarded_ppo"},
                 metrics={"success": 0.0, "collisions": 0.0},

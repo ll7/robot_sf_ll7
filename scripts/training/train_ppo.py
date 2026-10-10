@@ -43,7 +43,7 @@ try:  # pragma: no cover - imported lazily in tests when available
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback, CallbackList
     from stable_baselines3.common.logger import configure as configure_sb3_logger
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv, VecMonitor
 except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
     raise RuntimeError(
         "Stable-Baselines3 must be installed to run expert PPO training.",
@@ -150,6 +150,7 @@ _EVAL_METRIC_KEYS = (
 _SUPPORTED_BEST_METRICS = set(_EVAL_METRIC_KEYS)
 _FREQUENCY_EPISODES_DEPRECATION_WARNED = False
 _DIRECT_WANDB_TRAIN_METRIC_KEYS = (
+    "train/approx_kl",
     "train/value_loss",
     "train/policy_gradient_loss",
     "train/entropy_loss",
@@ -583,6 +584,7 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
         "peds_have_static_obstacle_forces",
         "peds_have_robot_repulsion",
         "map_id",
+        "ppo_action_semantics",
         "predictive_foresight_enabled",
         "predictive_foresight_model_id",
         "predictive_foresight_checkpoint_path",
@@ -1735,6 +1737,11 @@ class _DirectWandbTrainingMetricsCallback(BaseCallback):
         self._wandb_run = wandb_run
         self._start_timesteps = int(max(0, start_timesteps))
         self._rollout_iterations = 0
+        self._reward_term_sums: dict[str, float] = {}
+        self._reward_term_counts: dict[str, int] = {}
+        self._completed_episodes = 0
+        self._successful_episodes = 0
+        self._collision_episodes = 0
         self._run_start_time = (
             float(run_start_time) if run_start_time is not None else _wandb_training_clock()
         )
@@ -1745,6 +1752,25 @@ class _DirectWandbTrainingMetricsCallback(BaseCallback):
         Returns:
             Always true so training continues.
         """
+        for info, done in zip(
+            self.locals.get("infos", ()), self.locals.get("dones", ()), strict=True
+        ):
+            meta = info.get("meta", {})
+            for key, value in meta.get("reward_terms", {}).items():
+                if isinstance(value, int | float) and np.isfinite(value):
+                    self._reward_term_sums[key] = self._reward_term_sums.get(key, 0.0) + value
+                    self._reward_term_counts[key] = self._reward_term_counts.get(key, 0) + 1
+            if done:
+                collision = bool(
+                    meta.get("is_pedestrian_collision")
+                    or meta.get("is_robot_collision")
+                    or meta.get("is_obstacle_collision")
+                )
+                self._completed_episodes += 1
+                self._collision_episodes += int(collision)
+                self._successful_episodes += int(
+                    bool(meta.get("is_route_complete")) and not collision
+                )
         return True
 
     def _on_rollout_end(self) -> None:
@@ -1762,6 +1788,16 @@ class _DirectWandbTrainingMetricsCallback(BaseCallback):
             run_start_time=self._run_start_time,
         )
         payload.update(_extract_direct_wandb_train_metrics(self.model))
+        payload.update(
+            {
+                f"reward_terms/{key}": value / self._reward_term_counts[key]
+                for key, value in self._reward_term_sums.items()
+            }
+        )
+        if self._completed_episodes:
+            payload["rollout/completed_episodes"] = self._completed_episodes
+            payload["rollout/success_rate"] = self._successful_episodes / self._completed_episodes
+            payload["rollout/collision_rate"] = self._collision_episodes / self._completed_episodes
         if payload:
             self._wandb_run.log(payload, step=total_timesteps)
 
@@ -2634,6 +2670,7 @@ def _init_training_model(
         )
     else:
         vec_env = DummyVecEnv(env_fns)
+    vec_env = VecMonitor(vec_env)
     policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)
     resolved_resume = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
     if resolved_resume is not None:

@@ -86,6 +86,7 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
+from tests.support.predictive_checkpoints import stage_predictive_checkpoint_registry
 
 
 @pytest.fixture(autouse=True)
@@ -3508,8 +3509,37 @@ def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp
     assert map_file == "maps/svg_maps/classic_crossing.svg"
 
 
-def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("ambient_checkpoint", ["missing", "legacy_metadata"])
+def test_run_campaign_stops_on_partial_failure_when_configured(
+    tmp_path: Path, monkeypatch, ambient_checkpoint: str
+) -> None:
     """Campaign should stop after first partial-failure when stop_on_failure is enabled."""
+    import torch
+
+    from robot_sf.models import registry as model_registry
+
+    ambient_path = tmp_path / "ambient_predictor.pt"
+    if ambient_checkpoint == "legacy_metadata":
+        torch.save({"config": {"horizon_steps": 8}, "state_dict": {}}, ambient_path)
+    ambient_registry = tmp_path / "ambient_registry.yaml"
+    ambient_registry.write_text(
+        yaml.safe_dump(
+            {
+                "models": [
+                    {
+                        "model_id": "predictive_proxy_selected_v1",
+                        "local_path": str(ambient_path),
+                        "local_only": True,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(model_registry, "DEFAULT_REGISTRY_PATH", ambient_registry)
+
+    stage_predictive_checkpoint_registry(tmp_path, monkeypatch)
+
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -6364,8 +6394,10 @@ def test_prepare_campaign_preflight_rejects_invalid_comparability_mapping_for_pa
 
 def test_prepare_campaign_preflight_rejects_missing_planner_key_mapping_for_paper(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Paper-facing preflight should fail when planner comparability coverage is incomplete."""
+    stage_predictive_checkpoint_registry(tmp_path, monkeypatch)
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text(
         "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",

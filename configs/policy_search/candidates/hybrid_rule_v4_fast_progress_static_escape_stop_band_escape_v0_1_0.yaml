@@ -1,18 +1,21 @@
 # Hybrid v4 fast-progress static escape with opt-in stop-band escape (issue #10291).
 #
-# This successor keeps the v4 surface-clearance braking cap and hard candidate
-# checks, but removes the rounded unconditional zero-speed band by setting the
-# stop clearance to 0.0 m. Below the old 0.15 m stop band, translation is still
-# bounded by v_brake(clearance - margin), drive-limited rollout, wall checks and
-# pedestrian collision/braking filters. Existing v4 release and frozen identities
-# keep their original stop band.
+# This successor admits near-human commands up to 0.6 m/s and leaves directional
+# safety to the unchanged drive-limited rollout, wall, pedestrian collision and
+# stopping-tail checks. It has no unconditional radial zero-speed band or radial
+# inverse-braking cap. All other parameters match the frozen static v4 arm.
 name: hybrid_rule_v4_fast_progress_static_escape_stop_band_escape_v0_1_0
 algo: hybrid_rule_local_planner
 allow_testing_algorithms: true
 base_config_path: configs/algos/hybrid_rule_v4_clearance_braking.yaml
 params:
+  planner_variant: hybrid_rule_v4_guarded_progress_v0_1_0
+  goal_progress_weight: 4.5
   max_linear_speed: 2.0
-  v4_stop_clearance_human: 0.0
+  # Pin released switch values; #10166 changes constructor defaults only.
+  physical_static_exclusion_enabled: false
+  goal_next_validity_enabled: false
+  goal_posterior_avoidance_enabled: false
   static_clearance_escape_enabled: true
   static_clearance_escape_min_clearance: 1.0
   static_clearance_escape_max_speed: 0.3

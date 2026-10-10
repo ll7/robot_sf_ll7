@@ -58,6 +58,7 @@ from robot_sf.robot.differential_drive import DifferentialDriveSettings
 # distinct from the historical, rejected ``hybrid_rule_v4_recovery_aware``
 # policy-search candidate, which is an unrelated v3-scorer ablation.
 HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT = "hybrid_rule_v4_clearance_braking"
+HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT = "hybrid_rule_v4_guarded_progress_v0_1_0"
 
 _SUPPORTED_VARIANTS = {
     "hybrid_rule_v0_minimal",
@@ -66,6 +67,7 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v3_teb_like_rollout",
     "hybrid_rule_v4_recovery_aware",
     HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
+    HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
     "hybrid_rule_v5_ensemble_selector",
     "tentabot_value_scorer_v0",
     "tentabot_value_scorer_v1_static_gated",
@@ -504,9 +506,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 f"Unsupported hybrid rule planner variant "
                 f"'{self.config.planner_variant}'. Supported variants: {supported}."
             )
-        self._v4_clearance_braking = (
-            self.config.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
-        )
+        self._v4_clearance_braking = self.config.planner_variant in {
+            HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
+            HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
+        }
+        if (
+            self.config.planner_variant == HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT
+            and not self.config.v4_braking_check_enabled
+        ):
+            raise ValueError("Guarded progress requires the v4 braking check")
         if self.config.v4_predictive_braking_enabled:
             if not self._v4_clearance_braking or not self.config.v4_braking_check_enabled:
                 raise ValueError("Predictive braking requires v4 and its braking check")
@@ -961,6 +969,22 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "reaction_time": reaction,
             }
             return max_speed
+        if self.config.planner_variant == HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT:
+            # A radial present-position stopping limit can starve directions
+            # that pass the rollout and stopping-tail checks. Admit bounded
+            # near-human motion; those hard checks certify each candidate.
+            min_clearance = float(np.min(clearances)) if clearances.size else float("inf")
+            near = min_clearance < float(self.config.v4_moderate_clearance_human)
+            cap = max(min(max_speed, float(self.config.moderate_speed)), 0.0) if near else max_speed
+            self._last_v4_speed_safety = {
+                "model": HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
+                "min_surface_clearance": _finite_or_none(min_clearance),
+                "level": "guarded_near" if near else "free",
+                "speed_cap": float(cap),
+                "reaction_time": reaction,
+                "radial_braking_cap_enabled": False,
+            }
+            return float(cap)
         if clearances.size == 0:
             min_clearance = float("inf")
             braking_cap = float("inf")
@@ -4336,6 +4360,13 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 prediction_guarantee="conditional_on_pedestrian_error_tube",
                 radial_speed_bands_enabled=False,
             )
+        elif self.config.planner_variant == HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT:
+            payload.update(
+                model=HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
+                radial_braking_cap_enabled=False,
+                zero_speed_band_enabled=False,
+                near_human_speed_cap=float(self.config.moderate_speed),
+            )
         return payload
 
     def diagnostics(self) -> dict[str, Any]:
@@ -4497,6 +4528,7 @@ def _coerce_config_bool(key: str, value: Any) -> bool:
 
 __all__ = [
     "HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT",
+    "HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT",
     "HybridRuleCandidate",
     "HybridRuleLocalPlannerAdapter",
     "HybridRuleLocalPlannerConfig",

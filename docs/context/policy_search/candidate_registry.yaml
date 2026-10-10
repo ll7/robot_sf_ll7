@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-25
+updated_at: 2026-10-10
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -129,11 +129,10 @@ candidates:
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_stop_band_escape_v0_1_0.yaml
     hypothesis: >
-      Opt-in 0.1.0 successor for #10291. It keeps the hybrid v4 surface-clearance
-      braking cap, drive-limited rollout, wall checks and pedestrian hard filters, but
-      removes the rounded unconditional zero-speed band so stationary side clearances
-      below 0.15 m may still admit braking-capped slow progress. Existing v4 release
-      and frozen identities keep their original stop band.
+      Opt-in 0.1.0 successor for #10291. Directional rollout and stopping-tail
+      guards decide whether near-human commands are feasible, without a radial
+      zero-speed band or inverse-braking cap starving translation. The frozen
+      static arm's ceiling and scorer remain fixed; existing identities are unchanged.
     required_stages:
       - smoke
       - nominal_sanity

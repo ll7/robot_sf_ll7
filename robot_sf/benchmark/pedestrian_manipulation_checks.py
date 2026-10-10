@@ -6,6 +6,7 @@ These simplified rigid-disc probes are diagnostics, not source-study replication
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from shapely.geometry import Point
@@ -16,6 +17,11 @@ from robot_sf.nav.obstacle import Obstacle
 from robot_sf.sim.simulator import _build_pysf_simulation
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
+if TYPE_CHECKING:
+    from pysocialforce import Simulator as PySFSimulator
+
+    from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
+
 
 def build_probe(
     profile: dict,
@@ -25,7 +31,7 @@ def build_probe(
     *,
     width: float = 120,
     height: float = 140,
-):
+) -> tuple[PySFSimulator, list[PedestrianBehavior], float]:
     """Build the same production pedestrian substrate as benchmark episodes.
 
     Returns:
@@ -65,7 +71,7 @@ def build_probe(
     return sim, behaviors, config.ped_radius
 
 
-def advance(sim, behaviors):
+def advance(sim, behaviors) -> None:
     """Advance native behavioral controls before one physics step."""
     for behavior in behaviors:
         behavior.step()

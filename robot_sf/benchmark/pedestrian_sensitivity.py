@@ -137,7 +137,7 @@ def summarize(  # noqa: C901
     alpha = (1 - confidence) / 2
     draws = np.random.default_rng(bootstrap_seed).choice(seeds, (samples, len(seeds)))
 
-    def interval(point, values):
+    def interval(point, values) -> dict[str, Any]:
         finite = [float(value) for value in values if value is not None and np.isfinite(value)]
         return {
             "estimate": point,
@@ -146,7 +146,7 @@ def summarize(  # noqa: C901
             "undefined_draws": samples - len(finite),
         }
 
-    def scores(factor, selected):
+    def scores(factor, selected) -> list[np.floating[Any]]:
         return [
             np.mean(
                 [
@@ -158,7 +158,7 @@ def summarize(  # noqa: C901
             for planner in planners
         ]
 
-    def tau(factor, selected):
+    def tau(factor, selected) -> float | None:
         value = float(kendalltau(scores("legacy", selected), scores(factor, selected)).statistic)
         return value if np.isfinite(value) else None
 
@@ -183,7 +183,7 @@ def summarize(  # noqa: C901
             deltas[planner] = {}
             for metric in METRICS:
 
-                def differences(selected):
+                def differences(selected) -> list[float]:
                     result = []
                     for seed in selected:
                         for scenario in scenarios:

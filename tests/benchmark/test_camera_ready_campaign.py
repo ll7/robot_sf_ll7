@@ -6400,7 +6400,7 @@ def test_prepare_campaign_preflight_rejects_missing_planner_key_mapping_for_pape
     stage_predictive_checkpoint_registry(tmp_path, monkeypatch)
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     incomplete_mapping = tmp_path / "incomplete_mapping.yaml"

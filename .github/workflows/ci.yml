@@ -411,6 +411,7 @@ jobs:
         id: changed-coverage
         env:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          BASE_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
@@ -418,6 +419,15 @@ jobs:
           if [[ "$actual_head" != "$HEAD_SHA" ]]; then
             echo "Checked-out head drifted: expected $HEAD_SHA, got $actual_head" >&2
             exit 2
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            # Event base.sha can predate commits already present in the PR.
+            # Bind this verdict to the live target branch; a missing ref fails
+            # before coverage rather than falling back to that stale event SHA.
+            git fetch --no-tags origin \
+              "refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+            BASE_SHA="$(git merge-base "refs/remotes/origin/$BASE_BRANCH" "$HEAD_SHA")"
           fi
 
           set +e

@@ -346,10 +346,63 @@ def test_obstacle_clearance_handles_frames_and_missing_payloads() -> None:
 
     no_channel = _observation(wall=lambda xs, ys: xs > 0)
     no_channel["occupancy_grid_meta"]["channel_indices"] = [-1, 1, -1, -1]
-    assert not _ObstacleClearance(adapter, no_channel).available
+    with pytest.raises(ValueError, match="static obstacle channel.*sampler clearance"):
+        _ObstacleClearance(adapter, no_channel)
     bad_res = _observation(wall=lambda xs, ys: xs > 0)
     bad_res["occupancy_grid_meta"]["resolution"] = [0.0]
     assert not _ObstacleClearance(adapter, bad_res).available
+
+
+def _reviewer_occupied_grid_observation() -> dict:
+    """The real-planner probe: one fully occupied channel around a stopped robot."""
+    return {
+        "robot": {
+            "position": np.zeros(2),
+            "heading": [0.0],
+            "speed": [0.0],
+            "angular_velocity": [0.0],
+        },
+        "goal": {"current": [10.0, 0.0]},
+        "pedestrians": {},
+        "sim": {"timestep": [0.1]},
+        "occupancy_grid": np.ones((1, 20, 20)),
+        "occupancy_grid_meta": {
+            "origin": [-1.0, -1.0],
+            "resolution": [0.1],
+            "size": [2.0, 2.0],
+            "channel_indices": [0],
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "indices", [None, [-1, -1, -1, -1], [9]], ids=["missing", "absent", "out_of_range"]
+)
+def test_bounded_sampler_rejects_populated_grid_without_valid_static_channel(indices) -> None:
+    """Invalid channel metadata must not turn occupied geometry into a moving command."""
+    observation = _reviewer_occupied_grid_observation()
+    if indices is None:
+        del observation["occupancy_grid_meta"]["channel_indices"]
+    else:
+        observation["occupancy_grid_meta"]["channel_indices"] = indices
+    adapter = _adapter("bounded_v2")
+    with pytest.raises(ValueError, match="static obstacle channel.*sampler clearance"):
+        adapter.plan(observation)
+
+
+def test_bounded_sampler_occupied_grid_probe_and_absent_empty_grid_controls() -> None:
+    """Valid occupied geometry stops; intentionally absent or zero-sized grids stay usable."""
+    observation = _reviewer_occupied_grid_observation()
+    adapter = _adapter("bounded_v2")
+    assert _ObstacleClearance(adapter, observation)(np.zeros((1, 2)))[0] == pytest.approx(
+        -0.1207106781
+    )
+    assert adapter.plan(observation) == (0.0, 0.0)
+    del observation["occupancy_grid"]
+    assert adapter.plan(observation) == (3.0, 0.0)
+    observation["occupancy_grid"] = np.empty((0, 0, 0))
+    observation["occupancy_grid_meta"]["channel_indices"] = [-1, -1, -1, -1]
+    assert adapter.plan(observation) == (3.0, 0.0)
 
 
 def test_rollout_respects_drive_limits() -> None:

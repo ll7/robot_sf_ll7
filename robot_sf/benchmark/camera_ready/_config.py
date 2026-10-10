@@ -12,7 +12,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -1715,7 +1715,9 @@ def _load_snqi_acquisition_binding(raw: Any, config_path: Path) -> dict[str, Any
     return load_acquisition_binding(raw, config_path)
 
 
-def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
+def _load_snqi_v2_config(
+    raw: Any, config_path: Path, *, evaluation_scenario_horizons: Mapping[str, int] | None = None
+) -> SnqiV2Spec | None:
     """Resolve explicit versioned assets relative to the campaign config.
 
     Returns:
@@ -1738,7 +1740,11 @@ def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
         paths.append(path)
     from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION  # noqa: PLC0415
 
-    return load_snqi_v2_spec(*paths, expected_metric_schema_version=METRIC_SCHEMA_VERSION)
+    return load_snqi_v2_spec(
+        *paths,
+        expected_metric_schema_version=METRIC_SCHEMA_VERSION,
+        evaluation_scenario_horizons=evaluation_scenario_horizons,
+    )
 
 
 def _assemble_campaign_config(
@@ -1754,6 +1760,24 @@ def _assemble_campaign_config(
     Returns:
         Fully constructed campaign configuration dataclass.
     """
+    mode = payload.get("numerical_mode")
+    if mode is not None:
+        from robot_sf._numerical_mode import (  # noqa: PLC0415
+            PINNED_LEARNED_ALGOS,
+            PINNED_MODE,
+            validate_pinned_campaign_arm,
+        )
+
+        if mode != PINNED_MODE:
+            raise ValueError("Unsupported campaign numerical_mode")
+        for planner in parsed.planner_specs:
+            validate_pinned_campaign_arm(planner.algo)
+            if planner.algo in PINNED_LEARNED_ALGOS:
+                arm = yaml.safe_load(planner.algo_config_path.read_text())
+                if arm.get("numerical_mode") != mode:
+                    raise ValueError(
+                        "Campaign numerical_mode does not match learned planner config"
+                    )
     return CampaignConfig(
         name=parsed.name,
         scenario_matrix_path=parsed.scenario_matrix_path,
@@ -1767,6 +1791,7 @@ def _assemble_campaign_config(
         workers=int(payload.get("workers", 1)),
         horizon=(int(payload["horizon"]) if payload.get("horizon") is not None else None),
         horizon_policy=payload.get("horizon_policy"),
+        numerical_mode=payload.get("numerical_mode"),
         protocol_version=payload.get("protocol_version"),
         dt=(float(payload["dt"]) if payload.get("dt") is not None else None),
         record_forces=bool(payload.get("record_forces", True)),
@@ -1783,7 +1808,7 @@ def _assemble_campaign_config(
         bootstrap_seed=int(payload.get("bootstrap_seed", 123)),
         snqi_weights_path=parsed.snqi_weights_path,
         snqi_baseline_path=parsed.snqi_baseline_path,
-        snqi_v2_spec=_load_snqi_v2_config(payload.get("snqi_v2_spec"), config_path),
+        snqi_v2_spec=None,
         snqi_v2_binding=_load_snqi_acquisition_binding(payload.get("snqi_v2_spec"), config_path),
         stop_on_failure=bool(payload.get("stop_on_failure", False)),
         export_publication_bundle=bool(payload.get("export_publication_bundle", True)),
@@ -1939,8 +1964,19 @@ def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> 
         repository_root=repository_root,
     )
     _validate_campaign_config(cfg)
-    if cfg.snqi_v2_spec is not None:
+    if payload.get("snqi_v2_spec") is not None and cfg.snqi_v2_binding is None:
         scenarios = _load_campaign_scenarios(cfg, repository_root)
+        cfg = replace(
+            cfg,
+            snqi_v2_spec=_load_snqi_v2_config(
+                payload["snqi_v2_spec"],
+                config_path,
+                evaluation_scenario_horizons={
+                    scenario["name"]: scenario["simulation_config"]["max_episode_steps"]
+                    for scenario in scenarios
+                },
+            ),
+        )
         cfg.snqi_v2_spec.validate_evaluation_schedule(
             {
                 scenario["name"]: scenario["simulation_config"]["max_episode_steps"]

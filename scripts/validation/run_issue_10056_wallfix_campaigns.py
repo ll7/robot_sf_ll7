@@ -64,7 +64,7 @@ CAMPAIGNS = (
     ),
     (
         "stage_a",
-        "run_issue_6969_parameter_screen.py",
+        "run_issue_6969_parameter_screen_guarded.py",
         (5149, 5150, 5151),
         ("--profiles", "8", "--profile-seed", "6969"),
     ),

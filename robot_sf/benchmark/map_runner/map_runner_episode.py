@@ -148,6 +148,7 @@ from robot_sf.benchmark.planner_command_contract import (
 )
 from robot_sf.benchmark.public_requirement_events import evaluate_public_requirement_events
 from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
 from robot_sf.benchmark.safety.cbf_safety_filter_runtime import (
     CBFSafetyFilterRuntimeConfig,
     apply_runtime_cbf_safety_filter,
@@ -1758,6 +1759,12 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
                 ],
                 fill_value=np.nan,
             )
+            ep.robot_force_presence = np.zeros(ep.robot_ped_forces.shape[:2], dtype=bool)
+            for t, sample in enumerate(robot_force_samples):
+                count = len(sample["forces"])
+                if count != len(sample["peds_pos"]):
+                    raise ValueError("robot force and input pedestrian cardinality differ")
+                ep.robot_force_presence[t, :count] = True
         metrics_raw = compute_all_metrics(
             ep,
             horizon=horizon_val,
@@ -2304,6 +2311,7 @@ def _prepare_episode_env(  # noqa: C901
     Returns:
         The initial observation from ``env.reset``.
     """
+    check_simulation_seed(seed, boundary="map reset")
     obs, _ = env.reset(seed=int(seed))
     instantiated_count: int | None = None
     if expected_population_size is not None:
@@ -3819,6 +3827,8 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
     Returns:
         _EpisodeStepLoopResult: Immutable bundle of trajectory and outcome data.
     """
+    check_simulation_seed(args.seed, boundary="map factory")
+    check_seed_config(args.config, boundary="map factory")
     policy_fn = args.planner_runtime.policy_fn
     env = make_robot_env(config=args.config, seed=int(args.seed), debug=False)
     state: _StepLoopState | None = None
@@ -5640,6 +5650,7 @@ def run_map_episode(  # noqa: PLR0913
     Returns:
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
+    check_simulation_seed(seed, boundary="map episode")
     from robot_sf.benchmark.snqi.execution_context import admit_episode_context  # noqa: PLC0415
 
     ctx = _resolve_episode_run_context(

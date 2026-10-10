@@ -102,6 +102,7 @@ from robot_sf.benchmark.observation_noise import (
     observation_noise_hash,
 )
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.benchmark.seed_variance import build_seed_episode_rows
 from robot_sf.benchmark.snqi.campaign_contract import (
     SNQI_FAILED_WARN_RECOMMENDATION,
@@ -391,6 +392,33 @@ def run_campaign(  # noqa: PLR0913
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
+    if cfg.snqi_v2_binding and cfg.snqi_v2_spec is None and not allow_pending_snqi_v2:
+        raise ValueError("SNQI-v2 acquisition and anchors are required before campaign execution")
+    from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
+        _load_campaign_scenarios,
+        _resolve_seed_override,
+    )
+    from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
+        _resolve_seed_list,
+        _select_seeds,
+        _suite_key,
+    )
+    from robot_sf.common.artifact_paths import get_repository_root  # noqa: PLC0415
+
+    seed_override = _resolve_seed_override(cfg.seed_policy)
+    if seed_override is not None:
+        for seed in seed_override:
+            check_simulation_seed(seed, boundary="direct campaign")
+    else:
+        suite_seeds = _resolve_seed_list(
+            get_repository_root() / "configs/benchmarks/seed_list_v1.yaml"
+        )
+        for scenario in _load_campaign_scenarios(cfg):
+            selected = _select_seeds(
+                scenario, suite_seeds=suite_seeds, suite_key=_suite_key(cfg.scenario_matrix_path)
+            )
+            for seed in selected:
+                check_simulation_seed(seed, boundary="direct campaign")
     if allow_pending_snqi_v2:
         from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
             is_development_rehearsal,
@@ -418,8 +446,6 @@ def run_campaign(  # noqa: PLR0913
             raise ValueError(
                 "pending SNQI-v2 execution differs from the verified rehearsal identity config"
             )
-    if cfg.snqi_v2_binding and cfg.snqi_v2_spec is None and not allow_pending_snqi_v2:
-        raise ValueError("SNQI-v2 acquisition and anchors are required before campaign execution")
     dependencies = _resolve_campaign_runtime_dependencies(
         prepare_campaign_preflight=prepare_campaign_preflight,
         run_batch=run_batch,
@@ -2886,7 +2912,7 @@ def _build_campaign_metadata_section(
             cfg.snqi_v2_spec.provenance()
             if getattr(cfg, "snqi_v2_spec", None)
             else {"snqi_v2": "pending_calibration"}
-            if snqi is None
+            if getattr(cfg, "snqi_v2_binding", None) is not None
             else {}
         ),
         **_legacy_snqi_metadata(cfg, snqi),
@@ -3211,7 +3237,7 @@ def _build_campaign_manifest_payload(
         "runtime_sec": outcome.runtime_sec,
         **(
             {"snqi_v2": "pending_calibration"}
-            if snqi is None and not paths.manifest_payload.get("metrics", {}).get("snqi_v2_version")
+            if paths.manifest_payload.get("snqi_v2") == "pending_calibration"
             else {}
         ),
         "finished_at_utc": outcome.campaign_finished_at_utc,
@@ -3273,6 +3299,12 @@ def _write_run_level_files(
     """Write run_meta.json, manifest.json, and campaign_manifest.json."""
     campaign_root = paths.campaign_root
     git_meta = paths.git_meta
+    if cfg.numerical_mode is not None and outcome.benchmark_success:
+        from robot_sf.benchmark.numerical_mode import (  # noqa: PLC0415
+            validate_campaign_numerical_manifest,
+        )
+
+        validate_campaign_numerical_manifest(paths.manifest_payload, campaign_root)
     run_meta = _build_run_meta(
         cfg,
         paths=paths,
@@ -3290,18 +3322,28 @@ def _write_run_level_files(
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
     }
+    if cfg.numerical_mode is not None and outcome.benchmark_success:
+        run_manifest["numerical_mode"] = paths.manifest_payload["numerical_mode"]
+        run_manifest["numerical_kernel_context"] = paths.manifest_payload[
+            "numerical_kernel_context"
+        ]
+        run_meta["numerical_mode"] = run_manifest["numerical_mode"]
+    campaign_manifest = _build_campaign_manifest_payload(
+        paths,
+        outcome=outcome,
+        snqi=snqi,
+        run_meta=run_meta,
+        table_paths=table_paths,
+    )
+    if cfg.numerical_mode is not None and not outcome.benchmark_success:
+        for payload in (run_meta, run_manifest, campaign_manifest):
+            payload.pop("numerical_mode", None)
+            payload.pop("numerical_kernel_context", None)
+            payload["requested_numerical_mode"] = paths.manifest_payload["numerical_mode"]
+            payload["numerical_mode_validation"] = "unvalidated"
     _write_json(campaign_root / "run_meta.json", run_meta)
     _write_json(campaign_root / "manifest.json", run_manifest)
-    _write_json(
-        campaign_root / "campaign_manifest.json",
-        _build_campaign_manifest_payload(
-            paths,
-            outcome=outcome,
-            snqi=snqi,
-            run_meta=run_meta,
-            table_paths=table_paths,
-        ),
-    )
+    _write_json(campaign_root / "campaign_manifest.json", campaign_manifest)
 
 
 def _export_publication_bundle_section(  # noqa: PLR0913

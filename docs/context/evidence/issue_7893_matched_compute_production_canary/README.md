@@ -4,7 +4,7 @@
 does not start either arm or leave a partial comparison artifact. Controller-snapshot provenance is
 explicitly not fabricated.
 **Issue:** [#7893](https://github.com/ll7/robot_sf_ll7/issues/7893) (parent #4360; frozen packet
-#6921).
+for issue #6921).
 **Entry point:** `scripts/validation/run_matched_compute_production_canary.py`.
 
 ## Execution
@@ -30,12 +30,12 @@ explicitly not fabricated.
   checks the digest/seed/scenario identity, and rejects artifact or byte reuse across candidates.
 - Execution destinations are resolved before either arm starts or a receipt is written. Both must
   be ignored, untracked, non-symlink paths inside the exact worktree-local
-  `output/matched_compute_canary/` scope; escapes and prefix-confusable sibling paths fail closed.
+  `<scratch-root>/matched_compute_canary/` scope; escapes and prefix-confusable sibling paths fail closed.
   This gate does not apply to read-only `--check` mode, so the tracked blocked receipt remains a
   valid validation input.
 - Command: `python scripts/validation/run_matched_compute_production_canary.py --packet
   configs/adversarial/issue_6921_matched_compute_packet.yaml --output-dir
-  output/matched_compute_canary`
+  <scratch-root>/matched_compute_canary`
 
 ## Results
 
@@ -58,7 +58,9 @@ explicitly not fabricated.
 - `evidence_status: blocked` — no arm is `production_observed` and no arm began execution.
 - No planner ranking, stress-strength, matched-objective-equivalence, safety, realism, benchmark,
   release, dissertation, or publication claim is made.
-- Raw per-candidate output lives under `output/matched_compute_canary/` (ignored, worktree-local).
+- The configured per-candidate destination is
+  `<scratch-root>/matched_compute_canary/`; both arms were blocked before execution, so no raw
+  output was created or retained and no durable retrieval pointer exists.
 - `--check` mode validates a receipt deterministically (packet-bound budget and runtime-trace
   reconciliation, canonical candidate-bound episode provenance, frozen arm and native-manifest
   identity fields, duplicate and cross-arm identity checks, packet/config digest and reachable

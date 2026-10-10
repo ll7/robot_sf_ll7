@@ -8,6 +8,22 @@
     ],
     "rule": "Findings with check_name='unresolved-import' and description prefix 'unresolved-import: Cannot resolve imported module...' are treated as the optional-import category: recorded but EXCLUDED from the ratchet gate (owned by #4990/#4995)."
   },
+  "exceptions": {
+    "robot_sf/sim/fast_pysf_wrapper.py": {
+      "invalid-argument-type": {
+        "count": 1,
+        "existing_count": 9,
+        "reason": "The additional line-404 NumPy-point finding has a receipt-scoped call site and shared kernel; neither is edited by this ratchet PR. Fix its input type at source in the next behaviour-receipted simulation change, then remove this one-finding increment and lower the baseline/fixture (follow-up #10306). Nine findings for this exact path/rule were already covered by the ordinary baseline."
+      }
+    },
+    "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py": {
+      "invalid-argument-type": {
+        "count": 2,
+        "existing_count": 0,
+        "reason": "This file is evidence-bound; an edit would invalidate its archived source hash. Fix the file when its evidence is next regenerated, then remove this two-finding exception and lower the baseline/fixture (follow-up #10312)."
+      }
+    }
+  },
   "generated_at": "2026-10-10T14:14:23Z",
   "modules": {
     "docs": {
@@ -161,9 +177,9 @@
       "total": 6
     },
     "robot_sf/sim": {
-      "general": 27,
+      "general": 28,
       "optional_import_excluded": 0,
-      "total": 27
+      "total": 28
     },
     "robot_sf/telemetry": {
       "general": 9,
@@ -181,9 +197,9 @@
       "total": 2
     },
     "scripts": {
-      "general": 2578,
+      "general": 2580,
       "optional_import_excluded": 22,
-      "total": 2600
+      "total": 2602
     },
     "third_party": {
       "general": 266,
@@ -196,7 +212,7 @@
     "call-top-callable": 2,
     "deprecated": 2,
     "index-out-of-bounds": 4,
-    "invalid-argument-type": 3143,
+    "invalid-argument-type": 3146,
     "invalid-assignment": 288,
     "invalid-context-manager": 1,
     "invalid-key": 19,
@@ -220,10 +236,10 @@
   },
   "schema_version": 1,
   "summary": {
-    "general_findings": 6432,
+    "general_findings": 6435,
     "module_count": 36,
     "optional_import_findings_excluded": 168,
-    "total_findings": 6600
+    "total_findings": 6603
   },
   "ty_version": "ty 0.0.58"
 }

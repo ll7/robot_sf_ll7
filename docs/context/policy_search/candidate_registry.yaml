@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-25
+updated_at: 2026-10-10
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -117,6 +117,22 @@ candidates:
       and a braking-feasibility check against constant-velocity pedestrian predictions should
       remove the moving-robot pedestrian contacts that v3 produces in dense doorways. The
       v3 config stays unchanged as the paired comparison arm.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v4_fast_progress_static_escape_stop_band_escape_v0_1_0:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_stop_band_escape_v0_1_0.yaml
+    hypothesis: >
+      Opt-in 0.1.0 successor for #10291. Directional rollout and stopping-tail
+      guards decide whether near-human commands are feasible, without a radial
+      zero-speed band or inverse-braking cap starving translation. The frozen
+      static arm's ceiling and scorer remain fixed; existing identities are unchanged.
     required_stages:
       - smoke
       - nominal_sanity

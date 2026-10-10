@@ -8,8 +8,13 @@
     ],
     "rule": "Findings with check_name='unresolved-import' and description prefix 'unresolved-import: Cannot resolve imported module...' are treated as the optional-import category: recorded but EXCLUDED from the ratchet gate (owned by #4990/#4995)."
   },
-  "generated_at": "2026-09-25T21:43:13Z",
+  "generated_at": "2026-10-10T11:27:18Z",
   "modules": {
+    "docs": {
+      "general": 4,
+      "optional_import_excluded": 0,
+      "total": 4
+    },
     "examples": {
       "general": 167,
       "optional_import_excluded": 2,
@@ -21,19 +26,19 @@
       "total": 3
     },
     "fast-pysf": {
-      "general": 7,
+      "general": 9,
       "optional_import_excluded": 8,
-      "total": 15
+      "total": 17
     },
     "robot_sf": {
-      "general": 24,
+      "general": 28,
       "optional_import_excluded": 0,
-      "total": 24
+      "total": 28
     },
     "robot_sf/adversarial": {
-      "general": 122,
+      "general": 145,
       "optional_import_excluded": 0,
-      "total": 122
+      "total": 145
     },
     "robot_sf/analysis": {
       "general": 6,
@@ -41,9 +46,9 @@
       "total": 6
     },
     "robot_sf/analysis_workbench": {
-      "general": 435,
+      "general": 469,
       "optional_import_excluded": 0,
-      "total": 435
+      "total": 469
     },
     "robot_sf/baselines": {
       "general": 22,
@@ -51,9 +56,9 @@
       "total": 22
     },
     "robot_sf/benchmark": {
-      "general": 1571,
+      "general": 1688,
       "optional_import_excluded": 2,
-      "total": 1573
+      "total": 1690
     },
     "robot_sf/common": {
       "general": 3,
@@ -86,9 +91,9 @@
       "total": 2
     },
     "robot_sf/gym_env": {
-      "general": 81,
+      "general": 85,
       "optional_import_excluded": 0,
-      "total": 81
+      "total": 85
     },
     "robot_sf/manual_control": {
       "general": 1,
@@ -106,9 +111,9 @@
       "total": 2
     },
     "robot_sf/nav": {
-      "general": 73,
+      "general": 72,
       "optional_import_excluded": 0,
-      "total": 73
+      "total": 72
     },
     "robot_sf/ped_ego": {
       "general": 4,
@@ -116,14 +121,14 @@
       "total": 4
     },
     "robot_sf/ped_npc": {
-      "general": 9,
+      "general": 22,
       "optional_import_excluded": 0,
-      "total": 9
+      "total": 22
     },
     "robot_sf/planner": {
-      "general": 443,
+      "general": 482,
       "optional_import_excluded": 6,
-      "total": 449
+      "total": 488
     },
     "robot_sf/prediction": {
       "general": 35,
@@ -131,14 +136,14 @@
       "total": 35
     },
     "robot_sf/render": {
-      "general": 100,
+      "general": 102,
       "optional_import_excluded": 1,
-      "total": 101
+      "total": 103
     },
     "robot_sf/research": {
-      "general": 35,
+      "general": 37,
       "optional_import_excluded": 0,
-      "total": 35
+      "total": 37
     },
     "robot_sf/robot": {
       "general": 12,
@@ -146,9 +151,9 @@
       "total": 12
     },
     "robot_sf/scenario_certification": {
-      "general": 10,
+      "general": 16,
       "optional_import_excluded": 0,
-      "total": 10
+      "total": 16
     },
     "robot_sf/sensor": {
       "general": 6,
@@ -156,9 +161,9 @@
       "total": 6
     },
     "robot_sf/sim": {
-      "general": 23,
+      "general": 27,
       "optional_import_excluded": 0,
-      "total": 23
+      "total": 27
     },
     "robot_sf/telemetry": {
       "general": 9,
@@ -176,9 +181,9 @@
       "total": 2
     },
     "scripts": {
-      "general": 2101,
+      "general": 2590,
       "optional_import_excluded": 22,
-      "total": 2123
+      "total": 2612
     },
     "third_party": {
       "general": 266,
@@ -188,36 +193,37 @@
   },
   "rules": {
     "call-non-callable": 19,
-    "call-top-callable": 1,
+    "call-top-callable": 2,
     "deprecated": 2,
     "index-out-of-bounds": 4,
-    "invalid-argument-type": 2765,
-    "invalid-assignment": 246,
-    "invalid-key": 15,
-    "invalid-method-override": 10,
+    "invalid-argument-type": 3143,
+    "invalid-assignment": 288,
+    "invalid-context-manager": 1,
+    "invalid-key": 19,
+    "invalid-method-override": 11,
     "invalid-parameter-default": 4,
-    "invalid-return-type": 201,
-    "invalid-type-form": 60,
+    "invalid-return-type": 220,
+    "invalid-type-form": 64,
     "missing-argument": 3,
-    "no-matching-overload": 120,
-    "not-iterable": 121,
-    "not-subscriptable": 226,
+    "no-matching-overload": 132,
+    "not-iterable": 128,
+    "not-subscriptable": 268,
     "possibly-missing-submodule": 6,
-    "redundant-cast": 8,
-    "too-many-positional-arguments": 2,
+    "redundant-cast": 10,
+    "too-many-positional-arguments": 3,
     "unknown-argument": 6,
-    "unresolved-attribute": 1652,
-    "unresolved-import": 194,
+    "unresolved-attribute": 1832,
+    "unresolved-import": 201,
     "unresolved-reference": 25,
-    "unsupported-operator": 143,
+    "unsupported-operator": 184,
     "unused-type-ignore-comment": 39
   },
   "schema_version": 1,
   "summary": {
-    "general_findings": 5704,
-    "module_count": 35,
+    "general_findings": 6446,
+    "module_count": 36,
     "optional_import_findings_excluded": 168,
-    "total_findings": 5872
+    "total_findings": 6614
   },
   "ty_version": "ty 0.0.58"
 }

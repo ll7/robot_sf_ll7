@@ -169,6 +169,8 @@ class FollowRouteBehavior:
     """Respawns that could not avoid a robot footprint during the current episode."""
     step_count: int = 0
     """Behavior steps taken in the current episode; respawn events record it."""
+    respawn_epochs: dict[int, int] = field(default_factory=dict)
+    """Per local pedestrian id: route respawns this episode (identity-change signal, #10262)."""
 
     def __post_init__(self):
         """
@@ -252,6 +254,7 @@ class FollowRouteBehavior:
         pedestrian that overlaps the new robot start right after it is sampled.
         """
         self.respawn_overlap_events = []
+        self.respawn_epochs = {}
         self.step_count = 0
         if self.reset_at_start:
             for gid in self.navigators.keys():
@@ -318,6 +321,10 @@ class FollowRouteBehavior:
         self.groups.reposition_group(gid, spawn_positions)
         self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0
+        # A respawn teleports the group to its route start: it is a new actor for
+        # trajectory supervision even though it reuses the same simulator row.
+        for pid in self.groups.groups[gid]:
+            self.respawn_epochs[int(pid)] = self.respawn_epochs.get(int(pid), 0) + 1
 
 
 def _any_inside(points: list[Vec2D], zones: list["PreparedGeometry"]) -> bool:

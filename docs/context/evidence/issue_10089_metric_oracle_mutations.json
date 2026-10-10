@@ -1,0 +1,2054 @@
+{
+  "schema_version": "metric-oracle-mutation-proof.v1",
+  "issue": 10089,
+  "ruling_issue": 10176,
+  "ruling_date": "2026-10-08",
+  "base_commit": "53f8f2666e98d00b70a8ef5376790be474a743aa",
+  "scope": "Coverage-only replacement; no runtime fix or benchmark claim. New tests pass on unchanged base production code.",
+  "environment": {
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "UV_NO_SYNC": "1"
+  },
+  "production_sha256_after_restoration": {
+    "robot_sf/benchmark/metrics.py": "fcee1fb969bc45c3e29d7c877eeb48d29a00626196d2870a8daa0ede2d8a8a61",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "bcc8b1e84b0e2bd13b3a01cec515b7738c448b2ccdb5bad31a34128aab9954e2"
+  },
+  "test_and_fixture_sha256": {
+    "tests/benchmark/test_campaign_horizon_authority.py": "906f686d08a49abd72543cd9d7d4bc7425b82098aae4f5e79e09802f46d93517",
+    "tests/benchmark/test_metrics_characterization.py": "20894ab876bc9f5067d72302dd5250784fdee294d6d4a332b4735ee8c215f08d",
+    "tests/benchmark/test_release_metric_oracles.py": "26f334ea44ef0cc461fb6c49d5e195542c5f15a96272446f834c726f7c6222f1",
+    "tests/benchmark/fixtures/release_0_0_8_metric_sentinels.json": "8d298c9e1befcd5efc28e66bff8d48aede7df43b1ea83d0b9b158d513d69b6f4"
+  },
+  "summary": {
+    "killed_mutations": 77,
+    "behavioral_failure_invocations": 94,
+    "distinct_new_tests_mutation_proved": 52,
+    "rejected_nonbehavioral_attempts": 1,
+    "rejected_attempt_reason": "An initial nested-key mutation addressed a nonexistent key, producing KeyError. Excluded and replaced with the correct robot_force_metadata key."
+  },
+  "pristine_validation": [
+    {
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py tests/benchmark/test_release_metric_oracles.py tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 0,
+      "result": "75 passed in 31.94s"
+    },
+    {
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py tests/benchmark/test_release_metric_oracles.py tests/benchmark/test_campaign_horizon_authority.py tests/benchmark/test_curvature_v2.py tests/benchmark/test_fxm_metric_definitions.py tests/benchmark/test_fxm2_metrics.py tests/benchmark/test_metric_output_golden.py -q -n 4 --no-cov --tb=short --show-capture=no",
+      "exit_code": 0,
+      "result": "148 passed in 74.97s"
+    }
+  ],
+  "shared_drift_control": {
+    "mutation": "Add 1.0 to avg_speed in the shared metric implementation",
+    "path": "robot_sf/benchmark/metrics.py",
+    "selectors": [
+      "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path",
+      "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]"
+    ],
+    "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed] -q --no-cov --tb=short --show-capture=no",
+    "exit_code": 1,
+    "result": "5 paired native cases pass; release-pinned straight_speed fails",
+    "failed_tests": [
+      "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]"
+    ],
+    "mutation_code": "\n_mutation_original = avg_speed\ndef avg_speed(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+  },
+  "mutations": [
+    {
+      "id": "detour-path_efficiency",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "path_efficiency: constant output hides detour effect",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency"
+      ],
+      "failure_excerpt": [
+        "E   assert 1.0 < 1.0",
+        "E    +  where 1.0 = path_efficiency(EpisodeData(robot_pos=array([[0., 0.],\\n       [1., 2.],\\n       [2., 0.],\\n       [3., 0.]]), robot_vel=array([[1., 0.],...robot_pos=None, collision_event=False, robot_pos_includes_reset=False, route_waypoints=None, robot_force_presence=None), 3.0)",
+        "E    +  and   1.0 = path_efficiency(EpisodeData(robot_pos=array([[0., 0.],\\n       [1., 0.],\\n       [2., 0.],\\n       [3., 0.]]), robot_vel=array([[1., 0.],...robot_pos=None, collision_event=False, robot_pos_includes_reset=False, route_waypoints=None, robot_force_presence=None), 3.0)",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = path_efficiency\ndef path_efficiency(data, *args, **kwargs):\n    return 1.0\n"
+    },
+    {
+      "id": "detour-path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "path_length: constant output hides detour effect",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency"
+      ],
+      "failure_excerpt": [
+        "E   assert 1.0 > 1.0",
+        "E    +  where 1.0 = path_length(EpisodeData(robot_pos=array([[0., 0.],\\n       [1., 2.],\\n       [2., 0.],\\n       [3., 0.]]), robot_vel=array([[1., 0.],...robot_pos=None, collision_event=False, robot_pos_includes_reset=False, route_waypoints=None, robot_force_presence=None))",
+        "E    +  and   1.0 = path_length(EpisodeData(robot_pos=array([[0., 0.],\\n       [1., 0.],\\n       [2., 0.],\\n       [3., 0.]]), robot_vel=array([[1., 0.],...robot_pos=None, collision_event=False, robot_pos_includes_reset=False, route_waypoints=None, robot_force_presence=None))",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_detour_increases_length_and_reduces_efficiency",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = path_length\ndef path_length(data, *args, **kwargs):\n    return 1.0\n"
+    },
+    {
+      "id": "distance-scale-offset-mean_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_clearance: fixed output offset (break distance/radius unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 2.8 == 4.800000000000001 \u00b1 4.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.8",
+        "E     Expected: 4.800000000000001 \u00b1 4.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_clearance\ndef mean_clearance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "distance-scale-offset-mean_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_distance: fixed output offset (break distance/radius unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 7.0 == 9.0 \u00b1 9.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.0",
+        "E     Expected: 9.0 \u00b1 9.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_distance\ndef mean_distance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "distance-scale-offset-min_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_clearance: fixed output offset (break distance/radius unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 2.8 == 4.800000000000001 \u00b1 4.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.8",
+        "E     Expected: 4.800000000000001 \u00b1 4.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance]",
+        "1 failed in 0.83s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_clearance\ndef min_clearance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "distance-scale-offset-min_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_distance: fixed output offset (break distance/radius unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 7.0 == 9.0 \u00b1 9.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.0",
+        "E     Expected: 9.0 \u00b1 9.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance]",
+        "1 failed in 0.78s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_distance\ndef min_distance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "distance-scale-zero-mean_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_clearance: zero output (nonzero unit-scaling control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_clearance]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_clearance\ndef mean_clearance(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "distance-scale-zero-mean_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_distance: zero output (nonzero unit-scaling control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[mean_distance]",
+        "1 failed in 0.79s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_distance\ndef mean_distance(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "distance-scale-zero-min_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_clearance: zero output (nonzero unit-scaling control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_clearance]",
+        "1 failed in 0.85s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_clearance\ndef min_clearance(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "distance-scale-zero-min_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_distance: zero output (nonzero unit-scaling control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_follow_length_unit_scaling[min_distance]",
+        "1 failed in 0.79s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_distance\ndef min_distance(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "force-offset-force_q50",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q50: fixed output offset (break force scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50]"
+      ],
+      "failure_excerpt": [
+        "E   assert 6.5901699437494745 == 8.090169943749475 \u00b1 8.1e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 6.5901699437494745",
+        "E     Expected: 8.090169943749475 \u00b1 8.1e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: v + 1.0 for k, v in _mutation_original(data, *args, **kwargs).items()}\n"
+    },
+    {
+      "id": "force-offset-force_q90",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q90: fixed output offset (break force scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90]"
+      ],
+      "failure_excerpt": [
+        "E   assert 12.118033988749895 == 13.618033988749897 \u00b1 1.4e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 12.118033988749895",
+        "E     Expected: 13.618033988749897 \u00b1 1.4e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: v + 1.0 for k, v in _mutation_original(data, *args, **kwargs).items()}\n"
+    },
+    {
+      "id": "force-offset-force_q95",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q95: fixed output offset (break force scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95]"
+      ],
+      "failure_excerpt": [
+        "E   assert 12.809016994374947 == 14.309016994374947 \u00b1 1.4e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 12.809016994374947",
+        "E     Expected: 14.309016994374947 \u00b1 1.4e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: v + 1.0 for k, v in _mutation_original(data, *args, **kwargs).items()}\n"
+    },
+    {
+      "id": "force-offset-mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "ped_force_mean/mean: fixed output offset (break force scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert 8.893446629166316 == 10.393446629166316 \u00b1 1.0e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 8.893446629166316",
+        "E     Expected: 10.393446629166316 \u00b1 1.0e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = ped_force_mean\ndef ped_force_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "force-rotation-force_q50",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q50: summarize world x component instead of force magnitude",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q50]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q50] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q50]"
+      ],
+      "failure_excerpt": [
+        "E   assert -0.0656803436522209 == 2.0 \u00b1 2.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: -0.0656803436522209",
+        "E     Expected: 2.0 \u00b1 2.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q50]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: float(np.nanmean(data.ped_forces[..., 0])) for k in _mutation_original(data, *args, **kwargs)}\n"
+    },
+    {
+      "id": "force-rotation-force_q90",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q90: summarize world x component instead of force magnitude",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q90]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q90] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q90]"
+      ],
+      "failure_excerpt": [
+        "E   assert -0.0656803436522209 == 2.0 \u00b1 2.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: -0.0656803436522209",
+        "E     Expected: 2.0 \u00b1 2.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q90]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: float(np.nanmean(data.ped_forces[..., 0])) for k in _mutation_original(data, *args, **kwargs)}\n"
+    },
+    {
+      "id": "force-rotation-force_q95",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q95: summarize world x component instead of force magnitude",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q95]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q95] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q95]"
+      ],
+      "failure_excerpt": [
+        "E   assert -0.0656803436522209 == 2.0 \u00b1 2.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: -0.0656803436522209",
+        "E     Expected: 2.0 \u00b1 2.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[force_q95]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: float(np.nanmean(data.ped_forces[..., 0])) for k in _mutation_original(data, *args, **kwargs)}\n"
+    },
+    {
+      "id": "force-rotation-mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "ped_force_mean/mean: summarize world x component instead of force magnitude",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert -0.0656803436522209 == 2.0 \u00b1 2.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: -0.0656803436522209",
+        "E     Expected: 2.0 \u00b1 2.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_are_invariant_under_rotation[mean]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = ped_force_mean\ndef ped_force_mean(data, *args, **kwargs):\n    return float(np.nanmean(data.ped_forces[..., 0]))\n"
+    },
+    {
+      "id": "force-zero-force_q50",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q50: zero output (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q50]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: 0.0 for k, v in _mutation_original(data, *args, **kwargs).items()}\n"
+    },
+    {
+      "id": "force-zero-force_q90",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q90: zero output (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q90]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: 0.0 for k, v in _mutation_original(data, *args, **kwargs).items()}\n"
+    },
+    {
+      "id": "force-zero-force_q95",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "force_quantiles/force_q95: zero output (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[force_q95]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = force_quantiles\ndef force_quantiles(data, *args, **kwargs):\n    return {k: 0.0 for k, v in _mutation_original(data, *args, **kwargs).items()}\n"
+    },
+    {
+      "id": "force-zero-mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "ped_force_mean/mean: zero output (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_force_metrics_scale_with_force_magnitude[mean]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = ped_force_mean\ndef ped_force_mean(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "frame-avg_speed",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "avg_speed: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 10.375 == 3.125 \u00b1 3.1e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 10.375",
+        "E     Expected: 3.125 \u00b1 3.1e-06",
+        "E   assert 2.6153488046897406 == 3.125 \u00b1 3.1e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.6153488046897406",
+        "E     Expected: 3.125 \u00b1 3.1e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[avg_speed-rotation]",
+        "2 failed in 0.81s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = avg_speed\ndef avg_speed(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-curvature_mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "curvature_mean: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 10.03539816339745 == 2.7853981633974483 \u00b1 2.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 10.03539816339745",
+        "E     Expected: 2.7853981633974483 \u00b1 2.8e-06",
+        "E   assert 2.275746968087189 == 2.7853981633974483 \u00b1 2.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.275746968087189",
+        "E     Expected: 2.7853981633974483 \u00b1 2.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[curvature_mean-rotation]",
+        "2 failed in 0.83s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = curvature_mean\ndef curvature_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-energy",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "energy: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 16.95820393249937 == 9.70820393249937 \u00b1 9.7e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 16.95820393249937",
+        "E     Expected: 9.70820393249937 \u00b1 9.7e-06",
+        "E   assert 9.198552737189111 == 9.70820393249937 \u00b1 9.7e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 9.198552737189111",
+        "E     Expected: 9.70820393249937 \u00b1 9.7e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[energy-rotation]",
+        "2 failed in 0.81s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = energy\ndef energy(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-jerk_mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "jerk_mean: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 12.25 == 5.0 \u00b1 5.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 12.25",
+        "E     Expected: 5.0 \u00b1 5.0e-06",
+        "E   assert 4.490348804689741 == 5.0 \u00b1 5.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 4.490348804689741",
+        "E     Expected: 5.0 \u00b1 5.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[jerk_mean-rotation]",
+        "2 failed in 0.82s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = jerk_mean\ndef jerk_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-mean_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_clearance: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 13.493023345397694 == 6.2430233453976935 \u00b1 6.2e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 13.493023345397694",
+        "E     Expected: 6.2430233453976935 \u00b1 6.2e-06",
+        "E   assert 5.733372150087435 == 6.2430233453976935 \u00b1 6.2e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 5.733372150087435",
+        "E     Expected: 6.2430233453976935 \u00b1 6.2e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_clearance-rotation]",
+        "2 failed in 0.83s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_clearance\ndef mean_clearance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-mean_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_distance: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 14.893023345397694 == 7.643023345397694 \u00b1 7.6e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 14.893023345397694",
+        "E     Expected: 7.643023345397694 \u00b1 7.6e-06",
+        "E   assert 7.1333721500874345 == 7.643023345397694 \u00b1 7.6e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.1333721500874345",
+        "E     Expected: 7.643023345397694 \u00b1 7.6e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[mean_distance-rotation]",
+        "2 failed in 0.82s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_distance\ndef mean_distance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-min_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_clearance: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 12.32213595499958 == 5.072135954999579 \u00b1 5.1e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 12.32213595499958",
+        "E     Expected: 5.072135954999579 \u00b1 5.1e-06",
+        "E   assert 4.562484759689321 == 5.072135954999579 \u00b1 5.1e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 4.562484759689321",
+        "E     Expected: 5.072135954999579 \u00b1 5.1e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_clearance-rotation]",
+        "2 failed in 0.84s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_clearance\ndef min_clearance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-min_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_distance: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 13.72213595499958 == 6.47213595499958 \u00b1 6.5e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 13.72213595499958",
+        "E     Expected: 6.47213595499958 \u00b1 6.5e-06",
+        "E   assert 5.96248475968932 == 6.47213595499958 \u00b1 6.5e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 5.96248475968932",
+        "E     Expected: 6.47213595499958 \u00b1 6.5e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[min_distance-rotation]",
+        "2 failed in 0.81s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_distance\ndef min_distance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "path_length: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 13.25 == 6.0 \u00b1 6.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 13.25",
+        "E     Expected: 6.0 \u00b1 6.0e-06",
+        "E   assert 5.490348804689741 == 6.0 \u00b1 6.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 5.490348804689741",
+        "E     Expected: 6.0 \u00b1 6.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[path_length-rotation]",
+        "2 failed in 0.81s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = path_length\ndef path_length(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "frame-socnavbench_path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "socnavbench_path_length: add world x coordinate (break translation/rotation invariance)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-rotation]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-translation] tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-rotation] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-translation]",
+        "tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-rotation]"
+      ],
+      "failure_excerpt": [
+        "E   assert 13.25 == 6.0 \u00b1 6.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 13.25",
+        "E     Expected: 6.0 \u00b1 6.0e-06",
+        "E   assert 5.490348804689741 == 6.0 \u00b1 6.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 5.490348804689741",
+        "E     Expected: 6.0 \u00b1 6.0e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-translation]",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_metric_invariance_under_rigid_transform[socnavbench_path_length-rotation]",
+        "2 failed in 0.82s"
+      ],
+      "expected_failures": 2,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = socnavbench_path_length\ndef socnavbench_path_length(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + float(data.robot_pos[1, 0])\n"
+    },
+    {
+      "id": "nearest-delta-mean_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_clearance: halve distances/clearances (wrong controlled change)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.1875 == 0.375 \u00b1 3.8e-07",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.1875",
+        "E     Expected: 0.375 \u00b1 3.8e-07",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_clearance\ndef mean_clearance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) * 0.5\n"
+    },
+    {
+      "id": "nearest-delta-mean_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_distance: halve distances/clearances (wrong controlled change)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.1875 == 0.375 \u00b1 3.8e-07",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.1875",
+        "E     Expected: 0.375 \u00b1 3.8e-07",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_distance\ndef mean_distance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) * 0.5\n"
+    },
+    {
+      "id": "nearest-delta-min_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_clearance: halve distances/clearances (wrong controlled change)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.375 == 0.75 \u00b1 7.5e-07",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.375",
+        "E     Expected: 0.75 \u00b1 7.5e-07",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_clearance\ndef min_clearance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) * 0.5\n"
+    },
+    {
+      "id": "nearest-delta-min_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_distance: halve distances/clearances (wrong controlled change)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.375 == 0.75 \u00b1 7.5e-07",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.375",
+        "E     Expected: 0.75 \u00b1 7.5e-07",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance]",
+        "1 failed in 0.84s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_distance\ndef min_distance(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) * 0.5\n"
+    },
+    {
+      "id": "nearest-far-mean_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_clearance: aggregate all pedestrians instead of the nearest (farther control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 7.25 == 5.75 \u00b1 5.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.25",
+        "E     Expected: 5.75 \u00b1 5.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_clearance]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_clearance\ndef mean_clearance(data, *args, **kwargs):\n    return float(np.linalg.norm(data.peds_pos - data.robot_pos[:, None, :], axis=-1).mean())\n"
+    },
+    {
+      "id": "nearest-far-mean_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "mean_distance: aggregate all pedestrians instead of the nearest (farther control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 7.25 == 5.75 \u00b1 5.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.25",
+        "E     Expected: 5.75 \u00b1 5.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[mean_distance]",
+        "1 failed in 0.88s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = mean_distance\ndef mean_distance(data, *args, **kwargs):\n    return float(np.linalg.norm(data.peds_pos - data.robot_pos[:, None, :], axis=-1).mean())\n"
+    },
+    {
+      "id": "nearest-far-min_clearance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_clearance: aggregate all pedestrians instead of the nearest (farther control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 7.25 == 5.75 \u00b1 5.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.25",
+        "E     Expected: 5.75 \u00b1 5.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_clearance]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_clearance\ndef min_clearance(data, *args, **kwargs):\n    return float(np.linalg.norm(data.peds_pos - data.robot_pos[:, None, :], axis=-1).mean())\n"
+    },
+    {
+      "id": "nearest-far-min_distance",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "min_distance: aggregate all pedestrians instead of the nearest (farther control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance]"
+      ],
+      "failure_excerpt": [
+        "E   assert 7.25 == 5.75 \u00b1 5.8e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 7.25",
+        "E     Expected: 5.75 \u00b1 5.8e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_distance_metrics_respond_only_to_nearest_pedestrian[min_distance]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = min_distance\ndef min_distance(data, *args, **kwargs):\n    return float(np.linalg.norm(data.peds_pos - data.robot_pos[:, None, :], axis=-1).mean())\n"
+    },
+    {
+      "id": "paired-config_hash",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt config_hash",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: config_hash",
+        "E   assert '553660886afe757a-changed' == '553660886afe757a'",
+        "E     ",
+        "E     - 553660886afe757a",
+        "E     + 553660886afe757a-changed",
+        "E     ?                 ++++++++",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.91s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"config_hash\"] += \"-changed\""
+    },
+    {
+      "id": "paired-effective_budget_steps",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt effective_budget_steps",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: effective_budget_steps",
+        "E   assert 401 == 400",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.62s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"effective_budget_steps\"] += 1"
+    },
+    {
+      "id": "paired-episode_id",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt episode_id",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: episode_id",
+        "E   assert 'francis2023_...e757a-changed' == 'francis2023_...660886afe757a'",
+        "E     ",
+        "E     Skipping 37 identical leading characters in diff, use -v to show",
+        "E     - 0886afe757a",
+        "E     + 0886afe757a-changed",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.90s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"episode_id\"] += \"-changed\""
+    },
+    {
+      "id": "paired-horizon",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt horizon",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: horizon",
+        "E   assert 601 == 600",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.85s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"horizon\"] += 1"
+    },
+    {
+      "id": "paired-metric",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Add 0.01 m/s to avg_speed only for admitted legacy binding",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[benchmark_data_2026_08-francis2023_narrow_doorway-orca-1001]",
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[benchmark_data_2026_08-francis2023_narrow_doorway-orca-1002]",
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1002]",
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[benchmark_data_2026_08-classic_realworld_double_bottleneck_high-social_force-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.avg_speed",
+        "E   assert 0.25059849301207315 == 0.24059849301207314 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.25059849301207315",
+        "E     Expected: 0.24059849301207314 \u00b1 1.0e-12",
+        "E   AssertionError: metrics.avg_speed",
+        "E   assert 0.24017620618943225 == 0.23017620618943224 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.24017620618943225",
+        "E     Expected: 0.23017620618943224 \u00b1 1.0e-12",
+        "E   AssertionError: metrics.avg_speed",
+        "E   assert 0.95991463368817 == 0.94991463368817 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.95991463368817",
+        "E     Expected: 0.94991463368817 \u00b1 1.0e-12",
+        "E   AssertionError: metrics.avg_speed",
+        "E   assert 0.9590333775512672 == 0.9490333775512672 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.9590333775512672",
+        "E     Expected: 0.9490333775512672 \u00b1 1.0e-12",
+        "E   AssertionError: metrics.avg_speed",
+        "E   assert 0.2294463429642382 == 0.21944634296423818 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 0.2294463429642382",
+        "E     Expected: 0.21944634296423818 \u00b1 1.0e-12",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[benchmark_data_2026_08-francis2023_narrow_doorway-orca-1001]",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[benchmark_data_2026_08-francis2023_narrow_doorway-orca-1002]",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1002]",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[benchmark_data_2026_08-classic_realworld_double_bottleneck_high-social_force-1001]",
+        "5 failed in 22.75s"
+      ],
+      "expected_failures": 5,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"avg_speed\"] += 0.01"
+    },
+    {
+      "id": "paired-metric-bool",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: episode_record[\"metrics\"][\"robot_force_metadata\"][\"prf_active\"] = False",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.robot_force_metadata.prf_active",
+        "E   assert False == True",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.89s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"robot_force_metadata\"][\"prf_active\"] = False"
+    },
+    {
+      "id": "paired-metric-keys",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt metric-keys",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics",
+        "E   assert dict_keys(['m...tric_values']) == dict_keys(['m...tric_values'])",
+        "E     ",
+        "E     Use -v to get more diff",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.84s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"].pop(\"avg_speed\")"
+    },
+    {
+      "id": "paired-metric-list-length",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: episode_record[\"metrics\"][\"robot_force_metadata\"][\"response_multipliers\"].append(2.0)",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.robot_force_metadata.response_multipliers",
+        "E   assert 2 == 1",
+        "E    +  where 2 = len([1.0, 2.0])",
+        "E    +  and   1 = len([1.0])",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 9.12s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"robot_force_metadata\"][\"response_multipliers\"].append(2.0)"
+    },
+    {
+      "id": "paired-metric-list-number",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: episode_record[\"metrics\"][\"robot_force_metadata\"][\"response_multipliers\"][0] += 1",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.robot_force_metadata.response_multipliers[0]",
+        "E   assert 2.0 == 1.0 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.0",
+        "E     Expected: 1.0 \u00b1 1.0e-12",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.88s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"robot_force_metadata\"][\"response_multipliers\"][0] += 1"
+    },
+    {
+      "id": "paired-metric-nested-keys",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: episode_record[\"metrics\"][\"robot_force_metadata\"].pop(\"social_force_config\")",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.robot_force_metadata",
+        "E   assert dict_keys(['p...locity_rule']) == dict_keys(['p...locity_rule'])",
+        "E     ",
+        "E     Use -v to get more diff",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.92s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"robot_force_metadata\"].pop(\"social_force_config\")"
+    },
+    {
+      "id": "paired-metric-nested-number",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: episode_record[\"metrics\"][\"robot_force_metadata\"][\"reference_m_s2\"] += 1",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.robot_force_metadata.reference_m_s2",
+        "E   assert 4.703015433252316 == 3.703015433252317 \u00b1 3.7e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 4.703015433252316",
+        "E     Expected: 3.703015433252317 \u00b1 3.7e-12",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.93s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"robot_force_metadata\"][\"reference_m_s2\"] += 1"
+    },
+    {
+      "id": "paired-metric-string",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: episode_record[\"metrics\"][\"robot_force_metadata\"][\"source\"] = \"changed\"",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.robot_force_metadata.source",
+        "E   assert 'changed' == 'recorded_rob..._social_force'",
+        "E     ",
+        "E     - recorded_robot_pedestrian_social_force",
+        "E     + changed",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.90s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"robot_force_metadata\"][\"source\"] = \"changed\""
+    },
+    {
+      "id": "paired-metric_schema_version",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt metric_schema_version",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metric_schema_version",
+        "E   assert 'changed' == 'robot-sf-metrics.v2'",
+        "E     ",
+        "E     - robot-sf-metrics.v2",
+        "E     + changed",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.97s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metric_schema_version\"] = \"changed\""
+    },
+    {
+      "id": "paired-one-sided-nan",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Only the admitted legacy path emits NaN for finite avg_speed",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: metrics.avg_speed",
+        "E   assert nan == 0.94991463368817 \u00b1 1.0e-12",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: nan",
+        "E     Expected: 0.94991463368817 \u00b1 1.0e-12",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 9.94s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metrics\"][\"avg_speed\"] = float(\"nan\")"
+    },
+    {
+      "id": "paired-outcome",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt outcome",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: outcome",
+        "E   assert {'route_compl..._event': True} == {'route_compl...event': False}",
+        "E     ",
+        "E     Omitting 2 identical items, use -vv to show",
+        "E     Differing items:",
+        "E     {'timeout_event': True} != {'timeout_event': False}",
+        "E     Use -v to get more diff",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 9.11s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"outcome\"][\"timeout_event\"] = not episode_record[\"outcome\"][\"timeout_event\"]"
+    },
+    {
+      "id": "paired-provenance",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt provenance",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: assert {'policy': 'l...e_steps': 401} == {'policy': 'l...e_steps': 400}",
+        "E     ",
+        "E     Omitting 3 identical items, use -vv to show",
+        "E     Differing items:",
+        "E     {'applied_max_episode_steps': 401} != {'applied_max_episode_steps': 400}",
+        "E     Use -v to get more diff",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.84s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"metadata\"][\"scenario_horizon\"][\"applied_max_episode_steps\"] += 1"
+    },
+    {
+      "id": "paired-scenario_params",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt scenario_params",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: scenario_params",
+        "E   assert {'name': 'fra..._goal'}], ...} == {'name': 'fra..._goal'}], ...}",
+        "E     ",
+        "E     Omitting 15 identical items, use -vv to show",
+        "E     Differing items:",
+        "E     {'run_horizon': 601} != {'run_horizon': 600}",
+        "E     Use -v to get more diff",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.75s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"scenario_params\"][\"run_horizon\"] += 1"
+    },
+    {
+      "id": "paired-steps",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt steps",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: steps",
+        "E   assert 264 == 263",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.93s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"steps\"] += 1"
+    },
+    {
+      "id": "paired-termination_reason",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "mutation": "Admitted legacy binding: corrupt termination_reason",
+      "selectors": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: termination_reason",
+        "E   assert 'changed' == 'collision'",
+        "E     ",
+        "E     - collision",
+        "E     + changed",
+        "FAILED tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_paired_horizon_path[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001]",
+        "1 failed in 8.90s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "Immediately before return episode_record in run_map_episode:\nif ctx.scenario.get(\"metadata\", {}).get(\"scenario_horizon\", {}).get(\"policy\") == \"legacy_runner_cap\":\n    episode_record[\"termination_reason\"] = \"changed\""
+    },
+    {
+      "id": "release-bent_curvature_v2",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "curvature_mean: fixed offset violates pinned release value",
+      "selectors": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]"
+      ],
+      "failure_excerpt": [
+        "E   assert 2.0471975511965974 == 1.0471975511965976 \u00b1 1.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.0471975511965974",
+        "E     Expected: 1.0471975511965976 \u00b1 1.0e-06",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = curvature_mean\ndef curvature_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "release-bent_jerk",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "jerk_mean: fixed offset violates pinned release value",
+      "selectors": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_jerk]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_jerk] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_jerk]"
+      ],
+      "failure_excerpt": [
+        "E   assert 3.0 == 2.0 \u00b1 2.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 3.0",
+        "E     Expected: 2.0 \u00b1 2.0e-06",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_jerk]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = jerk_mean\ndef jerk_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "release-manifest",
+      "path": "tests/benchmark/fixtures/release_0_0_8_metric_sentinels.json",
+      "mutation": "Bind sentinels to another manifest without updating the digest",
+      "selectors": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric"
+      ],
+      "command": "uv run pytest tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_path]",
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]",
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_jerk]",
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]"
+      ],
+      "failure_excerpt": [
+        "E   AssertionError: assert '6b2fd25d185e...9c16f6c80a182' == '1d71f06d1203...bfea7958700e9'",
+        "E     ",
+        "E     - 1d71f06d1203d287d5955004db87a481918758f9c23af756ca7bfea7958700e9",
+        "E     + 6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182",
+        "E   AssertionError: assert '6b2fd25d185e...9c16f6c80a182' == '1d71f06d1203...bfea7958700e9'",
+        "E     ",
+        "E     - 1d71f06d1203d287d5955004db87a481918758f9c23af756ca7bfea7958700e9",
+        "E     + 6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182",
+        "E   AssertionError: assert '6b2fd25d185e...9c16f6c80a182' == '1d71f06d1203...bfea7958700e9'",
+        "E     ",
+        "E     - 1d71f06d1203d287d5955004db87a481918758f9c23af756ca7bfea7958700e9",
+        "E     + 6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182",
+        "E   AssertionError: assert '6b2fd25d185e...9c16f6c80a182' == '1d71f06d1203...bfea7958700e9'",
+        "E     ",
+        "E     - 1d71f06d1203d287d5955004db87a481918758f9c23af756ca7bfea7958700e9",
+        "E     + 6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_path]",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_jerk]",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]",
+        "4 failed in 0.81s"
+      ],
+      "expected_failures": 4,
+      "result": "killed",
+      "fixture_update": {
+        "manifest_path": "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
+      }
+    },
+    {
+      "id": "release-schema",
+      "path": "tests/benchmark/fixtures/release_0_0_8_metric_sentinels.json",
+      "mutation": "Bind the pinned v2 curvature value to the historical v1 definition",
+      "selectors": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]"
+      ],
+      "failure_excerpt": [
+        "E   assert 1.0 == 1.0471975511965976 \u00b1 1.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 1.0",
+        "E     Expected: 1.0471975511965976 \u00b1 1.0e-06",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[bent_curvature_v2]",
+        "1 failed in 0.79s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "fixture_update": {
+        "metric_schema_version": "robot-sf-metrics.v1"
+      }
+    },
+    {
+      "id": "release-straight_path",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "path_length: fixed offset violates pinned release value",
+      "selectors": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_path]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_path] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_path]"
+      ],
+      "failure_excerpt": [
+        "E   assert 4.0 == 3.0 \u00b1 3.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 4.0",
+        "E     Expected: 3.0 \u00b1 3.0e-06",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_path]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = path_length\ndef path_length(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "release-straight_speed",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "avg_speed: fixed offset violates pinned release value",
+      "selectors": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]"
+      ],
+      "failure_excerpt": [
+        "E   assert 2.0 == 1.0 \u00b1 1.0e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 2.0",
+        "E     Expected: 1.0 \u00b1 1.0e-06",
+        "FAILED tests/benchmark/test_release_metric_oracles.py::test_release_pinned_synthetic_metric[straight_speed]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = avg_speed\ndef avg_speed(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-offset-avg_speed",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "avg_speed: add a fixed output offset (break unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed]"
+      ],
+      "failure_excerpt": [
+        "E   assert 4.375 == 6.375 \u00b1 6.4e-06",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 4.375",
+        "E     Expected: 6.375 \u00b1 6.4e-06",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = avg_speed\ndef avg_speed(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-offset-curvature_mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "curvature_mean: add a fixed output offset (break unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert 1.2617993877991494 == 0.5951327211324827 \u00b1 6.0e-07",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 1.2617993877991494",
+        "E     Expected: 0.5951327211324827 \u00b1 6.0e-07",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = curvature_mean\ndef curvature_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-offset-energy",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "energy: add a fixed output offset (break unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy]"
+      ],
+      "failure_excerpt": [
+        "E   assert 24.12461179749811 == 26.12461179749811 \u00b1 2.6e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 24.12461179749811",
+        "E     Expected: 26.12461179749811 \u00b1 2.6e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = energy\ndef energy(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-offset-jerk_mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "jerk_mean: add a fixed output offset (break unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert 10.0 == 12.0 \u00b1 1.2e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 10.0",
+        "E     Expected: 12.0 \u00b1 1.2e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = jerk_mean\ndef jerk_mean(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-offset-path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "path_length: add a fixed output offset (break unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length]"
+      ],
+      "failure_excerpt": [
+        "E   assert 13.0 == 15.0 \u00b1 1.5e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 13.0",
+        "E     Expected: 15.0 \u00b1 1.5e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = path_length\ndef path_length(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-offset-socnavbench_path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "socnavbench_path_length: add a fixed output offset (break unit scaling)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length]"
+      ],
+      "failure_excerpt": [
+        "E   assert 13.0 == 15.0 \u00b1 1.5e-05",
+        "E     ",
+        "E     comparison failed",
+        "E     Obtained: 13.0",
+        "E     Expected: 15.0 \u00b1 1.5e-05",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = socnavbench_path_length\ndef socnavbench_path_length(data, *args, **kwargs):\n    return _mutation_original(data, *args, **kwargs) + 1.0\n"
+    },
+    {
+      "id": "scale-zero-avg_speed",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "avg_speed: return zero (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[avg_speed]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = avg_speed\ndef avg_speed(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "scale-zero-curvature_mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "curvature_mean: return zero (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[curvature_mean]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = curvature_mean\ndef curvature_mean(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "scale-zero-energy",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "energy: return zero (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[energy]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = energy\ndef energy(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "scale-zero-jerk_mean",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "jerk_mean: return zero (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[jerk_mean]",
+        "1 failed in 0.80s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = jerk_mean\ndef jerk_mean(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "scale-zero-path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "path_length: return zero (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[path_length]",
+        "1 failed in 0.82s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = path_length\ndef path_length(data, *args, **kwargs):\n    return 0.0\n"
+    },
+    {
+      "id": "scale-zero-socnavbench_path_length",
+      "path": "robot_sf/benchmark/metrics.py",
+      "mutation": "socnavbench_path_length: return zero (nonzero control)",
+      "selectors": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length]"
+      ],
+      "command": "uv run pytest tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length] -q --no-cov --tb=short --show-capture=no",
+      "exit_code": 1,
+      "failed_tests": [
+        "tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length]"
+      ],
+      "failure_excerpt": [
+        "E   assert 0.0 > 0",
+        "FAILED tests/benchmark/test_metrics_characterization.py::test_motion_metrics_follow_length_unit_scaling[socnavbench_path_length]",
+        "1 failed in 0.81s"
+      ],
+      "expected_failures": 1,
+      "result": "killed",
+      "mutation_code": "\n_mutation_original = socnavbench_path_length\ndef socnavbench_path_length(data, *args, **kwargs):\n    return 0.0\n"
+    }
+  ]
+}

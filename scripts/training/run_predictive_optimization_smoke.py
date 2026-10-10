@@ -600,6 +600,7 @@ def _run_arm(
         str(_REPO_ROOT / "scripts/training/train_predictive_planner.py"),
         "--dataset",
         str(dataset["path"]),
+        "--allow-legacy-supervision",
         "--output-dir",
         str(run_dir),
         *_arm_training_args(config=config, arm=arm),

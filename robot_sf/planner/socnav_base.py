@@ -572,7 +572,8 @@ class SocNavPlannerConfig:
             object.__setattr__(self, "_" + name, _resolve_private_selector(name, value))
             return
         if name == "social_force_obstacle_law":
-            resolved, mode = resolve_obstacle_force_law_with_mode(value)
+            # The pedestrian default must not change the robot planner's wall response.
+            resolved, mode = resolve_obstacle_force_law_with_mode({} if value is None else value)
             object.__setattr__(self, name, resolved)
             object.__setattr__(self, "_obstacle_force_law_resolution_mode", mode)
             return

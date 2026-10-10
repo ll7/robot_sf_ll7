@@ -132,10 +132,7 @@
                   "type": "object",
                   "required": [
                     "factor",
-                    "sigma",
-                    "threshold",
                     "agent_radius",
-                    "effective_offset",
                     "distance_floor"
                   ],
                   "properties": {
@@ -156,7 +153,49 @@
                     },
                     "distance_floor": {
                       "type": "number"
+                    },
+                    "amplitude_unscaled": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "amplitude_m_s2": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "decay_m": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "range_m": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
                     }
+                  }
+                }
+              },
+              "if": {
+                "properties": {
+                  "law_version": {
+                    "const": "body_edge_exponential_v3"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "parameters": {
+                    "required": [
+                      "amplitude_unscaled",
+                      "amplitude_m_s2",
+                      "decay_m",
+                      "range_m"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "parameters": {
+                    "required": ["sigma", "threshold", "effective_offset"]
                   }
                 }
               }

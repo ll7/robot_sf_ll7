@@ -345,17 +345,20 @@ class FastPysfWrapper:
 
         ped_radius = float(self.sim.peds.agent_radius)
         if law_version == BODY_EDGE_EXPONENTIAL_V3:
-            forces = np.zeros((1, 2), dtype=float)
-            pf_forces.all_obstacle_forces_for_law(
-                forces,
-                np.asarray([p], dtype=float),
-                np.asarray(raw_obs, dtype=float),
-                ped_radius,
-                law_version,
-            )
-            if self._obstacle_force_enabled():
-                self._obstacle_force_applied = True
-            return forces[0] * float(self.sim.config.obstacle_force_config.factor)
+            try:
+                raw_obs = np.asarray(raw_obs, dtype=float)
+                closest = np.asarray(
+                    [pf_forces.closest_point_on_segment(tuple(row[:4]), p) for row in raw_obs]
+                )
+                distances = np.sum((closest - p) ** 2, axis=1)
+                finite = np.isfinite(distances)
+                if not finite.any():
+                    return total
+                nearest = int(np.argmin(np.where(finite, distances, np.inf)))
+                raw_obs = raw_obs[nearest : nearest + 1]
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                self._record_fallback("obstacle_force_dropped", exc)
+                return total
 
         applied = False
         for row in raw_obs:

@@ -2975,6 +2975,7 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "goal_completion_policy",
     "robot_goal_sampling_policy",
     "pedestrian_model",
+    "obstacle_force_law",
     "social_force_kernel_version",
     "ttc_predictive_force",
     "zanlungo_collision_prediction",

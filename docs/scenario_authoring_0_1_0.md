@@ -117,20 +117,37 @@ Reproduce the inventory from the repository root (standard library only):
 ```python
 import hashlib
 import subprocess
+
 freeze = "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"
+
+
 def blob(revision, path):
     return subprocess.check_output(["git", "show", f"{revision}:{path}"])
-paths = subprocess.check_output([
-    "git", "ls-tree", "-r", "--name-only", freeze, "--", "configs", "maps", "robot_sf/maps", "fast-pysf/maps"
-], text=True).splitlines()
+
+
+paths = subprocess.check_output(
+    [
+        "git",
+        "ls-tree",
+        "-r",
+        "--name-only",
+        freeze,
+        "--",
+        "configs",
+        "maps",
+        "robot_sf/maps",
+        "fast-pysf/maps",
+    ],
+    text=True,
+).splitlines()
 # Packaged map directories also contain Python tools and Markdown, not map data.
-paths = [p for p in paths if p.startswith(("configs/", "maps/"))
-         or p.endswith((".svg", ".json"))]
+paths = [p for p in paths if p.startswith(("configs/", "maps/")) or p.endswith((".svg", ".json"))]
 for path in paths:
     frozen, base, head = (blob(rev, path) for rev in (freeze, "53f8f2666", "HEAD"))
     assert base == head, path
-    print(path, hashlib.sha256(frozen).hexdigest(),
-          hashlib.sha256(head).hexdigest(), frozen == head)
+    print(
+        path, hashlib.sha256(frozen).hexdigest(), hashlib.sha256(head).hexdigest(), frozen == head
+    )
 ```
 
 ## Per-scenario effective speed requests

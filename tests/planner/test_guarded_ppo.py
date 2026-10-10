@@ -25,6 +25,7 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
 )
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
 from robot_sf.planner.socnav_base import SamplingPlannerAdapter, SocNavPlannerConfig
 from robot_sf.planner.socnav_orca import ORCAPlannerAdapter
 from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
@@ -179,7 +180,42 @@ def test_guarded_ppo_exposes_structured_shield_decision_for_fallback() -> None:
     assert adaptation["mode"] == "guard_selected_command"
     assert adaptation["raw_policy_action"] == [0.6, 0.0]
     assert adaptation["adapted_action"] == [0.0, 1.0]
+    assert "planner_diagnostics" not in decision.fallback_controller_state
     assert decision.hard_constraint_violation is False
+
+
+def test_guarded_ppo_carries_fallback_diagnostics_into_trace_metadata() -> None:
+    """Optional fallback diagnostics should reach the existing serialized decision."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 2.5,
+                "guard_hard_ped_clearance": 0.45,
+                "guard_first_step_ped_clearance": 0.55,
+            }
+        ),
+        fallback_adapter=RiskDWAPlannerAdapter(
+            RiskDWAPlannerConfig(
+                linear_candidates=(0.0,),
+                angular_candidates=(0.0,),
+                progress_escape_enabled=False,
+            )
+        ),
+    )
+
+    decision = guard.choose_command_decision(
+        _obs(ped_positions=[(0.58, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.6, 0.0),
+    )
+
+    metadata = decision.to_metadata()
+    fallback_state = metadata["fallback_controller_state"]
+    assert fallback_state["planner_diagnostics"]["schema_version"] == (
+        "risk-dwa-progress-escape.v1"
+    )
+    assert fallback_state["planner_diagnostics"]["status"] == "disabled"
+    assert fallback_state["planner_diagnostics"]["reason"] == "disabled_by_config"
+    assert guard.diagnostics()["fallback_diagnostics"]["planner_type"] == "RiskDWAPlannerAdapter"
 
 
 def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:
@@ -564,13 +600,13 @@ def test_guarded_ppo_propagates_child_adapter_lifecycle_hooks() -> None:
     env = object()
 
     guard.bind_env(env)
-    guard.reset(seed=7)
+    guard.reset(seed=1001)
     guard.close()
 
     assert fallback.bound_envs == [env]
     assert prior.bound_envs == [env]
-    assert fallback.reset_seeds == [7]
-    assert prior.reset_seeds == [7]
+    assert fallback.reset_seeds == [1001]
+    assert prior.reset_seeds == [1001]
     assert fallback.closed
     assert prior.closed
 

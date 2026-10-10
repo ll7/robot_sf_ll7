@@ -7,8 +7,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from jsonschema import Draft202012Validator, ValidationError
+from pysocialforce import Simulator
 from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1, ObstacleForceConfig
 from pysocialforce.forces import ObstacleForce
+
+from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,6 +49,24 @@ def _metadata(config):
 def test_default_wall_law_metadata_is_schema_valid():
     """The default law must not make every native episode unwritable."""
     _wall_schema().validate(_metadata(ObstacleForceConfig()))
+
+
+@pytest.mark.parametrize("factor", [0.5, 10.0])
+def test_live_wrapper_wall_metadata_validates_against_production_schema(factor):
+    """The wrapper's live witness must include every parameter of the applied law."""
+    simulation = Simulator(np.array([[0.0, 0.4, 0.0, 0.0, 2.0, 0.4]]))
+    simulation.config.obstacle_force_config.factor = factor
+    wrapper = FastPysfWrapper(simulation)
+    metadata = wrapper.obstacle_force_law_metadata()
+
+    _wall_schema().validate(metadata)
+    assert (
+        metadata["parameters"]
+        == ObstacleForce(simulation.config.obstacle_force_config, simulation).law_metadata()[
+            "parameters"
+        ]
+    )
+    assert metadata["parameters"]["amplitude_m_s2"] == pytest.approx(0.3 * factor)
 
 
 @pytest.mark.parametrize("parameter", ["amplitude_m_s2", "decay_m", "range_m"])

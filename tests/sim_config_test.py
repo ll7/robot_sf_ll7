@@ -47,7 +47,7 @@ def test_env_settings_post_init():
 
 def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     """The absent selector stays out of legacy hashes while explicit v2 remains identity-bearing."""
-    legacy = SimulationSettings()
+    legacy = SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1)
     assert legacy.social_force_kernel_resolution_mode == "defaulted_missing"
     assert "social_force_kernel_version" not in asdict(legacy)
     legacy_settings_payload = asdict(legacy)
@@ -64,13 +64,16 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
         "3862ea280966a4e790715babbb7567cbf121031eb38374b08264e4f4d3626be0"
     )
 
-    legacy_env = EnvSettings()
+    legacy_env = EnvSettings(sim_config=legacy)
     legacy_env_payload = _hash_payload_without_default_goal_policy(asdict(legacy_env))
     legacy_env_json = json.dumps(legacy_env_payload, sort_keys=True, default=str)
     expected_legacy_env_hash = hashlib.blake2b(legacy_env_json.encode(), digest_size=8).hexdigest()
     assert _stable_config_hash(legacy_env) == expected_legacy_env_hash
 
-    wrapped = SimulationSettings(social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+    wrapped = SimulationSettings(
+        obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1,
+        social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+    )
     assert wrapped.social_force_kernel_resolution_mode == "explicit"
     assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
     wrapped_env = EnvSettings(sim_config=wrapped)
@@ -118,6 +121,20 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     resolved_payload = get_resolved_config_dict(EnvSettings(sim_config=wrapped))
     assert resolved_payload["sim_config"]["social_force_kernel_version"] == (
         SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    )
+
+
+def test_body_edge_default_has_distinct_simulation_identity():
+    """Issue #10017 deliberately gives the new 0.1.0 wall default its own identity."""
+    payload = asdict(SimulationSettings())
+    assert payload["obstacle_force_law"] == BODY_EDGE_EXPONENTIAL_V3
+    payload.pop("pedestrian_seed")
+    payload.pop("groups")
+    payload.pop("robot_goal_sampling_policy")
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    # #10017: the default may move; the explicit-legacy assertion above must not.
+    assert hashlib.sha256(serialized.encode()).hexdigest() == (
+        "db40e197057cfe057ed28cbb0a89502cd715d0f9a307605749a2738cb3b2c71d"
     )
 
 

@@ -94,27 +94,38 @@ class FastPysfWrapper:
         config = self.sim.config.obstacle_force_config
         factor = float(getattr(config, "factor", 1.0))
         agent_radius = float(self.sim.peds.agent_radius)
+        law_version = self._resolve_obstacle_force_law()
+        parameters = {
+            "factor": factor,
+            "agent_radius": agent_radius,
+            "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+        }
+        if law_version == BODY_EDGE_EXPONENTIAL_V3:
+            parameters.update(
+                {
+                    "amplitude_unscaled": pf_forces.BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED,
+                    "amplitude_m_s2": factor * pf_forces.BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED,
+                    "decay_m": pf_forces.BODY_EDGE_EXPONENTIAL_DECAY_M,
+                    "range_m": pf_forces.BODY_EDGE_EXPONENTIAL_RANGE_M,
+                }
+            )
         return pf_forces.obstacle_force_law_metadata(
-            self._resolve_obstacle_force_law(),
+            law_version,
             site="fast_pysf_wrapper",
             geometry_convention=(
                 "nearest_finite_segment_surface"
-                if self._resolve_obstacle_force_law() == BODY_EDGE_EXPONENTIAL_V3
+                if law_version == BODY_EDGE_EXPONENTIAL_V3
                 else "map_line_endpoints_orthogonal_vector"
             ),
             radius_convention=(
                 "physical_body_edge_clearance"
-                if self._resolve_obstacle_force_law() == BODY_EDGE_EXPONENTIAL_V3
+                if law_version == BODY_EDGE_EXPONENTIAL_V3
                 else "agent_radius_direct"
             ),
             enabled=self._obstacle_force_enabled(),
             applied=bool(getattr(self, "_obstacle_force_applied", False)),
             resolution_mode=getattr(config, "obstacle_force_law_resolution_mode", None),
-            parameters={
-                "factor": factor,
-                "agent_radius": agent_radius,
-                "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
-            },
+            parameters=parameters,
         )
 
     def diagnostics(self) -> dict[str, Any]:

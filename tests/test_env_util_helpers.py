@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 from gymnasium import spaces
+from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.common.types import Rect
 from robot_sf.gym_env.env_config import EnvSettings
@@ -33,6 +34,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
 )
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.sim.sim_config import SimulationSettings
 
 
 def _minimal_map_def() -> MapDefinition:
@@ -177,15 +179,27 @@ def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:
 def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
     """Absent and explicit legacy sampling retain a frozen old-shape hash."""
     cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
         map_pool=MapDefinitionPool(
             maps_folder="fixture",
             map_defs={"fixture": _minimal_map_def()},
-        )
+        ),
     )
     assert _stable_config_hash(cfg) == "d280527b83ce075c"
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
     assert _stable_config_hash(cfg) == "d280527b83ce075c"
+
+
+def test_robot_env_hash_pins_new_default_wall_identity() -> None:
+    """Issue #10017 changes default identity without moving explicit legacy hashes."""
+    cfg = EnvSettings(
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
+    )
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
+
+    cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
 
 
 def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:

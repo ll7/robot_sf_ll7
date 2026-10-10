@@ -694,11 +694,17 @@ def _report_check(
 def _refresh_baseline(
     baseline_path: Path, payload: dict[str, Any], findings: list[dict[str, Any]]
 ) -> int:
-    """Keep reviewed exception caps when refreshing raw counts; reject expired caps."""
+    """Refresh downward from committed limits, preserving reviewed exception caps."""
     if baseline_path.exists():
         previous = load_baseline(baseline_path)
+        failures, _ = check_against_baseline(findings, previous)
+        if failures:
+            print("ERROR: findings exceed committed limits; refusing refresh:", file=sys.stderr)
+            print("\n".join(failures), file=sys.stderr)
+            return 1
         if "exceptions" in previous:
             payload["exceptions"] = previous["exceptions"]
+            # Retained allowances must also fit the smaller refreshed raw budget.
             failures, _ = check_against_baseline(findings, payload)
             if failures:
                 print(

@@ -278,6 +278,85 @@ def test_baseline_refresh_preserves_and_validates_narrow_exceptions(tmp_path, mo
     assert baseline.read_bytes() == approved_bytes
 
 
+@pytest.mark.parametrize("with_exceptions", [True, False])
+@pytest.mark.parametrize(
+    "path", ["scripts/unapproved_refresh_probe.py", "new_clean_module/probe.py"]
+)
+def test_baseline_refresh_refuses_unrelated_growth_without_writing(
+    tmp_path, monkeypatch, capsys, path: str, with_exceptions: bool
+) -> None:
+    """Retained approved matches cannot hide growth in old or previously clean modules."""
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    if with_exceptions:
+        baseline.write_bytes(BASELINE.read_bytes())
+        findings = json.loads(FIXTURE.read_text())
+    else:
+        baseline.write_text(
+            json.dumps(
+                {
+                    "schema_version": tyratchet.SCHEMA_VERSION,
+                    "modules": {"scripts": {"general": 1, "total": 1}},
+                }
+            )
+        )
+        findings = [_finding("scripts/existing.py")]
+    previous_bytes = baseline.read_bytes()
+    findings.append(_finding(path, check_name="invalid-return-type"))
+    report.write_text(json.dumps(findings))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+
+    assert (
+        tyratchet.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--write-baseline",
+                "--baseline",
+                str(baseline),
+                "--ty-output",
+                str(report),
+            ]
+        )
+        == 1
+    )
+    assert baseline.read_bytes() == previous_bytes
+    assert "total general findings increased" in capsys.readouterr().err
+
+
+def test_baseline_refresh_allows_decrease_and_preserves_exact_exceptions(
+    tmp_path, monkeypatch
+) -> None:
+    """Removing an ordinary finding can lower the budget without changing approved keys."""
+    previous = _exception_baseline()
+    previous["modules"]["scripts"].update(general=3, total=3)
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(previous))
+    report.write_text(json.dumps([_finding("scripts/evidence.py", line=i + 1) for i in range(2)]))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+
+    assert (
+        tyratchet.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--write-baseline",
+                "--baseline",
+                str(baseline),
+                "--ty-output",
+                str(report),
+            ]
+        )
+        == 0
+    )
+    refreshed = json.loads(baseline.read_text())
+    assert refreshed["summary"]["general_findings"] == 2
+    assert refreshed["summary"]["total_findings"] == 2
+    assert refreshed["modules"]["scripts"]["general"] == 2
+    assert refreshed["exceptions"] == previous["exceptions"]
+
+
 def test_aggregate_splits_optional_and_general_buckets() -> None:
     """Optional-import findings land in the excluded bucket; others in general."""
     findings = [

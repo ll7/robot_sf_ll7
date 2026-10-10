@@ -44,6 +44,65 @@ missing objects fail closed. The 32 MiB limit applies to decoded payloads,
 including LFS objects; use only receipt data rather than raw traces in these
 files, and keep traces at the external artifact URI.
 
+## Producer flow
+
+Use `scripts/ci/make_behaviour_receipt.py` to build the committed payload and
+the compact PR-body header. The default baseline is the latest published
+software release, including release records whose semver appears in the release
+name rather than the tag. For real evidence, run from the SLURM host and use
+`--mode sbatch --submit-only` to submit the head and baseline empty-world sweeps;
+after both jobs finish, rerun with `--mode existing` and the two completed sweep
+directories to write `receipts/behaviour/<id>.json` and print the header.
+
+One-command local/small-matrix smoke flow:
+
+```bash
+uv run python scripts/ci/make_behaviour_receipt.py \
+  --head-sha "$FINAL_OR_EXECUTION_SHA" \
+  --baseline latest \
+  --receipt-id "$PR_NUMBER" \
+  --mode local \
+  --arms goal \
+  --scenarios francis2023_open \
+  --seeds 1001 \
+  --workers 1 \
+  --head-artifact-uri https://example.org/replace-with-head-sweep \
+  --baseline-artifact-uri https://example.org/replace-with-baseline-sweep \
+  --audit-uri https://example.org/replace-with-real-row-audit \
+  --classification-evidence-base-uri https://example.org/replace-with-classifications
+```
+
+Production receipt generation uses the full gate seed set (`1001..1030`) because
+that is what the validator admits today; the producer rejects seeds outside the
+wider development range (`1001..1200`) and also rejects currently unsupported
+development seeds above `1030` instead of emitting a receipt the gate cannot
+accept. The printed `refute_review` URI is a deliberate placeholder unless
+`--refute-review-uri` is supplied. Replace it with the independent exact-head
+review link before updating the PR body.
+
+Because the payload commit changes the PR head, the exact-head sequence is:
+
+```bash
+RUN_SOURCE=$(git rev-parse HEAD)
+uv run python scripts/ci/make_behaviour_receipt.py --head-sha "$RUN_SOURCE" ... \
+  > /tmp/behaviour-header.before-commit.txt
+git add receipts/behaviour/<id>.json
+git commit -m "ci: add behaviour receipt for PR <id>"
+FINAL_HEAD=$(git rev-parse HEAD)
+uv run python scripts/ci/make_behaviour_receipt.py --head-sha "$FINAL_HEAD" \
+  --mode existing \
+  --head-sweep-dir <completed-head-sweep> \
+  --baseline-sweep-dir <completed-baseline-sweep> \
+  --receipt-id <id> \
+  --audit-source-sha "$RUN_SOURCE" \
+  --refute-review-uri <accepted-review-url>
+```
+
+Paste the final `<!-- behaviour-change-receipt:v2 ... -->` block into the PR
+body. Keep `scheduler.source_sha` and `interaction_audit.source_sha` at the
+actual execution commits; only `head_sha` and `refute_review.head_sha` should
+move to the final receipt commit.
+
 ## Scope and dependency rule
 
 Production triggers cover planner/adapters, simulator/dynamics, maps/scenarios,

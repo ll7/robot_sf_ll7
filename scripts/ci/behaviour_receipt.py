@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 SCOPE_FILE = "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
 SCOPE_PATH = ROOT / SCOPE_FILE
+SOFTWARE_VERSION_RE = re.compile(r"(?<![\w.])v?(\d+\.\d+\.\d+(?:\.post\d+)?)(?![\w.])")
 TRIGGERS = (
     "robot_sf/planner/",
     "robot_sf/baselines/",
@@ -79,25 +80,41 @@ def current_head() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
 
+def _release_version_key(release: dict) -> tuple[int, ...] | None:
+    """Return the software semver advertised by a GitHub release, if any."""
+    tag = str(release.get("tag_name") or "")
+    name = str(release.get("name") or "")
+    if tag.startswith("artifact/") or tag.startswith("models-"):
+        return None
+    match = SOFTWARE_VERSION_RE.search(tag) or SOFTWARE_VERSION_RE.search(name)
+    if match is None:
+        return None
+    version = match.group(1)
+    parts: list[int] = []
+    for chunk in version.replace(".post", ".").split("."):
+        parts.append(int(chunk))
+    return tuple(parts)
+
+
 def latest_release(repo: str) -> str:
-    """Use the latest published software release, excluding artifact releases."""
+    """Use the highest published software release, excluding artifact releases."""
     rows = json.loads(
         subprocess.check_output(
             ["gh", "api", f"repos/{repo}/releases", "--paginate", "--slurp"],
             text=True,
         )
     )
-    releases = [
-        r
-        for page in rows
-        for r in page
-        if not r["draft"]
-        and not r["prerelease"]
-        and re.fullmatch(r"v?\d+\.\d+\.\d+(?:\.post\d+)?", r["tag_name"])
-    ]
+    releases = []
+    for page in rows:
+        for release in page:
+            if release["draft"] or release["prerelease"]:
+                continue
+            version_key = _release_version_key(release)
+            if version_key is not None:
+                releases.append((version_key, release["published_at"], release["tag_name"]))
     if not releases:
         raise ValueError("published software release inventory is empty")
-    return max(releases, key=lambda r: r["published_at"])["tag_name"]
+    return max(releases)[2]
 
 
 def release_source(release: str) -> str:

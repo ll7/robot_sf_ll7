@@ -1085,6 +1085,7 @@ if [[ -n "$VALIDATED_BASE_SHA" ]]; then
 fi
 
 mark_pr_ready_progress "validation_setup" "none" "running follow-up and evidence preflight checks"
+bash "$SCRIPT_DIR/fetch_test_fixture_sources.sh"
 followup_args=()
 if [[ "$pr_ready_final" == "1" ]]; then
   followup_args+=(--require-body)

@@ -2750,11 +2750,11 @@ def test_get_changed_files_prefers_current_base_diff_over_stale_api_list(
     """Issue #7668: stale PR API files cannot override a resolvable current-base diff."""
     api_files = tmp_path / "pr_changed_files.txt"
     api_files.write_text("stale-base-only.py\n", encoding="utf-8")
-    mock_run.return_value = MagicMock(returncode=0, stdout="current-base.py\n", stderr="")
+    mock_run.return_value = MagicMock(returncode=0, stdout="current-base.py\0", stderr="")
 
     assert pr_contract_check.get_changed_files(api_files, "origin/main") == ["current-base.py"]
     mock_run.assert_called_once_with(
-        ["git", "diff", "--name-only", "origin/main...HEAD"],
+        ["git", "diff", "--name-only", "-z", "--no-renames", "origin/main...HEAD"],
         capture_output=True,
         text=True,
         check=False,

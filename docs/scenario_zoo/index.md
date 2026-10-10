@@ -15,6 +15,9 @@ For the evidence boundary, keep these surfaces separate:
 - Fallback and degraded execution policy:
   [Issue #691 Benchmark Fallback Policy](../context/issue_691_benchmark_fallback_policy.md).
 
+For the corrected double bottleneck and station platform, use the
+[0.1.0 authoring successor](../scenario_authoring_0_1_0.md). It preserves released 0.0.8 inputs.
+
 ## Draft Authoring
 
 Use the v1 authoring tools when a contributor needs a small, deterministic YAML skeleton instead of

@@ -25,6 +25,15 @@ from robot_sf.benchmark.pedestrian_sensitivity import (
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "configs/benchmarks/pedestrian_sensitivity_10190.yaml"
+STUDY_FAILURE_EXCEPTIONS = (
+    OSError,
+    ValueError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    TypeError,
+    ArithmeticError,
+)
 
 
 def sha256(path):
@@ -256,7 +265,7 @@ def main(argv=None):
         }
         write_json(args.out / "summary.json", summary)
         manifest["status"] = "complete"
-    except Exception as exc:
+    except STUDY_FAILURE_EXCEPTIONS as exc:
         manifest["status"] = "failed"
         manifest["error_type"] = type(exc).__name__
         write_json(args.out / "manifest.json", manifest)

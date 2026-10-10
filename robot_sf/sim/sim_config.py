@@ -474,7 +474,7 @@ class SimulationSettings:
     group_allocation_mode: InitVar[str] = field(default="legacy", kw_only=True)
     """Group law: legacy (default) or opt-in exact_small_crowd_v1."""
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: Any) -> None:  # noqa: C901 - independent selector validation
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "ped_force_radius":
             if value is not None and (not isfinite(value) or value <= 0):

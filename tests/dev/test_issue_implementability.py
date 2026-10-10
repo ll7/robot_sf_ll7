@@ -1627,3 +1627,49 @@ class TestReadyToSubmitAndReviewingQualifiers:
         for label in pre_existing_qualifiers + pre_existing_execution:
             assert label in taxonomy.KNOWN_STATE_LABELS, label
             assert taxonomy.unknown_state_labels({label}) == [], label
+
+
+@pytest.mark.parametrize(
+    "labels", [["state:blocked-dependency"], ["state:ready", "state:blocked-dependency"]]
+)
+def test_dependency_blocked_qualifier_refuses_with_blocking_reason(labels: list[str]) -> None:
+    """A known dependency hold composes with ready and still prevents dispatch."""
+    report = evaluate_issue(_issue(labels=labels), _claim())
+
+    assert report["classification"] == "blocked"
+    assert report["admission_reason"] == "dependency_missing"
+    assert report["write_allowed"] is False
+    assert "state:blocked-dependency" in report["reasons"][0]
+    assert "unknown" not in report["reasons"][0]
+
+
+@pytest.mark.parametrize("label", ["state:blocked", "state:hold", "needs-triage"])
+def test_generic_blocking_labels_keep_generic_reason(label: str) -> None:
+    """Dependency-specific admission must not reclassify ordinary workflow holds."""
+    report = evaluate_issue(
+        _issue(labels=["state:ready", label] if label == "needs-triage" else [label]), _claim()
+    )
+    assert report["classification"] == "blocked"
+    assert report["admission_reason"] == "blocked"
+    assert report["write_allowed"] is False
+    assert label in report["reasons"][0]
+
+
+@pytest.mark.parametrize(
+    ("label", "classification", "reason"),
+    [
+        ("decision-required", "human_decision", "human_decision"),
+        ("resource:slurm", "needs_compute", "needs_compute"),
+        ("state:working", "working", "active_work"),
+    ],
+)
+def test_dependency_hold_preserves_earlier_routing_precedence(
+    label: str, classification: str, reason: str
+) -> None:
+    """A dependency qualifier cannot override existing routing and ownership holds."""
+    report = evaluate_issue(
+        _issue(labels=["state:ready", "state:blocked-dependency", label]), _claim()
+    )
+    assert report["classification"] == classification
+    assert report["admission_reason"] == reason
+    assert report["write_allowed"] is False

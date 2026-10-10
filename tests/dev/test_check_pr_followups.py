@@ -26,6 +26,20 @@ from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
 
 
+@pytest.fixture(autouse=True)
+def isolated_cli_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLI fixtures own their event and readiness settings, including in hosted CI."""
+    for name in (
+        "GITHUB_EVENT_PATH",
+        "GITHUB_EVENT_NAME",
+        "PR_READY_PR_BODY_FILE",
+        "PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES",
+        "PR_READY_REQUIRE_SUBSTANTIVE_BODY",
+        "PR_READY_ADVISORY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def standalone_python(tmp_path: Path) -> tuple[str, dict[str, str]]:
     """Use host Python without site hooks and stage only the declared YAML dependency."""
@@ -1353,10 +1367,18 @@ def test_analyze_body_collects_multiline_deferred_work() -> None:
     assert report.linked_issues == ("#2966",)
 
 
-def test_cli_reads_github_pull_request_event(tmp_path: Path, monkeypatch) -> None:
-    """The CLI can read pull_request.body from a GitHub event payload."""
-    monkeypatch.delenv("PR_READY_PR_BODY_FILE", raising=False)
-    monkeypatch.delenv("PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES", raising=False)
+@pytest.mark.parametrize("event_title", [None, "", "docs: update readiness guidance"])
+def test_cli_reads_github_pull_request_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, event_title: str | None
+) -> None:
+    """An explicit event owns its body and title even inside unrelated hosted PR CI."""
+    hosted_event = tmp_path / "hosted-event.json"
+    hosted_event.write_text(
+        json.dumps({"pull_request": {"title": "fix(validation): bind literal seed loops"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(hosted_event))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     event_path = tmp_path / "event.json"
     event_path.write_text(
         json.dumps(
@@ -1365,7 +1387,8 @@ def test_cli_reads_github_pull_request_event(tmp_path: Path, monkeypatch) -> Non
                     "body": _body(
                         deferred="Run release readiness dashboard.",
                         issues="https://github.com/ll7/robot_sf_ll7/issues/2965",
-                    )
+                    ),
+                    **({"title": event_title} if event_title is not None else {}),
                 }
             }
         ),
@@ -1380,7 +1403,7 @@ def test_cli_reads_github_pull_request_event(tmp_path: Path, monkeypatch) -> Non
         check=False,
     )
 
-    assert result.returncode == 0
+    assert result.returncode == 0, result.stderr
     assert "status=ok" in result.stdout
     assert "#2965" in result.stdout
 

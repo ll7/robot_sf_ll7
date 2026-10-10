@@ -14,6 +14,11 @@ real acceleration/deceleration limits, and a candidate is rejected when the
 robot could not brake to a stop before a predicted pedestrian contact. Every v4
 branch is gated on the variant, so v3 and older variants run the unchanged
 code path.
+
+For 0.1.0, ``v4_predictive_braking_enabled`` opts into a candidate-specific
+continuous stopping tube instead of the radial present-position speed bands.
+Observed pedestrian motion earns credit only inside an explicit error tube;
+the separation certificate is conditional on that prediction bound.
 """
 
 from __future__ import annotations
@@ -363,6 +368,11 @@ class HybridRuleLocalPlannerConfig:
     # Reject candidates after which the robot cannot brake to a stop before a
     # constant-velocity pedestrian prediction reaches contact while it still moves.
     v4_braking_check_enabled: bool = True
+    # 0.1.0 experiment: replace radial present-position bands with a per-command
+    # stopping tube. Credit observed pedestrian motion, never assumed yielding.
+    # The guarantee is conditional on |p(t) - (p0 + v0*t)| <= error*t.
+    v4_predictive_braking_enabled: bool = False
+    v4_prediction_speed_error: float = 0.2
 
     goal_progress_weight: float = 4.0
     path_alignment_weight: float = 0.8
@@ -489,6 +499,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._v4_clearance_braking = (
             self.config.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
         )
+        if self.config.v4_predictive_braking_enabled:
+            if not self._v4_clearance_braking or not self.config.v4_braking_check_enabled:
+                raise ValueError("Predictive braking requires v4 and its braking check")
+            error = float(self.config.v4_prediction_speed_error)
+            if not np.isfinite(error) or error < 0:
+                raise ValueError("Prediction speed error must be finite and non-negative")
+            if not np.isfinite(float(self.config.v4_reaction_time)):
+                raise ValueError("Predictive braking reaction time must be finite")
         # v4 only: drive limits start from the DifferentialDriveSettings defaults
         # and are replaced by the bound environment's robot config in bind_env.
         self._drive_limits: dict[str, Any] | None = (
@@ -557,6 +575,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Hybrid v4 additionally reads the robot drive's acceleration, braking and
         speed limits here, so rollouts and braking checks use the real drive.
         """
+        if self.config.v4_predictive_braking_enabled and not isinstance(
+            _bound_robot_config(env), DifferentialDriveSettings
+        ):
+            raise ValueError("Predictive braking requires a bound differential-drive robot")
         if self._v4_clearance_braking:
             self._drive_limits = _resolve_drive_limits(env)
             self._v4_bound_timestep = _bound_timestep(env)
@@ -864,6 +886,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         :func:`braking_speed_limit` of ``c - v4_braking_margin`` with the drive's
         braking deceleration, so the robot never exceeds a speed it could not
         stop from before reaching the nearest pedestrian's current position.
+        The opt-in predictive model instead admits speeds up to the drive ceiling
+        and certifies each direction independently in the stopping check.
 
         Returns:
             float: Maximum allowed linear speed for the current crowd proximity.
@@ -872,6 +896,19 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         max_speed = self._v4_effective_max_speed()
         reaction = self._v4_reaction_time(float(state["dt"]))
         clearances = self._v4_surface_clearances(state)
+        if self.config.v4_predictive_braking_enabled and clearances.size:
+            # This ceiling only admits commands to evaluation. Every candidate
+            # must pass the complete stopping tube below, including commands
+            # whose direction is unrelated to the nearest pedestrian.
+            self._last_v4_speed_safety = {
+                "model": "predictive_stopping_tube_v1",
+                "min_surface_clearance": float(np.min(clearances)),
+                "level": "candidate_stopping_check",
+                "speed_cap": max_speed,
+                "prediction_speed_error": float(self.config.v4_prediction_speed_error),
+                "reaction_time": reaction,
+            }
+            return max_speed
         if clearances.size == 0:
             min_clearance = float("inf")
             braking_cap = float("inf")
@@ -961,6 +998,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             dict[str, Any] | None: Rejection diagnostics, or ``None`` when feasible.
         """
         ped_pos = state["ped_pos"]
+        if self.config.v4_predictive_braking_enabled:
+            return self._v4_predictive_braking_rejection(candidate, state, collision_radius)
         if ped_pos.size == 0:
             return None
         ped_vel = state["ped_vel"]
@@ -1018,6 +1057,116 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             speed = (
                 max(0.0, speed - decel * step) if speed >= 0.0 else min(0.0, speed + accel * step)
             )
+        return None
+
+    def _v4_predictive_braking_rejection(
+        self, candidate: HybridRuleCandidate, state: dict[str, Any], collision_radius: float
+    ) -> dict[str, Any] | None:
+        """Certify separation through a drive-realizable reaction and full stop.
+
+        Pedestrian centres follow the observed world-frame velocity with a
+        reachable error disk of radius ``v4_prediction_speed_error * t``.
+        For every interval, minimize relative chord separation analytically
+        and subtract the disk at the interval end. The differential drive's
+        midpoint odometry is used, with a conservative turning allowance
+        ``distance * abs(turn) / 2`` and acceleration interpolation allowance
+        ``abs(delta_speed) * dt / 8``. The triangle inequality then guarantees
+        centre separation strictly above ``collision_radius`` through stopping,
+        provided the pedestrian stays inside its tube and drive limits hold.
+
+        No simulator-wide acceleration bound is assumed. This is a conditional
+        prediction guarantee, not a guarantee that pedestrians will yield or
+        cannot subsequently walk into a stopped robot. Current overlap fails
+        closed; the legacy decreasing-distance exception is not used.
+
+        Returns:
+            Rejection diagnostics, or None when the full stopping tube is clear.
+        """
+        pedestrians = state["ped_pos"]
+        if pedestrians.size == 0:
+            return None
+        collision_radius = max(
+            collision_radius,
+            float(state["robot_radius"])
+            + float(state["ped_radius"])
+            + float(self.config.v4_braking_margin),
+        )
+        limits = self._v4_drive_limits()
+        dt = max(float(state["dt"]), 1e-3)
+        reaction_steps = max(1, int(np.ceil(self._v4_reaction_time(dt) / dt)))
+        decel = max(float(limits["max_linear_decel"]), _EPS)
+        accel = max(float(limits["max_linear_accel"]), _EPS)
+        maximum = self._v4_effective_max_speed()
+        minimum = self._min_linear_speed(maximum)
+        speed = float(state["current_speed"])
+        robot_fields, _, _ = self._socnav_fields(state.get("observation", {}))
+        angular = float(
+            self._as_1d_float(
+                robot_fields.get("angular_velocity", [self._v4_angular_estimate]), pad=1
+            )[0]
+        )
+        pos = np.array(state["robot_pos"], dtype=float)
+        heading = float(state["heading"])
+        braking_peak = max(maximum, abs(minimum), abs(speed))
+        count = reaction_steps + int(np.ceil(braking_peak / (min(accel, decel) * dt))) + 1
+        error = float(self.config.v4_prediction_speed_error)
+        positions = [pos.copy()]
+        paddings = []
+        for i in range(count):
+            target = float(candidate.linear) if i < reaction_steps else 0.0
+            next_speed = float(np.clip(target, speed - decel * dt, speed + accel * dt))
+            next_speed = float(np.clip(next_speed, minimum, maximum))
+            next_angular = self._v4_step_angular(
+                float(candidate.angular) if i < reaction_steps else 0.0, angular, dt
+            )
+            turn = 0.5 * (angular + next_angular) * dt
+            distance = 0.5 * (speed + next_speed) * dt
+            end = pos + distance * np.array(
+                [np.cos(heading + turn / 2), np.sin(heading + turn / 2)]
+            )
+            padding = abs(distance * turn) / 2 + abs(next_speed - speed) * dt / 8
+            positions.append(end.copy())
+            paddings.append(padding)
+            pos, heading, speed, angular = (
+                end,
+                _wrap_angle(heading + turn),
+                next_speed,
+                next_angular,
+            )
+            if i >= reaction_steps and abs(speed) <= _EPS:
+                break
+        else:
+            raise RuntimeError("Predictive stopping check did not reach zero speed")
+        # Batch all time intervals and pedestrians; no sampling of closest approach.
+        nodes = np.asarray(positions)
+        times = np.arange(len(paddings)) * dt
+        relative_start = (
+            pedestrians[None, :, :]
+            + times[:, None, None] * state["ped_vel"][None, :, :]
+            - nodes[:-1, None, :]
+        )
+        relative_delta = state["ped_vel"][None, :, :] * dt - np.diff(nodes, axis=0)[:, None, :]
+        squared = np.sum(relative_delta * relative_delta, axis=2)
+        fractions = np.clip(
+            -np.sum(relative_start * relative_delta, axis=2) / np.where(squared > 0, squared, 1),
+            0,
+            1,
+        )
+        separation = np.linalg.norm(relative_start + fractions[:, :, None] * relative_delta, axis=2)
+        lower = np.min(separation, axis=1) - error * (times + dt) - np.asarray(paddings)
+        violating = np.flatnonzero(~np.isfinite(lower) | (lower <= collision_radius))
+        if violating.size:
+            index = int(violating[0])
+            return {
+                "accepted": False,
+                "reason": "braking_infeasible",
+                "candidate": candidate,
+                "min_dynamic_clearance": float(lower[index]),
+                "collision_radius": float(collision_radius),
+                "time": float(times[index] + dt),
+                "prediction_speed_error": error,
+                "model": "predictive_stopping_tube_v1",
+            }
         return None
 
     def _v4_wall_stopping_rejection(
@@ -4077,7 +4226,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
     def _v4_speed_safety_metadata(self) -> dict[str, Any]:
         """Return episode-level v4 speed-safety metadata (thresholds and drive limits)."""
         limits = dict(self._v4_drive_limits())
-        return {
+        payload = {
             "model": HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
             "clearance_reference": "surface",
             "stop_clearance_human": float(self.config.v4_stop_clearance_human),
@@ -4097,6 +4246,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ],
             "centre_distance_gates": ["near_human_angular_limit_distance"],
         }
+        if self.config.v4_predictive_braking_enabled:
+            payload.update(
+                model="predictive_stopping_tube_v1",
+                prediction_speed_error=float(self.config.v4_prediction_speed_error),
+                prediction_guarantee="conditional_on_pedestrian_error_tube",
+                radial_speed_bands_enabled=False,
+            )
+        return payload
 
     def diagnostics(self) -> dict[str, Any]:
         """Return aggregate planner diagnostics for benchmark episode metadata."""

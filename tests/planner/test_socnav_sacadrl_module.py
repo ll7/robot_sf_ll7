@@ -220,6 +220,20 @@ def test_adapter_builds_network_input_and_agent_states(monkeypatch) -> None:
     assert release_radius_states[0, -1] == pytest.approx(0.0)
 
 
+def test_network_input_converts_ego_velocity_before_goal_frame_projection() -> None:
+    """SA-CADRL's network features use global velocities projected into the goal frame."""
+    adapter = sacadrl.SACADRLPlannerAdapter(allow_fallback=True)
+    observation = _observation(goal=(4.0, 0.0), pedestrians=[[1.0, 0.0]])
+    observation["robot"]["heading"] = np.asarray([np.pi / 2.0])
+    observation["pedestrians"]["velocities"] = np.asarray([[1.25, -0.5]])
+
+    network_input, _pref_speed, _distance = adapter._build_network_input(observation)
+
+    # Five scalar fields precede flattened 7-column agent states; columns 2:4
+    # are the pedestrian velocity projected onto goal-parallel and goal-lateral.
+    np.testing.assert_allclose(network_input[0, 7:9], [0.5, 1.25], rtol=0.0, atol=1e-6)
+
+
 def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, monkeypatch) -> None:
     """Checkpoint resolution retains suffix handling, provenance hashing, and fail-closed errors."""
     prefix = tmp_path / "model"
@@ -318,6 +332,63 @@ def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
     assert "make_sacadrl_policy" in socnav.__all__
     assert socnav.SACADRLPlannerAdapter is sacadrl.SACADRLPlannerAdapter
     assert socnav.make_sacadrl_policy is sacadrl.make_sacadrl_policy
+
+
+def test_flat_observation_pedestrian_velocity_converts_to_global_frame() -> None:
+    """A flat map-runner observation's ego pedestrian velocity reaches agents in world frame.
+
+    The existing helper coverage only uses ``heading=0.0``, where the rotation is the
+    identity and a missing conversion would pass unnoticed. This drives the real
+    ``_build_network_input`` path from a flat observation at a non-zero heading
+    (issue #9845) and asserts the rotation actually happens, with no robot
+    translation subtracted.
+    """
+    heading = 0.5 * np.pi
+    ego_velocity = np.array([[0.7, -0.2]])
+    flat_observation = {
+        "robot_position": np.array([0.0, 0.0]),
+        "robot_heading": np.array([heading]),
+        "robot_speed": np.array([0.0]),
+        "robot_radius": np.array([0.3]),
+        "goal_current": np.array([4.0, 0.0]),
+        "goal_next": np.array([4.0, 0.0]),
+        "pedestrians_positions": np.array([[2.0, 1.0]]),
+        "pedestrians_velocities": ego_velocity,
+        "pedestrians_count": np.array([1.0]),
+        "pedestrians_radius": 0.35,
+        "sim_timestep": 0.1,
+    }
+
+    adapter = sacadrl.SACADRLPlannerAdapter(
+        config=sacadrl.SocNavPlannerConfig(), allow_fallback=True
+    )
+    captured: list[np.ndarray] = []
+    original = adapter._build_other_agents_states
+
+    def spy(ped_positions, ped_velocities, *args, **kwargs):
+        captured.append(np.asarray(ped_velocities, dtype=float))
+        return original(ped_positions, ped_velocities, *args, **kwargs)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(adapter, "_build_other_agents_states", spy)
+    try:
+        adapter._build_network_input(flat_observation)
+    finally:
+        monkey.undo()
+
+    assert captured, "the flat path must build other-agent states"
+    cos_h, sin_h = float(np.cos(heading)), float(np.sin(heading))
+    expected = np.array(
+        [
+            [
+                cos_h * ego_velocity[0, 0] - sin_h * ego_velocity[0, 1],
+                sin_h * ego_velocity[0, 0] + cos_h * ego_velocity[0, 1],
+            ]
+        ]
+    )
+    np.testing.assert_allclose(captured[0], expected, rtol=0.0, atol=1e-12)
+    # A no-op conversion would be indistinguishable at heading 0; guard that too.
+    assert not np.allclose(captured[0], ego_velocity, atol=1e-6)
 
 
 @pytest.mark.parametrize(("columns", "slots"), [(19, 2), (40, 5)])

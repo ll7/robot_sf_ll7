@@ -1,0 +1,60 @@
+{
+  "status": "diagnostic-only",
+  "head": "6c9d79cda6dfaafc8c24c846e774a7bbd2b657e8",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "scenarios": [
+    "classic_station_platform_medium"
+  ],
+  "predictive": false,
+  "arms": [
+    "hybrid_v4_default",
+    "hybrid_v4_predictive_braking"
+  ],
+  "bound_audit": "2s_all_sampled_offsets_euclidean_nearby_2m_v1",
+  "prediction_speed_error_m_s": 0.2,
+  "empty": false,
+  "horizon_override": 600,
+  "workers": 4,
+  "sha256": {
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+    "scripts/validation/run_predictive_braking_diagnostics.py": "3bd6e7ea54e2c0a4933a44ac5cc72f78f64b8dcf19434353764e57652241d527",
+    "robot_sf/planner/hybrid_rule_local_planner.py": "822df68be949832a2b416847af87ff9566830ea897fd78fdfa4893dfec037c36",
+    "scripts/analysis/analyze_predictive_braking_pair.py": "49efb1acb02d9759aa7c3df92753ffd4eb6c1d84d2e927efea73860fc11c3f41",
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_1_0_predictive_braking_v1.yaml": "615c47708064697e2a9d7e29980866cbdd4ffce2b2dcef8a78f5126505c503dd",
+    "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
+    "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab",
+    "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml": "d4fbb7a9186b8950249cc2b4a24aec49dc49f0bb0829cce89b8ebab8508045e3",
+    "configs/algos/hybrid_rule_v4_predictive_braking_dev_v1.yaml": "7b2d2d1c91dfc2546b31e283e62f40d3d0f00fff0f88241869cfdb5317e5201b"
+  }
+}

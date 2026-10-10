@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking/provenance.json",
+  "artifact_sha256": "b70c6fbb57e7dfce6c6ac65db31ec91f0e920e6ed6f39b746ffe1fe7e55e5bff",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

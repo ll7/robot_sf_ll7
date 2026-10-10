@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking/source_equivalence.json",
+  "artifact_sha256": "e93d9bbd47d4b29d1ca80a638c711cccf92c4602d1ef7076bbe5eb62a1ed8a43",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

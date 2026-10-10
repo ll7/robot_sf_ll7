@@ -2131,6 +2131,14 @@ def _apply_robot_overrides(
     """Apply optional scenario-level robot kinematics overrides."""
     if not isinstance(overrides, Mapping) or not overrides:
         return
+    if "control_latency_s" in overrides:
+        if isinstance(overrides["control_latency_s"], bool):
+            raise ValueError("robot_config.control_latency_s must be a non-negative number.")
+        latency_s = _coerce_non_negative_float(
+            overrides["control_latency_s"], field_name="control_latency_s"
+        )
+        config.sim_config.action_latency_ms = latency_s * 1000.0
+        config.sim_config._validate_action_latency_config()
     raw_type = str(overrides.get("type", overrides.get("model", "differential_drive"))).strip()
     robot_type = _robot_type_alias(raw_type)
     if robot_type == "differential_drive":
@@ -2792,6 +2800,8 @@ def _apply_single_pedestrian_override(
         hold_ref_point=hold_ref_point,
         hold_timeout_s=hold_timeout_s,
         metadata=metadata,
+        initial_group_id=entry.get("initial_group_id", ped.initial_group_id),
+        join_radius_m=entry.get("join_radius_m", ped.join_radius_m),
     )
 
 
@@ -2957,8 +2967,46 @@ def _apply_residual_adversary_override(
     config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
 
 
+def _normalize_desired_speed_overrides(
+    config: RobotSimulationConfig, overrides: Mapping[str, Any]
+) -> None:
+    """Validate speed fields together after applying scenario overrides."""
+    speed_fields = {
+        "ped_speed_tier",
+        "desired_speed_mean",
+        "desired_speed_std",
+        "desired_speed_seed",
+    }
+    if not speed_fields.intersection(overrides):
+        return
+    for attr in ("desired_speed_mean", "desired_speed_std"):
+        value = getattr(config.sim_config, attr)
+        if value is not None:
+            setattr(
+                config.sim_config,
+                attr,
+                _coerce_finite_float(value, field_name=f"simulation_config.{attr}"),
+            )
+    seed = config.sim_config.desired_speed_seed
+    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int) or seed < 0):
+        raise ValueError("simulation_config.desired_speed_seed must be a non-negative integer.")
+    # Normalize after all fields are assigned so explicit values override the tier.
+    config.sim_config._validate_desired_speed_config()
+    if (
+        config.sim_config.desired_speed_std is not None
+        and config.sim_config.desired_speed_mean is None
+    ):
+        raise ValueError(
+            "simulation_config.desired_speed_std requires desired_speed_mean or a pedestrian speed tier."
+        )
+
+
 _SIMULATION_OVERRIDE_ATTRS = (
     "peds_speed_mult",
+    "ped_speed_tier",
+    "desired_speed_mean",
+    "desired_speed_std",
+    "desired_speed_seed",
     "peds_reset_follow_route_at_start",
     "action_latency_steps",
     "action_latency_ms",
@@ -2991,6 +3039,19 @@ _SIMULATION_OVERRIDE_ATTRS = (
 )
 
 
+def _apply_group_allocation_mode(
+    config: RobotSimulationConfig, overrides: Mapping[str, Any]
+) -> None:
+    """Apply the opt-in group law without changing the default sampling mode."""
+    if "group_allocation_mode" in overrides:
+        mode = overrides["group_allocation_mode"]
+        if mode not in {"legacy", "exact_small_crowd_v1"}:
+            raise ValueError(
+                "simulation_config.group_allocation_mode must be legacy or exact_small_crowd_v1"
+            )
+        config.sim_config.group_allocation_mode = mode
+
+
 def _apply_simulation_overrides(  # noqa: C901
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
@@ -3007,12 +3068,14 @@ def _apply_simulation_overrides(  # noqa: C901
         "ped_density",
         "max_peds_per_group",
         "groups",
+        "group_allocation_mode",
         "prf_config",
         "residual_adversary",
     }
     unknown = sorted(set(overrides) - supported)
     if unknown:
         raise ValueError(f"simulation_config contains unknown keys: {', '.join(unknown)}")
+    _apply_group_allocation_mode(config, overrides)
     if "groups" in overrides:
         groups = _coerce_finite_float(overrides["groups"], field_name="simulation_config.groups")
         if not 0.0 <= groups <= 1.0:
@@ -3043,6 +3106,7 @@ def _apply_simulation_overrides(  # noqa: C901
     for attr in _SIMULATION_OVERRIDE_ATTRS:
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)
+    _normalize_desired_speed_overrides(config, overrides)
     # Expose the pedestrian-robot force as a calibration surface (issue #4974):
     # coefficient (force_multiplier), effective radius (robot_radius), activation
     # distance, and active flag can be tuned per-scenario without touching defaults.
@@ -3332,10 +3396,11 @@ def map_cache_info() -> dict[str, int]:
         ``currsize`` from the underlying LRU cache.
     """
     ci = _load_map_definition_cached.cache_info()
+    maxsize = ci.maxsize if ci.maxsize is not None else 0
     return {
         "hits": ci.hits,
         "misses": ci.misses,
-        "maxsize": ci.maxsize,
+        "maxsize": maxsize,
         "currsize": ci.currsize,
     }
 

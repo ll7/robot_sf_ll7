@@ -215,7 +215,7 @@ def test_issue_9533_campaign_configs_freeze_paired_dev_eval_design() -> None:
     )
     assert _changed_paths(canonical_ppo, matched_cpu_ppo) == {"device"}
     assert matched_cpu_ppo["device"] == "cpu"
-    assert "paper_eval_s30" not in (
+    assert "paper_eval_s30" not in (  # seed-holdout: setup-only (negative config assertion; no seed execution)
         benchmark_root / "issue_9533_guarded_ppo_progress_escape.yaml"
     ).read_text(encoding="utf-8")
 

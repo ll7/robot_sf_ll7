@@ -16,16 +16,15 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf._execution_context import execution_context_digest
+from robot_sf.adversarial.episode_store_binding import (
+    _episode_row_binding_problem,
+    _episode_row_for_binding,
+)
 from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     planner_independent_scenario_case_payload,
-)
-from robot_sf.benchmark.termination_reason import (
-    TERMINATION_REASONS,
-    outcome_contradictions,
-    status_from_termination_reason,
 )
 from robot_sf.scenario_certification.feasibility_diagnostics import DIAGNOSTIC_CLAIM_BOUNDARY
 from robot_sf.scenario_certification.input_identity import (
@@ -69,9 +68,6 @@ _GIT_COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _CHECKPOINT_FREE_CLASSICAL_PLANNERS = frozenset({"goal", "social_force", "orca"})
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "benchmark/schemas/scenario_admissibility.v1.json"
-)
-_EPISODE_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[1] / "benchmark/schemas/episode.schema.v1.json"
 )
 _TARGET_PLANNER_REPLAY_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "benchmark/schemas/target_planner_replay_result.v1.json"
@@ -2521,103 +2517,11 @@ def _resolve_evidence_path(
     return resolved
 
 
-def _episode_row_for_binding(
-    episode_store_bytes: bytes, *, episode_id: Any
-) -> tuple[dict[str, Any] | None, str]:
-    """Parse a JSONL store and select exactly one schema-valid source episode row."""
-    if not isinstance(episode_id, str) or not episode_id.strip():
-        return None, "episode_identity_mismatch"
-    matches: list[dict[str, Any]] = []
-    try:
-        text = episode_store_bytes.decode("utf-8")
-        for line in text.splitlines():
-            if not line.strip():
-                continue
-            value = json.loads(line)
-            if not isinstance(value, dict):
-                return None, "episode_store_malformed"
-            if value.get("episode_id") == episode_id:
-                matches.append(value)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None, "episode_store_malformed"
-    if len(matches) != 1:
-        return None, "episode_identity_missing_or_ambiguous"
-    episode = matches[0]
-    if list(_episode_schema_validator().iter_errors(episode)):
-        return None, "episode_store_episode_schema_invalid"
-    return episode, ""
-
-
-def _load_episode_schema() -> dict[str, Any]:
-    """Load the benchmark's canonical v1 episode JSON Schema."""
-    return json.loads(_EPISODE_SCHEMA_PATH.read_text(encoding="utf-8"))
-
-
-@lru_cache(maxsize=1)
-def _episode_schema_validator() -> Draft202012Validator:
-    """Reuse the canonical episode validator across candidate classifications."""
-    return Draft202012Validator(_load_episode_schema())
-
-
 @lru_cache(maxsize=1)
 def _target_planner_replay_schema_validator() -> Draft202012Validator:
     """Reuse the versioned target-planner replay result validator."""
     schema = json.loads(_TARGET_PLANNER_REPLAY_SCHEMA_PATH.read_text(encoding="utf-8"))
     return Draft202012Validator(schema)
-
-
-def _episode_row_binding_problem(
-    episode: Mapping[str, Any],
-    source: Mapping[str, Any],
-    *,
-    expected_episode_id: Any = None,
-    compare_route_outcome: bool = True,
-) -> str | None:
-    """Check source episode identity, clean runtime status, and route outcome against its row."""
-    outcome = episode.get("outcome")
-    integrity = episode.get("integrity")
-    metadata = episode.get("algorithm_metadata")
-    termination = episode.get("termination_reason")
-    expected_id = source.get("episode_id") if expected_episode_id is None else expected_episode_id
-    if (
-        episode.get("episode_id") != expected_id
-        or episode.get("scenario_id") != source.get("scenario_id")
-        or episode.get("seed") != source.get("seed")
-        or episode.get("algo") != source.get("planner_id")
-        or episode.get("git_hash") != source.get("source_commit")
-    ):
-        return "episode_identity_mismatch"
-    episode_horizon = episode.get("horizon")
-    if (
-        not isinstance(episode_horizon, int)
-        or isinstance(episode_horizon, bool)
-        or episode_horizon != source.get("horizon_steps")
-    ):
-        return "episode_horizon_mismatch"
-    if (
-        not isinstance(outcome, Mapping)
-        or type(outcome.get("route_complete")) is not bool
-        or (compare_route_outcome and outcome["route_complete"] is not source.get("route_complete"))
-        or not isinstance(termination, str)
-        or termination not in TERMINATION_REASONS
-        or episode.get("status") != status_from_termination_reason(termination)
-        or outcome_contradictions(
-            termination_reason=termination,
-            outcome=outcome,
-            metrics=episode.get("metrics") if isinstance(episode.get("metrics"), Mapping) else None,
-        )
-    ):
-        return "episode_outcome_mismatch"
-    contradictions = integrity.get("contradictions") if isinstance(integrity, Mapping) else None
-    if not isinstance(contradictions, list) or contradictions:
-        return "episode_integrity_invalid_or_contradictory"
-    if (
-        not isinstance(metadata, Mapping)
-        or metadata.get("status") != "ok"
-        or runtime_fallback_or_degraded_marker(dict(episode)) is not None
-    ):
-        return "episode_runtime_unavailable_or_degraded"
-    return None
 
 
 def _replay_sidecar_binding_problem(

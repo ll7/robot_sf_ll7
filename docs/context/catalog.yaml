@@ -192,6 +192,10 @@ entries:
   status: current
   freshness: maintained
   area: operations
+- path: docs/context/adversarial_feasibility_frontier.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/simulator_typed_snapshot_contract.md
   status: current
   freshness: maintained

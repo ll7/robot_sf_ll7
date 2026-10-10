@@ -22,10 +22,12 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "dev" / "ty_advisory_ratchet.py"
 BASELINE = ROOT / "scripts" / "validation" / "ty_advisory_baseline.json"
+WORKFLOW = ROOT / ".github" / "workflows" / "ty-advisory-ratchet.yml"
 # Deterministic, host-independent raw-findings fixture reconstructed from the
 # committed baseline. The baseline-reproduction test parses THIS file, never a
 # live ty run, so reproduction holds on every clean worktree (issue #5070).
@@ -477,6 +479,25 @@ def test_live_ty_advisory_scan() -> None:
 def test_ratchet_helper_is_registered_in_repo() -> None:
     """The ratchet helper exists at the documented path."""
     assert SCRIPT.exists(), f"ty ratchet helper missing at {SCRIPT}"
+
+
+def test_ty_advisory_workflow_checks_pr_merge_ref_and_is_gating() -> None:
+    """The hosted ratchet must evaluate the PR merge tree and fail on drift."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    trigger = workflow.get("on") or workflow[True]
+    assert "paths" not in trigger["pull_request"], (
+        "the ratchet must not be skipped by path filters; dependency/config "
+        "changes can alter the merged-tree ty count"
+    )
+
+    steps = workflow["jobs"]["ty-advisory-ratchet"]["steps"]
+    checkout = next(step for step in steps if step.get("name") == "Checkout")
+    assert checkout["with"]["ref"] == (
+        "${{ github.event_name == 'pull_request' && github.ref || github.sha }}"
+    )
+
+    ratchet = next(step for step in steps if step.get("id") == "ty_ratchet")
+    assert "continue-on-error" not in ratchet
 
 
 def test_aggregate_tolerates_null_location() -> None:

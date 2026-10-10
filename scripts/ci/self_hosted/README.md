@@ -20,11 +20,57 @@ GitHub settings.
   `ll7` also starting any rerun, to `robot-sf-ci-ephemeral`. Forks, bots,
   `pull_request_target`, `workflow_run`, comments, and manual dispatch stay on
   `ubuntu-latest`. Do not add untrusted triggers to this route.
-- A job-started hook baked into the image checks the repository, actor,
-  triggering actor, event name, and event JSON before any job step. It rejects
-  fork heads and PRs authored by anyone other than `ll7`, even if a fork edits
-  `runs-on` to name the runner directly. A missing or malformed event fails
-  closed. The workflow expression remains the routing layer.
+- The trust anchor is `main`: PRs must target `main`, and pushes must have
+  `GITHUB_REF=refs/heads/main`. Stacked PRs and other branches/tags stay hosted
+  even when their selected range is owner-only or explicitly approved.
+  Main's content is trusted only while `ll7` is the only account able to merge
+  to main. Reopen this policy before another account gains that ability; a
+  ruleset or merge-authority decision belongs to the author, separately.
+- A hosted admission job checks every commit in the event range using GitHub's
+  compare API: PR `base.sha..head.sha`, push `before..after`. Both the GitHub
+  author account and committer account must be `ll7` (type `User`). Checking
+  event actors or the newest commit alone is insufficient. Webhook commit lists
+  are not used because they can be truncated. Pagination, totals, unique SHAs,
+  immutable endpoints and the range head are checked before admission.
+- An owner-authored, same-repository PR can carry an explicit exception: the
+  owner applies `ci-owner:<full 40-character lowercase head SHA>` to that PR.
+  The current PR must be open at that exact head with the label still present;
+  the latest matching label/unlabel event in the complete history must be a
+  `labeled` event by `ll7`. A collaborator applying or re-applying the label
+  cannot grant approval. Remove the label to revoke; a new head needs a new
+  SHA-specific label and an owner-started run/rerun. This label is dedicated to
+  this admission policy, not merge approval. Push runs have no label exception.
+  Approval does not override unknown ranges, missing commit identities or API
+  failures. Bot-started runs, forks and other PR authors retain hosted routing.
+- The existing job-started hook is also the admission command (`--route`). The
+  workflow checks out the PR base policy on a hosted runner, accepts only an
+  exact `self_hosted=true`, and defaults to hosted on missing output, checkout
+  failure, script failure or API error. Failed admission must not skip CI.
+  The installed hook independently repeats the checks before any job step,
+  including when a workflow selects the private label directly. A hook cannot
+  reschedule an assigned job: an API failure or revoked approval after routing
+  rejects that job before steps. Rerun uses a fresh admission decision.
+- Hosted routing uses the default read-only job token (`contents: read` and
+  `pull-requests: read`), passed to the API over stdin rather than command-line
+  arguments. Missing authentication and rate limits select hosted. The installed
+  hook discards inherited tokens and uses anonymous HTTPS; a later rate limit
+  rejects before steps and explicitly logs that the API budget was exhausted.
+  It cannot reschedule an assigned job. Unknown/zero/empty
+  ranges, absent GitHub account mappings, malformed or incomplete responses,
+  over 1,000 commits or 10,000+ approval-history events fail closed.
+- The first residual is forged Git author/committer email metadata mapping to
+  the owner's GitHub account. This remains defense in depth, not cryptographic
+  authorship proof; signatures are not required. A collaborator with workflow
+  write access, a compromised owner account or a deliberately modified/old installed hook is
+  outside the protection claimed here. SHA approvals are explicit grants and
+  are checked at admission time; GitHub does not provide an atomic transaction
+  spanning approval reads and execution. Independent security review and a
+  separately reviewed hook deployment remain required before activation.
+- The hook launches with absolute `/bin/bash`, re-executes under `env -i` with
+  only the event identity/range variables (including `GITHUB_REF`), and calls
+  `/usr/bin/curl` and `/usr/bin/jq`. Only routing forwards `GH_TOKEN`. Inherited
+  PATH, proxy, CA overrides and Bash startup environment are discarded; `-p`
+  prevents startup-file and exported-function imports in this launcher.
 - Routed jobs have `permissions: contents: read`, use only the default
   `GITHUB_TOKEN`, and must not receive repository secrets, SSH keys, cluster
   credentials, or private-ops files.

@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 
-from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+# This compatibility module aliases the facade via sys.modules, including this loader.
+from robot_sf.benchmark.camera_ready_campaign import load_campaign_config  # ty: ignore[unresolved-import]
 from robot_sf.benchmark.map_runner.map_runner import (
     _build_env_config,
     _build_policy,
@@ -33,7 +34,7 @@ from scripts.validation.run_empty_world_sweep import assert_dev_seeds, remove_pe
 from scripts.validation.run_hybrid_feasibility_diagnostics import MAIN_MATRIX, ROOT, hybrid_config
 
 
-def run_cell(task):  # noqa: PLR0915 -- native episode custody stays in one try/finally
+def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays in one try/finally
     """Execute the canonical native policy/environment loop and record actual outcomes."""
     scenario, seed, predictive, empty, horizon, *pair = task
     logger.remove()
@@ -72,32 +73,33 @@ def run_cell(task):  # noqa: PLR0915 -- native episode custody stays in one try/
     robot_frames, pedestrian_frames, velocity_frames = [], [], []
     try:
         obs, _ = env.reset(seed=seed)
+        simulator = env.simulator
+        if simulator is None:
+            raise RuntimeError("Native diagnostics require an initialized simulator after reset")
         policy._planner_bind_env(env)
         policy._planner_reset(seed=seed)
-        robot_frames.append(np.array(env.simulator.robot_pos[0]))
-        pedestrian_frames.append(env.simulator.ped_pos.copy())
-        velocity_frames.append(env.simulator.ped_vel.copy())
-        initial = float(
-            np.linalg.norm(np.array(env.simulator.goal_pos[0]) - env.simulator.robot_pos[0])
-        )
+        robot_frames.append(np.array(simulator.robot_pos[0]))
+        pedestrian_frames.append(simulator.ped_pos.copy())
+        velocity_frames.append(simulator.ped_vel.copy())
+        initial = float(np.linalg.norm(np.array(simulator.goal_pos[0]) - simulator.robot_pos[0]))
         while True:
-            pre = np.array(env.simulator.robot_pos[0])
-            ped_pre = env.simulator.ped_pos.copy()
-            ped_velocity = env.simulator.ped_vel.copy()
+            pre = np.array(simulator.robot_pos[0])
+            ped_pre = simulator.ped_pos.copy()
+            ped_velocity = simulator.ped_vel.copy()
             command = policy(obs)
             action = _policy_command_to_env_action(env=env, config=cfg, command=command)
             obs, _, terminated, truncated, info = env.step(action)
             steps += 1
-            robot_frames.append(np.array(env.simulator.robot_pos[0]))
-            pedestrian_frames.append(env.simulator.ped_pos.copy())
-            velocity_frames.append(env.simulator.ped_vel.copy())
-            if predictive and ped_pre.shape == env.simulator.ped_pos.shape and ped_pre.size:
-                dt = env.simulator.config.time_per_step_in_secs
-                errors = np.linalg.norm(env.simulator.ped_pos - ped_pre - ped_velocity * dt, axis=1)
+            robot_frames.append(np.array(simulator.robot_pos[0]))
+            pedestrian_frames.append(simulator.ped_pos.copy())
+            velocity_frames.append(simulator.ped_vel.copy())
+            if predictive and ped_pre.shape == simulator.ped_pos.shape and ped_pre.size:
+                dt = simulator.config.time_per_step_in_secs
+                errors = np.linalg.norm(simulator.ped_pos - ped_pre - ped_velocity * dt, axis=1)
                 tube_checks += len(errors)
                 tube_violations += int(np.count_nonzero(errors > 0.2 * dt + 1e-9))
                 maximum_error = max(maximum_error, float(np.max(errors)) / dt)
-            travel += float(np.linalg.norm(env.simulator.robot_pos[0] - pre))
+            travel += float(np.linalg.norm(simulator.robot_pos[0] - pre))
             meta = info.get("meta", {})
             contact = any(
                 meta.get(k, False)
@@ -115,7 +117,7 @@ def run_cell(task):  # noqa: PLR0915 -- native episode custody stays in one try/
         runtime = policy._planner_adapter.diagnostics()
         if runtime.get("fallback_count", 0) or runtime.get("degraded_count", 0):
             raise RuntimeError("Fallback/degraded execution is not diagnostic evidence")
-        dt = env.simulator.config.time_per_step_in_secs
+        dt = simulator.config.time_per_step_in_secs
         prediction_error = float(pcfg.get("v4_prediction_speed_error", 0.2))
         bound_windows, bound_violations = audit_prediction_windows(
             robot_frames,
@@ -142,10 +144,10 @@ def run_cell(task):  # noqa: PLR0915 -- native episode custody stays in one try/
             "empty": empty,
             "outcome": "collision" if collisions else "success" if success else "timeout",
             "steps": steps,
-            "duration_s": steps * env.simulator.config.time_per_step_in_secs,
+            "duration_s": steps * simulator.config.time_per_step_in_secs,
             "initial_goal_distance_m": initial,
             "final_goal_distance_m": float(
-                np.linalg.norm(np.array(env.simulator.goal_pos[0]) - env.simulator.robot_pos[0])
+                np.linalg.norm(np.array(simulator.goal_pos[0]) - simulator.robot_pos[0])
             ),
             "travel_m": travel,
             "min_center_separation_m": minimum if np.isfinite(minimum) else None,

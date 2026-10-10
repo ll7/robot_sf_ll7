@@ -49,7 +49,7 @@ jobs:
         with:
           install-system-packages: "false"
           migrate-artifacts: "false"
-          sync-args: "--frozen"
+          sync-args: "--all-extras --frozen"
 
       - name: Run ty advisory ratchet
         id: ty_ratchet

@@ -498,6 +498,20 @@ def test_ty_advisory_workflow_checks_pr_merge_ref_and_is_gating() -> None:
 
     ratchet = next(step for step in steps if step.get("id") == "ty_ratchet")
     assert "continue-on-error" not in ratchet
+    assert ratchet["shell"] == "bash", "tee must not mask the ratchet's exit status"
+
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-ci-python")
+    assert setup["with"]["sync-args"] == "--all-extras --frozen", (
+        "the ratchet must use the same dependency profile as the committed baseline"
+    )
+
+
+def test_ty_advisory_workflow_job_cannot_skip_pull_requests() -> None:
+    """Every PR, including drafts, must run the merged-tree ratchet job."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["ty-advisory-ratchet"]
+    assert "if" not in job, "a job-level condition must not skip the ratchet on PR events"
+    assert "continue-on-error" not in job, "job-level advisory masking must not hide drift"
 
 
 def test_aggregate_tolerates_null_location() -> None:

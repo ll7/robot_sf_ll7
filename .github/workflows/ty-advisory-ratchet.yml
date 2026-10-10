@@ -1,6 +1,6 @@
 name: ty advisory ratchet
 
-# Non-gating downward ratchet over the ty advisory type-check baseline (issue #5004).
+# Downward ratchet over the ty advisory type-check baseline (issue #5004).
 # Re-runs `ty check`, diffs the per-module general-bucket counts against the committed
 # baseline at scripts/validation/ty_advisory_baseline.json, and fails on net-new
 # findings (regressions in clean modules, any per-module increase, or a total
@@ -28,7 +28,6 @@ concurrency:
 
 jobs:
   ty-advisory-ratchet:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -43,10 +42,11 @@ jobs:
         with:
           install-system-packages: "false"
           migrate-artifacts: "false"
-          sync-args: "--frozen"
+          sync-args: "--all-extras --frozen"
 
       - name: Run ty advisory ratchet
         id: ty_ratchet
+        shell: bash
         run: |
           mkdir -p output/ty
           uv run python scripts/dev/ty_advisory_ratchet.py --check 2>&1 | tee output/ty/ratchet.log

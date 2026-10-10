@@ -13,16 +13,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scripts.ci import behaviour_receipt
-
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.ci import behaviour_receipt  # noqa: E402
+
 DEV_SEED_MIN = 1001
 DEV_SEED_MAX = 1200
 GATE_SEED_MAX = 1030
 DEFAULT_SEEDS = tuple(range(DEV_SEED_MIN, GATE_SEED_MAX + 1))
-PLACEHOLDER_REVIEW_URI = (
-    "https://example.org/replace-with-independent-exact-head-refute-review"
-)
+PLACEHOLDER_REVIEW_URI = "https://example.org/replace-with-independent-exact-head-refute-review"
 PLACEHOLDER_EVIDENCE_URI = "https://example.org/replace-with-durable-behaviour-evidence"
 
 
@@ -76,17 +77,14 @@ def _check_seed_range(seeds: list[int]) -> list[int]:
 
 def _release_source(repo_root: Path, baseline: str) -> str:
     try:
-        return behaviour_receipt.release_source(baseline)
+        return _full_sha(repo_root, f"refs/tags/{baseline}")
     except subprocess.CalledProcessError:
         subprocess.run(
             ["git", "fetch", "origin", f"refs/tags/{baseline}:refs/tags/{baseline}"],
             cwd=repo_root,
-            check=False,
+            check=True,
         )
-        try:
-            return behaviour_receipt.release_source(baseline)
-        except subprocess.CalledProcessError:
-            return _full_sha(repo_root, baseline)
+        return _full_sha(repo_root, f"refs/tags/{baseline}")
 
 
 def _sweep_command(
@@ -241,18 +239,63 @@ def _existing_sweep(
 ) -> SweepRun:
     if not output_dir.is_dir():
         raise FileNotFoundError(output_dir)
-    digest = artifact_sha256
-    if digest is None:
-        candidates = [
-            output_dir / "README.md",
-            output_dir / "execution_main.json",
-            output_dir / "episodes_main.jsonl",
-        ]
-        source = next((path for path in candidates if path.is_file()), None)
-        if source is None:
-            raise FileNotFoundError(f"no digest source found in {output_dir}")
-        digest = _sha256(source)
+    _verify_sweep_metadata(output_dir, source_sha)
+    digest = _canonical_digest(
+        {
+            path.relative_to(output_dir).as_posix(): _sha256(path)
+            for path in sorted(output_dir.rglob("*"))
+            if path.is_file()
+        }
+    )
+    if artifact_sha256 is not None and artifact_sha256 != digest:
+        raise ValueError("supplied sweep digest differs from actual artifact bytes")
     return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id)
+
+
+def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
+    summaries = sorted(output_dir.glob("episodes_*.jsonl"))
+    if not summaries:
+        raise ValueError("sweep has no episode suites")
+    for summary in summaries:
+        suite = summary.stem.removeprefix("episodes_")
+        metadata_path = output_dir / f"execution_{suite}.json"
+        if not metadata_path.is_file():
+            raise ValueError(f"missing authoritative execution metadata for {suite}")
+        meta = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if meta.get("head_sha") != source_sha:
+            raise ValueError(f"{suite} recorded SHA differs from claimed source SHA")
+        if meta.get("suite") != suite:
+            raise ValueError(f"{suite} execution suite identity differs")
+        complete = (
+            meta.get("complete") is True
+            and meta.get("trace_requested") is True
+            and meta.get("campaign_execution_status") == "completed"
+            and meta.get("exit_code") == 0
+            and meta.get("unexpected_failed_runs") == 0
+            and all(
+                meta.get(key) == []
+                for key in (
+                    "failed_slots",
+                    "missing_slots",
+                    "duplicate_slots",
+                    "unexpected_slots",
+                    "incomplete_trace_slots",
+                )
+            )
+        )
+        if not complete:
+            raise ValueError(f"{suite} sweep execution is incomplete")
+        records = [json.loads(line) for line in summary.read_text().splitlines() if line.strip()]
+        counts = [meta.get(key) for key in ("expected_slots", "written_rows", "total_episodes")]
+        if not records or any(count != len(records) for count in counts):
+            raise ValueError(f"{suite} execution row counts differ")
+        seeds = meta.get("seeds")
+        if not isinstance(seeds, list) or sorted(_check_seed_range(seeds)) != sorted(
+            {row["seed"] for row in records}
+        ):
+            raise ValueError(f"{suite} execution seed identity differs")
+        if any(row.get("execution_status") != "written" for row in records):
+            raise ValueError(f"{suite} has unsuccessful row execution")
 
 
 def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, Any]]:
@@ -262,10 +305,31 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
             if not line.strip():
                 continue
             row = json.loads(line)
-            arm = str(row.get("arm") or row.get("_sweep_arm") or row.get("algo"))
-            map_id = str(row.get("map") or row.get("scenario") or row.get("scenario_id"))
-            seed = int(row["seed"])
-            rows[(arm, map_id, seed)] = row
+            key = (str(row["arm"]), str(row["scenario"]), int(row["seed"]))
+            suite = path.stem.removeprefix("episodes_")
+            campaign = sweep_dir / "campaigns" / f"empty_world_{suite}"
+            source = row.get("source_file")
+            if not isinstance(source, str):
+                raise ValueError(f"missing raw controller trace source for {key}")
+            source_path = (campaign / source).resolve()
+            if not source_path.is_relative_to(campaign.resolve()):
+                raise ValueError("raw controller trace path escapes the campaign")
+            raw_rows = [
+                json.loads(item) for item in source_path.read_text().splitlines() if item.strip()
+            ]
+            matches = [
+                raw for raw in raw_rows if (raw.get("scenario_id"), raw.get("seed")) == key[1:]
+            ]
+            if len(matches) != 1 or source_path.parent.name.split("__")[0] != key[0]:
+                raise ValueError(f"raw episode identity differs for {key}")
+            raw = matches[0]
+            if _row_success(raw) != _row_success(row) or _row_collisions(raw) != _row_collisions(
+                row
+            ):
+                raise ValueError(f"raw episode outcome differs from summary for {key}")
+            if key in rows:
+                raise ValueError(f"duplicate sweep row {key}")
+            rows[key] = {**raw, "execution_status": row["execution_status"]}
     if not rows:
         raise ValueError(f"no sweep rows found in {sweep_dir}")
     return rows
@@ -286,20 +350,42 @@ def _row_collisions(row: dict[str, Any]) -> int:
     return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
 
 
-def _execution_ok(row: dict[str, Any]) -> bool:
-    return row.get("execution_status", row.get("_sweep_execution_status", "written")) == "written"
-
-
-def _algorithm_mode(scope: dict[str, Any], arm: str) -> tuple[str, str]:
-    from robot_sf.benchmark.algorithm_metadata import (
-        canonical_algorithm_name,
-        enrich_algorithm_metadata,
+def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
+    from robot_sf.benchmark.fallback_policy import (
+        resolve_execution_mode,
+        runtime_fallback_or_degraded_marker,
     )
+    from scripts.validation.run_empty_world_sweep import _trace_complete
 
-    algo = canonical_algorithm_name(scope.get("arm_algorithms", {}).get(arm, arm))
-    profile = enrich_algorithm_metadata(algo=algo)["planner_kinematics"]
-    mode = "native" if profile["supports_native_commands"] else "adapter"
-    return algo, mode
+    metadata = row.get("algorithm_metadata") or {}
+    algorithm = row.get("algo") or row.get("algorithm")
+    mode = resolve_execution_mode(metadata)
+    marker = runtime_fallback_or_degraded_marker(
+        row,
+        expected_algorithm=algorithm,
+        algorithm_metadata=metadata,
+    )
+    trace = metadata.get("simulation_step_trace") or {}
+    steps = trace.get("steps") or []
+    executed = (
+        row.get("execution_status") == "written"
+        and metadata.get("status") == "ok"
+        and _trace_complete(row)
+        and all(
+            isinstance((step.get("planner") or {}).get("selected_action"), dict)
+            and step["planner"]["selected_action"]
+            for step in steps
+        )
+        and row.get("controller_executed", True) is True
+    )
+    return {
+        "algorithm": algorithm or "unknown",
+        "execution_mode": mode if row.get("execution_mode", mode) == mode else "unknown",
+        "controller_executed": bool(executed),
+        "fallback": row.get("fallback") is True
+        or (marker is not None and "fallback" in str(marker)),
+        "degraded": row.get("degraded") is True or marker is not None,
+    }
 
 
 def build_rows_and_classifications(
@@ -314,7 +400,6 @@ def build_rows_and_classifications(
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
     for arm in scope["arms"]:
-        algo, mode = _algorithm_mode(scope, arm)
         for map_id in scope["maps"]:
             for seed in DEFAULT_SEEDS:
                 key = (arm, map_id, seed)
@@ -335,15 +420,9 @@ def build_rows_and_classifications(
                         "seed": seed,
                         "success": success,
                         "collisions": collisions,
-                        "fallback": bool(head.get("fallback", False)),
                         "baseline_success": baseline_success,
                         "baseline_collisions": baseline_collisions,
-                        "execution_mode": str(head.get("execution_mode") or mode),
-                        "algorithm": str(head.get("algorithm") or algo),
-                        "controller_executed": bool(
-                            head.get("controller_executed", _execution_ok(head))
-                        ),
-                        "degraded": bool(head.get("degraded", False)),
+                        **_execution_evidence(head),
                     }
                 )
                 evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
@@ -381,6 +460,20 @@ def build_rows_and_classifications(
     return rows, classifications, totals
 
 
+def _audit_status(rows: list[dict[str, Any]]) -> str:
+    if not rows or any(
+        row.get("controller_executed") is not True
+        or row.get("execution_mode") not in {"native", "adapter"}
+        or not row.get("algorithm")
+        or row.get("algorithm") == "unknown"
+        or type(row.get("fallback")) is not bool
+        or type(row.get("degraded")) is not bool
+        for row in rows
+    ):
+        return "fail"
+    return "degraded" if any(row["fallback"] or row["degraded"] for row in rows) else "pass"
+
+
 def write_real_row_audit(
     path: Path,
     *,
@@ -392,11 +485,11 @@ def write_real_row_audit(
     audit = {
         "schema_version": "behaviour-real-row-audit.v1",
         "source_sha": source_sha,
-        "status": "pass",
+        "status": _audit_status(rows),
         "rows": len(rows),
-        "controller_executed_rows": sum(bool(row["controller_executed"]) for row in rows),
-        "fallback_rows": sum(bool(row["fallback"]) for row in rows),
-        "degraded_rows": sum(bool(row["degraded"]) for row in rows),
+        "controller_executed_rows": sum(row.get("controller_executed") is True for row in rows),
+        "fallback_rows": sum(row.get("fallback") is True for row in rows),
+        "degraded_rows": sum(row.get("degraded") is True for row in rows),
         "classification_rows": len(classifications),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -479,7 +572,7 @@ def write_receipt_and_header(  # noqa: PLR0913
         },
         "refute_review": {
             "head_sha": head_sha,
-            "verdict": "accepted",
+            "verdict": "pending_independent_review",
             "uri": refute_review_uri,
         },
         "scope_sha256": _canonical_digest(scope),
@@ -495,6 +588,9 @@ def _load_scope(path: Path) -> dict[str, Any]:
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head-sha", required=True)
+    parser.add_argument(
+        "--head-source-sha", help="Recorded execution source before receipt-only commits"
+    )
     parser.add_argument("--baseline", default="latest")
     parser.add_argument("--repo", default="ll7/robot_sf_ll7")
     parser.add_argument("--receipt-id", required=True)
@@ -541,9 +637,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _prepare_sweeps(args: argparse.Namespace, repo_root: Path, baseline_source: str) -> tuple[
-    SweepRun, SweepRun
-]:
+def _prepare_sweeps(
+    args: argparse.Namespace, repo_root: Path, baseline_source: str
+) -> tuple[SweepRun, SweepRun]:
     seeds = _check_seed_range(list(args.seeds))
     work_dir = (repo_root / args.work_dir).resolve()
     if args.mode == "existing":
@@ -551,7 +647,7 @@ def _prepare_sweeps(args: argparse.Namespace, repo_root: Path, baseline_source: 
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
         return (
             _existing_sweep(
-                args.head_sha,
+                args.head_source_sha or args.head_sha,
                 args.head_sweep_dir.resolve(),
                 artifact_uri=args.head_artifact_uri,
                 artifact_sha256=args.head_artifact_sha256,
@@ -619,10 +715,12 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     repo_root = ROOT
     head_sha = _full_sha(repo_root, args.head_sha)
+    args.head_sha = head_sha
+    if args.head_source_sha:
+        args.head_source_sha = _full_sha(repo_root, args.head_source_sha)
+        behaviour_receipt.require_receipt_only_ancestor(args.head_source_sha, head_sha, "job")
     baseline_release = (
-        behaviour_receipt.latest_release(args.repo)
-        if args.baseline == "latest"
-        else args.baseline
+        behaviour_receipt.latest_release(args.repo) if args.baseline == "latest" else args.baseline
     )
     baseline_source = _release_source(repo_root, baseline_release)
     scheduler, baseline = _prepare_sweeps(args, repo_root, baseline_source)
@@ -630,9 +728,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
     scope = _load_scope(args.scope_path)
+    head_rows = _load_sweep_rows(scheduler.output_dir)
+    baseline_rows = _load_sweep_rows(baseline.output_dir)
     rows, classifications, totals = build_rows_and_classifications(
-        _load_sweep_rows(scheduler.output_dir),
-        _load_sweep_rows(baseline.output_dir),
+        head_rows,
+        baseline_rows,
         scope,
         classification_class=args.classification_class,
         evidence_base_uri=args.classification_evidence_base_uri,
@@ -642,9 +742,11 @@ def main(argv: list[str] | None = None) -> int:
     audit_sha = write_real_row_audit(
         audit_path,
         source_sha=audit_source_sha,
-        rows=rows,
+        rows=[*rows, *[_execution_evidence(row) for row in baseline_rows.values()]],
         classifications=classifications,
     )
+    if json.loads(audit_path.read_text())["status"] != "pass":
+        raise ValueError(f"real-row audit did not pass; inspect {audit_path}")
     baseline_config_sha = args.baseline_config_sha256 or _canonical_digest(
         {
             "release": baseline_release,

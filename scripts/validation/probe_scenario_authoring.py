@@ -21,6 +21,14 @@ SUCCESSOR = Path("configs/scenarios/classic_interactions_francis2023_authoring_0
 NAMES = ("classic_realworld_double_bottleneck_high", "classic_station_platform_medium")
 
 
+def copied_max_speeds(sim) -> np.ndarray:
+    """Return initialized pedestrian speed caps, failing before recording a bogus probe row."""
+    max_speeds = sim.pysf_sim.peds.max_speeds
+    if max_speeds is None:
+        raise RuntimeError("pedestrian max speeds were not initialized")
+    return max_speeds.copy()
+
+
 def speed_caps(matrix: Path, seed: int) -> list[dict]:
     """Measure native caps and explicit typical requests for every loaded scenario.
 
@@ -59,7 +67,7 @@ def speed_caps(matrix: Path, seed: int) -> list[dict]:
             config.sim_config.desired_speed_seed = seed
             map_def = next(iter(config.map_pool.map_defs.values()))
             sim = init_simulators(config, map_def)[0]
-            caps = sim.pysf_sim.peds.max_speeds.copy()
+            caps = copied_max_speeds(sim)
             rows.append(
                 {
                     **row,
@@ -95,7 +103,7 @@ def measure(matrix: Path, name: str, seed: int, tier: str | None = None) -> dict
     config.sim_config.desired_speed_seed = seed
     map_def = next(iter(config.map_pool.map_defs.values()))
     sim = init_simulators(config, map_def)[0]
-    caps = sim.pysf_sim.peds.max_speeds.copy()
+    caps = copied_max_speeds(sim)
     positions = [sim.pysf_state.ped_positions.copy()]
     runtime = next(
         (

@@ -3388,10 +3388,11 @@ def map_cache_info() -> dict[str, int]:
         ``currsize`` from the underlying LRU cache.
     """
     ci = _load_map_definition_cached.cache_info()
+    maxsize = ci.maxsize if ci.maxsize is not None else 0
     return {
         "hits": ci.hits,
         "misses": ci.misses,
-        "maxsize": ci.maxsize,
+        "maxsize": maxsize,
         "currsize": ci.currsize,
     }
 

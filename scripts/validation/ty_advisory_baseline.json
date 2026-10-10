@@ -8,7 +8,7 @@
     ],
     "rule": "Findings with check_name='unresolved-import' and description prefix 'unresolved-import: Cannot resolve imported module...' are treated as the optional-import category: recorded but EXCLUDED from the ratchet gate (owned by #4990/#4995)."
   },
-  "generated_at": "2026-10-10T11:42:08Z",
+  "generated_at": "2026-10-10T14:14:23Z",
   "modules": {
     "docs": {
       "general": 4,
@@ -171,9 +171,9 @@
       "total": 9
     },
     "robot_sf/training": {
-      "general": 94,
+      "general": 93,
       "optional_import_excluded": 0,
-      "total": 94
+      "total": 93
     },
     "robot_sf_carla_bridge": {
       "general": 2,
@@ -181,9 +181,9 @@
       "total": 2
     },
     "scripts": {
-      "general": 2590,
+      "general": 2578,
       "optional_import_excluded": 22,
-      "total": 2612
+      "total": 2600
     },
     "third_party": {
       "general": 266,
@@ -202,7 +202,7 @@
     "invalid-key": 19,
     "invalid-method-override": 11,
     "invalid-parameter-default": 4,
-    "invalid-return-type": 220,
+    "invalid-return-type": 219,
     "invalid-type-form": 64,
     "missing-argument": 3,
     "no-matching-overload": 132,
@@ -212,7 +212,7 @@
     "redundant-cast": 10,
     "too-many-positional-arguments": 2,
     "unknown-argument": 6,
-    "unresolved-attribute": 1832,
+    "unresolved-attribute": 1820,
     "unresolved-import": 201,
     "unresolved-reference": 25,
     "unsupported-operator": 184,
@@ -220,10 +220,10 @@
   },
   "schema_version": 1,
   "summary": {
-    "general_findings": 6445,
+    "general_findings": 6432,
     "module_count": 36,
     "optional_import_findings_excluded": 168,
-    "total_findings": 6613
+    "total_findings": 6600
   },
   "ty_version": "ty 0.0.58"
 }

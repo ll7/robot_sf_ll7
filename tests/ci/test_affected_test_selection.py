@@ -122,11 +122,7 @@ def test_mapped_direct_consumer_does_not_hide_dynamic_slow_consumer(tmp_path):
 
     files = {
         "configs/a.yaml": "ok\n",
-        "tests/test_direct.py": (
-            "PIN = 'configs/a.yaml'\n"
-            "def test_direct():\n"
-            "    assert PIN\n"
-        ),
+        "tests/test_direct.py": ("PIN = 'configs/a.yaml'\ndef test_direct():\n    assert PIN\n"),
         "tests/test_dynamic_slow.py": (
             "from pathlib import Path\n"
             "import pytest\n"
@@ -139,10 +135,7 @@ def test_mapped_direct_consumer_does_not_hide_dynamic_slow_consumer(tmp_path):
             "    assert (ROOT / _config_path()).read_text() == 'ok\\n'\n"
         ),
         "tests/test_unrelated_slow.py": (
-            "import pytest\n"
-            "pytestmark = pytest.mark.slow\n"
-            "def test_unrelated():\n"
-            "    assert True\n"
+            "import pytest\npytestmark = pytest.mark.slow\ndef test_unrelated():\n    assert True\n"
         ),
     }
     for name, text in files.items():

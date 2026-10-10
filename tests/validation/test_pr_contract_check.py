@@ -20,9 +20,115 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.ci import pr_contract_check
+from scripts.dev.check_pr_followups import analyze_body as analyze_pr_followups
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
+
+_V2_CONTRACT_BODY_TEMPLATE = """## Summary
+Contract parity regression fixture.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: {relates}
+deferred_work:
+  status: {status}
+  issues: {issues}
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+
+def _v2_contract_body(*, status: str, issues: str, relates: str = "[]") -> str:
+    return _V2_CONTRACT_BODY_TEMPLATE.format(status=status, issues=issues, relates=relates)
+
+
+@pytest.mark.parametrize(
+    ("status", "relates", "expected_reason"),
+    [
+        pytest.param("issues", "[]", "deferred_work.status must be one of", id="invalid-status"),
+        pytest.param(
+            "open",
+            "[9488]",
+            "linked_issues and deferred_work contain duplicate issue references",
+            id="duplicate-reference",
+        ),
+    ],
+)
+def test_standalone_and_readiness_reject_invalid_v2_with_shared_reasons(
+    status: str, relates: str, expected_reason: str
+) -> None:
+    body = _v2_contract_body(status=status, issues="[9488]", relates=relates)
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
+    )
+
+    assert parsed.status == "malformed"
+    assert followups.status == "malformed_v2_contract"
+    assert len(parsed.errors) == 1
+    assert expected_reason in parsed.errors[0]
+    for reason in parsed.errors:
+        assert reason in followups.message
+        assert any(reason in blocker for blocker in blockers)
+
+
+def test_standalone_and_readiness_accept_valid_v2_no_deferred_work() -> None:
+    body = _v2_contract_body(status="none", issues="[]", relates="[9488]")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
+    )
+
+    assert followups.status == "ok"
+    assert not any("PR contract v2" in blocker for blocker in blockers)
+
+
+def test_standalone_and_readiness_keep_v1_markdown_compatibility() -> None:
+    body = """## Summary
+Legacy Markdown contract.
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: none
+"""
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
+    )
+
+    assert parsed.status == "absent"
+    assert followups.status == "ok"
+    assert not any("PR contract v2" in blocker for blocker in blockers)
+
 
 # GitHub's compare endpoint returns changed-file records on its first page, up to
 # 300 files for the whole comparison. A response containing exactly 300 rows may
@@ -3040,6 +3146,25 @@ def test_regression_last_20_merged_prs() -> None:
                 "github-closing-parity" in blocker and f"#{issue}" in blocker
                 for blocker in blockers
             ), f"PR #{number} no longer exposes its known historical parity hit"
+        # Older merged bodies may fail a newly enforced parser rule. Require
+        # that exact canonical rejection; every unrelated blocker still fails.
+        parsed_contract = parse_pr_contract_v2(body, source="historical parity")
+        expected_v2_blockers = (
+            [
+                f"BLOCKER: {parsed_contract.message}; "
+                "v1 fallback is disabled when a v2 marker is present."
+            ]
+            if parsed_contract.status == "malformed"
+            else []
+        )
+        observed_v2_blockers = [
+            blocker
+            for blocker in blockers
+            if blocker.startswith("BLOCKER: Malformed pr-contract:v2:")
+        ]
+        assert observed_v2_blockers == expected_v2_blockers, (
+            f"PR #{number} has different standalone and canonical v2 validation"
+        )
         unexpected_blockers = [
             blocker
             for blocker in blockers
@@ -3049,6 +3174,7 @@ def test_regression_last_20_merged_prs() -> None:
                 for issue in expected_parity_issues
             )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
+            and blocker not in expected_v2_blockers
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"

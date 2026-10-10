@@ -1,0 +1,508 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Effective runtime physics",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_design_parameters",
+    "pedestrian_speed_model",
+    "pedestrian_model",
+    "pedestrian_contact_law",
+    "group_forces",
+    "radius_roles",
+    "robot_kinematics",
+    "integration",
+    "clearance_definition"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "effective-physics.v1"
+    },
+    "release_design_parameters": {
+      "type": "object",
+      "required": [
+        "pedestrian_physical_radius_m",
+        "pedestrian_force_radius_m",
+        "pedestrian_metric_radius_m",
+        "robot_reverse_speed_cap_m_s",
+        "pedestrian_robot_force_activation_range_m",
+        "pedestrian_speed_mean_m_s",
+        "pedestrian_speed_sd_m_s",
+        "pedestrian_speed_cap_m_s",
+        "pedestrian_robot_force_enabled",
+        "pedestrian_robot_steering_enabled",
+        "wall_force_law",
+        "pedestrian_robot_force_law",
+        "ttc_definition",
+        "pedestrian_radius_convention",
+        "pedestrian_speed_tier"
+      ],
+      "properties": {
+        "pedestrian_physical_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pedestrian_force_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pedestrian_metric_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "robot_reverse_speed_cap_m_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pedestrian_robot_force_activation_range_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pedestrian_speed_mean_m_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "pedestrian_speed_sd_m_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "pedestrian_speed_cap_m_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "pedestrian_robot_force_enabled": {
+          "type": "boolean"
+        },
+        "pedestrian_robot_steering_enabled": {
+          "type": "boolean"
+        },
+        "wall_force_law": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "identity",
+                "enabled"
+              ],
+              "properties": {
+                "identity": {
+                  "const": "disabled"
+                },
+                "enabled": {
+                  "const": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "law_version",
+                "enabled",
+                "parameters",
+                "geometry_convention",
+                "radius_convention"
+              ],
+              "properties": {
+                "law_version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "geometry_convention": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "radius_convention": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "parameters": {
+                  "type": "object",
+                  "required": [
+                    "factor",
+                    "sigma",
+                    "threshold",
+                    "agent_radius",
+                    "effective_offset",
+                    "distance_floor"
+                  ],
+                  "properties": {
+                    "factor": {
+                      "type": "number"
+                    },
+                    "sigma": {
+                      "type": "number"
+                    },
+                    "threshold": {
+                      "type": "number"
+                    },
+                    "agent_radius": {
+                      "type": "number"
+                    },
+                    "effective_offset": {
+                      "type": "number"
+                    },
+                    "distance_floor": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "pedestrian_robot_force_law": {
+          "type": "object",
+          "required": [
+            "identity",
+            "enabled",
+            "activation_rule",
+            "parameters",
+            "activation_ranges_m",
+            "response_multipliers"
+          ],
+          "properties": {
+            "identity": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "activation_rule": {
+              "type": "string",
+              "minLength": 1
+            },
+            "parameters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "is_active",
+                  "activation_threshold",
+                  "force_multiplier",
+                  "robot_radius"
+                ],
+                "properties": {
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "activation_threshold": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "force_multiplier": {
+                    "type": "number"
+                  },
+                  "robot_radius": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "activation_ranges_m": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "response_multipliers": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "ttc_definition": {
+          "type": "object",
+          "required": [
+            "identity",
+            "geometry",
+            "formula",
+            "relative_speed_floor_m_s",
+            "ped_velocity",
+            "dt_s"
+          ],
+          "properties": {
+            "identity": {
+              "type": "string",
+              "minLength": 1
+            },
+            "geometry": {
+              "type": "string",
+              "minLength": 1
+            },
+            "formula": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ped_velocity": {
+              "type": "string",
+              "minLength": 1
+            },
+            "relative_speed_floor_m_s": {
+              "type": "number",
+              "minimum": 0
+            },
+            "dt_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "pedestrian_radius_convention": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pedestrian_speed_tier": {
+          "anyOf": [
+            {
+              "const": false
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "pedestrian_speed_model": {
+      "type": "object",
+      "required": [
+        "identity",
+        "mean_m_s",
+        "sd_m_s",
+        "cap_m_s",
+        "cap_rule",
+        "max_speed_multiplier",
+        "per_agent_caps_m_s"
+      ],
+      "properties": {
+        "identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mean_m_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sd_m_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cap_m_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cap_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max_speed_multiplier": {
+          "type": "number",
+          "minimum": 0
+        },
+        "per_agent_caps_m_s": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "pedestrian_model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pedestrian_contact_law": {
+      "type": "object",
+      "required": [
+        "identity",
+        "social_kernel",
+        "enabled",
+        "parameters",
+        "hard_nonpenetration"
+      ],
+      "properties": {
+        "identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "social_kernel": {
+          "type": "object",
+          "minProperties": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "hard_nonpenetration": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "group_forces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "identity",
+          "parameters"
+        ],
+        "properties": {
+          "identity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parameters": {
+            "type": "object",
+            "minProperties": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "radius_roles": {
+      "type": "object",
+      "required": [
+        "physical_contact_m",
+        "force_kernel_m",
+        "metric_m",
+        "placement_m",
+        "occupancy_grid"
+      ],
+      "properties": {
+        "physical_contact_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "force_kernel_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "metric_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "placement_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "occupancy_grid": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "geometry",
+            "radii_m"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "geometry": {
+              "type": "string",
+              "minLength": 1
+            },
+            "radii_m": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "robot_kinematics": {
+      "type": "string",
+      "minLength": 1
+    },
+    "integration": {
+      "type": "object",
+      "required": [
+        "dt_s",
+        "integrator"
+      ],
+      "properties": {
+        "dt_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "integrator": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "clearance_definition": {
+      "type": "object",
+      "required": [
+        "identity",
+        "formula",
+        "robot_radius_m",
+        "pedestrian_radius_m"
+      ],
+      "properties": {
+        "identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "robot_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pedestrian_radius_m": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

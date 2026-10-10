@@ -2131,6 +2131,14 @@ def _apply_robot_overrides(
     """Apply optional scenario-level robot kinematics overrides."""
     if not isinstance(overrides, Mapping) or not overrides:
         return
+    if "control_latency_s" in overrides:
+        if isinstance(overrides["control_latency_s"], bool):
+            raise ValueError("robot_config.control_latency_s must be a non-negative number.")
+        latency_s = _coerce_non_negative_float(
+            overrides["control_latency_s"], field_name="control_latency_s"
+        )
+        config.sim_config.action_latency_ms = latency_s * 1000.0
+        config.sim_config._validate_action_latency_config()
     raw_type = str(overrides.get("type", overrides.get("model", "differential_drive"))).strip()
     robot_type = _robot_type_alias(raw_type)
     if robot_type == "differential_drive":
@@ -2792,6 +2800,8 @@ def _apply_single_pedestrian_override(
         hold_ref_point=hold_ref_point,
         hold_timeout_s=hold_timeout_s,
         metadata=metadata,
+        initial_group_id=entry.get("initial_group_id", ped.initial_group_id),
+        join_radius_m=entry.get("join_radius_m", ped.join_radius_m),
     )
 
 

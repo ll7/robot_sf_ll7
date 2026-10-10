@@ -50,6 +50,7 @@ from scripts.dev.check_issue_line_budget import (  # noqa: E402
     has_declared_cap,
 )
 from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2  # noqa: E402
 
 # Match GitHub closing keywords followed by a local/cross-repository issue reference or URL.
 CLOSING_PATTERN = re.compile(
@@ -524,6 +525,14 @@ def check_closure_declaration(title: str, body: str) -> list[str]:
                 f"declaration (e.g., 'Closes #{issue}' or 'Refs #{issue}')."
             )
     return warnings
+
+
+def check_pr_contract_v2(body: str) -> list[str]:
+    """Reject malformed v2 contracts using the shared readiness parser."""
+    result = parse_pr_contract_v2(body, source="PR body")
+    if result.status != "malformed":
+        return []
+    return [f"BLOCKER: {result.message}; v1 fallback is disabled when a v2 marker is present."]
 
 
 def check_state_refresh_only(changed_files: list[str], title: str, body: str) -> list[str]:
@@ -1371,10 +1380,17 @@ def run_all_checks(
     added_files: set[str] | None = None,
     historical_numstat: object = _UNSET_NUMSTAT,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 10 contract checks."""
+    """Run all contract checks."""
     blockers = []
     warnings = []
     infos = []
+
+    # 0. Strict v2 contract. Keep the canonical parser shared with final readiness
+    # so malformed machine-readable declarations cannot pass this standalone gate.
+    blockers.extend(check_pr_contract_v2(body))
+
+    # Behaviour receipts are enforced by the workflow's separate immutable-base
+    # validator step. Never import PR-head policy into current admission here.
 
     # 1. Closes-discipline
     commit_messages = None
@@ -1540,13 +1556,13 @@ def get_changed_files(changed_files_file: Path | None, base_ref: str) -> list[st
     if base_ref_is_resolvable(base_ref):
         try:
             res = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                ["git", "diff", "--name-only", "-z", "--no-renames", f"{base_ref}...HEAD"],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             if res.returncode == 0:
-                return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+                return [path for path in res.stdout.split("\0") if path]
         except _BEST_EFFORT_ERRORS:
             pass
 

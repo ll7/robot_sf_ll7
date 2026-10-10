@@ -19,7 +19,6 @@ from pysocialforce.config import (
 from pysocialforce.forces import (
     ObstacleForce,
     all_obstacle_forces_for_law,
-    body_edge_exponential_force,
     obstacle_force,
     obstacle_force_body_edge_exponential,
     obstacle_force_for_law,
@@ -332,15 +331,14 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     assert corrected_metadata["resolution_mode"] == "explicit"
 
 
-def test_default_body_edge_law_uses_only_nearest_segment_and_physical_radius():
-    """The default doorway law is finite-range and does not sum distant posts."""
+def test_default_body_edge_law_is_finite_range_and_uses_pedestrian_radius():
+    """Distant surfaces are inactive and body-edge overlap reaches the finite amplitude."""
     obstacle = (8.0, 2.6, 8.0, 4.0)
     ped_pos = (6.5, 2.0)
     assert obstacle_force_for_law(obstacle, (-1.0, 0.0), ped_pos, 0.35) == (0.0, 0.0)
 
     near_pos = (7.7, 2.6)
-    raw_distance = 0.3
-    expected = body_edge_exponential_force(raw_distance, -raw_distance, 0.0, 0.35)
+    expected = (-0.3 * (1.0 - math.exp(-5.0)), 0.0)
     assert obstacle_force_body_edge_exponential(
         obstacle,
         (-1.0, 0.0),

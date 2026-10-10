@@ -4,12 +4,27 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from jsonschema import Draft202012Validator, ValidationError
 from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1, ObstacleForceConfig
 from pysocialforce.forces import ObstacleForce
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_wall_corner_does_not_double_the_same_surface_response():
+    """Two edges sharing the nearest corner must not double its pedestrian force."""
+    edges = np.array([[0.0, -1.0, 0.0, 0.0, 1.0, 0.0], [-1.0, 0.0, 0.0, 0.0, 0.0, 1.0]])
+    simulation = SimpleNamespace(
+        peds=SimpleNamespace(agent_radius=0.35, pos=lambda: np.array([[0.3, 0.3]])),
+        get_raw_obstacles=lambda: edges[:1],
+    )
+    single_surface = ObstacleForce(ObstacleForceConfig(), simulation)()[0]
+    assert np.linalg.norm(single_surface) > 0
+    simulation.get_raw_obstacles = lambda: edges
+    corner = ObstacleForce(ObstacleForceConfig(), simulation)()[0]
+    np.testing.assert_allclose(corner, single_surface, rtol=1e-12, atol=1e-12)
 
 
 def _wall_schema():
@@ -37,9 +52,11 @@ def test_default_wall_law_metadata_is_schema_valid():
 def test_body_edge_wall_schema_rejects_incomplete_active_parameters(parameter):
     """Accepting the new law must retain complete parameter provenance."""
     metadata = _metadata(ObstacleForceConfig())
+    validator = _wall_schema()
+    validator.validate(metadata)
     metadata["parameters"].pop(parameter)
     with pytest.raises(ValidationError):
-        _wall_schema().validate(metadata)
+        validator.validate(metadata)
 
 
 def test_legacy_wall_schema_still_requires_its_active_offset():

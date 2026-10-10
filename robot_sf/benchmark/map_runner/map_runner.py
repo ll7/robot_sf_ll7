@@ -2500,6 +2500,7 @@ def _run_map_episode(  # noqa: PLR0913
     snqi_baseline: dict[str, dict[str, float]] | None,
     algo: str,
     scenario_path: Path,
+    provenance_scenario_path: Path | None = None,
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
@@ -2539,6 +2540,11 @@ def _run_map_episode(  # noqa: PLR0913
             "snqi_baseline": snqi_baseline,
             "algo": algo,
             "scenario_path": scenario_path,
+            **(
+                {"provenance_scenario_path": provenance_scenario_path}
+                if provenance_scenario_path is not None
+                else {}
+            ),
             "algo_config": algo_config,
             "algo_config_path": algo_config_path,
             "adapter_impact_eval": adapter_impact_eval,
@@ -3322,7 +3328,9 @@ def _compute_resume_identity_payload(
     # Match the worker: an absent algorithm file and empty parsed mapping stay absent.
     identity_source = ctx.algo_config_path
     if identity_source is None and not ctx.raw_policy_cfg:
-        identity_source = configless_release_source(ctx.scenario_path, ctx.algo)
+        identity_source = configless_release_source(
+            getattr(ctx, "provenance_scenario_path", None) or ctx.scenario_path, ctx.algo
+        )
     identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
     identity_algo, identity_cfg = _policy_resolution.resolve_episode_policy_runtime(
         default_algo=ctx.algo,
@@ -3410,6 +3418,7 @@ def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
         raw_policy_cfg=ctx.raw_policy_cfg,
         algo_config_path=ctx.algo_config_path,
         scenario_path=ctx.scenario_path,
+        provenance_scenario_path=ctx.provenance_scenario_path,
         adapter_impact_eval=ctx.adapter_impact_eval,
         experimental_ped_impact=ctx.experimental_ped_impact,
         ped_impact_radius_m=ctx.ped_impact_radius_m,

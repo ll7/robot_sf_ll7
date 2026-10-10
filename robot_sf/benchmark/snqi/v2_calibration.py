@@ -591,6 +591,7 @@ def _calibration_identity_context(config: Any, planner: Any, scenarios: Mapping[
         algo=planner.algo,
         algo_config_path=str(path) if path is not None else None,
         raw_policy_cfg=policy_config,
+        scenario_path=config.scenario_matrix_path,
         horizon=planner.horizon_override or config.horizon,
         dt=planner.dt_override or config.dt,
         record_forces=config.record_forces,

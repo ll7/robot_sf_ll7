@@ -5622,6 +5622,7 @@ def run_map_episode(  # noqa: PLR0913
     snqi_baseline: dict[str, dict[str, float]] | None,
     algo: str,
     scenario_path: Path,
+    provenance_scenario_path: Path | None = None,
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
@@ -5648,6 +5649,9 @@ def run_map_episode(  # noqa: PLR0913
     runtime_input_records: list[dict[str, str]] | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
+
+    The scenario path resolves normalized map references. The optional provenance
+    path selects registered defaults from the original config-less release source.
 
     Returns:
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.

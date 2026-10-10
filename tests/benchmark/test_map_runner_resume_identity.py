@@ -844,3 +844,31 @@ def test_resume_runs_current_defaults_with_a_legacy_result_present(tmp_path: Pat
             observation_level=current_payload["observation_level"],
         )
     assert write_payload == current_payload
+
+
+def test_normalized_batch_preserves_released_default_source_and_resume(tmp_path: Path) -> None:
+    """Normalized map paths must retain the original release default policy and resume ID."""
+    root = Path(__file__).resolve().parents[2]
+    matrix = root / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = _minimal_map_scenario()
+    scenario["seeds"] = [1001]
+    out = tmp_path / "episodes.jsonl"
+    kwargs = {
+        "schema_path": SCHEMA_PATH,
+        "horizon": 1,
+        "algo": "goal",
+        "scenario_path": root / "scoped_scenarios.json",
+        "provenance_scenario_path": matrix,
+    }
+    result = map_runner.run_map_batch([scenario], out, resume=False, **kwargs)
+    assert result["written"] == 1, result.get("failures")
+    legacy = json.loads(out.read_text().splitlines()[0])
+    assert legacy["algorithm_metadata"]["hybrid_default_policy"]["default_set"] == "legacy-0.0.8"
+    assert "hybrid_default_set" not in legacy["scenario_params"]
+    assert map_runner.run_map_batch([scenario], out, resume=True, **kwargs)["written"] == 0
+    kwargs["provenance_scenario_path"] = root / "new-scenarios.yaml"
+    assert map_runner.run_map_batch([scenario], out, resume=True, **kwargs)["written"] == 1
+    current = json.loads(out.read_text().splitlines()[-1])
+    assert current["algorithm_metadata"]["hybrid_default_policy"]["default_set"] == "current"
+    assert current["scenario_params"]["hybrid_default_set"] == "current"
+    assert current["episode_id"] != legacy["episode_id"]

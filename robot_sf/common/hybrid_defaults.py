@@ -146,7 +146,10 @@ def episode_default_policy(
     def wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
         source = kwargs.get("algo_config_path")
         if source is None and kwargs.get("algo_config") is None:
-            source = configless_release_source(kwargs.get("scenario_path"), kwargs.get("algo", ""))
+            source = configless_release_source(
+                kwargs.get("provenance_scenario_path") or kwargs.get("scenario_path"),
+                kwargs.get("algo", ""),
+            )
         with defaults_for_source(source) as policy:
             logger.debug("Typed hybrid defaults: {}", policy)
             record = function(*args, **kwargs)

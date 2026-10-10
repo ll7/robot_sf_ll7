@@ -1,0 +1,101 @@
+{
+  "classification": "development reset diagnostics; no planner or held-out evaluation",
+  "tested_runtime_head": "8f169aefcc698f5cb94521e84af5e29471e088f4",
+  "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+  "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "reset_count": 180,
+  "statistics": [
+    {
+      "scenario": "classic_group_crossing_high",
+      "mode": "exact_small_crowd_v1",
+      "population": [
+        4
+      ],
+      "grouped_total": 60,
+      "population_total": 120,
+      "grouped_fraction": 0.5
+    },
+    {
+      "scenario": "classic_group_crossing_high",
+      "mode": "legacy",
+      "population": [
+        4
+      ],
+      "grouped_total": 56,
+      "population_total": 120,
+      "grouped_fraction": 0.4666666666666667
+    },
+    {
+      "scenario": "classic_group_crossing_low",
+      "mode": "exact_small_crowd_v1",
+      "population": [
+        2
+      ],
+      "grouped_total": 60,
+      "population_total": 60,
+      "grouped_fraction": 1.0
+    },
+    {
+      "scenario": "classic_group_crossing_low",
+      "mode": "legacy",
+      "population": [
+        2
+      ],
+      "grouped_total": 24,
+      "population_total": 60,
+      "grouped_fraction": 0.4
+    },
+    {
+      "scenario": "classic_group_crossing_medium",
+      "mode": "exact_small_crowd_v1",
+      "population": [
+        3
+      ],
+      "grouped_total": 60,
+      "population_total": 90,
+      "grouped_fraction": 0.6666666666666666
+    },
+    {
+      "scenario": "classic_group_crossing_medium",
+      "mode": "legacy",
+      "population": [
+        3
+      ],
+      "grouped_total": 43,
+      "population_total": 90,
+      "grouped_fraction": 0.4777777777777778
+    }
+  ]
+}

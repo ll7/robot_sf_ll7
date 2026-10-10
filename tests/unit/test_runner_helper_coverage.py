@@ -374,6 +374,37 @@ def _handshake_runner(connection: _HandshakeConnection) -> object:
     return step_runner
 
 
+@pytest.mark.parametrize(
+    "start_error",
+    [OSError("start failed"), RuntimeError("start failed"), KeyboardInterrupt("start interrupted")],
+)
+def test_worker_start_failure_releases_pipe_and_stderr(
+    monkeypatch: pytest.MonkeyPatch, start_error: BaseException
+) -> None:
+    """Startup failure or interruption releases resources without masking the cause."""
+    closed = []
+    parent = SimpleNamespace(close=lambda: closed.append("parent"))
+    child = SimpleNamespace(close=lambda: closed.append("child"))
+    step_runner = _handshake_runner(_HandshakeConnection(poll_result=True))
+
+    def fail_start() -> None:
+        """Simulate process startup failure before ownership transfers."""
+        raise start_error
+
+    process = SimpleNamespace(start=fail_start)
+    step_runner._ctx.Pipe = lambda duplex: (parent, child)
+    step_runner._ctx.Process = lambda target, args: process
+    with runner_mod.tempfile.TemporaryFile(mode="w+b") as stderr:
+        monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", lambda **kwargs: stderr)
+        with pytest.raises(type(start_error), match=str(start_error)):
+            step_runner._ensure_worker()
+        assert closed == ["parent", "child"]
+        assert stderr.closed
+        assert step_runner._stderr is None
+        assert step_runner._process is None
+        assert step_runner._conn is None
+
+
 def test_planner_step_process_handshake_timeout_fails_closed() -> None:
     """A worker that never acknowledges initialization is rejected and reaped."""
     step_runner = _handshake_runner(_HandshakeConnection(poll_result=False))

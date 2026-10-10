@@ -670,14 +670,16 @@ class _PlannerStepProcess:
         process = self._ctx.Process(
             target=_planner_step_worker, args=(child_conn, self._planner, self._stderr.fileno())
         )
+        started = False
         try:
             process.start()
-        except Exception:
-            parent_conn.close()
-            child_conn.close()
-            self._stderr.close()
-            self._stderr = None
-            raise
+            started = True
+        finally:
+            if not started:
+                parent_conn.close()
+                child_conn.close()
+                self._stderr.close()
+                self._stderr = None
         child_conn.close()
         self._process = process
         self._conn = parent_conn

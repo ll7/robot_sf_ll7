@@ -23,6 +23,7 @@ from robot_sf.planner.socnav_base import (
 from robot_sf.planner.socnav_sampling_v2 import (
     GoalPathField,
     _ObstacleClearance,
+    _pedestrian_world_velocities,
     _repulsion_direction,
     _rollout,
     braking_speed_limit,
@@ -542,3 +543,31 @@ def test_social_force_and_sampling_version_selectors_coexist() -> None:
     sampler.plan(_observation())
     assert sampler._last_sampling_v2["desired_heading"] == pytest.approx(0.0)
     assert sampler.diagnostics()["socnav_sampling_version"] == SOCNAV_SAMPLING_BOUNDED_V2
+
+
+def test_pedestrian_world_velocities_converts_ego_at_nonzero_heading() -> None:
+    """Opt-in pedestrian prediction rotates the ego-frame observation velocity to world.
+
+    The flat map-runner contract supplies ``pedestrians_velocities`` in the robot
+    ego frame, so the sampling arm's opt-in prediction path must rotate by the
+    robot heading. A heading of 0.0 would hide a missing conversion, so this uses
+    pi/2 and also pins the release default, where prediction is off and the
+    pedestrian velocity must not be consumed at all (issue #9845).
+    """
+    heading = 0.5 * math.pi
+    ego_velocity = np.array([[0.6, -0.35]])
+    ped_positions = np.array([[2.0, 1.0]])
+    ped_state = {"velocities": ego_velocity, "count": np.array([1.0])}
+
+    enabled = SimpleNamespace(sampling_pedestrian_prediction=True)
+    converted = _pedestrian_world_velocities(enabled, ped_state, ped_positions, heading)
+    np.testing.assert_allclose(converted, np.array([[0.35, 0.6]]), rtol=0.0, atol=1e-12)
+    assert not np.allclose(converted, ego_velocity, atol=1e-6)
+
+    disabled = SimpleNamespace(sampling_pedestrian_prediction=False)
+    np.testing.assert_allclose(
+        _pedestrian_world_velocities(disabled, ped_state, ped_positions, heading),
+        np.zeros_like(ped_positions),
+        rtol=0.0,
+        atol=0.0,
+    )

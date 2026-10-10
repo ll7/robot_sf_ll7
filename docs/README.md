@@ -301,6 +301,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Issue #596 Atomic Scenario Matrix](./context/issue_596_atomic_scenario_matrix.md)** - Compact scenario-by-scenario matrix covering capabilities, failure modes, and verified-simple membership
 * **[Issue #596 ORCA Failure Analysis](./context/issue_596_orca_failure_analysis.md)** - Targeted ORCA probe results showing which atomic scenarios still fail and why
 * **[Issue #596 Testing-Only Planner Promotion Matrix](./context/issue_596_testing_only_planner_promotion_matrix.md)** - Planner-specific promotion blockers, evidence links, and next-proof requirements for the testing-only planners
+* **[0.0.8 Main-only Scope Amendment](./release/0.0.8/main_only_scope_amendment_20261009.md)** - Author ruling, retained-note correction lineage and excluded doorway successor
+* **[0.0.8 Main-only Publication Disclosure](./release/0.0.8/publication_disclosure_main_only.md)** - Effective publication scope, failure disclosure and original main asset hashes
 * **[Benchmark Release Protocol v0.1](./benchmark_release_protocol.md)** - Canonical benchmark release model, versioning policy, and manifest/entrypoint contract for paper-facing releases
 * **[Benchmark Release Reproducibility](./benchmark_release_reproducibility.md)** - Reproduce a benchmark release from a tag, canonical manifest, and reduced smoke validation path
   - Current smoke manifest: `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml` (14 arms, one scenario, one seed, H600)
@@ -318,6 +320,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[Issue #1357 Tentabot-Style Motion-Primitive Assessment](./context/policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)** - Source-backed verdict that Tentabot-style learned primitive-value scoring is a Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner
 * **[Issue #1023 Scenario-Horizon Benchmark Surface](./context/issue_1023_scenario_horizon_benchmark.md)** - Runnable h500 scenario-horizon benchmark config, local non-Slurm full campaign evidence, fixed-vs-scenario comparison, and conservative promotion boundary
+* **[Predictive stopping bound for 0.1.0](./validation/predictive_braking/README.md)** - Opt-in contract, conditional separation proof and paired dev diagnostics for issue #10111
 * **[Issue #1023 Experimental Benchmark Candidates](./context/issue_1023_experimental_benchmark_candidates.md)** - Rationale and caveats for adding `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress_static_escape` to the long-horizon benchmark as experimental challengers
 * **[H500 Policy-Search Evidence Bundle](./context/evidence/policy_search_h500_2026-05-06/README.md)** - Durable policy-search evidence behind the h500 scenario-horizon schedule
 * **[Issue #1023 Scenario-Horizon Preflight Evidence Bundle](./context/evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md)** - Compact preflight proof for the paper-facing scenario-horizon benchmark matrix
@@ -442,6 +445,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 
 ### Simulation & UI
 
+* [Pedestrian group allocation](./sim/group_allocation.md) - Opt-in exact counts and legacy compatibility
+
 * **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
 * **[LiDAR Configuration Reference](./lidar_configuration.md)** - Canonical robot and ego-pedestrian scan defaults, including ray count, field of view, range, and noise
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
@@ -469,6 +474,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Force Field Heatmap](./force_field_heatmap.md)** - Heatmap + vector overlays figure (PNG/PDF)
 
 ### Performance & CI
+
+* **[Hosted-first CI runner fallback](./dev/ci_runner_fallback.md)** - Availability checks, queue recovery, kill switch, hosted capacity options and security threat note.
 
 * **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
 * **[Issue 2536 Speed Discovery](./context/issue_2536_speed_discovery.md)** - Bounded simulator-speed candidate discovery and next occupancy-grid rasterization proof path

@@ -12,6 +12,75 @@ import pytest
 SETUP = Path(__file__).resolve().parents[2] / "scripts/ci/self_hosted/setup.sh"
 
 
+@pytest.mark.parametrize(
+    ("filesystem", "block_size", "blocks", "accepted"),
+    [
+        ("tmpfs", 4096, 131072, False),  # 512 MiB, as in the failed wheel install.
+        ("tmpfs", 4096, 524287, False),  # One block below 2 GiB.
+        ("tmpfs", 4096, 524288, True),
+        ("tmpfs", 1024, 2097152, True),
+        ("ext2/ext3", 4096, 131072, True),
+        ("real-filesystem", 0, 0, True),  # Exercise stat's symlink resolution too.
+        ("unknown", "invalid", 0, False),
+        ("stat-failure", 4096, 524288, False),
+    ],
+)
+def test_container_startup_checks_tmpdir_capacity(
+    tmp_path: Path, filesystem: str, block_size: int | str, blocks: int, accepted: bool
+) -> None:
+    """Reject small temporary tmpfs mounts before registering or running a job."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    trace = tmp_path / "trace"
+    target = tmp_path / "disk-scratch"
+    target.mkdir()
+    scratch = tmp_path / "scratch-link"
+    scratch.symlink_to(target, target_is_directory=True)
+    _mock_command(
+        commands,
+        "stat",
+        'printf "stat:%s\\n" "${!#}" >>"$TRACE"\n'
+        '[[ "$FS_TYPE" != real-filesystem ]] || exec /usr/bin/stat "$@"\n'
+        '[[ "$FS_TYPE" != stat-failure ]] || exit 1\n'
+        'printf "%s %s %s\\n" "$FS_TYPE" "$BLOCK_SIZE" "$BLOCKS"\n',
+    )
+    for name in ("config.sh", "run.sh"):
+        _mock_command(tmp_path, name, f'printf "{name}\\n" >>"$TRACE"\n')
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{commands}:{environment['PATH']}",
+        TRACE=str(trace),
+        TMPDIR=str(scratch),
+        FS_TYPE=filesystem,
+        BLOCK_SIZE=str(block_size),
+        BLOCKS=str(blocks),
+        TEST_RUNNER_HOME=str(tmp_path),
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'cd() { builtin cd "$TEST_RUNNER_HOME"; }; cp() { :; }; install() { :; }; '
+            'source "$1" container fixture-runner',
+            "container-startup-test",
+            str(SETUP),
+        ],
+        input="fixture-registration-token\n",
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    events = trace.read_text(encoding="utf-8").splitlines()
+    assert (result.returncode == 0) is accepted, result.stderr
+    assert ("config.sh" in events) is accepted, "unsafe scratch must block registration"
+    assert ("run.sh" in events) is accepted, "unsafe scratch must block job execution"
+    assert events[0] == f"stat:{scratch}", "startup must inspect the effective TMPDIR"
+    if not accepted:
+        assert "TMPDIR" in result.stderr
+
+
 def _mock_command(directory: Path, name: str, body: str) -> None:
     command = directory / name
     command.write_text("#!/usr/bin/env bash\nset -eu\n" + body, encoding="utf-8")

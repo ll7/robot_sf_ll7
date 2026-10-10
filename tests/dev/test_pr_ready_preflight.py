@@ -39,6 +39,7 @@ _UNRELATED_OPTIONAL_IMPORTS = (
 )
 
 _POST_PREFLIGHT_SCRIPTS = [
+    "fetch_test_fixture_sources.sh",
     "check_pr_followups.py",
     "check_perf_evidence.py",
     "check_fast_results_claim_map.py",

@@ -1212,8 +1212,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             )
             != SOCIAL_FORCE_PLANNER_LEGACY_V1
         )
+        selector = getattr(config, "social_force_obstacle_law", None)
         return obstacle_force_law_metadata(
-            getattr(config, "social_force_obstacle_law", None),
+            {} if selector is None else selector,
             site="socnav_social_force",
             geometry_convention=(
                 "occupancy_visible_nearest_points" if is_v2 else "occupancy_cell_centers"

@@ -1,0 +1,398 @@
+{
+  "tasks": [
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1001
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1002
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1003
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1004
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1005
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1006
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1007
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1008
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1009
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.0,
+      "seed": 1010
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1001
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1002
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1003
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1004
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1005
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1006
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1007
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1008
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1009
+    },
+    {
+      "kind": "aperture",
+      "width_m": 1.2,
+      "seed": 1010
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1001
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1002
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1003
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1004
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1005
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1006
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1007
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1008
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1009
+    },
+    {
+      "kind": "aperture",
+      "width_m": 2.0,
+      "seed": 1010
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1001
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1002
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1003
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1004
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1005
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1006
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1007
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1008
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1009
+    },
+    {
+      "kind": "aperture",
+      "width_m": 3.0,
+      "seed": 1010
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1001
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1002
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1003
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1004
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1005
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1006
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1007
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1008
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1009
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "seed": 1010
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1001
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1002
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1003
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1004
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1005
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1006
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1007
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1008
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1009
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "seed": 1010
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1001
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1002
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1003
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1004
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1005
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1006
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1007
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1008
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1009
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "seed": 1010
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "seed": 1002
+    },
+    {
+      "kind": "scenario",
+      "manifest": "configs/scenarios/francis2023.yaml",
+      "scenario": "francis2023_narrow_doorway",
+      "seed": 1001
+    }
+  ],
+  "episode_limit_s": 600,
+  "workers": 8
+}

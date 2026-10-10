@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 from gymnasium import spaces
+from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.common.types import Rect
 from robot_sf.gym_env.env_config import EnvSettings
@@ -33,6 +34,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
 )
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.sim.sim_config import SimulationSettings
 
 
 def _minimal_map_def() -> MapDefinition:
@@ -177,15 +179,45 @@ def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:
 def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
     """Absent and explicit legacy sampling retain the same config identity."""
     cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
         map_pool=MapDefinitionPool(
             maps_folder="fixture",
             map_defs={"fixture": _minimal_map_def()},
-        )
+        ),
     )
     implicit_legacy_hash = _stable_config_hash(cfg)
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
     assert _stable_config_hash(cfg) == implicit_legacy_hash
+
+
+def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte() -> None:
+    """The 0.1.0 default must retain the independently pinned historical hash."""
+    cfg = EnvSettings(
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
+    )
+    explicit_legacy = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    assert _stable_config_hash(cfg).encode("ascii") == b"d280527b83ce075c"
+    assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
+        "ascii"
+    )
+    assert cfg.sim_config.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert cfg.sim_config.obstacle_force_law_resolution_mode == "defaulted_missing"
+
+
+def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
+    """Opting into the corrected law changes identity without moving legacy hashes."""
+    cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law="body_edge_exponential_v3"),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
+
+    cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
 
 
 def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:

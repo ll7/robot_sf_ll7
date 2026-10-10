@@ -7,6 +7,11 @@ from itertools import pairwise
 import numpy as np
 import pytest
 from pysocialforce.config import (
+    BODY_EDGE_EXPONENTIAL_V3,
+    BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     DEFAULT_OBSTACLE_FORCE_LAW,
     LEGACY_SHIFTED_GRADIENT_V1,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
@@ -17,8 +22,10 @@ from pysocialforce.config import (
 )
 from pysocialforce.forces import (
     ObstacleForce,
+    all_obstacle_forces_body_edge_exponential,
     all_obstacle_forces_for_law,
     obstacle_force,
+    obstacle_force_body_edge_exponential,
     obstacle_force_for_law,
     obstacle_force_surface_distance_unit_normal,
     surface_distance_unit_normal_force,
@@ -115,7 +122,7 @@ def test_surface_distance_unit_normal_matches_point_endpoint_and_segment_analyti
 def test_unversioned_dispatch_reproduces_legacy_obstacle_force_exactly(
     obstacle, ortho_vec, ped_pos, ped_radius, surface_point
 ):
-    """Unversioned and default dispatch preserve the pre-versioning kernel exactly."""
+    """Explicit unversioned metadata preserves the pre-versioning kernel exactly."""
     dx = ped_pos[0] - surface_point[0]
     dy = ped_pos[1] - surface_point[1]
     shifted_distance = max(math.hypot(dx, dy) - ped_radius, 1e-5)
@@ -133,7 +140,6 @@ def test_unversioned_dispatch_reproduces_legacy_obstacle_force_exactly(
         )
         == legacy
     )
-    assert obstacle_force_for_law(obstacle, ortho_vec, ped_pos, ped_radius) == legacy
     assert (
         obstacle_force_for_law(
             obstacle,
@@ -146,7 +152,10 @@ def test_unversioned_dispatch_reproduces_legacy_obstacle_force_exactly(
     )
 
 
-@pytest.mark.parametrize("law_version", [None, SURFACE_DISTANCE_UNIT_NORMAL_V2])
+@pytest.mark.parametrize(
+    "law_version",
+    [LEGACY_SHIFTED_GRADIENT_V1, SURFACE_DISTANCE_UNIT_NORMAL_V2],
+)
 def test_line_segment_batch_dispatch_matches_scalar_geometry(law_version):
     """The fast-pysf batch path matches its point/endpoint/segment scalar owner."""
     obstacles = np.array(
@@ -182,6 +191,7 @@ def test_line_segment_batch_dispatch_matches_scalar_geometry(law_version):
 def test_obstacle_force_law_resolution_and_metadata_are_explicit():
     """Law resolution defaults old metadata to legacy and records site conventions."""
     assert resolve_obstacle_force_law() == DEFAULT_OBSTACLE_FORCE_LAW
+    assert DEFAULT_OBSTACLE_FORCE_LAW == LEGACY_SHIFTED_GRADIENT_V1
     assert resolve_obstacle_force_law_with_mode() == (
         DEFAULT_OBSTACLE_FORCE_LAW,
         "defaulted_missing",
@@ -285,7 +295,7 @@ def test_obstacle_force_config_copy_with_law_override_is_explicit() -> None:
 
 
 def test_obstacle_force_component_dispatches_corrected_law_without_changing_default():
-    """The registered force component selects v2 only for an explicit opt-in."""
+    """The registered force component keeps legacy available and selects v2 explicitly."""
 
     class _Peds:
         agent_radius = 0.35
@@ -301,13 +311,18 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
         def get_raw_obstacles():
             return np.array([[1.0, 1.0, 1.0, 1.0, 0.0, 1.0]], dtype=float)
 
-    legacy_config = ObstacleForceConfig(threshold=-0.57)
+    legacy_config = ObstacleForceConfig(
+        threshold=-0.57,
+        law_version=LEGACY_SHIFTED_GRADIENT_V1,
+    )
     legacy_component = ObstacleForce(legacy_config, _Simulation())
     legacy_expected = obstacle_force((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), -0.57)
     np.testing.assert_array_equal(legacy_component()[0], np.asarray(legacy_expected) * 10.0)
+    default_component = ObstacleForce(ObstacleForceConfig(threshold=-0.57), _Simulation())
+    np.testing.assert_array_equal(default_component()[0], legacy_component()[0])
     legacy_metadata = legacy_component.law_metadata()
     assert legacy_metadata["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
-    assert legacy_metadata["resolution_mode"] == "defaulted_missing"
+    assert legacy_metadata["resolution_mode"] == "explicit"
 
     corrected_config = ObstacleForceConfig(
         threshold=-0.57,
@@ -321,6 +336,109 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     corrected_metadata = corrected_component.law_metadata()
     assert corrected_metadata["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
     assert corrected_metadata["resolution_mode"] == "explicit"
+
+
+def test_explicit_body_edge_law_is_finite_range_and_uses_pedestrian_radius():
+    """Distant surfaces are inactive and the range-only candidate keeps the old curve."""
+    obstacle = (8.0, 2.6, 8.0, 4.0)
+    ped_pos = (6.5, 2.0)
+    assert obstacle_force_for_law(
+        obstacle, (-1.0, 0.0), ped_pos, 0.35, BODY_EDGE_EXPONENTIAL_V3
+    ) == (0.0, 0.0)
+
+    near_pos = (7.7, 2.6)
+    expected = (-0.3 * (1.0 - math.exp(-5.0)), 0.0)
+    assert obstacle_force_body_edge_exponential(
+        obstacle,
+        (-1.0, 0.0),
+        near_pos,
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+    ) == pytest.approx(expected, rel=1e-12, abs=1e-12)
+
+
+def test_body_edge_variants_are_selectable_and_contact_only():
+    """Contact candidates increase only near body overlap, not at distant doorway posts."""
+    obstacle = (0.0, 0.0, 1.0, 0.0)
+    exact_contact = (0.5, 0.0)
+    range_only = obstacle_force_for_law(
+        obstacle,
+        (0.0, -1.0),
+        exact_contact,
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+    )
+    physical_margin = obstacle_force_for_law(
+        obstacle,
+        (0.0, -1.0),
+        (0.5, 0.4),
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    )
+    stiff_contact = obstacle_force_for_law(
+        obstacle,
+        (0.0, -1.0),
+        exact_contact,
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    )
+
+    assert range_only == (0.0, 0.0)
+    assert physical_margin[1] > 0.0
+    assert stiff_contact[1] > physical_margin[1]
+
+
+@pytest.mark.parametrize(
+    "law",
+    [
+        BODY_EDGE_EXPONENTIAL_V3,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+        BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+        BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+    ],
+)
+def test_explicit_body_edge_wall_force_does_not_balance_lone_walker_before_narrow_doorway(law):
+    """A 1.2 m doorway must not create a force barrier before the opening."""
+
+    class _Peds:
+        agent_radius = 0.35
+
+        @staticmethod
+        def pos():
+            return np.array([[6.5, 2.0]], dtype=float)
+
+    class _Simulation:
+        peds = _Peds()
+
+        @staticmethod
+        def get_raw_obstacles():
+            return np.array(
+                [
+                    [8.0, 2.6, 8.0, 4.0, -1.0, 0.0],
+                    [8.0, 0.0, 8.0, 1.4, -1.0, 0.0],
+                ],
+                dtype=float,
+            )
+
+    config = ObstacleForceConfig(law_version=law)
+    braking_force_x = -float(ObstacleForce(config, _Simulation())()[0, 0])
+    assert braking_force_x < 1.30
+    assert config.obstacle_force_law_resolution_mode == "explicit"
+    assert ObstacleForce(config, _Simulation()).law_metadata()["compatibility_mode"] == (
+        "corrected_opt_in"
+    )
+
+
+def test_multi_segment_wall_law_keeps_both_distinct_nearby_surfaces():
+    """A nearer wall must not suppress a different nearby wall's normal response."""
+    edges = np.array([[0.4, -1.0, 0.4, 1.0, 1.0, 0.0], [-1.0, -0.5, 1.0, -0.5, 0.0, -1.0]])
+    force = np.zeros((1, 2))
+    all_obstacle_forces_body_edge_exponential(
+        force, np.array([[0.0, 0.0]]), edges, 0.4, "body_edge_exponential_v3_multi_segment"
+    )
+    expected = [-0.3 * (1.0 - math.exp(-5.0)), 0.3 * (math.exp(-2.5) - math.exp(-5.0))]
+    np.testing.assert_allclose(force[0], expected, rtol=1e-12, atol=1e-12)
 
 
 def test_corrected_point_force_is_finite_and_monotonic_near_contact():

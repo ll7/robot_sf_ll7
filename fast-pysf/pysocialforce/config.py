@@ -132,9 +132,24 @@ def social_force_kernel_metadata(value: Any = None, *, site: str) -> dict[str, A
 LEGACY_SHIFTED_GRADIENT_V1 = "legacy_shifted_gradient_v1"
 SURFACE_DISTANCE_UNIT_NORMAL_V2 = "surface_distance_unit_normal_v2"
 BODY_EDGE_EXPONENTIAL_V3 = "body_edge_exponential_v3"
+BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY = "body_edge_exponential_v3_range_only"
+BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN = "body_edge_exponential_v3_physical_margin"
+BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF = "body_edge_exponential_v3_contact_stiff"
 DEFAULT_OBSTACLE_FORCE_LAW = BODY_EDGE_EXPONENTIAL_V3
+BODY_EDGE_EXPONENTIAL_LAW_VERSIONS = frozenset(
+    {
+        BODY_EDGE_EXPONENTIAL_V3,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+        BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    }
+)
 OBSTACLE_FORCE_LAW_VERSIONS = frozenset(
-    {LEGACY_SHIFTED_GRADIENT_V1, SURFACE_DISTANCE_UNIT_NORMAL_V2, BODY_EDGE_EXPONENTIAL_V3}
+    {
+        LEGACY_SHIFTED_GRADIENT_V1,
+        SURFACE_DISTANCE_UNIT_NORMAL_V2,
+        *BODY_EDGE_EXPONENTIAL_LAW_VERSIONS,
+    }
 )
 OBSTACLE_FORCE_DISTANCE_FLOOR = 1e-5
 OBSTACLE_FORCE_LAW_METADATA_SCHEMA = "obstacle_force_law_metadata.v2"
@@ -328,7 +343,7 @@ def obstacle_force_law_metadata(  # noqa: PLR0913
 
     if resolved == LEGACY_SHIFTED_GRADIENT_V1:
         compatibility_mode = "legacy_compatible"
-    elif resolved == BODY_EDGE_EXPONENTIAL_V3:
+    elif resolved in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
         compatibility_mode = "corrected_default"
     else:
         compatibility_mode = "corrected_opt_in"

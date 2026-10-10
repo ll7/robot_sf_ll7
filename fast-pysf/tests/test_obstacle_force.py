@@ -8,6 +8,9 @@ import numpy as np
 import pytest
 from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_V3,
+    BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     DEFAULT_OBSTACLE_FORCE_LAW,
     LEGACY_SHIFTED_GRADIENT_V1,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
@@ -332,7 +335,7 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
 
 
 def test_default_body_edge_law_is_finite_range_and_uses_pedestrian_radius():
-    """Distant surfaces are inactive and body-edge overlap reaches the finite amplitude."""
+    """Distant surfaces are inactive and the range-only candidate keeps the old curve."""
     obstacle = (8.0, 2.6, 8.0, 4.0)
     ped_pos = (6.5, 2.0)
     assert obstacle_force_for_law(obstacle, (-1.0, 0.0), ped_pos, 0.35) == (0.0, 0.0)
@@ -344,7 +347,39 @@ def test_default_body_edge_law_is_finite_range_and_uses_pedestrian_radius():
         (-1.0, 0.0),
         near_pos,
         0.35,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     ) == pytest.approx(expected, rel=1e-12, abs=1e-12)
+
+
+def test_body_edge_variants_are_selectable_and_contact_only():
+    """Contact candidates increase only near body overlap, not at distant doorway posts."""
+    obstacle = (0.0, 0.0, 1.0, 0.0)
+    exact_contact = (0.5, 0.0)
+    range_only = obstacle_force_for_law(
+        obstacle,
+        (0.0, -1.0),
+        exact_contact,
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+    )
+    physical_margin = obstacle_force_for_law(
+        obstacle,
+        (0.0, -1.0),
+        (0.5, 0.4),
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    )
+    stiff_contact = obstacle_force_for_law(
+        obstacle,
+        (0.0, -1.0),
+        exact_contact,
+        0.35,
+        BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    )
+
+    assert range_only == (0.0, 0.0)
+    assert physical_margin[1] > 0.0
+    assert stiff_contact[1] > physical_margin[1]
 
 
 def test_default_wall_force_does_not_balance_lone_walker_before_narrow_doorway():

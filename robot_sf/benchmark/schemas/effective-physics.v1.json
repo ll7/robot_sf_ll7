@@ -169,6 +169,26 @@
                     "range_m": {
                       "type": "number",
                       "exclusiveMinimum": 0
+                    },
+                    "contact_radius_margin_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_bias_unscaled": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_bias_m_s2": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_stiffness_unscaled_per_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_stiffness_m_s2_per_m": {
+                      "type": "number",
+                      "minimum": 0
                     }
                   }
                 }
@@ -176,7 +196,12 @@
               "if": {
                 "properties": {
                   "law_version": {
-                    "const": "body_edge_exponential_v3"
+                    "enum": [
+                      "body_edge_exponential_v3",
+                      "body_edge_exponential_v3_range_only",
+                      "body_edge_exponential_v3_physical_margin",
+                      "body_edge_exponential_v3_contact_stiff"
+                    ]
                   }
                 }
               },

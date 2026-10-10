@@ -27,19 +27,28 @@ incomplete pagination, malformed inventory, duplicate IDs, API errors and
 timeouts select hosted. Each singleton costs one idle slot; the six test shards
 cost six slots. Inventory is a snapshot, not a reservation across workflow runs.
 
-The probe authenticates with only the read-only `github.token`; it never calls
-anonymously, references a repository secret or retries a denied request. The
-repository runner-list endpoint documents Administration **read**, which the
-normal `GITHUB_TOKEN` cannot request. An inaccessible inventory therefore keeps
-CI hosted even when machines exist. Rate limits (403/429), permission denial
-and all other API failures select hosted without logging response bodies.
-Supporting acceleration where that token cannot read inventory would require
-a separately reviewed inventory-access design; no extra credential is introduced
-or requested by this change. This PR neither changes permissions beyond read-only
-probe access nor enables acceleration.
-The probe step runs only for the author as both actor and rerun initiator, on
-main push or an author-owned same-repository PR targeting main, and only on attempt one. Forks,
-bots, manual dispatch, privileged events and every retry stay hosted.
+The hosted availability job mints a short-lived installation token using
+`actions/create-github-app-token` v2.2.2, pinned to
+`fee1f7d63c2ff003460e3d139729b119787bc349`. The upstream releases API lists
+v2.2.2 as the latest v1/v2 release; its tag reference and commit API resolve to
+that same SHA. The action requests only `permission-administration: read`, with
+`owner: ll7` and `repositories: robot_sf_ll7`, using repository secrets
+`ROBOT_SF_ROUTER_APP_ID` and `ROBOT_SF_ROUTER_APP_KEY`. The repository runner-list
+endpoint requires Administration read, which the normal job token cannot request.
+Default post-job revocation stays enabled. The action's masked token output is
+consumed directly by the probe's `github-token` input; it is never copied into
+job outputs, artifacts, environment variables, scripts, or workload jobs.
+
+Minting and probing require successful commit-provenance admission, the rollout
+switch, and the author as both actor and rerun initiator. Only a main push or an
+author-owned same-repository, non-fork PR targeting main is eligible, on attempt
+one. Forks, bots, manual dispatch, privileged events and every retry stay hosted.
+The checkout uses trusted PR base source, never PR head source. Mint failure or
+an empty token skips the probe, leaving missing capacity outputs to select hosted.
+The mint step, probe step and availability job tolerate failure. Rate limits
+(403/429), permission denial and all other inventory API failures select hosted
+without logging response bodies. This credential change does not enable the
+rollout switch or change the provenance policy.
 
 ## Queue recovery
 
@@ -74,16 +83,18 @@ pre-merge PR CI stays hosted if its base lacks the routing module.
 ## Threat note for independent review
 
 - **Tokens:** workload jobs retain their read-only job permissions and no
-  extra inventory credential. Both hosted provenance routing and availability
-  use the read-only job token. The installed start hook remains credential-free
+  extra inventory credential. Hosted provenance routing uses the read-only job
+  token; only availability holds the scoped Administration read App token. The
+  installed start hook remains credential-free
   and preserves its cleaned environment and absolute tool paths.
   Checkout credential persistence is disabled. The hosted
   router reads trusted PR base code; it never imports the writable PR head.
   Inventory/error responses and runner names are never logged. The watchdog
   has repository `actions: write` only for cancel/rerun, plus `contents: read`;
   no registration, settings, secret, deployment or repository write authority.
-  No repository-secret reference remains in the availability job. Main-base
-  checkout is defense in depth; existing repository write collaborators can
+  Only the guarded mint action receives App secrets. No contribution-head code
+  receives the installation token. Main-base checkout is defense in depth; existing
+  repository write collaborators can
   still edit workflows. No new credential authority is granted to contributions.
 - **Who may execute self-hosted:** the existing author/event/repository
   expression and immutable runner hook remain necessary admission boundaries.
@@ -137,7 +148,9 @@ decision if limits are actually reached; this change requests no settings.
 Run `node --test tests/ci/runner_fallback.test.cjs` for mocked API decisions,
 capacity, queue timing, recovery order, trust/staleness and failed cancellation.
 Run the focused Python workflow tests for actual expression evaluation and
-credential boundaries. Mocked transport tests are implementation evidence;
+credential boundaries, exact App permission/repository scope, mint trust conditions,
+failure fallback, and deliberately unsafe workflow mutations. Mocked transport
+tests are implementation evidence;
 they do not establish live GitHub cancellation or inventory-token access.
 
 - [Runner inventory API and permissions](https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-a-repository)

@@ -281,6 +281,18 @@ def test_social_force_diagnostics_defaults_before_initialization():
     assert diagnostics["obstacle_force_law"]["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
+def test_social_force_metadata_with_no_config_matches_explicit_legacy_robot_law():
+    """A missing robot config must not inherit the new pedestrian wall default."""
+    uninitialized = SocialForcePlannerAdapter.__new__(SocialForcePlannerAdapter)
+    uninitialized.config = None
+    historical = SocialForcePlannerAdapter(SocNavPlannerConfig(social_force_obstacle_law=None))
+
+    assert historical.obstacle_force_law_metadata()["law_version"] == (LEGACY_SHIFTED_GRADIENT_V1)
+    assert uninitialized.obstacle_force_law_metadata()["law_version"] == (
+        LEGACY_SHIFTED_GRADIENT_V1
+    )
+
+
 def test_social_force_adapter_responds_to_pedestrian():
     """Social-force adapter slows or turns when pedestrians are in the path."""
     cfg = SocNavPlannerConfig(social_force_repulsion_weight=2.0)

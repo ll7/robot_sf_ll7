@@ -290,7 +290,7 @@ def test_get_forces_at_points_matches_pointwise_without_pedestrians():
     sim = make_no_pedestrian_sim()
     wrapper = FastPysfWrapper(sim)
 
-    points = np.array([[0.5, 0.0], [1.5, 0.25], [2.0, -0.5]], dtype=float)
+    points = np.array([[1.55, 0.0], [1.5, 0.25], [2.0, -0.5]], dtype=float)
     batched = wrapper.get_forces_at_points(points, include_desired=True, desired_goal=[5.0, 0.0])
     pointwise = np.vstack(
         [

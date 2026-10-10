@@ -1208,7 +1208,6 @@ def test_lightweight_workflows_skip_system_packages_and_full_sync() -> None:
         "pr-contract-check.yml",
         "scripts-catalog.yml",
         "evidence-registry-ratchet.yml",
-        "ty-advisory-ratchet.yml",
     ]
     for filename in lightweight_workflows:
         wf_path = WORKFLOWS_DIR / filename
@@ -1231,6 +1230,27 @@ def test_lightweight_workflows_skip_system_packages_and_full_sync() -> None:
                 assert with_block.get("sync-args") == "--frozen", (
                     f"{filename} job {job_name} must set sync-args: '--frozen'"
                 )
+
+
+def test_ty_ratchet_uses_fast_feedback_dependency_profile() -> None:
+    """The live type scan needs the same pinned full environment as its baseline."""
+    workflow = yaml.safe_load(
+        (WORKFLOWS_DIR / "ty-advisory-ratchet.yml").read_text(encoding="utf-8")
+    )
+    setup_steps = [
+        step
+        for step in workflow["jobs"]["ty-advisory-ratchet"]["steps"]
+        if step.get("uses") == "./.github/actions/setup-ci-python"
+    ]
+    assert len(setup_steps) == 1
+    with_block = setup_steps[0]["with"]
+    assert with_block["install-system-packages"] == "false"
+    assert with_block["migrate-artifacts"] == "false"
+    assert with_block["sync-args"] == "--all-extras --frozen"
+    setup_action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))
+    assert with_block.get(
+        "python-version", setup_action["inputs"]["python-version"]["default"]
+    ) == ("3.12")
 
 
 def test_packaging_extras_metadata_and_readme_trigger_contract() -> None:

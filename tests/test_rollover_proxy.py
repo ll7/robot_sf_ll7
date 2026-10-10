@@ -33,6 +33,91 @@ def test_critical_lateral_acceleration_matches_closed_form() -> None:
     assert critical_lateral_acceleration(RolloverProxyParams()) == pytest.approx(_DEFAULT_CRIT)
 
 
+def test_critical_lateral_acceleration_regression_pins_current_values() -> None:
+    """Regression pin for issue #10192: thresholds must not change across the rename."""
+    assert critical_lateral_acceleration(RolloverProxyParams()) == pytest.approx(2.725)
+    with pytest.warns(DeprecationWarning, match="track_width_m|front_axle_to_cog_m"):
+        custom = RolloverProxyParams(
+            track_width_m=0.9,
+            cog_height_m=0.5,
+            front_axle_to_cog_m=0.4,
+            wheelbase_m=1.0,
+        )
+    assert critical_lateral_acceleration(custom) == pytest.approx(3.5316)
+
+
+def test_layout_neutral_names_match_deprecated_aliases() -> None:
+    """Layout-neutral geometry names must reproduce the old-name threshold (issue #10192)."""
+    with pytest.warns(DeprecationWarning, match="track_width_m|front_axle_to_cog_m"):
+        legacy = RolloverProxyParams(
+            track_width_m=0.9,
+            cog_height_m=0.5,
+            front_axle_to_cog_m=0.4,
+            wheelbase_m=1.0,
+        )
+    neutral = RolloverProxyParams(
+        two_wheel_axle_track_m=0.9,
+        cog_height_m=0.5,
+        single_wheel_axle_to_cog_m=0.4,
+        wheelbase_m=1.0,
+    )
+
+    assert neutral == legacy
+    assert critical_lateral_acceleration(neutral) == pytest.approx(
+        critical_lateral_acceleration(legacy)
+    )
+
+
+def test_deprecated_aliases_still_load_with_deprecation_warning() -> None:
+    """Old geometry names keep loading for one release while warning (issue #10192)."""
+    with pytest.warns(DeprecationWarning, match="track_width_m"):
+        track_params = RolloverProxyParams(track_width_m=0.9)
+    assert track_params.two_wheel_axle_track_m == pytest.approx(0.9)
+
+    with pytest.warns(DeprecationWarning, match="front_axle_to_cog_m"):
+        cog_params = RolloverProxyParams(front_axle_to_cog_m=0.4)
+    assert cog_params.single_wheel_axle_to_cog_m == pytest.approx(0.4)
+
+    with pytest.warns(DeprecationWarning, match="track_width_m"):
+        assert RolloverProxyParams().track_width_m == pytest.approx(0.8)
+    with pytest.warns(DeprecationWarning, match="front_axle_to_cog_m"):
+        assert RolloverProxyParams().front_axle_to_cog_m == pytest.approx(0.5)
+
+
+def test_front_single_and_rear_single_tricycles_share_threshold() -> None:
+    """The same vehicle as a front-single or rear-single tricycle shares one threshold."""
+    front_single = RolloverProxyParams(
+        two_wheel_axle_track_m=0.9,
+        cog_height_m=0.5,
+        single_wheel_axle_to_cog_m=0.4,
+        wheelbase_m=1.0,
+    )
+    rear_single = RolloverProxyParams(
+        two_wheel_axle_track_m=0.9,
+        cog_height_m=0.5,
+        single_wheel_axle_to_cog_m=0.4,
+        wheelbase_m=1.0,
+    )
+
+    assert critical_lateral_acceleration(front_single) == pytest.approx(
+        critical_lateral_acceleration(rear_single)
+    )
+
+
+def test_proxy_docstrings_are_layout_neutral() -> None:
+    """Proxy docstrings must define layout-neutral geometry (issue #10192)."""
+    docs = [RolloverProxyParams.__doc__, evaluate_stability_margin.__doc__]
+    assert all(docs)
+    for doc in docs:
+        assert doc is not None
+        lowered = doc.lower()
+        assert "front axle" not in lowered
+        assert "rear track" not in lowered
+        assert "rear axle" not in lowered
+        assert "front track" not in lowered
+        assert "single wheel may be at the front or at the rear" in lowered
+
+
 def test_lateral_acceleration_is_v_times_omega() -> None:
     """Proxy lateral acceleration must be ``v · ω``."""
     assert lateral_acceleration(1.5, 2.0) == pytest.approx(3.0)
@@ -84,12 +169,12 @@ def test_margin_depends_on_magnitude_not_sign() -> None:
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"track_width_m": 0.0},
+        {"two_wheel_axle_track_m": 0.0},
         {"cog_height_m": -0.1},
-        {"front_axle_to_cog_m": 0.0},
+        {"single_wheel_axle_to_cog_m": 0.0},
         {"wheelbase_m": -1.0},
         {"gravity_m_s2": 0.0},
-        {"front_axle_to_cog_m": 0.7, "wheelbase_m": 0.6},  # a > L
+        {"single_wheel_axle_to_cog_m": 0.7, "wheelbase_m": 0.6},  # a > L
     ],
 )
 def test_invalid_params_are_rejected(kwargs: dict[str, float]) -> None:
@@ -126,10 +211,10 @@ def test_proxy_agrees_with_benchmark_surface_source_of_truth(v: float, omega: fl
     benchmark_margin = evaluate_stability_margin(
         v,
         omega,
-        t_w=params.track_width_m,
+        t_w=params.two_wheel_axle_track_m,
         L=params.wheelbase_m,
         h_c=params.cog_height_m,
-        a=params.front_axle_to_cog_m,
+        a=params.single_wheel_axle_to_cog_m,
     )
 
     assert proxy_margin == pytest.approx(benchmark_margin)
@@ -368,6 +453,6 @@ def test_rollover_proxy_penalty_must_be_finite(bad_penalty: float) -> None:
 def test_rollover_proxy_params_must_be_typed() -> None:
     """A non-RolloverProxyParams value must be rejected in both config paths."""
     with pytest.raises(TypeError, match="rollover_proxy_params"):
-        EnvSettings(rollover_proxy_params={"track_width_m": 0.8})
+        EnvSettings(rollover_proxy_params={"two_wheel_axle_track_m": 0.8})
     with pytest.raises(TypeError, match="rollover_proxy_params"):
-        RobotSimulationConfig(rollover_proxy_params={"track_width_m": 0.8})
+        RobotSimulationConfig(rollover_proxy_params={"two_wheel_axle_track_m": 0.8})

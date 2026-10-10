@@ -1,0 +1,10 @@
+# Exactly 24 full PPO rollouts (20 workers x 2048 steps), below the 1M cap.
+base_config: dev_delta_recovery_15m.yaml
+policy_id: ppo_dev_delta_recovery_pilot
+total_timesteps: 983040
+evaluation:
+  step_schedule:
+    - every_steps: 245760
+tracking:
+  wandb:
+    name: ppo-delta-recovery-pilot

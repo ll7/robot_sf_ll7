@@ -24,6 +24,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_request_from_dict,
 )
 from robot_sf.render import review_sessions
+from tests.support.browser_runtime import require_node_runtime
 
 # Hang guard for Event.wait/Thread.join: an Event returns at once when set, so a
 # large bound costs nothing when healthy. It is not a performance assertion.
@@ -1954,8 +1955,6 @@ def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
     assert "fetch(" not in text
     assert "WebSocket" not in text
     assert ".start();" not in text
-    if shutil.which("node") is None:
-        pytest.skip("node is unavailable")
     script = f"""
       import {{ isLoopbackOrigin, ReviewSessionsController }} from {json.dumps(asset.as_uri())};
       if (!isLoopbackOrigin('http://127.0.0.1:8765')) throw new Error('loopback');
@@ -1966,6 +1965,7 @@ def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
       await controller.start();
       if (calls.length !== 1 || calls[0].action !== 'start' || calls[0].request_digest !== 'request-digest' || calls[0].recipe_digest !== 'recipe-digest') throw new Error('explicit control');
     """
+    require_node_runtime()
     completed = subprocess.run(
         ["node", "--input-type=module", "-e", script],
         check=True,

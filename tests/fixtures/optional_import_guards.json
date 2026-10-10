@@ -231,7 +231,7 @@
       "has_as_count": 0,
       "pragma_no_cover_count": 1,
       "blessed": true,
-      "note": "PR #10005: optional MoviePy discovery can fail on an unreadable ancestor .env; only the encoder import boundary treats permission denial as unavailable.",
+      "note": "PR #10005: optional MoviePy discovery can fail on an unreadable ancestor .env; the four MoviePy import boundaries treat permission denial as unavailable.",
       "samples": [
         "robot_sf/benchmark/full_classic/encode.py:36",
         "robot_sf/benchmark/full_classic/videos.py:34",

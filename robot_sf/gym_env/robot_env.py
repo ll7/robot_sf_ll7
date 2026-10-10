@@ -598,7 +598,7 @@ class RobotEnv(BaseEnv):
             self.map_def,
         )
 
-        semantics = env_config.ppo_action_semantics
+        semantics = getattr(env_config, "ppo_action_semantics", "acceleration")
         if semantics not in {"acceleration", "velocity_delta"}:
             raise ValueError(f"Unsupported PPO action semantics: {semantics}")
         if semantics == "velocity_delta":
@@ -1137,21 +1137,26 @@ class RobotEnv(BaseEnv):
             requested_action = (0.0, 0.0)
         else:
             # Process the action through the simulator only when debug mode is disabled.
-            if self.config.ppo_action_semantics == "velocity_delta":
-                robot = self.simulator.robots[0]
-                target = ppo_delta_to_velocity_target(
-                    action,
-                    np.asarray(robot.current_speed, dtype=np.float32),
-                    max_linear_speed=self.config.robot_config.max_linear_speed,
-                    max_angular_speed=self.config.robot_config.max_angular_speed,
-                )
-                action = unicycle_velocity_target_to_acceleration(
-                    target,
-                    np.asarray(robot.current_speed),
-                    self.config.sim_config.time_per_step_in_secs,
-                )
             requested_action = tuple(self.simulator.robots[0].parse_action(action))
         action = self._apply_action_latency(requested_action)
+        if (
+            not self.debug_without_robot_movement
+            and getattr(self.config, "ppo_action_semantics", "acceleration") == "velocity_delta"
+        ):
+            # Resolve delayed deltas against the speed and timestep at actuation.
+            robot = self.simulator.robots[0]
+            target = ppo_delta_to_velocity_target(
+                action,
+                np.asarray(robot.current_speed, dtype=np.float32),
+                max_linear_speed=self.config.robot_config.max_linear_speed,
+                max_angular_speed=self.config.robot_config.max_angular_speed,
+            )
+            acceleration = unicycle_velocity_target_to_acceleration(
+                target,
+                np.asarray(robot.current_speed),
+                self.config.sim_config.time_per_step_in_secs,
+            )
+            action = tuple(robot.parse_action(acceleration))
 
         # Perform simulation step
         self.simulator.step_once([action])

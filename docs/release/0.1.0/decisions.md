@@ -688,3 +688,15 @@ exclusion narrow-hallway defect is tracked in
 [#10242](https://github.com/ll7/robot_sf_ll7/issues/10242). It does not block the
 validity-plus-sensor default above. Domain-Aware Approval remains pending until
 an independent reviewer grants it; the builder cannot approve its own work.
+
+### D-024: Author real initial groups and a reachable join radius
+- **Date:** 2026-10-09
+- **Question:** Which correction should make the named join/leave scenarios perform their group transitions?
+- **Choice:** Keep #10216: optional string `initial_group_id` labels local to authored pedestrians, integer runtime group IDs, and an optional `join_radius_m`. Join anchors begin together; leave begins as a triple. Only the join scenario opts into a 0.8 m radius. Reset restores authored membership. Reject malformed labels and nonpositive, nonfinite or boolean radii.
+- **Reason:** Singleton initialization prevented a real departure; social repulsion kept the joiner outside the historical waypoint threshold. Runtime group IDs must also remain compatible with benchmark row writing. Defaults elsewhere stay unchanged. These two released scenario identities change behaviour when run on fixed main; historical results are not interchangeable.
+- **Decided by:** orchestrator (delegated), after independent comparison of #10216, #10252 and #10257; author direction in the 2026-10-09 execution thread.
+- **Alternatives:** #10252 and #10257 are parked. Retain the five invalid-setting cases and audit from #10257, adapted to the selected interface.
+- **Evidence:** #10028; #10216; independent group-fix comparison and author instruction. Development diagnostics are implementation proof, not planner-ranking evidence.
+- **Implemented in:** `SinglePedestrianDefinition`, scenario loading, authored population/controller initialization, and the join/leave scenario files. Frozen artifacts and release branches remain untouched.
+- **Enforced by:** `tests/test_authored_group_behaviors.py` (real physics transitions, repeated reset and pedestrian-present benchmark row writing); `tests/training/test_authored_group_roles.py` (five real-loader rejection cases); `test_join_without_target_keeps_group_zero_after_arrival` (valid group zero stays latched). The historical s30 hash test strips only the new authoring fields and retains its original pinned digest.
+- **Reopen:** A new material failure in membership, physical transitions, reset or benchmark writing, or an explicit author ruling.

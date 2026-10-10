@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from gymnasium import spaces
 
 from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.training.imitation_config import (
@@ -365,6 +366,9 @@ def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
             assert start_method == "spawn"
             observed_levels.append(train_ppo.os.environ.get("LOGURU_LEVEL"))
             self.env_fns = env_fns
+            self.num_envs = len(env_fns)
+            self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(1,))
+            self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
     class _FakePPO:
         """PPO constructor stub that records initialization arguments."""

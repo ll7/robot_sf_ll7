@@ -57,6 +57,7 @@ Deprecated: Use RobotSimulationConfig instead.
 | <a id="EnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="EnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="EnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="EnvSettings.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -113,6 +114,7 @@ Configuration for robot environments with image observations.
 | <a id="ImageRobotConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="ImageRobotConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="ImageRobotConfig.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.use_image_obs"></a>`use_image_obs` | `bool` | `True` | no | public |  |
 | <a id="ImageRobotConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -170,6 +172,7 @@ Configuration for multi-robot environments.
 | <a id="MultiRobotConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="MultiRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="MultiRobotConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="MultiRobotConfig.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -245,6 +248,7 @@ Deprecated: Use PedestrianSimulationConfig instead.
 | <a id="PedEnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="PedEnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="PedEnvSettings.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -304,6 +308,7 @@ Configuration for pedestrian environments.
 | <a id="PedestrianSimulationConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="PedestrianSimulationConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="PedestrianSimulationConfig.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -363,6 +368,7 @@ Deprecated: Use ImageRobotConfig instead.
 | <a id="RobotEnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="RobotEnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="RobotEnvSettings.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `True` | no | public | inherited from `ImageRobotConfig`; |
 | <a id="RobotEnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -420,6 +426,7 @@ Configuration for robot-based environments.
 | <a id="RobotSimulationConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="RobotSimulationConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public |  |
+| <a id="RobotSimulationConfig.ppo_action_semantics"></a>`ppo_action_semantics` | `str` | `'acceleration'` | no | public |  |
 | <a id="RobotSimulationConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public |  |
 | <a id="RobotSimulationConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public |  |
 | <a id="RobotSimulationConfig.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public |  |

@@ -14,9 +14,9 @@ log-likelihood (NLL) objective changes the behavior-cloning control arm on the p
 produced a successful policy in the evaluation cells.
 
 Fallback/degraded rows: none observed in the collection, training, or evaluation logs. The
-execution mode was native local CPU simulation/training. Raw datasets, checkpoints, and logs
-remain worktree-local ignored artifacts; the compact summaries in this directory are the only
-tracked evidence.
+execution mode was native local CPU simulation/training. Raw datasets, checkpoints, and logs were
+disposable worktree-local scratch and are unavailable; no durable retrieval pointer exists. The
+compact summaries in this directory are the only retained evidence.
 
 ## Protocol
 
@@ -45,7 +45,8 @@ therefore does not establish that progress weighting fixes the parked residual-B
 
 ## Provenance and next decision
 
-- Source dataset: `output/benchmarks/expert_trajectories/issue_1428_orca_residual_bc_progress_v1_smoke.npz`
+- Source dataset: `<scratch-root>/benchmarks/expert_trajectories/issue_1428_orca_residual_bc_progress_v1_smoke.npz`
+  (worktree-local; unavailable; no durable retrieval pointer).
 - Dataset SHA-256: `aa70b611875be2b6b67001e063bcf558ff00eff4ef398a4da498f33df8a07a09`
 - Enabling code head: `28b5e1939` (based on `origin/main` `ce91ad5bd`)
 - Machine-readable synthesis: [`summary.json`](summary.json)

@@ -1411,7 +1411,10 @@ def _load_arm(root: Path) -> _Arm:
     manifest = _read_object(root / "campaign_manifest.json", "campaign manifest")
     preflight = _read_object(root / "preflight/validate_config.json", "preflight config receipt")
     summary = _read_object(root / "reports/campaign_summary.json", "campaign summary")
-    if manifest.get("schema_version") != CAMPAIGN_SCHEMA:
+    if manifest.get("schema_version") not in (
+        CAMPAIGN_SCHEMA,
+        "benchmark-camera-ready-campaign.v2",
+    ):
         raise RadiusSweepSummaryError(f"unsupported campaign schema in {root}")
     binding = _mapping(manifest.get("radius_binding"), "campaign radius_binding")
     radius = _finite(binding.get("radius_m"), "campaign radius")

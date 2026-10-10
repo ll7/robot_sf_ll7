@@ -4,6 +4,7 @@
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -428,7 +429,12 @@ def test_f2_protected_inputs_rehash_actual_config_and_lock(
     for name in members:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes((ROOT / name).read_bytes())
+        # This witness verifies historical F2 bytes, independently of later dependency bumps.
+        path.write_bytes(
+            subprocess.check_output(
+                ["git", "-C", str(ROOT), "show", f"{acquisition_builder.F2_SOURCE}:{name}"]
+            )
+        )
         write_review_sidecar(path)
     monkeypatch.setattr(
         acquisition_builder.subprocess,
@@ -488,3 +494,62 @@ def test_delivered_f2_context_loads_through_release_admission():
     )
     assert actual["torch_version"] == "2.13.0+cu130"
     assert actual["stable_baselines3_version"] == "2.9.0"
+
+
+@pytest.mark.parametrize(
+    "protected_path",
+    ["robot_sf/benchmark/constants.py", "robot_sf/benchmark/metric_definitions.py"],
+)
+@pytest.mark.parametrize("committed", [False, True], ids=["dirty", "committed"])
+def test_protected_metric_inputs_refuse_changed_bytes(
+    tmp_path, monkeypatch, acquisition_builder, protected_path, committed
+):
+    """Metric threshold/definition edits must trip custody checks in Git and on disk."""
+    import subprocess
+
+    builder = acquisition_builder
+
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(tmp_path), *args], text=True).strip()
+
+    git("init", "-q")
+    for relative in (
+        "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml",
+        "uv.lock",
+        "robot_sf/benchmark/constants.py",
+        "robot_sf/benchmark/metric_definitions.py",
+    ):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Stage the historical F2 blobs so dependency bumps do not rewrite the witness.
+        target.write_bytes(
+            subprocess.check_output(
+                ["git", "-C", str(ROOT), "show", f"{builder.F2_SOURCE}:{relative}"]
+            )
+        )
+    git("add", "configs", "uv.lock", "robot_sf")
+
+    def commit():
+        git(
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "fixture metric inputs",
+        )
+
+    commit()
+    historical = git("rev-parse", "HEAD")
+    monkeypatch.setattr(builder, "HISTORICAL_SOURCE", historical)
+    builder.verify_protected_inputs(tmp_path, historical)
+    target = tmp_path / protected_path
+    target.write_bytes(target.read_bytes() + b"\n# changed metric input bytes\n")
+    if committed:
+        git("add", protected_path)
+        commit()
+    with pytest.raises(ValueError, match=f"F2 protected input bytes differ:.*{protected_path}"):
+        builder.verify_protected_inputs(tmp_path, git("rev-parse", "HEAD"))

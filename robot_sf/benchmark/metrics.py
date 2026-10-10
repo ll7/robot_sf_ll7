@@ -57,6 +57,8 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.constants import (
     COMFORT_FORCE_THRESHOLD,
+    CURVATURE_LENGTH_FLOOR_M,
+    CURVATURE_MIN_DISPLACEMENT_M,
 )
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
@@ -65,6 +67,7 @@ from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
     METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
     require_anchor_compatibility,
 )
 from robot_sf.benchmark.metric_definitions import (
@@ -98,10 +101,21 @@ ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
-# D-055: sub-millimetre displacements are standstill, independent of timestep.
-CURVATURE_MIN_DISPLACEMENT_M = 1e-3
-# Bound total turning on short paths without changing the turning numerator.
-CURVATURE_LENGTH_FLOOR_M = 1.0
+
+
+# Contracts declared by the metric implementations below. Runtime witnesses import
+# these identities from the executing metric module rather than release defaults.
+TTC_DEFINITION = {
+    "identity": "time_to_collision_min.center_distance_v1",
+    "geometry": "center_based",
+    "formula": "min(distance/relative_speed), dot(relative_velocity,displacement)>0",
+    "relative_speed_floor_m_s": 1e-9,
+    "ped_velocity": "finite_difference_post_step_positions/dt",
+}
+CLEARANCE_DEFINITION = {
+    "identity": "surface_clearance_v1",
+    "formula": "center_distance-robot_radius-pedestrian_radius",
+}
 
 
 @dataclass
@@ -173,13 +187,17 @@ class EpisodeData:
     robot_pos_includes_reset: bool = False
     # Frozen reset route; geometric progress must not follow waypoint handoffs.
     route_waypoints: np.ndarray | None = None
+    # Sample cardinality declares presence independently of force validity.
+    robot_force_presence: np.ndarray | None = None
 
 
 def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
     """Evaluate inverse-cubic robot repulsion from aligned positions, without a simulator.
 
     Positions must be force-evaluation inputs, not post-integration snapshots. NaN
-    rows stay NaN. Coincident centers are singular and rejected, as in the model.
+    rows stay NaN. Downstream reductions reject this padding unless the caller
+    supplies an explicit robot_force_presence mask marking absent slots.
+    Coincident centers are singular and rejected, as in the model.
     Per-pedestrian response multipliers, when used, must be supplied explicitly.
 
     Returns:
@@ -203,28 +221,43 @@ def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.nda
 
 
 def robot_force_reductions(
-    forces: np.ndarray, *, dt: float, reference: float, prefix: str = "robot_force"
+    forces: np.ndarray,
+    *,
+    dt: float,
+    reference: float,
+    prefix: str = "robot_force",
+    presence: np.ndarray | None = None,
 ) -> dict[str, float]:
-    """Reduce model accelerations; absent/despawned NaN rows contribute no exposure.
+    """Reduce model accelerations; explicitly absent NaN rows contribute no exposure.
+
+    Without a mask every slot is present. Nonfinite force cannot imply absence.
 
     Empty exposure gives zero impulse, peak, duration and count; the conditional
     mean and per-exposed-pedestrian impulse are NaN (undefined denominator).
 
     Returns:
-        Six named scalar reductions in model acceleration/time units.
+        Six scalar reductions and a validity count in model acceleration/time units.
     """
     if forces.ndim != 3 or forces.shape[-1] != 2:
         raise ValueError("robot forces must have shape (T,K,2)")
     if not math.isfinite(dt) or dt <= 0 or not math.isfinite(reference) or reference < 0:
         raise ValueError("dt and force reference must be finite, with dt > 0 and reference >= 0")
-    if np.isinf(forces).any():
-        raise ValueError("infinite robot force sample")
-    magnitude = np.linalg.norm(forces, axis=-1)
-    magnitude = np.where(np.isfinite(magnitude), magnitude, 0.0)
+    presence = np.ones(forces.shape[:2], dtype=bool) if presence is None else np.asarray(presence)
+    if presence.shape != forces.shape[:2] or presence.dtype != np.dtype(bool):
+        raise ValueError("robot force presence must be a boolean array of shape (T,K)")
+    if np.any(presence & ~np.isfinite(forces).all(axis=-1)):
+        raise ValueError("non-finite or infinite robot force sample for present pedestrian")
+    if np.any(~presence & ~np.isnan(forces).all(axis=-1)):
+        raise ValueError("absent pedestrian force slot must contain only NaN padding")
+    with np.errstate(over="ignore"):
+        magnitude = np.linalg.norm(np.where(presence[..., None], forces, 0.0), axis=-1)
+    if not np.isfinite(magnitude).all():
+        raise ValueError("non-finite robot force magnitude for present pedestrian")
     active = magnitude > 0
     count = int(np.count_nonzero(active.any(axis=0)))
     impulse = float(magnitude.sum() * dt)
     return {
+        f"{prefix}_invalid_present_samples": 0,
         f"{prefix}_impulse_total": impulse,
         f"{prefix}_impulse_per_exposed_ped": impulse / count if count else float("nan"),
         f"{prefix}_peak": float(np.max(magnitude, initial=0)),
@@ -249,7 +282,8 @@ def robot_force_pp_equivalent(data: EpisodeData) -> np.ndarray:
     samples = data.robot_force_samples
     if not samples or len(samples) < 2 or data.social_force_config is None:
         raise ValueError("pp-equivalent requires at least two aligned force-input samples")
-    positions = np.full_like(data.peds_pos, np.nan)
+    shape_source = data.robot_ped_forces if data.robot_ped_forces is not None else data.peds_pos
+    positions = np.full_like(shape_source, np.nan)
     component_count = len(samples[0]["components"])
     for t, sample in enumerate(samples):
         if len(sample["components"]) != component_count:
@@ -305,7 +339,9 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
     posthoc = data.robot_ped_forces is None
     forces = recompute_robot_ped_forces(data, cfg) if posthoc else data.robot_ped_forces
     reference = robot_force_reference(data.social_force_config, cfg["prf_ped_radius_m"])
-    result = robot_force_reductions(forces, dt=data.dt, reference=reference)
+    result = robot_force_reductions(
+        forces, dt=data.dt, reference=reference, presence=data.robot_force_presence
+    )
     result["robot_force_metadata"] = {
         **cfg,
         "source": ROBOT_FORCE_RECORDED_SOURCE,
@@ -327,6 +363,7 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
                 dt=data.dt,
                 reference=reference,
                 prefix="robot_force_pp_equiv",
+                presence=data.robot_force_presence,
             )
         )
         result["robot_force_metadata"]["pp_equiv_status"] = "experimental_counterfactual"
@@ -1469,8 +1506,9 @@ def evaluate_stability_margin(
 
     A value of ``1.0`` indicates no lateral-acceleration load, while ``0.0`` means the
     estimated lateral acceleration is at or beyond the critical rollover threshold. Geometry
-    parameters follow the reviewer-supplied TWV proxy: rear track width ``t_w``, wheelbase
-    ``L``, center-of-gravity height ``h_c``, and CG distance from the front axle ``a``.
+    parameters follow the reviewer-supplied TWV proxy: track ``t_w`` of the axle with two
+    wheels, wheelbase ``L``, center-of-gravity height ``h_c``, and CG distance from the axle
+    with one wheel ``a``. The single wheel may be at the front or at the rear.
 
     Returns:
         Stability margin in ``[0.0, 1.0]`` or ``NaN`` when speed/yaw-rate samples are invalid.
@@ -3462,7 +3500,10 @@ def compute_all_metrics(  # noqa: PLR0913
             "Missing pedestrian force data; force-based metrics will be NaN.",
         )
 
-    values: dict[str, Any] = {"metric_schema_version": METRIC_SCHEMA_VERSION}
+    values: dict[str, Any] = {
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "metric_definitions_sha256": metric_definitions_sha256(),
+    }
     if isinstance(data.episode_metadata, dict):
         values["_episode_metadata"] = dict(data.episode_metadata)
     values.update(_compute_signal_metrics_block(data))

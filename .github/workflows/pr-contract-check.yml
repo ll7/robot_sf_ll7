@@ -21,17 +21,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Keep the default merge checkout for existing current-base checks.
+          # The published software baseline must resolve by its immutable tag.
+          fetch-depth: 0
 
       - name: Fetch base ref
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          # On pull_request the default checkout is a shallow merge-ref with no
-          # origin/<base> ref, so `git diff origin/main` / `git show origin/main:path`
-          # error and the contract check mis-flags modified evidence files as new
-          # (issue #5464). Fetch the base branch so origin/<base> resolves locally.
-          git fetch --no-tags --depth=1 origin \
+          # Refresh the moving base for current-base checks; immutable budget
+          # measurement uses pull_request.base.sha separately below. Checkout
+          # already hydrated history and tags for source-bound receipts.
+          git fetch origin \
             "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" \
             || echo "::warning::Failed to fetch base ref '${BASE_REF}'; contract check will use authoritative added-files list"
 
@@ -90,9 +93,32 @@ jobs:
             --require-open-issues \
             --advisory
 
+      - name: Validate behaviour receipt with base policy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEHAVIOUR_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Before first installation the gate is not active. Never substitute
+          # PR-head policy for missing base policy, schema or owner inventory.
+          git cat-file -e "$PR_BASE_SHA^{commit}"
+          if ! git cat-file -e "$PR_BASE_SHA:scripts/ci/behaviour_receipt.py"; then
+            echo "::notice::Behaviour receipt gate is not installed on the event base; activation follows installation"
+            exit 0
+          fi
+          TRUSTED_GATE="$RUNNER_TEMP/behaviour-gate-base"
+          git worktree add --detach "$TRUSTED_GATE" "$PR_BASE_SHA"
+          PYTHONPATH="$TRUSTED_GATE:$TRUSTED_GATE/fast-pysf" UV_NO_SYNC=1 \
+            uv run python "$TRUSTED_GATE/scripts/ci/behaviour_receipt.py" \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --base-ref "$PR_BASE_SHA"
+
       - name: Run PR Contract Check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           uv run python scripts/ci/pr_contract_check.py \
@@ -100,4 +126,5 @@ jobs:
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --added-files-file "$RUNNER_TEMP/pr_added_files.txt" \
             --base-ref "origin/${{ github.base_ref }}" \
+            --budget-base-sha "$PR_BASE_SHA" \
             --post-comment

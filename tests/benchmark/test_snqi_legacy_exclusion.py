@@ -90,7 +90,11 @@ def test_excluded_legacy_snqi_dev_campaign_writes_episodes_and_publication(tmp_p
     assert report["evidence"]["snqi_field_consistency"]["checked"] is False
     assert not (root / "reports/snqi_diagnostics.json").exists()
     assert not (bundle.bundle_dir / "payload/release_metadata/snqi").exists()
-    assert summary["campaign"]["snqi_v2"] == "pending_calibration"
+    if cfg.snqi_v2_binding is not None:
+        assert summary["campaign"]["snqi_v2"] == "pending_calibration"
+    else:
+        assert "snqi_v2" not in summary["campaign"]
+        assert "snqi_v2" not in json.loads((root / "campaign_manifest.json").read_text())
     assert "snqi_contract_status" not in summary["campaign"]
     assert "mean_snqi" not in json.dumps(summary)
     for path in (root / "reports").glob("*.csv"):

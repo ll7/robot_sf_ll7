@@ -105,7 +105,7 @@ AUDITED_UNIT_FIELDS = frozenset(
     predictive_uncertainty_growth_per_step progress_escape_distance
     progress_escape_speed proxemic_costmap_personal_radius proxemic_costmap_social_radius
     social_force_obstacle_v2_length
-    v4_braking_margin v4_moderate_clearance_human v4_reaction_time
+    v4_braking_margin v4_moderate_clearance_human v4_reaction_time v4_prediction_speed_error
     v4_slow_clearance_human v4_stop_clearance_human
     recovery_reorient_angular_speed resolution robot_radius robot_radius_default robot_radius_m
     rollout_dt rollout_horizon route_guide_commitment_progress_threshold pedestrian_radius_m
@@ -144,6 +144,7 @@ NON_PHYSICAL_NAMES = frozenset(
     social_force_lambda_importance social_force_n social_force_n_prime
     route_rescue_progress_weight_boost
     sampling_path_distance sampling_speed_fractions
+    v4_predictive_braking_enabled
     """.split()
 )
 NON_PHYSICAL_SUFFIXES = (
@@ -212,6 +213,9 @@ DRIVE_ANGULAR_SPEED_FIELDS = frozenset(
     recovery_reorient_angular_speed
     """.split()
 )
+# Pedestrian prediction error in m/s: finite and nonnegative (inventory audit),
+# with no upper drive-speed limit because this is uncertainty, not a command.
+PREDICTION_SPEED_ERROR_FIELDS = frozenset(("v4_prediction_speed_error",))
 DRIVE_LINEAR_ACCEL_FIELDS = frozenset(
     """
     actuation_max_linear_accel max_linear_accel max_linear_acceleration
@@ -776,6 +780,7 @@ def test_drive_related_fields_have_a_rule_or_a_stated_reason() -> None:
         TIME_STEP_FIELDS
         | DRIVE_LINEAR_SPEED_FIELDS
         | DRIVE_ANGULAR_SPEED_FIELDS
+        | PREDICTION_SPEED_ERROR_FIELDS
         | DRIVE_LINEAR_ACCEL_FIELDS
         | DRIVE_LINEAR_DECEL_FIELDS
         | DRIVE_ANGULAR_ACCEL_FIELDS

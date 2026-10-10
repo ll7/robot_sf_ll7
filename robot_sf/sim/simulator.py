@@ -234,6 +234,7 @@ def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
     ``max_speeds = max_speed_multiplier * initial_speeds`` also yields the correct values
     on every subsequent ``_update_state`` call.
     """
+    peds.effective_desired_speed_parameters = {}
     if settings.desired_speed_mean is None:
         return
     desired_speeds = sample_desired_pedestrian_speeds(
@@ -241,6 +242,7 @@ def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
         mean=settings.desired_speed_mean,
         std=settings.desired_speed_std,
         seed=settings.desired_speed_seed,
+        sampling_metadata=peds.effective_desired_speed_parameters,
     )
     # Direct assignment: works with both new pysf (``assign_desired_speeds`` already ran,
     # this overwrites with identical values) and old pysf (no explicit-speed support).
@@ -555,6 +557,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
         config.peds_per_area_m2,
         config.max_peds_per_group,
         group_member_probs=_group_member_probabilities(config),
+        group_allocation_mode=config.group_allocation_mode,
+        group_fraction=config.groups,
         rng=np.random.default_rng(config.route_spawn_seed),
         route_spawn_distribution=config.route_spawn_distribution,
         route_spawn_jitter_frac=config.route_spawn_jitter_frac,

@@ -76,7 +76,7 @@ from robot_sf.common.artifact_paths import (
     get_repository_root,
 )
 
-CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v2"
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1191,7 +1191,22 @@ def _build_manifest_execution_block(
     Returns:
         JSON-serializable manifest fields for planner and execution metadata.
     """
+    numerical = {}
+    if cfg.numerical_mode is not None:
+        from robot_sf._numerical_mode import (  # noqa: PLC0415
+            effective_numerical_mode,
+            initialize_pinned_torch,
+            validate_numerical_mode,
+        )
+
+        initialize_pinned_torch()
+        observed = effective_numerical_mode()
+        claim = {"mode": cfg.numerical_mode, "inference_dtype": "float64"}
+        # Actor dtype is verified from each learned arm's retained runtime evidence.
+        validate_numerical_mode(claim, {**observed, "inference_dtype": "float64"})
+        numerical = {"numerical_mode": claim, "numerical_kernel_context": observed}
     return {
+        **numerical,
         "planners": planner_entries,
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),

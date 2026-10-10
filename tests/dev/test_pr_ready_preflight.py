@@ -3095,6 +3095,8 @@ def test_functional_hang_guards_are_generous_and_cleanup_still_works(tmp_path):
     finally:
         _stop_process_group(process, signal.SIGKILL)
         _collect_process(process)
+
+
 @pytest.mark.skipif(os.name != "posix", reason="SIGTERM is POSIX-specific")
 @pytest.mark.parametrize("outer_exists", [False, True], ids=["absent", "sentinel"])
 def test_nested_readiness_does_not_use_outer_termination_receipt(

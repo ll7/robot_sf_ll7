@@ -1,5 +1,6 @@
 """Deterministic admission and cleanup at the browser and child boundaries."""
 
+import ast
 import os
 import subprocess
 import sys
@@ -106,6 +107,42 @@ SETUP_CALLS = [
     for job_name, job in yaml.safe_load(path.read_text()).get("jobs", {}).items()
     if any(step.get("uses") == "./.github/actions/setup-ci-python" for step in job.get("steps", []))
 ]
+
+
+@pytest.mark.parametrize(
+    ("owner_result", "run_full_ci", "cancelled", "expected"),
+    [
+        ("success", "true", False, True),
+        ("success", "false", False, False),
+        ("failure", "true", False, False),
+        ("success", "true", True, False),
+    ],
+)
+def test_browser_witnesses_require_successful_uncancelled_owner(
+    owner_result, run_full_ci, cancelled, expected
+):
+    """A stale positive output or cancellation cannot admit hosted browser work."""
+    from tests.ci.test_self_hosted_routing import _evaluate_node
+
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    expression = workflow["jobs"]["browser-witnesses"]["if"]
+    expression = expression.removeprefix("${{").removesuffix("}}")
+    expression = expression.replace("&&", "and").replace("!cancelled()", "not cancelled()")
+    decision = _evaluate_node(
+        ast.parse(
+            expression.strip().replace("dispatch-ownership", "dispatch_ownership"), mode="eval"
+        ),
+        {
+            "cancelled": cancelled,
+            "needs": {
+                "dispatch_ownership": {
+                    "result": owner_result,
+                    "outputs": {"run_full_ci": run_full_ci},
+                }
+            },
+        },
+    )
+    assert decision is expected
 
 
 @pytest.mark.parametrize(

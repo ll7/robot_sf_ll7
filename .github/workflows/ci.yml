@@ -385,7 +385,7 @@ jobs:
 
   browser-witnesses:
     needs: dispatch-ownership
-    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

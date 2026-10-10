@@ -24,6 +24,51 @@ DOORWAY = (
 )
 
 
+def _override_campaign(tmp_path, manifest, scenarios):
+    """Bind a candidate to explicit development scenario identities without a seed inventory."""
+    config_path = tmp_path / "effective_candidate.yaml"
+    config_path.write_text(yaml.safe_dump(manifest))
+    scenario_path = tmp_path / "effective_scenarios.yaml"
+    scenario_path.write_text(yaml.safe_dump({"scenarios": scenarios}))
+    cfg = load_campaign_config(DOORWAY)
+    arm = replace(next(a for a in cfg.planners if a.algo == "predictive_mppi"),
+                  algo_config_path=config_path)
+    return replace(cfg, planners=(arm,), scenario_matrix_path=scenario_path)
+
+
+@pytest.mark.parametrize("overrides", [
+    {"scenario_overrides": {"doorway": {"horizon_steps": 12}}},
+    {"family_overrides": {"bottleneck": {"horizon_steps": 12}}},
+    {"family_overrides": {"bottleneck": {"horizon_steps": 10}},
+     "scenario_overrides": {"doorway": {"horizon_steps": 12}}},
+])
+def test_effective_context_override_refuses_long_horizon(tmp_path, predictor_registry, overrides):
+    """Runtime scenario/family merges must not hide a 12-step request behind an eight-step base."""
+    manifest = {"base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+                **overrides}
+    cfg = _override_campaign(tmp_path, manifest, [
+        {"name": "doorway", "metadata": {"family": "bottleneck"}, "seeds": [1001]},
+    ])
+    with pytest.raises(CampaignCheckpointPreflightError, match="required_horizon_steps=12"):
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
+
+
+def test_family_checkpoint_and_scenario_horizon_combination_refused(tmp_path, predictor_registry):
+    """Two individually compatible overrides can combine into an incompatible effective binding."""
+    longer = tmp_path / "twelve_steps.pt"
+    save_predictive_checkpoint(longer,
+                              model=PredictiveTrajectoryModel(PredictiveModelConfig(horizon_steps=12)),
+                              optimizer=None, epoch=0)
+    cfg = _override_campaign(tmp_path, {
+        "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+        "params": {"predictive_checkpoint_path": str(longer)},
+        "family_overrides": {"bottleneck": {"predictive_checkpoint_path": str(tmp_path / "eight_steps.pt")}},
+        "scenario_overrides": {"doorway": {"horizon_steps": 12}},
+    }, [{"name": "doorway", "family": "bottleneck", "seeds": [1001]}])
+    with pytest.raises(CampaignCheckpointPreflightError, match="forecast_steps=8"):
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
+
+
 @pytest.fixture
 def predictor_registry(tmp_path):
     """Use a real eight-step checkpoint without downloading or accessing evaluation seeds."""

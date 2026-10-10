@@ -1,8 +1,28 @@
 """Tests for action-space adapters."""
 
 import numpy as np
+import pytest
 
-from robot_sf.robot.action_adapters import DiffDriveAdapterConfig, holonomic_to_diff_drive_action
+from robot_sf.robot.action_adapters import (
+    DiffDriveAdapterConfig,
+    holonomic_to_diff_drive_action,
+    unicycle_velocity_target_to_acceleration,
+)
+
+
+@pytest.mark.parametrize("dt", [0.0, -0.1, float("nan"), float("inf")])
+def test_velocity_target_rejects_invalid_timestep(dt):
+    """Invalid timesteps must not become huge acceleration requests."""
+    with pytest.raises(ValueError, match="timestep must be finite and positive"):
+        unicycle_velocity_target_to_acceleration(np.array([0.55, 0.16]), np.array([0.6, 0.2]), dt)
+
+
+def test_velocity_target_uses_small_positive_timestep():
+    """A valid small timestep retains its physical velocity-change conversion."""
+    acceleration = unicycle_velocity_target_to_acceleration(
+        np.array([1e-7, -2e-7]), np.zeros(2), 1e-7
+    )
+    np.testing.assert_allclose(acceleration, [1.0, -2.0], rtol=1e-12, atol=0)
 
 
 def test_holonomic_to_diff_drive_forward():

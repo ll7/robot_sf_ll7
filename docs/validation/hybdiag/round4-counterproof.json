@@ -1,0 +1,23 @@
+{
+  "head": "babd77658f7c7c85da34d249d108de89c9d3e618",
+  "modules": {
+    "robot_sf/planner/socnav_occupancy.py": "f596677c2a70d62cd2f5898990af16fbf3c1abd733e7081eda921a29f1004894",
+    "robot_sf/planner/grid_route.py": "a6403115ffa6db25ea2cf8704786f1ac42a91693a436aa2b67b5dafd1ee37322",
+    "robot_sf/planner/hybrid_rule_local_planner.py": "7e34e241e20e4b296fccfd54d70d75dae8894605d7118135d57586b3c68b377b",
+    "robot_sf/sensor/socnav_observation.py": "7a184d63dabee2fc9fa03fb5c4867161be038f4989749dc952b9c8414f5bf86f",
+    "robot_sf/benchmark/map_runner/map_runner_observations.py": "25394f4ea92478e336db210b28ff8ba3e106bd10a610e394ca522e04d1be208a"
+  },
+  "test_sha256": "c5b7a28f6936d204182bdf3457e16b3d4d0731e620b94135793de8a07b5a1441",
+  "exit": 1,
+  "argv": [
+    "/home/luttkule/lanes/hybdiag/artifacts/round4-counterproof/old-hybdiag-3o_zj07b/test_hybdiag_counterexamples.py::test_physical_wall_stop_rejects_reverse_toward_wall_behind",
+    "/home/luttkule/lanes/hybdiag/artifacts/round4-counterproof/old-hybdiag-3o_zj07b/test_hybdiag_counterexamples.py::test_debug_wall_exclusion_reports_applied_arc_padding",
+    "-n",
+    "0",
+    "-q"
+  ],
+  "intended_reasons_verified": true,
+  "missing_reasons": [],
+  "status": "AI-GENERATED/NEEDS-REVIEW",
+  "test_source_ref": "2280305fab299ca6e19c49e7544ed84560006a0e"
+}

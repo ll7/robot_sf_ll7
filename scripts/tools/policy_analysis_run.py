@@ -43,7 +43,10 @@ from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
-from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.path_utils import (
+    compute_completion_reference_length,
+    compute_shortest_path_length,
+)
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
     TERMINATION_REASONS,
@@ -1267,6 +1270,10 @@ class EpisodeTrajectory:
     robot_positions: list[np.ndarray]
     ped_positions: list[np.ndarray]
     ped_forces: list[np.ndarray]
+    initial_robot_pos: np.ndarray | None = None
+    route_waypoints: np.ndarray | None = None
+    goal_zone: np.ndarray | None = None
+    completion_policy: str = "waypoint_radius_v1"
 
 
 @dataclass
@@ -1393,6 +1400,30 @@ def _build_policy_adapter(
     )
 
 
+def _initial_episode_trajectory(simulator: Any) -> EpisodeTrajectory:
+    """Freeze reset geometry and navigator reference before the simulator advances.
+
+    Returns:
+        Empty trajectory carrying immutable reset, route and completion context.
+    """
+    initial_robot_pos = np.array(simulator.robot_pos[0], dtype=float, copy=True)
+    navigators = getattr(simulator, "robot_navs", None)
+    route_waypoints = None
+    goal_zone = None
+    completion_policy = "waypoint_radius_v1"
+    if navigators:
+        navigator = navigators[0]
+        route_waypoints = np.array(navigator.waypoints, dtype=float, copy=True)
+        if not np.array_equal(route_waypoints[0], initial_robot_pos):
+            route_waypoints = np.vstack([initial_robot_pos, route_waypoints])
+        zone = getattr(navigator, "goal_zone", None)
+        goal_zone = np.array(zone, dtype=float, copy=True) if zone is not None else None
+        completion_policy = getattr(navigator, "completion_policy", "waypoint_radius_v1")
+    return EpisodeTrajectory(
+        [], [], [], initial_robot_pos, route_waypoints, goal_zone, completion_policy
+    )
+
+
 def _collect_episode_trajectories(  # noqa: PLR0913
     env,
     obs: Any,
@@ -1406,9 +1437,10 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     videos: bool,
 ) -> EpisodeRuntimeOutcome:
     """Run the episode loop and return trajectory plus termination details."""
-    robot_positions: list[np.ndarray] = []
-    ped_positions: list[np.ndarray] = []
-    ped_forces: list[np.ndarray] = []
+    trajectory = _initial_episode_trajectory(env.simulator)
+    robot_positions = trajectory.robot_positions
+    ped_positions = trajectory.ped_positions
+    ped_forces = trajectory.ped_forces
     reached_goal_step: int | None = None
     route_complete_flag = False
     loop_exhausted = True
@@ -1463,7 +1495,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         and len(robot_positions) >= max_steps
     )
     return EpisodeRuntimeOutcome(
-        trajectory=EpisodeTrajectory(robot_positions, ped_positions, ped_forces),
+        trajectory=trajectory,
         reached_goal_step=reached_goal_step,
         wall_time=wall_time,
         terminated=terminated,
@@ -1471,6 +1503,38 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         last_info=info,
         reached_max_steps=reached_max_steps,
     )
+
+
+def _trajectory_reference_length(
+    trajectory: EpisodeTrajectory,
+    robot_pos_arr: np.ndarray,
+    map_def: Any,
+    goal_vec: np.ndarray,
+    scenario: Mapping[str, Any],
+    seed: int,
+) -> float:
+    """Return the reset-to-completion reference used by v2 geometry and ideal time."""
+    reference_start = (
+        trajectory.initial_robot_pos
+        if trajectory.initial_robot_pos is not None
+        else robot_pos_arr[0]
+        if robot_pos_arr.size
+        else None
+    )
+    if reference_start is None or map_def is None:
+        return float("nan")
+    elif trajectory.completion_policy == "goal_zone_entry_v1":
+        return compute_completion_reference_length(
+            map_def,
+            reference_start,
+            goal_vec,
+            completion_policy=trajectory.completion_policy,
+            goal_zone=trajectory.goal_zone,
+            scenario_id=str(scenario.get("name") or scenario.get("id") or ""),
+            seed=seed,
+        )
+    else:
+        return compute_shortest_path_length(map_def, reference_start, goal_vec)
 
 
 def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
@@ -1502,10 +1566,15 @@ def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
     ped_forces_arr = _stack_ped_positions(trajectory.ped_forces, fill_value=np.nan)
 
     obstacles = sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def else None
-    shortest_path = (
-        compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
-        if robot_pos_arr.size and map_def is not None
-        else float("nan")
+    if trajectory.route_waypoints is not None:
+        goal_vec = trajectory.route_waypoints[-1]
+    shortest_path = _trajectory_reference_length(
+        trajectory,
+        robot_pos_arr,
+        map_def,
+        goal_vec,
+        scenario,
+        seed,
     )
 
     if robot_pos_arr.size == 0:
@@ -1521,6 +1590,8 @@ def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
             goal=goal_vec,
             dt=float(dt),
             reached_goal_step=reached_goal_step,
+            initial_robot_pos=trajectory.initial_robot_pos,
+            route_waypoints=trajectory.route_waypoints,
             robot_radius=float(robot_radius),
             ped_radius=float(ped_radius),
         )
@@ -1585,7 +1656,7 @@ def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
     route_complete_signal = route_complete_success(last_info)
     success = bool(route_complete_signal and not collision)
     route_complete = success
-    timeout = bool(
+    timeout = not (collision or success) and bool(
         (isinstance(meta, dict) and meta.get("is_timesteps_exceeded"))
         or truncated
         or reached_max_steps

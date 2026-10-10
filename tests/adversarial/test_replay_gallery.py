@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +106,19 @@ def _bind_certificate_to_scenario(status: dict[str, Any], scenario_path: Path) -
         assert map_binding_error is None and map_binding is not None
         certificate["evidence"]["map_id_input_binding"] = map_binding
     return status
+
+
+@pytest.fixture(autouse=True)
+def _isolated_map_registry_cache() -> Iterator[None]:
+    """Keep environment-selected registry entries within their owning test."""
+    registry_loader = replay_gallery.scenario_loader._load_map_registry
+    registry_loader.cache_clear()
+    try:
+        yield
+    finally:
+        # Monkeypatch restores the environment, but the loader caches its
+        # no-argument lookup independently of ROBOT_SF_MAP_REGISTRY.
+        registry_loader.cache_clear()
 
 
 @pytest.fixture(autouse=True)

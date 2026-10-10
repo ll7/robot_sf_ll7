@@ -25,6 +25,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
         with:
+          node: "true"
           migrate-artifacts: "false"
 
       - name: Sync dependencies (locked)

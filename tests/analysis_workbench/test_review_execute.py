@@ -117,7 +117,11 @@ def _nested_fixture_admission_config(root: Path) -> ExecutorAdmissionConfig:
 
 
 def _patch_fake_execution(
-    monkeypatch: pytest.MonkeyPatch, *, fail_treatment_speed: float | None = None
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fail_treatment_speed: float | None = None,
+    start_delay_effect: bool = False,
+    no_ped_motion: bool = False,
 ) -> list[dict[str, Any]]:
     """Supply deterministic telemetry without starting the simulator child."""
     import robot_sf.analysis_workbench.review_execute as review_execute_module
@@ -130,7 +134,17 @@ def _patch_fake_execution(
         if fail_treatment_speed is not None and speed == fail_treatment_speed:
             return {"outcome": "error", "error": "synthetic child failure"}
         horizon = int(job["horizon_steps"])
-        ped_traj = [[10.0, step * speed * 0.1] for step in range(horizon + 1)]
+        start_delay = float(job.get("ped_start_delay_s", 0.0))
+        release_steps = 0
+        remaining_delay_s = start_delay
+        while start_delay_effect and remaining_delay_s > 0.0:
+            remaining_delay_s = max(0.0, remaining_delay_s - 0.1)
+            release_steps += 1
+        ped_traj = (
+            [[10.0, 0.0] for _step in range(horizon + 1)]
+            if no_ped_motion
+            else [[10.0, max(0, step - release_steps) * speed * 0.1] for step in range(horizon + 1)]
+        )
         robot_traj = [[step * 0.1, 0.0] for step in range(horizon + 1)]
         return {
             "outcome": "ok",
@@ -174,13 +188,13 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     """Exercise real SREV-22 execution producing survived and falsified verdicts.
 
     Runtime note (issue #9520):
-    This test runs 4 real episode executions sequentially in isolated child
-    processes (control and treatment for 'ped-speed-up', control and treatment
-    for 'ped-speed-down'). Each child process incurs ~1.9s of Python module
+    This test runs 6 real episode executions sequentially in isolated child
+    processes (control and treatment for 'ped-speed-up', 'ped-speed-down', and
+    'ped-start-delay'). Each child process incurs ~1.9s of Python module
     imports plus ~4.0s of Numba LLVM JIT compilation on step 0 for the
     PySocialForce force calculators (DesiredForce, SocialForce, ObstacleForce,
-    etc.), totaling ~5.9s per execution (~24s total in isolation, scaling to
-    ~54s under parallel suite contention).
+    etc.), totaling ~5.9s per execution (~36s total in isolation; wall time
+    varies with suite contention).
 
     Profiling confirms:
     - Step 0 accounts for ~3.98s (Numba JIT compilation), while steps 1..60
@@ -190,8 +204,7 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
       which would violate the measured-verdict assertion contract.
     - Process isolation via 'spawn' is required for timeout and termination
       safety.
-    The ~24s quiet / ~54s contended call duration is therefore necessary and
-    intrinsic to real-execution verification.
+    The resulting runtime is intrinsic to real-execution verification.
     """
     request = _fixture_request()
     result = run(request, base=tmp_path)
@@ -228,17 +241,19 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     assert verdicts["ped-speed-up"]["verdict"] == "survived"
     assert verdicts["ped-speed-down"]["status"] == "complete"
     assert verdicts["ped-speed-down"]["verdict"] == "falsified"
-    assert verdicts["ped-start-delay"]["status"] == "unavailable"
-    assert "intervention_not_executable" in verdicts["ped-start-delay"]["reason"]
+    assert verdicts["ped-start-delay"]["status"] == "complete"
+    assert verdicts["ped-start-delay"]["control_activated"] is True
+    assert verdicts["ped-start-delay"]["treatment_activated"] is True
+    assert verdicts["ped-start-delay"]["nonintervened_config_match"] is True
     # Activation is measured from executed trajectories, never from requested config.
     assert verdicts["ped-speed-up"]["control_activated"] is True
     assert verdicts["ped-speed-up"]["treatment_activated"] is True
     assert verdicts["ped-speed-up"]["nonintervened_config_match"] is True
     traces = json.loads((output_dir / "activation-traces.json").read_text(encoding="utf-8"))
-    assert len(traces["traces"]) == 2
+    assert len(traces["traces"]) == 3
     ledger = json.loads((output_dir / "attempt-ledger.json").read_text(encoding="utf-8"))
-    assert ledger["executions_consumed"] == 4
-    assert len(ledger["attempts"]) == 4
+    assert ledger["executions_consumed"] == 6
+    assert len(ledger["attempts"]) == 6
     manifest = json.loads((output_dir / "preservation-manifest.json").read_text(encoding="utf-8"))
     assert manifest["retrieval_destination"] == "external:post-execution-preservation"
     assert manifest["artifacts"]["execute-report.json"] == by_id["execute-report.json"]["sha256"]
@@ -1032,14 +1047,31 @@ def test_resume_restores_reports_and_does_not_rerun_terminal_candidates(
 
     resumed = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
     assert resumed.status == "complete"
-    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5]
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5, 1.0, 1.0]
     ledger = json.loads((tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text())
-    assert {report["intervention_id"] for report in ledger["candidate_reports"]} == {
+    reports = {report["intervention_id"]: report for report in ledger["candidate_reports"]}
+    assert set(reports) == {
         "ped-speed-up",
         "ped-speed-down",
         "ped-start-delay",
     }
-    assert len(ledger["traces"]) == 2
+    unavailable = reports["ped-start-delay"]
+    assert unavailable["status"] == "unavailable"
+    assert unavailable["control_activated"] is True
+    assert unavailable["treatment_activated"] is False
+    assert unavailable["reason"].startswith("intervention_not_activated:")
+    assert unavailable["control_metrics"]["ped_displacement_m"] > 0.05
+    assert unavailable["treatment_metrics"]["ped_displacement_m"] > 0.05
+    delay_trace = next(
+        trace for trace in ledger["traces"] if trace["intervention_id"] == "ped-start-delay"
+    )
+    assert delay_trace["treatment_activated"] is False
+    assert len(ledger["attempts"]) == 6
+    assert len(ledger["traces"]) == 3
+
+    resumed_again = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert resumed_again.status == "complete"
+    assert len(calls) == 6
 
 
 def test_resume_rejects_tampered_ledger_identity(
@@ -1168,15 +1200,27 @@ def test_resume_rejects_complete_downgraded_to_unavailable(
     ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
     result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
     assert result.status == "failed"
-    assert "inconsistent" in result.reason or "do not match" in result.reason
+    assert (
+        "inconsistent" in result.reason
+        or "do not match" in result.reason
+        or "not reproducible" in result.reason
+    )
 
 
-def test_resume_rejects_unavailable_report_carrying_metrics(
+def test_resume_rejects_preexecution_unavailable_report_carrying_metrics(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """An unavailable report must not carry measured metrics (issue #9418)."""
+    """An unexecuted unavailable report cannot claim measured metrics."""
     _patch_fake_execution(monkeypatch)
-    first = run(_fixture_request(max_executions=6), base=tmp_path)
+    request = _fixture_request(
+        max_executions=6,
+        intervention_parameters={
+            "ped-speed-up": {"speed_delta_m_s": 0.5},
+            "ped-speed-down": {"speed_delta_m_s": -0.5},
+            "ped-start-delay": {"dt_s": 9.0},
+        },
+    )
+    first = run(request, base=tmp_path)
     assert first.status == "complete"
     ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
     ledger = json.loads(ledger_path.read_text())
@@ -1188,9 +1232,32 @@ def test_resume_rejects_unavailable_report_carrying_metrics(
     )
     unavailable["control_metrics"] = dict(complete["control_metrics"])
     ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
-    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    result = run(request, base=tmp_path, resume=True)
     assert result.status == "failed"
-    assert "metrics are inconsistent" in result.reason
+    assert "unavailable candidate ped-start-delay" in result.reason
+
+
+def test_resume_rejects_forged_executed_unavailable_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Attempt-backed unavailable reports must reproduce measured telemetry."""
+    _patch_fake_execution(monkeypatch)
+    request = _fixture_request(max_executions=6)
+    first = run(request, base=tmp_path)
+    assert first.status == "complete"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    unavailable = next(
+        report
+        for report in ledger["candidate_reports"]
+        if report["intervention_id"] == "ped-start-delay"
+    )
+    unavailable["treatment_metrics"]["ped_motion_onset_step"] += 1
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+
+    resumed = run(request, base=tmp_path, resume=True)
+    assert resumed.status == "failed"
+    assert "unavailable candidate ped-start-delay metrics are inconsistent" in resumed.reason
 
 
 def test_resume_rejects_trace_without_complete_report(
@@ -1393,6 +1460,131 @@ def test_intervention_update_branches() -> None:
         control_delay=0.5,
     )
     assert update is None and "negative" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_start_delay_offset",
+        {"dt_s": 1.0},
+        control_speed=1.0,
+        control_delay=0.5,
+    )
+    assert update == {"ped_speed_m_s": 1.0, "ped_start_delay_s": 1.5} and reason is None
+
+
+def test_start_delay_activation_requires_measured_onset_shift_and_motion() -> None:
+    from robot_sf.analysis_workbench.review_execute import _activation_flags
+
+    control = {
+        "ped_displacement_m": 1.0,
+        "ped_motion_onset_step": 1,
+        "ped_mean_speed_m_s": 1.0,
+    }
+    delayed_motion = {
+        "ped_displacement_m": 0.8,
+        "ped_motion_onset_step": 12,
+        "ped_mean_speed_m_s": 0.8,
+    }
+    same_onset = {**delayed_motion, "ped_motion_onset_step": 1}
+    no_motion = {**delayed_motion, "ped_displacement_m": 0.0, "ped_motion_onset_step": 60}
+    common = {
+        "factor": "single_pedestrian_start_delay_offset",
+        "motion_epsilon_m": 0.05,
+        "activation_speed_tolerance_m_s": 0.05,
+        "control_delay_s": 0.0,
+        "treatment_delay_s": 1.0,
+    }
+    assert _activation_flags(
+        control_metrics=control, treatment_metrics=delayed_motion, **common
+    ) == (True, True)
+    assert _activation_flags(control_metrics=control, treatment_metrics=same_onset, **common) == (
+        True,
+        False,
+    )
+    assert _activation_flags(control_metrics=control, treatment_metrics=no_motion, **common) == (
+        True,
+        False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("control_delay_s", "treatment_delay_s", "control_onset", "treatment_onset", "expected_shift"),
+    [
+        (0.0, 1.0, 1, 12, 11),
+        (0.5, 1.0, 7, 12, 5),
+        (1.0, 0.0, 12, 1, -11),
+        (0.0, 0.25, 1, 4, 3),
+    ],
+)
+def test_start_delay_activation_uses_simulator_release_tick_schedule(
+    control_delay_s: float,
+    treatment_delay_s: float,
+    control_onset: int,
+    treatment_onset: int,
+    expected_shift: int,
+) -> None:
+    from robot_sf.analysis_workbench.review_execute import (
+        _activation_flags,
+        _configured_onset_shift_steps,
+    )
+
+    control = {"ped_displacement_m": 1.0, "ped_motion_onset_step": control_onset}
+    treatment = {"ped_displacement_m": 0.8, "ped_motion_onset_step": treatment_onset}
+    assert _configured_onset_shift_steps(control_delay_s, treatment_delay_s) == expected_shift
+    assert _activation_flags(
+        factor="single_pedestrian_start_delay_offset",
+        control_metrics=control,
+        treatment_metrics=treatment,
+        motion_epsilon_m=0.05,
+        activation_speed_tolerance_m_s=0.05,
+        control_delay_s=control_delay_s,
+        treatment_delay_s=treatment_delay_s,
+    ) == (True, True)
+
+
+def test_fake_start_delay_pair_completes_only_when_measured_offset_activates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_fake_execution(monkeypatch, start_delay_effect=True)
+    result = run(_fixture_request(), base=tmp_path)
+    assert result.status == "complete"
+    ledger = json.loads((tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text())
+    delay_report = next(
+        report
+        for report in ledger["candidate_reports"]
+        if report["intervention_id"] == "ped-start-delay"
+    )
+    assert delay_report["status"] == "complete"
+    assert delay_report["control_activated"] is True
+    assert delay_report["treatment_activated"] is True
+    assert (
+        delay_report["treatment_metrics"]["ped_motion_onset_step"]
+        - delay_report["control_metrics"]["ped_motion_onset_step"]
+        == 11
+    )
+
+
+def test_start_delay_control_without_motion_blocks_treatment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_fake_execution(monkeypatch, no_ped_motion=True)
+    request = _fixture_request(
+        max_candidates=3,
+        max_executions=2,
+        intervention_parameters={"ped-start-delay": {"dt_s": 1.0}},
+    )
+
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "control_fidelity_failure" in result.reason
+    ledger = json.loads((tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text())
+    assert [(attempt["candidate_id"], attempt["kind"]) for attempt in ledger["attempts"]] == [
+        ("ped-start-delay", "control")
+    ]
+    delay_report = next(
+        report
+        for report in ledger["candidate_reports"]
+        if report["intervention_id"] == "ped-start-delay"
+    )
+    assert delay_report["status"] == "failed"
+    assert ledger["traces"] == []
 
 
 def test_measurement_selection_branches() -> None:
@@ -1675,8 +1867,8 @@ def test_resume_continues_after_partial(monkeypatch: pytest.MonkeyPatch, tmp_pat
     ledger = json.loads(
         (tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text(encoding="utf-8")
     )
-    assert ledger["executions_consumed"] == 4
-    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5]
+    assert ledger["executions_consumed"] == 6
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5, 1.0, 1.0]
 
 
 def test_control_fidelity_predicate() -> None:

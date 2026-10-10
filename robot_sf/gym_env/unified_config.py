@@ -195,6 +195,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
     robot_config: DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings = field(
         default_factory=DifferentialDriveSettings,
     )
+    # Opt-in PPO interface; existing environments retain acceleration actions.
+    ppo_action_semantics: str = "acceleration"
     # Environment behavior flags
     use_image_obs: bool = field(default=False)
     # Internal non-hardware three-wheeled rollover proxy. Disabled by default so
@@ -243,6 +245,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
     predictive_foresight_front_corridor_half_width: float = field(default=1.0)
     # Route waypoint observation for DWA global-route probe (flag-gated, default OFF)
     include_route_waypoints: bool = field(default=False)
+    include_goal_next_valid: bool = field(default=False)
 
     def __post_init__(self):
         """Validate robot-specific configuration.

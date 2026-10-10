@@ -1,0 +1,12 @@
+# Prospective 0.1.0 pinned numerical policy; refs #10233.
+numerical_mode: pinned_float64_v1
+
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+device: cpu
+predictive_foresight_device: cpu
+deterministic: true
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: false

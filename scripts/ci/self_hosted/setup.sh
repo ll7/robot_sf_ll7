@@ -18,7 +18,7 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {
   cat <<'USAGE'
-Usage: setup.sh build | network | start SLOT | stop SLOT | status SLOT
+Usage: setup.sh build | network | limits | start SLOT | stop SLOT | status SLOT
 
 Build the pinned container image locally, then start one supervisor per slot.
 Slots 1-2 are allowed on imech036 and imech039; slots 1-3 on imech156-u.
@@ -38,6 +38,18 @@ require_slot() {
     echo "SLOT must be in 1..$limit on $host" >&2
     exit 2
   fi
+}
+
+# Per-slot container size: CPUs, memory (also the swap cap) and pytest workers.
+# Measured 2026-09-30: a 2-worker shard peaks near 6 GiB, so memory, not CPU,
+# bounds workers; tmpfs mounts (up to 3 GiB) count against the same limit.
+# imech156-u (32 cores, 62 GiB, 3 slots) runs larger slots;
+# imech036/imech039 (20 cores, 31 GiB, 2 slots) keep the original size.
+slot_limits() {
+  case "$host" in
+    imech156-u) printf '8 16g 4\n' ;;
+    *) printf '4 8g 2\n' ;;
+  esac
 }
 
 slot_name() { printf 'robot-sf-ci-%s-%s' "$host" "$1"; }
@@ -107,6 +119,26 @@ ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]
 DOCKERFILE
 }
 
+check_tmpdir() {
+  local scratch="${TMPDIR:-/tmp}" filesystem block_size blocks
+  # stat -f follows symlinks and queries the containing filesystem, so nested
+  # mounts and TMPDIR overrides cannot hide a small tmpfs behind a disk path.
+  local mount_stats
+  if ! mount_stats="$(stat -f -c '%T %S %b' -- "$scratch")"; then
+    echo "Could not inspect TMPDIR filesystem" >&2
+    return 1
+  fi
+  read -r filesystem block_size blocks <<<"$mount_stats"
+  if [[ -z "$filesystem" || ! "$block_size" =~ ^[1-9][0-9]*$ || ! "$blocks" =~ ^[0-9]+$ ]]; then
+    echo "Invalid TMPDIR filesystem capacity" >&2
+    return 1
+  fi
+  if [[ "$filesystem" == tmpfs ]] && (( block_size * blocks < 2147483648 )); then
+    echo "TMPDIR tmpfs must have at least 2 GiB capacity" >&2
+    return 1
+  fi
+}
+
 run_container() {
   local runner_name="$1"
   local token
@@ -120,6 +152,7 @@ run_container() {
   install -d -m 700 /home/runner/_work/_temp /home/runner/_work/_uv_cache \
     /home/runner/_work/_tmp /home/runner/_work/_pip_cache \
     /home/runner/_tool
+  check_tmpdir
   ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
@@ -128,14 +161,17 @@ run_container() {
 }
 
 supervise() {
-  local name
+  local name cpus memory workers
   name="$(slot_name "$1")"
+  read -r cpus memory workers < <(slot_limits)
   while true; do
     if ! ensure_network || ! probe_network; then
       echo "Runner $name network isolation check failed; retrying after 60 seconds" >&2
       sleep 60
       continue
     fi
+    # TMPDIR uses the disk-backed work volume, outside the small /tmp and
+    # credential-scratch tmpfs mounts. Container startup verifies its capacity.
     # Keep the host lock through container startup: the next slot must count
     # this container when it checks capacity. --rm removes its work volume.
     if ! lock_disk_admission; then
@@ -157,14 +193,14 @@ supervise() {
         --tmpfs /home/runner/_work/_temp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m,mode=700 \
         --tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m \
         --cap-drop ALL --security-opt no-new-privileges \
-        --pids-limit 512 --cpus 4 --memory 8g --memory-swap 8g \
+        --pids-limit 512 --cpus "$cpus" --memory "$memory" --memory-swap "$memory" \
         --env HOME=/home/runner \
         --env RUNNER_TEMP=/home/runner/_work/_temp \
         --env RUNNER_TOOL_CACHE=/home/runner/_tool \
         --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
         --env TMPDIR=/home/runner/_work/_tmp \
         --env PIP_CACHE_DIR=/home/runner/_work/_pip_cache \
-        --env PYTEST_NUM_WORKERS=2 --env OPENBLAS_NUM_THREADS=1 \
+        --env PYTEST_NUM_WORKERS="$workers" --env OPENBLAS_NUM_THREADS=1 \
         --env OMP_NUM_THREADS=1 \
         "$image" "$name" >/dev/null; then
       unlock_disk_admission
@@ -281,6 +317,7 @@ stop_slot() {
 case "${1:-}" in
   build) [[ $# -eq 1 ]] || { usage; exit 2; }; build_image ;;
   network) [[ $# -eq 1 ]] || { usage; exit 2; }; ensure_network ;;
+  limits) [[ $# -eq 1 ]] || { usage; exit 2; }; require_slot 1; slot_limits ;;
   supervise) [[ $# -eq 2 ]] || { usage; exit 2; }; require_slot "$2"; supervise "$2" ;;
   start|stop|status)
     [[ $# -eq 2 ]] || { usage; exit 2; }

@@ -1,0 +1,418 @@
+{
+  "arms": [
+    {
+      "arm": "goal__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.27726260882711035,
+        "median": 0.05126660427761648,
+        "p95": 0.1715182314476859
+      },
+      "old": {
+        "max": 0.29020679006362704,
+        "median": 0.05824675879592359,
+        "p95": 0.19254892869186113
+      }
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.4046245808897593,
+        "median": 0.18132071715961295,
+        "p95": 0.37061924234578014
+      },
+      "old": {
+        "max": 11930325896265.887,
+        "median": 0.26802832007685784,
+        "p95": 919554764249.2238
+      }
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.2643163701176298,
+        "median": 0.07634565102925708,
+        "p95": 0.18687055132823238
+      },
+      "old": {
+        "max": 0.53773219593507,
+        "median": 0.09742910289786419,
+        "p95": 0.29061847633409565
+      }
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.22073681377448523,
+        "median": 0.0801537610863609,
+        "p95": 0.18081645611891328
+      },
+      "old": {
+        "max": 211055.1944261884,
+        "median": 0.10404221631514017,
+        "p95": 1.2525141355655427
+      }
+    },
+    {
+      "arm": "orca__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.9182825074359747,
+        "median": 0.07380010383756003,
+        "p95": 0.3617713026513708
+      },
+      "old": {
+        "max": 539.8059635017353,
+        "median": 0.11836102369096436,
+        "p95": 2.6064180763134437
+      }
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.5385293190577221,
+        "median": 0.26410199382994026,
+        "p95": 0.40461257779648563
+      },
+      "old": {
+        "max": 0.6509656798771764,
+        "median": 0.28159574709545965,
+        "p95": 0.5455378589385468
+      }
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 1.0135022095293456,
+        "median": 0.11259466039731517,
+        "p95": 0.38326374019460263
+      },
+      "old": {
+        "max": 0.7519956152280762,
+        "median": 0.07002936381317246,
+        "p95": 0.398463080876633
+      }
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.4244453820344684,
+        "median": 0.0727027526106154,
+        "p95": 0.27312071253667225
+      },
+      "old": {
+        "max": 1.0046221006099292,
+        "median": 0.0418562954614142,
+        "p95": 0.194498280984879
+      }
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.2819471308556835,
+        "median": 0.07674308725187808,
+        "p95": 0.21526820130775415
+      },
+      "old": {
+        "max": 18160046443532.043,
+        "median": 0.10392882977033088,
+        "p95": 4626427286.513173
+      }
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.7125000000000323,
+        "median": 0.29677378905130747,
+        "p95": 0.6092904656319222
+      },
+      "old": {
+        "max": 0.6250088925722571,
+        "median": 0.2982651224253361,
+        "p95": 0.5982290830766107
+      }
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.21263457590587126,
+        "median": 0.07532851705847288,
+        "p95": 0.1829737103598588
+      },
+      "old": {
+        "max": 0.32559966770216237,
+        "median": 0.10045542521160647,
+        "p95": 0.19120618322751026
+      }
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 0.21263457590587126,
+        "median": 0.07532851705847288,
+        "p95": 0.1829737103598588
+      },
+      "old": {
+        "max": 0.32559966770216237,
+        "median": 0.10045542521160647,
+        "p95": 0.19072485892658653
+      }
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 2.259891548968766,
+        "median": 0.16798013095678316,
+        "p95": 1.1766192863411091
+      },
+      "old": {
+        "max": 3283.654078699995,
+        "median": 0.2968729984387181,
+        "p95": 4.919115412000369
+      }
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "n": 48,
+      "new": {
+        "max": 1.2396000934760842,
+        "median": 0.10974750521838557,
+        "p95": 0.4989931176088106
+      },
+      "old": {
+        "max": 10.850166817189244,
+        "median": 0.14073180271000754,
+        "p95": 1.7937473479769706
+      }
+    }
+  ],
+  "decision": "D-055",
+  "episodes": 672,
+  "extremes": [],
+  "full_receipt": {
+    "artifact_path": "measurement.full.json",
+    "custody": "Local diagnostic receipt only; no public or durable external custody claimed.",
+    "location": "local://curvfix_evidence/measurement.full.json",
+    "record_count": 672,
+    "sha256": "f66f52b088fbfbd5955c297f6b1c770797a3e882f0b9cedae7ed308aed473980",
+    "size_bytes": 169821
+  },
+  "new_includes_reset": true,
+  "new_pooled_p95": 0.41913666808708483,
+  "old_exact_matches": 653,
+  "old_max_relative_error": 3.9452664732273564e-16,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "seed": 1001,
+  "sources": [
+    {
+      "arm": "goal__differential_drive",
+      "artifact_path": "runs/goal__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/goal__differential_drive/episodes.jsonl",
+      "sha256": "74ac622b4b13963849550c07ec801bd1fe38894a0fc05c5765d1544f379132a2"
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "artifact_path": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "sha256": "dc688de09bdb450152f27f7c0f6e1f79be8c37d555093d41a0006a5a55d79720"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "artifact_path": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "sha256": "52f927ddfc9bb171a68eca34415cb6c983dac09a9d7a0670fb1918da8efb9b47"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "artifact_path": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "sha256": "2b4fce61807a861d5ccd8d2df94feebfd71db19593145f21374fd45b480cd227"
+    },
+    {
+      "arm": "orca__differential_drive",
+      "artifact_path": "runs/orca__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "81a0945209299a485f7db3d3034314ffd0b46b24e63e2a22031f2db3badbf029"
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "artifact_path": "runs/ppo__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/ppo__differential_drive/episodes.jsonl",
+      "sha256": "772576e817d16fda440554688ae0a650b2f1ab6841dd2bb9e27d79b27cfd309b"
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "artifact_path": "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/prediction_planner__differential_drive/episodes.jsonl",
+      "sha256": "be4c76d4795848565417fc5885dd7b7f52770b551d3ae788c469ff08a93648dc"
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "artifact_path": "runs/predictive_mppi__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/predictive_mppi__differential_drive/episodes.jsonl",
+      "sha256": "eaffa0fb6df10131add4974fe18ec9503ff93141e823c7210aebcff6aec558e4"
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "artifact_path": "runs/risk_dwa__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/risk_dwa__differential_drive/episodes.jsonl",
+      "sha256": "747ce716baee6d6c0e492efebe377a829e0627849da3841157a7bd52f6e190cf"
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "artifact_path": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/sacadrl__differential_drive/episodes.jsonl",
+      "sha256": "4a6e3713f3c045212bb16de819ae3d125f73f9ebd2bbf2bec563fe0b219b29bd"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "artifact_path": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "sha256": "6d1e179b65df90e5bcf33b7ce95d4e2ac4ae84327629b0cf31c7ebb8de45f156"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "artifact_path": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "sha256": "0e9a6e4a621b740f1cf5246ad2e34eb7d70a4636ecedc6ebe33f5a2b7e1e7d40"
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "artifact_path": "runs/social_force__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/social_force__differential_drive/episodes.jsonl",
+      "sha256": "3ddc7d5c8c5bbe0d37ba9c2b8782bbf2fb4fadd6921213c6d5f5a5ff2ffc6cb0"
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "artifact_path": "runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "cohort": "rehearsal",
+      "location": "local://rehearsal/runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "sha256": "06ce4ac62bdf15f2b023b5c7f635a4c0f00d79e7508952fe2bd3d4c9be559238"
+    },
+    {
+      "arm": "goal__differential_drive",
+      "artifact_path": "runs/goal__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/goal__differential_drive/episodes.jsonl",
+      "sha256": "1a6aba017017c0ca3d37f9828b4199209a4b73f7311cdf4572a96e737699d67e"
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "artifact_path": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "sha256": "42a6a589f3099b45a936bf75a4becbf453da64e28c09a15a057af37f299c23d7"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "artifact_path": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "sha256": "31fd090e3fc87ffe73e817a3f7bb0e4b12357b5ade2a7015771ddef16040a999"
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "artifact_path": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "sha256": "7cf0eeb288551bc41ec1b9fe9d51ed47f0bc916e82be05bf60ff502d3b290bda"
+    },
+    {
+      "arm": "orca__differential_drive",
+      "artifact_path": "runs/orca__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "589721cea1cc73a6f57d7424a2511a57006785ece406b2a842ea40c74887936e"
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "artifact_path": "runs/ppo__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/ppo__differential_drive/episodes.jsonl",
+      "sha256": "0935d887879d1d64140e862b71a551589608c8607d4c034ced2a86929c81620d"
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "artifact_path": "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/prediction_planner__differential_drive/episodes.jsonl",
+      "sha256": "7cde821621c3c95bcda96228f8f356a4a61e22fad7b05101ccf2c17ba104b91d"
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "artifact_path": "runs/predictive_mppi__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/predictive_mppi__differential_drive/episodes.jsonl",
+      "sha256": "2c65bb8e17d5b1c0406b860515ef8a2adf00055d239b1a3e35396592e1ebcd95"
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "artifact_path": "runs/risk_dwa__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/risk_dwa__differential_drive/episodes.jsonl",
+      "sha256": "4d60dca66f53731fdf06433fb5fad840b50b4753912856c551be087ce0ab0ec5"
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "artifact_path": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/sacadrl__differential_drive/episodes.jsonl",
+      "sha256": "0ac20d4e204e7584e121bff57ef183dfe5d022e13c6dbc1cee64b72954036d1c"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "artifact_path": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "sha256": "e088593289b98f5251a2150f43067b7f2d536d5bab1d17e36d4b709658f070dd"
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "artifact_path": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "sha256": "de26f6b5f5212d92ecf7ac1c4a364ac3e90281a20e36fd06005102d3b759d07c"
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "artifact_path": "runs/social_force__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/social_force__differential_drive/episodes.jsonl",
+      "sha256": "64bb18cf180abc8b7cf1df8cda9630d54dd04d8a374d2de01821b54973a2c915"
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "artifact_path": "runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "cohort": "traces",
+      "location": "local://probe_traces_v2/runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "sha256": "1d62d53304aaffac86588a958ba3931120727bd6e1ed7810d7364f1b5cafb540"
+    }
+  ],
+  "trace_source_commits": [
+    "ea414933e61ce267389bd3bcbe97fb669a825c6e"
+  ]
+}

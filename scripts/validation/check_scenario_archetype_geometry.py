@@ -22,6 +22,7 @@ any missing, stale, duplicate, or changed-evidence row returns exit code 2.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import asdict, dataclass, field
@@ -29,7 +30,8 @@ from itertools import pairwise
 from math import dist
 from pathlib import Path
 
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, MultiPoint, Point, Polygon
+from shapely.ops import unary_union
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.svg_map_parser import SvgMapConverter
@@ -216,6 +218,29 @@ def _missing_zone_kinds(map_def: MapDefinition) -> list[str]:
     return missing
 
 
+def inspect_pedestrian_completion_risks(svg_path: Path, threshold_m: float = 1.0) -> list[dict]:
+    """Flag earlier pedestrian segments entering the final endpoint's completion disk.
+
+    This is an authoring diagnostic, not a route rejection: ordered runtime progress
+    makes loops legal. The final segment itself is deliberately excluded.
+    """
+    definition = SvgMapConverter(str(svg_path)).get_map_definition()
+    findings = []
+    for index, route in enumerate(definition.ped_routes):
+        for segment, (start, end) in enumerate(pairwise(route.waypoints[:-1])):
+            distance = LineString([start, end]).distance(Point(route.waypoints[-1]))
+            if distance <= threshold_m:
+                findings.append(
+                    {
+                        "route": index,
+                        "segment": segment,
+                        "distance_m": distance,
+                        "threshold_m": threshold_m,
+                    }
+                )
+    return findings
+
+
 def inspect_map_geometry(
     svg_path: Path, tolerance_m: float = DEFAULT_TOLERANCE_M
 ) -> MapGeometryReport:
@@ -371,6 +396,193 @@ def format_console_table(report: MapGeometryReport) -> str:
     return "\n".join(lines)
 
 
+RELEASE_MATRICES = (
+    Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"),
+    Path("configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"),
+)
+
+
+def _route_spawn_support(route, half_width: float):
+    """Exact nominal support of per-anchor axis-clipped x/y route jitter.
+
+    sample_route draws an anchor anywhere along the route and independently
+    clips both coordinate offsets to +/- sidewalk_width/2. Each segment's
+    support is its Minkowski sum with an axis-aligned square, not a round buffer.
+    Obstacle rejection and live-pose guards are separate runtime constraints.
+    """
+    return unary_union(
+        [
+            MultiPoint(
+                [
+                    (x + dx, y + dy)
+                    for x, y in (a, b)
+                    for dx in (-half_width, half_width)
+                    for dy in (-half_width, half_width)
+                ]
+            ).convex_hull
+            for a, b in pairwise(route.waypoints)
+        ]
+    )
+
+
+def _release_actors(
+    definition: MapDefinition, density: float, population_size: int | None = None
+) -> list[tuple]:
+    """Resolve static single-pedestrian lanes and all declared crowd start zones."""
+    actors = []
+    for ped in definition.single_pedestrians:
+        points = [ped.start] + (ped.trajectory or ([ped.goal] if ped.goal else []))
+        lane = LineString(points) if len(points) > 1 else Point(points[0])
+        actors.append(("single", ped.id, lane, {"points": points, "role": ped.role}))
+    from robot_sf.ped_npc.ped_population import PedSpawnConfig
+
+    sidewalk_width = PedSpawnConfig.__dataclass_fields__["sidewalk_width"].default
+    for index, route in enumerate(definition.ped_routes):
+        actors.append(
+            (
+                "crowd_route",
+                str(index),
+                _route_spawn_support(route, sidewalk_width / 2),
+                {
+                    "points": route.waypoints,
+                    "sidewalk_width": sidewalk_width,
+                    "density": density,
+                    "population_size": population_size,
+                },
+            )
+        )
+    for kind, zones in (
+        ("ped_spawn", definition.ped_spawn_zones),
+        ("crowded", definition.ped_crowded_zones),
+    ):
+        for index, zone in enumerate(zones):
+            actors.append(
+                (
+                    kind,
+                    str(index),
+                    _rect_polygon(zone),
+                    {"density": density, "population_size": population_size},
+                )
+            )
+    return actors
+
+
+def _robot_endpoint_evidence(config, endpoint_policy: str) -> dict:
+    """Keep historical fingerprints exact; bind both radii for the new policy."""
+    if endpoint_policy == "pedestrian_radius_v1":
+        return {}
+    return {"robot_radius_m": float(config.robot_config.radius), "endpoint_policy": endpoint_policy}
+
+
+def inspect_release_zones(
+    matrices=RELEASE_MATRICES, *, endpoint_policy: str = "robot_pedestrian_radii_v2"
+) -> list[dict]:
+    """Audit every full robot rectangle against resolved actors, without stepping.
+
+    Use the scenario loader so YAML actor/route overrides and geometry contracts
+    are applied. The default compares centre-support distance to the sum of robot
+    and pedestrian radii, including tangency. ``pedestrian_radius_v1`` reproduces
+    the historical 0.0.8 audit and its exact dispositions.
+    Report dormant crowd zones too: zero density is a disposition, not an omission.
+    The nominal lane test is geometric; it makes no dynamic collision claim.
+    """
+    from robot_sf.training.scenario_loader import (
+        build_robot_config_from_scenario,
+        load_scenarios,
+    )
+
+    if endpoint_policy not in {"pedestrian_radius_v1", "robot_pedestrian_radii_v2"}:
+        raise ValueError(f"Unknown endpoint policy: {endpoint_policy!r}")
+    rows = []
+    for matrix in matrices:
+        matrix = Path(matrix).resolve()
+        for scenario in load_scenarios(matrix):
+            config = build_robot_config_from_scenario(scenario, scenario_path=matrix)
+            if config.map_pool is None or not config.map_pool.map_defs:
+                raise ValueError(f"Missing map for {scenario['name']}")
+            radius = float(config.sim_config.ped_radius)
+            footprint_evidence = _robot_endpoint_evidence(config, endpoint_policy)
+            robot_radius = footprint_evidence.get("robot_radius_m", 0.0)
+            for map_id, definition in sorted(config.map_pool.map_defs.items()):
+                actors = _release_actors(
+                    definition,
+                    config.sim_config.peds_per_area_m2,
+                    config.sim_config.population_size,
+                )
+                for kind, zones in (
+                    ("spawn", definition.robot_spawn_zones),
+                    ("goal", definition.robot_goal_zones),
+                ):
+                    for index, zone in enumerate(zones):
+                        rectangle = _rect_polygon(zone)
+                        hits = []
+                        for actor_kind, actor, shape, detail in actors:
+                            distance = rectangle.distance(shape)
+                            # Decimal contacts can round upward (4.9 - 4.5 > 0.4).
+                            # A nanometre allowance conservatively includes that contact.
+                            if distance > radius + robot_radius + 1e-9:
+                                continue
+                            evidence = {
+                                "zone_wkt": rectangle.wkt,
+                                "actor_wkt": shape.wkt,
+                                "ped_radius_m": radius,
+                                **footprint_evidence,
+                                **detail,
+                            }
+                            fingerprint = hashlib.sha256(
+                                json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+                            ).hexdigest()
+                            hits.append(
+                                {
+                                    "actor_kind": actor_kind,
+                                    "actor": actor,
+                                    "distance_m": distance,
+                                    "geometry_sha256": fingerprint,
+                                    "evidence": evidence,
+                                }
+                            )
+                        rows.append(
+                            {
+                                "matrix": canonical_repo_path(str(matrix)),
+                                "scenario": scenario["name"],
+                                "map_id": map_id,
+                                "zone": f"{kind}[{index}]",
+                                "bounds": list(rectangle.bounds),
+                                "ped_radius_m": radius,
+                                "intersections": hits,
+                            }
+                        )
+    return rows
+
+
+def enforce_release_zone_waivers(rows: list[dict], waiver_file: Path) -> None:
+    """Reject unreviewed, changed or stale endpoint intersections individually."""
+    findings = [
+        {"matrix": row["matrix"], "scenario": row["scenario"], "zone": row["zone"], **hit}
+        for row in rows
+        for hit in row["intersections"]
+    ]
+    waivers = load_waiver_rows(waiver_file, "release_zones")
+    fields = ("matrix", "scenario", "zone", "actor_kind", "actor")
+    for row in waivers:
+        if any(
+            not isinstance(row.get(key), str) or not row[key]
+            for key in (*fields, "geometry_sha256")
+        ):
+            raise WaiverValidationError(
+                "release zone waiver requires exact identity and geometry_sha256"
+            )
+    validate_exact_waivers(
+        findings,
+        waivers,
+        identity_fields=fields,
+        evidence_matches=lambda actual, waiver: (
+            actual["geometry_sha256"] == waiver["geometry_sha256"]
+        ),
+        label="release zone overlap",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point returning a process exit code."""
 
@@ -393,9 +605,52 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Require exact waivers for every finding (for CI enforcement).",
     )
+    parser.add_argument(
+        "--release-zones",
+        action="store_true",
+        help="Audit all 48 release scenarios and three doorway widths.",
+    )
+    parser.add_argument(
+        "--endpoint-policy",
+        choices=("pedestrian_radius_v1", "robot_pedestrian_radii_v2"),
+        default="robot_pedestrian_radii_v2",
+        help="Use pedestrian_radius_v1 only to reproduce the historical audit.",
+    )
+    parser.add_argument(
+        "--ped-route-completion",
+        action="store_true",
+        help="Report earlier pedestrian segments within 1 m of their endpoint.",
+    )
     args = parser.parse_args(argv)
 
+    if args.release_zones:
+        rows = inspect_release_zones(endpoint_policy=args.endpoint_policy)
+        print(json.dumps(rows, indent=2))
+        if args.waiver_file is None:
+            print("ERROR: --release-zones requires --waiver-file", file=sys.stderr)
+            return 2
+        try:
+            enforce_release_zone_waivers(rows, args.waiver_file)
+        except WaiverValidationError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        return 0
+
     paths = [Path(p) for p in args.map] or [Path(p) for p in DEFAULT_MAPS]
+    if args.ped_route_completion:
+        print(
+            json.dumps(
+                [
+                    {
+                        "map": canonical_repo_path(str(p)),
+                        "findings": inspect_pedestrian_completion_risks(p),
+                    }
+                    for p in paths
+                ],
+                indent=2,
+            )
+        )
+        return 0
     reports = [inspect_map_geometry(p, args.tolerance_m) for p in paths]
     total = sum(r.violations for r in reports)
 

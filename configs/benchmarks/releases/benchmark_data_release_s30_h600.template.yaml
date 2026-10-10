@@ -1,4 +1,4 @@
-# Reusable benchmark-data v0.2 identity template for the 14-arm S30/H600
+# Reusable benchmark-data v0.2 identity template for the 14-arm S30 authored-budget
 # contract. Historical concrete manifests remain immutable reference inputs.
 #
 # The source SHA and publication coordinates are supplied only after a clean
@@ -17,8 +17,8 @@ identity_resolution:
 latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
-canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "2e37aa31cb6714b156f961bada10523e04e6b79fd4f38c51ccb5b50672a9dae1"
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml
+campaign_config_sha256: "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -27,7 +27,9 @@ matrix:
   scenarios: 48
   seeds: 30
   expected_episode_cells: 20160
-  horizon_steps: 600
+  horizon_steps: null
+  scenario_horizons: ../horizon_schedules/release_0_0_8_authored_v1.yaml
+  scenario_horizons_sha256: "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"
   dt: 0.1
 
 publication:
@@ -36,7 +38,7 @@ publication:
   version_doi: "{{version_doi}}"
   reservation_status: reserved_unpublished
   metadata_path: benchmark_data_release_s30_h600_zenodo_metadata.template.json
-  metadata_sha256: "17b6835a84ed01bc1f5fdfdd58899930976b8d07cb3752502683be18c0668dac"
+  metadata_sha256: "a281197a1eccd1f292a4fc90ea9ec1f006c1423c03859b4df7710307dfba9624"
   github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
 
 claim_boundary:
@@ -47,8 +49,8 @@ claim_boundary:
   fallback_or_degraded_evidence: prohibited
 
 scenario:
-  matrix_path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
-  matrix_sha256: "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+  matrix_path: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  matrix_sha256: "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
   suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
   suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
   route_certification_path: ../route_clearance_certifications_v1.yaml
@@ -56,49 +58,57 @@ scenario:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
+  seed_set: release_eval_0_0_8
   seeds: []
-  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
-  seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+  seed_sets_path: ../../benchmarks/seed_sets_0_0_8.yaml
+  seed_sets_sha256: a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706
   resolved_seeds:
-    - 111
-    - 112
-    - 113
-    - 114
-    - 115
-    - 116
-    - 117
-    - 118
-    - 119
-    - 120
-    - 121
-    - 122
-    - 123
-    - 124
-    - 125
-    - 126
-    - 127
-    - 128
-    - 129
-    - 130
-    - 131
-    - 132
-    - 133
-    - 134
-    - 135
-    - 136
-    - 137
-    - 138
-    - 139
-    - 140
+    - 50036
+    - 50140
+    - 50331
+    - 50403
+    - 50813
+    - 51339
+    - 51709
+    - 51767
+    - 52094
+    - 52175
+    - 52257
+    - 52671
+    - 52850
+    - 52971
+    - 53020
+    - 53198
+    - 53239
+    - 53636
+    - 53671
+    - 53779
+    - 55022
+    - 55379
+    - 55568
+    - 56170
+    - 56966
+    - 57077
+    - 57113
+    - 57494
+    - 57943
+    - 59019
 
 metrics:
-  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
-  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
-  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
-  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
   snqi_claim_policy: advisory_no_ranking
-
+  snqi_v2_binding:
+    weights:
+      path: ../snqi_v2/weights.v2.0.json
+      sha256: 684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25
+    anchors:
+      path: ../snqi_v2/anchors.v2.0.json
+      sha256: bb1a526c818efca16c6d4237127c27dc7812947758f78a18c8f1d28c2a65fa4c
+    family:
+      path: ../snqi_v2/family.v2.0.yaml
+      sha256: 6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942
+    acquisition_config:
+      path: ../snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml
+      sha256: fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3
 planners:
   keys:
     - prediction_planner
@@ -145,7 +155,6 @@ artifacts:
     - reports/campaign_report.md
     - reports/matrix_summary.json
     - reports/campaign_table.md
-    - reports/snqi_diagnostics.json
 
 artifact_provenance:
   raw_campaign_output: durable-required

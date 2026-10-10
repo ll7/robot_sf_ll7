@@ -1,11 +1,23 @@
-"""Tests for guarded PPO safety veto behavior."""
+"""Tests for guarded PPO safety and shared planner adapter contracts."""
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
+import yaml
 from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
+from robot_sf.benchmark.map_runner.map_runner_native_command import (
+    NativeCommandStepError,
+    _parse_response,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import policy_command_to_env_action
+from robot_sf.benchmark.runner import _NativeCommandPolicy
+from robot_sf.planner import socnav_sampling_v2 as sampling
+from robot_sf.planner.goal_target import select_goal_target
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     GuardedPPOConfig,
@@ -13,7 +25,11 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
 )
+from robot_sf.planner.socnav_base import SamplingPlannerAdapter, SocNavPlannerConfig
 from robot_sf.planner.socnav_orca import ORCAPlannerAdapter
+from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
+from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 
 def _obs(
@@ -493,7 +509,7 @@ def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> Non
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
@@ -524,7 +540,7 @@ def test_guarded_ppo_near_field_only_prior_skips_clear_scenes() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
@@ -610,6 +626,27 @@ def test_guarded_ppo_tracks_current_goal_before_next_waypoint() -> None:
     assert decision == "ppo_clear"
 
 
+@pytest.mark.parametrize(
+    "profile",
+    ["guarded_ppo_camera_ready_cpu_goal_v2.yaml", "guarded_ppo_release_v0_0_8.yaml"],
+)
+def test_guarded_ppo_outer_guard_looks_ahead_for_one_waypoint_boundary_step(profile: str) -> None:
+    """The outer guard keeps its own lookahead while the v2 fallback uses current."""
+    release_path = Path(__file__).parents[2] / "configs/algos" / profile
+    release_config = yaml.safe_load(release_path.read_text(encoding="utf-8"))
+    guard = GuardedPPOAdapter(config=build_guarded_ppo_config(release_config))
+    observation = _obs(robot=(8.0, 5.0), goal=(8.0, 5.0), next_goal=(8.0, 8.0))
+    _, _, outer_target, _, _ = guard._extract_state(observation)
+    np.testing.assert_array_equal(outer_target, [8.0, 8.0])
+    fallback_target = select_goal_target(
+        observation["robot"]["position"],
+        observation["goal"]["current"],
+        observation["goal"]["next"],
+        version=release_config["fallback_risk_dwa"]["goal_target_version"],
+    )
+    np.testing.assert_array_equal(fallback_target, [8.0, 5.0])
+
+
 def test_guarded_ppo_honors_array_pedestrian_count_for_padded_rows() -> None:
     """Padded zero pedestrian rows from SocNav observations should not become real blockers."""
     guard = GuardedPPOAdapter(
@@ -638,9 +675,9 @@ def test_guarded_ppo_best_effort_prefers_fallback_when_clearer() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
-            {"safe": False, "min_ped_clear": 0.8},
-            {"safe": False, "min_ped_clear": 0.5},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.8, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.5, "min_obs_clear": float("inf"), "progress": 0.0},
         ]
     )
     guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
@@ -800,10 +837,11 @@ def test_guarded_ppo_obstacle_clearance_helper_branches() -> None:
     meta = {"resolution": [0.5]}
     guard._extract_grid_payload = lambda observation: (grid, meta)  # type: ignore[method-assign]
 
-    guard._preferred_channel = lambda meta: 2  # type: ignore[method-assign]
-    assert guard._min_obstacle_clearance(point, {}) == float("inf")
+    meta["channel_indices"] = [2]
+    with pytest.raises(ValueError, match="static obstacle channel"):
+        guard._min_obstacle_clearance(point, {})
 
-    guard._preferred_channel = lambda meta: 0  # type: ignore[method-assign]
+    meta["channel_indices"] = [0]
     guard._world_to_grid = lambda point, meta, grid_shape: None  # type: ignore[method-assign]
     assert guard._min_obstacle_clearance(point, {}) == 0.0
 
@@ -833,8 +871,7 @@ def test_guarded_ppo_obstacle_clearance_requires_observation_without_grid_payloa
         guard._min_obstacle_clearance(point)
 
     grid = np.zeros((1, 5, 5), dtype=float)
-    meta = {"resolution": [0.5]}
-    monkeypatch.setattr(guard, "_preferred_channel", lambda _meta: 0)
+    meta = {"resolution": [0.5], "channel_indices": [0]}
     monkeypatch.setattr(guard, "_world_to_grid", lambda *_args, **_kwargs: None)
     assert guard._min_obstacle_clearance(point, grid_payload=(grid, meta)) == 0.0
 
@@ -857,9 +894,9 @@ def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.6},
-            {"safe": False, "min_ped_clear": 0.5},
-            {"safe": False, "min_ped_clear": 0.7},
+            {"safe": False, "min_ped_clear": 0.6, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.5, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.7, "min_obs_clear": float("inf"), "progress": 0.0},
         ]
     )
     blocked_guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
@@ -1076,3 +1113,496 @@ def test_guarded_ppo_config_accepts_boundary_values() -> None:
     assert config.prior_blend_weight == 1.0
     assert config.obstacle_threshold == 1.0
     assert config.goal_tolerance == 0.0
+
+
+def test_surface_v2_guard_uses_body_to_body_clearance() -> None:
+    """The candidate guard measures the free gap between the two physical discs."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=1,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+            hard_ped_clearance=0.58,
+            first_step_ped_clearance=0.72,
+        )
+    )
+    unsafe = guard._evaluate_command(
+        _obs(ped_positions=[(1.7, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.0, 0.0),
+    )
+    safe = guard._evaluate_command(
+        _obs(ped_positions=[(2.2, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.0, 0.0),
+    )
+
+    # Include both braking steps: trapezoidal stopping displacement is 0.02 m.
+    assert unsafe["min_ped_clear"] == pytest.approx(0.28)
+    assert unsafe["safe"] is False
+    assert safe["min_ped_clear"] == pytest.approx(0.78)
+    assert safe["safe"] is True
+
+
+def test_surface_v2_guard_reports_ttc_from_rollout_start() -> None:
+    """TTC from each rollout sample includes the elapsed time to that sample."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=1,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+            hard_ped_clearance=0.0,
+            first_step_ped_clearance=0.0,
+        )
+    )
+    result = guard._evaluate_command(
+        _obs(ped_positions=[(3.0, 0.0)], ped_velocities=[(-1.0, 0.0)]),
+        (0.0, 0.0),
+    )
+    # At t=.1, gap=3-.1-.015-1.4=1.485; relative speed=1+.1.
+    assert result["min_ttc"] == pytest.approx(0.1 + 1.485 / 1.1)
+
+
+def test_surface_v2_guard_requires_positive_body_radii() -> None:
+    """Surface geometry cannot silently degrade to center-distance checks."""
+    with pytest.raises(ValueError, match="robot_radius must be finite and positive"):
+        GuardedPPOConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=0.0,
+            pedestrian_radius_m=0.4,
+        )
+
+
+def _adapter_residual_observation(*, speed=0.0, angular=0.0, pedestrian=None):
+    """Build an unnormalised adapter observation without resetting a simulator."""
+    positions = np.asarray([] if pedestrian is None else [pedestrian], dtype=float).reshape(-1, 2)
+    return {
+        "robot": {
+            "position": np.zeros(2),
+            "heading": np.zeros(1),
+            "speed": np.array([speed]),
+            "angular_velocity": np.array([angular]),
+            "radius": np.array([1.0]),
+        },
+        "goal": {"current": np.array([10.0, 0.0])},
+        "pedestrians": {
+            "positions": positions,
+            "velocities": np.zeros_like(positions),
+            "count": np.array([len(positions)]),
+            "radius": np.array([0.4]),
+        },
+        "sim": {"timestep": np.array([0.1])},
+    }
+
+
+def test_guard_checks_pedestrians_until_braking_finishes():
+    """The reported .82 m horizon gap must include the unsafe .50 m stopping gap."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            clearance_model="surface_v2", robot_radius_m=1.0, pedestrian_radius_m=0.4, min_ttc=0.0
+        )
+    )
+    observation = _adapter_residual_observation(speed=2.0, pedestrian=(3.9, 0.0))
+    result = guard._evaluate_command(observation, (0.0, 0.0))
+    assert result["min_ped_clear"] == pytest.approx(0.5)
+    assert not result["safe"]
+
+
+@pytest.mark.parametrize("pedestrian, expected", [((1.0, 2.0), np.inf), ((1.0, 0.0), 0.42)])
+def test_legacy_guard_ttc_is_first_contact_not_closest_approach(pedestrian, expected):
+    """A near miss has no contact; head-on contact occurs at (1 - .58) / 1 seconds."""
+    guard = GuardedPPOAdapter(GuardedPPOConfig(rollout_dt=0.1, rollout_steps=1))
+    result = guard._evaluate_command(
+        _adapter_residual_observation(pedestrian=pedestrian), (1.0, 0.0)
+    )
+    assert result["min_ttc"] == pytest.approx(expected)
+
+
+def test_guard_grid_fallback_keeps_pedestrians_out_of_static_clearance():
+    """Unbound geometry must read the static channel rather than combined occupancy."""
+    guard = GuardedPPOAdapter()
+    observation = _adapter_residual_observation()
+    grid = np.zeros((4, 20, 20))
+    grid[[1, 3], 10, 10] = 1.0
+    meta = {
+        "origin": [-1.0, -1.0],
+        "resolution": [0.1],
+        "size": [2.0, 2.0],
+        "channel_indices": [0, 1, 2, 3],
+    }
+    assert np.isinf(
+        guard._min_obstacle_clearance(np.zeros(2), observation, grid_payload=(grid, meta))
+    )
+    grid[0, 10, 10] = 1.0
+    assert guard._min_obstacle_clearance(np.zeros(2), observation, grid_payload=(grid, meta)) == 0.0
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+@pytest.mark.parametrize("raw_action", [False, True])
+def test_sacadrl_nonfinite_scores_stop_and_record_fallback(monkeypatch, bad, raw_action):
+    """Invalid model scores cannot select a full-speed action through argmax."""
+    adapter = SACADRLPlannerAdapter()
+    model = SimpleNamespace(
+        actions=np.full((2, 2), bad) if raw_action else np.array([[1.0, -0.5], [0.5, 0.0]]),
+        predict=lambda _: np.array([[0.1, 0.2]]) if raw_action else np.array([[bad, bad]]),
+    )
+    monkeypatch.setattr(adapter, "_ensure_model", lambda: model)
+    monkeypatch.setattr(adapter, "_build_network_input", lambda _: (np.zeros(3), 1.0, 10.0))
+    assert adapter.plan(_adapter_residual_observation()) == (0.0, 0.0)
+    provenance = adapter.diagnostics()["checkpoint_provenance"]
+    assert provenance["fallback_triggered"] is True
+    assert provenance["fallback_reason"] == "nonfinite_model_output"
+    model.actions = np.array([[1.0, -0.5], [0.5, 0.0]])
+    model.predict = lambda _: np.array([[0.1, 0.2]])
+    assert adapter.plan(_adapter_residual_observation()) == (0.5, 0.0)
+
+
+def test_sacadrl_episode_reset_clears_transient_fallback_provenance(monkeypatch):
+    """A nonfinite step taints only its episode, retaining checkpoint custody."""
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
+        attach_planner_reset,
+    )
+
+    adapter = SACADRLPlannerAdapter(allow_fallback=True)
+    model = SimpleNamespace(
+        actions=np.array([[1.0, -0.5], [0.5, 0.0]]),
+        predict=lambda _: np.array([[np.nan, np.nan]]),
+    )
+    monkeypatch.setattr(adapter, "_build_model", lambda: model)
+    monkeypatch.setattr(adapter, "_build_network_input", lambda _: (np.zeros(3), 1.0, 10.0))
+    adapter._checkpoint_provenance.update(checkpoint_sha256="checkpoint-custody")
+    observation = _adapter_residual_observation()
+    assert adapter.plan(observation) == (0.0, 0.0)
+    model.predict = lambda _: np.array([[0.1, 0.2]])
+    assert adapter.plan(observation) == (0.5, 0.0)
+    assert adapter.diagnostics()["checkpoint_provenance"]["fallback_triggered"] is True
+
+    def policy(_observation):
+        return adapter.plan(_observation)
+
+    attach_planner_reset(policy, adapter)
+    # The episode runner tolerates adapters without a reset hook.
+    reset = getattr(policy, "_planner_reset", None)
+    if reset is not None:
+        reset(seed=1001)
+    assert policy(observation) == (0.5, 0.0)
+    provenance = adapter.diagnostics()["checkpoint_provenance"]
+    assert provenance["fallback_triggered"] is False
+    assert "fallback_reason" not in provenance
+    assert provenance["checkpoint_sha256"] == "checkpoint-custody"
+    assert provenance["load_succeeded"] is True
+    assert provenance["load_status"] == "loaded"
+    assert adapter._model is model
+
+    # A persistent load failure must still mark later episodes as degraded.
+    adapter._model = None
+    adapter._load_error = RuntimeError("checkpoint unavailable")
+    adapter._checkpoint_provenance.update(
+        load_succeeded=False,
+        load_status="fallback",
+        load_error="RuntimeError: checkpoint unavailable",
+    )
+    reset(seed=1002)
+    assert adapter._ensure_model() is None
+    provenance = adapter.diagnostics()["checkpoint_provenance"]
+    assert provenance["fallback_triggered"] is True
+    assert provenance["load_error"] == "RuntimeError: checkpoint unavailable"
+
+
+@pytest.mark.parametrize("parser", ["map", "classic"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"vx":0,"vy":1}',
+        '{"v":1,"omega":0,"unexpected":1}',
+        '{"v":1,"omega":0,"linear":2}',
+    ],
+)
+def test_native_command_rejects_unknown_or_ambiguous_keys(parser, payload):
+    """Both real parsers refuse holonomic aliases, unknown keys and conflicting pairs."""
+
+    def parse(text):
+        if parser == "map":
+            return _parse_response(text)
+        return _NativeCommandPolicy._parse_response(None, text)
+
+    error = NativeCommandStepError if parser == "map" else ValueError
+    with pytest.raises(error):
+        parse(payload)
+    finite = parse('{"v":0.5,"omega":0.25}')
+    np.testing.assert_allclose(finite, [0.5, 0.25])
+
+
+@pytest.mark.parametrize("rollout_dt", [0.1, 0.2])
+def test_prediction_score_rolls_out_bound_drive_from_observed_velocity(monkeypatch, rollout_dt):
+    """Scoring a command must use the same accelerated turning pose as the bound plant."""
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(predictive_rollout_dt=rollout_dt))
+    settings = DifferentialDriveSettings(max_linear_accel=0.4, max_angular_accel=0.3)
+    drive = DifferentialDriveRobot(settings)
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+    adapter.bind_env(env)
+    config = SimpleNamespace(
+        robot_config=drive.config, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
+    observation = _adapter_residual_observation(speed=0.4, angular=0.2)
+    drive.state.velocity = (0.4, 0.2)
+    drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+    expected = []
+    for _ in range(3):
+        for _ in range(round(rollout_dt / 0.1)):
+            action = policy_command_to_env_action(env=env, config=config, command=(1.5, 0.8))
+            drive.apply_action(tuple(action), 0.1)
+        expected.append(drive.pos)
+
+    def check_progress(*args, robot_traj, **kwargs):
+        np.testing.assert_allclose(robot_traj, expected, atol=1e-14, rtol=0.0)
+        return 0.0
+
+    monkeypatch.setattr(adapter, "_goal_progress", check_progress)
+    adapter._score_action(
+        observation=observation,
+        future_peds=np.zeros((0, 3, 2)),
+        mask=np.zeros(0),
+        v=1.5,
+        w=0.8,
+        steps=3,
+    )
+
+
+def test_prediction_sequence_rollout_uses_measured_drive_state(monkeypatch):
+    """Sequence search must share the accelerated wheel odometry used by one-action scoring."""
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(predictive_rollout_dt=0.1))
+    drive = DifferentialDriveRobot(DifferentialDriveSettings(max_angular_accel=0.3))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+    adapter.bind_env(env)
+    config = SimpleNamespace(
+        robot_config=drive.config, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
+    drive.state.velocity = (0.4, 0.2)
+    drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+    sequence = [(1.5, 0.8), (0.0, -0.5)]
+    expected = []
+    for command in np.repeat(sequence, 2, axis=0):
+        action = policy_command_to_env_action(env=env, config=config, command=tuple(command))
+        drive.apply_action(tuple(action), 0.1)
+        expected.append(drive.pos)
+    real_rollout = adapter._rollout_robot_sequence
+
+    def check_rollout(**kwargs):
+        positions, headings = real_rollout(**kwargs)
+        np.testing.assert_allclose(positions, expected, atol=1e-14, rtol=0.0)
+        return positions, headings
+
+    monkeypatch.setattr(adapter, "_rollout_robot_sequence", check_rollout)
+    adapter._score_action_sequence(
+        observation=_adapter_residual_observation(speed=0.4, angular=0.2),
+        future_peds=np.zeros((0, 4, 2)),
+        mask=np.zeros(0),
+        sequence=sequence,
+        steps=4,
+    )
+
+
+@pytest.mark.parametrize("planner", ["guard", "sampler"])
+def test_static_grid_fallback_refuses_an_unseparated_combined_channel(planner):
+    """Combined-only occupancy cannot identify which cells are static obstacles."""
+    observation = _adapter_residual_observation()
+    observation["occupancy_grid"] = np.ones((1, 20, 20))
+    observation["occupancy_grid_meta"] = {
+        "origin": [-1.0, -1.0],
+        "resolution": [0.1],
+        "size": [2.0, 2.0],
+        "channel_indices": [-1, -1, -1, 0],
+    }
+    guard = GuardedPPOAdapter()
+    with pytest.raises(ValueError, match="static obstacle channel"):
+        if planner == "guard":
+            guard._min_obstacle_clearance(np.zeros(2), observation)
+        else:
+            sampling._ObstacleClearance(guard, observation)
+
+
+@pytest.mark.parametrize("observed_speed", [-0.5, 2.0])
+def test_bounded_sampler_preserves_measured_speed_and_braking_horizon(monkeypatch, observed_speed):
+    """Preferred command bounds cannot erase feasible reverse or overspeed plant state."""
+    config = SocNavPlannerConfig(
+        socnav_sampling_version="bounded_v2",
+        max_linear_speed=1.0,
+        sampling_heading_candidates=1,
+        occupancy_heading_sweep=0.0,
+        sampling_speed_fractions=(1.0,),
+        sampling_horizon_s=0.2,
+        sampling_braking_envelope=True,
+    )
+    settings = DifferentialDriveSettings(
+        max_linear_accel=0.6, max_linear_decel=0.7, max_angular_accel=0.35, allow_backwards=True
+    )
+    adapter = SamplingPlannerAdapter(config)
+    adapter.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(robots=[DifferentialDriveRobot(settings)]),
+            config=SimpleNamespace(robot_config=settings),
+        )
+    )
+    real_rollout = sampling._rollout
+    calls = []
+
+    def check_rollout(*args, **kwargs):
+        points, travelled = real_rollout(*args, **kwargs)
+        drive = DifferentialDriveRobot(settings)
+        drive.state.velocity = (observed_speed, 0.0)
+        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+        env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+        step_dt = args[6]
+        conversion = SimpleNamespace(
+            robot_config=settings, sim_config=SimpleNamespace(time_per_step_in_secs=step_dt)
+        )
+        expected = []
+        for _ in points:
+            action = policy_command_to_env_action(
+                env=env, config=conversion, command=(args[4], 0.0)
+            )
+            drive.apply_action(tuple(action), step_dt)
+            expected.append(drive.pos)
+        np.testing.assert_allclose(points, expected, atol=1e-14, rtol=0.0)
+        stopping_time = abs(observed_speed) / (0.6 if observed_speed < 0 else 0.7)
+        assert len(points) * step_dt >= stopping_time
+        calls.append(points)
+        return points, travelled
+
+    monkeypatch.setattr(sampling, "_rollout", check_rollout)
+    command = adapter.plan(_adapter_residual_observation(speed=observed_speed))
+    assert calls
+    assert 0.0 <= command[0] <= 1.0
+
+
+def test_bounded_sampler_binding_preserves_native_limited_reverse():
+    """A bound reverse forecast must agree with native command execution."""
+    settings = DifferentialDriveSettings(
+        limited_reverse=True,
+        max_reverse_speed=0.5,
+        max_linear_accel=0.6,
+        max_linear_decel=0.7,
+        max_angular_accel=0.35,
+    )
+    drive = DifferentialDriveRobot(settings)
+    adapter = SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(robots=[drive]), config=SimpleNamespace(robot_config=settings)
+    )
+    adapter.bind_env(env)
+    forecast, _ = sampling._rollout(
+        np.zeros(2),
+        0.0,
+        -0.5,
+        0.0,
+        1.0,
+        1.0,
+        0.1,
+        (1.2, 1.0, 0.6, 0.7),
+        settings=adapter._sampling_drive_settings,
+    )
+    drive.state.velocity = (-0.5, 0.0)
+    drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+    config = SimpleNamespace(
+        robot_config=settings, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
+    expected = []
+    for _ in forecast:
+        action = policy_command_to_env_action(env=env, config=config, command=(1.0, 0.0))
+        drive.apply_action(tuple(action), 0.1)
+        expected.append(drive.pos)
+    np.testing.assert_allclose(forecast, expected, atol=1e-14, rtol=0.0)
+    assert adapter._sampling_drive_settings.min_linear_speed == -0.5
+    limits = adapter.diagnostics()["drive_limits"]
+    assert limits["limited_reverse"] is True
+    assert limits["max_reverse_speed"] == 0.5
+
+
+def test_bounded_sampler_brakes_before_turning_from_measured_reverse():
+    """The stop fallback cannot treat signed reverse motion as stationary."""
+    adapter = SamplingPlannerAdapter(
+        SocNavPlannerConfig(
+            socnav_sampling_version="bounded_v2",
+            sampling_speed_fractions=(0.0,),
+            sampling_heading_candidates=1,
+            occupancy_heading_sweep=0.0,
+        )
+    )
+    settings = DifferentialDriveSettings(limited_reverse=True, max_reverse_speed=0.5)
+    adapter.bind_env(
+        SimpleNamespace(
+            config=SimpleNamespace(robot_config=settings),
+            simulator=SimpleNamespace(robots=[DifferentialDriveRobot(settings)]),
+        )
+    )
+    observation = _adapter_residual_observation(speed=-0.5)
+    observation["goal"]["current"] = np.array([0.0, 10.0])
+    assert adapter.plan(observation) == (0.0, 0.0)
+    assert adapter._last_sampling_v2["reason"] == "brake_straight"
+    observation["robot"]["speed"] = np.zeros(1)
+    assert adapter.plan(observation) == (0.0, 1.0)
+    assert adapter._last_sampling_v2["reason"] == "turn_in_place"
+
+
+def test_guard_compares_best_effort_commands_on_the_same_braking_clock():
+    """A shorter stopped forecast must not outrank a better moving escape."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=12,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+        ),
+        fallback_adapter=_FallbackAdapter((0.55, 0.0)),
+    )
+    observation = _adapter_residual_observation(speed=0.5)
+    observation["pedestrians"]["positions"] = np.array([[-2.4, 0.0], [1.6, 0.0]])
+    observation["pedestrians"]["velocities"] = np.array([[1.2, 0.0], [0.4, 0.0]])
+    observation["pedestrians"]["count"] = np.array([2])
+    decision = guard.choose_command_decision(observation, (0.6, 0.0))
+    command, label = decision.as_command_result()
+    # The native 0.55 command covers 0.6575 m in 1.2 s, then 0.1525 m braking.
+    # At 1.8 s the rear pedestrian is at -0.24 m: 0.81 + 0.24 - 1.4 = -0.35 m.
+    # Braking immediately ends at 0.125 m, so its same-clock gap is -1.035 m.
+    assert decision.selected_evaluation["min_ped_clear"] == pytest.approx(-0.35)
+    assert command == pytest.approx((0.55, 0.0))
+    assert label == "fallback_best_effort"
+
+
+@pytest.mark.parametrize("indices", [[-1, 0, -1, -1], [3, 0, -1, -1]])
+def test_guard_grid_refuses_missing_or_out_of_bounds_static_channel(indices):
+    """A pedestrian-only or invalid static channel must not certify a wall-free path."""
+    observation = _adapter_residual_observation()
+    observation["occupancy_grid"] = np.ones((1, 20, 20))
+    observation["occupancy_grid_meta"] = {
+        "origin": [-1.0, -1.0],
+        "resolution": [0.1],
+        "size": [2.0, 2.0],
+        "channel_indices": indices,
+    }
+    with pytest.raises(ValueError, match="static obstacle channel"):
+        GuardedPPOAdapter()._min_obstacle_clearance(np.zeros(2), observation)
+
+
+@pytest.mark.parametrize("helper", ["progress", "collision", "clearance", "ttc", "sequence"])
+def test_bound_prediction_helpers_refuse_unspecified_measured_motion(helper):
+    """Standalone bound forecasts must not silently substitute rest for unknown motion."""
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig())
+    drive = DifferentialDriveRobot(DifferentialDriveSettings())
+    adapter.bind_env(SimpleNamespace(simulator=SimpleNamespace(robots=[drive])))
+    kwargs = {"future_peds": np.ones((1, 3, 2)), "mask": np.ones(1), "v": 1.0, "w": 0.0, "steps": 3}
+    with pytest.raises(ValueError, match="measured-motion observation"):
+        if helper == "progress":
+            adapter._goal_progress({}, {"current": [2.0, 0.0]}, 1.0, 0.0, steps=3)
+        elif helper == "collision":
+            adapter._collision_cost(**kwargs)
+        elif helper == "clearance":
+            adapter._min_clearance(**kwargs)
+        elif helper == "ttc":
+            adapter._ttc_penalty(**kwargs)
+        else:
+            adapter._rollout_robot_sequence(sequence=[(1.0, 0.0)], segment_steps=3, dt=0.2)

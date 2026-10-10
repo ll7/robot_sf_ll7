@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +27,15 @@ def _evaluate_node(node: ast.AST, context: dict[str, Any]) -> Any:
     """Evaluate only the expression features used in the runs-on contract."""
     if isinstance(node, ast.Expression):
         return _evaluate_node(node.body, context)
+    if isinstance(node, ast.Call):
+        assert isinstance(node.func, ast.Name) and node.func.id in {"cancelled", "always"}
+        assert not node.args and not node.keywords
+        return True if node.func.id == "always" else context["cancelled"]
+    if isinstance(node, ast.UnaryOp):
+        assert isinstance(node.op, ast.Not)
+        return not _evaluate_node(node.operand, context)
     if isinstance(node, ast.Name):
-        assert node.id in {"github", "vars"}
+        assert node.id in {"github", "vars", "needs"}
         return context[node.id]
     if isinstance(node, ast.Attribute):
         parent = _evaluate_node(node.value, context)
@@ -36,8 +44,9 @@ def _evaluate_node(node: ast.AST, context: dict[str, Any]) -> Any:
         return node.value
     if isinstance(node, ast.Compare):
         assert len(node.ops) == len(node.comparators) == 1
-        assert isinstance(node.ops[0], ast.Eq)
-        return _evaluate_node(node.left, context) == _evaluate_node(node.comparators[0], context)
+        assert isinstance(node.ops[0], (ast.Eq, ast.NotEq))
+        equal = _evaluate_node(node.left, context) == _evaluate_node(node.comparators[0], context)
+        return equal if isinstance(node.ops[0], ast.Eq) else not equal
     if isinstance(node, ast.BoolOp):
         return _evaluate_bool_op(node, context)
     raise AssertionError(f"Unsupported runs-on expression node: {ast.dump(node)}")
@@ -56,14 +65,35 @@ def _evaluate_bool_op(node: ast.BoolOp, context: dict[str, Any]) -> Any:
     return result
 
 
-def _resolve_runs_on(expression: str, github: dict[str, Any], *, enabled: bool = True) -> str:
+def _resolve_runs_on(
+    expression: str,
+    github: dict[str, Any],
+    *,
+    enabled: bool = True,
+    available: bool = True,
+    provenance: str = "true",
+    admission_result: str = "success",
+) -> str:
     assert expression.startswith("${{") and expression.endswith("}}")
     inner = expression[3:-2].strip().replace("&&", "and").replace("||", "or")
+    inner = inner.replace("needs.runner-availability", "needs.runner_availability")
+    inner = inner.replace("self-hosted-admission", "self_hosted_admission")
     resolved = _evaluate_node(
         ast.parse(inner, mode="eval"),
         {
-            "github": github,
+            "github": {**github, "run_attempt": int(github["run_attempt"])},
             "vars": {"ROBOT_SF_SELF_HOSTED_CI_ENABLED": "true" if enabled else ""},
+            "needs": {
+                "self_hosted_admission": {
+                    "result": admission_result,
+                    "outputs": {"self_hosted": provenance},
+                },
+                "runner_availability": {
+                    "outputs": {
+                        name.replace("-", "_"): "true" if available else "" for name in ROUTED_JOBS
+                    }
+                },
+            },
         },
     )
     assert isinstance(resolved, str)
@@ -83,6 +113,7 @@ def _github_context(
         "actor": actor,
         "triggering_actor": triggering_actor,
         "repository": repository,
+        "run_attempt": "1",
         "event": {"pull_request": {"head": {"repo": {"full_name": head_repository}}}},
     }
 
@@ -109,11 +140,15 @@ def test_routed_jobs_resolve_to_expected_runner(context: dict[str, Any], expecte
     """Only author-started push and same-repository PR jobs reach the private label."""
     jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
     expressions = {jobs[name]["runs-on"] for name in ROUTED_JOBS}
-    assert len(expressions) == 1
+    assert len(expressions) == len(ROUTED_JOBS)
     for name in ROUTED_JOBS:
         job = jobs[name]
         assert _resolve_runs_on(job["runs-on"], context) == expected, name
-        assert job["permissions"] == {"contents": "read"}
+        expected_permissions = {"contents": "read"}
+        if name == "fast-feedback":
+            # The run-scoped snapshot API needs read access even on failed-job retries.
+            expected_permissions["actions"] = "read"
+        assert job["permissions"] == expected_permissions
 
 
 def test_unset_rollout_switch_keeps_trusted_jobs_hosted() -> None:
@@ -124,6 +159,97 @@ def test_unset_rollout_switch_keeps_trusted_jobs_hosted() -> None:
             _resolve_runs_on(jobs[name]["runs-on"], _github_context("pull_request"), enabled=False)
             == "ubuntu-latest"
         )
+
+
+@pytest.mark.parametrize("event", ["push", "pull_request"])
+def test_missing_idle_capacity_keeps_trusted_jobs_hosted(event: str) -> None:
+    """A successful trust check alone must not strand work on a missing runner."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    for name in ROUTED_JOBS:
+        assert (
+            _resolve_runs_on(jobs[name]["runs-on"], _github_context(event), available=False)
+            == "ubuntu-latest"
+        ), name
+
+
+def test_retry_is_hosted_even_with_stale_successful_capacity_output() -> None:
+    """A watchdog or manual retry cannot repeat the self-hosted queue failure."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    context = {**_github_context("push"), "run_attempt": "2"}
+    for name in ROUTED_JOBS:
+        assert _resolve_runs_on(jobs[name]["runs-on"], context) == "ubuntu-latest", name
+
+
+@pytest.mark.parametrize(
+    ("provenance", "available", "attempt", "expected"),
+    [
+        ("true", True, "1", "robot-sf-ci-ephemeral"),
+        ("true", False, "1", "ubuntu-latest"),
+        ("false", True, "1", "ubuntu-latest"),
+        ("", True, "1", "ubuntu-latest"),
+        ("unknown", True, "1", "ubuntu-latest"),
+        ("true", True, "2", "ubuntu-latest"),
+    ],
+)
+def test_provenance_and_availability_are_both_required(
+    provenance: str, available: bool, attempt: str, expected: str
+) -> None:
+    """A healthy runner cannot override denied or missing provenance admission."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    context = {**_github_context("push"), "run_attempt": attempt}
+    for name in ROUTED_JOBS:
+        assert (
+            _resolve_runs_on(
+                jobs[name]["runs-on"], context, provenance=provenance, available=available
+            )
+            == expected
+        ), name
+
+
+def test_inventory_token_and_recovery_authority_stay_in_hosted_trusted_jobs() -> None:
+    """Never execute PR source with the inventory or cancellation credentials."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    router = jobs["runner-availability"]
+    assert router["runs-on"] == "ubuntu-latest"
+    assert router["permissions"] == {"contents": "read"}
+    assert router["continue-on-error"] is True
+    assert "self-hosted-admission" in router["needs"]
+    probe = next(step for step in router["steps"] if step.get("id") == "route")
+    assert "needs.self-hosted-admission.outputs.self_hosted == 'true'" in probe["if"]
+    assert "needs.self-hosted-admission.result == 'success'" in probe["if"]
+    assert "github.event.pull_request.base.ref == 'main'" in probe["if"]
+    assert "github.ref == 'refs/heads/main'" in probe["if"]
+    assert probe["with"]["github-token"] == "${{ github.token }}"
+    assert "secrets." not in str(router)
+    checkout = router["steps"][0]
+    assert "pull_request.base.sha" in checkout["with"]["ref"]
+    assert "pull_request.head.sha" not in checkout["with"]["ref"]
+    assert checkout["with"]["persist-credentials"] is False
+    for name in ROUTED_JOBS:
+        assert "secrets." not in str(jobs[name])
+        assert "always()" not in jobs[name]["if"]
+        assert "!cancelled()" in jobs[name]["if"]
+        assert "needs.dispatch-ownership.result == 'success'" in jobs[name]["if"]
+    watchdog = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-runner-watchdog.yml").read_text(encoding="utf-8")
+    )
+    recovery = watchdog["jobs"]["recover"]
+    assert recovery["runs-on"] == "ubuntu-latest"
+    assert watchdog["permissions"] == {"contents": "read", "actions": "write"}
+    assert recovery["steps"][0]["with"]["ref"] == "${{ github.sha }}"
+    assert "download-artifact" not in str(recovery)
+
+
+def test_failed_provenance_job_cannot_use_stale_positive_outputs() -> None:
+    """Failed admission never grants access even if an earlier step wrote true."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    for name in ROUTED_JOBS:
+        assert (
+            _resolve_runs_on(
+                jobs[name]["runs-on"], _github_context("push"), admission_result="failure"
+            )
+            == "ubuntu-latest"
+        ), name
 
 
 def test_routed_jobs_do_not_persist_checkout_credentials() -> None:
@@ -170,7 +296,8 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "--cap-drop ALL",
         "--security-opt no-new-privileges",
         "--tmpfs /home/runner:",
-        "--cpus 4 --memory 8g",
+        "read -r cpus memory workers < <(slot_limits)",
+        '--cpus "$cpus" --memory "$memory" --memory-swap "$memory"',
         "--jq .token |",
         "--rm --detach --interactive",
         "flock -x",
@@ -198,11 +325,40 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
         "TMPDIR=/home/runner/_work/_tmp",
         "PIP_CACHE_DIR=/home/runner/_work/_pip_cache",
-        "PYTEST_NUM_WORKERS=2",
+        'PYTEST_NUM_WORKERS="$workers"',
         "OPENBLAS_NUM_THREADS=1",
         "OMP_NUM_THREADS=1",
     ):
         assert environment in script
+
+
+@pytest.mark.parametrize(
+    ("hostname", "expected"),
+    (
+        ("imech156-u", "8 16g 4"),
+        ("imech036", "4 8g 2"),
+        ("imech039", "4 8g 2"),
+        ("auxme-imech036", "4 8g 2"),
+        ("auxme-imech039", "4 8g 2"),
+    ),
+)
+def test_slot_limits_keep_each_host_bounded(hostname: str, expected: str) -> None:
+    """Execute the read-only limits command without depending on this host."""
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'hostname() { printf "%s\\n" "$TEST_HOST"; }; source "$1" limits',
+            "slot-limits-test",
+            str(SETUP_SCRIPT),
+        ],
+        env={"PATH": "/usr/bin:/bin", "HOME": "/tmp", "TEST_HOST": hostname},
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.stdout.strip() == expected
 
 
 def test_runner_temporary_paths_resolve_to_intended_mounts() -> None:

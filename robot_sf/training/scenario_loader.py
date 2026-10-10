@@ -1298,8 +1298,15 @@ def _rebase_scenario_paths(
 ) -> Mapping[str, Any]:
     """Rewrite relative map paths to be relative to the root scenario file.
 
+    A relative ``map_file`` in an included manifest resolves beside that manifest first.
+    When a different file with the same relative path also exists beside the root
+    manifest, the reference is ambiguous and rejected instead of silently picking one.
+
     Returns:
         Mapping[str, Any]: Scenario entry with rebased paths when applicable.
+
+    Raises:
+        ValueError: If an included scenario's relative map path names two different files.
     """
     search_root = root if root.is_dir() else root.parent
     map_id = scenario.get("map_id")
@@ -1322,15 +1329,22 @@ def _rebase_scenario_paths(
     if candidate.is_absolute():
         return _rebase_route_override_path(scenario, source=source)
     probe = (search_root / candidate).resolve()
-    if probe.exists():
-        return _rebase_route_override_path(scenario, source=source)
     if source.parent != search_root:
         abs_target = (source.parent / candidate).resolve()
         if abs_target.exists():
+            if probe.exists() and probe != abs_target:
+                raise ValueError(
+                    f"Scenario {scenario.get('name')!r} in {source}: map_file {map_file!r} is "
+                    f"ambiguous; it exists beside the including manifest ({abs_target}) and "
+                    f"beside the root manifest ({probe}). Rename one file or use a path that "
+                    "names only one of them."
+                )
             rel = os.path.relpath(abs_target, search_root)
             updated = dict(scenario)
             updated["map_file"] = Path(rel).as_posix()
             return _rebase_route_override_path(updated, source=source)
+    if probe.exists():
+        return _rebase_route_override_path(scenario, source=source)
     resolved = _resolve_map_with_search_paths(
         map_file,
         map_search_paths=map_search_paths,
@@ -1984,6 +1998,26 @@ def _robot_type_alias(raw: str) -> str:
     return robot_type
 
 
+def _reverse_robot_settings(overrides: Mapping[str, Any]) -> dict[str, Any]:
+    """Parse the opt-in reverse fields shared by both drive models.
+
+    Returns:
+        Explicit reverse overrides, with missing fields omitted.
+    """
+    kwargs: dict[str, Any] = {}
+    if "limited_reverse" in overrides:
+        kwargs["limited_reverse"] = _coerce_bool(
+            overrides["limited_reverse"], field_name="limited_reverse"
+        )
+    if "max_reverse_speed" in overrides:
+        if isinstance(overrides["max_reverse_speed"], bool):
+            raise ValueError("robot_config.max_reverse_speed must be finite and positive")
+        kwargs["max_reverse_speed"] = _coerce_finite_float(
+            overrides["max_reverse_speed"], field_name="max_reverse_speed"
+        )
+    return kwargs
+
+
 def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDriveSettings:
     """Build differential-drive settings from scenario overrides.
 
@@ -2028,6 +2062,7 @@ def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDr
             overrides["allow_backwards"],
             field_name="allow_backwards",
         )
+    kwargs.update(_reverse_robot_settings(overrides))
     return DifferentialDriveSettings(**kwargs)
 
 
@@ -2054,11 +2089,16 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
         kwargs["max_accel"] = _coerce_finite_float(overrides["max_accel"], field_name="max_accel")
     if "max_decel" in overrides:
         kwargs["max_decel"] = _coerce_finite_float(overrides["max_decel"], field_name="max_decel")
+    if "creep_speed" in overrides:
+        kwargs["creep_speed"] = _coerce_non_negative_float(
+            overrides["creep_speed"], field_name="creep_speed"
+        )
     if "allow_backwards" in overrides:
         kwargs["allow_backwards"] = _coerce_bool(
             overrides["allow_backwards"],
             field_name="allow_backwards",
         )
+    kwargs.update(_reverse_robot_settings(overrides))
     return BicycleDriveSettings(**kwargs)
 
 
@@ -2752,6 +2792,8 @@ def _apply_single_pedestrian_override(
         hold_ref_point=hold_ref_point,
         hold_timeout_s=hold_timeout_s,
         metadata=metadata,
+        initial_group_id=entry.get("initial_group_id", ped.initial_group_id),
+        join_radius_m=entry.get("join_radius_m", ped.join_radius_m),
     )
 
 
@@ -2917,13 +2959,89 @@ def _apply_residual_adversary_override(
     config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
 
 
-def _apply_simulation_overrides(
+_SIMULATION_OVERRIDE_ATTRS = (
+    "peds_speed_mult",
+    "peds_reset_follow_route_at_start",
+    "action_latency_steps",
+    "action_latency_ms",
+    "pedestrian_integration_scheme",
+    "oracle_force_trace_enabled",
+    "sampler_capture_enabled",
+    "ped_radius",
+    "pedestrian_uncertainty_envelope_enabled",
+    "pedestrian_uncertainty_alpha_mps",
+    "goal_radius",
+    "goal_completion_policy",
+    "robot_goal_sampling_policy",
+    "pedestrian_model",
+    "social_force_kernel_version",
+    "ttc_predictive_force",
+    "zanlungo_collision_prediction",
+    "anisotropic_fov",
+    "alignment_torque",
+    "route_spawn_distribution",
+    "route_spawn_jitter_frac",
+    "route_spawn_seed",
+    "archetype_composition",
+    "archetype_speed_factors",
+    "archetype_seed",
+    "response_law_composition",
+    "response_law_seed",
+    "population_size",
+    "non_reactive_response_multiplier",
+    "hesitating_response_multiplier",
+)
+
+
+def _apply_group_allocation_mode(
+    config: RobotSimulationConfig, overrides: Mapping[str, Any]
+) -> None:
+    """Apply the opt-in group law without changing the default sampling mode."""
+    if "group_allocation_mode" in overrides:
+        mode = overrides["group_allocation_mode"]
+        if mode not in {"legacy", "exact_small_crowd_v1"}:
+            raise ValueError(
+                "simulation_config.group_allocation_mode must be legacy or exact_small_crowd_v1"
+            )
+        config.sim_config.group_allocation_mode = mode
+
+
+def _apply_simulation_overrides(  # noqa: C901
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
 ) -> None:
     """Apply scenario-level simulation overrides to a config instance."""
-    if not isinstance(overrides, Mapping):
+    if overrides is None:
         return
+    if not isinstance(overrides, Mapping):
+        raise ValueError("simulation_config must be a mapping")
+    supported = set(_SIMULATION_OVERRIDE_ATTRS) | {
+        "time_per_step_in_secs",
+        "max_episode_steps",
+        "difficulty",
+        "ped_density",
+        "max_peds_per_group",
+        "groups",
+        "group_allocation_mode",
+        "prf_config",
+        "residual_adversary",
+    }
+    unknown = sorted(set(overrides) - supported)
+    if unknown:
+        raise ValueError(f"simulation_config contains unknown keys: {', '.join(unknown)}")
+    _apply_group_allocation_mode(config, overrides)
+    if "groups" in overrides:
+        groups = _coerce_finite_float(overrides["groups"], field_name="simulation_config.groups")
+        if not 0.0 <= groups <= 1.0:
+            raise ValueError("simulation_config.groups must be in [0, 1]")
+        config.sim_config.groups = groups
+    if "time_per_step_in_secs" in overrides:
+        dt = _coerce_finite_float(
+            overrides["time_per_step_in_secs"], field_name="simulation_config.time_per_step_in_secs"
+        )
+        if dt <= 0:
+            raise ValueError("simulation_config.time_per_step_in_secs must be positive")
+        config.sim_config.time_per_step_in_secs = dt
     if "max_episode_steps" in overrides:
         steps = max(1, int(overrides["max_episode_steps"]))
         config.sim_config.sim_time_in_secs = steps * config.sim_config.time_per_step_in_secs
@@ -2939,37 +3057,7 @@ def _apply_simulation_overrides(
         config.sim_config.ped_density_by_difficulty[difficulty] = density
     if "max_peds_per_group" in overrides:
         config.sim_config.max_peds_per_group = int(overrides["max_peds_per_group"])
-    for attr in (
-        "peds_speed_mult",
-        "action_latency_steps",
-        "action_latency_ms",
-        "pedestrian_integration_scheme",
-        "oracle_force_trace_enabled",
-        "sampler_capture_enabled",
-        "ped_radius",
-        "pedestrian_uncertainty_envelope_enabled",
-        "pedestrian_uncertainty_alpha_mps",
-        "goal_radius",
-        "goal_completion_policy",
-        "robot_goal_sampling_policy",
-        "pedestrian_model",
-        "social_force_kernel_version",
-        "ttc_predictive_force",
-        "zanlungo_collision_prediction",
-        "anisotropic_fov",
-        "alignment_torque",
-        "route_spawn_distribution",
-        "route_spawn_jitter_frac",
-        "route_spawn_seed",
-        "archetype_composition",
-        "archetype_speed_factors",
-        "archetype_seed",
-        "response_law_composition",
-        "response_law_seed",
-        "population_size",
-        "non_reactive_response_multiplier",
-        "hesitating_response_multiplier",
-    ):
+    for attr in _SIMULATION_OVERRIDE_ATTRS:
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)
     # Expose the pedestrian-robot force as a calibration surface (issue #4974):
@@ -3094,7 +3182,7 @@ def _route_zone_from_map(
             (
                 (waypoints[0][0], waypoints[0][1]),
                 (waypoints[0][0] + 0.1, waypoints[0][1]),
-                (waypoints[0][0], waypoints[0][1] + 0.1),
+                (waypoints[0][0] + 0.1, waypoints[0][1] + 0.1),
             ),
         )
     if 0 <= goal_id < len(goal_zones):
@@ -3105,7 +3193,7 @@ def _route_zone_from_map(
             (
                 (waypoints[-1][0], waypoints[-1][1]),
                 (waypoints[-1][0] + 0.1, waypoints[-1][1]),
-                (waypoints[-1][0], waypoints[-1][1] + 0.1),
+                (waypoints[-1][0] + 0.1, waypoints[-1][1] + 0.1),
             ),
         )
     return spawn_zone, goal_zone

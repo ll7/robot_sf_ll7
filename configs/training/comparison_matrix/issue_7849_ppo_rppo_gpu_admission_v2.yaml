@@ -14,11 +14,13 @@ source:
   base_ref: origin/main
   base_commit: d62a4433716910db4135d6308e01ffccfaa26a74
   inventory: configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml
-  inventory_sha256: 88822d158188d046db3887a78d5c38348fc137caef5ed3d1a902f45c9b06146b
+  inventory_sha256: b8768a0e2c75b06d6d670cd92ec0cb90031e6b5f52c051f8a59d398c04c8208a
   binding_rule: Use one clean exact-head public worktree. Rehash the inventory, every
     listed source/config/scenario/map input, and the resolved environment manifest
     immediately before route admission. A changed byte invalidates this packet and
-    requires a new review.
+    requires a new review. The live rehash
+    runs at admission via scripts/dev/preflight_launch_packet.py, not in per-PR CI
+    (decision in #9953).
   checksums:
     configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml: a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa
     configs/training/ppo/issue_7849_ppo_full_v2.yaml: f83d66ded3a22b2f5e7c2fa8fe894b663769e49586ca42d47cd8f41abfb74103

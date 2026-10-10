@@ -6,7 +6,7 @@ commands at the social-force desired speed.  The historical ``grid_cell_sum_v1``
 path stays the default.
 """
 
-from itertools import pairwise
+from itertools import groupby, pairwise
 from pathlib import Path
 
 import numpy as np
@@ -382,6 +382,8 @@ def _run(
     positions: list | None = None,
     commands: list | None = None,
 ) -> dict:
+    if not 1001 <= seed <= 1030:
+        raise ValueError("Episode regressions require development seeds 1001-1030")
     scenario = next(
         dict(row) for row in load_scenarios(scenario_path) if row.get("name") == scenario_id
     )
@@ -390,6 +392,7 @@ def _run(
 
     def _record_plan(self, observation):
         command = original_plan(self, observation)
+        assert self._last_simulation_timestep["seconds"] == pytest.approx(0.1)
         if commands is not None:
             commands.append(command)
         return command
@@ -422,13 +425,22 @@ def _run(
         SocialForcePlannerAdapter.plan = original_plan
 
 
+# Fixed-clock calibration: tests/benchmark/fixtures/issue_10007_fxb/dev_seed_calibration.json.
+# Doorway dev seeds 1001-1003: max 94 spin commands and 22 consecutive spin
+# commands. Ceil(1.25 * max) gives 118 total and 28 consecutive (2.8 s at dt=0.1).
+# All three runs had zero large turn flips; keep that discrete invariant exact.
+DEV_EPISODE_SEEDS = (1001, 1002, 1003)
+DOORWAY_SPIN_LIMIT = 118
+DOORWAY_CONSECUTIVE_SPIN_LIMIT = 28
+
+
 @pytest.mark.slow
-def test_bottleneck_low_without_pedestrians_reaches_goal() -> None:
-    """The pedestrian-free bottleneck is completed (v1 orbited for the whole horizon)."""
+def test_bottleneck_low_dev_seed_reaches_goal() -> None:
+    """The pedestrian-free bottleneck completes with the observed 0.1 s clock."""
     record = _run(
         Path("configs/scenarios/archetypes/classic_bottleneck.yaml"),
         "classic_bottleneck_low",
-        111,
+        1001,
     )
     assert record["outcome"] == {
         "route_complete": True,
@@ -438,49 +450,56 @@ def test_bottleneck_low_without_pedestrians_reaches_goal() -> None:
 
 
 @pytest.mark.slow
-def test_group_crossing_seed_22_makes_monotone_progress_and_reaches_goal() -> None:
-    """Group crossing seed 22 progresses every second of the first 10 s and completes."""
+@pytest.mark.parametrize("seed", DEV_EPISODE_SEEDS)
+def test_group_crossing_dev_seeds_make_monotone_progress_and_reach_goal(seed: int) -> None:
+    """Dev runs progress every second of the first 10 s and complete without contact."""
     positions: list[np.ndarray] = []
     record = _run(
         Path("configs/scenarios/archetypes/classic_group_crossing.yaml"),
         "classic_group_crossing_medium",
-        22,
+        seed,
         positions,
     )
     assert record["outcome"]["route_complete"] is True
     assert record["outcome"]["collision_event"] is False
+    assert len(positions) > 100
     final_position = positions[-1]
     distances = [float(np.linalg.norm(positions[i] - final_position)) for i in range(0, 101, 10)]
     assert all(later < earlier for earlier, later in pairwise(distances))
 
 
 @pytest.mark.slow
-def test_release_matrix_bottleneck_low_seed_112_enters_goal_zone() -> None:
-    """The shipped v2 config completes under goal_zone_entry_v1.
-
-    With terminal_goal_v1 enabled the robot stopped 1.75 m before the final
-    waypoint, outside the goal zone, and timed out on this seed.
-    """
+@pytest.mark.parametrize("seed", [1001, 1002])
+def test_release_matrix_bottleneck_low_dev_seed_enters_goal_zone(seed: int) -> None:
+    """The shipped v2 config completes under goal_zone_entry_v1 on dev seeds."""
     assert V2_CONFIG == {"social_force_planner_version": V2}
-    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", 112)
+    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", seed)
     assert record["outcome"]["route_complete"] is True
+    assert record["outcome"]["collision_event"] is False
 
 
 @pytest.mark.slow
-def test_narrow_doorway_seed_111_does_not_spin_in_place() -> None:
-    """In a dead end the turn direction never flips and the spin is bounded.
+@pytest.mark.parametrize("seed", DEV_EPISODE_SEEDS)
+def test_narrow_doorway_dev_seeds_bound_spin_without_turn_flips(seed: int) -> None:
+    """An impassable doorway has bounded spin and no large alternating turns.
 
-    The 1 m-radius robot does not fit through this doorway, so the episode
-    times out.  Before the turn rules, 234 of 400 commands were (0, +-max turn)
-    with 55 sign flips and mean curvature about 330; with them there are no
-    sign flips and the robot creeps around the force balance instead.
+    Bounds use fixed-code dev measurements with a 25% spin margin, documented
+    beside DEV_EPISODE_SEEDS. Consecutive command counts remain well-defined at
+    zero translation, unlike mean curvature. This is a dev regression contract,
+    not held-out performance evidence or a claim of zero spinning.
     """
     commands: list[tuple[float, float]] = []
-    record = _run(RELEASE_MATRIX, "francis2023_narrow_doorway", 111, commands=commands)
+    record = _run(RELEASE_MATRIX, "francis2023_narrow_doorway", seed, commands=commands)
+    assert commands
     turns = [angular for _linear, angular in commands]
     flips = sum(1 for a, b in pairwise(turns) if a * b < 0.0 and abs(a) > 0.5 and abs(b) > 0.5)
-    spinning = sum(1 for linear, angular in commands if linear < 0.05 and abs(angular) > 0.9)
+    spin_mask = [linear < 0.05 and abs(angular) > 0.9 for linear, angular in commands]
+    longest_spin = max((sum(1 for _ in run) for spin, run in groupby(spin_mask) if spin), default=0)
     assert flips == 0
-    assert spinning <= 150
-    assert record["metrics"]["curvature_mean"] < 50.0
-    assert record["outcome"]["collision_event"] is False
+    assert sum(spin_mask) <= DOORWAY_SPIN_LIMIT
+    assert longest_spin <= DOORWAY_CONSECUTIVE_SPIN_LIMIT
+    assert record["outcome"] == {
+        "route_complete": False,
+        "collision_event": False,
+        "timeout_event": True,
+    }

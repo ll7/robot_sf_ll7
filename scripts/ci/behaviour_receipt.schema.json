@@ -1,0 +1,775 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "behaviour-change-receipt.v1"
+    },
+    "head_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "scheduler": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "slurm"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      },
+      "required": [
+        "kind",
+        "job_id",
+        "source_sha"
+      ],
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "uri",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "baseline": {
+      "type": "object",
+      "properties": {
+        "release": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "artifact_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "comparison": {
+          "type": "string",
+          "minLength": 1
+        },
+        "body_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "differences": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "release",
+        "source_sha",
+        "artifact_uri",
+        "artifact_sha256",
+        "comparison",
+        "body_id",
+        "config_sha256",
+        "differences"
+      ],
+      "additionalProperties": false
+    },
+    "vehicle": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "body_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "body_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "arm": {
+            "type": "string",
+            "minLength": 1
+          },
+          "map": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 1001,
+            "maximum": 1030
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "collisions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fallback": {
+            "type": "boolean"
+          },
+          "baseline_success": {
+            "type": "boolean"
+          },
+          "baseline_collisions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "execution_mode": {
+            "enum": [
+              "native",
+              "adapter",
+              "mixed"
+            ]
+          },
+          "algorithm": {
+            "type": "string",
+            "minLength": 1
+          },
+          "controller_executed": {
+            "type": "boolean"
+          },
+          "degraded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "arm",
+          "map",
+          "seed",
+          "success",
+          "collisions",
+          "fallback",
+          "baseline_success",
+          "baseline_collisions",
+          "execution_mode",
+          "algorithm",
+          "controller_executed",
+          "degraded"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "arm": {
+            "type": "string",
+            "minLength": 1
+          },
+          "map": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "success_to_failure",
+              "new_collision"
+            ]
+          },
+          "class": {
+            "enum": [
+              "defect",
+              "known_limitation",
+              "vehicle_specific_infeasible",
+              "measurement_inconsistency"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "arm",
+          "map",
+          "seed",
+          "kind",
+          "class",
+          "evidence",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "map": {
+            "type": "string",
+            "minLength": 1
+          },
+          "vehicle": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "const": "infeasible_by_design"
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "map",
+          "vehicle",
+          "kind",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "totals": {
+      "type": "object",
+      "properties": {
+        "episodes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_collisions": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "episodes",
+        "new_failures",
+        "new_collisions"
+      ],
+      "additionalProperties": false
+    },
+    "interaction_audit": {
+      "type": "object",
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      },
+      "required": [
+        "uri",
+        "sha256",
+        "source_sha"
+      ],
+      "additionalProperties": false
+    },
+    "refute_review": {
+      "type": "object",
+      "properties": {
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "verdict": {
+          "const": "accepted"
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "head_sha",
+        "verdict",
+        "uri"
+      ],
+      "additionalProperties": false
+    },
+    "scope_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "head_sha",
+    "scheduler",
+    "artifact",
+    "baseline",
+    "vehicle",
+    "rows",
+    "classifications",
+    "exceptions",
+    "totals",
+    "interaction_audit",
+    "refute_review",
+    "scope_sha256"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "header": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "behaviour-change-receipt-header.v2"
+        },
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "scheduler": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "slurm"
+            },
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "required": [
+            "kind",
+            "job_id",
+            "source_sha"
+          ],
+          "additionalProperties": false
+        },
+        "artifact": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "uri",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "baseline": {
+          "type": "object",
+          "properties": {
+            "release": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "artifact_uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "comparison": {
+              "type": "string",
+              "minLength": 1
+            },
+            "body_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "config_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "differences": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "release",
+            "source_sha",
+            "artifact_uri",
+            "artifact_sha256",
+            "comparison",
+            "body_id",
+            "config_sha256",
+            "differences"
+          ],
+          "additionalProperties": false
+        },
+        "vehicle": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "body_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "id",
+            "body_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "classifications": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "map": {
+                "type": "string",
+                "minLength": 1
+              },
+              "vehicle": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "const": "infeasible_by_design"
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "map",
+              "vehicle",
+              "kind",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "totals": {
+          "type": "object",
+          "properties": {
+            "episodes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "new_failures": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "new_collisions": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "episodes",
+            "new_failures",
+            "new_collisions"
+          ],
+          "additionalProperties": false
+        },
+        "interaction_audit": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "source_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "required": [
+            "uri",
+            "sha256",
+            "source_sha"
+          ],
+          "additionalProperties": false
+        },
+        "refute_review": {
+          "type": "object",
+          "properties": {
+            "head_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "verdict": {
+              "const": "accepted"
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "head_sha",
+            "verdict",
+            "uri"
+          ],
+          "additionalProperties": false
+        },
+        "scope_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rows_artifact": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "head_sha",
+        "scheduler",
+        "artifact",
+        "baseline",
+        "vehicle",
+        "classifications",
+        "exceptions",
+        "totals",
+        "interaction_audit",
+        "refute_review",
+        "scope_sha256",
+        "rows_artifact"
+      ],
+      "additionalProperties": false
+    },
+    "rows_artifact": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "behaviour-change-rows.v1"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "arm": {
+                "type": "string",
+                "minLength": 1
+              },
+              "map": {
+                "type": "string",
+                "minLength": 1
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 1001,
+                "maximum": 1030
+              },
+              "success": {
+                "type": "boolean"
+              },
+              "collisions": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fallback": {
+                "type": "boolean"
+              },
+              "baseline_success": {
+                "type": "boolean"
+              },
+              "baseline_collisions": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "execution_mode": {
+                "enum": [
+                  "native",
+                  "adapter",
+                  "mixed"
+                ]
+              },
+              "algorithm": {
+                "type": "string",
+                "minLength": 1
+              },
+              "controller_executed": {
+                "type": "boolean"
+              },
+              "degraded": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "arm",
+              "map",
+              "seed",
+              "success",
+              "collisions",
+              "fallback",
+              "baseline_success",
+              "baseline_collisions",
+              "execution_mode",
+              "algorithm",
+              "controller_executed",
+              "degraded"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "classifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "arm": {
+                "type": "string",
+                "minLength": 1
+              },
+              "map": {
+                "type": "string",
+                "minLength": 1
+              },
+              "seed": {
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "success_to_failure",
+                  "new_collision"
+                ]
+              },
+              "class": {
+                "enum": [
+                  "defect",
+                  "known_limitation",
+                  "vehicle_specific_infeasible",
+                  "measurement_inconsistency"
+                ]
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "arm",
+              "map",
+              "seed",
+              "kind",
+              "class",
+              "evidence",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "rows",
+        "classifications"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -5,6 +5,29 @@ reads the episode summaries that were published with a release bundle. It does
 not start a simulator, replay an episode, or require per-step traces. It emits
 diagnostic signals for review; a signal does not establish planner causation.
 
+## Campaign-folder audit
+
+For camera-ready diagnostics, read the manifest inventory. Release gating also binds
+the arm list independently to the committed 0.0.8 template:
+
+```bash
+uv run python scripts/analysis/scan_release_audit.py \
+  --campaign-root /path/to/campaign \
+  --output-dir /path/to/audit --release-gate
+```
+
+The scanner takes enabled arm keys from `campaign_manifest.json` and scenario/seed cells
+from the complete `preflight/preview_scenarios.json`, with the manifest's resolved seed
+policy as fallback. Missing arms and missing cells remain blocking. Its expected preflight
+contract is valid runs (`invalid_run: false`); recorded invalid runs are flagged as mismatches.
+It reads recorded rows only and emits diagnostic output; it does not establish release
+custody or substitute for the checksummed publication-bundle loader.
+
+When the source declares `planner_ids`, omitted pedestrian-cohort settings follow that roster.
+An explicit historical configuration retains the historical cohort and report bytes, so 0.0.7
+manifests and configurations remain reproducible. An explicitly configured missing arm still
+blocks the gate.
+
 ## Bundle source and row contract
 
 The loader admits a publication bundle only after checking
@@ -317,3 +340,10 @@ integers above `2**53`; integral floats above `2**53 - 1` block because
 adjacent counts cannot be distinguished. This command is a release gate only
 after the bundle and preflight inputs are pinned and verified; the example
 paths above are placeholders.
+
+The integrated scanner also retains `--bundle <publication-bundle>` and writes
+`release-row-gate.json`, scenario scan shards, `queue.json`, and `receipt.json`
+into a new `--output-dir`. `--release-gate` independently compares either input
+roster with the committed 0.0.8 template, even without `--config`; a missing arm
+blocks. Exit codes are 0 for completed diagnostics, 1 for a blocked release gate,
+and 2 for invalid input or a crash.

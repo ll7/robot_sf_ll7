@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.nav.map_config import (
     GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
     ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1,
@@ -51,6 +52,7 @@ class DummySimulator:
             robot_goal_sampling_policy: Optional versioned final-target sampling policy.
             robot_radius: Required robot footprint radius when corrected sampling is selected.
         """
+        check_simulation_seed(seed, boundary="DummySimulator.__init__")
         self.map_def = map_def
         self.seed = seed
         self.rng = np.random.default_rng(seed)
@@ -78,6 +80,7 @@ class DummySimulator:
 
     def reset_state(self) -> None:
         """Reset simulator to initial state."""
+        check_simulation_seed(self.seed, boundary="DummySimulator.reset_state")
         self.timestep = 0
         self.rng = np.random.default_rng(self.seed)
         sampling_kwargs = (
@@ -101,17 +104,19 @@ class DummySimulator:
         )
         self.robots[0].reset_state((route[0], navigator.initial_orientation))
 
-    def repopulate_crowd(self) -> None:
+    def repopulate_crowd(self, seed: int | None = None) -> None:
         """Re-sample the pedestrian crowd (issue #9760 protocol hook).
 
         The dummy backend holds no crowd (``ped_pos`` is always empty), so
         there is nothing to re-sample; the method exists so directly-constructed
-        envs running on this backend support the same first-seeded-reset path
-        as the full simulator.
+        envs running on this backend support the same seeded-reset protocol
+        as the full simulator. The seed has no effect on an empty population.
         """
+        check_simulation_seed(seed, boundary="DummySimulator.repopulate_crowd")
 
     def step_once(self, actions) -> None:
         """Advance one timestep using a simple unicycle-style pose update."""
+        check_simulation_seed(self.seed, boundary="DummySimulator.step_once")
         self.timestep += 1
         action = actions[0] if actions else (0.0, 0.0)
         self.robots[0].apply_action(action, dt=self.step_dt)

@@ -42,9 +42,9 @@ def test_episode_seed_pool_rejects_invalid_pool_members(bad_pool):
 def test_episode_seed_pool_rejects_constructor_seed_outside_pool():
     with pytest.raises(
         ValueError,
-        match=r"seed 999 must belong to episode_seed_pool \(1001\.\.1001\); check num_envs",
+        match=r"seed 1004 must belong to episode_seed_pool \(1001\.\.1001\); check num_envs",
     ):
-        _dummy_switching_env(seed=999, episode_seed_pool=(1001,))
+        _dummy_switching_env(seed=1004, episode_seed_pool=(1001,))
 
 
 def test_training_factory_keeps_construct_and_reset_seeds_in_pool(monkeypatch):
@@ -91,8 +91,8 @@ def test_training_factory_keeps_construct_and_reset_seeds_in_pool(monkeypatch):
 
     with pytest.raises(
         ValueError,
-        match=r"seed 999 must belong to episode_seed_pool \(1001\.\.1003\); check num_envs",
+        match=r"seed 1004 must belong to episode_seed_pool \(1001\.\.1003\); check num_envs",
     ):
-        env.reset(seed=999)
+        env.reset(seed=1004)
     assert len(seen) == before
     env.close()

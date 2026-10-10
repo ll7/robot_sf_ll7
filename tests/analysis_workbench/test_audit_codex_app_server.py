@@ -706,7 +706,7 @@ def test_transport_reports_process_loss_and_request_timeout(tmp_path: Path) -> N
         encoding="utf-8",
     )
     slow.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-    slow_transport = CodexAppServerTransport(_config(slow, timeout=0.1))
+    slow_transport = CodexAppServerTransport(_config(slow))
     try:
         slow_transport.initialize()
         with pytest.raises(AppServerTimeout):

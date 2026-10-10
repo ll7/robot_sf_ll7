@@ -340,9 +340,18 @@ def test_live_http_publication_uses_canonical_finding_and_append_only_provider(
     provider = _LiveGitHubProvider()
     opened.service.github_provider = provider
     session = next(iter(opened.service._sessions.values()))
+    serving_ready = threading.Event()
+    service_actions = opened.server.service_actions
+
+    def signal_serving_ready() -> None:
+        service_actions()
+        serving_ready.set()
+
+    opened.server.service_actions = signal_serving_ready
     server_thread = threading.Thread(target=opened.server.serve_forever, daemon=True)
     server_thread.start()
     try:
+        assert serving_ready.wait(HANG_GUARD_SECONDS), "HTTP serving loop never became ready"
         with urlopen(opened.url, timeout=HANG_GUARD_SECONDS) as response:
             browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
         parsed = urlsplit(opened.url)
@@ -399,6 +408,7 @@ def test_live_http_publication_uses_canonical_finding_and_append_only_provider(
     finally:
         opened.server.shutdown()
         server_thread.join(timeout=HANG_GUARD_SECONDS)
+        assert not server_thread.is_alive(), "HTTP serving thread did not stop"
         opened.close()
 
 
@@ -906,3 +916,40 @@ def test_real_service_facade_saved_record_read_rejects_wrong_context_and_source(
         assert valid["records"] == []
     finally:
         service.close()
+
+
+def test_http_publication_waits_for_serving_loop_before_first_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A delayed serving thread must not consume the first HTTP request's budget."""
+    import time
+
+    observed_ready = threading.Event()
+    real_open = open_live_audit_workbench
+    real_urlopen = urlopen
+
+    def delayed_open(*args: Any, **kwargs: Any) -> Any:
+        opened = real_open(*args, **kwargs)
+        real_serve = opened.server.serve_forever
+        real_iteration = opened.server.service_actions
+
+        def observe_iteration() -> None:
+            real_iteration()
+            observed_ready.set()
+
+        def delayed_serve(*args: Any, **kwargs: Any) -> None:
+            # Fault injection, not synchronization: model a loaded runner's startup delay.
+            time.sleep(0.1)
+            real_serve(*args, **kwargs)
+
+        opened.server.service_actions = observe_iteration
+        opened.server.serve_forever = delayed_serve
+        return opened
+
+    def request_after_ready(*args: Any, **kwargs: Any) -> Any:
+        assert observed_ready.is_set(), "HTTP request issued before the serving loop was ready"
+        return real_urlopen(*args, **kwargs)
+
+    monkeypatch.setitem(globals(), "open_live_audit_workbench", delayed_open)
+    monkeypatch.setitem(globals(), "urlopen", request_after_ready)
+    test_live_http_publication_uses_canonical_finding_and_append_only_provider(tmp_path)

@@ -88,6 +88,7 @@ from robot_sf.benchmark.camera_ready._util import (
     _synthetic_actuation_metadata,
     _utc_now,
 )
+from robot_sf.benchmark.effective_physics import campaign_physics, validate_campaign_physics
 from robot_sf.benchmark.fairness_contract import build_fairness_report, emit_fairness_annotations
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
@@ -134,7 +135,7 @@ if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
 
-CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v2"
 _SNQI_FAILED_WARN_BOUNDARY = (
     "SNQI calibration failed under warn and remains advisory only; it is not a "
     "planner-ranking authority."
@@ -3283,6 +3284,8 @@ def _build_campaign_manifest_payload(
             **dict(run_meta.get("seed_variability") or {}),
         },
     }
+    payload.update(campaign_physics(paths.campaign_root))
+    validate_campaign_physics(payload)
     return _snqi_public_payload(payload, snqi)
 
 
@@ -3299,6 +3302,12 @@ def _write_run_level_files(
     """Write run_meta.json, manifest.json, and campaign_manifest.json."""
     campaign_root = paths.campaign_root
     git_meta = paths.git_meta
+    if cfg.numerical_mode is not None and outcome.benchmark_success:
+        from robot_sf.benchmark.numerical_mode import (  # noqa: PLC0415
+            validate_campaign_numerical_manifest,
+        )
+
+        validate_campaign_numerical_manifest(paths.manifest_payload, campaign_root)
     run_meta = _build_run_meta(
         cfg,
         paths=paths,
@@ -3316,18 +3325,28 @@ def _write_run_level_files(
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
     }
+    if cfg.numerical_mode is not None and outcome.benchmark_success:
+        run_manifest["numerical_mode"] = paths.manifest_payload["numerical_mode"]
+        run_manifest["numerical_kernel_context"] = paths.manifest_payload[
+            "numerical_kernel_context"
+        ]
+        run_meta["numerical_mode"] = run_manifest["numerical_mode"]
+    campaign_manifest = _build_campaign_manifest_payload(
+        paths,
+        outcome=outcome,
+        snqi=snqi,
+        run_meta=run_meta,
+        table_paths=table_paths,
+    )
+    if cfg.numerical_mode is not None and not outcome.benchmark_success:
+        for payload in (run_meta, run_manifest, campaign_manifest):
+            payload.pop("numerical_mode", None)
+            payload.pop("numerical_kernel_context", None)
+            payload["requested_numerical_mode"] = paths.manifest_payload["numerical_mode"]
+            payload["numerical_mode_validation"] = "unvalidated"
     _write_json(campaign_root / "run_meta.json", run_meta)
     _write_json(campaign_root / "manifest.json", run_manifest)
-    _write_json(
-        campaign_root / "campaign_manifest.json",
-        _build_campaign_manifest_payload(
-            paths,
-            outcome=outcome,
-            snqi=snqi,
-            run_meta=run_meta,
-            table_paths=table_paths,
-        ),
-    )
+    _write_json(campaign_root / "campaign_manifest.json", campaign_manifest)
 
 
 def _export_publication_bundle_section(  # noqa: PLR0913

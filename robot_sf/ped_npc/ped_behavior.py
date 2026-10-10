@@ -169,6 +169,8 @@ class FollowRouteBehavior:
     """Respawns that could not avoid a robot footprint during the current episode."""
     step_count: int = 0
     """Behavior steps taken in the current episode; respawn events record it."""
+    respawn_epochs: dict[int, int] = field(default_factory=dict)
+    """Per local pedestrian id: route respawns this episode (identity-change signal, #10262)."""
 
     def __post_init__(self):
         """
@@ -189,6 +191,7 @@ class FollowRouteBehavior:
                 sec_id + 1,
                 self.goal_proximity_threshold,
                 group_pos,
+                require_final_waypoint=True,
             )
 
     def set_robot_exclusion(
@@ -251,6 +254,7 @@ class FollowRouteBehavior:
         pedestrian that overlaps the new robot start right after it is sampled.
         """
         self.respawn_overlap_events = []
+        self.respawn_epochs = {}
         self.step_count = 0
         if self.reset_at_start:
             for gid in self.navigators.keys():
@@ -317,6 +321,10 @@ class FollowRouteBehavior:
         self.groups.reposition_group(gid, spawn_positions)
         self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0
+        # A respawn teleports the group to its route start: it is a new actor for
+        # trajectory supervision even though it reuses the same simulator row.
+        for pid in self.groups.groups[gid]:
+            self.respawn_epochs[int(pid)] = self.respawn_epochs.get(int(pid), 0) + 1
 
 
 def _any_inside(points: list[Vec2D], zones: list["PreparedGeometry"]) -> bool:
@@ -359,6 +367,8 @@ class SinglePedestrianBehavior:
     _runtimes: list[SinglePedestrianRuntime] = field(init=False, default_factory=list)
     _id_to_global: dict[str, int] = field(init=False, default_factory=dict)
     _warned_missing_targets: set[int] = field(init=False, default_factory=set)
+    _initial_group_ids: dict[int, int] = field(init=False, default_factory=dict)
+    _leave_group_ids: dict[int, int] = field(init=False, default_factory=dict)
     _pysf_peds: "PedState | None" = field(init=False, default=None, repr=False)
     _start_delay_max_speeds: dict[int, float] = field(
         init=False,
@@ -373,6 +383,8 @@ class SinglePedestrianBehavior:
         for idx, ped in enumerate(self.single_pedestrians):
             global_id = self.single_offset + idx
             self._id_to_global[ped.id] = global_id
+            if global_id in self.groups.group_by_ped_id:
+                self._initial_group_ids[global_id] = self.groups.group_by_ped_id[global_id]
             waits = {rule.waypoint_index: rule.wait_s for rule in ped.wait_at or []}
             self._runtimes.append(
                 SinglePedestrianRuntime(
@@ -428,6 +440,10 @@ class SinglePedestrianBehavior:
 
     def reset(self) -> None:
         """Reset per-pedestrian runtime state for a new episode."""
+        for ped_id, group_id in self._initial_group_ids.items():
+            self.groups.add_to_group(ped_id, group_id)
+        if self._pysf_peds is not None:
+            self._pysf_peds.groups = self.groups.groups_as_lists
         for runtime in self._runtimes:
             runtime.waypoint_index = 0
             runtime.pending_waits = {
@@ -684,13 +700,18 @@ class SinglePedestrianBehavior:
         Returns:
             bool: ``True`` when the join role controls the pedestrian goal.
         """
-        target_group = runtime.joined_group_id or self._resolve_target_group_id(runtime)
+        target_group = runtime.joined_group_id
+        if target_group is None:
+            target_group = self._resolve_target_group_id(runtime)
         if target_group is None or not self.groups.groups.get(target_group):
             return False
         target_pos = self.groups.group_centroid(target_group)
         self.states.redirect(runtime.ped_id, target_pos)
         pos = self.states.pos_of(runtime.ped_id)
-        if dist(pos, target_pos) <= self.goal_proximity_threshold:
+        join_radius = runtime.definition.join_radius_m
+        if join_radius is None:
+            join_radius = self.goal_proximity_threshold
+        if dist(pos, target_pos) <= join_radius:
             self.groups.add_to_group(runtime.ped_id, target_group)
             runtime.joined_group_id = target_group
         return True
@@ -700,7 +721,13 @@ class SinglePedestrianBehavior:
         if runtime.left_group:
             return
         if runtime.ped_id in self.groups.group_by_ped_id:
-            self.groups.new_group({runtime.ped_id})
+            # Reuse the split group across resets instead of accumulating empty groups.
+            group_id = self._leave_group_ids.get(runtime.ped_id)
+            if group_id is None:
+                group_id = self.groups.new_group({runtime.ped_id})
+                self._leave_group_ids[runtime.ped_id] = group_id
+            else:
+                self.groups.add_to_group(runtime.ped_id, group_id)
         runtime.left_group = True
 
     def _resolve_target_group_id(self, runtime: SinglePedestrianRuntime) -> int | None:

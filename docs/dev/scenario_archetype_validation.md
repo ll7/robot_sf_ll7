@@ -74,6 +74,7 @@ three doorway widths, without creating or stepping environments:
 ```bash
 uv run python scripts/validation/check_scenario_archetype_geometry.py \
   --release-zones \
+  --endpoint-policy pedestrian_radius_v1 \
   --waiver-file configs/scenarios/release_0_0_8_endpoint_dispositions.yaml
 ```
 
@@ -126,3 +127,15 @@ not a round centreline buffer. The station bend at x=74 leaves a 1.5 m gap
 between that entire support and the robot goal. Other shared moving-flow
 intersections have individual exact dispositions; nominal support is not a
 claim of runtime clearance or release admission.
+
+## Full-footprint endpoint audit for 0.1.0 (#10091)
+
+The default policy is now `robot_pedestrian_radii_v2`: it compares each full
+robot rectangle with actor support using the sum of the effective robot and
+pedestrian radii. Geometry fingerprints include both radii and the policy.
+The explicit historical policy above preserves 0.0.8 fingerprints and CI's
+existing disposition contract. Old waivers cannot authorize the new policy.
+
+[The 0.1.0 endpoint dispositions](../scenario_endpoint_footprint_0_1_0.md)
+record the 12 additional findings in seven scenarios and their authoring
+implications. These are retained risks, not clearance certificates.

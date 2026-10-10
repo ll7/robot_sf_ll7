@@ -125,6 +125,21 @@ def _expected_jobs(scenarios: list[dict[str, Any]]) -> int:
     return len(_expected_job_identities(scenarios))
 
 
+def _resume_job_identity_seed(value: Any) -> int:
+    """Return a saved row's seed only when it is already an exact integer.
+
+    ``int()`` would accept a numeric string and silently truncate a fractional
+    seed, so both callers must see the malformed row rather than a coerced
+    identity that may collide with a declared job.
+
+    Raises:
+        TypeError: If the value is not an integer (booleans included).
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"malformed resume job identity: seed must be an integer, got {value!r}")
+    return value
+
+
 def _validate_resume_job_identities(episodes_path: Path, expected: set[tuple[str, int]]) -> None:
     """Refuse duplicate, unknown, or malformed logical rows before reusing an arm."""
     seen: set[tuple[str, int]] = set()
@@ -134,7 +149,7 @@ def _validate_resume_job_identities(episodes_path: Path, expected: set[tuple[str
                 continue
             record = json.loads(line)
             try:
-                identity = (str(record["scenario_id"]), int(record["seed"]))
+                identity = (str(record["scenario_id"]), _resume_job_identity_seed(record["seed"]))
             except (KeyError, TypeError, ValueError) as exc:
                 raise ResumeMismatchError(
                     f"malformed resume job identity on line {line_number} in {episodes_path}"
@@ -248,7 +263,7 @@ def _validate_resume_runtime_identities(
                 continue
             record = json.loads(line)
             try:
-                key = (str(record["scenario_id"]), int(record["seed"]))
+                key = (str(record["scenario_id"]), _resume_job_identity_seed(record["seed"]))
                 scenario = scenarios_by_id[key[0]]
                 if key not in expected_identities:
                     expected_identities[key] = expected_runtime_identity(planner, scenario, key[1])

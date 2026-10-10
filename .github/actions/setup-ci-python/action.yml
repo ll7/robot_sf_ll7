@@ -1,7 +1,10 @@
 name: Set up CI Python environment
-description: Shared post-checkout Robot SF CI setup for Python, uv caches, system packages, and artifacts.
+description: Shared post-checkout Robot SF CI setup for Python, optional Node, uv caches, system packages, and artifacts.
 
 inputs:
+  node:
+    description: Install the pinned Node runtime for jobs that run browser tests.
+    default: "false"
   python-version:
     description: Python version passed to actions/setup-python.
     default: "3.12"
@@ -24,6 +27,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Set up browser test runtime
+      if: ${{ inputs.node == 'true' }}
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version-file: .nvmrc
+    - name: Retrieve pinned historical test fixture sources
+      shell: bash
+      run: bash scripts/dev/fetch_test_fixture_sources.sh
+
     - name: Set up Python
       uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:

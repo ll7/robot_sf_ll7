@@ -1,5 +1,6 @@
 """Producer provenance, real-gate admission, and pre-fix negative controls."""
 
+import copy
 import importlib.util
 import json
 import os
@@ -296,6 +297,120 @@ def test_row_construction_audits_recorded_trace_evidence(tmp_path, fault):
     audit = tmp_path / "audit.json"
     producer.write_real_row_audit(audit, source_sha="a" * 40, rows=rows, classifications=classes)
     assert json.loads(audit.read_text())["status"] in {"fail", "degraded"}
+
+
+def _executed_goal_with_optional_metrics():
+    """Mirror #10313's seed-1001 goal row with 203 complete controller actions."""
+    row = {**_raw_row(1001), "scenario_id": "classic_bottleneck_low", "execution_status": "written"}
+    row["steps"] = 203
+    metadata = row["algorithm_metadata"]
+    step = metadata["simulation_step_trace"]["steps"][0]
+    metadata["simulation_step_trace"]["steps"] = [copy.deepcopy(step) for _ in range(203)]
+    metadata["planner_diagnostics"] = {"fallback_count": 0, "degraded_count": 0}
+    metadata["paired_effect_metric_producer"] = {
+        "schema_version": "paired_effect_metric_producer.v1",
+        "status": "unavailable",
+        "reason": "one_or_more_fields_unavailable",
+        "metric_values": {},
+        "fields": {
+            "false_positive_stop_rate": {
+                "status": "unavailable",
+                "reason": "missing_safety_wrapper_summary",
+            }
+        },
+    }
+    return row
+
+
+def test_optional_metrics_do_not_degrade_executed_controller_or_mutate_row():
+    row = _executed_goal_with_optional_metrics()
+    original = copy.deepcopy(row)
+    evidence = producer._execution_evidence(row)
+    assert evidence == {
+        "algorithm": "goal",
+        "controller_executed": True,
+        "execution_mode": "native",
+        "fallback": False,
+        "degraded": False,
+    }
+    assert producer._audit_status([evidence]) == "pass"
+    assert row == original
+
+
+@pytest.mark.parametrize(
+    "fault, axis, expected, audit_status",
+    [
+        ("row_fallback", "fallback", True, "degraded"),
+        ("controller_fallback", "fallback", True, "degraded"),
+        ("positive_counter", "fallback", True, "degraded"),
+        ("negative_counter", "degraded", True, "degraded"),
+        ("string_counter", "degraded", True, "degraded"),
+        ("nonfinite_counter", "degraded", True, "degraded"),
+        ("boolean_counter", "degraded", True, "degraded"),
+        ("controller_status", "controller_executed", False, "fail"),
+        ("nested_controller_status", "degraded", True, "degraded"),
+        ("unavailable_controller_status", "degraded", True, "degraded"),
+        ("missing_action", "controller_executed", False, "fail"),
+        ("empty_action", "controller_executed", False, "fail"),
+        ("missing_trace", "controller_executed", False, "fail"),
+        ("incomplete_trace", "controller_executed", False, "fail"),
+        ("wrong_mode", "execution_mode", "unknown", "fail"),
+        ("contradictory_mode", "execution_mode", "unknown", "fail"),
+        ("no_controller", "controller_executed", False, "fail"),
+    ],
+)
+def test_optional_metrics_do_not_excuse_runtime_faults(fault, axis, expected, audit_status):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    trace = metadata["simulation_step_trace"]
+    counters = metadata["planner_diagnostics"]
+    actions = trace["steps"][0]["planner"]
+    target, key, value = {
+        "row_fallback": (row, "fallback", True),
+        "controller_fallback": (metadata, "fallback_used", True),
+        "positive_counter": (counters, "fallback_count", 1),
+        "negative_counter": (counters, "fallback_count", -1),
+        "string_counter": (counters, "fallback_count", "0"),
+        "nonfinite_counter": (counters, "fallback_count", float("nan")),
+        "boolean_counter": (counters, "fallback_count", False),
+        "controller_status": (metadata, "status", "degraded"),
+        "nested_controller_status": (metadata, "controller", {"status": "degraded"}),
+        "unavailable_controller_status": (metadata, "controller", {"status": "unavailable"}),
+        "missing_action": (actions, "selected_action", None),
+        "empty_action": (actions, "selected_action", {}),
+        "missing_trace": (metadata, "simulation_step_trace", None),
+        "incomplete_trace": (trace, "steps", trace["steps"][:-1]),
+        "wrong_mode": (metadata["planner_kinematics"], "execution_mode", "unknown"),
+        "contradictory_mode": (row, "execution_mode", "adapter"),
+        "no_controller": (row, "controller_executed", False),
+    }[fault]
+    if value is None:
+        target.pop(key)
+    else:
+        target[key] = value
+    evidence = producer._execution_evidence(row)
+    assert evidence[axis] == expected
+    assert producer._audit_status([evidence]) == audit_status
+
+
+@pytest.mark.parametrize("location", ["row", "metadata", "controller"])
+def test_metric_subtree_cannot_mask_controller_degradation(location):
+    row = _executed_goal_with_optional_metrics()
+    metadata = row["algorithm_metadata"]
+    metrics = metadata["paired_effect_metric_producer"]
+    metrics["fields"]["false_positive_stop_rate"]["status"] = "degraded"
+    metrics["fields"]["false_positive_stop_rate"]["fallback_used"] = True
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    if location == "row":
+        row["controller"] = {"status": "degraded"}
+    elif location == "metadata":
+        metadata["status"] = "degraded"
+    else:
+        metadata["controller"] = {"status": "degraded"}
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == ("fail" if location == "metadata" else "degraded")
 
 
 def _payload_fixture(tmp_path, monkeypatch):

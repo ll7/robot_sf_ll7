@@ -360,8 +360,15 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     metadata = row.get("algorithm_metadata") or {}
     algorithm = row.get("algo") or row.get("algorithm")
     mode = resolve_execution_mode(metadata)
+    # Optional derived-metric availability is not controller execution status.
+    runtime_row = {
+        **row,
+        "algorithm_metadata": {
+            key: value for key, value in metadata.items() if key != "paired_effect_metric_producer"
+        },
+    }
     marker = runtime_fallback_or_degraded_marker(
-        row,
+        runtime_row,
         expected_algorithm=algorithm,
         algorithm_metadata=metadata,
     )

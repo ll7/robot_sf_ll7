@@ -118,7 +118,11 @@ def sample_desired_pedestrian_speeds(
     std_eff = PED_SPEED_TIER_STD if std is None else float(std)
     if sampling_metadata is not None:
         sampling_metadata.update(
-            mean_m_s=float(mean), sd_m_s=float(std_eff), cap_m_s=float(high), seed=seed
+            mean_m_s=float(mean),
+            sd_m_s=float(std_eff),
+            cap_m_s=float(high),
+            seed=seed,
+            identity="rejection_truncated_normal_v1" if truncate else "clipped_normal_v1",
         )
     if num_peds <= 0:
         return np.zeros(0, dtype=float)

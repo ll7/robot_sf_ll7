@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import unicodedata
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -2950,6 +2951,7 @@ def test_check_worker_lane_provenance_skips_label_when_pr_shas_unavailable(
 
 
 _RECENT_MERGED_PR_LIMIT = 20
+_MIN_RECENT_MERGED_PRS_WITH_EVIDENCE = 15
 
 
 def _validate_recent_merged_pr_inventory(
@@ -3019,6 +3021,21 @@ def _valid_recent_merged_pr_inventory() -> list[dict[str, object]]:
         {"number": number, "title": f"PR {number}", "body": None if number == 1 else ""}
         for number in range(1, 21)
     ]
+
+
+def _historical_pr_evidence_fixture(pr_number: int) -> HistoricalPREvidence:
+    """Build valid immutable diff evidence for recent-sweep unit tests."""
+    filename = f"file_{pr_number}.py"
+    return HistoricalPREvidence(
+        pr_number=pr_number,
+        base_sha="a" * 40,
+        head_sha=f"{pr_number:040x}",
+        merge_commit_sha=f"{pr_number + 1000:040x}",
+        merge_parent_shas=(f"{pr_number + 2000:040x}",),
+        merge_base_sha="a" * 40,
+        changed_files=(filename,),
+        numstat=pr_contract_check.HistoricalNumstatEvidence.from_numstat(f"1\t0\t{filename}\n"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -3092,6 +3109,60 @@ def test_fetch_recent_merged_pr_inventory_fails_closed_on_timeout(
         _fetch_recent_merged_pr_inventory("ll7/robot_sf_ll7")
 
 
+def test_regression_last_20_merged_prs_checks_available_prs_when_sparse_evidence_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sparse live evidence gaps do not make the regression sweep vacuous."""
+    unavailable = {1, 2}
+    run_all_checks = MagicMock(return_value=([], [], []))
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_recent_merged_pr_inventory",
+        lambda _repo: _valid_recent_merged_pr_inventory(),
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_historical_pr_evidence",
+        lambda number: None if number in unavailable else _historical_pr_evidence_fixture(number),
+    )
+    monkeypatch.setattr(
+        pr_contract_check,
+        "run_all_checks",
+        run_all_checks,
+    )
+
+    with pytest.warns(RuntimeWarning, match=r"PR #1.*PR #2"):
+        test_regression_last_20_merged_prs()
+
+    assert run_all_checks.call_count == _RECENT_MERGED_PR_LIMIT - len(unavailable)
+
+
+def test_regression_last_20_merged_prs_fails_when_evidence_is_unavailable_for_too_many_prs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live sweep with broad evidence loss is not accepted as proof."""
+    unavailable = {1, 2, 3, 4, 5, 6}
+    run_all_checks = MagicMock(return_value=([], [], []))
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_recent_merged_pr_inventory",
+        lambda _repo: _valid_recent_merged_pr_inventory(),
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_historical_pr_evidence",
+        lambda number: None if number in unavailable else _historical_pr_evidence_fixture(number),
+    )
+    monkeypatch.setattr(
+        pr_contract_check,
+        "run_all_checks",
+        run_all_checks,
+    )
+
+    with pytest.raises(pytest.fail.Exception, match="checked only 14 of 20"):
+        test_regression_last_20_merged_prs()
+
+
 def test_regression_last_20_merged_prs() -> None:
     """Run regression test on the last 20 merged PRs to ensure zero false blockers."""
     try:
@@ -3099,6 +3170,8 @@ def test_regression_last_20_merged_prs() -> None:
     except RuntimeError as error:
         pytest.fail(f"Cannot prove the recent merged PR regression sweep: {error}")
 
+    checked_prs = 0
+    unavailable_evidence: list[str] = []
     for pr in prs:
         title = pr["title"]
         body = pr["body"] or ""
@@ -3109,12 +3182,14 @@ def test_regression_last_20_merged_prs() -> None:
         try:
             historical_evidence = _fetch_historical_pr_evidence(number)
         except RuntimeError as error:
-            pytest.fail(f"Immutable diff evidence unavailable for PR #{number}: {error}")
+            unavailable_evidence.append(f"PR #{number}: {error}")
+            continue
         if historical_evidence is None:
-            pytest.fail(
-                "Cannot prove the live PR regression sweep: immutable diff evidence unavailable "
-                f"for PR #{number}"
+            unavailable_evidence.append(
+                f"PR #{number}: immutable diff evidence helper returned no evidence"
             )
+            continue
+        checked_prs += 1
         changed_files = list(historical_evidence.changed_files)
 
         # Pass pr_number=None: this regression test only asserts on blockers, and
@@ -3178,6 +3253,21 @@ def test_regression_last_20_merged_prs() -> None:
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"
+        )
+
+    if checked_prs < _MIN_RECENT_MERGED_PRS_WITH_EVIDENCE:
+        pytest.fail(
+            "Cannot prove the live PR regression sweep: checked only "
+            f"{checked_prs} of {_RECENT_MERGED_PR_LIMIT} recent merged PRs with immutable "
+            f"diff evidence; require at least {_MIN_RECENT_MERGED_PRS_WITH_EVIDENCE}. "
+            f"Unavailable evidence: {'; '.join(unavailable_evidence)}"
+        )
+    if unavailable_evidence:
+        warnings.warn(
+            "Skipped recent merged PR(s) without immutable diff evidence: "
+            + "; ".join(unavailable_evidence),
+            RuntimeWarning,
+            stacklevel=2,
         )
 
 

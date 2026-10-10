@@ -471,6 +471,9 @@ class SimulationSettings:
     desired_speed_truncated: InitVar[bool] = field(default=False, kw_only=True)
     """Opt-in rejection-truncated N(mean, std) on [0, 3]; default retains clipping."""
 
+    group_allocation_mode: InitVar[str] = field(default="legacy", kw_only=True)
+    """Group law: legacy (default) or opt-in exact_small_crowd_v1."""
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "ped_force_radius":
@@ -492,6 +495,11 @@ class SimulationSettings:
             resolved, mode = resolve_social_force_kernel_version_with_mode(value)
             object.__setattr__(self, "_social_force_kernel_version", resolved)
             object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
+        if name == "group_allocation_mode":
+            if not isinstance(value, str) or value not in {"legacy", "exact_small_crowd_v1"}:
+                raise ValueError("group_allocation_mode must be legacy or exact_small_crowd_v1")
+            object.__setattr__(self, "_group_allocation_mode", value)
             return
         if name == "episode_step_limit":
             if value is not None and (type(value) is not int or value <= 0):
@@ -517,6 +525,11 @@ class SimulationSettings:
                 return object.__getattribute__(self, "_social_force_kernel_version")
             except AttributeError:
                 return resolve_social_force_kernel_version_with_mode(None)[0]
+        if name == "group_allocation_mode":
+            try:
+                return object.__getattribute__(self, "_group_allocation_mode")
+            except AttributeError:
+                return "legacy"
         if name == "episode_step_limit":
             try:
                 return object.__getattribute__(self, "_episode_step_limit")
@@ -537,6 +550,8 @@ class SimulationSettings:
             overrides["desired_speed_truncated"] = True
         if self.social_force_kernel_resolution_mode != "defaulted_missing":
             overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
+        if self.group_allocation_mode != "legacy":
+            overrides["group_allocation_mode"] = self.group_allocation_mode
         if self.episode_step_limit is not None:
             overrides["episode_step_limit"] = self.episode_step_limit
         return overrides

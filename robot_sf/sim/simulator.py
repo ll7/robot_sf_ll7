@@ -560,6 +560,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
         config.peds_per_area_m2,
         config.max_peds_per_group,
         group_member_probs=_group_member_probabilities(config),
+        group_allocation_mode=config.group_allocation_mode,
+        group_fraction=config.groups,
         rng=np.random.default_rng(config.route_spawn_seed),
         route_spawn_distribution=config.route_spawn_distribution,
         route_spawn_jitter_frac=config.route_spawn_jitter_frac,

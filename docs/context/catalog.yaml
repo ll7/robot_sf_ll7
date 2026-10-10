@@ -24,6 +24,22 @@ entries:
   status: proposal
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_audit.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_audit.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_mutations.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_mutations.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_10007_fxb/README.md
   status: evidence
   freshness: evidence
@@ -8106,6 +8122,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/2026-10-05_freeze008_box4_seed_admission
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10233_pinned_numerical_mode
   status: evidence
   freshness: evidence
   area: benchmark_evidence

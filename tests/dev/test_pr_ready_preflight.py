@@ -39,6 +39,7 @@ _UNRELATED_OPTIONAL_IMPORTS = (
 )
 
 _POST_PREFLIGHT_SCRIPTS = [
+    "fetch_test_fixture_sources.sh",
     "check_pr_followups.py",
     "check_perf_evidence.py",
     "check_fast_results_claim_map.py",
@@ -886,6 +887,7 @@ def _pr_ready_environment(
         "PR_READY_FINAL",
         "PR_READY_MODE",
         "PR_READY_SKIP_PREFLIGHT",
+        "PR_READY_TERMINATION_RECEIPT",
         "ROBOT_SF_TEST_ENV",
         "SLURM_CLUSTER_NAME",
         "SLURM_JOB_ID",
@@ -3065,3 +3067,49 @@ def test_stop_process_group_kills_descendants_after_parent_exit(tmp_path: Path) 
         if process.poll() is None:
             process.kill()
         process.communicate()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="SIGTERM is POSIX-specific")
+@pytest.mark.parametrize("outer_exists", [False, True], ids=["absent", "sentinel"])
+def test_nested_readiness_does_not_use_outer_termination_receipt(
+    preflight_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    outer_exists: bool,
+) -> None:
+    """A nested controller writes its own receipt and leaves outer custody untouched."""
+    outer = tmp_path / "outer-termination.json"
+    if outer_exists:
+        outer.write_text("outer custody sentinel", encoding="utf-8")
+    monkeypatch.setenv("PR_READY_TERMINATION_RECEIPT", str(outer))
+    _write_signal_lane_stub(preflight_repo)
+    ready = tmp_path / "nested-ready"
+    process = _start_pr_ready(
+        preflight_repo,
+        env_overrides={
+            "PR_READY_MODE": "interim",
+            "PR_READY_SIGNAL_CORE_READY": str(ready),
+            "PR_READY_SIGNAL_CORE_RELEASE": str(tmp_path / "nested-release"),
+        },
+    )
+    try:
+        _wait_for_marker(ready, process, timeout=60.0)
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process, timeout=60.0)
+        assert process.returncode == 143, stdout + stderr
+        if outer_exists:
+            assert outer.read_text(encoding="utf-8") == "outer custody sentinel"
+        else:
+            assert not outer.exists()
+        assert str(outer) not in stdout + stderr
+        receipts = list(
+            (preflight_repo / "output/validation/pr_ready").glob("pr_ready_termination_*.json")
+        )
+        assert len(receipts) == 1
+        payload = json.loads(receipts[0].read_text(encoding="utf-8"))
+        assert payload["signal"]["exit_code"] == 143
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["controller_pid"] == process.pid
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process, timeout=60.0)

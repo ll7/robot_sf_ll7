@@ -83,3 +83,29 @@ def test_classify_outcome_prefers_flags_over_ambiguous_reason() -> None:
     assert sweep.classify_outcome(row) == "timeout"
     assert sweep.classify_outcome({"metrics": {"success": True}}) == "success"
     assert sweep.classify_outcome({"outcome": {"collision_event": True}}) == "collision"
+
+
+def test_width_diagnostic_does_not_inherit_historical_snqi_anchors(tmp_path):
+    """Actor-free v2 diagnostics must reach metrics without incompatible v1 anchors."""
+    import yaml
+
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+
+    cfg_path, _ = sweep.build_derived_inputs(
+        "width",
+        seeds=[1001],
+        arms=["goal"],
+        scenarios_filter=None,
+        workers=1,
+        out_dir=tmp_path,
+        step_trace=True,
+    )
+    payload = yaml.safe_load(cfg_path.read_text())
+    assert payload["snqi_weights"] is None
+    assert payload["snqi_baseline"] is None
+    cfg = load_campaign_config(cfg_path)
+    assert cfg.snqi_weights_path is None
+    assert cfg.snqi_baseline_path is None
+    source = yaml.safe_load((REPO_ROOT / sweep.SUITES["width"]).read_text())
+    assert source["snqi_weights"] is not None
+    assert source["snqi_baseline"] is not None

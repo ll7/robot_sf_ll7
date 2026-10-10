@@ -9,6 +9,7 @@ import pytest
 from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_V3,
     BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
     BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
     BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     DEFAULT_OBSTACLE_FORCE_LAW,
@@ -190,7 +191,7 @@ def test_line_segment_batch_dispatch_matches_scalar_geometry(law_version):
 def test_obstacle_force_law_resolution_and_metadata_are_explicit():
     """Law resolution defaults old metadata to legacy and records site conventions."""
     assert resolve_obstacle_force_law() == DEFAULT_OBSTACLE_FORCE_LAW
-    assert DEFAULT_OBSTACLE_FORCE_LAW == BODY_EDGE_EXPONENTIAL_V3
+    assert DEFAULT_OBSTACLE_FORCE_LAW == LEGACY_SHIFTED_GRADIENT_V1
     assert resolve_obstacle_force_law_with_mode() == (
         DEFAULT_OBSTACLE_FORCE_LAW,
         "defaulted_missing",
@@ -217,7 +218,7 @@ def test_obstacle_force_law_resolution_and_metadata_are_explicit():
         )
         == SURFACE_DISTANCE_UNIT_NORMAL_V2
     )
-    assert ObstacleForceConfig().law_version == BODY_EDGE_EXPONENTIAL_V3
+    assert ObstacleForceConfig().law_version == LEGACY_SHIFTED_GRADIENT_V1
     assert ObstacleForceConfig().obstacle_force_law_resolution_mode == "defaulted_missing"
 
     metadata = obstacle_force_law_metadata(
@@ -317,6 +318,8 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     legacy_component = ObstacleForce(legacy_config, _Simulation())
     legacy_expected = obstacle_force((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), -0.57)
     np.testing.assert_array_equal(legacy_component()[0], np.asarray(legacy_expected) * 10.0)
+    default_component = ObstacleForce(ObstacleForceConfig(threshold=-0.57), _Simulation())
+    np.testing.assert_array_equal(default_component()[0], legacy_component()[0])
     legacy_metadata = legacy_component.law_metadata()
     assert legacy_metadata["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
     assert legacy_metadata["resolution_mode"] == "explicit"
@@ -335,11 +338,13 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     assert corrected_metadata["resolution_mode"] == "explicit"
 
 
-def test_default_body_edge_law_is_finite_range_and_uses_pedestrian_radius():
+def test_explicit_body_edge_law_is_finite_range_and_uses_pedestrian_radius():
     """Distant surfaces are inactive and the range-only candidate keeps the old curve."""
     obstacle = (8.0, 2.6, 8.0, 4.0)
     ped_pos = (6.5, 2.0)
-    assert obstacle_force_for_law(obstacle, (-1.0, 0.0), ped_pos, 0.35) == (0.0, 0.0)
+    assert obstacle_force_for_law(
+        obstacle, (-1.0, 0.0), ped_pos, 0.35, BODY_EDGE_EXPONENTIAL_V3
+    ) == (0.0, 0.0)
 
     near_pos = (7.7, 2.6)
     expected = (-0.3 * (1.0 - math.exp(-5.0)), 0.0)
@@ -383,7 +388,17 @@ def test_body_edge_variants_are_selectable_and_contact_only():
     assert stiff_contact[1] > physical_margin[1]
 
 
-def test_default_wall_force_does_not_balance_lone_walker_before_narrow_doorway():
+@pytest.mark.parametrize(
+    "law",
+    [
+        BODY_EDGE_EXPONENTIAL_V3,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+        BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+        BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+    ],
+)
+def test_explicit_body_edge_wall_force_does_not_balance_lone_walker_before_narrow_doorway(law):
     """A 1.2 m doorway must not create a force barrier before the opening."""
 
     class _Peds:
@@ -406,11 +421,13 @@ def test_default_wall_force_does_not_balance_lone_walker_before_narrow_doorway()
                 dtype=float,
             )
 
-    for law in (BODY_EDGE_EXPONENTIAL_V3, "body_edge_exponential_v3_multi_segment"):
-        braking_force_x = -float(
-            ObstacleForce(ObstacleForceConfig(law_version=law), _Simulation())()[0, 0]
-        )
-        assert braking_force_x < 1.30
+    config = ObstacleForceConfig(law_version=law)
+    braking_force_x = -float(ObstacleForce(config, _Simulation())()[0, 0])
+    assert braking_force_x < 1.30
+    assert config.obstacle_force_law_resolution_mode == "explicit"
+    assert ObstacleForce(config, _Simulation()).law_metadata()["compatibility_mode"] == (
+        "corrected_opt_in"
+    )
 
 
 def test_multi_segment_wall_law_keeps_both_distinct_nearby_surfaces():

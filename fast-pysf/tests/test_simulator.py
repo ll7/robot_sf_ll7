@@ -6,7 +6,7 @@ import numpy as np
 import pysocialforce as pysf
 import pytest
 from pysocialforce.config import (
-    BODY_EDGE_EXPONENTIAL_V3,
+    LEGACY_SHIFTED_GRADIENT_V1,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
     ObstacleForceConfig,
     SceneConfig,
@@ -85,7 +85,7 @@ def test_compute_forces_accumulates_multiple_force_components():
 
 
 def test_simulator_emits_explicit_obstacle_force_law_metadata():
-    """Simulator metadata records corrected defaults and explicit opt-in dispatch."""
+    """Simulator metadata records legacy defaults and explicit opt-in dispatch."""
     state = np.zeros((0, 7), dtype=float)
     legacy = pysf.Simulator(state=state)
     corrected = pysf.Simulator(
@@ -95,7 +95,7 @@ def test_simulator_emits_explicit_obstacle_force_law_metadata():
         ),
     )
 
-    assert legacy.obstacle_force_law_metadata()["law_version"] == BODY_EDGE_EXPONENTIAL_V3
+    assert legacy.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
     assert corrected.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
     assert legacy.obstacle_force_law_metadata()["enabled"] is True
     assert legacy.obstacle_force_law_metadata()["applied"] is False
@@ -171,9 +171,9 @@ def test_default_simulator_configs_are_instance_local():
     assert default_v2.obstacle_force_law_metadata()["law_version"] == (
         SURFACE_DISTANCE_UNIT_NORMAL_V2
     )
-    assert fresh_v2.obstacle_force_law_metadata()["law_version"] == BODY_EDGE_EXPONENTIAL_V3
+    assert fresh_v2.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
     assert default.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
-    assert fresh.obstacle_force_law_metadata()["law_version"] == BODY_EDGE_EXPONENTIAL_V3
+    assert fresh.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
 def test_default_simulator_configs_are_isolated_between_instances():
@@ -188,7 +188,7 @@ def test_default_simulator_configs_are_isolated_between_instances():
         first.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
 
         assert first.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
-        assert second.obstacle_force_law_metadata()["law_version"] == BODY_EDGE_EXPONENTIAL_V3
+        assert second.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
 def test_compute_force_components_evaluates_each_force_once_and_preserves_default_sum():

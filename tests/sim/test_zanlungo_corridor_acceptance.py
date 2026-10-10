@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 import pytest
+from pysocialforce.config import BODY_EDGE_EXPONENTIAL_V3
 
+from robot_sf.research import zanlungo_corridor_acceptance
 from robot_sf.research.zanlungo_corridor_acceptance import (
     AcceptanceConfig,
     CorridorFixtureConfig,
@@ -36,11 +39,27 @@ def config() -> AcceptanceConfig:
     return load_acceptance_config(CONFIG_PATH)
 
 
+@pytest.fixture(
+    scope="module",
+    params=[None, BODY_EDGE_EXPONENTIAL_V3],
+    ids=["legacy_default", "explicit_body_edge"],
+)
+def wall_law(request: pytest.FixtureRequest) -> str | None:
+    """Exercise both release defaults and the explicitly selected corrected law."""
+    return request.param
+
+
 @pytest.fixture(scope="module")
-def report(config: AcceptanceConfig) -> dict:
-    """Run the frozen geometry on a development seed without editing its packet."""
+def report(config: AcceptanceConfig, wall_law: str | None) -> dict:
+    """Use an explicit opt-in only for the corrected-law regression, not the packet."""
     development_config = replace(config, fixture=replace(config.fixture, seed=1001))
-    return run_acceptance(development_config)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            zanlungo_corridor_acceptance,
+            "SimulationSettings",
+            partial(SimulationSettings, obstacle_force_law=wall_law),
+        )
+        return run_acceptance(development_config)
 
 
 def test_canonical_config_predeclares_fixture_and_parameter_bookkeeping(
@@ -61,14 +80,18 @@ def test_canonical_config_predeclares_fixture_and_parameter_bookkeeping(
     assert all(case.relative_to_reference is not None for case in config.cases[1:])
 
 
-def test_cpu_harness_labels_reference_yielding_and_control_pass_through(
+def test_cpu_harness_labels_reference_yielding_and_law_specific_control(
     report: dict,
+    wall_law: str | None,
 ) -> None:
-    """The reference yields without requiring distant walls to squeeze the control."""
+    """Legacy keeps its collision label; explicitly corrected walls permit passing."""
     by_id = {row["case_id"]: row for row in report["rows"]}
     assert by_id["zanlungo_paper_reference"]["metrics"]["outcome_label"] == "yielding"
-    assert by_id["social_force_control"]["metrics"]["outcome_label"] == "pass_through"
-    assert by_id["social_force_control"]["metrics"]["collision_proxy_avoided"] is True
+    expected = "collision_proxy" if wall_law is None else "pass_through"
+    assert by_id["social_force_control"]["metrics"]["outcome_label"] == expected
+    assert by_id["social_force_control"]["metrics"]["collision_proxy_avoided"] is (
+        wall_law is not None
+    )
     assert report["acceptance_checks"]["reference_outcome_is_yielding"] is True
     assert report["acceptance_met"] is True
 

@@ -136,7 +136,7 @@ BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY = "body_edge_exponential_v3_range_only"
 BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN = "body_edge_exponential_v3_physical_margin"
 BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF = "body_edge_exponential_v3_contact_stiff"
 BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT = "body_edge_exponential_v3_multi_segment"
-DEFAULT_OBSTACLE_FORCE_LAW = BODY_EDGE_EXPONENTIAL_V3
+DEFAULT_OBSTACLE_FORCE_LAW = LEGACY_SHIFTED_GRADIENT_V1
 BODY_EDGE_EXPONENTIAL_LAW_VERSIONS = frozenset(
     {
         BODY_EDGE_EXPONENTIAL_V3,
@@ -345,8 +345,6 @@ def obstacle_force_law_metadata(  # noqa: PLR0913
 
     if resolved == LEGACY_SHIFTED_GRADIENT_V1:
         compatibility_mode = "legacy_compatible"
-    elif resolved in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
-        compatibility_mode = "corrected_default"
     else:
         compatibility_mode = "corrected_opt_in"
 
@@ -584,9 +582,9 @@ class ObstacleForceConfig:
         threshold: Additive distance offset (m), subtracted like a radius from
             the pedestrian-obstacle distance. Negative values inflate the
             effective distance and soften near-wall repulsion.
-        law_version: Versioned obstacle-force law. Missing configuration resolves
-            to the finite-range body-edge law. Explicit historical/unversioned
-            inputs still resolve to ``legacy_shifted_gradient_v1``.
+        law_version: Versioned obstacle-force law. Missing configuration retains
+            ``legacy_shifted_gradient_v1`` for 0.1.0; corrected laws require an
+            explicit selector.
     """
 
     factor: float = 10.0

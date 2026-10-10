@@ -85,6 +85,7 @@ def test_live_wrapper_wall_metadata_validates_against_production_schema(factor):
     """The wrapper's live witness must include every parameter of the applied law."""
     simulation = Simulator(np.array([[0.0, 0.4, 0.0, 0.0, 2.0, 0.4]]))
     simulation.config.obstacle_force_config.factor = factor
+    simulation.config.obstacle_force_config.law_version = BODY_EDGE_EXPONENTIAL_V3
     wrapper = FastPysfWrapper(simulation)
     metadata = wrapper.obstacle_force_law_metadata()
 
@@ -101,7 +102,7 @@ def test_live_wrapper_wall_metadata_validates_against_production_schema(factor):
 @pytest.mark.parametrize("parameter", ["amplitude_m_s2", "decay_m", "range_m"])
 def test_body_edge_wall_schema_rejects_incomplete_active_parameters(parameter):
     """Accepting the new law must retain complete parameter provenance."""
-    metadata = _metadata(ObstacleForceConfig())
+    metadata = _metadata(ObstacleForceConfig(law_version=BODY_EDGE_EXPONENTIAL_V3))
     validator = _wall_schema()
     validator.validate(metadata)
     metadata["parameters"].pop(parameter)

@@ -191,10 +191,28 @@ def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
     assert _stable_config_hash(cfg) == "d280527b83ce075c"
 
 
-def test_robot_env_hash_pins_new_default_wall_identity() -> None:
-    """Issue #10017 changes default identity without moving explicit legacy hashes."""
+def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte() -> None:
+    """The 0.1.0 default must retain the independently pinned historical hash."""
     cfg = EnvSettings(
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
+    )
+    explicit_legacy = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    assert _stable_config_hash(cfg).encode("ascii") == b"d280527b83ce075c"
+    assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
+        "ascii"
+    )
+    assert cfg.sim_config.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert cfg.sim_config.obstacle_force_law_resolution_mode == "defaulted_missing"
+
+
+def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
+    """Opting into the corrected law changes identity without moving legacy hashes."""
+    cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law="body_edge_exponential_v3"),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
     assert _stable_config_hash(cfg) == "f6c4a0545697161d"
 

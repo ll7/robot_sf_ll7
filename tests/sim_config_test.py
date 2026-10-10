@@ -124,15 +124,15 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     )
 
 
-def test_body_edge_default_has_distinct_simulation_identity():
-    """Issue #10017 deliberately gives the new 0.1.0 wall default its own identity."""
-    payload = asdict(SimulationSettings())
+def test_explicit_body_edge_has_distinct_simulation_identity():
+    """Opting into the corrected law retains its independently pinned identity."""
+    payload = asdict(SimulationSettings(obstacle_force_law=BODY_EDGE_EXPONENTIAL_V3))
     assert payload["obstacle_force_law"] == BODY_EDGE_EXPONENTIAL_V3
     payload.pop("pedestrian_seed")
     payload.pop("groups")
     payload.pop("robot_goal_sampling_policy")
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    # #10017: the default may move; the explicit-legacy assertion above must not.
+    # The opt-in identity must not alter the explicit-legacy assertion above.
     assert hashlib.sha256(serialized.encode()).hexdigest() == (
         "db40e197057cfe057ed28cbb0a89502cd715d0f9a307605749a2738cb3b2c71d"
     )
@@ -209,12 +209,12 @@ def test_sampler_capture_enabled_requires_a_boolean() -> None:
         SimulationSettings(sampler_capture_enabled=1)  # type: ignore[arg-type]
 
 
-def test_obstacle_force_law_defaults_to_body_edge_and_accepts_historical_selectors() -> None:
-    """Simulation settings resolve the corrected default and explicit historical laws."""
-    assert SimulationSettings().obstacle_force_law == BODY_EDGE_EXPONENTIAL_V3
+def test_obstacle_force_law_defaults_to_legacy_and_accepts_explicit_selectors() -> None:
+    """Simulation settings preserve legacy by default and allow explicit corrected laws."""
+    assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
     assert SimulationSettings().obstacle_force_law_resolution_mode == "defaulted_missing"
     assert SimulationSettings(obstacle_force_law=None).obstacle_force_law == (  # type: ignore[arg-type]
-        BODY_EDGE_EXPONENTIAL_V3
+        LEGACY_SHIFTED_GRADIENT_V1
     )
     assert (
         SimulationSettings(obstacle_force_law=None).obstacle_force_law_resolution_mode

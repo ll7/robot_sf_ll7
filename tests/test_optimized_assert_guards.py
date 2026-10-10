@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import os
-import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -434,7 +433,9 @@ def test_converted_guards_survive_python_optimized_mode() -> None:
     assert not any(
         isinstance(node, ast.Assert) for node in ast.walk(ast.parse(_OPTIMIZED_GUARD_SCRIPT))
     )
-    result = subprocess.run(
+    from tests.support.subprocess_events import capture_completion
+
+    result = capture_completion(
         [sys.executable, "-O", "-c", _OPTIMIZED_GUARD_SCRIPT],
         cwd=Path(__file__).resolve().parents[1],
         env={
@@ -442,10 +443,7 @@ def test_converted_guards_survive_python_optimized_mode() -> None:
             "PYGAME_HIDE_SUPPORT_PROMPT": "1",
             "TF_CPP_MIN_LOG_LEVEL": "3",
         },
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=60,
+        hang_guard_seconds=300,
     )
     combined_output = f"{result.stdout}\n{result.stderr}"
 

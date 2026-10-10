@@ -88,6 +88,7 @@ from robot_sf.benchmark.camera_ready._util import (
     _synthetic_actuation_metadata,
     _utc_now,
 )
+from robot_sf.benchmark.effective_physics import campaign_physics, validate_campaign_physics
 from robot_sf.benchmark.fairness_contract import build_fairness_report, emit_fairness_annotations
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
@@ -134,7 +135,7 @@ if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
 
-CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v2"
 _SNQI_FAILED_WARN_BOUNDARY = (
     "SNQI calibration failed under warn and remains advisory only; it is not a "
     "planner-ranking authority."
@@ -3283,6 +3284,8 @@ def _build_campaign_manifest_payload(
             **dict(run_meta.get("seed_variability") or {}),
         },
     }
+    payload.update(campaign_physics(paths.campaign_root))
+    validate_campaign_physics(payload)
     return _snqi_public_payload(payload, snqi)
 
 

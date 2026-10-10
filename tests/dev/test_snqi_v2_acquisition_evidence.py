@@ -4,6 +4,7 @@
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -428,7 +429,12 @@ def test_f2_protected_inputs_rehash_actual_config_and_lock(
     for name in members:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes((ROOT / name).read_bytes())
+        # This witness verifies historical F2 bytes, independently of later dependency bumps.
+        path.write_bytes(
+            subprocess.check_output(
+                ["git", "-C", str(ROOT), "show", f"{acquisition_builder.F2_SOURCE}:{name}"]
+            )
+        )
         write_review_sidecar(path)
     monkeypatch.setattr(
         acquisition_builder.subprocess,

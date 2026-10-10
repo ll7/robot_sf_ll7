@@ -148,6 +148,73 @@ def test_release_eight_step_binding_passes(predictor_registry):
     assert record["required_horizon_steps"] == record["forecast_steps"] == 8
 
 
+def test_stale_checkpoint_config_cannot_admit_larger_model_horizon(tmp_path, predictor_registry):
+    """An edited config cannot turn a serialized eight-step output head into twelve steps."""
+    import torch
+
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        PredictiveHorizonPreflightError,
+    )
+
+    checkpoint = tmp_path / "eight_steps.pt"
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    payload["config"]["horizon_steps"] = 12
+    torch.save(payload, checkpoint)
+    cfg = _override_campaign(
+        tmp_path,
+        {"predictive_checkpoint_path": str(checkpoint), "horizon_steps": 12},
+        [{"name": "doorway", "seeds": [1001]}],
+    )
+    with pytest.raises(PredictiveHorizonPreflightError, match="size mismatch for decoder") as exc:
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
+    assert exc.value.binding["unverified_reason"] == "checkpoint_error"
+    assert "forecast_steps" not in exc.value.binding
+
+
+@pytest.mark.parametrize(
+    "section,key,value,remove",
+    [
+        ("config", "input_dim", None, True),
+        ("config", "horizon_steps", None, True),
+        (None, "feature_schema", None, True),
+        (None, "feature_schema", None, False),
+        (None, "feature_schema", [], False),
+        (None, "feature_schema", {}, False),
+        ("config", "input_dim", "4", False),
+        ("config", "horizon_steps", "8", False),
+        ("config", "horizon_steps", True, False),
+        ("feature_schema", "input_dim", "4", False),
+    ],
+)
+def test_required_checkpoint_metadata_fails_closed(
+    tmp_path, predictor_registry, section, key, value, remove
+):
+    """Required metadata is never reconstructed from defaults or coerced from invalid types."""
+    import torch
+
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        PredictiveHorizonPreflightError,
+    )
+
+    checkpoint = tmp_path / "eight_steps.pt"
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    metadata = payload if section is None else payload[section]
+    if remove:
+        del metadata[key]
+    else:
+        metadata[key] = value
+    torch.save(payload, checkpoint)
+    cfg = _override_campaign(
+        tmp_path,
+        {"predictive_checkpoint_path": str(checkpoint), "horizon_steps": 8},
+        [{"name": "doorway", "seeds": [1001]}],
+    )
+    with pytest.raises(PredictiveHorizonPreflightError, match=key) as exc:
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
+    assert exc.value.binding["unverified_reason"] == "checkpoint_error"
+    assert "forecast_steps" not in exc.value.binding
+
+
 @pytest.mark.parametrize("saved_steps", [8, 12])
 def test_checkpoint_path_override_controls_forecast_window(
     tmp_path, predictor_registry, saved_steps

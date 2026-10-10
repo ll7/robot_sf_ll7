@@ -26,6 +26,13 @@ from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
 
 
+@pytest.fixture(autouse=True)
+def isolate_hosted_event_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Synthetic CLI fixtures must not borrow the hosting PR's title or body."""
+    monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
+    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+
+
 @pytest.fixture
 def standalone_python(tmp_path: Path) -> tuple[str, dict[str, str]]:
     """Use host Python without site hooks and stage only the declared YAML dependency."""

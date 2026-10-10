@@ -107,6 +107,7 @@ def test_build_model_obs_dict_flattens_structured_socnav_observation() -> None:
                 "robot_speed": SimpleNamespace(shape=(2,), dtype=np.float32),
                 "goal_current": SimpleNamespace(shape=(2,), dtype=np.float32),
                 "pedestrians_positions": SimpleNamespace(shape=(1, 2), dtype=np.float32),
+                "pedestrians_velocities": SimpleNamespace(shape=(1, 2), dtype=np.float32),
                 "sim_timestep": SimpleNamespace(shape=(1,), dtype=np.float32),
             },
         ),
@@ -116,10 +117,14 @@ def test_build_model_obs_dict_flattens_structured_socnav_observation() -> None:
         {
             "robot": {
                 "position": np.array([1.0, 2.0], dtype=np.float32),
+                "heading": np.array([np.pi / 2.0], dtype=np.float32),
                 "velocity_xy": np.array([0.3, 0.4], dtype=np.float32),
             },
             "goal": {"current": np.array([5.0, 6.0], dtype=np.float32)},
-            "pedestrians": {"positions": np.array([[2.0, 3.0]], dtype=np.float32)},
+            "pedestrians": {
+                "positions": np.array([[2.0, 3.0]], dtype=np.float32),
+                "velocities": np.array([[1.2, -0.4]], dtype=np.float32),
+            },
             "sim": {"timestep": np.array([0.1], dtype=np.float32)},
         }
     )
@@ -128,7 +133,23 @@ def test_build_model_obs_dict_flattens_structured_socnav_observation() -> None:
     assert converted["robot_speed"].tolist() == pytest.approx([0.3, 0.4])
     assert converted["goal_current"].tolist() == pytest.approx([5.0, 6.0])
     assert converted["pedestrians_positions"].shape == (1, 2)
+    np.testing.assert_allclose(converted["pedestrians_velocities"], [[1.2, -0.4]])
     assert converted["sim_timestep"].tolist() == pytest.approx([0.1])
+
+    flat_converted = planner._build_model_obs_dict(
+        {
+            "robot_position": np.array([1.0, 2.0], dtype=np.float32),
+            "robot_heading": np.array([np.pi / 2.0], dtype=np.float32),
+            "robot_speed": np.array([0.3, 0.4], dtype=np.float32),
+            "goal_current": np.array([5.0, 6.0], dtype=np.float32),
+            "pedestrians_positions": np.array([[2.0, 3.0]], dtype=np.float32),
+            "pedestrians_velocities": np.array([[1.2, -0.4]], dtype=np.float32),
+            "sim_timestep": np.array([0.1], dtype=np.float32),
+        }
+    )
+    np.testing.assert_allclose(
+        flat_converted["pedestrians_velocities"], converted["pedestrians_velocities"]
+    )
 
 
 def test_step_dict_mode_flattens_runtime_dict_for_box_checkpoint() -> None:

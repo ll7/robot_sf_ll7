@@ -2792,6 +2792,8 @@ def _apply_single_pedestrian_override(
         hold_ref_point=hold_ref_point,
         hold_timeout_s=hold_timeout_s,
         metadata=metadata,
+        initial_group_id=entry.get("initial_group_id", ped.initial_group_id),
+        join_radius_m=entry.get("join_radius_m", ped.join_radius_m),
     )
 
 
@@ -2991,6 +2993,19 @@ _SIMULATION_OVERRIDE_ATTRS = (
 )
 
 
+def _apply_group_allocation_mode(
+    config: RobotSimulationConfig, overrides: Mapping[str, Any]
+) -> None:
+    """Apply the opt-in group law without changing the default sampling mode."""
+    if "group_allocation_mode" in overrides:
+        mode = overrides["group_allocation_mode"]
+        if mode not in {"legacy", "exact_small_crowd_v1"}:
+            raise ValueError(
+                "simulation_config.group_allocation_mode must be legacy or exact_small_crowd_v1"
+            )
+        config.sim_config.group_allocation_mode = mode
+
+
 def _apply_simulation_overrides(  # noqa: C901
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
@@ -3007,12 +3022,14 @@ def _apply_simulation_overrides(  # noqa: C901
         "ped_density",
         "max_peds_per_group",
         "groups",
+        "group_allocation_mode",
         "prf_config",
         "residual_adversary",
     }
     unknown = sorted(set(overrides) - supported)
     if unknown:
         raise ValueError(f"simulation_config contains unknown keys: {', '.join(unknown)}")
+    _apply_group_allocation_mode(config, overrides)
     if "groups" in overrides:
         groups = _coerce_finite_float(overrides["groups"], field_name="simulation_config.groups")
         if not 0.0 <= groups <= 1.0:

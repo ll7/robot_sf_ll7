@@ -521,7 +521,12 @@ def test_protected_metric_inputs_refuse_changed_bytes(
     ):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes((ROOT / relative).read_bytes())
+        # Stage the historical F2 blobs so dependency bumps do not rewrite the witness.
+        target.write_bytes(
+            subprocess.check_output(
+                ["git", "-C", str(ROOT), "show", f"{builder.F2_SOURCE}:{relative}"]
+            )
+        )
     git("add", "configs", "uv.lock", "robot_sf")
 
     def commit():

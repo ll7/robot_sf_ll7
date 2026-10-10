@@ -9,14 +9,61 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec, SeedPolicy
+from robot_sf.benchmark.camera_ready._config import _parse_scenario_candidates
+from robot_sf.benchmark.camera_ready._config_types import (
+    CampaignConfig,
+    PlannerSpec,
+    ScenarioCandidateSelection,
+    SeedPolicy,
+)
 from robot_sf.benchmark.camera_ready._run_state import _resolve_path
 from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
 )
 from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+    PredictiveHorizonPreflightError,
     check_campaign_predictive_horizons_preflight,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.release_parameter_freeze import UnfrozenReleaseParametersError
+
+
+def _checkpoint_inventory(records: list[dict]) -> list[dict]:
+    """Record which declared artifacts were present for this network-free census."""
+    inventory = {}
+    for record in records:
+        reference = record.get("checkpoint")
+        if not reference:
+            continue
+        path = record.get("resolved_path")
+        key = (reference, path)
+        if key in inventory:
+            continue
+        present = bool(path and Path(path).is_file())
+        inventory[key] = {
+            "checkpoint": reference,
+            "resolved_path": path,
+            "availability": "present" if present else "missing_checkpoint",
+            "sha256": sha256_file(Path(path)) if present else None,
+            "forecast_steps": record.get("forecast_steps"),
+        }
+    return list(inventory.values())
+
+
+def _failure_record(path: Path, arm: PlannerSpec, exc: Exception) -> dict:
+    """Keep typed checkpoint refusals distinct from unresolved configs and freeze blockers."""
+    if isinstance(exc, PredictiveHorizonPreflightError):
+        failure = exc.binding
+    else:
+        failure = {
+            "planner_key": arm.key,
+            "algo_config_path": str(arm.algo_config_path),
+            "status": "unverified",
+            "unverified_reason": "unfrozen_placeholder"
+            if isinstance(exc, UnfrozenReleaseParametersError)
+            else "resolution_error",
+        }
+    return {"matrix": str(path), **failure, "detail": str(exc)}
 
 
 def scan_predictive_horizons(
@@ -25,7 +72,7 @@ def scan_predictive_horizons(
     registry_path: Path | None = None,
     cache_dir: Path | None = None,
 ) -> dict:
-    """Inspect every matrix's planner bindings without resolving seed policies or scenarios.
+    """Inspect every matrix's planner bindings without executing scenarios or campaign seed policies.
 
     Historical campaign YAML may no longer satisfy current campaign admission rules. Use
     the canonical arm path resolver rather than admitting/executing the whole campaign.
@@ -51,6 +98,7 @@ def scan_predictive_horizons(
                     {
                         "matrix": str(path),
                         "status": "unverified",
+                        "unverified_reason": "unbound_format",
                         "detail": "Predictive planner-name roster has no campaign algo_config bindings",
                     }
                 )
@@ -64,13 +112,18 @@ def scan_predictive_horizons(
                     {
                         "matrix": str(path),
                         "status": "unverified",
+                        "unverified_reason": "unbound_format",
                         "detail": "Inline predictive planner config requires its matrix loader",
                     }
                 )
             continue
         cfg = CampaignConfig(
             name=path.stem,
-            scenario_matrix_path=path,
+            scenario_matrix_path=_resolve_path(payload.get("scenario_matrix"), base_dir=path.parent)
+            or path,
+            scenario_candidates=ScenarioCandidateSelection(
+                names=_parse_scenario_candidates(payload)
+            ),
             seed_policy=SeedPolicy(),
             planners=tuple(
                 PlannerSpec(
@@ -90,28 +143,24 @@ def scan_predictive_horizons(
                     cache_dir=cache_dir,
                 )
             except (CampaignCheckpointPreflightError, OSError, ValueError, TypeError) as exc:
-                message = str(exc)
-                records.append(
-                    {
-                        "matrix": str(path),
-                        "planner_key": arm.key,
-                        "algo_config_path": str(arm.algo_config_path),
-                        "status": "incompatible"
-                        if "required_horizon_steps=" in message
-                        else "unverified",
-                        "detail": message,
-                    }
-                )
+                records.append(_failure_record(path, arm, exc))
             else:
                 records.extend({"matrix": str(path), **binding} for binding in bindings)
     return {
-        "schema_version": "predictive-horizon-scan.v1",
+        "schema_version": "predictive-horizon-scan.v2",
         "yaml_files_scanned": len(files),
         "campaign_matrices_scanned": matrices,
         "other_matrix_formats_inspected": other_formats,
         "compatible": sum(r["status"] == "compatible" for r in records),
         "incompatible": sum(r["status"] == "incompatible" for r in records),
         "unverified": sum(r["status"] == "unverified" for r in records),
+        "unverified_reasons": {
+            reason: sum(r.get("unverified_reason") == reason for r in records)
+            for reason in sorted(
+                {r["unverified_reason"] for r in records if r["status"] == "unverified"}
+            )
+        },
+        "checkpoint_inventory": _checkpoint_inventory(records),
         "bindings": records,
     }
 

@@ -32,7 +32,7 @@ The gate:
 - downloads and checksum-verifies each registry artifact into the durable
   cache (`stage=True`);
 - loads each learned predictive MPPI, prediction-planner, or gap-prediction binding
-  (including candidate scenario overrides) with the runtime checkpoint loader and
+  (including effective family, scenario, and scenario-algorithm overrides) with the runtime checkpoint loader and
   checks its actual forecast output head against the required planning horizon;
 - writes a per-arm staging report (`submit_safe=true` only when at least one
   checkpoint reference is covered and every reference is present or staged);
@@ -77,8 +77,20 @@ uv run python scripts/benchmark/scan_predictive_horizons.py \
   --report-path output/validation/predictive_horizon_scan.json
 ```
 
+The read-only scan expands scenario includes/metadata overrides and applies campaign
+candidate selection whenever planner configs have contextual overrides. The shared runtime
+resolver merges the effective config for each selected scenario/family; unused overrides
+are not hypothetical runtime bindings. This structural expansion does not resolve the
+campaign seed policy or execute episodes. Equal effective configs share a checkpoint check,
+with all covered contexts retained in the report.
+
 The read-only scan reports compatible, incompatible, and unverified checkpoint bindings;
-it exits nonzero for either of the latter. Historical/frozen invalid bindings remain
+it exits nonzero for either of the latter. Its checkpoint inventory records declared IDs,
+resolved paths, availability, SHA-256 and forecast steps. Missing checkpoints and unfrozen
+placeholders have distinct unverified reasons; corrupt/unresolvable inputs retain explicit
+error categories. Census totals depend on which declared artifacts are locally available.
+The gate runs at campaign startup and in the supplied pre-submit staging CLI; direct Slurm
+submission templates do not all enforce this CLI unconditionally. Historical/frozen invalid bindings remain
 unchanged and must be listed in review evidence. MPPI needs its complete `horizon_steps`
 sequence (the legacy doorway binding requests 12 from an eight-step model). The
 prediction planner retains its existing forecast-bound adaptive horizon; its boost does

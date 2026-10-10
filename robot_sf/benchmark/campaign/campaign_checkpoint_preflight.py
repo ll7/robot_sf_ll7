@@ -9,7 +9,9 @@ whole-campaign failure -- but only *after* the expensive run has already burned 
 PPO ``model_cache`` checkpoint).
 
 This module inspects a campaign config for every enabled arm that declares a checkpoint and fails
-fast -- before scenarios load and before ``sbatch`` -- when a checkpoint cannot be resolved. It
+fast before campaign execution, and before ``sbatch`` when the supplied staging gate is used.
+Contextual predictive bindings expand scenario definitions without executing episodes or resolving
+the campaign seed policy. Direct Slurm templates do not all enforce the staging gate. It
 mirrors the fail-closed shape of :mod:`robot_sf.benchmark.orca_preflight` and offers two modes:
 
 * ``stage=False`` (default, cheap, network-free): a ``model_id`` is accepted when it is present

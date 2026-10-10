@@ -31,24 +31,36 @@ def _override_campaign(tmp_path, manifest, scenarios):
     scenario_path = tmp_path / "effective_scenarios.yaml"
     scenario_path.write_text(yaml.safe_dump({"scenarios": scenarios}))
     cfg = load_campaign_config(DOORWAY)
-    arm = replace(next(a for a in cfg.planners if a.algo == "predictive_mppi"),
-                  algo_config_path=config_path)
+    arm = replace(
+        next(a for a in cfg.planners if a.algo == "predictive_mppi"), algo_config_path=config_path
+    )
     return replace(cfg, planners=(arm,), scenario_matrix_path=scenario_path)
 
 
-@pytest.mark.parametrize("overrides", [
-    {"scenario_overrides": {"doorway": {"horizon_steps": 12}}},
-    {"family_overrides": {"bottleneck": {"horizon_steps": 12}}},
-    {"family_overrides": {"bottleneck": {"horizon_steps": 10}},
-     "scenario_overrides": {"doorway": {"horizon_steps": 12}}},
-])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"scenario_overrides": {"doorway": {"horizon_steps": 12}}},
+        {"family_overrides": {"bottleneck": {"horizon_steps": 12}}},
+        {
+            "family_overrides": {"bottleneck": {"horizon_steps": 10}},
+            "scenario_overrides": {"doorway": {"horizon_steps": 12}},
+        },
+    ],
+)
 def test_effective_context_override_refuses_long_horizon(tmp_path, predictor_registry, overrides):
     """Runtime scenario/family merges must not hide a 12-step request behind an eight-step base."""
-    manifest = {"base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
-                **overrides}
-    cfg = _override_campaign(tmp_path, manifest, [
-        {"name": "doorway", "metadata": {"family": "bottleneck"}, "seeds": [1001]},
-    ])
+    manifest = {
+        "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+        **overrides,
+    }
+    cfg = _override_campaign(
+        tmp_path,
+        manifest,
+        [
+            {"name": "doorway", "metadata": {"family": "bottleneck"}, "seeds": [1001]},
+        ],
+    )
     with pytest.raises(CampaignCheckpointPreflightError, match="required_horizon_steps=12"):
         check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
 
@@ -56,15 +68,24 @@ def test_effective_context_override_refuses_long_horizon(tmp_path, predictor_reg
 def test_family_checkpoint_and_scenario_horizon_combination_refused(tmp_path, predictor_registry):
     """Two individually compatible overrides can combine into an incompatible effective binding."""
     longer = tmp_path / "twelve_steps.pt"
-    save_predictive_checkpoint(longer,
-                              model=PredictiveTrajectoryModel(PredictiveModelConfig(horizon_steps=12)),
-                              optimizer=None, epoch=0)
-    cfg = _override_campaign(tmp_path, {
-        "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
-        "params": {"predictive_checkpoint_path": str(longer)},
-        "family_overrides": {"bottleneck": {"predictive_checkpoint_path": str(tmp_path / "eight_steps.pt")}},
-        "scenario_overrides": {"doorway": {"horizon_steps": 12}},
-    }, [{"name": "doorway", "family": "bottleneck", "seeds": [1001]}])
+    save_predictive_checkpoint(
+        longer,
+        model=PredictiveTrajectoryModel(PredictiveModelConfig(horizon_steps=12)),
+        optimizer=None,
+        epoch=0,
+    )
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "params": {"predictive_checkpoint_path": str(longer)},
+            "family_overrides": {
+                "bottleneck": {"predictive_checkpoint_path": str(tmp_path / "eight_steps.pt")}
+            },
+            "scenario_overrides": {"doorway": {"horizon_steps": 12}},
+        },
+        [{"name": "doorway", "family": "bottleneck", "seeds": [1001]}],
+    )
     with pytest.raises(CampaignCheckpointPreflightError, match="forecast_steps=8"):
         check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
 
@@ -178,19 +199,22 @@ def test_scenario_override_checked_and_disabled_arm_skipped(tmp_path, predictor_
         check_campaign_predictive_horizons_preflight,
     )
 
-    config_path = tmp_path / "candidate.yaml"
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
-                "scenario_algo_overrides": {"doorway": {"params": {"horizon_steps": 12}}},
-            }
-        )
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "scenario_algo_overrides": {
+                "doorway": {
+                    "base_config_path": str(
+                        ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"
+                    ),
+                    "params": {"horizon_steps": 12},
+                }
+            },
+        },
+        [{"name": "doorway", "seeds": [1001]}],
     )
-    cfg = load_campaign_config(DOORWAY)
-    arm = replace(
-        next(a for a in cfg.planners if a.algo == "predictive_mppi"), algo_config_path=config_path
-    )
+    arm = cfg.planners[0]
     with pytest.raises(CampaignCheckpointPreflightError, match="scenario=doorway"):
         check_campaign_arm_checkpoints_preflight(
             replace(cfg, planners=(arm,)), registry_path=predictor_registry
@@ -297,3 +321,212 @@ def test_scan_continues_after_refusal_without_loading_seed_inventory(tmp_path, p
         ("bad", "incompatible"),
         ("good", "compatible"),
     ]
+
+
+@pytest.mark.parametrize(
+    "name,family,selected_family",
+    [
+        ("doorway", "bottleneck", "bottleneck"),
+        ("francis2023_doorway", "bottleneck", "francis2023"),
+        ("classic_doorway", "bottleneck", "classic"),
+    ],
+)
+def test_scenario_override_wins_family_and_unused_overrides(
+    tmp_path, predictor_registry, name, family, selected_family
+):
+    """Check the actual selected family and final scenario merge, rather than hypothetical bases."""
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        check_campaign_predictive_horizons_preflight,
+    )
+
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "family_overrides": {
+                selected_family: {"horizon_steps": 12},
+                "unused": {"horizon_steps": 30},
+            },
+            "scenario_overrides": {name: {"horizon_steps": 8}},
+            "scenario_algo_overrides": {"absent_scenario": {"params": {"horizon_steps": 30}}},
+        },
+        [{"name": name, "metadata": {"family": family}, "seeds": [1001]}],
+    )
+    records = check_campaign_predictive_horizons_preflight(cfg, registry_path=predictor_registry)
+    assert [(r["scenario"], r["family"], r["required_horizon_steps"]) for r in records] == [
+        (name, selected_family, 8),
+    ]
+
+
+def test_scenario_algo_override_uses_its_own_config(tmp_path, predictor_registry):
+    """The runtime's early algorithm override must bypass global params/family/scenario merges."""
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        check_campaign_predictive_horizons_preflight,
+    )
+
+    release = str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml")
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": release,
+            "params": {"horizon_steps": 12},
+            "family_overrides": {"bottleneck": {"horizon_steps": 20}},
+            "scenario_overrides": {"doorway": {"horizon_steps": 30}},
+            "scenario_algo_overrides": {
+                "doorway": {
+                    "algo": "predictive_mppi",
+                    "base_config_path": release,
+                }
+            },
+        },
+        [{"name": "doorway", "family": "bottleneck", "seeds": [1001]}],
+    )
+    records = check_campaign_predictive_horizons_preflight(cfg, registry_path=predictor_registry)
+    assert len(records) == 1
+    assert records[0]["required_horizon_steps"] == records[0]["forecast_steps"] == 8
+
+
+def test_included_scenario_metadata_and_candidate_selection(tmp_path, predictor_registry):
+    """Use expanded scenario metadata and the campaign selector, with no campaign seed lookup."""
+    from robot_sf.benchmark.camera_ready._config_types import ScenarioCandidateSelection
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        check_campaign_predictive_horizons_preflight,
+    )
+
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "family_overrides": {"bottleneck": {"horizon_steps": 12}},
+        },
+        [{"name": "safe", "seeds": [1001]}, {"name": "doorway", "seeds": [1001]}],
+    )
+    included = tmp_path / "included.yaml"
+    cfg.scenario_matrix_path.rename(included)
+    cfg.scenario_matrix_path.write_text(
+        yaml.safe_dump(
+            {
+                "includes": [included.name],
+                "scenario_overrides_by_name": {"doorway": {"metadata": {"family": "bottleneck"}}},
+            }
+        )
+    )
+    safe_cfg = replace(cfg, scenario_candidates=ScenarioCandidateSelection(names=("safe",)))
+    records = check_campaign_predictive_horizons_preflight(
+        safe_cfg, registry_path=predictor_registry
+    )
+    assert records[0]["contexts"] == [{"scenario": "safe", "family": "nominal"}]
+    with pytest.raises(CampaignCheckpointPreflightError, match="family=bottleneck"):
+        check_campaign_predictive_horizons_preflight(cfg, registry_path=predictor_registry)
+
+
+def test_same_scenario_name_different_families_are_checked(tmp_path, predictor_registry):
+    """Family resolution must not be deduplicated by scenario identifier alone."""
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "family_overrides": {"bottleneck": {"horizon_steps": 12}},
+        },
+        [
+            {"name": "doorway", "family": "nominal", "seeds": [1001]},
+            {"name": "doorway", "family": "bottleneck", "seeds": [1001]},
+        ],
+    )
+    with pytest.raises(CampaignCheckpointPreflightError, match="family=bottleneck"):
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
+
+
+def test_census_classifies_missing_checkpoint_and_unfrozen_placeholder(
+    tmp_path, predictor_registry
+):
+    """Unknown inputs need reproducible reasons and inventory, rather than cache-dependent totals."""
+    from scripts.benchmark.scan_predictive_horizons import scan_predictive_horizons
+
+    missing = tmp_path / "missing.yaml"
+    missing.write_text(yaml.safe_dump({"predictive_checkpoint_path": str(tmp_path / "absent.pt")}))
+    placeholder = tmp_path / "placeholder.yaml"
+    placeholder.write_text(yaml.safe_dump({"release_parameter_freeze": {"status": "unfrozen"}}))
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "planners": [
+                    {"key": "missing", "algo": "predictive_mppi", "algo_config": str(missing)},
+                    {"key": "unfrozen", "algo": "predictive_mppi", "algo_config": str(placeholder)},
+                    {
+                        "key": "present",
+                        "algo": "predictive_mppi",
+                        "algo_config": str(
+                            ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"
+                        ),
+                    },
+                ]
+            }
+        )
+    )
+    scan = scan_predictive_horizons(tmp_path, registry_path=predictor_registry)
+    assert scan["unverified_reasons"] == {"missing_checkpoint": 1, "unfrozen_placeholder": 1}
+    inventory = {r["checkpoint"]: r for r in scan["checkpoint_inventory"]}
+    assert inventory[str(tmp_path / "absent.pt")]["availability"] == "missing_checkpoint"
+    assert inventory["predictive_proxy_selected_v1"]["availability"] == "present"
+    assert len(inventory["predictive_proxy_selected_v1"]["sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    "name,selected_family",
+    [
+        ("francis2023_doorway", "francis2023"),
+        ("classic_doorway", "classic"),
+    ],
+)
+def test_runtime_family_prefix_overrides_metadata(
+    tmp_path, predictor_registry, name, selected_family
+):
+    """Historical identifier prefixes take precedence over an authored metadata family."""
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "family_overrides": {selected_family: {"horizon_steps": 12}},
+        },
+        [{"name": name, "metadata": {"family": "bottleneck"}, "seeds": [1001]}],
+    )
+    with pytest.raises(CampaignCheckpointPreflightError, match=f"family={selected_family}"):
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=predictor_registry)
+
+
+def test_census_resolves_scenario_matrix_and_candidate_selection(tmp_path, predictor_registry):
+    """The scanner must use the campaign's scenario matrix, not its planner-roster YAML."""
+    from scripts.benchmark.scan_predictive_horizons import scan_predictive_horizons
+
+    cfg = _override_campaign(
+        tmp_path,
+        {
+            "base_config_path": str(ROOT / "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+            "family_overrides": {"bottleneck": {"horizon_steps": 12}},
+        },
+        [
+            {"name": "safe", "seeds": [1001]},
+            {"name": "doorway", "family": "bottleneck", "seeds": [1001]},
+        ],
+    )
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "scenario_matrix": cfg.scenario_matrix_path.name,
+                "scenario_candidates": ["safe"],
+                "planners": [
+                    {
+                        "key": "candidate",
+                        "algo": "predictive_mppi",
+                        "algo_config": cfg.planners[0].algo_config_path.name,
+                    }
+                ],
+            }
+        )
+    )
+    scan = scan_predictive_horizons(tmp_path, registry_path=predictor_registry)
+    assert (scan["compatible"], scan["incompatible"], scan["unverified"]) == (1, 0, 0)
+    assert scan["bindings"][0]["contexts"] == [{"scenario": "safe", "family": "nominal"}]

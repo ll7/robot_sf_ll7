@@ -1,0 +1,60 @@
+# Diagnostic successor for the #10304 pedestrian wall-law matrix.
+# Historical release/map inputs stay unchanged; only the real-world bottleneck
+# single-pedestrian starts and routed targets are versioned here.
+includes:
+- classic_interactions_francis2023_release_0_0_8_v1.yaml
+scenario_overrides_by_name:
+  classic_realworld_double_bottleneck_high:
+    simulation_config:
+      ped_density: 0.0
+      max_episode_steps: 900
+    metadata:
+      issue: 10304
+      spawn_mode: legal_single_ped_markers
+      density_advisory: zero_baseline_route_spawn
+      wall_law_fixture_version: issue_10304_wall_law_bottleneck_successor_v1
+      notes: >
+        Eight body-footprint-clear single pedestrians use lanes whose direct
+        start-to-final-target lines and scripted waypoints pass through both
+        bottleneck openings.
+    single_pedestrians:
+    - id: l1
+      speed_m_s: 0.9
+      start: [10.0, 13.5]
+      goal: null
+      trajectory: [[10.0, 13.5], [17.0, 13.5], [23.0, 13.5], [37.0, 13.5], [43.0, 13.5], [50.0, 13.5]]
+    - id: l2
+      speed_m_s: 0.9
+      start: [8.5, 13.5]
+      goal: null
+      trajectory: [[8.5, 13.5], [17.0, 13.5], [23.0, 13.5], [37.0, 13.5], [43.0, 13.5], [51.5, 13.5]]
+    - id: l3
+      speed_m_s: 0.9
+      start: [10.0, 14.3]
+      goal: null
+      trajectory: [[10.0, 14.3], [17.0, 14.3], [23.0, 14.3], [37.0, 14.3], [43.0, 14.3], [50.0, 14.3]]
+    - id: l4
+      speed_m_s: 0.9
+      start: [8.5, 14.3]
+      goal: null
+      trajectory: [[8.5, 14.3], [17.0, 14.3], [23.0, 14.3], [37.0, 14.3], [43.0, 14.3], [51.5, 14.3]]
+    - id: r1
+      speed_m_s: 0.9
+      start: [50.0, 15.1]
+      goal: null
+      trajectory: [[50.0, 15.1], [43.0, 15.1], [37.0, 15.1], [23.0, 15.1], [17.0, 15.1], [10.0, 15.1]]
+    - id: r2
+      speed_m_s: 0.9
+      start: [51.5, 15.1]
+      goal: null
+      trajectory: [[51.5, 15.1], [43.0, 15.1], [37.0, 15.1], [23.0, 15.1], [17.0, 15.1], [8.5, 15.1]]
+    - id: r3
+      speed_m_s: 0.9
+      start: [50.0, 15.9]
+      goal: null
+      trajectory: [[50.0, 15.9], [43.0, 15.9], [37.0, 15.9], [23.0, 15.9], [17.0, 15.9], [10.0, 15.9]]
+    - id: r4
+      speed_m_s: 0.9
+      start: [51.5, 15.9]
+      goal: null
+      trajectory: [[51.5, 15.9], [43.0, 15.9], [37.0, 15.9], [23.0, 15.9], [17.0, 15.9], [8.5, 15.9]]

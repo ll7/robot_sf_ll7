@@ -18,7 +18,14 @@ import numpy as np
 import pysocialforce as pysf
 from loguru import logger
 from pysocialforce import forces as pf_forces
-from pysocialforce.config import OBSTACLE_FORCE_DISTANCE_FLOOR, resolve_obstacle_force_law
+from pysocialforce.config import (
+    BODY_EDGE_EXPONENTIAL_LAW_VERSIONS,
+    BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    OBSTACLE_FORCE_DISTANCE_FLOOR,
+    resolve_obstacle_force_law,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -90,19 +97,65 @@ class FastPysfWrapper:
         config = self.sim.config.obstacle_force_config
         factor = float(getattr(config, "factor", 1.0))
         agent_radius = float(self.sim.peds.agent_radius)
+        law_version = self._resolve_obstacle_force_law()
+        parameters = {
+            "factor": factor,
+            "agent_radius": agent_radius,
+            "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+        }
+        if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
+            parameters.update(
+                {
+                    "amplitude_unscaled": pf_forces.BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED,
+                    "amplitude_m_s2": factor * pf_forces.BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED,
+                    "decay_m": pf_forces.BODY_EDGE_EXPONENTIAL_DECAY_M,
+                    "range_m": pf_forces.BODY_EDGE_EXPONENTIAL_RANGE_M,
+                }
+            )
+            if law_version in (
+                BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+                BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+            ):
+                parameters["contact_radius_margin_m"] = (
+                    pf_forces.BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
+                )
+            if law_version == BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF:
+                parameters.update(
+                    {
+                        "contact_bias_unscaled": (
+                            pf_forces.BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED
+                        ),
+                        "contact_bias_m_s2": (
+                            factor * pf_forces.BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED
+                        ),
+                        "contact_stiffness_unscaled_per_m": (
+                            pf_forces.BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M
+                        ),
+                        "contact_stiffness_m_s2_per_m": (
+                            factor
+                            * pf_forces.BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M
+                        ),
+                    }
+                )
         return pf_forces.obstacle_force_law_metadata(
-            self._resolve_obstacle_force_law(),
+            law_version,
             site="fast_pysf_wrapper",
-            geometry_convention="map_line_endpoints_orthogonal_vector",
-            radius_convention="agent_radius_direct",
+            geometry_convention=(
+                "all_nearby_distinct_surface_points"
+                if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT
+                else "nearest_finite_segment_surface"
+                if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS
+                else "map_line_endpoints_orthogonal_vector"
+            ),
+            radius_convention=(
+                "physical_body_edge_clearance"
+                if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS
+                else "agent_radius_direct"
+            ),
             enabled=self._obstacle_force_enabled(),
             applied=bool(getattr(self, "_obstacle_force_applied", False)),
             resolution_mode=getattr(config, "obstacle_force_law_resolution_mode", None),
-            parameters={
-                "factor": factor,
-                "agent_radius": agent_radius,
-                "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
-            },
+            parameters=parameters,
         )
 
     def diagnostics(self) -> dict[str, Any]:
@@ -332,6 +385,34 @@ class FastPysfWrapper:
             return total
 
         ped_radius = float(self.sim.peds.agent_radius)
+        if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
+            try:
+                raw_obs = np.asarray(raw_obs, dtype=float)
+                if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT:
+                    forces = np.zeros((1, 2))
+                    pf_forces.all_obstacle_forces_for_law(
+                        forces,
+                        np.asarray(p, dtype=float).reshape(1, 2),
+                        raw_obs,
+                        ped_radius,
+                        law_version,
+                    )
+                    if self._obstacle_force_enabled():
+                        self._obstacle_force_applied = True
+                    return forces[0] * float(self.sim.config.obstacle_force_config.factor)
+                closest = np.asarray(
+                    [pf_forces.closest_point_on_segment(tuple(row[:4]), p) for row in raw_obs]
+                )
+                distances = np.sum((closest - p) ** 2, axis=1)
+                finite = np.isfinite(distances)
+                if not finite.any():
+                    return total
+                nearest = int(np.argmin(np.where(finite, distances, np.inf)))
+                raw_obs = raw_obs[nearest : nearest + 1]
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                self._record_fallback("obstacle_force_dropped", exc)
+                return total
+
         applied = False
         for row in raw_obs:
             line = tuple(map(float, row[:4]))

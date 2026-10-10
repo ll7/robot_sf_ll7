@@ -1,0 +1,216 @@
+{
+  "archives": [
+    {
+      "digest_verified": true,
+      "errors": [],
+      "evidence_members": [
+        {
+          "copyright_lines": [
+            "Copyright (c) 2013-2022, GeoPandas developers.",
+            "* Redistributions of source code must retain the above copyright notice, this",
+            "* Redistributions in binary form must reproduce the above copyright notice,",
+            "specific prior written permission.",
+            "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND",
+            "DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR"
+          ],
+          "encoding": "utf-8-replace",
+          "kind": "license_or_notice",
+          "path": "geopandas-1.2.0/LICENSE.txt",
+          "read_status": "read",
+          "sha256": "c60efa15937a5a82a5a2786a26be7452936fffec7a845724db0740e54535c8ea",
+          "size": 1498,
+          "summary_lines": [
+            "Copyright (c) 2013-2022, GeoPandas developers.",
+            "All rights reserved.",
+            "Redistribution and use in source and binary forms, with or without",
+            "modification, are permitted provided that the following conditions are met:",
+            "* Redistributions of source code must retain the above copyright notice, this",
+            "list of conditions and the following disclaimer.",
+            "* Redistributions in binary form must reproduce the above copyright notice,",
+            "this list of conditions and the following disclaimer in the documentation"
+          ]
+        },
+        {
+          "copyright_lines": [
+            "License-Expression: BSD-3-Clause",
+            "License-File: LICENSE.txt"
+          ],
+          "encoding": "utf-8-replace",
+          "identity_match": true,
+          "kind": "metadata",
+          "path": "geopandas-1.2.0/PKG-INFO",
+          "read_status": "read",
+          "sha256": "8e88c22d2ad9465a370c005aa5bfbfd1566ca8589382b430856a48407ee18193",
+          "size": 2008,
+          "summary_lines": [
+            "Metadata-Version: 2.5",
+            "Name: geopandas",
+            "Version: 1.2.0",
+            "Summary: Geographic pandas extensions",
+            "Project-URL: Home, https://geopandas.org",
+            "Project-URL: Repository, https://github.com/geopandas/geopandas",
+            "Author-email: Kelsey Jordahl <kjordahl@alum.mit.edu>",
+            "Maintainer: GeoPandas contributors"
+          ]
+        }
+      ],
+      "expected_sha256": "72425b0dec1b77122b1e00f72c2b3b91f320cf0331ae236d37e26865e8808628",
+      "expected_size": 337713,
+      "filename": "geopandas-1.2.0.tar.gz",
+      "inspection_status": "inspected",
+      "kind": "sdist",
+      "member_count": 80,
+      "metadata": [
+        {
+          "fields": {
+            "license": null,
+            "license_classifiers": [],
+            "license_expression": "BSD-3-Clause",
+            "license_files": [
+              "LICENSE.txt"
+            ],
+            "metadata_version": "2.5",
+            "name": "geopandas",
+            "project_urls": [
+              {
+                "label": "Home",
+                "url": "https://geopandas.org"
+              },
+              {
+                "label": "Repository",
+                "url": "https://github.com/geopandas/geopandas"
+              }
+            ],
+            "requires_python": ">=3.11",
+            "summary": "Geographic pandas extensions",
+            "version": "1.2.0"
+          },
+          "path": "geopandas-1.2.0/PKG-INFO",
+          "sha256": "8e88c22d2ad9465a370c005aa5bfbfd1566ca8589382b430856a48407ee18193"
+        }
+      ],
+      "observed_sha256": "72425b0dec1b77122b1e00f72c2b3b91f320cf0331ae236d37e26865e8808628",
+      "observed_size": 337713,
+      "total_uncompressed_bytes": 1720632,
+      "url": "https://files.pythonhosted.org/packages/d3/6b/079d42d468f6537b0e8ba04ad411d53fe6b03070801e5b85328b01d28772/geopandas-1.2.0.tar.gz"
+    },
+    {
+      "digest_verified": true,
+      "errors": [],
+      "evidence_members": [
+        {
+          "copyright_lines": [
+            "License-Expression: BSD-3-Clause",
+            "License-File: LICENSE.txt"
+          ],
+          "encoding": "utf-8-replace",
+          "identity_match": true,
+          "kind": "metadata",
+          "path": "geopandas-1.2.0.dist-info/METADATA",
+          "read_status": "read",
+          "sha256": "8e88c22d2ad9465a370c005aa5bfbfd1566ca8589382b430856a48407ee18193",
+          "size": 2008,
+          "summary_lines": [
+            "Metadata-Version: 2.5",
+            "Name: geopandas",
+            "Version: 1.2.0",
+            "Summary: Geographic pandas extensions",
+            "Project-URL: Home, https://geopandas.org",
+            "Project-URL: Repository, https://github.com/geopandas/geopandas",
+            "Author-email: Kelsey Jordahl <kjordahl@alum.mit.edu>",
+            "Maintainer: GeoPandas contributors"
+          ]
+        },
+        {
+          "copyright_lines": [
+            "Copyright (c) 2013-2022, GeoPandas developers.",
+            "* Redistributions of source code must retain the above copyright notice, this",
+            "* Redistributions in binary form must reproduce the above copyright notice,",
+            "specific prior written permission.",
+            "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND",
+            "DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR"
+          ],
+          "encoding": "utf-8-replace",
+          "kind": "license_or_notice",
+          "path": "geopandas-1.2.0.dist-info/licenses/LICENSE.txt",
+          "read_status": "read",
+          "sha256": "c60efa15937a5a82a5a2786a26be7452936fffec7a845724db0740e54535c8ea",
+          "size": 1498,
+          "summary_lines": [
+            "Copyright (c) 2013-2022, GeoPandas developers.",
+            "All rights reserved.",
+            "Redistribution and use in source and binary forms, with or without",
+            "modification, are permitted provided that the following conditions are met:",
+            "* Redistributions of source code must retain the above copyright notice, this",
+            "list of conditions and the following disclaimer.",
+            "* Redistributions in binary form must reproduce the above copyright notice,",
+            "this list of conditions and the following disclaimer in the documentation"
+          ]
+        }
+      ],
+      "expected_sha256": "948fd57df4f713697d5cce149333c0e4714965320c9f5ffa411666c577962eba",
+      "expected_size": 368068,
+      "filename": "geopandas-1.2.0-py3-none-any.whl",
+      "inspection_status": "inspected",
+      "kind": "wheel",
+      "member_count": 79,
+      "metadata": [
+        {
+          "fields": {
+            "license": null,
+            "license_classifiers": [],
+            "license_expression": "BSD-3-Clause",
+            "license_files": [
+              "LICENSE.txt"
+            ],
+            "metadata_version": "2.5",
+            "name": "geopandas",
+            "project_urls": [
+              {
+                "label": "Home",
+                "url": "https://geopandas.org"
+              },
+              {
+                "label": "Repository",
+                "url": "https://github.com/geopandas/geopandas"
+              }
+            ],
+            "requires_python": ">=3.11",
+            "summary": "Geographic pandas extensions",
+            "version": "1.2.0"
+          },
+          "path": "geopandas-1.2.0.dist-info/METADATA",
+          "sha256": "8e88c22d2ad9465a370c005aa5bfbfd1566ca8589382b430856a48407ee18193"
+        }
+      ],
+      "observed_sha256": "948fd57df4f713697d5cce149333c0e4714965320c9f5ffa411666c577962eba",
+      "observed_size": 368068,
+      "total_uncompressed_bytes": 1712014,
+      "url": "https://files.pythonhosted.org/packages/c7/26/10e1061c79b388621b7bae46fcd4942a8c62f960018adf4c38719e9e91ac/geopandas-1.2.0-py3-none-any.whl"
+    }
+  ],
+  "claim_boundary": "Archive and metadata observations only; existing disposition is preserved.",
+  "package": "geopandas",
+  "pypi_info": {
+    "classifiers": [
+      "Development Status :: 5 - Production/Stable",
+      "Intended Audience :: Science/Research",
+      "Operating System :: OS Independent",
+      "Programming Language :: Python :: 3",
+      "Programming Language :: Python :: 3 :: Only",
+      "Topic :: Scientific/Engineering :: GIS"
+    ],
+    "home_page": null,
+    "license": null,
+    "name": "geopandas",
+    "project_urls": {
+      "Home": "https://geopandas.org",
+      "Repository": "https://github.com/geopandas/geopandas"
+    },
+    "version": "1.2.0"
+  },
+  "pypi_metadata_url": "https://pypi.org/pypi/geopandas/1.2.0/json",
+  "schema_version": "robot-sf.dependency-archive-refresh.v1",
+  "upstream_commit_sha": "199fc53c8a1b87fe4f11d7a8f69f0d1408d9ef71",
+  "version": "1.2.0"
+}

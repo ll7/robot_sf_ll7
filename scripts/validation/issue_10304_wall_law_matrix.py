@@ -8,6 +8,7 @@ import concurrent.futures
 import json
 import math
 import platform
+import random
 import subprocess
 import time
 from collections import defaultdict
@@ -32,6 +33,8 @@ STALL_WINDOW_STEPS = 100
 STALL_DISPLACEMENT_M = 0.20
 DEFAULT_MAX_EPISODE_STEPS = 900
 STATIONARY_ACTION = [(0.0, 0.0)]
+DEV_SEED_MIN = 1001
+DEV_SEED_MAX = 1200
 
 VARIANTS: dict[str, dict[str, float | str]] = {
     "legacy": {"law": "legacy_shifted_gradient_v1"},
@@ -74,18 +77,29 @@ def _git_head() -> str:
         return "unknown"
 
 
+def _validate_seed(seed: int) -> None:
+    if not DEV_SEED_MIN <= seed <= DEV_SEED_MAX:
+        raise ValueError(f"seed {seed} is outside the dev band {DEV_SEED_MIN}-{DEV_SEED_MAX}")
+
+
 def _parse_seed_spec(seed_spec: str) -> list[int]:
     seeds: list[int] = []
     for part in seed_spec.split(","):
         if not part:
             continue
         if "-" not in part:
-            seeds.append(int(part))
+            seed = int(part)
+            _validate_seed(seed)
+            seeds.append(seed)
             continue
         start, end = (int(value) for value in part.split("-", 1))
         if end < start:
             raise ValueError(f"seed range must ascend: {part}")
+        _validate_seed(start)
+        _validate_seed(end)
         seeds.extend(range(start, end + 1))
+    if not seeds:
+        raise ValueError("at least one dev seed is required")
     return seeds
 
 
@@ -101,19 +115,14 @@ def _obstacle_polygons(definition) -> list[Any]:
     return [polygon for obstacle in definition.obstacles for polygon in obstacle.iter_polygons()]
 
 
-def _wall_clearance(point_xy: np.ndarray, obstacles: list[Any]) -> float:
-    body = Point(float(point_xy[0]), float(point_xy[1])).buffer(BODY_RADIUS_M)
-    return min(body.distance(obstacle) for obstacle in obstacles)
-
-
-def _overlap_count(positions: np.ndarray, obstacles: list[Any]) -> tuple[int, float]:
-    overlaps = 0
+def _overlap_state(positions: np.ndarray, obstacles: list[Any]) -> tuple[np.ndarray, float]:
+    overlaps = np.zeros(len(positions), dtype=bool)
     min_clearance = math.inf
-    for position in positions:
+    for row, position in enumerate(positions):
         body = Point(float(position[0]), float(position[1])).buffer(BODY_RADIUS_M)
         min_clearance = min(min_clearance, *(body.distance(obstacle) for obstacle in obstacles))
         if any(body.intersection(obstacle).area > 1e-9 for obstacle in obstacles):
-            overlaps += 1
+            overlaps[row] = True
     return overlaps, min_clearance
 
 
@@ -138,6 +147,10 @@ def _run_one(payload: tuple[str, int]) -> TrialResult:
     from loguru import logger
 
     logger.remove()
+    _validate_seed(seed)
+    # Robot route choices and zone sampling still use the two global RNG streams.
+    random.seed(seed)
+    np.random.seed(seed)
     scenario = _select_scenario()
     scenario.setdefault("simulation_config", {})
     scenario["simulation_config"].update(
@@ -167,9 +180,9 @@ def _run_one(payload: tuple[str, int]) -> TrialResult:
     obstacles = _obstacle_polygons(definition)
     targets = _final_targets(definition)
 
-    initial_positions = np.asarray(simulator.ped_pos, dtype=float)
-    _, min_clearance = _overlap_count(initial_positions, obstacles)
-    ever_overlapped = np.zeros(initial_positions.shape[0], dtype=bool)
+    initial_positions = np.asarray(simulator.ped_pos, dtype=float).copy()
+    initial_overlap_mask, min_clearance = _overlap_state(initial_positions, obstacles)
+    ever_overlapped = initial_overlap_mask.copy()
     last_window: list[np.ndarray] = []
     final_positions = initial_positions
     steps = int(
@@ -186,12 +199,9 @@ def _run_one(payload: tuple[str, int]) -> TrialResult:
         simulator.step_once(STATIONARY_ACTION)
         positions = np.asarray(simulator.ped_pos, dtype=float)
         final_positions = positions
-        overlaps, clearance = _overlap_count(positions, obstacles)
+        overlap_mask, clearance = _overlap_state(positions, obstacles)
         min_clearance = min(min_clearance, clearance)
-        if overlaps:
-            for row, position in enumerate(positions):
-                if _wall_clearance(position, obstacles) <= 1e-9:
-                    ever_overlapped[row] = True
+        ever_overlapped |= overlap_mask
         last_window.append(positions.copy())
         if len(last_window) > STALL_WINDOW_STEPS:
             last_window.pop(0)
@@ -199,20 +209,6 @@ def _run_one(payload: tuple[str, int]) -> TrialResult:
             steps = step + 1
             break
 
-    initial_overlap_mask = np.array(
-        [
-            any(
-                Point(float(position[0]), float(position[1]))
-                .buffer(BODY_RADIUS_M)
-                .intersection(obstacle)
-                .area
-                > 1e-9
-                for obstacle in obstacles
-            )
-            for position in initial_positions
-        ],
-        dtype=bool,
-    )
     goal_distances = np.linalg.norm(final_positions - targets, axis=1)
     completed = goal_distances <= GOAL_RADIUS_M
     new_overlap_mask = ever_overlapped & ~initial_overlap_mask
@@ -295,7 +291,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    seeds = _parse_seed_spec(args.seeds)
+    try:
+        seeds = _parse_seed_spec(args.seeds)
+    except ValueError as error:
+        parser.error(str(error))
     workers = min(args.workers, 8)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     started_at = time.time()

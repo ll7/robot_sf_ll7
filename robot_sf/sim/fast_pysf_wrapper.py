@@ -18,7 +18,11 @@ import numpy as np
 import pysocialforce as pysf
 from loguru import logger
 from pysocialforce import forces as pf_forces
-from pysocialforce.config import OBSTACLE_FORCE_DISTANCE_FLOOR, resolve_obstacle_force_law
+from pysocialforce.config import (
+    BODY_EDGE_EXPONENTIAL_V3,
+    OBSTACLE_FORCE_DISTANCE_FLOOR,
+    resolve_obstacle_force_law,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -93,8 +97,16 @@ class FastPysfWrapper:
         return pf_forces.obstacle_force_law_metadata(
             self._resolve_obstacle_force_law(),
             site="fast_pysf_wrapper",
-            geometry_convention="map_line_endpoints_orthogonal_vector",
-            radius_convention="agent_radius_direct",
+            geometry_convention=(
+                "nearest_finite_segment_surface"
+                if self._resolve_obstacle_force_law() == BODY_EDGE_EXPONENTIAL_V3
+                else "map_line_endpoints_orthogonal_vector"
+            ),
+            radius_convention=(
+                "physical_body_edge_clearance"
+                if self._resolve_obstacle_force_law() == BODY_EDGE_EXPONENTIAL_V3
+                else "agent_radius_direct"
+            ),
             enabled=self._obstacle_force_enabled(),
             applied=bool(getattr(self, "_obstacle_force_applied", False)),
             resolution_mode=getattr(config, "obstacle_force_law_resolution_mode", None),
@@ -332,6 +344,19 @@ class FastPysfWrapper:
             return total
 
         ped_radius = float(self.sim.peds.agent_radius)
+        if law_version == BODY_EDGE_EXPONENTIAL_V3:
+            forces = np.zeros((1, 2), dtype=float)
+            pf_forces.all_obstacle_forces_for_law(
+                forces,
+                np.asarray([p], dtype=float),
+                np.asarray(raw_obs, dtype=float),
+                ped_radius,
+                law_version,
+            )
+            if self._obstacle_force_enabled():
+                self._obstacle_force_applied = True
+            return forces[0] * float(self.sim.config.obstacle_force_config.factor)
+
         applied = False
         for row in raw_obs:
             line = tuple(map(float, row[:4]))

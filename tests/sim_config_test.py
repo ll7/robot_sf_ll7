@@ -6,6 +6,7 @@ from dataclasses import asdict, replace
 
 import pytest
 from pysocialforce.config import (
+    BODY_EDGE_EXPONENTIAL_V3,
     LEGACY_SHIFTED_GRADIENT_V1,
     SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
@@ -191,17 +192,20 @@ def test_sampler_capture_enabled_requires_a_boolean() -> None:
         SimulationSettings(sampler_capture_enabled=1)  # type: ignore[arg-type]
 
 
-def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() -> None:
-    """Simulation settings resolve historical inputs and expose the explicit opt-in law."""
-    assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+def test_obstacle_force_law_defaults_to_body_edge_and_accepts_historical_selectors() -> None:
+    """Simulation settings resolve the corrected default and explicit historical laws."""
+    assert SimulationSettings().obstacle_force_law == BODY_EDGE_EXPONENTIAL_V3
     assert SimulationSettings().obstacle_force_law_resolution_mode == "defaulted_missing"
     assert SimulationSettings(obstacle_force_law=None).obstacle_force_law == (  # type: ignore[arg-type]
-        LEGACY_SHIFTED_GRADIENT_V1
+        BODY_EDGE_EXPONENTIAL_V3
     )
     assert (
         SimulationSettings(obstacle_force_law=None).obstacle_force_law_resolution_mode
         == "defaulted_missing"
     )
+    historical = SimulationSettings(obstacle_force_law="")
+    assert historical.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert historical.obstacle_force_law_resolution_mode == "historical_unversioned"
     corrected = SimulationSettings(obstacle_force_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
     assert corrected.obstacle_force_law_version == SURFACE_DISTANCE_UNIT_NORMAL_V2
     assert corrected.obstacle_force_law_resolution_mode == "explicit"

@@ -8,6 +8,42 @@ from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_ppo import _make_training_env, load_expert_training_config
 
 
+def test_delayed_delta_uses_speed_when_applied():
+    """Queued deltas retain their signed change when earlier actions change speed."""
+    recipe = load_expert_training_config(
+        "configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml"
+    )
+    path = Path("configs/scenarios/archetypes/issue_596_frame_consistency.yaml")
+    scenario = next(s for s in load_scenarios(path) if s["name"] == "empty_map_8_directions_east")
+    overrides = dict(recipe.env_overrides)
+    overrides["sim_config"] = {**overrides.get("sim_config", {}), "action_latency_steps": 1}
+    env = _make_training_env(
+        1001,
+        scenario=scenario,
+        scenario_definitions=None,
+        scenario_path=path,
+        exclude_scenarios=(),
+        suite_name="contract",
+        algorithm_name="ppo",
+        env_overrides=overrides,
+        env_factory_kwargs=recipe.env_factory_kwargs,
+        scenario_sampling={},
+    )()
+    try:
+        env.reset(seed=1001)
+        env.simulator.robots[0].state.velocity = (0.05, 0.95)
+        for output, expected in [
+            ((0.1, -0.1), (0.05, 0.95)),
+            ((-0.1, 0.1), (0.15, 0.85)),
+            ((0.0, 0.0), (0.05, 0.95)),
+        ]:
+            obs, *_ = env.step(np.array(output))
+            # One-step delay, dt=.1, acceleration limit=1; targets clip at apply time.
+            np.testing.assert_allclose(obs["robot_speed"], expected, atol=1e-6, rtol=0)
+    finally:
+        env.close()
+
+
 def test_configured_delta_actions_apply_velocity_change():
     """Small signed commands change speed per step, including braking at limits."""
     recipe = load_expert_training_config(

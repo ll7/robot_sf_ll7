@@ -1151,12 +1151,46 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
       PPO_ALGO_CONFIG: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Select native-PPO offline repeat count
+        id: offline-repeats
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          attempts=1
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            attempts=20
+          elif [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            # Include both sides of renames and compare only the PR's changes.
+            git diff --name-only --no-renames "$PR_BASE_SHA...$PR_HEAD_SHA" \
+              > "$RUNNER_TEMP/exact-repeat-changed-paths.txt"
+            while IFS= read -r path; do
+              case "$path" in
+                robot_sf/benchmark/runner.py | robot_sf/benchmark/exact_repeat_campaign.py | \
+                robot_sf/baselines/ppo.py | robot_sf/models/* | \
+                scripts/models/preflight_models.py | scripts/dev/model_cache_key.py | \
+                tests/benchmark/test_exact_repeat_executor.py | \
+                configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml | \
+                .github/workflows/ci.yml)
+                  attempts=20
+                  break
+                  ;;
+              esac
+            done < "$RUNNER_TEMP/exact-repeat-changed-paths.txt"
+          fi
+          echo "attempts=$attempts" >> "$GITHUB_OUTPUT"
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -1177,10 +1211,21 @@ jobs:
         run: uv run python scripts/models/preflight_models.py --config "${PPO_ALGO_CONFIG}"
 
       - name: Run exact-repeat native-PPO determinism offline
+        env:
+          ATTEMPTS: ${{ steps.offline-repeats.outputs.attempts }}
         run: |
-          uv run pytest -m slow -p no:cacheprovider \
-            tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
-            -q
+          set -euo pipefail
+          failures=0
+          for attempt in $(seq 1 "$ATTEMPTS"); do
+            echo "Native PPO offline attempt ${attempt}/${ATTEMPTS}"
+            if ! uv run pytest -m slow -p no:cacheprovider \
+              tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
+              -q; then
+              failures=$((failures + 1))
+            fi
+          done
+          echo "Native PPO offline failures: ${failures}/${ATTEMPTS}"
+          test "$failures" -eq 0
 
   ci:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'ci-draft' || 'ci' }}

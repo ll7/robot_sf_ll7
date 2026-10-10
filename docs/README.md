@@ -140,6 +140,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Bicycle Planner Adaptation](./validation/bicycle_planner.md)** - Opt-in T60 disc configs, physical adapter contract, and dev-seed diagnostic probe
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
+* **[Behaviour Receipt Gate Integration](./dev/behaviour_receipt_gate.md)** - Owner-supplied inventory prerequisite, source checkout and controller execution contract
 * **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Test Suite Orientation](../tests/README.md)** - Top-level test-tree map with pointers to the QA runbook and dev guide for targeted suite execution
@@ -321,6 +322,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Issue #1357 Tentabot-Style Motion-Primitive Assessment](./context/policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)** - Source-backed verdict that Tentabot-style learned primitive-value scoring is a Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner
 * **[Issue #1023 Scenario-Horizon Benchmark Surface](./context/issue_1023_scenario_horizon_benchmark.md)** - Runnable h500 scenario-horizon benchmark config, local non-Slurm full campaign evidence, fixed-vs-scenario comparison, and conservative promotion boundary
 * **[Predictive stopping bound for 0.1.0](./validation/predictive_braking/README.md)** - Opt-in contract, conditional separation proof and paired dev diagnostics for issue #10111
+* **[Predictive braking development pair](./benchmark_predictive_braking_pair.md)** - Separate 0.1.0 hybrid arms, paired near-miss cost and complete 2 s prediction-bound audit for issue #10235
 * **[Issue #1023 Experimental Benchmark Candidates](./context/issue_1023_experimental_benchmark_candidates.md)** - Rationale and caveats for adding `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress_static_escape` to the long-horizon benchmark as experimental challengers
 * **[H500 Policy-Search Evidence Bundle](./context/evidence/policy_search_h500_2026-05-06/README.md)** - Durable policy-search evidence behind the h500 scenario-horizon schedule
 * **[Issue #1023 Scenario-Horizon Preflight Evidence Bundle](./context/evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md)** - Compact preflight proof for the paper-facing scenario-horizon benchmark matrix
@@ -474,6 +476,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Force Field Heatmap](./force_field_heatmap.md)** - Heatmap + vector overlays figure (PNG/PDF)
 
 ### Performance & CI
+
+* **[Hosted-first CI runner fallback](./dev/ci_runner_fallback.md)** - Availability checks, queue recovery, kill switch, hosted capacity options and security threat note.
 
 * **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
 * **[Issue 2536 Speed Discovery](./context/issue_2536_speed_discovery.md)** - Bounded simulator-speed candidate discovery and next occupancy-grid rasterization proof path

@@ -1341,7 +1341,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_config = getattr(config, "robot_config", None)
         if robot_config is None:
             return
-        limits: dict[str, float] = {}
+        limits: dict[str, float | bool] = {}
         for key in (
             "max_linear_speed",
             "max_linear_decel",
@@ -1351,16 +1351,18 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             "max_angular_accel",
             "wheel_radius",
             "interaxis_length",
+            "max_reverse_speed",
         ):
             value = getattr(robot_config, key, None)
             if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
                 limits[key] = float(value)
+        # Reverse selectors are InitVars, so dataclass field copies omit them.
+        for key in ("allow_backwards", "limited_reverse"):
+            value = getattr(robot_config, key, None)
+            if isinstance(value, bool):
+                limits[key] = value
         self._sampling_drive_limits = limits
-        settings = dict(limits)
-        backwards = getattr(robot_config, "allow_backwards", None)
-        if isinstance(backwards, bool):
-            settings["allow_backwards"] = backwards
-        self._sampling_drive_settings = DifferentialDriveSettings(**settings)
+        self._sampling_drive_settings = DifferentialDriveSettings(**limits)
         self._sampling_path_fields = {}
         self._sampling_obstacle_segments = None
         if self._sampling_version() == SOCNAV_SAMPLING_LEGACY_V1:

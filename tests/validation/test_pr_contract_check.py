@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import unicodedata
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,9 +21,115 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.ci import pr_contract_check
+from scripts.dev.check_pr_followups import analyze_body as analyze_pr_followups
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
+
+_V2_CONTRACT_BODY_TEMPLATE = """## Summary
+Contract parity regression fixture.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: {relates}
+deferred_work:
+  status: {status}
+  issues: {issues}
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+
+def _v2_contract_body(*, status: str, issues: str, relates: str = "[]") -> str:
+    return _V2_CONTRACT_BODY_TEMPLATE.format(status=status, issues=issues, relates=relates)
+
+
+@pytest.mark.parametrize(
+    ("status", "relates", "expected_reason"),
+    [
+        pytest.param("issues", "[]", "deferred_work.status must be one of", id="invalid-status"),
+        pytest.param(
+            "open",
+            "[9488]",
+            "linked_issues and deferred_work contain duplicate issue references",
+            id="duplicate-reference",
+        ),
+    ],
+)
+def test_standalone_and_readiness_reject_invalid_v2_with_shared_reasons(
+    status: str, relates: str, expected_reason: str
+) -> None:
+    body = _v2_contract_body(status=status, issues="[9488]", relates=relates)
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
+    )
+
+    assert parsed.status == "malformed"
+    assert followups.status == "malformed_v2_contract"
+    assert len(parsed.errors) == 1
+    assert expected_reason in parsed.errors[0]
+    for reason in parsed.errors:
+        assert reason in followups.message
+        assert any(reason in blocker for blocker in blockers)
+
+
+def test_standalone_and_readiness_accept_valid_v2_no_deferred_work() -> None:
+    body = _v2_contract_body(status="none", issues="[]", relates="[9488]")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
+    )
+
+    assert followups.status == "ok"
+    assert not any("PR contract v2" in blocker for blocker in blockers)
+
+
+def test_standalone_and_readiness_keep_v1_markdown_compatibility() -> None:
+    body = """## Summary
+Legacy Markdown contract.
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: none
+"""
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity",
+        body,
+        [],
+        "ll7/robot_sf_ll7",
+        pr_contract_check.PRDiffBases("missing-base"),
+        None,
+    )
+
+    assert parsed.status == "absent"
+    assert followups.status == "ok"
+    assert not any("PR contract v2" in blocker for blocker in blockers)
+
 
 # GitHub's compare endpoint returns changed-file records on its first page, up to
 # 300 files for the whole comparison. A response containing exactly 300 rows may
@@ -2844,6 +2951,7 @@ def test_check_worker_lane_provenance_skips_label_when_pr_shas_unavailable(
 
 
 _RECENT_MERGED_PR_LIMIT = 20
+_MIN_RECENT_MERGED_PRS_WITH_EVIDENCE = 15
 
 
 def _validate_recent_merged_pr_inventory(
@@ -2913,6 +3021,21 @@ def _valid_recent_merged_pr_inventory() -> list[dict[str, object]]:
         {"number": number, "title": f"PR {number}", "body": None if number == 1 else ""}
         for number in range(1, 21)
     ]
+
+
+def _historical_pr_evidence_fixture(pr_number: int) -> HistoricalPREvidence:
+    """Build valid immutable diff evidence for recent-sweep unit tests."""
+    filename = f"file_{pr_number}.py"
+    return HistoricalPREvidence(
+        pr_number=pr_number,
+        base_sha="a" * 40,
+        head_sha=f"{pr_number:040x}",
+        merge_commit_sha=f"{pr_number + 1000:040x}",
+        merge_parent_shas=(f"{pr_number + 2000:040x}",),
+        merge_base_sha="a" * 40,
+        changed_files=(filename,),
+        numstat=pr_contract_check.HistoricalNumstatEvidence.from_numstat(f"1\t0\t{filename}\n"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -2986,6 +3109,60 @@ def test_fetch_recent_merged_pr_inventory_fails_closed_on_timeout(
         _fetch_recent_merged_pr_inventory("ll7/robot_sf_ll7")
 
 
+def test_regression_last_20_merged_prs_checks_available_prs_when_sparse_evidence_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sparse live evidence gaps do not make the regression sweep vacuous."""
+    unavailable = {1, 2}
+    run_all_checks = MagicMock(return_value=([], [], []))
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_recent_merged_pr_inventory",
+        lambda _repo: _valid_recent_merged_pr_inventory(),
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_historical_pr_evidence",
+        lambda number: None if number in unavailable else _historical_pr_evidence_fixture(number),
+    )
+    monkeypatch.setattr(
+        pr_contract_check,
+        "run_all_checks",
+        run_all_checks,
+    )
+
+    with pytest.warns(RuntimeWarning, match=r"PR #1.*PR #2"):
+        test_regression_last_20_merged_prs()
+
+    assert run_all_checks.call_count == _RECENT_MERGED_PR_LIMIT - len(unavailable)
+
+
+def test_regression_last_20_merged_prs_fails_when_evidence_is_unavailable_for_too_many_prs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live sweep with broad evidence loss is not accepted as proof."""
+    unavailable = {1, 2, 3, 4, 5, 6}
+    run_all_checks = MagicMock(return_value=([], [], []))
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_recent_merged_pr_inventory",
+        lambda _repo: _valid_recent_merged_pr_inventory(),
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_fetch_historical_pr_evidence",
+        lambda number: None if number in unavailable else _historical_pr_evidence_fixture(number),
+    )
+    monkeypatch.setattr(
+        pr_contract_check,
+        "run_all_checks",
+        run_all_checks,
+    )
+
+    with pytest.raises(pytest.fail.Exception, match="checked only 14 of 20"):
+        test_regression_last_20_merged_prs()
+
+
 def test_regression_last_20_merged_prs() -> None:
     """Run regression test on the last 20 merged PRs to ensure zero false blockers."""
     try:
@@ -2993,6 +3170,8 @@ def test_regression_last_20_merged_prs() -> None:
     except RuntimeError as error:
         pytest.fail(f"Cannot prove the recent merged PR regression sweep: {error}")
 
+    checked_prs = 0
+    unavailable_evidence: list[str] = []
     for pr in prs:
         title = pr["title"]
         body = pr["body"] or ""
@@ -3003,12 +3182,14 @@ def test_regression_last_20_merged_prs() -> None:
         try:
             historical_evidence = _fetch_historical_pr_evidence(number)
         except RuntimeError as error:
-            pytest.fail(f"Immutable diff evidence unavailable for PR #{number}: {error}")
+            unavailable_evidence.append(f"PR #{number}: {error}")
+            continue
         if historical_evidence is None:
-            pytest.fail(
-                "Cannot prove the live PR regression sweep: immutable diff evidence unavailable "
-                f"for PR #{number}"
+            unavailable_evidence.append(
+                f"PR #{number}: immutable diff evidence helper returned no evidence"
             )
+            continue
+        checked_prs += 1
         changed_files = list(historical_evidence.changed_files)
 
         # Pass pr_number=None: this regression test only asserts on blockers, and
@@ -3040,6 +3221,25 @@ def test_regression_last_20_merged_prs() -> None:
                 "github-closing-parity" in blocker and f"#{issue}" in blocker
                 for blocker in blockers
             ), f"PR #{number} no longer exposes its known historical parity hit"
+        # Older merged bodies may fail a newly enforced parser rule. Require
+        # that exact canonical rejection; every unrelated blocker still fails.
+        parsed_contract = parse_pr_contract_v2(body, source="historical parity")
+        expected_v2_blockers = (
+            [
+                f"BLOCKER: {parsed_contract.message}; "
+                "v1 fallback is disabled when a v2 marker is present."
+            ]
+            if parsed_contract.status == "malformed"
+            else []
+        )
+        observed_v2_blockers = [
+            blocker
+            for blocker in blockers
+            if blocker.startswith("BLOCKER: Malformed pr-contract:v2:")
+        ]
+        assert observed_v2_blockers == expected_v2_blockers, (
+            f"PR #{number} has different standalone and canonical v2 validation"
+        )
         unexpected_blockers = [
             blocker
             for blocker in blockers
@@ -3049,9 +3249,25 @@ def test_regression_last_20_merged_prs() -> None:
                 for issue in expected_parity_issues
             )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
+            and blocker not in expected_v2_blockers
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"
+        )
+
+    if checked_prs < _MIN_RECENT_MERGED_PRS_WITH_EVIDENCE:
+        pytest.fail(
+            "Cannot prove the live PR regression sweep: checked only "
+            f"{checked_prs} of {_RECENT_MERGED_PR_LIMIT} recent merged PRs with immutable "
+            f"diff evidence; require at least {_MIN_RECENT_MERGED_PRS_WITH_EVIDENCE}. "
+            f"Unavailable evidence: {'; '.join(unavailable_evidence)}"
+        )
+    if unavailable_evidence:
+        warnings.warn(
+            "Skipped recent merged PR(s) without immutable diff evidence: "
+            + "; ".join(unavailable_evidence),
+            RuntimeWarning,
+            stacklevel=2,
         )
 
 

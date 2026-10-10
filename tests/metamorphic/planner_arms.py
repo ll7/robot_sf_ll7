@@ -1,7 +1,7 @@
 """Release-arm episode harness for planner metamorphic relations.
 
-The release ``social_force``, ``orca`` and hybrid v3 arms are built with the same
-map-runner policy builder, structured observation, occupancy grid, and command
+The release ``social_force``, ``orca``, hybrid v3, and Risk-DWA arms use the
+map-runner policy builder, flattened SOCNAV leaves, occupancy grid, and command
 conversion used by benchmark runs. Scenes are small synthetic maps so a relation
 runs in seconds; the harness is a test fixture, not benchmark evidence.
 """
@@ -142,7 +142,7 @@ def resolve_release_algo_config(
     )
 
 
-def release_arm(key: str) -> tuple[str, dict[str, Any]]:
+def release_arm(key: str, *, scenario: str = "metamorphic") -> tuple[str, dict[str, Any]]:
     """Return the runtime ``(algo, config)`` of one release arm (successor entry wins).
 
     Returns:
@@ -150,12 +150,12 @@ def release_arm(key: str) -> tuple[str, dict[str, Any]]:
     """
     if key == HYBRID_V4_DIAGNOSTIC_ARM:
         return resolve_release_algo_config(
-            "hybrid_rule_local_planner", HYBRID_V4_DIAGNOSTIC_CONFIG, "metamorphic"
+            "hybrid_rule_local_planner", HYBRID_V4_DIAGNOSTIC_CONFIG, scenario
         )
     matches = [entry for entry in release_campaign_planners() if entry["key"] == key]
     assert matches, f"release roster has no arm {key!r}"
     entry = matches[-1]
-    return resolve_release_algo_config(entry["algo"], entry.get("algo_config"), "metamorphic")
+    return resolve_release_algo_config(entry["algo"], entry.get("algo_config"), scenario)
 
 
 def identity(point: Point) -> Point:
@@ -380,6 +380,7 @@ class ArmEpisode:
     collision: bool
     step_limit_reached: bool
     status: str
+    flat_socnav_observation: bool
 
 
 def run_arm_episode(
@@ -389,6 +390,7 @@ def run_arm_episode(
     seed: int,
     max_steps: int,
     ped_density: float = 0.0,
+    scenario: str = "metamorphic",
     social_force_kernel_version: str | None = None,
 ) -> ArmEpisode:
     """Drive one release arm through a seeded map-runner-style episode.
@@ -399,7 +401,7 @@ def run_arm_episode(
     Returns:
         The robot poses (including the reset pose), commands, env actions, and outcome.
     """
-    algo, algo_config = release_arm(arm)
+    algo, algo_config = release_arm(arm, scenario=scenario)
     if social_force_kernel_version is not None:
         algo_config["social_force_kernel_version"] = social_force_kernel_version
     config = robot_env_config(
@@ -416,6 +418,16 @@ def run_arm_episode(
     pedestrians: list[tuple[tuple[float, float], ...]] = []
     info: dict[str, Any] = {}
     terminated = truncated = False
+    flat_socnav_observation = True
+
+    def is_flat_socnav(payload: Any) -> bool:
+        return (
+            isinstance(payload, dict)
+            and "pedestrians_count" in payload
+            and "pedestrians_positions" in payload
+            and "pedestrians_velocities" in payload
+            and "pedestrians" not in payload
+        )
 
     def record_state() -> None:
         pose = env.simulator.robot_poses[0]
@@ -426,6 +438,7 @@ def run_arm_episode(
 
     try:
         observation, info = env.reset(seed=seed)
+        flat_socnav_observation = is_flat_socnav(observation)
         bind_env = getattr(policy, "_planner_bind_env", None)
         if callable(bind_env):
             bind_env(env)
@@ -440,6 +453,7 @@ def run_arm_episode(
             command = policy(observation)
             action = policy_command_to_env_action(env=env, config=config, command=command)
             observation, _reward, terminated, truncated, info = env.step(action)
+            flat_socnav_observation = flat_socnav_observation and is_flat_socnav(observation)
             values = np.asarray(command, dtype=float).reshape(-1)
             action_values = np.asarray(action, dtype=float).reshape(-1)
             commands.append((float(values[0]), float(values[1])))
@@ -458,4 +472,5 @@ def run_arm_episode(
         collision=bool(info.get("collision", False)),
         step_limit_reached=not (terminated or truncated),
         status=str(meta.get("status")),
+        flat_socnav_observation=flat_socnav_observation,
     )

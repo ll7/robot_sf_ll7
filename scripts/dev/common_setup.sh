@@ -38,7 +38,11 @@ fi
 preflight_check_worktree_dependency_profile() {
   local profile="${1:-core}"
   local venv_root
-  if [[ -d "$REPO_ROOT/.venv" || -L "$REPO_ROOT/.venv" ]]; then
+  if [[ -n "${ROBOT_SF_EXPLICIT_VENV_OVERRIDE:-}" \
+    && "${VIRTUAL_ENV:-}" == "$ROBOT_SF_EXPLICIT_VENV_OVERRIDE" \
+    && "${UV_PROJECT_ENVIRONMENT:-}" == "$ROBOT_SF_EXPLICIT_VENV_OVERRIDE" ]]; then
+    venv_root="$ROBOT_SF_EXPLICIT_VENV_OVERRIDE"
+  elif [[ -d "$REPO_ROOT/.venv" || -L "$REPO_ROOT/.venv" ]]; then
     venv_root="$REPO_ROOT/.venv"
   elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
     venv_root="$VIRTUAL_ENV"

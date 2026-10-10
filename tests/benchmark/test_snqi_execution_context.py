@@ -19,6 +19,13 @@ EVIDENCE = ROOT / "docs/context/evidence/2026-10-04_freeze008_calibration"
 ENV = "ROBOT_SF_SNQI_V2_CALIBRATION_CONTEXT"
 
 
+@pytest.fixture(autouse=True)
+def single_thread_context(monkeypatch):
+    """Give synthetic admission contexts explicit, caller-independent thread caps."""
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(variable, "1")
+
+
 def test_worker_refuses_context_difference_before_episode_setup(monkeypatch):
     """Base reaches the setup fence; the fixed worker must refuse without setup/reset."""
     context = build_execution_context_provenance()
@@ -303,6 +310,26 @@ def test_release_cli_refuses_before_source_admission_or_campaign(
     assert payload["benchmark_success"] is False
     reason = "mismatch: cpu_model" if custody == "valid" else "requires acquired anchor custody"
     assert reason in payload["status_reason"]
+
+
+def test_learned_family_absent_from_readiness_catalog_refuses(monkeypatch):
+    """A learned family the catalog cannot resolve must fail fast instead of being skipped."""
+    from robot_sf.benchmark.snqi import execution_context
+
+    family = "sac"
+    assert family in execution_context._LEARNED_FAMILIES
+    real = execution_context.get_algorithm_readiness
+    monkeypatch.setattr(
+        execution_context,
+        "get_algorithm_readiness",
+        lambda name: None if name == family else real(name),
+    )
+    with pytest.raises(ValueError, match=f"absent from readiness catalog: {family}"):
+        execution_context._learned_algorithm_names()
+    # The catalog lookup must still fail closed for every other family as well.
+    monkeypatch.setattr(execution_context, "get_algorithm_readiness", lambda _name: None)
+    with pytest.raises(ValueError, match="absent from readiness catalog"):
+        execution_context._learned_algorithm_names()
 
 
 def test_malformed_worker_reference_refuses(monkeypatch):

@@ -140,6 +140,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Bicycle Planner Adaptation](./validation/bicycle_planner.md)** - Opt-in T60 disc configs, physical adapter contract, and dev-seed diagnostic probe
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
+* **[Behaviour Receipt Gate Integration](./dev/behaviour_receipt_gate.md)** - Owner-supplied inventory prerequisite, source checkout and controller execution contract
 * **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Test Suite Orientation](../tests/README.md)** - Top-level test-tree map with pointers to the QA runbook and dev guide for targeted suite execution

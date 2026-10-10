@@ -68,7 +68,10 @@ pairs for every declared scenario/seed and a matching producer/run contract.
 `paired.csv` and `paired.md` show, per scenario, both success and contact
 proportions, near-miss onsets, near-miss exposure in seconds and the 2 s
 prediction-bound violation rate. Success gain and added near-miss cost appear
-side by side. Contacts count episodes with any observed robot, pedestrian or
+side by side. These outputs cover each declared input scenario; they do not
+establish that the whole pedestrian campaign was executed. Preserved pedestrian
+evidence covers the station slice, alongside an actor-free gate over all 48
+scenarios. Contacts count episodes with any observed robot, pedestrian or
 obstacle contact; success requires route completion. Near misses count
 false-to-true transitions of the native near-miss state, with exposure equal
 to the number of exposed steps times the simulator step duration. Native

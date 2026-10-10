@@ -2782,6 +2782,7 @@ def _make_pinned_tool_fixture_repo(
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
     }
     env.pop("PYTHONPATH", None)
+    env.pop("ROBOT_SF_VENV_FRESHNESS_CHECK", None)
     return repo, venv, env
 
 
@@ -4011,10 +4012,17 @@ def test_worktree_shared_venv_skips_unpinned_tool_with_log_line(
     assert "reason=unpinned" in result.stderr
 
 
+@pytest.mark.parametrize("parent_bypasses_freshness", [False, True])
 def test_worktree_shared_venv_skips_tool_gate_for_interpreters(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parent_bypasses_freshness: bool,
 ) -> None:
     """Interpreter commands keep the #6003 contract even when a stale tool sits in the venv."""
+    if parent_bypasses_freshness:
+        monkeypatch.setenv("ROBOT_SF_VENV_FRESHNESS_CHECK", "skip")
+    else:
+        monkeypatch.delenv("ROBOT_SF_VENV_FRESHNESS_CHECK", raising=False)
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
     checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
     checker.parent.mkdir(parents=True)
@@ -5758,6 +5766,11 @@ def test_coverage_docs_match_effective_source_scope() -> None:
     assert 'source = ["robot_sf", "fast-pysf/pysocialforce"]' in cov_guide_text
     assert "fast-pysf/pysocialforce" in coverage_run["source"]
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in wrapper_text
+    assert "--cov=robot_sf/gym_env" in cov_guide_text
+    assert "--cov=robot_sf/benchmark" in cov_guide_text
+    assert "--cov=robot_sf/analysis_workbench --cov-branch" in cov_guide_text
+    assert "coverage report -m" in cov_guide_text
+    assert "Coverage.py imports dotted source names" in cov_guide_text
     assert "Only the `robot_sf/` package" in cov_guide_text
     assert "not included in the local wrapper report" in cov_guide_text
     assert "measure only the `robot_sf/` package" in dev_guide_text

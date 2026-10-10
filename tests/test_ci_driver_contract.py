@@ -25,8 +25,11 @@ QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
+    "self-hosted-admission": 5,
+    "runner-availability": 2,
     "dispatch-ownership": 55,
     "fast-feedback": 45,
+    "browser-witnesses": 30,
     "coverage-gate": 20,
     "changed-coverage-gate": 30,
     "compat-matrix": 30,
@@ -168,7 +171,21 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
         "exact-repeat-model-preflight",
     ):
         needs = jobs[job_name]["needs"]
-        assert needs == "dispatch-ownership", job_name
+        # Provenance and bounded availability admission precede routed jobs.
+        # Ruling: https://github.com/ll7/robot_sf_ll7/pull/10217#issuecomment-6057864254
+        expected_needs = (
+            ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
+            if job_name
+            in (
+                "fast-feedback",
+                "smoke-artifacts",
+                "wheel-smoke-install",
+                "examples-smoke",
+                "notebooks-smoke",
+            )
+            else "dispatch-ownership"
+        )
+        assert needs == expected_needs, job_name
         assert "needs.dispatch-ownership.outputs.run_full_ci == 'true'" in jobs[job_name]["if"]
     assert "dispatch-ownership" in jobs["ci"]["needs"]
 
@@ -398,7 +415,11 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert {"fast-feedback", "smoke-artifacts"} <= set(workflow["jobs"])
     assert _workflow_job_phases("fast-feedback") == {"lint", "typecheck", "test"}
     assert _workflow_job_phases("smoke-artifacts") == {"smoke", "artifact-policy"}
-    assert workflow["jobs"]["fast-feedback"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["fast-feedback"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
 
 
 def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
@@ -500,6 +521,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     )
     assert 'compat_os=["ubuntu-latest","macos-latest"]' in path_step["run"]
     assert setup_step["with"] == {
+        "node": "true",
         "python-version": "${{ matrix.python }}",
         "sync-args": "--extra viz --extra maps --frozen",
     }
@@ -633,7 +655,11 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
 
     assert "examples-smoke" in workflow["jobs"]
     assert _workflow_job_phases("examples-smoke") == {"examples-smoke"}
-    assert workflow["jobs"]["examples-smoke"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["examples-smoke"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -724,7 +750,11 @@ def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() 
 
     assert "notebooks-smoke" in workflow["jobs"]
     assert _workflow_job_phases("notebooks-smoke") == {"notebooks-smoke"}
-    assert workflow["jobs"]["notebooks-smoke"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["notebooks-smoke"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
     assert "notebooks-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -737,7 +767,11 @@ def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> N
     assert "wheel-smoke-install" in workflow["jobs"]
     assert any("uv build" in run_block for run_block in wheel_smoke_run_blocks)
     assert any("wheel_install_smoke.sh" in run_block for run_block in wheel_smoke_run_blocks)
-    assert workflow["jobs"]["wheel-smoke-install"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["wheel-smoke-install"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
     assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -1358,7 +1392,7 @@ def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> N
         "if-no-files-found": "error",
     }
     fast = workflow["jobs"]["fast-feedback"]
-    assert fast["needs"] == "dispatch-ownership"
+    assert fast["needs"] == ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
     assert fast["permissions"] == {"contents": "read", "actions": "read"}
     download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
     assert download["uses"] == "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"

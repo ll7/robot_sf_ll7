@@ -429,9 +429,12 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         if grid_payload is None:
             return float("inf")
         grid, meta = grid_payload
-        channel = self._preferred_channel(meta)
-        if channel < 0 or channel >= grid.shape[0]:
+        if grid.size == 0:
             return float("inf")
+        # Pedestrians are forecast separately; combined occupancy is not static geometry.
+        channel = self._grid_channel_index(meta, "obstacles")
+        if channel < 0 or channel >= grid.shape[0]:
+            raise ValueError("A static obstacle channel is required for guarded PPO clearance")
 
         rc = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
         if rc is None:
@@ -476,12 +479,14 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             point_offset_xy_m=self._point_offset_in_grid_cell(point, meta, row, col),
         )
 
-    def _command_drive_rollout(self, observation, command, robot_pos, heading):
+    def _command_drive_rollout(
+        self, observation, command, robot_pos, heading, *, minimum_forecast_steps=0
+    ):
         """Forecast commands, with native dynamics for surface-clearance guards.
 
         Returns:
             tuple: World positions, headings and endpoint velocities; native
-            forecasts include the terminal static braking tail.
+            forecasts include the terminal braking tail.
         """
         if self.config.clearance_model != "surface_v2" or self._drive_settings is None:
             x, theta = np.array(robot_pos, dtype=float), float(heading)
@@ -498,33 +503,16 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         speed = float(self._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
         angular = float(self._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0])
         sequence = np.tile(command, (max(int(self.config.rollout_steps), 1), 1))
+        padding = max(0, minimum_forecast_steps - len(sequence))
+        if padding:
+            # Continue native braking and holding after the command horizon.
+            sequence = np.vstack((sequence, np.zeros((padding, 2))))
         positions, headings, velocities = native_drive_rollout(
             sequence, self._drive_settings, speed, angular, float(self.config.rollout_dt)
         )
         cos_h, sin_h = np.cos(heading), np.sin(heading)
         rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
         return robot_pos + positions @ rotation.T, headings + heading, velocities
-
-    def _terminal_obstacle_clearance(self, positions, observation, grid_payload):
-        """Check static braking viability without extending the pedestrian horizon.
-
-        Returns:
-            float: Swept minimum during the terminal coast, or infinity if empty.
-        """
-        minimum = float("inf")
-        previous = positions[0]
-        for point in positions[1:]:
-            swept = self._exact_obstacle_clearance(point, previous=previous)
-            if swept is not None:
-                minimum = min(minimum, swept)
-            minimum = min(
-                minimum,
-                self._min_obstacle_clearance(
-                    point, observation=observation, grid_payload=grid_payload
-                ),
-            )
-            previous = point
-        return minimum
 
     def _evaluate_command(
         self,
@@ -533,8 +521,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         *,
         state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray] | None = None,
         grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+        minimum_forecast_steps: int = 0,
     ) -> dict[str, float | bool]:
-        """Evaluate a command over a short rollout horizon.
+        """Evaluate command safety through the rollout and any native braking tail.
 
         Returns:
             dict[str, float | bool]: Safety summary including `safe` and clearance metrics.
@@ -553,13 +542,22 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         min_obs_clear = float("inf")
         min_ttc = float("inf")
 
-        drive_rollout = self._command_drive_rollout(observation, command, robot_pos, heading)
+        drive_rollout = self._command_drive_rollout(
+            observation,
+            command,
+            robot_pos,
+            heading,
+            minimum_forecast_steps=minimum_forecast_steps,
+        )
         previous_x = x.copy()
-        for step in range(steps):
+        command_end = x.copy()
+        for step in range(len(drive_rollout[0])):
             t = (step + 1) * dt
             x = drive_rollout[0][step]
             theta = float(drive_rollout[1][step])
             speed = float(drive_rollout[2][step, 0])
+            if step == steps - 1:
+                command_end = x.copy()
 
             if ped_pos.size > 0:
                 ped_t = ped_pos + ped_vel * t
@@ -584,34 +582,22 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     rel_speed_sq = np.sum(rel_vel * rel_vel, axis=1)
                     valid = rel_speed_sq > 1e-6
                     if np.any(valid):
-                        if self.config.clearance_model == "surface_v2":
-                            contact_times = [
-                                time_to_circle_contact(
-                                    position,
-                                    velocity,
-                                    combined_radius=(
-                                        float(self.config.robot_radius_m)
-                                        + float(self.config.pedestrian_radius_m)
-                                    ),
-                                )
-                                for position, velocity in zip(
-                                    rel_pos[valid], rel_vel[valid], strict=True
-                                )
-                            ]
-                            # Contact time is relative to this rollout sample;
-                            # report it on the episode's absolute rollout clock.
-                            min_ttc = min(
-                                min_ttc,
-                                t + min(contact_times, default=float("inf")),
+                        contact_radius = (
+                            float(self.config.robot_radius_m)
+                            + float(self.config.pedestrian_radius_m)
+                            if self.config.clearance_model == "surface_v2"
+                            else float(self.config.hard_ped_clearance)
+                        )
+                        contact_times = [
+                            time_to_circle_contact(
+                                position, velocity, combined_radius=contact_radius
                             )
-                        else:
-                            ttc = (
-                                -np.sum(rel_pos[valid] * rel_vel[valid], axis=1)
-                                / rel_speed_sq[valid]
+                            for position, velocity in zip(
+                                rel_pos[valid], rel_vel[valid], strict=True
                             )
-                            ttc = ttc[ttc > 0.0]
-                            if ttc.size > 0:
-                                min_ttc = min(min_ttc, float(np.min(ttc)))
+                        ]
+                        # Contact is relative to this sample, on the rollout clock.
+                        min_ttc = min(min_ttc, t + min(contact_times, default=float("inf")))
             swept = self._exact_obstacle_clearance(x, previous=previous_x)
             if swept is not None:
                 min_obs_clear = min(min_obs_clear, swept)
@@ -621,14 +607,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
             )
 
-        min_obs_clear = min(
-            min_obs_clear,
-            self._terminal_obstacle_clearance(
-                drive_rollout[0][steps - 1 :], observation, grid_payload
-            ),
-        )
-
-        end_dist = float(np.linalg.norm(goal - x))
+        # Braking checks safety beyond the command horizon, not goal progress.
+        end_dist = float(np.linalg.norm(goal - command_end))
         progress = start_dist - end_dist
         safe = (
             min_ped_clear >= float(self.config.hard_ped_clearance)
@@ -1107,8 +1087,30 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_diagnostics=fallback_diagnostics,
             )
 
+        # Compare executable alternatives on the same pedestrian forecast clock.
+        # A stopped robot keeps holding while the other command finishes braking.
+        common_steps = max(
+            len(
+                self._command_drive_rollout(observation, command, cached_state[0], cached_state[1])[
+                    0
+                ]
+            )
+            for command in (fallback_command, (0.0, 0.0))
+        )
+        if common_steps > max(int(self.config.rollout_steps), 1):
+            fallback_eval = self._evaluate_command(
+                observation,
+                fallback_command,
+                state=cached_state,
+                grid_payload=cached_grid,
+                minimum_forecast_steps=common_steps,
+            )
         stop_eval = self._evaluate_command(
-            observation, (0.0, 0.0), state=cached_state, grid_payload=cached_grid
+            observation,
+            (0.0, 0.0),
+            state=cached_state,
+            grid_payload=cached_grid,
+            minimum_forecast_steps=common_steps,
         )
         if bool(stop_eval["safe"]):
             return self._shield_decision(

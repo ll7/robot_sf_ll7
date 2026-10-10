@@ -257,7 +257,9 @@ def build_derived_inputs(  # noqa: C901
     payload["resume"] = False
     payload["stop_on_failure"] = False
     payload["export_publication_bundle"] = False
-    payload["paper_facing"] = False  # dev seeds are not admissible paper evidence
+    # Dev diagnostics emit v2 rows; historical width anchors use v1 metrics.
+    # Omit this unrelated scalar report without altering protected anchors.
+    payload.update(paper_facing=False, snqi_weights=None, snqi_baseline=None)
     payload["record_simulation_step_trace"] = bool(step_trace)
     if arms:
         known = {p["key"] for p in payload["planners"]}

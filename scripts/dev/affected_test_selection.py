@@ -179,6 +179,70 @@ def _always_witness(path: str, text: str) -> bool:
     )
 
 
+def _is_slow_test(text: str) -> bool:
+    """Recognize tests excluded by the default PR marker filter."""
+    return "pytest.mark.slow" in text or "robot-sf-test-lane: slow" in text
+
+
+def _has_unproven_slow_dependency(imports: set[str], text: str) -> bool:
+    """Return whether a slow test can read inputs beyond the static graph."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return True
+    dynamic_call_names = {"chr", "open"}
+    dynamic_method_names = {
+        "glob",
+        "iterdir",
+        "load",
+        "open",
+        "read",
+        "read_bytes",
+        "read_text",
+        "rglob",
+        "safe_load",
+        "walk",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            function = node.func
+            if isinstance(function, ast.Name) and function.id in dynamic_call_names:
+                return True
+            if isinstance(function, ast.Attribute) and function.attr in dynamic_method_names:
+                return True
+        elif isinstance(node, ast.JoinedStr):
+            return True
+    return bool(
+        imports
+        & {
+            "csv",
+            "glob",
+            "importlib.resources",
+            "json",
+            "os",
+            "pathlib",
+            "tomllib",
+            "yaml",
+        }
+    )
+
+
+def _unproven_slow_tests(tests: list[str], sources: dict, selected: dict[str, str]) -> list[str]:
+    """List unselected slow files whose dependencies are not fully statically proven."""
+    unproven = []
+    for path in tests:
+        if path in selected:
+            continue
+        source = sources.get(path)
+        if source is None:
+            unproven.append(path)
+            continue
+        imports, _, text = source
+        if _is_slow_test(text) and _has_unproven_slow_dependency(imports, text):
+            unproven.append(path)
+    return unproven
+
+
 def _scan_sources(root: Path, files: set[str], tests: list[str]) -> tuple[dict, dict]:
     """Read tracked text and Python ASTs; no untracked artifacts enter the graph."""
     reasons = {}
@@ -238,6 +302,11 @@ def selection_reasons(root: Path, paths: set[str]) -> tuple[str, dict[str, str]]
     for path in tests:
         if path in reached:
             reasons.setdefault(path, reached[path])
+    unproven_slow = _unproven_slow_tests(tests, sources, reasons) if paths else []
+    if unproven_slow:
+        return "full", dict.fromkeys(
+            tests, "fallback: unproven slow-test dependency " + unproven_slow[0]
+        )
     unmapped = sorted(path for path in paths if not _reaches_test(path, tests, reverse))
     if unmapped:
         return "full", dict.fromkeys(tests, "fallback: unmapped input " + unmapped[0])

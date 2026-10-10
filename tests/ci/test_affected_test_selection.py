@@ -116,6 +116,55 @@ def test_mapped_change_excludes_unrelated_slow_and_always_admits_pins(tmp_path):
     assert affected_tests(tmp_path, set()) == ["tests/test_inventory.py", "tests/test_pin.py"]
 
 
+def test_mapped_direct_consumer_does_not_hide_dynamic_slow_consumer(tmp_path):
+    """A static consumer cannot prove an unselected dynamic slow consumer is safe."""
+    from scripts.dev.affected_test_selection import selection_reasons
+
+    files = {
+        "configs/a.yaml": "ok\n",
+        "tests/test_direct.py": (
+            "PIN = 'configs/a.yaml'\n"
+            "def test_direct():\n"
+            "    assert PIN\n"
+        ),
+        "tests/test_dynamic_slow.py": (
+            "from pathlib import Path\n"
+            "import pytest\n"
+            "pytestmark = pytest.mark.slow\n"
+            "ROOT = Path(__file__).resolve().parents[1]\n"
+            "def _config_path():\n"
+            "    return ''.join(chr(value) for value in "
+            "[99, 111, 110, 102, 105, 103, 115, 47, 97, 46, 121, 97, 109, 108])\n"
+            "def test_dynamic_consumer():\n"
+            "    assert (ROOT / _config_path()).read_text() == 'ok\\n'\n"
+        ),
+        "tests/test_unrelated_slow.py": (
+            "import pytest\n"
+            "pytestmark = pytest.mark.slow\n"
+            "def test_unrelated():\n"
+            "    assert True\n"
+        ),
+    }
+    for name, text in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", *files], cwd=tmp_path, check=True)
+
+    mode, reasons = selection_reasons(tmp_path, {"configs/a.yaml"})
+
+    assert mode == "full"
+    assert set(reasons) == {
+        "tests/test_direct.py",
+        "tests/test_dynamic_slow.py",
+        "tests/test_unrelated_slow.py",
+    }
+    assert reasons["tests/test_dynamic_slow.py"].startswith(
+        "fallback: unproven slow-test dependency"
+    )
+
+
 def test_unchanged_pr_still_admits_inventory(tmp_path):
     """Every PR executes integrity witnesses even when its diff is empty."""
     from scripts.dev.affected_test_selection import affected_tests

@@ -265,18 +265,26 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
         is_full_config = required_keys <= raw_keys
         is_expert_overlay = "base_config" in raw_keys and "candidates" not in raw_keys
         is_constrained_rl_config = "safety_constraints" in raw_keys
+        is_referenced_base = config_path.resolve() in base_reference_paths
+        is_shared_dev_base = is_referenced_base and config_path.name.startswith("dev_")
         # A runnable overlay has its own execution controls.  The predictive
         # sub-base is independently loadable after #6748, but intentionally
         # lacks those controls and remains an intermediate shared overlay.
         is_runnable_expert_overlay = runnable_overlay_keys <= raw_keys
-        is_intermediate_base = (
-            is_expert_overlay
+        is_inherited_dev_overlay = (
+            config_path.name.startswith("dev_")
+            and is_expert_overlay
             and not is_full_config
             and not is_runnable_expert_overlay
-            and config_path.resolve() in base_reference_paths
         )
-        if not is_constrained_rl_config and (
-            is_full_config or (is_expert_overlay and not is_intermediate_base)
+        is_intermediate_base = (
+            is_expert_overlay and not is_runnable_expert_overlay and is_referenced_base
+        )
+        if (
+            not is_constrained_rl_config
+            and not is_shared_dev_base
+            and not is_inherited_dev_overlay
+            and (is_full_config or (is_expert_overlay and not is_intermediate_base))
         ):
             selected.append(config_path)
     return tuple(selected)
@@ -292,11 +300,9 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # the release-robot retrain) adds four release-robot leaves; their issue-791
     # parent becomes a shared intermediate base, so the runnable inventory grows
     # by three.
-    # The 2026-10-08 dev policy candidates add two runnable leaves, including
-    # dev_fixed_objective_5m with its own execution controls. Both use the
-    # shared release parent without dropping any of the four release leaves.
-    # PR #10263 adds the delta-recovery pilot leaf while making one
-    # release-contract config a shared base, so the runnable inventory grows by one.
+    # The 2026-10-08 dev policy candidates both inherit from the shared release
+    # parent directly. PR #10263 keeps the delta-recovery dev overlays outside
+    # the canonical leaf inventory because they share/inherit execution controls.
     assert len(config_paths) == 148
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
@@ -304,13 +310,18 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
         "configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml",
         "configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml",
     }
-    delta_recovery_leaves = {
+    dev_policy_leaves = {
+        "configs/training/ppo/dev_fixed_objective_5m.yaml",
+        "configs/training/ppo/dev_safety_objective_5m.yaml",
+    }
+    shared_dev_bases = {
         "configs/training/ppo/dev_delta_recovery_15m.yaml",
         "configs/training/ppo/dev_delta_recovery_pilot.yaml",
     }
     canonical_paths = {path.relative_to(_REPO_ROOT).as_posix() for path in config_paths}
     assert release_robot_leaves <= canonical_paths
-    assert delta_recovery_leaves <= canonical_paths
+    assert dev_policy_leaves <= canonical_paths
+    assert shared_dev_bases.isdisjoint(canonical_paths)
 
     failures: list[str] = []
     for config_path in config_paths:
@@ -321,6 +332,27 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
             failures.append(f"{relative_path}: {type(exc).__name__}: {exc}")
 
     assert not failures, "\n".join(failures)
+
+
+def test_dev_policy_configs_inherit_shared_parent_without_demoting_release_leaf() -> None:
+    """Development bases share the release parent instead of a release leaf."""
+    shared_parent = "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
+    fixed_path = _CONFIG_ROOT / "dev_fixed_objective_5m.yaml"
+    safety_path = _CONFIG_ROOT / "dev_safety_objective_5m.yaml"
+    delta_path = _CONFIG_ROOT / "dev_delta_recovery_15m.yaml"
+    release_path = _CONFIG_ROOT / "expert_ppo_release_contract_b_seed1001.yaml"
+    fixed = yaml.safe_load(fixed_path.read_text(encoding="utf-8"))
+    safety = yaml.safe_load(safety_path.read_text(encoding="utf-8"))
+    delta = yaml.safe_load(delta_path.read_text(encoding="utf-8"))
+    release = yaml.safe_load(release_path.read_text(encoding="utf-8"))
+
+    assert fixed["base_config"] == shared_parent
+    assert safety["base_config"] == shared_parent
+    assert delta["base_config"] == shared_parent
+    assert release["base_config"] == shared_parent
+    assert fixed["scenario_sampling"]["episode_seed_pool"] == list(range(1001, 1021))
+    assert safety["scenario_sampling"]["episode_seed_pool"] == list(range(1001, 1021))
+    assert delta["scenario_sampling"]["episode_seed_pool"] == list(range(1001, 1021))
 
 
 def test_constrained_rl_variants_are_not_expert_config_leaves() -> None:

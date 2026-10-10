@@ -33,6 +33,12 @@ def scenario_id_from_definition(scenario: Mapping[str, Any], *, index: int) -> s
     return scenario_id
 
 
+def _episode_seed_pool_error(seed: int, pool: tuple[int, ...]) -> str:
+    return (
+        f"seed {seed} must belong to episode_seed_pool ({min(pool)}..{max(pool)}); check num_envs"
+    )
+
+
 def _spaces_compatible(  # noqa: C901
     base: spaces.Space,
     other: spaces.Space,
@@ -231,7 +237,7 @@ class ScenarioSwitchingEnv(Env):
             ):
                 raise ValueError("episode_seed_pool must contain non-negative integer seeds")
             if seed is not None and seed not in self._episode_seed_pool:
-                raise ValueError("seed must belong to episode_seed_pool")
+                raise ValueError(_episode_seed_pool_error(seed, self._episode_seed_pool))
         self._rng = np.random.default_rng(seed)
         self._scenario_coverage: dict[str, int] = {}
         self._current_env: Env | None = None
@@ -319,7 +325,7 @@ class ScenarioSwitchingEnv(Env):
         """
         if seed is not None:
             if self._episode_seed_pool is not None and seed not in self._episode_seed_pool:
-                raise ValueError("seed must belong to episode_seed_pool")
+                raise ValueError(_episode_seed_pool_error(seed, self._episode_seed_pool))
             self._rng = np.random.default_rng(seed)
 
         if self._current_env is None:

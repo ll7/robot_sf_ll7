@@ -158,6 +158,17 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         robot_overrides = getattr(robot_config, "_config_hash_overrides", None)
         if callable(robot_overrides):
             config_payload["robot_config"].update(robot_overrides())
+        rollover_params = config_payload.get("rollover_proxy_params")
+        if isinstance(rollover_params, dict):
+            # Layout-neutral names must not change identity for unchanged geometry.
+            legacy_params = dict(rollover_params)
+            for current, legacy in (
+                ("two_wheel_axle_track_m", "track_width_m"),
+                ("single_wheel_axle_to_cog_m", "front_axle_to_cog_m"),
+            ):
+                if current in legacy_params:
+                    legacy_params[legacy] = legacy_params.pop(current)
+            config_payload["rollover_proxy_params"] = legacy_params
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,

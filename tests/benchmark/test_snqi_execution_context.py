@@ -312,6 +312,26 @@ def test_release_cli_refuses_before_source_admission_or_campaign(
     assert reason in payload["status_reason"]
 
 
+def test_learned_family_absent_from_readiness_catalog_refuses(monkeypatch):
+    """A learned family the catalog cannot resolve must fail fast instead of being skipped."""
+    from robot_sf.benchmark.snqi import execution_context
+
+    family = "sac"
+    assert family in execution_context._LEARNED_FAMILIES
+    real = execution_context.get_algorithm_readiness
+    monkeypatch.setattr(
+        execution_context,
+        "get_algorithm_readiness",
+        lambda name: None if name == family else real(name),
+    )
+    with pytest.raises(ValueError, match=f"absent from readiness catalog: {family}"):
+        execution_context._learned_algorithm_names()
+    # The catalog lookup must still fail closed for every other family as well.
+    monkeypatch.setattr(execution_context, "get_algorithm_readiness", lambda _name: None)
+    with pytest.raises(ValueError, match="absent from readiness catalog"):
+        execution_context._learned_algorithm_names()
+
+
 def test_malformed_worker_reference_refuses(monkeypatch):
     from robot_sf.benchmark.snqi.execution_context import admit_episode_context
 

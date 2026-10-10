@@ -28,6 +28,7 @@ from robot_sf.render.audit_workbench import (
     fixture_document,
     write_fixture_workbench,
 )
+from tests.support.browser_runtime import require_node_runtime
 
 
 @dataclass(frozen=True)
@@ -3990,6 +3991,7 @@ def _safe_node_version(output: str) -> str:
 
 def _run_browser_controller_harness() -> subprocess.CompletedProcess[str]:
     """Execute the dependency-free DOM harness and retain bounded failure detail."""
+    version = require_node_runtime()
     completed = subprocess.run(
         ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
         check=False,
@@ -3998,16 +4000,6 @@ def _run_browser_controller_harness() -> subprocess.CompletedProcess[str]:
         env={"PATH": os.environ.get("PATH", "")},
     )
     if completed.returncode:
-        try:
-            version = subprocess.run(
-                ["node", "--version"],
-                capture_output=True,
-                text=True,
-                check=True,
-                env={"PATH": os.environ.get("PATH", "")},
-            ).stdout.strip()
-        except (OSError, subprocess.CalledProcessError):
-            version = "unavailable"
         pytest.fail(
             f"Node DOM harness exit={completed.returncode}, version={_safe_node_version(version)}\n"
             f"stdout: {_safe_node_diagnostic(completed.stdout, stream='stdout')}\n"
@@ -4073,6 +4065,6 @@ def test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics
     assert "harness_location=" not in projected
     assert len(projected) < 100
     assert calls == [
-        ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
         ["node", "--version"],
+        ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
     ]

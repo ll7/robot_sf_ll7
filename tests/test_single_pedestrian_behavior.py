@@ -123,6 +123,24 @@ def test_single_pedestrian_join_and_leave_group():
     assert groups.group_by_ped_id[2] != leader_group
 
 
+def test_join_without_target_keeps_group_zero_after_arrival():
+    """An automatically selected group with id zero remains latched after joining."""
+    peds = [SinglePedestrianDefinition(id="joiner", start=(0.1, 0.0), role="join")]
+    ped_states = np.zeros((3, 7))
+    ped_states[:, :2] = [(0.0, 0.0), (0.1, 0.0), (2.0, 0.0)]
+    states = PedestrianStates(lambda: ped_states)
+    groups = PedestrianGroupings(states)
+    groups.new_group({0})
+    groups.new_group({1})
+    groups.new_group({2})
+    behavior = SinglePedestrianBehavior(states, groups, peds, single_offset=1)
+    behavior.step()
+    assert groups.group_by_ped_id[1] == 0
+    behavior.step()
+    assert groups.group_by_ped_id[1] == 0
+    assert np.allclose(states.goal_of(1), groups.group_centroid(0))
+
+
 def _proximity_hold_behavior(robot_poses, *, time_step_s=1.0, hold_timeout_s=6.0):
     """Build a single-pedestrian behavior configured with a proximity-released hold.
 

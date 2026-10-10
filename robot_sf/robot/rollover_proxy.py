@@ -29,6 +29,7 @@ loop is intentionally a separate, opt-in follow-up.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,6 +46,13 @@ class RolloverProxyParams:
     three-wheeled platform purely so the proxy is exercisable; they carry no hardware
     authority.
 
+    The geometry names are layout-neutral: ``two_wheel_axle_track_m`` is the track
+    ``t_w`` of the axle with two wheels, and ``single_wheel_axle_to_cog_m`` is the
+    distance ``a`` from the axle with one wheel to the centre of gravity.
+    The single wheel may be at the front or at the rear. The deprecated aliases ``track_width_m``
+    and ``front_axle_to_cog_m`` remain accepted for one release and emit a
+    ``DeprecationWarning``.
+
     The default geometry is **aligned with the benchmark-surface source of truth**
     ``robot_sf.benchmark.metrics.evaluate_stability_margin`` (the reviewer-supplied TWV proxy:
     ``t_w=0.8``, ``L=1.2``, ``h_c=0.6``, ``a=0.5``) so the runtime diagnostic and the benchmark
@@ -52,37 +60,95 @@ class RolloverProxyParams:
     identical to that function; ``test_rollover_proxy`` cross-checks numerical agreement.
 
     Attributes:
-        track_width_m: Lateral wheel track ``t_w`` (m).
+        two_wheel_axle_track_m: Track of the axle with two wheels ``t_w`` (m).
         cog_height_m: Centre-of-gravity height ``h_c`` (m).
-        front_axle_to_cog_m: Longitudinal distance from front axle to CoG ``a`` (m).
+        single_wheel_axle_to_cog_m: Distance from the axle with one wheel to CoG ``a`` (m).
         wheelbase_m: Wheelbase ``L`` (m).
         gravity_m_s2: Gravitational acceleration ``g`` (m/s^2).
         schema_version: Stable schema tag for reproducibility.
     """
 
-    track_width_m: float = 0.80
+    two_wheel_axle_track_m: float = 0.80
     cog_height_m: float = 0.60
-    front_axle_to_cog_m: float = 0.50
+    single_wheel_axle_to_cog_m: float = 0.50
     wheelbase_m: float = 1.20
     gravity_m_s2: float = GRAVITY_M_S2
     schema_version: str = PROXY_SCHEMA_VERSION
 
+    def __init__(
+        self,
+        two_wheel_axle_track_m: float = 0.80,
+        cog_height_m: float = 0.60,
+        single_wheel_axle_to_cog_m: float = 0.50,
+        wheelbase_m: float = 1.20,
+        gravity_m_s2: float = GRAVITY_M_S2,
+        schema_version: str = PROXY_SCHEMA_VERSION,
+        **kwargs: Any,
+    ) -> None:
+        """Create proxy geometry, accepting deprecated aliases for one release."""
+        if "track_width_m" in kwargs:
+            warnings.warn(
+                "track_width_m is deprecated; use two_wheel_axle_track_m instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            two_wheel_axle_track_m = kwargs.pop("track_width_m")
+        if "front_axle_to_cog_m" in kwargs:
+            warnings.warn(
+                "front_axle_to_cog_m is deprecated; use single_wheel_axle_to_cog_m instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            single_wheel_axle_to_cog_m = kwargs.pop("front_axle_to_cog_m")
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs))
+            raise TypeError(
+                f"RolloverProxyParams.__init__() got unexpected keyword(s): {unexpected}"
+            )
+        object.__setattr__(self, "two_wheel_axle_track_m", two_wheel_axle_track_m)
+        object.__setattr__(self, "cog_height_m", cog_height_m)
+        object.__setattr__(self, "single_wheel_axle_to_cog_m", single_wheel_axle_to_cog_m)
+        object.__setattr__(self, "wheelbase_m", wheelbase_m)
+        object.__setattr__(self, "gravity_m_s2", gravity_m_s2)
+        object.__setattr__(self, "schema_version", schema_version)
+        self.__post_init__()
+
+    @property
+    def track_width_m(self) -> float:
+        """Deprecated alias for ``two_wheel_axle_track_m`` (kept for one release)."""
+        warnings.warn(
+            "track_width_m is deprecated; use two_wheel_axle_track_m instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.two_wheel_axle_track_m
+
+    @property
+    def front_axle_to_cog_m(self) -> float:
+        """Deprecated alias for ``single_wheel_axle_to_cog_m`` (kept for one release)."""
+        warnings.warn(
+            "front_axle_to_cog_m is deprecated; use single_wheel_axle_to_cog_m instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.single_wheel_axle_to_cog_m
+
     def __post_init__(self) -> None:
         """Validate that the proxy geometry is physically usable."""
         positive = {
-            "track_width_m": self.track_width_m,
+            "two_wheel_axle_track_m": self.two_wheel_axle_track_m,
             "cog_height_m": self.cog_height_m,
-            "front_axle_to_cog_m": self.front_axle_to_cog_m,
+            "single_wheel_axle_to_cog_m": self.single_wheel_axle_to_cog_m,
             "wheelbase_m": self.wheelbase_m,
             "gravity_m_s2": self.gravity_m_s2,
         }
         for name, value in positive.items():
             if not (value > 0.0):
                 raise ValueError(f"RolloverProxyParams.{name} must be > 0, got {value!r}")
-        if self.front_axle_to_cog_m > self.wheelbase_m:
+        if self.single_wheel_axle_to_cog_m > self.wheelbase_m:
             raise ValueError(
-                "front_axle_to_cog_m must not exceed wheelbase_m "
-                f"({self.front_axle_to_cog_m} > {self.wheelbase_m})"
+                "single_wheel_axle_to_cog_m must not exceed wheelbase_m "
+                f"({self.single_wheel_axle_to_cog_m} > {self.wheelbase_m})"
             )
 
 
@@ -95,8 +161,8 @@ def critical_lateral_acceleration(params: RolloverProxyParams) -> float:
     """Return the proxy critical lateral acceleration ``a_y,crit`` (m/s^2)."""
     return (
         params.gravity_m_s2
-        * (params.track_width_m / (2.0 * params.cog_height_m))
-        * (params.front_axle_to_cog_m / params.wheelbase_m)
+        * (params.two_wheel_axle_track_m / (2.0 * params.cog_height_m))
+        * (params.single_wheel_axle_to_cog_m / params.wheelbase_m)
     )
 
 

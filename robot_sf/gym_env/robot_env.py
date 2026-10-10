@@ -149,7 +149,7 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         16-character hexadecimal hash string representing the configuration.
     """
     try:
-        config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
+        config_payload = asdict(cfg) if is_dataclass(cfg) else dict(cfg.__dict__)
         sim_config = getattr(cfg, "sim_config", None)
         selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
         if callable(selector_overrides):

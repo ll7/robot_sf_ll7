@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, replace
 from types import SimpleNamespace
 
@@ -11,6 +12,7 @@ from gymnasium import spaces
 from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.common.types import Rect
+from robot_sf.gym_env.config_validation import get_resolved_config_dict
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.gym_env.env_util import (
     create_spaces,
@@ -172,6 +174,22 @@ def test_robot_env_hash_and_run_id_stable() -> None:
     run_b = _make_telemetry_run_id()
     assert run_a.startswith("telemetry-")
     assert run_a != run_b
+
+
+def test_robot_env_hash_preserves_non_dataclass_config_and_serialization() -> None:
+    """Hash compatibility must not replace geometry on a caller-owned snapshot."""
+    cfg = SimpleNamespace(**asdict(RobotSimulationConfig()))
+    geometry = cfg.rollover_proxy_params
+    before = json.dumps(cfg.__dict__, sort_keys=True, default=str)
+    resolved_before = json.dumps(get_resolved_config_dict(cfg), sort_keys=True, default=str)
+
+    config_hash = _stable_config_hash(cfg)
+
+    assert json.dumps(get_resolved_config_dict(cfg), sort_keys=True, default=str) == resolved_before
+    assert json.dumps(cfg.__dict__, sort_keys=True, default=str) == before
+    assert cfg.rollover_proxy_params is geometry
+    assert _stable_config_hash(cfg) == config_hash
+    assert json.dumps(get_resolved_config_dict(cfg), sort_keys=True, default=str) == resolved_before
 
 
 def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:

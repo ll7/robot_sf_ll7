@@ -28,7 +28,7 @@
     }
   ],
   "disposition": "one_family_ready_for_child",
-  "full_report_pointer": "output/config_family_inventory.json (ignored, worktree-local)",
+  "full_report_pointer": "<scratch-root>/config_family_inventory.json (git-ignored scratch; unavailable)",
   "full_report_sha256": "2e2226304eac6c2648d77f7873e0337676ecd8cda8f6f1fed6d8bdfa313b77f4",
   "no_production_change": true,
   "no_training_or_benchmark_execution": true,
@@ -58,6 +58,9 @@
     "resolver_error_count": 0,
     "unsupported_count": 4
   },
-  "scan_command": "python scripts/dev/audit_config_families.py --report output/config_family_inventory.json",
-  "schema": "config_family_inventory_receipt.v1"
+  "scan_command": "python scripts/dev/audit_config_families.py --report <scratch-root>/config_family_inventory.json",
+  "schema": "config_family_inventory_receipt.v1",
+  "full_report_retained": false,
+  "full_report_durable_retrieval_pointer": null,
+  "report_path_is_reproduction_template": true
 }

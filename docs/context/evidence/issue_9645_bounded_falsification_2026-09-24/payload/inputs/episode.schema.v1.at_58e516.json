@@ -1,0 +1,1304 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/robot-sf/episode.schema.v1.json",
+    "title": "RobotSF Benchmark Episode (v1)",
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+        "version",
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics",
+        "termination_reason",
+        "outcome",
+        "integrity"
+    ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "exclusiveMinimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": false
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "maximum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "properties": {
+        "version": {
+            "const": "v1"
+        },
+        "episode_id": {
+            "type": "string",
+            "minLength": 1
+        },
+        "scenario_id": {
+            "type": "string",
+            "minLength": 1
+        },
+        "scenario_params": {
+            "type": "object"
+        },
+        "seed": {
+            "type": "integer"
+        },
+        "horizon": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "algo": {
+            "type": "string"
+        },
+        "observation_mode": {
+            "type": "string",
+            "description": "Active planner observation-mode contract for this episode."
+        },
+        "observation_level": {
+            "type": "string",
+            "enum": [
+                "oracle_full_state",
+                "tracked_agents_no_noise",
+                "tracked_agents_with_noise",
+                "lidar_2d",
+                "occluded_partial_state"
+            ],
+            "description": "Active graded benchmark observation-level contract for this episode."
+        },
+        "benchmark_track": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Primary observation-track aggregation fence for track-aware benchmark rows."
+        },
+        "track_schema_version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Version slug for the benchmark-track metadata contract."
+        },
+        "algorithm_metadata": {
+            "type": "object",
+            "description": "Metadata about the algorithm/policy used (name, config, status).",
+            "properties": {
+                "algorithm": {
+                    "type": "string"
+                },
+                "canonical_algorithm": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "ok",
+                        "fallback",
+                        "error",
+                        "placeholder"
+                    ]
+                },
+                "fallback_reason": {
+                    "type": "string"
+                },
+                "baseline_category": {
+                    "type": "string",
+                    "enum": [
+                        "diagnostic",
+                        "classical",
+                        "learning",
+                        "unknown"
+                    ]
+                },
+                "policy_semantics": {
+                    "type": "string"
+                },
+                "observation_spec": {
+                    "type": "object",
+                    "properties": {
+                        "default_mode": {
+                            "type": "string"
+                        },
+                        "active_mode": {
+                            "type": "string"
+                        },
+                        "supported_modes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "inputs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "override_applied": {
+                            "type": "boolean"
+                        },
+                        "notes": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "benchmark_track": {
+                    "type": "object",
+                    "description": "Observation-track provenance for track-aware benchmark rows.",
+                    "properties": {
+                        "benchmark_track": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "track_schema_version": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "observation_level": {
+                            "type": "string"
+                        },
+                        "observation_mode": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "config": {
+                    "type": "object"
+                },
+                "config_hash": {
+                    "type": "string"
+                },
+                "stochastic_reference": {
+                    "type": "boolean"
+                },
+                "distinct_from_goal_baseline": {
+                    "type": "boolean"
+                },
+                "planner_kinematics": {
+                    "type": "object",
+                    "properties": {
+                        "robot_kinematics": {
+                            "type": "string"
+                        },
+                        "planner_command_space": {
+                            "type": "string"
+                        },
+                        "supports_native_commands": {
+                            "type": "boolean"
+                        },
+                        "supports_adapter_commands": {
+                            "type": "boolean"
+                        },
+                        "execution_mode": {
+                            "type": "string",
+                            "enum": [
+                                "native",
+                                "native_command",
+                                "adapter",
+                                "mixed",
+                                "unknown"
+                            ]
+                        },
+                        "adapter_name": {
+                            "type": "string"
+                        },
+                        "adapter_active": {
+                            "type": "boolean"
+                        },
+                        "scenario_kinematics": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "adapter_impact": {
+                    "type": "object",
+                    "properties": {
+                        "requested": {
+                            "type": "boolean"
+                        },
+                        "native_steps": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "adapted_steps": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "execution_mode": {
+                            "type": "string",
+                            "enum": [
+                                "native",
+                                "adapter",
+                                "mixed",
+                                "unknown"
+                            ]
+                        },
+                        "adapter_fraction": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "kinematics_feasibility": {
+                    "type": "object",
+                    "properties": {
+                        "commands_evaluated": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "infeasible_native_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "projected_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "projection_rate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        },
+                        "infeasible_rate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        },
+                        "mean_abs_delta_linear": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "mean_abs_delta_angular": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "max_abs_delta_linear": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "max_abs_delta_angular": {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "safety_shield_contract": {
+                    "type": "object",
+                    "description": "Benchmark-facing shield contract; not a formal safety certificate.",
+                    "properties": {
+                        "schema_version": {
+                            "const": "safety-shield-contract.v1"
+                        },
+                        "shield_name": {
+                            "type": "string"
+                        },
+                        "prediction_source": {
+                            "type": "string"
+                        },
+                        "fallback_policy": {
+                            "type": "string"
+                        },
+                        "calibration_status": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "shield_stats": {
+                    "type": "object",
+                    "properties": {
+                        "schema_version": {
+                            "const": "safety-shield-stats.v1"
+                        },
+                        "decision_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "intervention_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "override_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "hard_constraint_violation_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "last_decision": {
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "planner_diagnostics": {
+                    "type": "object",
+                    "description": "Per-episode planner runtime/diagnostic counters (issue #5887 native-command arm and SIPP search).",
+                    "properties": {
+                        "expansion_limit_hits": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "runtime_bound_exits": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "fallback_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "commitment_invalidations": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "planner_step_runtime_seconds": {
+                            "type": "array",
+                            "items": {
+                                "type": "number",
+                                "minimum": 0
+                            }
+                        },
+                        "exit_codes": {
+                            "type": "array",
+                            "items": {
+                                "type": ["integer", "null"]
+                            }
+                        },
+                        "last_exit_code": {
+                            "type": ["integer", "null"]
+                        }
+                    },
+                    "additionalProperties": true
+                }
+            },
+            "additionalProperties": true
+        },
+        "metric_parameters": {
+            "type": "object",
+            "description": "Metric threshold profile and signature used for report reproducibility.",
+            "properties": {
+                "threshold_signature": {
+                    "type": "string"
+                },
+                "threshold_profile": {
+                    "type": "object",
+                    "properties": {
+                        "profile_id": {
+                            "type": "string"
+                        },
+                        "collision_distance_m": {
+                            "type": "number"
+                        },
+                        "near_miss_distance_m": {
+                            "type": "number"
+                        },
+                        "comfort_force_threshold": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "profile_id",
+                        "collision_distance_m",
+                        "near_miss_distance_m",
+                        "comfort_force_threshold"
+                    ],
+                    "additionalProperties": true
+                }
+            },
+            "required": [
+                "threshold_signature",
+                "threshold_profile"
+            ],
+            "additionalProperties": true
+        },
+        "metrics": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+                "collisions": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "deadlock": {
+                    "type": "boolean",
+                    "description": "Per-episode deadlock/stall flag (no-progress-over-window). Issue #5887."
+                },
+                "deadlock_stall": {
+                    "type": "object",
+                    "description": "Schema-backed deadlock/stall diagnostic block (issue #5887).",
+                    "required": [
+                        "schema_version",
+                        "window_steps",
+                        "progress_eps_m",
+                        "stall_window_count",
+                        "max_no_progress_run",
+                        "status"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "deadlock-stall.v1"
+                        },
+                        "window_steps": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "progress_eps_m": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "stall_window_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "max_no_progress_run": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "collision_rate": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_decision_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_intervention_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_override_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_hard_constraint_violation_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_intervention_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "shield_override_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "shield_hard_constraint_violation_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "pedestrian_impact": {
+                    "type": "object",
+                    "description": "Schema-backed pedestrian-impact metric block for opt-in near-vs-far reductions.",
+                    "required": [
+                        "schema_version",
+                        "parameters",
+                        "units",
+                        "sample_counts",
+                        "canonical_reductions"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "pedestrian-impact.v1"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "near_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                },
+                                "window_steps": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                }
+                            },
+                            "required": [
+                                "near_radius_m",
+                                "window_steps"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "accel": {
+                                    "const": "m/s^2"
+                                },
+                                "turn_rate": {
+                                    "const": "rad/s"
+                                },
+                                "near_radius": {
+                                    "const": "m"
+                                },
+                                "sample_counts": {
+                                    "const": "samples"
+                                },
+                                "sample_fraction": {
+                                    "const": "fraction"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "near_samples": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "far_samples": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "near_sample_frac": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "canonical_reductions": {
+                            "type": "object",
+                            "properties": {
+                                "accel_delta_mean": {
+                                    "type": "number"
+                                },
+                                "accel_delta_median": {
+                                    "type": "number"
+                                },
+                                "accel_delta_valid_pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "turn_rate_delta_mean": {
+                                    "type": "number"
+                                },
+                                "turn_rate_delta_median": {
+                                    "type": "number"
+                                },
+                                "turn_rate_delta_valid_pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "component_means": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "number"
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "social_acceptability": {
+                    "type": "object",
+                    "description": "Schema-backed exploratory social-acceptability pilot block for opt-in proxemic reductions.",
+                    "required": [
+                        "schema_version",
+                        "status",
+                        "parameters",
+                        "units",
+                        "available",
+                        "sample_counts",
+                        "proxemic",
+                        "interpretation"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "social-acceptability-pilot.v1"
+                        },
+                        "status": {
+                            "const": "exploratory"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "proxemic_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                }
+                            },
+                            "required": [
+                                "proxemic_radius_m"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "clearance": {
+                                    "const": "m"
+                                },
+                                "intrusion_area": {
+                                    "const": "m*s"
+                                },
+                                "intrusion_fraction": {
+                                    "const": "fraction"
+                                },
+                                "sample_counts": {
+                                    "const": "count"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "available": {
+                            "type": "boolean"
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "timesteps": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "proxemic": {
+                            "type": "object",
+                            "properties": {
+                                "intrusion_steps": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "intrusion_frac": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                },
+                                "intrusion_area_m_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "min_clearance_m": {
+                                    "type": "number"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "human_interaction_proxy": {
+                    "type": "object",
+                    "description": "Schema-backed diagnostic simulation-proxy block for human-centered interaction exposure reductions.",
+                    "required": [
+                        "schema_version",
+                        "status",
+                        "parameters",
+                        "units",
+                        "available",
+                        "sample_counts",
+                        "canonical_reductions",
+                        "interpretation"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "human-interaction-proxy.v1"
+                        },
+                        "status": {
+                            "const": "simulation_proxy"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "proxemic_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                },
+                                "yield_speed_mps": {
+                                    "type": "number",
+                                    "minimum": 0
+                                }
+                            },
+                            "required": [
+                                "proxemic_radius_m",
+                                "yield_speed_mps"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "discomfort_exposure": {
+                                    "const": "m*s"
+                                },
+                                "duration": {
+                                    "const": "s"
+                                },
+                                "time_to_yield": {
+                                    "const": "s"
+                                },
+                                "distance": {
+                                    "const": "m"
+                                },
+                                "path_deviation": {
+                                    "const": "m"
+                                },
+                                "sample_counts": {
+                                    "const": "count"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "available": {
+                            "type": "boolean"
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "timesteps": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "canonical_reductions": {
+                            "type": "object",
+                            "properties": {
+                                "human_discomfort_exposure_m_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "intrusion_duration_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "time_to_yield_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "robot_yield_distance_m": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "pedestrian_path_deviation_proxy_m": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "group_split_intrusion_available": {
+                                    "type": "boolean"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "exclusions": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "social_mini_game": {
+                    "type": "object",
+                    "description": "Schema-backed diagnostic Social Mini-Game metric rows with explicit availability semantics.",
+                    "required": [
+                        "schema_version",
+                        "status",
+                        "mechanism_family",
+                        "rows",
+                        "interpretation"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "social-mini-game-metrics.v1"
+                        },
+                        "status": {
+                            "const": "diagnostic"
+                        },
+                        "mechanism_family": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "rows": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": [
+                                    "metric",
+                                    "status",
+                                    "unit",
+                                    "denominator",
+                                    "support_count"
+                                ],
+                                "properties": {
+                                    "metric": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "available",
+                                            "unavailable",
+                                            "undefined"
+                                        ]
+                                    },
+                                    "unit": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "denominator": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "value": {
+                                        "type": [
+                                            "number",
+                                            "integer",
+                                            "boolean"
+                                        ]
+                                    },
+                                    "support_count": {
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "unavailable_reason": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "additionalProperties": true
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "distributional_disruption": {
+                    "type": "object",
+                    "description": "Schema-backed distributional disruption metric block for observable cohort comparison.",
+                    "required": [
+                        "schema_version",
+                        "claim_boundary",
+                        "baseline_condition",
+                        "cohort_definitions",
+                        "units",
+                        "metric_definitions",
+                        "support_counts",
+                        "cohort_metrics",
+                        "missing_data",
+                        "non_claims"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "distributional-disruption.v1"
+                        },
+                        "claim_boundary": {
+                            "type": "string"
+                        },
+                        "baseline_condition": {
+                            "type": "string"
+                        },
+                        "cohort_definitions": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "units": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "metric_definitions": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "required": ["formula", "denominator"],
+                                "properties": {
+                                    "formula": {
+                                        "type": "string"
+                                    },
+                                    "denominator": {
+                                        "type": "string"
+                                    }
+                                },
+                                "additionalProperties": false
+                            }
+                        },
+                        "support_counts": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        },
+                        "cohort_metrics": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "missing_data": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "required": ["status", "reason"],
+                                "properties": {
+                                    "status": {
+                                        "type": "string"
+                                    },
+                                    "reason": {
+                                        "type": "string"
+                                    },
+                                    "support_count": {
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "minimum_support": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    }
+                                },
+                                "additionalProperties": false
+                            }
+                        },
+                        "non_claims": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": {
+                "type": [
+                    "number",
+                    "integer",
+                    "boolean",
+                    "object"
+                ]
+            }
+        },
+        "termination_reason": {
+            "type": "string",
+            "enum": [
+                "success",
+                "collision",
+                "terminated",
+                "truncated",
+                "max_steps",
+                "error"
+            ]
+        },
+        "outcome": {
+            "type": "object",
+            "required": [
+                "route_complete",
+                "collision_event",
+                "timeout_event"
+            ],
+            "properties": {
+                "route_complete": {
+                    "type": "boolean"
+                },
+                "collision_event": {
+                    "type": "boolean"
+                },
+                "timeout_event": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
+        "integrity": {
+            "type": "object",
+            "required": [
+                "contradictions"
+            ],
+            "properties": {
+                "contradictions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": true
+        },
+        "config_hash": {
+            "type": "string"
+        },
+        "git_hash": {
+            "type": "string"
+        },
+        "timestamps": {
+            "type": "object",
+            "required": [
+                "start",
+                "end"
+            ],
+            "properties": {
+                "start": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "end": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            },
+            "additionalProperties": true
+        },
+        "timing": {
+            "type": "object",
+            "required": [
+                "steps_per_second"
+            ],
+            "properties": {
+                "steps_per_second": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            },
+            "additionalProperties": false
+        },
+        "notes": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "identity": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "observation_noise": {
+            "type": "object",
+            "description": "Benchmark-only planner-input observation noise profile.",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "profile": {
+                    "type": "string"
+                },
+                "interpretation": {
+                    "type": "string"
+                },
+                "pose_noise_std_m": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "heading_noise_std_rad": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "lidar_dropout_prob": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "pedestrian_false_negative_prob": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "pedestrian_false_positive_prob": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                }
+            },
+            "additionalProperties": true
+        },
+        "observation_noise_hash": {
+            "type": "string"
+        },
+        "observation_noise_stats": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+            }
+        },
+        "video": {
+            "type": "object",
+            "description": "Optional per-episode video artifact metadata.",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "mp4"
+                    ]
+                },
+                "filesize_bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "frames": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "renderer": {
+                    "type": "string",
+                    "enum": [
+                        "synthetic",
+                        "sim-view",
+                        "none"
+                    ]
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "encode_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "overhead_ratio": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            },
+            "required": [
+                "path",
+                "format",
+                "filesize_bytes",
+                "frames",
+                "renderer"
+            ],
+            "additionalProperties": true
+        }
+    }
+}

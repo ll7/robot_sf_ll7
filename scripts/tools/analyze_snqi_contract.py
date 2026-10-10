@@ -48,9 +48,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Independent JSON file-to-planner declaration for guarded execution; paths are relative to this map.",
     )
+    parser.add_argument(
+        "--horizons",
+        type=Path,
+        help="Independent JSON scenario-to-step-budget map for SNQI-v2 anchors",
+    )
     parser.add_argument("--anchors", type=Path)
     parser.add_argument("--family", type=Path)
-    parser.add_argument("--reports-dir", type=Path)
+    parser.add_argument(
+        "--reports-dir",
+        "--output-dir",
+        dest="reports_dir",
+        type=Path,
+        help="Analyzer output directory; defaults to a sibling of the campaign for legacy analysis",
+    )
     parser.add_argument(
         "--freeze-v2-anchors",
         type=Path,
@@ -312,7 +323,16 @@ def _analyze_v2(args: argparse.Namespace) -> int:
 
     if not all((args.episodes, args.weights, args.anchors, args.family, args.reports_dir)):
         raise ValueError("SNQI-v2 requires --episodes --weights --anchors --family --reports-dir")
-    spec = load_snqi_v2_spec(args.weights, args.anchors, args.family)
+    horizons = parse_v2_json(args.horizons.read_bytes()) if args.horizons else None
+    if args.horizons and (
+        not isinstance(horizons, dict)
+        or not horizons
+        or any(not isinstance(k, str) or type(v) is not int or v < 1 for k, v in horizons.items())
+    ):
+        raise ValueError("SNQI-v2 --horizons requires a nonempty scenario-to-positive-integer map")
+    spec = load_snqi_v2_spec(
+        args.weights, args.anchors, args.family, evaluation_scenario_horizons=horizons
+    )
     declarations = _v2_execution_declarations(args)
     episodes, expected_algorithms = [], {}
     for path in args.episodes:
@@ -497,7 +517,11 @@ def main(argv: list[str] | None = None) -> int:
         "positioning": positioning,
     }
 
-    reports_dir = campaign_root / "reports"
+    reports_dir = (
+        args.reports_dir.resolve()
+        if args.reports_dir
+        else campaign_root.parent / f"{campaign_root.name}_snqi_analysis"
+    )
     output_json = (
         args.output_json.resolve() if args.output_json else reports_dir / "snqi_diagnostics.json"
     )

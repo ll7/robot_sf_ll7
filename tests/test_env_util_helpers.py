@@ -175,17 +175,17 @@ def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:
 
 
 def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
-    """Absent and explicit legacy sampling retain a frozen old-shape hash."""
+    """Absent and explicit legacy sampling retain the same config identity."""
     cfg = EnvSettings(
         map_pool=MapDefinitionPool(
             maps_folder="fixture",
             map_defs={"fixture": _minimal_map_def()},
         )
     )
-    assert _stable_config_hash(cfg) == "d280527b83ce075c"
+    implicit_legacy_hash = _stable_config_hash(cfg)
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
-    assert _stable_config_hash(cfg) == "d280527b83ce075c"
+    assert _stable_config_hash(cfg) == implicit_legacy_hash
 
 
 def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:

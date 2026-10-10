@@ -25,14 +25,18 @@ QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
+    "self-hosted-admission": 5,
+    "runner-availability": 2,
     "dispatch-ownership": 55,
     "fast-feedback": 45,
+    "browser-witnesses": 30,
     "coverage-gate": 20,
     "changed-coverage-gate": 30,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
     "scenario-validation": 15,
+    "new-tests-fail-on-base": 30,
     "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 30,
@@ -167,7 +171,21 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
         "exact-repeat-model-preflight",
     ):
         needs = jobs[job_name]["needs"]
-        assert needs == "dispatch-ownership", job_name
+        # Provenance and bounded availability admission precede routed jobs.
+        # Ruling: https://github.com/ll7/robot_sf_ll7/pull/10217#issuecomment-6057864254
+        expected_needs = (
+            ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
+            if job_name
+            in (
+                "fast-feedback",
+                "smoke-artifacts",
+                "wheel-smoke-install",
+                "examples-smoke",
+                "notebooks-smoke",
+            )
+            else "dispatch-ownership"
+        )
+        assert needs == expected_needs, job_name
         assert "needs.dispatch-ownership.outputs.run_full_ci == 'true'" in jobs[job_name]["if"]
     assert "dispatch-ownership" in jobs["ci"]["needs"]
 
@@ -397,11 +415,15 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert {"fast-feedback", "smoke-artifacts"} <= set(workflow["jobs"])
     assert _workflow_job_phases("fast-feedback") == {"lint", "typecheck", "test"}
     assert _workflow_job_phases("smoke-artifacts") == {"smoke", "artifact-policy"}
-    assert workflow["jobs"]["fast-feedback"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["fast-feedback"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
 
 
 def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
-    """Keep main fast by combining complete coverage from four full-suite shards."""
+    """Keep main fast by combining complete coverage from six full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
     coverage_gate = workflow["jobs"]["coverage-gate"]
@@ -422,11 +444,9 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
         step for step in coverage_steps if step.get("name") == "Combine coverage shards"
     )
 
-    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
-    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 4
-    assert (
-        "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
-    )
+    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 6
+    assert fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"] == "1"
     assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
     coverage_core = workflow["env"]["COVERAGE_CORE"]
@@ -457,16 +477,7 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     changed_coverage_run = "\n".join(
         str(step.get("run", "")) for step in changed_coverage_gate["steps"]
     )
-    routing_step = next(
-        step
-        for step in changed_coverage_gate["steps"]
-        if step.get("name") == "Audit changed fast-lane routing"
-    )
-    assert "scripts/dev/check_fast_lane_routing.py" in routing_step["run"]
-    assert '"$BASE_SHA"' in routing_step["run"]
-    assert '"$HEAD_SHA"' in routing_step["run"]
-    assert "github.event.pull_request.base.sha" in routing_step["env"]["BASE_SHA"]
-    assert "github.event.pull_request.head.sha" in routing_step["env"]["HEAD_SHA"]
+    assert "scripts/dev/check_fast_lane_routing.py" not in changed_coverage_run
     assert '--base-sha "$BASE_SHA"' in changed_coverage_run
     assert '--head-sha "$HEAD_SHA"' in changed_coverage_run
     assert "--json-output output/coverage/changed-coverage-result.json" in changed_coverage_run
@@ -510,6 +521,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     )
     assert 'compat_os=["ubuntu-latest","macos-latest"]' in path_step["run"]
     assert setup_step["with"] == {
+        "node": "true",
         "python-version": "${{ matrix.python }}",
         "sync-args": "--extra viz --extra maps --frozen",
     }
@@ -643,7 +655,11 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
 
     assert "examples-smoke" in workflow["jobs"]
     assert _workflow_job_phases("examples-smoke") == {"examples-smoke"}
-    assert workflow["jobs"]["examples-smoke"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["examples-smoke"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -687,9 +703,10 @@ def test_ci_workflow_examples_smoke_has_bounded_checkout_retry_and_fail_closed_g
     for attempt in (attempt_1, attempt_2, attempt_3):
         assert attempt["uses"] == pinned_checkout
         assert attempt.get("continue-on-error") is True
-        # Preserve the existing checkout semantics: no extra options, and in
-        # particular no TLS-bypassing configuration, are injected.
-        assert "with" not in attempt
+        # Preserve the existing checkout semantics: the only option is the
+        # credential-hardening flag, and in particular no TLS-bypassing
+        # configuration is injected.
+        assert attempt.get("with") == {"persist-credentials": False}
 
     assert attempt_2["if"] == "steps.checkout_attempt_1.outcome == 'failure'"
     assert attempt_3["if"] == (
@@ -733,7 +750,11 @@ def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() 
 
     assert "notebooks-smoke" in workflow["jobs"]
     assert _workflow_job_phases("notebooks-smoke") == {"notebooks-smoke"}
-    assert workflow["jobs"]["notebooks-smoke"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["notebooks-smoke"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
     assert "notebooks-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -746,7 +767,11 @@ def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> N
     assert "wheel-smoke-install" in workflow["jobs"]
     assert any("uv build" in run_block for run_block in wheel_smoke_run_blocks)
     assert any("wheel_install_smoke.sh" in run_block for run_block in wheel_smoke_run_blocks)
-    assert workflow["jobs"]["wheel-smoke-install"]["needs"] == "dispatch-ownership"
+    assert workflow["jobs"]["wheel-smoke-install"]["needs"] == [
+        "dispatch-ownership",
+        "self-hosted-admission",
+        "runner-availability",
+    ]
     assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -785,9 +810,34 @@ def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -
     assert "--no-deps" not in smoke_text
     assert "wheel_with_dependency_resolution" in smoke_text
     assert "make_crowd_sim_env" in smoke_text
-    assert "env.reset(seed=123)" in smoke_text
+    assert "env.reset(seed=1001)" in smoke_text
     assert "env.step()" in smoke_text
     assert "PYTHONPATH= PYTHONNOUSERSITE=1" in smoke_text
+
+
+def test_benchmark_reproducibility_smoke_uses_development_seed_defaults() -> None:
+    """The hosted episode-generating smoke must never default to retired seeds."""
+    import ast
+
+    tree = ast.parse((ROOT / "scripts" / "benchmark_repro_check.py").read_text())
+    pipeline = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_benchmark_pipeline"
+    )
+    assert ast.literal_eval(pipeline.args.defaults[-1]) == 1001
+    episode_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "run_benchmark_pipeline"
+    ]
+    assert len(episode_calls) == 2
+    assert all(
+        ast.literal_eval(next(kw.value for kw in call.keywords if kw.arg == "seed")) == 1001
+        for call in episode_calls
+    ), "hosted reproducibility smoke must resolve dev seeds 1001 and 1002"
 
 
 def test_wheel_install_smoke_tests_optional_extras_independently() -> None:
@@ -1237,3 +1287,133 @@ def test_packaging_extras_metadata_and_readme_trigger_contract() -> None:
     assert "dist/*.whl" in run_cmd, "Twine check must validate wheels (dist/*.whl)"
     assert "dist/*.tar.gz" in run_cmd, "Twine check must validate sdists (dist/*.tar.gz)"
     assert "--no-project" in run_cmd, "Twine invocation must be ephemeral (--no-project)"
+
+
+def test_failed_matrix_publishes_nonempty_duration_bootstrap() -> None:
+    """Cache preparation must execute after a failed matrix or preceding verdict step."""
+    workflow = yaml.safe_load(_workflow_text())
+    steps = {step["name"]: step for step in workflow["jobs"]["ci"]["steps"]}
+    for name in (
+        "Download test-duration shards",
+        "Merge test durations",
+        "Save merged test durations",
+    ):
+        condition = steps[name]["if"]
+        assert "always()" in condition
+        assert "needs.fast-feedback.result == 'success'" not in condition
+        assert "steps.checkout_ci_source.outcome == 'success'" in condition
+    merge = steps["Merge test durations"]
+    assert "--allow-partial" in merge["run"]
+    assert "--metadata-output .pytest_cache/test_durations_metadata.json" in merge["run"]
+    assert merge["env"]["FAST_FEEDBACK_RESULT"] == "${{ needs.fast-feedback.result }}"
+    save = steps["Save merged test durations"]
+    assert "steps.merge-test-durations.outcome == 'success'" in save["if"]
+    assert ".pytest_cache/test_durations_metadata.json" in save["with"]["path"]
+    assert merge["env"]["DURATION_CACHE_KEY"] == save["with"]["key"]
+    checkout = next(
+        step for step in workflow["jobs"]["fast-feedback"]["steps"] if step["name"] == "Checkout"
+    )
+    assert merge["env"]["DURATION_SOURCE_SHA"] == checkout["with"]["ref"]
+
+
+def test_duration_dependency_key_miss_has_platform_scoped_fallback() -> None:
+    """A lock change reuses scheduling hints without crossing OS/architecture/schema."""
+    workflow = yaml.safe_load(_workflow_text())
+    steps = workflow["jobs"]["dispatch-ownership"]["steps"]
+    restore = next(
+        step
+        for step in steps
+        if step["name"] == "Restore test durations for pytest-split balancing"
+    )
+    prefixes = restore["with"]["restore-keys"].splitlines()
+    assert prefixes[-1] == "test-durations-v2-${{ runner.os }}-${{ runner.arch }}-"
+    assert "hashFiles('pyproject.toml', 'uv.lock')" in prefixes[0]
+    save = next(
+        step
+        for step in workflow["jobs"]["ci"]["steps"]
+        if step["name"] == "Save merged test durations"
+    )
+    assert restore["with"]["key"] == save["with"]["key"]
+    assert restore["with"]["path"] == save["with"]["path"]
+
+
+def test_fast_feedback_redistributes_heavy_tail_without_reducing_coverage() -> None:
+    """CI must steal queued release checks from a busy worker while keeping all shards."""
+    workflow = yaml.safe_load(_workflow_text())
+    fast = workflow["jobs"]["fast-feedback"]
+    assert fast["env"]["PYTEST_XDIST_DIST"] == "worksteal"
+    assert fast["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert fast["env"]["PYTEST_SHARD_COUNT"] == 6
+    assert "PYTEST_NUM_WORKERS" not in fast["env"]
+    merge = next(
+        step for step in workflow["jobs"]["ci"]["steps"] if step["name"] == "Merge test durations"
+    )
+    assert f"--shard-count {fast['env']['PYTEST_SHARD_COUNT']}" in merge["run"]
+    assert fast["timeout-minutes"] == 45
+    assert fast["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
+    assert (
+        next(step for step in fast["steps"] if step["name"] == "Unit tests")["run"]
+        == "scripts/dev/ci_driver.sh test"
+    )
+
+
+def test_ci_uv_cache_keeps_downloaded_wheels_and_keys_only_locked_environment() -> None:
+    """An exact uv cache hit must carry dependencies rather than metadata alone."""
+    action = yaml.safe_load(CI_SETUP_ACTION.read_text())
+    install = next(step for step in action["runs"]["steps"] if step.get("id") == "setup-uv")
+    assert install["with"]["enable-cache"] == "true"
+    assert install["with"]["prune-cache"] == "false"
+    assert install["with"]["cache-dependency-glob"].splitlines() == [
+        "pyproject.toml",
+        "uv.lock",
+    ]
+    sync = next(
+        step for step in action["runs"]["steps"] if "Sync dependencies" in step.get("name", "")
+    )
+    assert "uv_sync_retry.sh" in sync["run"]
+    assert "inputs.sync-args" in sync["run"]
+    assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
+
+
+def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> None:
+    """Staggered restores and reruns must not select overlapping or missing tests."""
+    workflow = yaml.safe_load(_workflow_text())
+    dispatch = workflow["jobs"]["dispatch-ownership"]
+    freeze = next(s for s in dispatch["steps"] if s.get("id") == "freeze-durations")
+    assert "--snapshot-input .test_durations --output .test_durations" in freeze["run"]
+    assert freeze["if"] == "steps.decision.outputs.run_full_ci == 'true'"
+    upload = next(s for s in dispatch["steps"] if s["name"] == "Upload frozen test durations")
+    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    assert upload["if"] == freeze["if"]
+    assert upload["with"] == {
+        "name": "test-duration-snapshot",
+        "path": ".test_durations",
+        "include-hidden-files": True,
+        "if-no-files-found": "error",
+    }
+    fast = workflow["jobs"]["fast-feedback"]
+    assert fast["needs"] == ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
+    assert fast["permissions"] == {"contents": "read", "actions": "read"}
+    download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
+    assert download["uses"] == "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    # An explicit token selects the run-scoped REST lookup, which sees the
+    # successful owner's original artifact during a failed-jobs-only rerun.
+    assert download["with"] == {
+        "name": upload["with"]["name"],
+        "path": ".",
+        "run-id": "${{ github.run_id }}",
+        "github-token": "${{ github.token }}",
+    }
+    assert "continue-on-error" not in upload
+    assert "continue-on-error" not in download
+    assert "if" not in download
+    assert "duration_snapshot" not in dispatch["outputs"]
+    for job in (dispatch, fast):
+        snapshot_steps = [
+            s for s in job["steps"] if "frozen test durations" in s.get("name", "").lower()
+        ]
+        assert len(snapshot_steps) == 1
+        assert "cache@" not in snapshot_steps[0]["uses"]
+        assert "cache/" not in snapshot_steps[0]["uses"]
+        assert "run_attempt" not in str(snapshot_steps[0])
+        assert "GITHUB_RUN_ATTEMPT" not in str(snapshot_steps[0])

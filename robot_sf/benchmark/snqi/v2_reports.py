@@ -20,6 +20,7 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.metric_definitions import metric_schema_version
 from robot_sf.benchmark.result_provenance import (
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
@@ -41,6 +42,7 @@ from robot_sf.benchmark.snqi.v2_spec import (
     WEIGHTS,
     SnqiV2Spec,
     parse_v2_json,
+    parse_v2_yaml,
 )
 from robot_sf.benchmark.spawn_validity import (
     RESPAWN_COLLISION_WINDOW_S,
@@ -51,6 +53,80 @@ CLAIM_BOUNDARY = (
     "SNQI-v2 is a declared benchmark aggregate over simulator quantities. It is not a validated "
     "measure of human comfort or safety and admits no deployment ranking on its own."
 )
+
+AlgorithmBindings = Mapping[str | tuple[str, str], str]
+
+
+def _expected_algorithm(
+    episode: Mapping[str, Any], bindings: AlgorithmBindings | None
+) -> str | None:
+    """Select the independently declared scenario route, retaining arm defaults.
+
+    Returns:
+        Source-declared algorithm, or None when no execution context was supplied.
+    """
+    if bindings is None:
+        return None
+    arm = _planner(episode)
+    return bindings.get((arm, episode["scenario_id"]), bindings.get(arm))
+
+
+def _planner_source_config_path(planner: Mapping[str, Any], repo_root: Path) -> Path | None:
+    """Resolve a repository-relative route declaration without trusting caller paths.
+
+    Returns:
+        Contained source file, or None for a planner without an algorithm config.
+    """
+    raw_path = planner.get("algo_config_path")
+    if raw_path is None:
+        return None
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError("SNQI-v2 algo_config_path must be a non-empty string")
+    if Path(raw_path).is_absolute():
+        raise ValueError("SNQI-v2 algo_config_path must be repository-relative")
+    resolved = (repo_root / raw_path).resolve()
+    try:
+        resolved.relative_to(repo_root.resolve())
+    except ValueError as exc:
+        raise ValueError("SNQI-v2 algo_config_path escapes the repository") from exc
+    return resolved
+
+
+def _source_scenario_algorithms(planner: Mapping[str, Any], repo_root: Path) -> dict[str, str]:
+    """Read routes from the actual planner source; observations cannot declare routes.
+
+    Returns:
+        Explicit source scenario routes; never a declaration inferred from observed rows.
+    """
+    from robot_sf.benchmark.effective_algorithm_branches import (  # noqa: PLC0415
+        enumerate_effective_branches,
+    )
+    from robot_sf.benchmark.release_parameter_freeze import (  # noqa: PLC0415
+        assert_release_parameters_frozen,
+    )
+
+    source_path = _planner_source_config_path(planner, repo_root)
+    if source_path is None:
+        return {}
+    payload = parse_v2_yaml(source_path.read_bytes())
+    if not isinstance(payload, dict):
+        raise ValueError("SNQI-v2 planner configuration must be a mapping")
+    if payload.get("algo") is not None and payload["algo"] != planner.get("algo"):
+        raise ValueError("SNQI-v2 planner source declares a different default algorithm")
+    assert_release_parameters_frozen(payload, label="SNQI-v2 planner configuration")
+    overrides = payload.get("scenario_algo_overrides", {})
+    if not isinstance(overrides, Mapping) or any(
+        not isinstance(key, str)
+        or not key
+        or not isinstance(value, Mapping)
+        or not isinstance(value.get("algo"), str)
+        or not value["algo"].strip()
+        for key, value in overrides.items()
+    ):
+        raise ValueError("SNQI-v2 source scenario algorithm declarations are invalid")
+    return {
+        branch["scenario"]: branch["algorithm"] for branch in enumerate_effective_branches(payload)
+    }
 
 
 def family_vectors() -> list[dict[str, Any]]:
@@ -128,7 +204,11 @@ def score_episode(
     metrics = episode.get("metrics")
     if not isinstance(metrics, Mapping):
         raise ValueError("SNQI-v2 episode requires metrics")
-    inputs = {**metrics, "executed_steps": episode.get("steps")}
+    inputs = {
+        **metrics,
+        "executed_steps": episode.get("steps"),
+        "metric_schema_version": metric_schema_version(episode),
+    }
     normalized = normalize_snqi_v2_terms(inputs, spec)
     force_provenance = validate_robot_force_provenance(inputs, spec.force_source)
     return {
@@ -161,12 +241,41 @@ def _summary(values: Sequence[float | None]) -> dict[str, Any]:
     }
 
 
+def _paired_bootstrap_seeds(grouped: Mapping[str, Sequence[Mapping[str, Any]]]) -> list[Any]:
+    """Validate unique paired cells and balanced seed coverage for episode-mean CIs.
+
+    Returns:
+        Sorted common seeds, each contributing the same number of episodes.
+    """
+    groups = list(grouped)
+    paired_cells = [
+        {(ep.get("scenario_id"), ep.get("seed")) for ep in grouped[key]} for key in groups
+    ]
+    for key, cells in zip(groups, paired_cells, strict=True):
+        if (
+            any(scenario is None or seed is None for scenario, seed in cells)
+            or len(cells) != len(grouped[key])
+            or cells != paired_cells[0]
+        ):
+            raise ValueError(
+                "SNQI-v2 family requires complete unique paired scenario/seed coverage"
+            )
+    seed_sets = [{ep.get("seed") for ep in grouped[key]} for key in groups]
+    if any(None in seeds or seeds != seed_sets[0] for seeds in seed_sets):
+        raise ValueError("SNQI-v2 paired seed bootstrap requires identical explicit seed coverage")
+    seeds = sorted(seed_sets[0])
+    seed_counts = [sum(ep["seed"] == seed for ep in grouped[groups[0]]) for seed in seeds]
+    if len(set(seed_counts)) != 1:
+        raise ValueError("SNQI-v2 family requires equal episode coverage across seeds")
+    return seeds
+
+
 def build_family_report(
     episodes: Sequence[Mapping[str, Any]],
     spec: SnqiV2Spec,
     *,
     bootstrap_samples: int = 2000,
-    expected_algorithms: Mapping[str, str] | None = None,
+    expected_algorithms: AlgorithmBindings | None = None,
 ) -> dict[str, Any]:
     """Compute family sensitivity and paired seed-bootstrap intervals from raw records.
 
@@ -177,12 +286,13 @@ def build_family_report(
         raise ValueError("SNQI-v2 family needs episodes and positive bootstrap samples")
     scored = [
         score_episode(
-            episode, spec, expected_algorithm=(expected_algorithms or {}).get(_planner(episode))
+            episode, spec, expected_algorithm=_expected_algorithm(episode, expected_algorithms)
         )
         for episode in episodes
     ]
     groups = sorted({_planner(episode) for episode in scored})
     grouped = {key: [episode for episode in scored if _planner(episode) == key] for key in groups}
+    seeds = _paired_bootstrap_seeds(grouped)
     means = np.array(
         [
             [
@@ -229,22 +339,6 @@ def build_family_report(
         flips += (declared[:, None] - declared[None, :]) * (
             values[:, None] - values[None, :]
         ) < -1e-12
-    paired_cells = [
-        {(ep.get("scenario_id"), ep.get("seed")) for ep in grouped[key]} for key in groups
-    ]
-    for key, cells in zip(groups, paired_cells, strict=True):
-        if (
-            any(scenario is None or seed is None for scenario, seed in cells)
-            or len(cells) != len(grouped[key])
-            or cells != paired_cells[0]
-        ):
-            raise ValueError(
-                "SNQI-v2 family requires complete unique paired scenario/seed coverage"
-            )
-    seed_sets = [{ep.get("seed") for ep in grouped[key]} for key in groups]
-    if any(None in seeds or seeds != seed_sets[0] for seeds in seed_sets):
-        raise ValueError("SNQI-v2 paired seed bootstrap requires identical explicit seed coverage")
-    seeds = sorted(seed_sets[0])
     by_seed = np.array(
         [
             [
@@ -295,6 +389,15 @@ def build_family_report(
         "claim_boundary": CLAIM_BOUNDARY,
         "provenance": spec.provenance(),
         "force_producer_provenance": force_producer_provenance,
+        "per_arm_clipped_at_one_fraction": {
+            arm: {
+                term: float(
+                    np.mean([ep["metrics"]["snqi_v2_terms"][term] >= 1 for ep in grouped[arm]])
+                )
+                for term in QUALITY_TERMS
+            }
+            for arm in groups
+        },
         "episode_count": len(scored),
         "stratified_count": len(stratified),
         "tie_policy": "average ranks for rho; split top-1 credit; lexical top-3 boundary",
@@ -341,7 +444,7 @@ def write_v2_reports(
     reports_dir: Path,
     *,
     bootstrap_samples: int = 2000,
-    expected_algorithms: Mapping[str, str] | None = None,
+    expected_algorithms: AlgorithmBindings | None = None,
 ) -> dict[str, str]:
     """Emit the inseparable diagnostics/family pair, returning their artifact paths.
 
@@ -353,7 +456,7 @@ def write_v2_reports(
     )
     scored = [
         score_episode(
-            episode, spec, expected_algorithm=(expected_algorithms or {}).get(_planner(episode))
+            episode, spec, expected_algorithm=_expected_algorithm(episode, expected_algorithms)
         )
         for episode in episodes
     ]
@@ -365,6 +468,21 @@ def write_v2_reports(
         "episode_count": len(scored),
         "family_report": "snqi_v2_family.json",
         "sources": spec.sources,
+        "per_arm_clipped_at_one_fraction": {
+            arm: {
+                term: float(
+                    np.mean(
+                        [
+                            ep["metrics"]["snqi_v2_terms"][term] >= 1
+                            for ep in scored
+                            if _planner(ep) == arm
+                        ]
+                    )
+                )
+                for term in QUALITY_TERMS
+            }
+            for arm in sorted({_planner(ep) for ep in scored})
+        },
         "normalized_term_means": {key: float(np.mean(values)) for key, values in terms.items()},
         "clipped_at_one_fraction": {
             key: float(np.mean(np.array(values) >= 1)) for key, values in terms.items()
@@ -431,6 +549,13 @@ def compact_report_episode(
     """
     scored = score_episode(episode, spec, expected_algorithm=expected_algorithm)
     compact_metrics = {source: scored["metrics"].get(source) for source in spec.sources.values()}
+    compact_metrics["metric_schema_version"] = metric_schema_version(scored)
+    if "metric_definitions_sha256" in scored["metrics"]:
+        compact_metrics["metric_definitions_sha256"] = scored["metrics"][
+            "metric_definitions_sha256"
+        ]
+    validity_key = spec.force_source.removesuffix("_impulse_total") + "_invalid_present_samples"
+    compact_metrics[validity_key] = scored["metrics"][validity_key]
     compact_metrics["robot_force_metadata"] = compact_robot_force_metadata(
         scored["metrics"], spec.force_source
     )
@@ -466,7 +591,11 @@ def _stage_v2_file(
     records = []
     with temporary.open("w", encoding="utf-8") as output:
         for episode in read_episode_files([path]):
-            spec.validate_evaluation_seeds([episode["seed"]])
+            if spec.diagnostic:
+                if not 1001 <= episode["seed"] <= 1030:
+                    raise ValueError("SNQI-v2 diagnostics require development seeds")
+            else:
+                spec.validate_evaluation_seeds([episode["seed"]])
             declared_kinematics = planner.get("kinematics")
             row_kinematics = episode.get("kinematics")
             if (
@@ -479,14 +608,21 @@ def _stage_v2_file(
             scored_episode = {**episode, "planner_key": planner["key"]}
             if kinematics is not None:
                 scored_episode["kinematics"] = kinematics
+            expected_algorithm = planner.get("_scenario_algorithms", {}).get(
+                episode["scenario_id"], planner.get("algo")
+            )
             enriched = score_episode(
                 scored_episode,
                 spec,
-                expected_algorithm=planner.get("algo"),
+                expected_algorithm=expected_algorithm,
             )
+            if expected_algorithm is not None and episode.get("algo") != expected_algorithm:
+                raise ValueError(
+                    "SNQI-v2 declared scenario algorithm does not match episode algorithm"
+                )
             output.write(json.dumps(enriched, separators=(",", ":")) + "\n")
             records.append(
-                compact_report_episode(enriched, spec, expected_algorithm=planner.get("algo"))
+                compact_report_episode(enriched, spec, expected_algorithm=expected_algorithm)
             )
     return records
 
@@ -585,14 +721,34 @@ def _validated_run_input(
         or (planner.get("algo") is not None and not isinstance(planner["algo"], str))
     ):
         raise ValueError("SNQI-v2 run requires explicit planner.key and a string planner.algo")
-    return (repo_root / path_value).resolve(), planner
+    path = (repo_root / path_value).resolve()
+    source_path = _planner_source_config_path(planner, repo_root)
+    sidecar = manifest_path_for_result_jsonl(path)
+    if not sidecar.is_file():
+        raise ValueError("SNQI-v2 requires the producer provenance sidecar")
+    payload = parse_v2_json(sidecar.read_text(encoding="utf-8"))
+    validate_result_provenance_manifest(payload)
+    producer_config = payload["inputs"]["algo_config"]
+    producer_path = producer_config.get("path")
+    if source_path is None:
+        if producer_path is not None:
+            raise ValueError("SNQI-v2 producer algo_config_path differs from run config")
+    elif (
+        not isinstance(producer_path, str)
+        or not producer_path
+        or (repo_root / producer_path).resolve() != source_path
+        or producer_config.get("sha256") != sha256_file(source_path)
+        or producer_config.get("artifact_status") != "available"
+    ):
+        raise ValueError("SNQI-v2 producer algo_config_path or config bytes differ from run config")
+    return path, planner
 
 
 def _validated_v2_record_algorithms(
     records: Sequence[Mapping[str, Any]],
     planner: Mapping[str, Any],
     planner_identities: set[str],
-) -> dict[str, str]:
+) -> dict[str | tuple[str, str], str]:
     """Validate one staged run's identities and return its algorithm bindings.
 
     Returns:
@@ -603,7 +759,7 @@ def _validated_v2_record_algorithms(
     if (
         len(identities) != 1
         or any(not isinstance(algo, str) or not algo for algo in algorithms)
-        or len(set(algorithms)) != 1
+        or (planner.get("algo") is None and len(set(algorithms)) != 1)
     ):
         raise ValueError("SNQI-v2 run must have one planner/kinematics identity and one algorithm")
     identity = next(iter(identities))
@@ -612,10 +768,15 @@ def _validated_v2_record_algorithms(
     planner_identities.add(identity)
     algorithm = algorithms[0]
     declared_algorithm = planner.get("algo")
-    if declared_algorithm is not None and declared_algorithm != algorithm:
-        raise ValueError("SNQI-v2 declared planner algorithm does not match episode algorithm")
     bound_algorithm = declared_algorithm if declared_algorithm is not None else algorithm
-    return {_planner(record): bound_algorithm for record in records}
+    bindings: dict[str | tuple[str, str], str] = {identity: bound_algorithm}
+    for record in records:
+        scenario = record["scenario_id"]
+        expected = planner.get("_scenario_algorithms", {}).get(scenario, bound_algorithm)
+        if record["algo"] != expected:
+            raise ValueError("SNQI-v2 declared scenario algorithm does not match episode algorithm")
+        bindings[(identity, scenario)] = expected
+    return bindings
 
 
 def enrich_campaign_v2(
@@ -645,6 +806,10 @@ def enrich_campaign_v2(
     try:
         for entry in run_entries:
             path, planner = _validated_run_input(entry, repo_root)
+            planner = {
+                **planner,
+                "_scenario_algorithms": _source_scenario_algorithms(planner, repo_root),
+            }
             if path in staged:
                 raise ValueError("SNQI-v2 duplicate campaign episode path")
             sidecar = manifest_path_for_result_jsonl(path)
@@ -668,6 +833,8 @@ def enrich_campaign_v2(
                 next(iter(run_algorithms.values())),
             )
             all_records.extend(records)
+        if spec.hashes and not spec.diagnostic:
+            spec.validate_evaluation_commitment(sorted({row["seed"] for row in all_records}))
         artifacts = write_v2_reports(
             all_records,
             spec,

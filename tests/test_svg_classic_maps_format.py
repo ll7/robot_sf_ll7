@@ -118,7 +118,7 @@ def test_classic_svg_ped_routes_spawn_nonzero_population(svg_path: Path) -> None
         peds_per_area_m2=0.06,
         max_group_members=3,
         route_spawn_distribution="spread",
-        route_spawn_seed=123,
+        route_spawn_seed=1013,
         route_spawn_jitter_frac=0.05,
     )
     ped_states, *_ = populate_ped_routes(

@@ -224,6 +224,11 @@ def socnav_observation_space(
                 {
                     "current": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
                     "next": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                    **(
+                        {"next_valid": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)}
+                        if getattr(env_config, "include_goal_next_valid", False)
+                        else {}
+                    ),
                 },
             ),
             "pedestrians": spaces.Dict(
@@ -319,6 +324,7 @@ class SocNavObservationFusion:
     _last_heading: float | None = None
     _pedestrian_tracker: PedestrianTracker | None = field(init=False, default=None, repr=False)
     _tracking_step_index: int = field(init=False, default=0, repr=False)
+    _current_source_indices: tuple[int, ...] = field(init=False, default=(), repr=False)
     _buf_ped_track_ids: np.ndarray | None = field(init=False, default=None, repr=False)
     _current_tracking_result: PedestrianTrackingResult | None = field(
         init=False, default=None, repr=False
@@ -368,6 +374,7 @@ class SocNavObservationFusion:
         self._cache_position_cap_width = None
         self._cache_position_cap_height = None
         self._lost_pedestrian_memory.clear()
+        self._current_source_indices = ()
         self._tracking_step_index = 0
         self._current_tracking_result = None
         if self._pedestrian_tracker is not None:
@@ -384,6 +391,15 @@ class SocNavObservationFusion:
         ``SOCNAV_STRUCT`` schema.
         """
         return self._current_tracking_result
+
+    @property
+    def current_source_indices(self) -> tuple[int, ...]:
+        """Simulator-source indices aligned to the latest public pedestrian rows.
+
+        This private oracle-side channel is intended for offline supervision only;
+        it does not change planner observations or turn tracker estimates into truth.
+        """
+        return self._current_source_indices
 
     def _position_cap(self) -> np.ndarray:
         """Return cached map position cap, refreshing when map_def identity or dimensions change.
@@ -873,11 +889,15 @@ class SocNavObservationFusion:
             )
             ped_positions = ped_positions[order]
             ped_velocities = ped_velocities[order]
+            source_indices = source_indices[order]
             if ped_track_ids is not None:
                 ped_track_ids = ped_track_ids[order]
 
         ped_positions = ped_positions[: self.max_pedestrians]
         ped_velocities = ped_velocities[: self.max_pedestrians]
+        self._current_source_indices = tuple(
+            int(index) for index in source_indices[: self.max_pedestrians]
+        )
         if ped_track_ids is not None:
             ped_track_ids = ped_track_ids[: self.max_pedestrians]
         return ped_positions, ped_velocities, ped_track_ids
@@ -976,6 +996,11 @@ class SocNavObservationFusion:
             "goal": {
                 "current": goal_clipped,
                 "next": next_goal_clipped,
+                **(
+                    {"next_valid": np.array([next_goal is not None], dtype=np.float32)}
+                    if getattr(self.env_config, "include_goal_next_valid", False)
+                    else {}
+                ),
             },
             "pedestrians": {
                 "positions": self._buf_ped_positions.copy(),

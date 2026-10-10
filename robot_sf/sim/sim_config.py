@@ -311,6 +311,16 @@ class SimulationSettings:
     difficulty: int = 0
     """Difficulty level"""
 
+    pedestrian_seed: int | None = None
+    """Episode seed for private pedestrian random streams; set by env reset/factory."""
+
+    groups: float | None = None
+    """Large-crowd expected fraction of pedestrians in multi-person groups.
+
+    Last-group truncation lowers the realised fraction in small crowds; this
+    does not allocate an exact fraction per reset. None retains the default law.
+    """
+
     max_peds_per_group: int = 3
     """Maximum number of pedestrians per group"""
 
@@ -448,6 +458,16 @@ class SimulationSettings:
     social_force_kernel_version: InitVar[Any] = None
     """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
 
+    episode_step_limit: InitVar[int | None] = field(default=None, kw_only=True)
+    """Explicit whole-step episode budget; None retains duration-based ceiling semantics.
+
+    Campaign runners set this after timestep resolution, avoiding a lossy conversion
+    from integer steps to seconds and back. This budget takes precedence over duration.
+    """
+
+    group_allocation_mode: InitVar[str] = field(default="legacy", kw_only=True)
+    """Group law: legacy (default) or opt-in exact_small_crowd_v1."""
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "obstacle_force_law":
@@ -459,6 +479,16 @@ class SimulationSettings:
             resolved, mode = resolve_social_force_kernel_version_with_mode(value)
             object.__setattr__(self, "_social_force_kernel_version", resolved)
             object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
+        if name == "group_allocation_mode":
+            if not isinstance(value, str) or value not in {"legacy", "exact_small_crowd_v1"}:
+                raise ValueError("group_allocation_mode must be legacy or exact_small_crowd_v1")
+            object.__setattr__(self, "_group_allocation_mode", value)
+            return
+        if name == "episode_step_limit":
+            if value is not None and (type(value) is not int or value <= 0):
+                raise ValueError("episode_step_limit must be a positive integer")
+            object.__setattr__(self, "_episode_step_limit", value)
             return
         object.__setattr__(self, name, value)
 
@@ -473,17 +503,32 @@ class SimulationSettings:
                 return object.__getattribute__(self, "_social_force_kernel_version")
             except AttributeError:
                 return resolve_social_force_kernel_version_with_mode(None)[0]
+        if name == "group_allocation_mode":
+            try:
+                return object.__getattribute__(self, "_group_allocation_mode")
+            except AttributeError:
+                return "legacy"
+        if name == "episode_step_limit":
+            try:
+                return object.__getattribute__(self, "_episode_step_limit")
+            except AttributeError:
+                return None
         return object.__getattribute__(self, name)
 
-    def _config_hash_overrides(self) -> dict[str, str]:
-        """Include explicit selectors in config hashes while omitting the legacy default.
+    def _config_hash_overrides(self) -> dict[str, Any]:
+        """Include explicit selectors and step budgets while omitting legacy defaults.
 
         Returns:
-            Only the non-default selector field, or an empty mapping for the legacy default.
+            Explicit runtime overrides, or an empty mapping for legacy defaults.
         """
-        if self.social_force_kernel_resolution_mode == "defaulted_missing":
-            return {}
-        return {"social_force_kernel_version": str(self.social_force_kernel_version)}
+        overrides: dict[str, Any] = {}
+        if self.social_force_kernel_resolution_mode != "defaulted_missing":
+            overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
+        if self.group_allocation_mode != "legacy":
+            overrides["group_allocation_mode"] = self.group_allocation_mode
+        if self.episode_step_limit is not None:
+            overrides["episode_step_limit"] = self.episode_step_limit
+        return overrides
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize settings with explicit version selectors while preserving legacy defaults.
@@ -580,7 +625,7 @@ class SimulationSettings:
                 self.robot_goal_sampling_policy
             )
 
-    def __post_init__(self, *init_vars: Any) -> None:  # noqa: C901
+    def __post_init__(self, *init_vars: Any) -> None:  # noqa: C901,PLR0912
         """
         Validate the simulation settings.
 
@@ -589,6 +634,10 @@ class SimulationSettings:
         """
         if init_vars:
             self.social_force_kernel_version = init_vars[0]
+        if len(init_vars) > 1:
+            self.episode_step_limit = init_vars[1]
+        if len(init_vars) > 2:
+            self.group_allocation_mode = init_vars[2]
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")
@@ -720,8 +769,10 @@ class SimulationSettings:
 
 
         Returns:
-            Ceiling of episode duration divided by step duration.
+            Explicit integer budget, or ceiling of duration divided by step duration.
         """
+        if self.episode_step_limit is not None:
+            return self.episode_step_limit
         return ceil(self.sim_time_in_secs / self.time_per_step_in_secs)
 
     @property

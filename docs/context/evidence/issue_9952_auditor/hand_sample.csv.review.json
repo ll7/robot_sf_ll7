@@ -1,0 +1,9 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/hand_sample.csv",
+  "artifact_sha256": "a25e14270b8a29411eb37513ae9cd9d39cdde2d4ab6cdfe5d2ae1988892bfe7d",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true,
+  "source_artifact_sha256": "223fc3010bcc41c8ca674226875dc197c7e91368697b2b4cbb519bd148302cf1",
+  "presentation_normalization": "LF line endings and removal of trailing whitespace; values and failure text preserved"
+}

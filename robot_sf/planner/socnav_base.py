@@ -23,7 +23,12 @@ from pysocialforce.config import (
 )
 
 from robot_sf.common.math_utils import wrap_angle_pi_closed
+from robot_sf.planner.clearance_geometry import (
+    validate_clearance_model,
+    validate_surface_clearance_radii,
+)
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
 _SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
@@ -39,6 +44,35 @@ _SOCNAV_ASSET_SETUP_CMD = "uv run python scripts/tools/prepare_socnav_assets.py"
 _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 _PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
 _SOCNAV_IMPORT_LOCK = threading.Lock()
+_SOCNAV_CONFIG_INIT_KEYS = frozenset(
+    {
+        "social_force_kernel_version",
+        "predictive_clearance_model",
+        "sampling_repulsion_weight",
+        "predictive_occupancy_version",
+        "predictive_heading_lattice_version",
+    }
+)
+
+_PREDICTIVE_SCORING_VERSIONS = {
+    "predictive_occupancy_version": frozenset({"pedestrians_v1"}),
+    "predictive_heading_lattice_version": frozenset({"per_step_v1", "horizon_scaled_v2"}),
+}
+
+_SOCNAV_PRIVATE_SELECTORS = frozenset(_PREDICTIVE_SCORING_VERSIONS) | {"sampling_repulsion_weight"}
+
+
+def _resolve_private_selector(name: str, value: Any) -> Any:
+    """Validate versioned prediction selectors; retain legacy sampling weight behavior.
+
+    Returns:
+        Any: The explicit selector value after validation.
+    """
+    versions = _PREDICTIVE_SCORING_VERSIONS.get(name)
+    if versions is not None and value not in versions:
+        raise ValueError(f"Unsupported {name}: {value!r}")
+    return value
+
 
 # Goal-approach correction versions are deliberately separate from the
 # obstacle-force law versions.  The default is the historical planner path;
@@ -124,6 +158,26 @@ def resolve_social_force_ped_version(value: Any = None) -> str:
             f"unsupported social-force ped version {resolved!r}; expected one of {supported}"
         )
     return resolved
+
+
+def _resolve_predictive_clearance_selector(
+    value: str,
+    *,
+    robot_radius: float,
+    pedestrian_radius: float,
+) -> str:
+    """Validate a predictive geometry selector against its configured radii.
+
+    Returns:
+        str: The validated clearance-model selector.
+    """
+    selected = validate_clearance_model(value)
+    validate_surface_clearance_radii(
+        selected,
+        robot_radius=robot_radius,
+        pedestrian_radius=pedestrian_radius,
+    )
+    return selected
 
 
 # Sampling-heuristic versions (issues #9727 and #9746).  ``legacy_v1`` is the
@@ -427,12 +481,23 @@ class SocNavPlannerConfig:
     # Issue #9764: preserve the historical unwrapped pair kernel by default;
     # the shortest-angle correction is explicitly selected for next-release runs.
     social_force_kernel_version: InitVar[Any] = field(default=None, kw_only=True)
+    # Issue #9750: opt in to physical surface-clearance interpretation for
+    # predictive terms.  Keep the historical center-distance output shape.
+    predictive_clearance_model: InitVar[str] = field(default="center_v1", kw_only=True)
     social_force_ped_v3_strength: float = field(default=6.0, kw_only=True)
     social_force_ped_v3_length: float = field(default=0.5, kw_only=True)
     social_force_ped_v3_default_ped_radius: float = field(default=0.4, kw_only=True)
     # Issues #9727/#9746: opt-in bounded sampling heuristic.  The fields below are
     # read only when ``socnav_sampling_version == "bounded_v2"``.
     socnav_sampling_version: Any = None
+    # ``None`` preserves the historical reuse of the social-force weight. The
+    # reference-aligned 0.0.8 candidate selects zero (the upstream sampler has
+    # no additive pedestrian repulsion vector).
+    sampling_repulsion_weight: InitVar[float | None] = field(default=None, kw_only=True)
+    # A2 retains only the base pedestrian cost; its default is absent from config hashes.
+    predictive_occupancy_version: InitVar[str] = field(default="pedestrians_v1", kw_only=True)
+    # A4: distinct horizon headings without changing historical config identity.
+    predictive_heading_lattice_version: InitVar[str] = field(default="per_step_v1", kw_only=True)
     # Pedestrians whose surface distance (centre distance minus robot and
     # pedestrian radius) is at most this value keep the full, uncapped legacy
     # repulsion.  1.6 m equals a 3.0 m centre distance at the release radii
@@ -481,6 +546,31 @@ class SocNavPlannerConfig:
             object.__setattr__(self, "_social_force_kernel_version", resolved)
             object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
             return
+        if name == "predictive_clearance_model":
+            selected = _resolve_predictive_clearance_selector(
+                value,
+                robot_radius=self.predictive_robot_radius,
+                pedestrian_radius=self.predictive_pedestrian_radius,
+            )
+            object.__setattr__(self, "_predictive_clearance_model", selected)
+            return
+        if name in {"predictive_robot_radius", "predictive_pedestrian_radius"}:
+            validate_surface_clearance_radii(
+                self.predictive_clearance_model,
+                robot_radius=(
+                    value if name == "predictive_robot_radius" else self.predictive_robot_radius
+                ),
+                pedestrian_radius=(
+                    value
+                    if name == "predictive_pedestrian_radius"
+                    else self.predictive_pedestrian_radius
+                ),
+            )
+            object.__setattr__(self, name, value)
+            return
+        if name in _SOCNAV_PRIVATE_SELECTORS:
+            object.__setattr__(self, "_" + name, _resolve_private_selector(name, value))
+            return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -497,6 +587,14 @@ class SocNavPlannerConfig:
         """Resolve the InitVar selector while keeping it out of legacy dataclass fields."""
         if init_vars:
             self.social_force_kernel_version = init_vars[0]
+        if len(init_vars) > 1:
+            self.predictive_clearance_model = init_vars[1]
+        if len(init_vars) > 2:
+            self.sampling_repulsion_weight = init_vars[2]
+        if len(init_vars) > 3:
+            self.predictive_occupancy_version = init_vars[3]
+        if len(init_vars) > 4:
+            self.predictive_heading_lattice_version = init_vars[4]
 
     def __getattribute__(self, name: str) -> Any:
         """Expose the resolved kernel selector without serializing its default.
@@ -509,23 +607,49 @@ class SocNavPlannerConfig:
                 return object.__getattribute__(self, "_social_force_kernel_version")
             except AttributeError:
                 return resolve_social_force_kernel_version_with_mode(None)[0]
+        if name == "predictive_clearance_model":
+            try:
+                return object.__getattribute__(self, "_predictive_clearance_model")
+            except AttributeError:
+                return "center_v1"
+        if name == "sampling_repulsion_weight":
+            try:
+                return object.__getattribute__(self, "_sampling_repulsion_weight")
+            except AttributeError:
+                return None
+        if name in {"predictive_occupancy_version", "predictive_heading_lattice_version"}:
+            try:
+                return object.__getattribute__(self, "_" + name)
+            except AttributeError:
+                return "pedestrians_v1" if name == "predictive_occupancy_version" else "per_step_v1"
         return object.__getattribute__(self, name)
 
-    def _config_hash_overrides(self) -> dict[str, str]:
-        """Include explicitly supplied kernel selectors in serialized identity.
+    def _config_hash_overrides(self) -> dict[str, Any]:
+        """Include non-default opt-ins in serialized identity.
 
         Returns:
-            The selector override, or an empty mapping for the historical default.
+            Explicit selectors that change behavior, or an empty mapping for defaults.
         """
-        if self.social_force_kernel_resolution_mode == "defaulted_missing":
-            return {}
-        return {"social_force_kernel_version": str(self.social_force_kernel_version)}
+        overrides: dict[str, Any] = {}
+        if self.social_force_kernel_resolution_mode != "defaulted_missing":
+            overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
+        if self.predictive_clearance_model != "center_v1":
+            overrides["predictive_clearance_model"] = self.predictive_clearance_model
+        if self.sampling_repulsion_weight is not None:
+            overrides["sampling_repulsion_weight"] = self.sampling_repulsion_weight
+        if self.predictive_occupancy_version != "pedestrians_v1":
+            overrides["predictive_occupancy_version"] = self.predictive_occupancy_version
+        if self.predictive_heading_lattice_version != "per_step_v1":
+            overrides["predictive_heading_lattice_version"] = (
+                self.predictive_heading_lattice_version
+            )
+        return overrides
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize planner settings while keeping the historical default shape.
 
         Returns:
-            Standard dataclass fields plus an explicitly supplied kernel selector.
+            Standard dataclass fields plus behavior-changing opt-in selectors.
         """
         payload = asdict(self)
         payload.update(self._config_hash_overrides())
@@ -792,7 +916,12 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
 
         base_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
         if np.linalg.norm(repulse) > 1e-6:
-            base_vec = base_vec + self.config.social_force_repulsion_weight * repulse
+            repulsion_weight = (
+                self.config.social_force_repulsion_weight
+                if self.config.sampling_repulsion_weight is None
+                else float(self.config.sampling_repulsion_weight)
+            )
+            base_vec = base_vec + repulsion_weight * repulse
             if np.linalg.norm(base_vec) > 1e-6:
                 base_vec = base_vec / np.linalg.norm(base_vec)
 
@@ -1211,12 +1340,28 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_config = getattr(config, "robot_config", None)
         if robot_config is None:
             return
-        limits: dict[str, float] = {}
-        for key in ("max_linear_speed", "max_linear_decel", "max_linear_accel", "radius"):
+        limits: dict[str, float | bool] = {}
+        for key in (
+            "max_linear_speed",
+            "max_linear_decel",
+            "max_linear_accel",
+            "radius",
+            "max_angular_speed",
+            "max_angular_accel",
+            "wheel_radius",
+            "interaxis_length",
+            "max_reverse_speed",
+        ):
             value = getattr(robot_config, key, None)
             if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
                 limits[key] = float(value)
+        # Reverse selectors are InitVars, so dataclass field copies omit them.
+        for key in ("allow_backwards", "limited_reverse"):
+            value = getattr(robot_config, key, None)
+            if isinstance(value, bool):
+                limits[key] = value
         self._sampling_drive_limits = limits
+        self._sampling_drive_settings = DifferentialDriveSettings(**limits)
         self._sampling_path_fields = {}
         self._sampling_obstacle_segments = None
         if self._sampling_version() == SOCNAV_SAMPLING_LEGACY_V1:

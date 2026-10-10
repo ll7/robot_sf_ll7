@@ -94,7 +94,13 @@ class _SACADRLModel:
         return self._actions
 
     def predict(self, obs: np.ndarray) -> np.ndarray:
-        """Return softmax action probabilities for the provided observations."""
+        """Return probabilities, rejecting observations beyond the checkpoint's capacity."""
+        if obs.shape[-1] > self._input_dim:
+            slots = (self._input_dim - 5) // 7
+            raise ValueError(
+                f"SA-CADRL observation exceeds checkpoint capacity ({slots} agent slots): "
+                f"got {obs.shape[-1]} columns, expected at most {self._input_dim}"
+            )
         obs = self._crop(obs)
         return self._sess.run(self._softmax, feed_dict={self._x: obs})
 
@@ -138,6 +144,14 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             "load_error": None,
         }
 
+    def reset(self, *, seed: int | None = None) -> None:
+        """Clear episode fallback flags while preserving checkpoint and load state."""
+        del seed
+        self._checkpoint_provenance["fallback_triggered"] = bool(
+            self._load_error is not None and self._allow_fallback
+        )
+        self._checkpoint_provenance.pop("fallback_reason", None)
+
     def diagnostics(self) -> dict[str, Any]:
         """Return runtime checkpoint provenance for benchmark episode metadata."""
         return {"checkpoint_provenance": dict(self._checkpoint_provenance)}
@@ -149,6 +163,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
+        time_step = self._simulation_timestep(observation)
         dist_to_goal = self._distance_to_goal(observation)
         if dist_to_goal <= self.config.goal_tolerance:
             return 0.0, 0.0
@@ -160,20 +175,22 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         obs_vec, pref_speed, _dist_to_goal = self._build_network_input(observation)
 
         predictions = model.predict(obs_vec)[0]
+        if not np.isfinite(predictions).all():
+            self._checkpoint_provenance.update(
+                fallback_triggered=True,
+                fallback_reason="nonfinite_model_output",
+            )
+            return 0.0, 0.0
         action_idx = int(np.argmax(predictions))
         raw_action = model.actions[action_idx]
+        if not np.isfinite(raw_action).all() or not np.isfinite(pref_speed):
+            self._checkpoint_provenance.update(
+                fallback_triggered=True,
+                fallback_reason="nonfinite_model_output",
+            )
+            return 0.0, 0.0
         linear = float(pref_speed * raw_action[0])
         delta_heading = float(raw_action[1])
-
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
-        if time_step <= 1e-6:
-            logger.warning(
-                "Invalid timestep ({}) for SACADRLPlannerAdapter; defaulting to 0.1s.",
-                time_step,
-            )
-            time_step = 0.1
 
         angular = float(delta_heading / time_step)
         linear = float(np.clip(linear, 0.0, self.config.max_linear_speed))

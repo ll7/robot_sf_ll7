@@ -17,7 +17,19 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
+# Read only the numerical policy before importing any scientific library.
+import yaml
+
+from robot_sf._numerical_mode import bootstrap_numerical_mode
+
+_early_parser = argparse.ArgumentParser(add_help=False)
+_early_parser.add_argument("--config", type=Path)
+_early_args, _ = _early_parser.parse_known_args()
+if _early_args.config is not None:
+    _early_payload = yaml.safe_load(_early_args.config.read_text())
+    bootstrap_numerical_mode(_early_payload.get("numerical_mode"))
+
+from robot_sf._numerical_thread_env import pin_thread_env_for_determinism  # noqa: E402
 
 # Apply process-wide numerical thread caps before importing camera-ready modules,
 # which transitively import NumPy and may initialize BLAS/OpenMP runtimes.
@@ -96,7 +108,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "registry checkpoint into the durable cache before continuing; the submit/sbatch "
             "wrapper must use this mode (or run the public "
             "scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) before requeueing. Only "
-            "applied to the preflight-only mode path; 'run' mode keeps the cheap guard and "
+            "accepted with --mode preflight; 'run' mode keeps the cheap guard and "
             "expects checkpoints to be already staged on the compute node."
         ),
     )
@@ -138,6 +150,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     parser = _build_parser()
     args = parser.parse_args(raw_argv)
+
+    if args.mode == "run" and (
+        args.checkpoint_preflight_mode != "metadata_only"
+        or args.checkpoint_cache_dir is not None
+        or args.checkpoint_registry_path is not None
+    ):
+        parser.error(
+            "checkpoint staging configuration requires --mode preflight; stage and verify checkpoints with --mode preflight before --mode run"
+        )
 
     logger.remove()
     logger.add(sys.stderr, level=args.log_level)

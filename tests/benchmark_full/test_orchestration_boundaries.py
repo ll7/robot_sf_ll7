@@ -7,6 +7,7 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 import robot_sf.benchmark.full_classic.orchestrator as orch
@@ -57,6 +58,64 @@ def _build_scheduler_record(job, cfg):
         "seed": job.seed,
         "disable_videos": getattr(cfg, "disable_videos", False),
     }
+
+
+@pytest.mark.parametrize("with_navigation", [True, False])
+def test_real_phase_freezes_reset_reference_before_recorded_rollout(
+    monkeypatch,
+    test_map,
+    with_navigation: bool,
+) -> None:
+    """Metrics include the reset segment and the final completion set, never the mutable waypoint."""
+    zone = np.array([[5, 1], [6, 1], [6, 3], [5, 3]], dtype=float)
+    nav = SimpleNamespace(
+        waypoints=np.array([[3, 2], [6, 2]], dtype=float),
+        goal_zone=zone,
+        completion_policy="goal_zone_entry_v1",
+    )
+    sim = SimpleNamespace(
+        robot_pos=np.array([[-20.0, -20.0]]),
+        goal_pos=np.array([[6.0, 2.0]]),
+        robot_navs=[nav] if with_navigation else [],
+    )
+    resets = []
+    closed = []
+
+    def reset(*, seed):
+        resets.append(seed)
+        sim.robot_pos[:] = [2.0, 2.0]
+
+    env = SimpleNamespace(simulator=sim, reset=reset)
+    monkeypatch.setattr(
+        orch, "_init_env_for_job", lambda *a, **k: (env, 0.1, None, np.array([3.0, 2.0]))
+    )
+    monkeypatch.setattr(orch, "resolve_map_definition", lambda *a, **k: test_map)
+    monkeypatch.setattr(orch, "_close_env", closed.append)
+
+    def recorded_rollout(*_args):
+        # Deliberately corrupt live navigation after capture; no environment steps.
+        sim.robot_pos[:] = [9.0, 9.0]
+        nav.waypoints[:] = [9.0, 9.0]
+        nav.goal_zone[:] = [9.0, 9.0]
+        positions = np.array([[3, 2], [5, 2]] if with_navigation else [[4, 2], [6, 2]], dtype=float)
+        return positions, [np.zeros((0, 2))] * 2, [np.zeros((0, 2))] * 2, 1
+
+    monkeypatch.setattr(orch, "_rollout_episode", recorded_rollout)
+    result = orch._orchestrate_real_episode(
+        SimpleNamespace(scenario_id="dev-static", seed=1001, job_id="dev-1001"),
+        SimpleNamespace(),
+        episode_id="dev-1001",
+        scenario=SimpleNamespace(map_path="static.svg", raw={}),
+        horizon=10,
+    )
+    metrics = result["metrics"]
+    # Zone route: reset(2,2)->(3,2)->(5,2) = 3m; point route: 2->4->6 = 4m.
+    assert metrics["socnavbench_path_length"] == pytest.approx(3.0 if with_navigation else 4.0)
+    assert metrics["path_efficiency"] == pytest.approx(1.0)
+    assert metrics["time_to_goal"] == pytest.approx(0.2)
+    assert metrics["metric_schema_version"] == "robot-sf-metrics.v2"
+    assert resets == [1001]
+    assert closed == [env]
 
 
 def test_run_context_is_frozen_and_reproducible(config_factory) -> None:

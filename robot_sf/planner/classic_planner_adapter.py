@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -57,7 +57,9 @@ class PlannerActionAdapter:
     kinematics_model: KinematicsModel | None = None
     last_kinematics_diagnostics: dict[str, Any] | None = None
 
-    def from_velocity_command(self, command: Iterable[float]) -> np.ndarray:
+    def from_velocity_command(
+        self, command: Iterable[float], *, safety_intervention: bool = False
+    ) -> np.ndarray:
         """Map a (v, w) command into the simulator action space and clip to limits.
 
         Returns:
@@ -68,13 +70,23 @@ class PlannerActionAdapter:
         kinematics_model = self.kinematics_model or self._default_kinematics_model()
         if self.kinematics_model is None:
             self.kinematics_model = kinematics_model
-        projected = kinematics_model.project(float_cmd)
+        if safety_intervention and isinstance(kinematics_model, BicycleDriveKinematicsModel):
+            kinematics_model = replace(kinematics_model, creep_speed=0.0)
+        creep_applied = False
+        if isinstance(kinematics_model, BicycleDriveKinematicsModel):
+            projected, creep_applied = kinematics_model.project_with_creep_info(float_cmd)
+        else:
+            projected = kinematics_model.project(float_cmd)
         self.last_kinematics_diagnostics = kinematics_model.diagnostics(
             float_cmd,
             projected,
         )
         linear_target, angular_target = projected
         if isinstance(self.robot, BicycleDriveRobot):
+            self.last_kinematics_diagnostics.update(
+                safety_intervention=safety_intervention,
+                creep_applied=creep_applied,
+            )
             return self._bicycle_action(linear_target, angular_target)
         if isinstance(self.robot, DifferentialDriveRobot):
             return self._differential_action(linear_target, angular_target)
@@ -97,6 +109,10 @@ class PlannerActionAdapter:
                 max_velocity=cfg.max_velocity,
                 max_angular_speed=max_angular_speed,
                 allow_backwards=cfg.allow_backwards,
+                max_curvature=math.tan(cfg.max_steer) / cfg.wheelbase,
+                creep_speed=cfg.creep_speed,
+                limited_reverse=cfg.limited_reverse,
+                max_reverse_speed=cfg.max_reverse_speed,
             )
         if isinstance(self.robot, DifferentialDriveRobot):
             cfg = self.robot.config
@@ -104,6 +120,8 @@ class PlannerActionAdapter:
                 max_linear_speed=cfg.max_linear_speed,
                 max_angular_speed=cfg.max_angular_speed,
                 allow_backwards=cfg.allow_backwards,
+                limited_reverse=cfg.limited_reverse,
+                max_reverse_speed=cfg.max_reverse_speed,
             )
         msg = f"Unsupported robot type for planner adapter: {type(self.robot)}"
         raise ValueError(msg)
@@ -118,15 +136,26 @@ class PlannerActionAdapter:
         current_speed, _ = self.robot.current_speed
 
         target_speed = float(np.clip(linear_target, config.min_velocity, config.max_velocity))
-        accel = (target_speed - current_speed) / max(self.time_step, 1e-6)
-        accel = float(np.clip(accel, -config.max_accel, config.max_accel))
-
-        if abs(target_speed) < 1e-6:
+        dt = max(float(self.time_step), 1e-6)
+        accel = (target_speed - current_speed) / dt
+        accel = float(np.clip(accel, -config.max_decel, config.max_accel))
+        accel = float(np.clip(accel, self.action_space.low[0], self.action_space.high[0]))
+        achievable_speed = float(
+            np.clip(current_speed + dt * accel, config.min_velocity, config.max_velocity)
+        )
+        yaw_limit = abs(achievable_speed) * math.tan(config.max_steer) / config.wheelbase
+        achievable_yaw = float(np.clip(angular_target, -yaw_limit, yaw_limit))
+        if abs(achievable_speed) < 1e-6:
             steer = 0.0
         else:
-            steer = math.atan(
-                angular_target * config.wheelbase / max(abs(target_speed), 1e-6)
-            ) * np.sign(target_speed)
+            steer = math.atan(achievable_yaw * config.wheelbase / achievable_speed)
+        if self.last_kinematics_diagnostics is not None:
+            self.last_kinematics_diagnostics.update(
+                speed_achievable=achievable_speed,
+                yaw_achievable=achievable_yaw,
+                acceleration_limited=not math.isclose(achievable_speed, target_speed),
+                yaw_limited=not math.isclose(achievable_yaw, angular_target),
+            )
         steer = float(np.clip(steer, -config.max_steer, config.max_steer))
 
         action = np.array([accel, steer], dtype=np.float32)

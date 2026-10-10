@@ -9,6 +9,8 @@ Runs pytest with fail-fast defaults for local triage. Worker counts above one
 use pytest-xdist; `PYTEST_NUM_WORKERS=1` runs pytest in-process without xdist.
 
 Wrapper options:
+  --train-suite --expect-head <sha> [--receipt-file <path>]
+                   Complete slow-inclusive suite on a clean exact train head
   --fast-fail      Stop on first failure (`-x`) [default]
   --no-fast-fail   Disable fail-fast
   --failed-first   Run previously failed tests first [default]
@@ -67,8 +69,49 @@ unset PR_READY_PR_BODY_FILE
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
+train_suite=0
+if [[ "${1:-}" == "--train-suite" ]]; then
+  train_suite=1
+  shift
+  train_head=""
+  train_receipt="output/train-suite/receipt-$$.json"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --expect-head|--receipt-file)
+        if [[ $# -lt 2 || -z "$2" ]]; then
+          echo "$1 requires a value." >&2
+          exit 2
+        fi
+        if [[ "$1" == "--expect-head" ]]; then train_head="$2"; else train_receipt="$2"; fi
+        shift 2
+        ;;
+      *)
+        echo "Train suite accepts no pytest selectors." >&2
+        exit 2
+        ;;
+    esac
+  done
+  if [[ -z "$train_head" ]]; then
+    echo "Train suite --expect-head is required." >&2
+    exit 2
+  fi
+  train_tree="$(python3 "$SCRIPT_DIR/train_suite_receipt.py" preflight \
+    --expect-head "$train_head" --receipt-file "$train_receipt")"
+  mkdir -p "$(dirname "$train_receipt")"
+  # Complete admission overrides inherited partial-run and ordering settings.
+  unset PYTEST_ADDOPTS PYTEST_SHARD_COUNT PYTEST_SHARD_INDEX
+  unset ROBOT_SF_AFFECTED_BASE_REF ROBOT_SF_AFFECTED_SELECTION_FILE ROBOT_SF_AFFECTED_TEST_PATHS
+  export ROBOT_SF_SHARD_INCLUDE_SLOW=1 ROBOT_SF_TEST_LANE=all
+  export PYTEST_FAST_FAIL=0 PYTEST_ORDER_MODE=none PR_READY_SERIAL_FALLBACK=0
+fi
 fast_fail="${PYTEST_FAST_FAIL:-1}"
-dist_mode="${PYTEST_XDIST_DIST:-load}"
+default_dist_mode=load
+# Sharded suites have long heterogeneous release-check batches. Let idle workers
+# steal their queued tests; ordinary local runs retain the existing scheduler.
+if [[ "${PYTEST_SHARD_COUNT:-1}" =~ ^[0-9]+$ ]] && [[ "${PYTEST_SHARD_COUNT:-1}" -gt 1 ]]; then
+  default_dist_mode=worksteal
+fi
+dist_mode="${PYTEST_XDIST_DIST:-$default_dist_mode}"
 order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
 lane_mode="${ROBOT_SF_TEST_LANE:-all}"
@@ -298,6 +341,13 @@ cmd=(uv run pytest)
 if [[ "$pytest_execution_mode" == "xdist" ]]; then
   cmd+=(-n "$worker_spec" --dist "$dist_mode")
 fi
+# Serial fallback preserves every common option without positional xdist values.
+pytest_common_start=${#cmd[@]}
+# Explicit loading also supports callers that disable plugin autoload.
+cmd+=(-p timeout --timeout=300)
+if [[ "$train_suite" == "1" ]]; then
+  cmd+=(--maxfail=0 tests fast-pysf/tests)
+fi
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint
 # subset per shard so the suite parallelizes across runners. Main CI may opt in
@@ -313,6 +363,9 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
   fi
   sharding_active="1"
   cmd+=("--splits" "$shard_count" "--group" "$shard_index")
+  # Greedy assignment spreads unknown-duration prefixes across runners;
+  # contiguous chunks cannot rebalance an unmeasured collection prefix.
+  cmd+=("--splitting-algorithm" "least_duration")
   # CI restores a prior aggregate and uploads each shard's store for a
   # workflow-level merge job; local runs simply keep the generated file.
   cmd+=("--store-durations" "--durations-path" ".test_durations")
@@ -329,7 +382,7 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
 fi
 
 # Fast PR/local lane: sharding excludes slow tests unless the caller explicitly
-# opts into the complete suite. Main CI uses that opt-in for its four shards.
+# opts into the complete suite. Main CI uses that opt-in for its full-suite shards.
 include_slow="${ROBOT_SF_SHARD_INCLUDE_SLOW:-0}"
 case "$include_slow" in
   1|true|yes|on) include_slow=1 ;;
@@ -346,6 +399,22 @@ for pytest_arg in "${pytest_args[@]}"; do
     break
   fi
 done
+if [[ -n "${ROBOT_SF_AFFECTED_BASE_REF:-}" ]]; then
+  selection_args=(--base "$ROBOT_SF_AFFECTED_BASE_REF" --format mode)
+  if [[ -n "${ROBOT_SF_AFFECTED_SELECTION_FILE:-}" ]]; then
+    selection_args+=(--read-report "$ROBOT_SF_AFFECTED_SELECTION_FILE")
+  fi
+  selection_mode="$(uv run python "$SCRIPT_DIR/affected_test_selection.py" "${selection_args[@]}")"
+  case "$selection_mode" in
+    full) include_slow=1 ;;
+    unchanged) ;;
+    *) echo "Invalid affected-test selection decision." >&2; exit 2 ;;
+  esac
+  if [[ "$selection_mode" == "full" && "$has_marker" == "1" ]]; then
+    echo "Full affected-test admission cannot use a marker selector." >&2
+    exit 2
+  fi
+fi
 if [[ "$sharding_active" == "1" && "$has_marker" == "0" && "$include_slow" != "1" ]]; then
   cmd+=("-m" "not slow")
 fi
@@ -517,11 +586,22 @@ fi
 # Run pytest, capturing output so parallel-worker crashes can be classified
 # (issues #5633 and #8469). We capture to a log and print it on failure so a
 # crash or timeout signature is never silently swallowed by `set -e`.
-pytest_log="$(mktemp "${TMPDIR:-/tmp}/pytest_run.XXXXXX.log")"
+if [[ "$train_suite" == "1" ]]; then
+  pytest_log="${train_receipt%.*}.log"
+else
+  pytest_log="$(mktemp "${TMPDIR:-/tmp}/pytest_run.XXXXXX.log")"
+fi
 set +e
 "${cmd[@]}" >"$pytest_log" 2>&1
 pytest_exit=$?
 set -e
+if [[ "$train_suite" == "1" ]]; then
+  cat "$pytest_log"
+  python3 "$SCRIPT_DIR/train_suite_receipt.py" finalize \
+    --expect-head "$train_head" --expect-tree "$train_tree" \
+    --receipt-file "$train_receipt" --pytest-exit-code "$pytest_exit"
+  exit 0
+fi
 if [[ "$pytest_exit" -eq 5 && "$sharding_active" == "1" && "$include_slow" == "0" ]] \
   && grep -Fq "no tests ran" "$pytest_log"; then
   # PR shards intentionally exclude slow tests.  pytest-split can assign a
@@ -548,13 +628,7 @@ if [[ "$pytest_exit" -ne 0 ]]; then
   if [[ "$serial_fallback" == "1" && "$pytest_execution_mode" == "xdist" ]]; then
     printf '\n[pr_ready_check] PR_READY_SERIAL_FALLBACK=1: rerunning in-process with pytest-xdist disabled to separate env crash from real failures.\n' >&2
     serial_log="$(mktemp "${TMPDIR:-/tmp}/pytest_serial.XXXXXX.log")"
-    # ``cmd`` starts with ``uv run pytest -n <workers> --dist <mode>``. Keep
-    # the wrapper-added pytest options, but omit the xdist worker/scheduler
-    # flags entirely so the fallback runs in pytest's controller process.
-    serial_cmd=(uv run pytest)
-    if [[ ${#cmd[@]} -gt 7 ]]; then
-      serial_cmd+=("${cmd[@]:7}")
-    fi
+    serial_cmd=(uv run pytest "${cmd[@]:pytest_common_start}")
     set +e
     PYTEST_NUM_WORKERS=1 "${serial_cmd[@]}" >"$serial_log" 2>&1
     serial_exit=$?

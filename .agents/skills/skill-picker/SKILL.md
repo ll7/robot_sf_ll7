@@ -45,6 +45,7 @@ Select the smallest useful repo-local skill stack when the user request is ambig
 | Fix PR comments | `gh-pr-comment-fixer` | `pr-ready-check` |
 | Open PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify implementation | `implementation-verification` | `pr-ready-check` |
+| Write, change, or review tests | `test-value-gate` | `implementation-verification` |
 | Branch cleanup | `clean-up` | `pr-ready-check` |
 | Worktree setup or cleanup | `skill-picker` | `goal-issue-implementation`, `clean-up`; see `AGENTS.md` |
 | Benchmark-sensitive review | `review-benchmark-change` | `benchmark-row-status` |

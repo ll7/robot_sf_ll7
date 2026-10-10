@@ -14,6 +14,11 @@ real acceleration/deceleration limits, and a candidate is rejected when the
 robot could not brake to a stop before a predicted pedestrian contact. Every v4
 branch is gated on the variant, so v3 and older variants run the unchanged
 code path.
+
+For 0.1.0, ``v4_predictive_braking_enabled`` opts into a candidate-specific
+continuous stopping tube instead of the radial present-position speed bands.
+Observed pedestrian motion earns credit only inside an explicit error tube;
+the separation certificate is conditional on that prediction bound.
 """
 
 from __future__ import annotations
@@ -38,6 +43,7 @@ from robot_sf.nav.proxemic_costmap import (
     config_hash as proxemic_config_hash,
 )
 from robot_sf.planner import hybrid_route_corridor
+from robot_sf.planner.clearance_geometry import StaticObstacleClearance
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
@@ -214,6 +220,9 @@ def _resolve_drive_limits(env: Any) -> dict[str, Any]:
     if accel is None and decel is None:
         limits["source"] += "+default_accel_limits"
     _apply_angular_limits(limits, robot_config)
+    if getattr(robot_config, "limited_reverse", False):
+        limits["min_linear_speed"] = -float(robot_config.max_reverse_speed)
+        limits["reverse_drive_version"] = "limited_reverse.v1"
     return limits
 
 
@@ -273,6 +282,7 @@ class _ContinuousStaticContext:
     width: float
     height: float
     obstacle_segments: np.ndarray
+    swept_geometry: Any = None
 
 
 @dataclass
@@ -308,6 +318,9 @@ class HybridRuleLocalPlannerConfig:
     pedestrian_radius_default: float = 0.3
     hard_safety_margin: float = 0.05
     static_hard_safety_margin: float = -1.0
+    debug_candidate_evaluator: bool = False
+    physical_static_exclusion_enabled: bool = False
+    goal_next_validity_enabled: bool = False
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9
     obstacle_threshold: float = 0.5
@@ -355,6 +368,11 @@ class HybridRuleLocalPlannerConfig:
     # Reject candidates after which the robot cannot brake to a stop before a
     # constant-velocity pedestrian prediction reaches contact while it still moves.
     v4_braking_check_enabled: bool = True
+    # 0.1.0 experiment: replace radial present-position bands with a per-command
+    # stopping tube. Credit observed pedestrian motion, never assumed yielding.
+    # The guarantee is conditional on |p(t) - (p0 + v0*t)| <= error*t.
+    v4_predictive_braking_enabled: bool = False
+    v4_prediction_speed_error: float = 0.2
 
     goal_progress_weight: float = 4.0
     path_alignment_weight: float = 0.8
@@ -481,6 +499,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._v4_clearance_braking = (
             self.config.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
         )
+        if self.config.v4_predictive_braking_enabled:
+            if not self._v4_clearance_braking or not self.config.v4_braking_check_enabled:
+                raise ValueError("Predictive braking requires v4 and its braking check")
+            error = float(self.config.v4_prediction_speed_error)
+            if not np.isfinite(error) or error < 0:
+                raise ValueError("Prediction speed error must be finite and non-negative")
+            if not np.isfinite(float(self.config.v4_reaction_time)):
+                raise ValueError("Predictive braking reaction time must be finite")
         # v4 only: drive limits start from the DifferentialDriveSettings defaults
         # and are replaced by the bound environment's robot config in bind_env.
         self._drive_limits: dict[str, Any] | None = (
@@ -504,6 +530,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     # quantization from near-line route waypoints. v3 keeps its
                     # frozen historical route-guide behavior.
                     mirror_equivariant_waypoint_snap_enabled=self._v4_clearance_braking,
+                    goal_next_validity_enabled=(
+                        self._v4_clearance_braking and self.config.goal_next_validity_enabled
+                    ),
                 )
             )
             if bool(self.config.route_guide_enabled)
@@ -546,6 +575,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Hybrid v4 additionally reads the robot drive's acceleration, braking and
         speed limits here, so rollouts and braking checks use the real drive.
         """
+        if self.config.v4_predictive_braking_enabled and not isinstance(
+            _bound_robot_config(env), DifferentialDriveSettings
+        ):
+            raise ValueError("Predictive braking requires a bound differential-drive robot")
         if self._v4_clearance_braking:
             self._drive_limits = _resolve_drive_limits(env)
             self._v4_bound_timestep = _bound_timestep(env)
@@ -569,6 +602,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             width=width,
             height=height,
             obstacle_segments=obstacle_segments,
+            swept_geometry=(
+                StaticObstacleClearance(obstacle_segments.reshape(-1, 2, 2), [])
+                if self._v4_clearance_braking and self.config.physical_static_exclusion_enabled
+                else None
+            ),
         )
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -592,6 +630,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._fallback_count = 0
         self._protective_stop_count = 0
         self._last_decision: dict[str, Any] | None = None
+        self._candidate_evaluator_debug: dict[str, Any] | None = None
         self._clearance_context: _ObstacleClearanceContext | None = None
         # v4 only: the drive integrates angular acceleration, so v4 tracks the
         # angular speed it expects the robot to have from its own commands.
@@ -620,6 +659,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         goal_next = self._as_1d_float(goal_state.get("next", goal_current), pad=2)[:2]
         current_dist = float(np.linalg.norm(goal_current - robot_pos))
         next_dist = float(np.linalg.norm(goal_next - robot_pos))
+        if (
+            self._v4_clearance_braking
+            and self.config.goal_next_validity_enabled
+            and not bool(self._as_1d_float(goal_state.get("next_valid", [1]), pad=1)[0])
+        ):
+            # SocNav encodes an absent terminal successor as [0, 0], in world
+            # coordinates. Distance from the robot does not establish validity.
+            next_dist = 0.0
         if next_dist > 1e-6 and current_dist <= float(self.config.waypoint_switch_distance):
             goal = goal_next
         else:
@@ -839,6 +886,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         :func:`braking_speed_limit` of ``c - v4_braking_margin`` with the drive's
         braking deceleration, so the robot never exceeds a speed it could not
         stop from before reaching the nearest pedestrian's current position.
+        The opt-in predictive model instead admits speeds up to the drive ceiling
+        and certifies each direction independently in the stopping check.
 
         Returns:
             float: Maximum allowed linear speed for the current crowd proximity.
@@ -847,6 +896,19 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         max_speed = self._v4_effective_max_speed()
         reaction = self._v4_reaction_time(float(state["dt"]))
         clearances = self._v4_surface_clearances(state)
+        if self.config.v4_predictive_braking_enabled and clearances.size:
+            # This ceiling only admits commands to evaluation. Every candidate
+            # must pass the complete stopping tube below, including commands
+            # whose direction is unrelated to the nearest pedestrian.
+            self._last_v4_speed_safety = {
+                "model": "predictive_stopping_tube_v1",
+                "min_surface_clearance": float(np.min(clearances)),
+                "level": "candidate_stopping_check",
+                "speed_cap": max_speed,
+                "prediction_speed_error": float(self.config.v4_prediction_speed_error),
+                "reaction_time": reaction,
+            }
+            return max_speed
         if clearances.size == 0:
             min_clearance = float("inf")
             braking_cap = float("inf")
@@ -885,6 +947,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         *,
         current_speed: float,
         dt: float,
+        current_angular: float | None = None,
     ) -> list[tuple[float, float]]:
         """Replace commanded rollout speeds by the speeds the drive can realize.
 
@@ -901,12 +964,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         accel_step = float(limits["max_linear_accel"]) * float(dt)
         decel_step = float(limits["max_linear_decel"]) * float(dt)
         max_speed = self._v4_effective_max_speed()
-        speed = float(np.clip(float(current_speed), 0.0, max_speed))
-        angular_speed = float(self._v4_angular_estimate)
+        speed = float(np.clip(float(current_speed), self._min_linear_speed(max_speed), max_speed))
+        angular_speed = float(
+            self._v4_angular_estimate if current_angular is None else current_angular
+        )
         realized: list[tuple[float, float]] = []
         for linear, angular in rollout_commands:
             speed = float(np.clip(float(linear), speed - decel_step, speed + accel_step))
-            speed = float(np.clip(speed, 0.0, max_speed))
+            speed = float(np.clip(speed, self._min_linear_speed(max_speed), max_speed))
             angular_speed = self._v4_step_angular(float(angular), angular_speed, float(dt))
             realized.append((speed, angular_speed))
         return realized
@@ -933,6 +998,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             dict[str, Any] | None: Rejection diagnostics, or ``None`` when feasible.
         """
         ped_pos = state["ped_pos"]
+        if self.config.v4_predictive_braking_enabled:
+            return self._v4_predictive_braking_rejection(candidate, state, collision_radius)
         if ped_pos.size == 0:
             return None
         ped_vel = state["ped_vel"]
@@ -941,7 +1008,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         decel = max(float(limits["max_linear_decel"]), _EPS)
         accel = float(limits["max_linear_accel"])
         max_speed = self._v4_effective_max_speed()
-        current_speed = float(np.clip(float(state["current_speed"]), 0.0, max_speed))
+        current_speed = float(
+            np.clip(float(state["current_speed"]), self._min_linear_speed(max_speed), max_speed)
+        )
         speed = float(
             np.clip(
                 float(candidate.linear),
@@ -949,16 +1018,21 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 current_speed + accel * step,
             )
         )
-        speed = float(np.clip(speed, 0.0, max_speed))
+        speed = float(np.clip(speed, self._min_linear_speed(max_speed), max_speed))
         moving_threshold = max(float(self.config.freezing_speed_threshold), 0.0)
         robot_pos = np.array(state["robot_pos"], dtype=float)
         heading = float(state["heading"])
         start_distances = np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)
-        max_steps = int(np.ceil(max_speed / (decel * step))) + 2
+        braking_peak = max_speed
+        braking_authority = decel
+        if self._min_linear_speed(max_speed) < 0.0:
+            braking_peak = max(max_speed, abs(self._min_linear_speed(max_speed)))
+            braking_authority = min(accel, decel)
+        max_steps = int(np.ceil(braking_peak / (braking_authority * step))) + 2
         elapsed = 0.0
         angular_speed = float(self._v4_angular_estimate)
         for step_idx in range(max_steps):
-            if speed <= moving_threshold:
+            if abs(speed) <= moving_threshold:
                 return None
             # Commit step: turn toward the candidate's rate; braking tail: the
             # drive is commanded to zero turn rate and decays at its limit.
@@ -980,8 +1054,199 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     "collision_radius": float(collision_radius),
                     "time": float(elapsed),
                 }
-            speed = max(0.0, speed - decel * step)
+            speed = (
+                max(0.0, speed - decel * step) if speed >= 0.0 else min(0.0, speed + accel * step)
+            )
         return None
+
+    def _v4_predictive_braking_rejection(
+        self, candidate: HybridRuleCandidate, state: dict[str, Any], collision_radius: float
+    ) -> dict[str, Any] | None:
+        """Certify separation through a drive-realizable reaction and full stop.
+
+        Pedestrian centres follow the observed world-frame velocity with a
+        reachable error disk of radius ``v4_prediction_speed_error * t``.
+        For every interval, minimize relative chord separation analytically
+        and subtract the disk at the interval end. The differential drive's
+        midpoint odometry is used, with a conservative turning allowance
+        ``distance * abs(turn) / 2`` and acceleration interpolation allowance
+        ``abs(delta_speed) * dt / 8``. The triangle inequality then guarantees
+        centre separation strictly above ``collision_radius`` through stopping,
+        provided the pedestrian stays inside its tube and drive limits hold.
+
+        No simulator-wide acceleration bound is assumed. This is a conditional
+        prediction guarantee, not a guarantee that pedestrians will yield or
+        cannot subsequently walk into a stopped robot. Current overlap fails
+        closed; the legacy decreasing-distance exception is not used.
+
+        Returns:
+            Rejection diagnostics, or None when the full stopping tube is clear.
+        """
+        pedestrians = state["ped_pos"]
+        if pedestrians.size == 0:
+            return None
+        collision_radius = max(
+            collision_radius,
+            float(state["robot_radius"])
+            + float(state["ped_radius"])
+            + float(self.config.v4_braking_margin),
+        )
+        limits = self._v4_drive_limits()
+        dt = max(float(state["dt"]), 1e-3)
+        reaction_steps = max(1, int(np.ceil(self._v4_reaction_time(dt) / dt)))
+        decel = max(float(limits["max_linear_decel"]), _EPS)
+        accel = max(float(limits["max_linear_accel"]), _EPS)
+        maximum = self._v4_effective_max_speed()
+        minimum = self._min_linear_speed(maximum)
+        speed = float(state["current_speed"])
+        robot_fields, _, _ = self._socnav_fields(state.get("observation", {}))
+        angular = float(
+            self._as_1d_float(
+                robot_fields.get("angular_velocity", [self._v4_angular_estimate]), pad=1
+            )[0]
+        )
+        pos = np.array(state["robot_pos"], dtype=float)
+        heading = float(state["heading"])
+        braking_peak = max(maximum, abs(minimum), abs(speed))
+        count = reaction_steps + int(np.ceil(braking_peak / (min(accel, decel) * dt))) + 1
+        error = float(self.config.v4_prediction_speed_error)
+        positions = [pos.copy()]
+        paddings = []
+        for i in range(count):
+            target = float(candidate.linear) if i < reaction_steps else 0.0
+            next_speed = float(np.clip(target, speed - decel * dt, speed + accel * dt))
+            next_speed = float(np.clip(next_speed, minimum, maximum))
+            next_angular = self._v4_step_angular(
+                float(candidate.angular) if i < reaction_steps else 0.0, angular, dt
+            )
+            turn = 0.5 * (angular + next_angular) * dt
+            distance = 0.5 * (speed + next_speed) * dt
+            end = pos + distance * np.array(
+                [np.cos(heading + turn / 2), np.sin(heading + turn / 2)]
+            )
+            padding = abs(distance * turn) / 2 + abs(next_speed - speed) * dt / 8
+            positions.append(end.copy())
+            paddings.append(padding)
+            pos, heading, speed, angular = (
+                end,
+                _wrap_angle(heading + turn),
+                next_speed,
+                next_angular,
+            )
+            if i >= reaction_steps and abs(speed) <= _EPS:
+                break
+        else:
+            raise RuntimeError("Predictive stopping check did not reach zero speed")
+        # Batch all time intervals and pedestrians; no sampling of closest approach.
+        nodes = np.asarray(positions)
+        times = np.arange(len(paddings)) * dt
+        relative_start = (
+            pedestrians[None, :, :]
+            + times[:, None, None] * state["ped_vel"][None, :, :]
+            - nodes[:-1, None, :]
+        )
+        relative_delta = state["ped_vel"][None, :, :] * dt - np.diff(nodes, axis=0)[:, None, :]
+        squared = np.sum(relative_delta * relative_delta, axis=2)
+        fractions = np.clip(
+            -np.sum(relative_start * relative_delta, axis=2) / np.where(squared > 0, squared, 1),
+            0,
+            1,
+        )
+        separation = np.linalg.norm(relative_start + fractions[:, :, None] * relative_delta, axis=2)
+        lower = np.min(separation, axis=1) - error * (times + dt) - np.asarray(paddings)
+        violating = np.flatnonzero(~np.isfinite(lower) | (lower <= collision_radius))
+        if violating.size:
+            index = int(violating[0])
+            return {
+                "accepted": False,
+                "reason": "braking_infeasible",
+                "candidate": candidate,
+                "min_dynamic_clearance": float(lower[index]),
+                "collision_radius": float(collision_radius),
+                "time": float(times[index] + dt),
+                "prediction_speed_error": error,
+                "model": "predictive_stopping_tube_v1",
+            }
+        return None
+
+    def _v4_wall_stopping_rejection(
+        self, candidate: HybridRuleCandidate, state: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Check the committed interval and complete braking tail against map walls.
+
+        Uses trapezoidal speed, midpoint heading and a conservative arc-to-chord
+        bound: sagitta <= arc_length * abs(turn_angle) / 8. No pedestrian
+        prediction or finite collision horizon truncates this physical stop check.
+
+        Returns:
+            Rejection evidence for a wall in the stopping sweep, otherwise None.
+        """
+        context = self._continuous_static_context
+        if not self.config.physical_static_exclusion_enabled or context is None:
+            return None
+        geometry = context.swept_geometry
+        if geometry is None:
+            return None
+        limits = self._v4_drive_limits()
+        dt = max(float(state["dt"]), 1e-3)
+        radius = float(state["robot_radius"])
+        pos = np.array(state["robot_pos"], dtype=float)
+        heading = float(state["heading"])
+        maximum = self._v4_effective_max_speed()
+        minimum = self._min_linear_speed(maximum)
+        speed = float(np.clip(float(state["current_speed"]), minimum, maximum))
+        robot_fields, _, _ = self._socnav_fields(state["observation"])
+        angular = float(
+            self._as_1d_float(
+                robot_fields.get("angular_velocity", [self._v4_angular_estimate]), pad=1
+            )[0]
+        )
+        decel = max(float(limits["max_linear_decel"]), _EPS)
+        accel = max(float(limits["max_linear_accel"]), _EPS)
+        count = int(np.ceil(max(abs(speed), maximum, abs(minimum)) / (min(accel, decel) * dt))) + 2
+        for i in range(count):
+            next_speed = (
+                max(0.0, speed - decel * dt) if speed >= 0.0 else min(0.0, speed + accel * dt)
+            )
+            if i == 0:
+                next_speed = float(
+                    np.clip(candidate.linear, speed - decel * dt, speed + accel * dt)
+                )
+                next_speed = float(np.clip(next_speed, minimum, maximum))
+            next_angular = self._v4_step_angular(candidate.angular if i == 0 else 0, angular, dt)
+            turn = 0.5 * (angular + next_angular) * dt
+            signed_distance = 0.5 * (speed + next_speed) * dt
+            distance = abs(signed_distance)
+            travel_heading = heading + turn / 2 + (np.pi if signed_distance < 0.0 else 0.0)
+            end = pos + distance * np.array([np.cos(travel_heading), np.sin(travel_heading)])
+            padding = abs(distance * turn) / 8.0
+            if geometry.clearance(end, radius + padding, pos) <= 0:
+                return {
+                    "accepted": False,
+                    "reason": "wall_braking_infeasible",
+                    "candidate": candidate,
+                    "hard_static_clearance": radius,
+                    "continuous_static_collision": True,
+                    "arc_padding_m": padding,
+                    "time": (i + 1) * dt,
+                }
+            pos, heading, speed, angular = (
+                end,
+                _wrap_angle(heading + turn),
+                next_speed,
+                next_angular,
+            )
+            if abs(speed) <= _EPS:
+                return None
+        return None
+
+    def _min_linear_speed(self, speed_cap: float) -> float:
+        """Return the opt-in reverse bound, restricted by the current safety cap."""
+        if not self._v4_clearance_braking:
+            return 0.0
+        return max(
+            float(self._v4_drive_limits().get("min_linear_speed", 0.0)), -max(speed_cap, 0.0)
+        )
 
     def _dynamic_window(
         self, current_speed: float, speed_cap: float
@@ -995,7 +1260,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         else:
             linear_decel = float(self.config.max_linear_decel)
             linear_accel = float(self.config.max_linear_accel)
-        v_min = max(0.0, float(current_speed) - linear_decel * period)
+        v_min = max(self._min_linear_speed(speed_cap), float(current_speed) - linear_decel * period)
         v_max = min(
             float(speed_cap),
             float(current_speed) + linear_accel * period,
@@ -1052,7 +1317,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             segments.append(
                 (
                     duration,
-                    float(np.clip(linear, 0.0, max_linear)),
+                    float(np.clip(linear, self._min_linear_speed(speed_cap), max_linear)),
                     float(np.clip(angular, -max_angular, max_angular)),
                 )
             )
@@ -1068,7 +1333,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         max_linear = max(min(float(speed_cap), float(self.config.max_linear_speed)), 0.0)
         max_angular = max(self._max_angular_speed(), 0.0)
         return HybridRuleCandidate(
-            float(np.clip(candidate.linear, 0.0, max_linear)),
+            float(np.clip(candidate.linear, self._min_linear_speed(speed_cap), max_linear)),
             float(np.clip(candidate.angular, -max_angular, max_angular)),
             candidate.source,
             self._clip_rollout_sequence(candidate.rollout_sequence, speed_cap=speed_cap),
@@ -1124,7 +1389,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             tuple[float, float]: Mean and maximum linear speed across rollout steps.
         """
         linear_values = [command[0] for command in rollout_commands]
-        return float(np.mean(linear_values)), float(np.max(linear_values))
+        return float(np.mean(linear_values)), float(np.max(np.abs(linear_values)))
 
     def _candidate_source_priority(self, source: str) -> int:
         """Return a source priority for preserving specialized duplicate commands."""
@@ -1790,6 +2055,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ]
         )
 
+        if self.config.static_clearance_escape_enabled and v_min < 0.0:
+            reverse_speed = max(v_min, -float(self.config.static_clearance_escape_max_speed))
+            candidates.append(HybridRuleCandidate(reverse_speed, 0.0, "reverse_escape"))
+
         unique: dict[tuple[Any, ...], HybridRuleCandidate] = {}
         for candidate in candidates:
             clipped = self._clip_candidate(candidate, speed_cap=speed_cap)
@@ -1917,6 +2186,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "candidate": candidate,
                 "continuous_static_collision": True,
                 "hard_static_clearance": float(hard_static_clearance),
+                "arc_padding_m": 0.0,
                 "time": float(t),
             }
         return None
@@ -2068,9 +2338,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             return False
         if current_min_clearance < min_escape_clearance:
             return False
-        if candidate.linear <= float(self.config.freezing_speed_threshold):
+        if abs(candidate.linear) <= float(self.config.freezing_speed_threshold):
             return False
-        if candidate.linear > float(self.config.static_clearance_escape_max_speed):
+        if abs(candidate.linear) > float(self.config.static_clearance_escape_max_speed):
             return False
         tolerance = max(float(self.config.static_clearance_escape_tolerance), 0.0)
         if initial_clearance > hard_static_clearance:
@@ -2096,9 +2366,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if not bool(self.config.static_corridor_transit_enabled):
             return False
-        if candidate.linear <= float(self.config.freezing_speed_threshold):
+        if abs(candidate.linear) <= float(self.config.freezing_speed_threshold):
             return False
-        if candidate.linear > float(self.config.static_clearance_escape_max_speed):
+        if abs(candidate.linear) > float(self.config.static_clearance_escape_max_speed):
             return False
         if step_progress <= 0.0:
             return False
@@ -2170,7 +2440,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if not bool(self.config.static_recenter_enabled):
             return 0.0
-        if candidate.linear > float(self.config.freezing_speed_threshold):
+        if abs(candidate.linear) > float(self.config.freezing_speed_threshold):
             return 0.0
         if abs(candidate.angular) < float(self.config.deadlock_rotation_threshold):
             return 0.0
@@ -2594,6 +2864,32 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 or bool(self.config.continuous_static_clearance_enabled)
             )
         )
+        physical_static_exclusion = (
+            self._v4_clearance_braking
+            and bool(self.config.physical_static_exclusion_enabled)
+            and use_continuous_static_check
+        )
+        if physical_static_exclusion:
+            # Exact map geometry excludes the physical body. The discretionary
+            # margin stays a soft preference below; it is not wall contact.
+            hard_static_clearance = float(state["robot_radius"])
+            required_static_clearance = hard_static_clearance + corridor_clearance_buffer
+            # Check the first committed plant step, then every plant interval.
+            # Trapezoidal velocity and midpoint heading match DifferentialDriveMotion.
+            dt = max(float(state["dt"]), 1e-3)
+            steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
+            robot_fields, _, _ = self._socnav_fields(state["observation"])
+            current_angular = float(
+                self._as_1d_float(
+                    robot_fields.get("angular_velocity", [self._v4_angular_estimate]), pad=1
+                )[0]
+            )
+            rollout_commands = self._v4_realized_rollout_commands(
+                self._candidate_rollout_commands(candidate, dt=dt, steps=steps),
+                current_speed=float(state["current_speed"]),
+                dt=dt,
+                current_angular=current_angular,
+            )
         proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
         return {
             "dt": dt,
@@ -2610,6 +2906,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "corridor_clearance_buffer": corridor_clearance_buffer,
             "required_static_clearance": required_static_clearance,
             "use_continuous_static_check": use_continuous_static_check,
+            "physical_static_exclusion": physical_static_exclusion,
+            "previous_linear": float(state["current_speed"]),
+            "previous_angular": current_angular if physical_static_exclusion else 0.0,
             "proxemic_enabled": proxemic_enabled,
             "proxemic_costmap_config": self._proxemic_costmap_config if proxemic_enabled else None,
             "rollout_points": [np.array(robot_pos, dtype=float)] if proxemic_enabled else None,
@@ -2729,15 +3028,44 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
         for step_idx, (step_linear, step_angular) in enumerate(ctx["rollout_commands"]):
             t = (step_idx + 1) * ctx["dt"]
-            robot_pos = (
-                robot_pos
-                + np.array(
-                    [step_linear * np.cos(heading), step_linear * np.sin(heading)],
-                    dtype=float,
+            if ctx["physical_static_exclusion"]:
+                previous = robot_pos.copy()
+                delta_heading = 0.5 * (ctx["previous_angular"] + step_angular) * ctx["dt"]
+                mid_heading = heading + delta_heading / 2
+                distance = 0.5 * (ctx["previous_linear"] + step_linear) * ctx["dt"]
+                robot_pos = previous + distance * np.array(
+                    [np.cos(mid_heading), np.sin(mid_heading)]
                 )
-                * ctx["dt"]
-            )
-            heading = _wrap_angle(heading + step_angular * ctx["dt"])
+                heading = _wrap_angle(heading + delta_heading)
+                ctx["previous_linear"], ctx["previous_angular"] = step_linear, step_angular
+                geometry = self._continuous_static_context.swept_geometry
+                arc_padding = abs(distance * delta_heading) / 8.0
+                if (
+                    geometry.clearance(
+                        robot_pos, ctx["hard_static_clearance"] + arc_padding, previous
+                    )
+                    <= 0
+                ):
+                    return {
+                        "accepted": False,
+                        "reason": "static_collision",
+                        "candidate": candidate,
+                        "continuous_static_collision": True,
+                        "hard_static_clearance": ctx["hard_static_clearance"],
+                        "swept_plant_interval": True,
+                        "arc_padding_m": float(arc_padding),
+                        "time": float(t),
+                    }
+            else:
+                robot_pos = (
+                    robot_pos
+                    + np.array(
+                        [step_linear * np.cos(heading), step_linear * np.sin(heading)],
+                        dtype=float,
+                    )
+                    * ctx["dt"]
+                )
+                heading = _wrap_angle(heading + step_angular * ctx["dt"])
             if ctx["proxemic_enabled"] and ctx["rollout_points"] is not None:
                 ctx["rollout_points"].append(np.array(robot_pos, dtype=float))
 
@@ -2919,6 +3247,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance / max(float(self.config.desired_static_clearance), _EPS)
             )
         )
+        if ctx["physical_static_exclusion"] and not np.isinf(min_static_clearance):
+            static_clearance = _clip01(
+                (min_static_clearance - float(state["robot_radius"]))
+                / max(float(self.config.desired_static_clearance), _EPS)
+            )
         rollout_mean_linear, rollout_max_linear = self._rollout_linear_stats(rollout_commands)
         dynamic_clearance = (
             1.0
@@ -2970,7 +3303,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and stalled_progress
             and start_dist > float(self.config.goal_far_distance)
             and recovery_nearest_ped >= float(self.config.slow_distance_human)
-            and candidate.linear <= float(self.config.freezing_speed_threshold)
+            and abs(candidate.linear) <= float(self.config.freezing_speed_threshold)
             and abs(candidate.angular) >= float(self.config.deadlock_rotation_threshold)
             else 0.0
         )
@@ -3336,6 +3669,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         if collision_rejection is not None:
             return collision_rejection
         if self._v4_clearance_braking and bool(self.config.v4_braking_check_enabled):
+            wall_rejection = self._v4_wall_stopping_rejection(candidate, state)
+            if wall_rejection is not None:
+                return wall_rejection
             braking_rejection = self._v4_braking_rejection(
                 candidate=candidate,
                 state=state,
@@ -3425,6 +3761,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         for key in (
             "min_static_clearance",
             "hard_static_clearance",
+            "arc_padding_m",
             "required_static_clearance",
             "min_dynamic_clearance",
             "collision_radius",
@@ -3468,6 +3805,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         moving_rejection_counts: Counter[str] = Counter()
         rejection_counts_by_source: dict[str, Counter[str]] = {}
         rejected_examples: list[dict[str, Any]] = []
+        debug_constraints: Counter[tuple[str, str | None, float | None, float | None]] = Counter()
 
         for candidate in candidates:
             evaluation = self._evaluate_candidate(
@@ -3486,13 +3824,58 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 continue
 
             reason = str(evaluation.get("reason", "unknown"))
+            if self.config.debug_candidate_evaluator:
+                name, threshold_name, threshold = self._debug_rejection_constraint(evaluation)
+                debug_constraints[
+                    (name, threshold_name, threshold, evaluation.get("arc_padding_m"))
+                ] += 1
             rejection_counts[reason] += 1
             source_counts = rejection_counts_by_source.setdefault(candidate.source, Counter())
             source_counts[reason] += 1
-            if candidate.linear > float(self.config.freezing_speed_threshold):
+            if abs(candidate.linear) > float(self.config.freezing_speed_threshold):
                 moving_rejection_counts[reason] += 1
             if len(rejected_examples) < max(int(self.config.top_k_diagnostics), 1):
                 rejected_examples.append(self._rejection_diagnostic(evaluation))
+
+        if self.config.debug_candidate_evaluator:
+            moving = [item for item in accepted if abs(item["candidate"].linear) > _EPS]
+            best_moving = max(moving, key=lambda item: float(item["score"]), default=None)
+            self._candidate_evaluator_debug = {
+                "speed_cap_m_s": float(speed_cap),
+                "constraint_context": {
+                    "hard_collision_horizon_s": float(self.config.hard_collision_horizon),
+                    "near_human_activation_distance_m": float(
+                        self.config.near_human_angular_limit_distance
+                    ),
+                    "braking_moving_threshold_m_s": float(self.config.freezing_speed_threshold),
+                    "physical_robot_radius_m": float(state["robot_radius"]),
+                    "physical_pedestrian_radius_m": float(state["ped_radius"]),
+                },
+                "constraints": [
+                    {
+                        "constraint": name,
+                        "threshold_name": key,
+                        "threshold": value,
+                        "rejected": count,
+                        **({"arc_padding_m": padding} if padding is not None else {}),
+                    }
+                    for (name, key, value, padding), count in sorted(
+                        debug_constraints.items(),
+                        key=lambda item: (
+                            item[0][0],
+                            "" if item[0][1] is None else item[0][1],
+                            float("-inf") if item[0][2] is None else item[0][2],
+                            float("-inf") if item[0][3] is None else item[0][3],
+                        ),
+                    )
+                ],
+                "candidate_count": len(candidates),
+                "feasible_moving_count": len(moving),
+                "best_feasible_moving": self._candidate_diagnostic(best_moving)
+                if best_moving is not None
+                else None,
+                "moving_epsilon_m_s": _EPS,
+            }
 
         return (
             accepted,
@@ -3505,10 +3888,58 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             rejected_examples,
         )
 
+    def _debug_rejection_constraint(
+        self, evaluation: dict[str, Any]
+    ) -> tuple[str, str | None, float | None]:
+        """Name the first hard predicate and its actual threshold for a rejected candidate.
+
+        Returns:
+            Constraint name, threshold name, and threshold value in the named units.
+        """
+        reason = str(evaluation["reason"])
+        if reason == "wall_braking_infeasible":
+            return (
+                reason,
+                "exclusion_radius_m",
+                float(evaluation["hard_static_clearance"])
+                + float(evaluation.get("arc_padding_m", 0)),
+            )
+        if reason == "static_collision":
+            if evaluation.get("continuous_static_collision"):
+                return (
+                    "exact_body_wall_overlap",
+                    "exclusion_radius_m",
+                    float(evaluation["hard_static_clearance"])
+                    + float(evaluation.get("arc_padding_m", 0)),
+                )
+            return (
+                "occupied_center_cell",
+                "obstacle_threshold",
+                float(self.config.obstacle_threshold),
+            )
+        if reason == "static_clearance":
+            return (
+                reason,
+                "required_clearance_m",
+                float(
+                    evaluation.get("required_static_clearance", evaluation["hard_static_clearance"])
+                ),
+            )
+        if reason in {"dynamic_collision", "braking_infeasible"}:
+            return reason, "collision_radius_m", float(evaluation["collision_radius"])
+        if reason == "excessive_angular_near_human":
+            return (
+                reason,
+                "max_angular_speed_rad_s",
+                float(self.config.near_human_max_angular_speed),
+            )
+        return f"unknown:{reason}", None, None
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the selected ``(linear, angular)`` command."""
         if self._v4_clearance_braking:
             self._last_v4_speed_safety = None
+        self._candidate_evaluator_debug = None
         state = self._extract_state(observation)
         if self._v4_clearance_braking:
             self._v4_last_dt = float(state["dt"])
@@ -3762,6 +4193,26 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "selected_actuation_diagnostics": actuation_diagnostics,
             "selected_static_safety_gate": static_safety_gate,
         }
+        if self.config.debug_candidate_evaluator:
+            debug = copy.deepcopy(self._candidate_evaluator_debug) or {
+                "constraints": [],
+                "candidate_count": 0,
+                "feasible_moving_count": 0,
+                "best_feasible_moving": None,
+                "moving_epsilon_m_s": _EPS,
+            }
+            stopped = abs(command[0]) <= _EPS
+            debug["chosen_stop"] = stopped
+            debug["stop_kind"] = (
+                (
+                    "GOAL"
+                    if mode == "GOAL_STOP"
+                    else ("PREFERRED" if debug["feasible_moving_count"] else "FORCED")
+                )
+                if stopped
+                else None
+            )
+            self._last_decision["candidate_evaluator_debug"] = debug
         if self._v4_clearance_braking:
             # v4-only keys; v3 decision payloads stay byte-identical.
             self._v4_angular_estimate = self._v4_step_angular(
@@ -3775,7 +4226,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
     def _v4_speed_safety_metadata(self) -> dict[str, Any]:
         """Return episode-level v4 speed-safety metadata (thresholds and drive limits)."""
         limits = dict(self._v4_drive_limits())
-        return {
+        payload = {
             "model": HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
             "clearance_reference": "surface",
             "stop_clearance_human": float(self.config.v4_stop_clearance_human),
@@ -3795,6 +4246,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ],
             "centre_distance_gates": ["near_human_angular_limit_distance"],
         }
+        if self.config.v4_predictive_braking_enabled:
+            payload.update(
+                model="predictive_stopping_tube_v1",
+                prediction_speed_error=float(self.config.v4_prediction_speed_error),
+                prediction_guarantee="conditional_on_pedestrian_error_tube",
+                radial_speed_bands_enabled=False,
+            )
+        return payload
 
     def diagnostics(self) -> dict[str, Any]:
         """Return aggregate planner diagnostics for benchmark episode metadata."""

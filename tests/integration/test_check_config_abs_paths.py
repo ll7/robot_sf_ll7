@@ -180,6 +180,43 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
+    def test_issue_9645_packet_has_no_pinned_exemption_and_no_absolute_paths(self) -> None:
+        """The issue-9645 packet ships no exact producer copies and needs no hook exemption.
+
+        The exact producer records contained absolute host paths; they are withheld and
+        only their digests are recorded. The packet must pass the ordinary scan.
+        """
+        repo_root = Path(__file__).resolve().parents[2]
+        packet = "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24"
+        assert not [
+            path
+            for path in abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256
+            if path.startswith(packet + "/")
+        ]
+        assert not (repo_root / packet / "payload/source_episode_records").exists()
+        files = sorted(str(path) for path in (repo_root / packet).rglob("*") if path.is_file())
+        assert files
+        result = find_abs_path_violations(files)
+        assert result["status"] == "pass", result["violations"][:3]
+
+    def test_issue_9645_packet_path_with_absolute_route_is_rejected(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A producer-style record with an absolute route path fails at the packet location."""
+        monkeypatch.chdir(tmp_path)
+        rel = (
+            "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+            "payload/source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl"
+        )
+        path = _write(
+            tmp_path,
+            rel,
+            '{"scenario_params": {"route_overrides_file": "/home/user/out/route.yaml"}}\n',
+        )
+        result = find_abs_path_violations([path])
+        assert result["status"] == "fail"
+        assert len(result["violations"]) == 1
+
     def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
         """Docs files outside docs/context/evidence/ are not scanned."""
         monkeypatch.chdir(tmp_path)

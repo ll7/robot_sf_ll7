@@ -18,6 +18,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Promote a reviewed PR after green CI or merge a ready PR | `gh-pr-merger` | `goal-pr-review` |
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify branch claims | `implementation-verification` | `pr-ready-check` |
+| Write, change, or review tests | `test-value-gate` | `implementation-verification` |
 | Run the standard readiness gate | `pr-ready-check` | none |
 | Set up or clean up worktrees | `skill-picker` | `goal-issue-implementation`, `clean-up`; see `AGENTS.md` |
 | Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |
@@ -194,6 +195,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `pr-ready-check` | atomic | verification | no | no | no | none | Run the repository PR readiness pipeline using shared scripts/dev entry points (ruff fix/format, parallel tests, coverage, and docstring checks). |
 | `quality-playbook` | policy | verification | no | no | no | none | Repo-wide risk-proportional validation workflow for non-trivial changes with context, risk, validation, and follow-through. |
 | `review-and-refactor` | atomic | verification | yes | no | no | none | Surgical review-then-refactor workflow for small code or docs changes; use when a task needs inspection before a narrow improvement. |
+| `test-value-gate` | atomic | verification | no | no | no | none | Decide whether a pytest test is worth adding, changing, or keeping, and prove that bug tests fail for the right reason. |
 
 ## Aliases
 

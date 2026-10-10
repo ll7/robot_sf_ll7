@@ -1,5 +1,7 @@
 <!-- AI-GENERATED (robot_sf_ll7#6969, 2026-08-13) - NEEDS-REVIEW -->
 
+**Affected / superseded geometry evidence (#10056).** This historical bundle used the pre-fix emergent-phenomena builders, whose walls were misplaced by the endpoint/axis tuple-order defect. Its original measurements and exhibits are retained for comparison, not current face-validity evidence. See the [corrected-wall replay](../issue_10056_wall_order_2026-09/README.md) and [issue #10056](https://github.com/ll7/robot_sf_ll7/issues/10056). Historical replay GIFs drew intended walls while pedestrians used misplaced walls.
+
 # Issue #6969 lane-formation reference and Stage A diagnostic
 
 Plain-language summary: the lane metrics distinguish known mixed and separated
@@ -21,8 +23,8 @@ none met the predeclared three-seed clear-hit rule.
 - Reference implementation commit: `e298120d5ffd9782046c8401c8163877a1e245bc`.
 - Stage A implementation commit: `8273fc384210a453b09e86d898141f7ae5d358c0`.
 - Runtime: Python 3.13.14, PySocialForce 2.0.0, Linux x86_64.
-- Reference command: `uv run python scripts/validation/run_issue_6969_lane_formation_reference.py --output-dir output/diagnostics/issue_6969_lane_formation_reference --generated-at 2026-08-13T08:40:00Z`.
-- Stage A command: `uv run python scripts/validation/run_issue_6969_parameter_screen.py --output-dir output/diagnostics/issue_6969_parameter_screen --generated-at 2026-08-13T08:45:00Z`.
+- Reference command template: `uv run python scripts/validation/run_issue_6969_lane_formation_reference.py --output-dir <scratch-root>/diagnostics/issue_6969_lane_formation_reference --generated-at 2026-08-13T08:40:00Z`.
+- Stage A command template: `uv run python scripts/validation/run_issue_6969_parameter_screen.py --output-dir <scratch-root>/diagnostics/issue_6969_parameter_screen --generated-at 2026-08-13T08:45:00Z`.
 - Native protocol: 3 seeds (`5149, 5150, 5151`), 100 warm-up steps discarded, 200 observation steps, boundary recycling for sustained occupancy, sampling strides 1/2/4.
 - Reference package: 12 native rows across mixed sustained flow and initialized separated-lane control, plus a synthetic metric audit.
 - Stage A package: eight frozen Latin-hypercube profiles over seven declared factors plus released-default and literature-typical anchors; 30 native rows.
@@ -64,6 +66,7 @@ tested envelope; it is inconclusive about regimes outside that envelope.
 Stop here for this diagnostic package. Any continuation must separately freeze a
 candidate-selection and held-out confirmation design, add fidelity outcomes (arching,
 doorway oscillation, throughput, overlap/collision diagnostics), and obtain domain
-review before a parameter recommendation or released-default decision. Raw rows,
-manifests, and checksums remain ignored local artifacts; this directory contains only
-the compact tracked synthesis and provenance pointers.
+review before a parameter recommendation or released-default decision. Raw rows and manifests
+were disposable git-ignored worktree-local scratch and are unavailable; no durable retrieval
+pointer exists. This directory retains only the compact tracked synthesis, with recorded hashes
+that cannot be rechecked against the missing raw files.

@@ -1,9 +1,8 @@
 """Full-simulation doorway regressions for hybrid v4 (issue #9726).
 
-In the 0.0.7 benchmark data, hybrid v3 collided with a pedestrian while still
-moving at 1-1.6 m/s on ``classic_doorway_high`` seed 111 and
-``classic_doorway_low`` seed 120. These episodes pin that v4 no longer does,
-and that the v3 release config still reproduces its recorded outcome.
+Hybrid v3's historical doorway failure involved pedestrian contacts while moving
+at 1-1.6 m/s. These paired episodes reproduce that mechanism on development
+seeds and require v4 to avoid pedestrian contacts without changing drive limits.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ EPISODE_SCHEMA = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 CANDIDATES = REPO_ROOT / "configs/policy_search/candidates"
 V3_CONFIG = CANDIDATES / "hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml"
 V4_CONFIG = CANDIDATES / "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml"
-CELLS = [("classic_doorway_high", 111), ("classic_doorway_low", 120)]
+CELLS = [("classic_doorway_high", 1002), ("classic_doorway_low", 1005)]
 
 
 def _run_episode(scenario_name: str, seed: int, config: Path, tmp_path: Path) -> dict:

@@ -1,0 +1,569 @@
+{
+  "schema_version": "fxm2_replay_comparison.v1",
+  "reviewed_head": "977378cbdb0d587a65b11cd28bba4c4bab6c2aba",
+  "seeds": [
+    1003,
+    1004
+  ],
+  "pairs": 9,
+  "positions_outcomes_identical": true,
+  "undeclared_metric_changes": [],
+  "success_efficiency_reference_violations": 0,
+  "changed_metric_union": [
+    "deadlock",
+    "deadlock_stall",
+    "path_efficiency",
+    "path_efficiency_reference_violation",
+    "social_mini_game",
+    "time_to_goal_ideal_ratio"
+  ],
+  "rows": [
+    {
+      "episode": "classic_merging_low__goal__1003",
+      "seed": 1003,
+      "steps": 600,
+      "termination_reason": "terminated",
+      "success": false,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        true,
+        false
+      ],
+      "stall_windows": [
+        114,
+        0
+      ],
+      "path_efficiency": [
+        0.987226571315969,
+        null
+      ],
+      "failed_raw_efficiency_is_nan": true,
+      "reference_m": [
+        55.26441070588134,
+        51.964512167632265
+      ],
+      "time_to_goal_ideal_ratio": [
+        null,
+        null
+      ],
+      "changed_metric_keys": [
+        "deadlock",
+        "deadlock_stall.max_no_progress_run",
+        "deadlock_stall.stall_window_count",
+        "path_efficiency",
+        "path_efficiency_reference_violation"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "adb46ea1018ec401dde1ca09d27003f725d90ed16ca27e1ff0bada095d7dbff3",
+        "after": "c20aa386fc6ebf45f35ecacf19810925a5654a3c47413418d5f5f14cb05a4903"
+      }
+    },
+    {
+      "episode": "classic_merging_low__goal__1004",
+      "seed": 1004,
+      "steps": 600,
+      "termination_reason": "terminated",
+      "success": false,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        true,
+        false
+      ],
+      "stall_windows": [
+        113,
+        0
+      ],
+      "path_efficiency": [
+        0.9689486936053121,
+        null
+      ],
+      "failed_raw_efficiency_is_nan": true,
+      "reference_m": [
+        54.08391884827787,
+        49.757614742958076
+      ],
+      "time_to_goal_ideal_ratio": [
+        null,
+        null
+      ],
+      "changed_metric_keys": [
+        "deadlock",
+        "deadlock_stall.max_no_progress_run",
+        "deadlock_stall.stall_window_count",
+        "path_efficiency",
+        "path_efficiency_reference_violation"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "df03f2534643ec4d9de5ab86e0a311e601e9b8d3cac3bf654eb1c591058c225c",
+        "after": "b68aab6b3cfca113682c0103704973ff11d00ba98953d8ef38c2fd558ee23094"
+      }
+    },
+    {
+      "episode": "classic_merging_low__hybrid_rule_local_planner__1003",
+      "seed": 1003,
+      "steps": 519,
+      "termination_reason": "success",
+      "success": true,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        166,
+        0
+      ],
+      "path_efficiency": [
+        0.8049183287311944,
+        0.7568557730563307
+      ],
+      "failed_raw_efficiency_is_nan": false,
+      "reference_m": [
+        55.26441070588134,
+        51.964512167632265
+      ],
+      "time_to_goal_ideal_ratio": [
+        1.8782431346717214,
+        1.9975170682859815
+      ],
+      "changed_metric_keys": [
+        "deadlock_stall.max_no_progress_run",
+        "deadlock_stall.stall_window_count",
+        "path_efficiency",
+        "path_efficiency_reference_violation",
+        "social_mini_game.rows",
+        "time_to_goal_ideal_ratio"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "0da5322d88e1589d87f0b50e1b5a0a44de49ea407a2d83ad65d58bbe1a2c34bb",
+        "after": "e43810dfb89b4abdb94ffb9e38eaa5224b9f375cd18e0f5423e441c7158c035b"
+      }
+    },
+    {
+      "episode": "classic_merging_low__hybrid_rule_local_planner__1004",
+      "seed": 1004,
+      "steps": 448,
+      "termination_reason": "success",
+      "success": true,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        120,
+        0
+      ],
+      "path_efficiency": [
+        0.8088188686083748,
+        0.7441194816882656
+      ],
+      "failed_raw_efficiency_is_nan": false,
+      "reference_m": [
+        54.08391884827787,
+        49.757614742958076
+      ],
+      "time_to_goal_ideal_ratio": [
+        1.656684683877212,
+        1.8007294051948222
+      ],
+      "changed_metric_keys": [
+        "deadlock_stall.max_no_progress_run",
+        "deadlock_stall.stall_window_count",
+        "path_efficiency",
+        "path_efficiency_reference_violation",
+        "social_mini_game.rows",
+        "time_to_goal_ideal_ratio"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "db23addb2bfeb8e8abed1196b59c706c53dcf919698867f6e294edb5e6424ba9",
+        "after": "af81593754678c7793d565f7dcbab0c0974de3a70a1d3b1573e035acc06e0d42"
+      }
+    },
+    {
+      "episode": "classic_merging_low__orca__1003",
+      "seed": 1003,
+      "steps": 393,
+      "termination_reason": "collision",
+      "success": false,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        142,
+        3
+      ],
+      "path_efficiency": [
+        1.0,
+        null
+      ],
+      "failed_raw_efficiency_is_nan": true,
+      "reference_m": [
+        55.26441070588134,
+        51.964512167632265
+      ],
+      "time_to_goal_ideal_ratio": [
+        null,
+        null
+      ],
+      "changed_metric_keys": [
+        "deadlock_stall.max_no_progress_run",
+        "deadlock_stall.stall_window_count",
+        "path_efficiency",
+        "path_efficiency_reference_violation"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "fca7f52c99b5485bc4d0c7c429788ec06626c91374a6ff7de6e821d91d4b6d28",
+        "after": "c591cd0a52a2af123de9ae1581d20748ec18d1ebbc0b95a9739d1afabfa04f20"
+      }
+    },
+    {
+      "episode": "classic_merging_low__orca__1004",
+      "seed": 1004,
+      "steps": 433,
+      "termination_reason": "success",
+      "success": true,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        125,
+        0
+      ],
+      "path_efficiency": [
+        0.7582373515408699,
+        0.6975841030959761
+      ],
+      "failed_raw_efficiency_is_nan": false,
+      "reference_m": [
+        54.08391884827787,
+        49.757614742958076
+      ],
+      "time_to_goal_ideal_ratio": [
+        1.6012153306223946,
+        1.7404371260030311
+      ],
+      "changed_metric_keys": [
+        "deadlock_stall.max_no_progress_run",
+        "deadlock_stall.stall_window_count",
+        "path_efficiency",
+        "path_efficiency_reference_violation",
+        "social_mini_game.rows",
+        "time_to_goal_ideal_ratio"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "d20c0573725828d63f3fabfb68df164f3769ea2b667d550d8881a92f9514a973",
+        "after": "c66e52f6c9e0fe20daeaf475101b80846f251dd42fa89fe6c0992128a4be5b84"
+      }
+    },
+    {
+      "episode": "francis2023_frontal_approach__goal__1003",
+      "seed": 1003,
+      "steps": 186,
+      "termination_reason": "collision",
+      "success": false,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        0,
+        0
+      ],
+      "path_efficiency": [
+        1.0,
+        null
+      ],
+      "failed_raw_efficiency_is_nan": true,
+      "reference_m": [
+        32.0,
+        31.80438840382006
+      ],
+      "time_to_goal_ideal_ratio": [
+        null,
+        null
+      ],
+      "changed_metric_keys": [
+        "path_efficiency",
+        "path_efficiency_reference_violation"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "fc564fa06b52c2089c0db170c58880d3817195f76b89c6e173e1b9d827184313",
+        "after": "7f45bd4377d9e93b30fb6a438ef5fd90f2c82548b38a9972bb78622458d4c60f"
+      }
+    },
+    {
+      "episode": "francis2023_frontal_approach__hybrid_rule_local_planner__1003",
+      "seed": 1003,
+      "steps": 208,
+      "termination_reason": "success",
+      "success": true,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        0,
+        0
+      ],
+      "path_efficiency": [
+        0.9932163628330428,
+        0.9871449678928614
+      ],
+      "failed_raw_efficiency_is_nan": false,
+      "reference_m": [
+        32.0,
+        31.80438840382006
+      ],
+      "time_to_goal_ideal_ratio": [
+        1.3,
+        1.3079955970794075
+      ],
+      "changed_metric_keys": [
+        "path_efficiency",
+        "path_efficiency_reference_violation",
+        "social_mini_game.rows",
+        "time_to_goal_ideal_ratio"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "aec24850c4f8fa2b8f13128efa9e9354c64e82b1f05046fe48e224acdc69c637",
+        "after": "14c16737e8132136768f65ff2a163effdb0a208c0395b9edc496879a7641062a"
+      }
+    },
+    {
+      "episode": "francis2023_frontal_approach__orca__1003",
+      "seed": 1003,
+      "steps": 172,
+      "termination_reason": "success",
+      "success": true,
+      "stable_checks": {
+        "steps": true,
+        "termination_reason": true,
+        "outcome": true,
+        "spawn_validity": true,
+        "safety_predicates": true,
+        "status": true,
+        "failure_mechanism": true,
+        "interaction_exposure": true,
+        "event_ledger": true,
+        "rr_probe.positions": true,
+        "rr_probe.reset_pos": true,
+        "rr_probe.waypoints": true,
+        "rr_probe.final_waypoint": true,
+        "rr_probe.reached_goal_step": true,
+        "rr_probe.goal_zone": true,
+        "rr_probe.completion_policy": true
+      },
+      "deadlock": [
+        false,
+        false
+      ],
+      "stall_windows": [
+        0,
+        0
+      ],
+      "path_efficiency": [
+        0.9961089494163418,
+        0.9900198724924526
+      ],
+      "failed_raw_efficiency_is_nan": false,
+      "reference_m": [
+        32.0,
+        31.80438840382006
+      ],
+      "time_to_goal_ideal_ratio": [
+        1.075,
+        1.0816117437387407
+      ],
+      "changed_metric_keys": [
+        "path_efficiency",
+        "path_efficiency_reference_violation",
+        "social_mini_game.rows",
+        "time_to_goal_ideal_ratio"
+      ],
+      "undeclared_metric_changes": [],
+      "input_sha256": {
+        "before": "3c813be81464a7c0df287e9ce6fbdeff34bcda5bdc4c1a57c0a29eb498148823",
+        "after": "18ad748980dfa84efc6d1a6176a5ca63ef4f507e23c21777ab25cfd89f9c171a"
+      }
+    }
+  ],
+  "probe_sha256": "6ee380dabb89e7471734658e32b90658ef3a697b7cb505ff388420e7337eae71",
+  "validated_episode_schema_records": 9,
+  "final_reference_recalculation_matches": 9,
+  "zone_reference_cache": {
+    "hits": 6,
+    "misses": 3
+  },
+  "implementation_file_sha256": {
+    "robot_sf/adversarial/replay_gallery.py": "c85cf7efeeb1ecca65e616fd2a24d778f90979e4fd099b36db9960358e90f3c3",
+    "robot_sf/benchmark/critical_intervals.py": "0371633e7bdf3e2bb0f1289b0186b980a1b65907866d0b4be4a77e0a1c7ab3c8",
+    "robot_sf/benchmark/full_classic/orchestrator.py": "8a63ff19221d68aa5b752a48f06be865fdde76c6168c47662b3c6e71dacba00a",
+    "robot_sf/benchmark/latency/control_action_latency_snqi.py": "2c2de24218e327647b780410b22d2bf426c3c894e22c53beb647e5980ad9fbc3",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "46d621c8066a2ef98d4ffb620094bcc2666edeca144304b7033fb725558e430d",
+    "robot_sf/benchmark/metric_definitions.py": "23ee752cbabf43e1ef20706284fd4be8448379a6ef0dc5171a38b34ef83dbdec",
+    "robot_sf/benchmark/metrics.py": "fa70eac3082b4ac0ed23f3697deab882bac782522d650347c0f693a753576819",
+    "robot_sf/benchmark/paired_effect_metric_contract.py": "2aac91419a97927ce1223ee4583c43a494b5b7a59b229fdfa66a61ad743d9489",
+    "robot_sf/benchmark/path_utils.py": "22f4c6811910200813141993036f9d703dea684ab41405976f6eb7375d049639",
+    "robot_sf/benchmark/scenario_generation/pipeline.py": "9a94253367e763868ab4410c544f7330caed7c9e70a539235795618c3ac90921",
+    "robot_sf/benchmark/trace_reexport_packaging.py": "af5221fc1edeb64d32cb25898f775a475d8d3c618525462fc192888f42539222",
+    "scripts/analysis/analyze_issue_5416_sipp_four_geometry.py": "2988408677da43a5bfc6cbeafa0fb455f6a4bba5a94d031407556f2dfb76a26f",
+    "scripts/benchmark/run_fidelity_sensitivity_campaign.py": "e817adcb72e7032a43c47d2fda0d67ba5387afa3e79d546d95c4ea7553dc60e3",
+    "scripts/repro/butterfly_reexport_to_trace_series.py": "197a7efdaa91b23af9eb94fd2ec3a0854344b806956ff443e944a9aed014e7ca",
+    "scripts/repro/trace_series_adapter.py": "d9a6539cdb911925bef582bde921f2f34a5c079b8a68d924e4785ad65759a590",
+    "scripts/tools/render_recorded_replay_trace.py": "ad63d7c7e271e2912c2cb0944f1613be4fa56398553e965e83046d99f5657d10",
+    "scripts/validation/check_issue_9671_trace_reexport.py": "76372815389605a8069be044a5045200377e7c6f7fbc0f3f478cd77a11d1698e",
+    "scripts/validation/run_empty_world_sweep.py": "2ab082fbe9dd1b54adbb8f11da80618be1f6af2b4d08394d087ae5ea47da3e2d",
+    "scripts/validation/run_issue_9348_three_width_campaign.py": "af42b4b3d34b775c8b3da70a606e97f4c564595a2f839dabc7d71d64d7388139"
+  }
+}

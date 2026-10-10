@@ -45,7 +45,7 @@ from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_pat
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import _configure_torch_213_runtime
-from robot_sf.models import resolve_model_path
+from robot_sf.models import get_registry_entry, resolve_model_path
 from robot_sf.planner.predictive_foresight import (
     PredictiveForesightEncoder,
     predictive_foresight_config_from_source,
@@ -79,6 +79,7 @@ class PPOPlannerConfig:
     # Device handling: "auto" | "cpu" | "cuda" | "cuda:0" etc.
     device: str = "auto"
     deterministic: bool = True
+    numerical_mode: str | None = None
 
     # Observation handling
     obs_mode: str = "vector"  # "vector" | "image" | "dict"
@@ -86,6 +87,7 @@ class PPOPlannerConfig:
 
     # Action space formatting for benchmark
     action_space: str = "velocity"  # "velocity" | "unicycle"
+    action_semantics: str | None = None  # registry-bound for the release checkpoints
     v_max: float = 2.0
     omega_max: float = 1.0
 
@@ -114,6 +116,12 @@ class PPOPlanner:
     """
 
     EPS: float = 1e-9
+    DELTA_CHECKPOINT_IDS = frozenset(
+        {
+            "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+            "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        }
+    )
 
     def __init__(
         self,
@@ -135,6 +143,7 @@ class PPOPlanner:
         if torch is not None:
             torch.set_num_threads(1)
         self.config = self._parse_config(config)
+        self._action_semantics = self._resolve_action_semantics(self.config)
         self._seed = seed
         self._model = None
         self._status = "ok"
@@ -162,6 +171,55 @@ class PPOPlanner:
             return PPOPlannerConfig(**cfg)
         raise TypeError(f"Invalid config type: {type(cfg)}")
 
+    def _resolve_action_semantics(self, config: PPOPlannerConfig) -> str:
+        """Resolve checkpoint declarations before loading or allowing fallback.
+
+        Returns:
+            Registry-declared semantics, or the historical absolute default when undeclared.
+        """
+        semantics = config.action_semantics
+        declared = None
+        if config.model_id:
+            try:
+                declared = get_registry_entry(config.model_id).get("action_semantics")
+            except KeyError:
+                # Unknown IDs still fail at model resolution; deferred loading keeps its API.
+                if config.model_id in self.DELTA_CHECKPOINT_IDS:
+                    raise
+        if config.model_id in self.DELTA_CHECKPOINT_IDS:
+            if declared != "velocity_delta":
+                raise ValueError(
+                    f"Checkpoint {config.model_id} requires registry "
+                    "action_semantics: velocity_delta"
+                )
+        if declared is not None:
+            if semantics is not None and semantics != declared:
+                raise ValueError("action_semantics conflicts with checkpoint registry declaration")
+            semantics = declared
+        semantics = semantics or "absolute_velocity"
+        if semantics not in {"absolute_velocity", "velocity_delta"}:
+            raise ValueError(f"Unsupported PPO action_semantics: {semantics}")
+        if semantics == "velocity_delta" and config.action_space != "unicycle":
+            raise ValueError("velocity_delta requires unicycle action_space")
+        return semantics
+
+    def _current_unicycle_speed(self, obs: Observation | dict[str, Any]) -> np.ndarray | None:
+        """Read physical (v, omega) for delta policies without inferring from action shape.
+
+        Returns:
+            Current unicycle speed, or None for absolute policies.
+        """
+        if self._action_semantics != "velocity_delta":
+            return None
+        robot = obs.robot if isinstance(obs, Observation) else obs.get("robot", {})
+        speed = obs.get("robot_speed") if isinstance(obs, dict) else None
+        if speed is None:
+            speed = robot.get("speed")
+        current = np.asarray(speed, dtype=float).reshape(-1)
+        if current.size != 2 or not np.all(np.isfinite(current)):
+            raise ValueError("velocity_delta requires finite current robot_speed (v, omega)")
+        return current
+
     def _load_model(self) -> None:
         """Load the PPO model from disk or enter fallback mode."""
         if self.config.model_id is None:
@@ -176,7 +234,7 @@ class PPOPlanner:
                 else Path(self.config.model_path)
             )
         except (KeyError, RuntimeError, ValueError) as exc:
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO model",
                     f"Failed to resolve model: {exc}",
@@ -188,7 +246,7 @@ class PPOPlanner:
                 return
             raise
         if not mp.exists():
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO model",
                     f"Model not found at {mp}",
@@ -204,7 +262,7 @@ class PPOPlanner:
                 "Download from releases or train with scripts/training/train_ppo.py --config ...",
             )
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO",
                     "stable_baselines3 not installed",
@@ -225,8 +283,9 @@ class PPOPlanner:
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
             self._status = "ok"
             self._fallback_reason = None
+            self._configure_pinned_actor()
         except (RuntimeError, ValueError, OSError) as e:
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO model",
                     f"Failed to load model: {e}",
@@ -241,6 +300,34 @@ class PPOPlanner:
                 "Check model compatibility with current stable_baselines3 version. "
                 "Re-train if needed using scripts/training/train_ppo.py --config ...",
             )
+
+    def _configure_pinned_actor(self) -> None:
+        """Validate kernel initialization and compile the opted-in float64 actor."""
+        from robot_sf._numerical_mode import (  # noqa: PLC0415
+            PINNED_MODE,
+            effective_numerical_mode,
+            initialize_pinned_torch,
+            validate_numerical_mode,
+        )
+        from robot_sf.baselines.pinned_actor import PinnedActor  # noqa: PLC0415
+
+        self._pinned_actor = None
+        if self.config.numerical_mode is None:
+            return
+        if self.config.numerical_mode != PINNED_MODE or not self.config.deterministic:
+            raise ValueError(
+                "Pinned inference requires pinned_float64_v1 and deterministic actions"
+            )
+        if self._model is None:
+            raise ValueError("Pinned inference requires a loaded policy")
+        if str(self._model.device) != "cpu":
+            raise ValueError("Pinned inference requires CPU")
+        initialize_pinned_torch()
+        validate_numerical_mode(
+            {"mode": PINNED_MODE, "inference_dtype": "float64"},
+            {**effective_numerical_mode(), "inference_dtype": "float64"},
+        )
+        self._pinned_actor = PinnedActor(self._model)
 
     def reset(self, *, seed: int | None = None) -> None:
         # No RNN state; just update seed and keep model
@@ -266,7 +353,10 @@ class PPOPlanner:
 
     def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
         """Update the planner's configuration."""
-        self.config = self._parse_config(config)
+        parsed = self._parse_config(config)
+        semantics = self._resolve_action_semantics(parsed)
+        self.config = parsed
+        self._action_semantics = semantics
         self._model = None
         self._initialized = False
         if not self._defer_model_loading:
@@ -304,9 +394,10 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        current_speed = self._current_unicycle_speed(obs)
         self._ensure_model_loaded()
         if is_observation_mapping(obs) and self._uses_dict_observation():
-            return self._step_dict_obs(obs)
+            return self._step_dict_obs(obs, current_speed)
 
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
@@ -319,14 +410,14 @@ class PPOPlanner:
                 action_vec = self._predict_action(model_obs)
                 if action_vec is None:
                     raise RuntimeError("PPO model unavailable or prediction failed")
-                return self._action_vec_to_dict_from_array(action_vec)
+                return self._action_vec_to_dict_from_array(action_vec, current_speed)
             action_vec = self._predict_action(obs)
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
             return self._action_vec_to_dict(action_vec, obs)
         except (RuntimeError, ValueError, OSError):
             # Fallback for robustness on common prediction errors
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 if self._status != "fallback":
                     self._status = "fallback"
                 if self._fallback_reason is None:
@@ -338,7 +429,9 @@ class PPOPlanner:
         """Return whether planner is configured for native dict observations."""
         return str(self.config.obs_mode).strip().lower() in {"dict", "native_dict", "multi_input"}
 
-    def _step_dict_obs(self, obs: dict[str, Any]) -> dict[str, float]:
+    def _step_dict_obs(
+        self, obs: dict[str, Any], current_speed: np.ndarray | None = None
+    ) -> dict[str, float]:
         """Predict an action from flattened dict observations expected by MultiInput PPO.
 
         Returns:
@@ -349,9 +442,9 @@ class PPOPlanner:
             action_vec = self._predict_action(model_obs)
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
-            return self._action_vec_to_dict_from_array(action_vec)
+            return self._action_vec_to_dict_from_array(action_vec, current_speed)
         except (RuntimeError, ValueError, OSError):
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 if self._status != "fallback":
                     self._status = "fallback"
                 if self._fallback_reason is None:
@@ -432,7 +525,12 @@ class PPOPlanner:
         else:
             model_obs_in = model_obs
         try:
-            act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
+            if self.config.numerical_mode is not None:
+                if self._pinned_actor is None:
+                    raise RuntimeError("Pinned inference requires the compiled float64 actor")
+                act = self._pinned_actor.predict(model_obs_in)
+            else:
+                act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
             act = np.asarray(act, dtype=float).squeeze()
             return act
         except (
@@ -441,6 +539,8 @@ class PPOPlanner:
             OSError,
             IndexError,
         ) as exc:  # predict-time errors we can recover from
+            if self.config.numerical_mode is not None:
+                raise
             # Log at debug level for diagnostics; fall back to goal if enabled
             logger.opt(exception=True).debug("PPO model prediction failed: {}", exc)
             return None
@@ -834,14 +934,24 @@ class PPOPlanner:
         vec = np.concatenate([rel_goal, rv, ped_flat]).astype(float)
         return vec
 
-    def _action_vec_to_dict_from_array(self, act: np.ndarray) -> dict[str, float]:
+    def _action_vec_to_dict_from_array(
+        self, act: np.ndarray, current_speed: np.ndarray | None = None
+    ) -> dict[str, float]:
         """Convert a raw action vector to the configured action dictionary.
 
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        if self._action_semantics == "velocity_delta":
+            if current_speed is None:
+                raise ValueError("velocity_delta requires current robot_speed")
+            # Add the signed delta BEFORE clipping: negative outputs can be braking.
+            act = np.asarray(act, dtype=float).reshape(-1)
+            if act.size != 2 or not np.all(np.isfinite(act)):
+                raise ValueError("velocity_delta requires two finite policy outputs")
+            act = current_speed + act
         if self.config.action_space == "unicycle":
-            # Expect [v, omega]
+            # Expect target [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0
             w = float(act[1]) if act.size >= 2 else 0.0
             v = max(0.0, min(v, self.config.v_max))
@@ -858,13 +968,13 @@ class PPOPlanner:
             vy *= scale
         return {"vx": vx, "vy": vy}
 
-    def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
+    def _action_vec_to_dict(self, act: np.ndarray, obs: Observation) -> dict[str, float]:
         """Convert raw action vector to configured action dict for Observation mode.
 
         Returns:
             Action dict in configured output space.
         """
-        return self._action_vec_to_dict_from_array(act)
+        return self._action_vec_to_dict_from_array(act, self._current_unicycle_speed(obs))
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
         """Return a simple goal-seeking action when PPO is unavailable.
@@ -940,7 +1050,20 @@ class PPOPlanner:
         checkpoint_path = cfg.get("predictive_foresight_checkpoint_path")
         if isinstance(checkpoint_path, str) and checkpoint_path:
             cfg["predictive_foresight_checkpoint_path"] = Path(checkpoint_path).name
-        meta = {"algorithm": "ppo", "config": cfg, "status": self._status}
+        cfg["action_semantics"] = self._action_semantics
+        meta = {
+            "algorithm": "ppo",
+            "config": cfg,
+            "status": self._status,
+            "action_semantics": self._action_semantics,
+            "action_adapter_version": "ppo-target-velocity.v2",
+        }
+        if self.config.numerical_mode is None:
+            cfg.pop("numerical_mode", None)
+        elif getattr(self, "_pinned_actor", None) is not None:
+            from robot_sf._numerical_mode import effective_numerical_mode  # noqa: PLC0415
+
+            meta["numerical_mode"] = {**effective_numerical_mode(), "inference_dtype": "float64"}
         if self._fallback_reason:
             meta["fallback_reason"] = self._fallback_reason
         return meta

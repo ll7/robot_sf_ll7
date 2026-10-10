@@ -14,8 +14,9 @@
 - Records per file: raw digest, resolved-mapping digest, inheritance chain, category,
   key/line counts, resolver errors. Fails closed on cycles, missing bases, and unsupported
   categories.
-- Full report (SHA-256 in `receipt.json`): `output/config_family_inventory.json`
-  (ignored, worktree-local).
+- The full report SHA-256 is recorded in `receipt.json`, but its disposable worktree-local bytes
+  are unavailable. No durable retrieval pointer exists; this README and receipt are the retained
+  compact inventory.
 
 ## Candidate families (after excluding already-migrated)
 

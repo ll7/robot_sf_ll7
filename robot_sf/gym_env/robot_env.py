@@ -618,6 +618,9 @@ class RobotEnv(BaseEnv):
         self.config = env_config
         self.grid_config = env_config.grid_config
 
+        # No pedestrian circles have been rasterized before the first regeneration.
+        self._last_grid_ped_radii = np.empty(0, dtype=float)
+
         # Initialize optional occupancy grid
         self.occupancy_grid = self._build_occupancy_grid(env_config)
 
@@ -1137,6 +1140,7 @@ class RobotEnv(BaseEnv):
                 ped_radii = np.full(len(ped_positions), 0.35)
             else:
                 ped_radii = np.asarray(ped_radii, dtype=float)
+            self._last_grid_ped_radii = ped_radii.copy()
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid (allow grid config to opt into ego frame)
@@ -1265,6 +1269,7 @@ class RobotEnv(BaseEnv):
                     ped_radii = np.full(len(ped_positions), 0.35)
                 else:
                     ped_radii = np.asarray(ped_radii, dtype=float)
+                self._last_grid_ped_radii = ped_radii.copy()
                 # Get robot pose (already in RobotPose format: ((x, y), theta))
                 robot_pose = self.simulator.robot_poses[0]
                 # Generate grid (allow grid config to opt into ego frame)

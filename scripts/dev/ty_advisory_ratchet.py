@@ -34,6 +34,14 @@ first-party *member-resolution* errors (``unresolved-import: Module X has no
 member Y``) are KEPT in the general bucket because they are real type errors,
 not optional-dependency noise. See ``exclusion`` in the baseline JSON.
 
+Narrow exceptions are recorded separately in ``exceptions``, keyed by exact
+repository-relative Python path and rule. Each has an approved additional
+``count``, an ``existing_count`` already covered by the ordinary baseline, and
+a follow-up ``reason``. Raw counts include these findings. The gate removes only
+matched additional findings and the corresponding approved baseline increment;
+unused allowances cannot cover another path/rule, and exceeding a key's cap fails
+even when other findings decrease. No prefix or wildcard keys are accepted.
+
 Ratchet contract
 ----------------
 * A **clean module** (general baseline count == 0) that gains any finding -> FAIL.
@@ -82,7 +90,7 @@ import subprocess
 import sys
 from collections import Counter
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from scripts.dev.git_common import resolve_repo_root
@@ -212,6 +220,55 @@ def aggregate(findings: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _exception_entries(baseline: dict[str, Any]) -> list[tuple[str, str, int, int, str]]:
+    """Validate bounded additional allowances keyed by exact path and rule."""
+    exceptions = baseline.get("exceptions", {})
+    if not isinstance(exceptions, dict):
+        raise ValueError("exceptions must be an exact-path mapping")
+    entries = []
+    slots: Counter[str] = Counter()
+    for path, rules in exceptions.items():
+        if not isinstance(path, str):
+            raise ValueError("exception path must be a string")
+        relative = PurePosixPath(path)
+        if (
+            relative.is_absolute()
+            or relative.as_posix() != path
+            or ".." in relative.parts
+            or relative.suffix != ".py"
+            or any(char in path for char in "*?[]\\")
+            or not isinstance(rules, dict)
+            or not rules
+        ):
+            raise ValueError(f"exception path must be an exact relative Python file: {path!r}")
+        for rule, entry in rules.items():
+            if (
+                not isinstance(rule, str)
+                or not rule
+                or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in rule)
+                or not isinstance(entry, dict)
+            ):
+                raise ValueError(f"invalid exact rule entry for {path!r}")
+            count = entry.get("count")
+            existing = entry.get("existing_count")
+            reason = entry.get("reason")
+            if (
+                type(count) is not int
+                or count <= 0
+                or type(existing) is not int
+                or existing < 0
+                or not isinstance(reason, str)
+                or not reason.strip()
+            ):
+                raise ValueError(f"exception {path!r}/{rule!r} needs counts and a reason")
+            entries.append((path, rule, count, existing, reason))
+            slots[module_of(path)] += count + existing
+    for mod, required in slots.items():
+        if required > int(baseline.get("modules", {}).get(mod, {}).get("general", 0)):
+            raise ValueError(f"exception counts exceed the raw baseline for {mod!r}")
+    return entries
+
+
 def materialize_findings_from_baseline(baseline: dict[str, Any]) -> list[dict[str, Any]]:
     """Reconstruct deterministic raw ty gitlab-JSON findings from a baseline.
 
@@ -235,6 +292,9 @@ def materialize_findings_from_baseline(baseline: dict[str, Any]) -> list[dict[st
     """
     modules = baseline.get("modules", {})
     findings: list[dict[str, Any]] = []
+    exception_slots: dict[str, list[tuple[str, str]]] = {}
+    for path, rule, count, existing, _reason in _exception_entries(baseline):
+        exception_slots.setdefault(module_of(path), []).extend([(path, rule)] * (count + existing))
     for mod in sorted(modules):
         counts = modules[mod]
         general_n = int(counts.get("general", 0))
@@ -252,18 +312,20 @@ def materialize_findings_from_baseline(baseline: dict[str, Any]) -> list[dict[st
             if mod == "scripts"
             else f"{mod}/_ty_baseline_fixture.py"
         )
+        slots = exception_slots.get(mod, [])
         for i in range(general_n):
+            slot = i - (general_n - len(slots))
+            finding_path, rule = slots[slot] if slot >= 0 else (base_path, "invalid-argument-type")
             findings.append(
                 {
-                    "check_name": "invalid-argument-type",
+                    "check_name": rule,
                     "description": (
-                        f"invalid-argument-type: baseline-reproduction fixture #{i} "
-                        f"for module '{mod}'"
+                        f"{rule}: baseline-reproduction fixture #{i} for module '{mod}'"
                     ),
                     "severity": "major",
-                    "fingerprint": f"{base_path}:{i + 1}:general",
+                    "fingerprint": f"{finding_path}:{i + 1}:general",
                     "location": {
-                        "path": base_path,
+                        "path": finding_path,
                         "positions": {"begin": {"line": i + 1, "column": 1}},
                     },
                 }
@@ -401,11 +463,37 @@ def check_against_baseline(
 
     failures: list[str] = []
     notices: list[str] = []
+    try:
+        exceptions = _exception_entries(baseline)
+    except ValueError as exc:
+        return [f"invalid narrow exception: {exc}"], []
+    matched = Counter(
+        ((finding.get("location") or {}).get("path"), finding.get("check_name"))
+        for finding in current_findings
+        if classify_finding(finding) == "general"
+    )
+    approved: Counter[str] = Counter()
+    covered: Counter[str] = Counter()
+    for path, rule, count, existing, reason in exceptions:
+        current = matched[(path, rule)]
+        mod = module_of(path)
+        approved[mod] += count
+        covered[mod] += min(max(current - existing, 0), count)
+        if current > existing + count:
+            failures.append(
+                f"exception cap exceeded: {path!r}/{rule!r} has {current} findings, "
+                f"maximum {existing + count} ({existing} preexisting + {count} approved)."
+            )
+        notices.append(
+            f"narrow exception {path!r}/{rule!r}: {current} matching findings, "
+            f"{count} approved additional; {reason}"
+        )
 
     all_modules = sorted(set(current_modules) | set(baseline_modules))
     for mod in all_modules:
-        base_general = int(baseline_modules.get(mod, {}).get("general", 0))
-        cur_general = int(current_modules.get(mod, {}).get("general", 0))
+        # Unused exceptions cannot be spent on unrelated files or rules.
+        base_general = int(baseline_modules.get(mod, {}).get("general", 0)) - approved[mod]
+        cur_general = int(current_modules.get(mod, {}).get("general", 0)) - covered[mod]
         if cur_general > base_general:
             if base_general == 0:
                 failures.append(
@@ -425,11 +513,19 @@ def check_against_baseline(
             )
 
     # Overall monotonicity summary (advisory; the per-module gate is authoritative).
-    base_general_total = sum(int(m.get("general", 0)) for m in baseline_modules.values())
-    if current_agg["general_total"] > base_general_total:
+    base_general_total = sum(int(m.get("general", 0)) for m in baseline_modules.values()) - sum(
+        approved.values()
+    )
+    current_general_total = current_agg["general_total"] - sum(covered.values())
+    if exceptions:
+        notices.append(
+            f"exception-adjusted general total: current={current_general_total}, "
+            f"baseline={base_general_total} ({sum(approved.values())} approved additional)."
+        )
+    if current_general_total > base_general_total:
         failures.append(
             f"total general findings increased from {base_general_total} to "
-            f"{current_agg['general_total']}."
+            f"{current_general_total}."
         )
     return failures, notices
 
@@ -595,6 +691,32 @@ def _report_check(
     return 0
 
 
+def _refresh_baseline(
+    baseline_path: Path, payload: dict[str, Any], findings: list[dict[str, Any]]
+) -> int:
+    """Keep reviewed exception caps when refreshing raw counts; reject expired caps."""
+    if baseline_path.exists():
+        previous = load_baseline(baseline_path)
+        if "exceptions" in previous:
+            payload["exceptions"] = previous["exceptions"]
+            failures, _ = check_against_baseline(findings, payload)
+            if failures:
+                print(
+                    "ERROR: update expired/invalid exceptions before refreshing:", file=sys.stderr
+                )
+                print("\n".join(failures), file=sys.stderr)
+                return 1
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(baseline_path, payload)
+    print(
+        f"Wrote ty baseline to {baseline_path}: "
+        f"{payload['summary']['general_findings']} general / "
+        f"{payload['summary']['total_findings']} total findings across "
+        f"{payload['summary']['module_count']} modules."
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the ratchet gate, baseline refresh, or aggregate report."""
     args = parse_args(sys.argv[1:] if argv is None else argv)
@@ -623,15 +745,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = build_baseline_payload(findings, ty_version=_detect_ty_version(repo_root))
 
     if args.write_baseline:
-        baseline_path.parent.mkdir(parents=True, exist_ok=True)
-        write_json(baseline_path, payload)
-        print(
-            f"Wrote ty baseline to {baseline_path}: "
-            f"{payload['summary']['general_findings']} general / "
-            f"{payload['summary']['total_findings']} total findings across "
-            f"{payload['summary']['module_count']} modules."
-        )
-        return 0
+        return _refresh_baseline(baseline_path, payload, findings)
 
     # --check
     if not baseline_path.exists():

@@ -176,6 +176,108 @@ def test_ratchet_ignores_optional_import_findings_in_gate() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _exception_baseline() -> dict:
+    """An approved two-finding allowance, without any ordinary scripts budget."""
+    return {
+        "schema_version": tyratchet.SCHEMA_VERSION,
+        "modules": {"scripts": {"general": 2, "total": 2}},
+        "exceptions": {
+            "scripts/evidence.py": {
+                "invalid-argument-type": {
+                    "count": 2,
+                    "existing_count": 0,
+                    "reason": "Evidence-bound; fix when evidence is regenerated (#10306).",
+                }
+            }
+        },
+    }
+
+
+def test_narrow_exception_accepts_only_approved_count() -> None:
+    """Exact approved findings pass without altering the ordinary module budget."""
+    findings = [_finding("scripts/evidence.py", line=i + 1) for i in range(2)]
+    failures, _ = tyratchet.check_against_baseline(findings, _exception_baseline())
+    assert failures == []
+
+
+@pytest.mark.parametrize(
+    ("path", "rule"),
+    [
+        ("scripts/evidence_other.py", "invalid-argument-type"),
+        ("scripts/evidence.py/other.py", "invalid-argument-type"),
+        ("scripts/evidence.py", "invalid-return-type"),
+    ],
+)
+def test_unused_exception_cannot_cover_another_path_or_rule(path: str, rule: str) -> None:
+    """An unused allowance must not become a module-wide drift budget."""
+    failures, _ = tyratchet.check_against_baseline(
+        [_finding(path, check_name=rule)], _exception_baseline()
+    )
+    assert any("clean module regressed" in failure for failure in failures)
+
+
+def test_narrow_exception_cap_survives_other_finding_reduction() -> None:
+    """An extra same-rule finding fails even if ordinary findings decrease."""
+    baseline = _exception_baseline()
+    baseline["modules"]["scripts"]["general"] = 3
+    findings = [_finding("scripts/evidence.py", line=i + 1) for i in range(3)]
+    failures, _ = tyratchet.check_against_baseline(findings, baseline)
+    assert any("exception cap" in failure for failure in failures)
+
+
+def test_preexisting_findings_do_not_consume_additional_allowance() -> None:
+    """A preexisting match cannot spend the allowance reserved for additional findings."""
+    baseline = _exception_baseline()
+    allowance = baseline["exceptions"]["scripts/evidence.py"]["invalid-argument-type"]
+    allowance.update(count=1, existing_count=1)
+    baseline["modules"]["scripts"]["general"] = 3
+    findings = [_finding("scripts/evidence.py"), _finding("scripts/a.py"), _finding("scripts/b.py")]
+    failures, _ = tyratchet.check_against_baseline(findings, baseline)
+    assert any("increased from 2 to 3" in failure for failure in failures)
+
+
+@pytest.mark.parametrize("path", ["scripts/", "scripts/*.py", "../evidence.py", "/evidence.py"])
+def test_malformed_or_prefix_exception_fails_closed(path: str) -> None:
+    """Exception keys must be exact repository-relative Python file paths."""
+    baseline = _exception_baseline()
+    baseline["exceptions"][path] = baseline["exceptions"].pop("scripts/evidence.py")
+    failures, _ = tyratchet.check_against_baseline([], baseline)
+    assert any("invalid narrow exception" in failure for failure in failures)
+
+
+def test_exception_fixture_roundtrip_preserves_exact_matches() -> None:
+    """Fixture synthesis includes the approved exact paths and passes the real gate."""
+    baseline = _exception_baseline()
+    fixture = tyratchet.materialize_findings_from_baseline(baseline)
+    assert {finding["location"]["path"] for finding in fixture} == {"scripts/evidence.py"}
+    assert tyratchet.aggregate(fixture)["general_total"] == 2
+    assert tyratchet.check_against_baseline(fixture, baseline)[0] == []
+
+
+def test_baseline_refresh_preserves_and_validates_narrow_exceptions(tmp_path, monkeypatch) -> None:
+    """Refresh must not erase restrictions or silently keep an expired allowance."""
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(_exception_baseline()))
+    report.write_text(json.dumps([_finding("scripts/evidence.py", line=i + 1) for i in range(2)]))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+    args = [
+        "--root",
+        str(tmp_path),
+        "--write-baseline",
+        "--baseline",
+        str(baseline),
+        "--ty-output",
+        str(report),
+    ]
+    assert tyratchet.main(args) == 0
+    assert json.loads(baseline.read_text())["exceptions"] == _exception_baseline()["exceptions"]
+    approved_bytes = baseline.read_bytes()
+    report.write_text(json.dumps([_finding("scripts/other.py")]))
+    assert tyratchet.main(args) == 1
+    assert baseline.read_bytes() == approved_bytes
+
+
 def test_aggregate_splits_optional_and_general_buckets() -> None:
     """Optional-import findings land in the excluded bucket; others in general."""
     findings = [

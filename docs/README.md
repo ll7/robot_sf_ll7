@@ -475,6 +475,8 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 
 ### Performance & CI
 
+* **[Hosted-first CI runner fallback](./dev/ci_runner_fallback.md)** - Availability checks, queue recovery, kill switch, hosted capacity options and security threat note.
+
 * **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
 * **[Issue 2536 Speed Discovery](./context/issue_2536_speed_discovery.md)** - Bounded simulator-speed candidate discovery and next occupancy-grid rasterization proof path
 * **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring

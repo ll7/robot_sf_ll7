@@ -139,6 +139,23 @@ def test_assign_labels_align_with_speed_factors() -> None:
     assert set(labels.tolist()) == {"cautious", "hurried"}
 
 
+def test_assign_labels_independent_of_key_order() -> None:
+    """Same composition/seed gives identical labels whatever the key order (issue #10271)."""
+    fwd = {"a": 0.5, "b": 0.3, "c": 0.2}
+    rev = {"c": 0.2, "b": 0.3, "a": 0.5}
+    factors_map = {"a": 0.7, "b": 1.0, "c": 1.4}
+
+    labels_fwd = assign_archetype_labels(20, fwd, seed=7)
+    labels_rev = assign_archetype_labels(20, rev, seed=7)
+    assert np.array_equal(labels_fwd, labels_rev)
+
+    factors_fwd = assign_archetype_speed_factors(20, fwd, factors_map, seed=7)
+    factors_rev = assign_archetype_speed_factors(20, rev, factors_map, seed=7)
+    assert np.array_equal(factors_fwd, factors_rev)
+    assert factors_fwd.tolist() == [factors_map[label] for label in labels_fwd]
+    assert factors_rev.tolist() == [factors_map[label] for label in labels_rev]
+
+
 def test_assign_speed_factors_empty_population() -> None:
     """Zero pedestrians yields an empty factor array."""
     out = assign_archetype_speed_factors(0, {"a": 1.0}, {"a": 1.0}, seed=1)

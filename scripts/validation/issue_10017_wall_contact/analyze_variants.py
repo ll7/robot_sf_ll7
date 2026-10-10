@@ -52,6 +52,14 @@ def doorway_braking_force(law: str, scale: float) -> float:
     return -float(force)
 
 
+def _svg_number(node: ET.Element, attribute: str) -> float:
+    """Parse required fixture geometry, retaining float(None)'s error for missing fields."""
+    value = node.get(attribute)
+    if value is None:
+        raise TypeError("float() argument must be a string or a real number, not 'NoneType'")
+    return float(value)
+
+
 def width_crossing(version: str, index: int) -> tuple[bool, float]:
     """Extract whole-body crossing and near-door stops from the retained trajectory."""
     task = plan["tasks"][index]
@@ -64,9 +72,9 @@ def width_crossing(version: str, index: int) -> tuple[bool, float]:
     )
     svg = ET.parse((manifest.parent / scenario["map_file"]).resolve())
     posts = [node for node in svg.iter() if node.tag.endswith("rect") and node.get("x") == "15"]
-    assert len(posts) == 2 and all(float(node.get("width")) == 1 for node in posts)
-    low = float(posts[0].get("y")) + float(posts[0].get("height"))
-    high = float(posts[1].get("y"))
+    assert len(posts) == 2 and all(_svg_number(node, "width") == 1 for node in posts)
+    low = _svg_number(posts[0], "y") + _svg_number(posts[0], "height")
+    high = _svg_number(posts[1], "y")
     receipt = indexed[(version, index)]
     path = root / "measurements" / version / str(index) / "trajectory.npz"
     assert (

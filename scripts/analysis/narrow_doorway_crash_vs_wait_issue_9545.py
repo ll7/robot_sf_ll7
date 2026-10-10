@@ -46,6 +46,7 @@ import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 import matplotlib
 import numpy as np
@@ -130,7 +131,24 @@ def _portable_path(path: Path) -> str:
         return str(path)
 
 
-def _release_artifact_metadata(model_id: str) -> dict[str, object]:
+class _ReleaseArtifact(TypedDict):
+    """Normalized immutable release identity returned by the registry validator."""
+
+    registry_path: str
+    registry_model_id: str
+    source: str
+    location: str
+    repo: str
+    tag: str
+    asset_name: str
+    artifact_uri: str
+    sha256: str
+    size_bytes: int
+    metadata_asset: str | None
+    published_at_utc: str | None
+
+
+def _release_artifact_metadata(model_id: str) -> _ReleaseArtifact:
     """Return the canonical immutable release identity for one registry model.
 
     The replay still hydrates a worktree-local cache through ``resolve_model_path`` at runtime,
@@ -195,7 +213,7 @@ def _release_artifact_metadata(model_id: str) -> dict[str, object]:
     }
 
 
-def _verify_resolved_release_artifact(path: Path, artifact: dict[str, object]) -> None:
+def _verify_resolved_release_artifact(path: Path, artifact: _ReleaseArtifact) -> None:
     """Require a hydrated cache file to match its canonical release identity."""
     if not path.is_file():
         raise RuntimeError(
@@ -311,7 +329,7 @@ def _build_diagnostic_env(seed: int, reward_weights: dict | None = None):
 
     scenarios = load_scenarios(SCENARIO_YAML)
     scenario = next(s for s in scenarios if s.get("name") == "francis2023_narrow_doorway")
-    config = build_env_config(scenario, scenario_path=Path(SCENARIO_YAML))
+    config = build_env_config(dict(scenario), scenario_path=Path(SCENARIO_YAML))
     weights = dict(FINAL_STAGE_WEIGHTS if reward_weights is None else reward_weights)
     env = make_robot_env(
         config=config,

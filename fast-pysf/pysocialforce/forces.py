@@ -100,6 +100,32 @@ class SimEntitiesProvider(Protocol):
         raise NotImplementedError()
 
 
+class ObstaclePedestrians(Protocol):
+    """The pedestrian data read by the obstacle force, including diagnostic probes."""
+
+    @property
+    def agent_radius(self) -> float:
+        """Physical pedestrian body radius."""
+        ...
+
+    def pos(self) -> np.ndarray:
+        """Current pedestrian positions."""
+        ...
+
+
+class ObstacleEntitiesProvider(Protocol):
+    """Only the raw surfaces and pedestrian geometry needed by ObstacleForce."""
+
+    @property
+    def peds(self) -> ObstaclePedestrians:
+        """Pedestrian geometry queried by the force."""
+        ...
+
+    def get_raw_obstacles(self) -> np.ndarray:
+        """Finite surface segments and their orthogonal vectors."""
+        ...
+
+
 class DebuggableForce:
     """A wrapper class that adds debugging functionality to a given force."""
 
@@ -429,7 +455,7 @@ def norm_vec(vec: Point2D) -> tuple[Point2D, float]:
 class ObstacleForce:
     """Calculate repulsive forces between pedestrians and nearby obstacles."""
 
-    def __init__(self, config: ObstacleForceConfig, sim: SimEntitiesProvider):
+    def __init__(self, config: ObstacleForceConfig, sim: ObstacleEntitiesProvider):
         """Initialize obstacle force computation.
 
         Args:
@@ -597,7 +623,9 @@ def all_obstacle_forces_surface_distance_unit_normal(
 
 
 @njit(nogil=True)
-def closest_point_on_segment(obstacle: Line2D, ped_pos: Point2D) -> tuple[float, float]:
+def closest_point_on_segment(
+    obstacle: Line2D, ped_pos: Point2D | np.ndarray
+) -> tuple[float, float]:
     """Return the closest finite-segment surface point to ``ped_pos``."""
     x1, y1, x2, y2 = obstacle
     dx = x2 - x1

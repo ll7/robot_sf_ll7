@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import _build_socnav_config
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_sacadrl as sacadrl
 
@@ -245,9 +246,9 @@ def test_far_goal_uses_actual_distance_by_default() -> None:
 
 
 def test_goal_cap_serialization_preserves_legacy_defaults_and_opt_in_identity() -> None:
-    """The transfer opt-in is absent by default but survives config round trips."""
+    """The mapped transfer opt-in survives round trips without changing default bytes."""
     default = sacadrl.SocNavPlannerConfig()
-    selected = sacadrl.SocNavPlannerConfig(sacadrl_max_goal_distance=10.0)
+    selected = _build_socnav_config({"sacadrl_max_goal_distance": 10.0})
 
     assert default.sacadrl_max_goal_distance is None
     assert "sacadrl_max_goal_distance" not in asdict(default)

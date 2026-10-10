@@ -49,6 +49,7 @@ _SOCNAV_CONFIG_INIT_KEYS = frozenset(
         "social_force_kernel_version",
         "predictive_clearance_model",
         "sampling_repulsion_weight",
+        "sacadrl_max_goal_distance",
         "predictive_occupancy_version",
         "predictive_heading_lattice_version",
     }

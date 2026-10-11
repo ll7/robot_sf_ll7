@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -401,3 +403,83 @@ def test_pinned_learned_owner_registration_is_deferred_and_scoped(
     (tmp_path / owner).write_text("import torch\n")
     errors, _ = check_profile(tmp_path)
     assert any("torch" in error and "collection" in error for error in errors)
+
+
+@pytest.mark.parametrize("boundary", ["deferred", "eager", "direct_test", "other_owner"])
+def test_predictive_checkpoint_boundary_is_deferred_and_owner_scoped(
+    tmp_path: Path, boundary: str
+) -> None:
+    """Only the predictive owner's lazy checkpoint adapter is outside the slim lane."""
+    owner = "robot_sf/benchmark/campaign/predictive_horizon_preflight.py"
+    adapter = "robot_sf.benchmark.campaign.predictive_checkpoint_validation"
+    owner_import = "import robot_sf.benchmark.campaign.predictive_horizon_preflight\n"
+    adapter_import = f"import {adapter}\n"
+    files = {
+        "tests/common/test_owner.py": owner_import,
+        owner: f"def validate():\n    {adapter_import}",
+        adapter.replace(".", "/") + ".py": "import torch\n",
+    }
+    if boundary == "eager":
+        files[owner] = adapter_import
+    elif boundary == "direct_test":
+        files["tests/common/test_owner.py"] += f"def test_validate():\n    {adapter_import}"
+    elif boundary == "other_owner":
+        files["tests/common/test_owner.py"] = "import robot_sf.synthetic.owner\n"
+        files["robot_sf/synthetic/owner.py"] = f"def validate():\n    {adapter_import}"
+    _write_tree(tmp_path, files)
+    errors, report = check_profile(tmp_path)
+    if boundary == "deferred":
+        assert errors == []
+        assert "torch" not in report
+        (tmp_path / owner).write_text(files[owner] + "def other():\n    import unknown_runtime\n")
+        errors, _ = check_profile(tmp_path)
+        assert any("unknown_runtime" in error for error in errors)
+    else:
+        assert any("torch" in error and "collection" in error for error in errors)
+
+
+def test_non_predictive_campaign_does_not_import_checkpoint_runtime() -> None:
+    """A real non-predictive campaign preflight works when the torch adapter is forbidden."""
+    root = Path(__file__).resolve().parents[2]
+    probe = """
+import builtins
+from dataclasses import replace
+from pathlib import Path
+import sys
+
+original_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name == "torch" or name.startswith("torch.") or name.endswith(
+        ("predictive_checkpoint_validation", "predictive_model")
+    ):
+        raise AssertionError(f"non-predictive campaign imported {name}")
+    return original_import(name, *args, **kwargs)
+builtins.__import__ = guarded_import
+
+from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+    check_campaign_arm_checkpoints_preflight,
+)
+cfg = load_campaign_config(Path(sys.argv[1]))
+arm = replace(cfg.planners[0], algo="social_force", algo_config_path=None)
+result = check_campaign_arm_checkpoints_preflight(replace(cfg, planners=(arm,)))
+assert result["checked"] == 0
+assert "torch" not in sys.modules
+assert "robot_sf.benchmark.campaign.predictive_checkpoint_validation" not in sys.modules
+"""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            probe,
+            str(
+                root
+                / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml"
+            ),
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

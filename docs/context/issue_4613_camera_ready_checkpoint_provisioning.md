@@ -31,6 +31,9 @@ The gate:
   nested prior-policy checkpoint is covered);
 - downloads and checksum-verifies each registry artifact into the durable
   cache (`stage=True`);
+- loads each learned predictive MPPI, prediction-planner, or gap-prediction binding
+  (including effective family, scenario, and scenario-algorithm overrides) with the runtime checkpoint loader and
+  checks its actual forecast output head against the required planning horizon;
 - writes a per-arm staging report (`submit_safe=true` only when at least one
   checkpoint reference is covered and every reference is present or staged);
 - exits `3` (fail-closed; do not submit) on any unresolvable or corrupt
@@ -49,9 +52,12 @@ uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
 - `metadata_only` (default, cheap, network-free): accepts `present_local` OR
   `stageable_remote`. The always-on guard inside
   `prepare_campaign_preflight()` runs in this mode so it never breaks offline
-  preflight-only workflows. **`stageable_remote` is not submit-safe.** The
+  preflight-only workflows for non-predictive arms. **`stageable_remote` is not submit-safe.** The
   JSON `submit_safe` field reports `false` when any arm is only
   `stageable_remote`.
+  Learned predictive bindings additionally require actual local checkpoint bytes even
+  in this network-free mode. A remote metadata promise cannot prove the forecast
+  window: stage that same declared checkpoint before retrying.
 - `enforced_staged` (`--stage`): downloads and checksum-verifies every registry
   artifact. The submit/sbatch wrapper must use this mode. After a successful
   run with a non-empty reference set, `submit_safe` is `true`; a `0/0` or
@@ -61,6 +67,37 @@ uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
 exposes the same branch for callers that want the staging step inside the
 preflight-only workflow; `run_camera_ready_benchmark.py --mode preflight
 --checkpoint-preflight-mode enforced_staged` is the public CLI surface.
+
+## Predictive horizon census
+
+To audit all benchmark matrices without executing scenarios or resolving seed inventories:
+
+```bash
+uv run python scripts/benchmark/scan_predictive_horizons.py \
+  --report-path output/validation/predictive_horizon_scan.json
+```
+
+The read-only scan expands scenario includes/metadata overrides and applies campaign
+candidate selection whenever planner configs have contextual overrides. The shared runtime
+resolver merges the effective config for each selected scenario/family; unused overrides
+are not hypothetical runtime bindings. This structural expansion does not resolve the
+campaign seed policy or execute episodes. Equal effective configs share a checkpoint check,
+with all covered contexts retained in the report.
+
+The read-only scan reports compatible, incompatible, and unverified checkpoint bindings;
+it exits nonzero for either of the latter. Its checkpoint inventory records declared IDs,
+resolved paths, availability, SHA-256 and forecast steps. Missing checkpoints and unfrozen
+placeholders have distinct unverified reasons; corrupt/unresolvable inputs retain explicit
+error categories. Census totals depend on which declared artifacts are locally available.
+The gate runs at campaign startup and in the supplied pre-submit staging CLI; direct Slurm
+submission templates do not all enforce this CLI unconditionally. Historical/frozen invalid bindings remain
+unchanged and must be listed in review evidence. MPPI needs its complete `horizon_steps`
+sequence (the legacy doorway binding requests 12 from an eight-step model). The
+prediction planner retains its existing forecast-bound adaptive horizon; its boost does
+not extend MPPI's sequence. Explicit predictive checkpoint paths win over model IDs,
+matching runtime loading. Other predictor model families keep their own contracts.
+This check proves checkpoint-window compatibility only. Time-grid validation and a real
+development planning-step probe remain separate work under issue #10283.
 
 ## S30 requeue rules
 

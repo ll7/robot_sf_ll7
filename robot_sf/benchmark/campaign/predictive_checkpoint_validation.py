@@ -47,22 +47,31 @@ def checkpoint_forecast_steps(path: Path, *, expected_feature_schema_name: str |
     config = payload.get("config")
     if not isinstance(config, dict):
         raise ValueError("Predictive checkpoint config metadata must be a mapping")
-    input_dim = _required_positive_int(config, "input_dim", section="config")
-    _required_positive_int(config, "horizon_steps", section="config")
-    feature_schema = payload.get("feature_schema")
-    if not isinstance(feature_schema, dict):
-        raise ValueError("Predictive checkpoint feature_schema metadata must be a mapping")
-    schema_name = feature_schema.get("name")
-    if not isinstance(schema_name, str) or not schema_name.strip():
-        raise ValueError("Predictive checkpoint feature_schema.name must be a non-empty string")
-    _required_positive_int(feature_schema, "input_dim", section="feature_schema")
-    validate_predictive_feature_schema_metadata(
-        feature_schema, input_dim=input_dim, expected_schema_name=expected_feature_schema_name
+    # Registered release checkpoints predate serialized input_dim/feature_schema. The runtime
+    # loader reconstructs both for them (default input_dim, inferred schema), so absence is
+    # accepted here and re-validated by that loader below; present-but-invalid metadata fails.
+    input_dim = (
+        _required_positive_int(config, "input_dim", section="config")
+        if "input_dim" in config
+        else None
     )
+    _required_positive_int(config, "horizon_steps", section="config")
+    if "feature_schema" in payload:
+        feature_schema = payload["feature_schema"]
+        if not isinstance(feature_schema, dict):
+            raise ValueError("Predictive checkpoint feature_schema metadata must be a mapping")
+        schema_name = feature_schema.get("name")
+        if not isinstance(schema_name, str) or not schema_name.strip():
+            raise ValueError("Predictive checkpoint feature_schema.name must be a non-empty string")
+        _required_positive_int(feature_schema, "input_dim", section="feature_schema")
+        if input_dim is not None:
+            validate_predictive_feature_schema_metadata(
+                feature_schema, input_dim=input_dim, expected_schema_name=expected_feature_schema_name
+            )
     if not isinstance(payload.get("state_dict"), dict):
         raise ValueError("Predictive checkpoint state_dict must be a mapping")
 
-    # Check metadata first: the runtime loader retains legacy default inference.
+    # Serialized metadata was checked above; the runtime loader infers legacy omissions.
     # Then use its state loading, including output-head shape and missing-key checks.
     from robot_sf.planner.predictive_model import load_predictive_checkpoint  # noqa: PLC0415
 

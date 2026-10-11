@@ -174,9 +174,7 @@ def test_stale_checkpoint_config_cannot_admit_larger_model_horizon(tmp_path, pre
 @pytest.mark.parametrize(
     "section,key,value,remove",
     [
-        ("config", "input_dim", None, True),
         ("config", "horizon_steps", None, True),
-        (None, "feature_schema", None, True),
         (None, "feature_schema", None, False),
         (None, "feature_schema", [], False),
         (None, "feature_schema", {}, False),
@@ -630,3 +628,80 @@ def test_census_resolves_scenario_matrix_and_candidate_selection(tmp_path, predi
     scan = scan_predictive_horizons(tmp_path, registry_path=predictor_registry)
     assert (scan["compatible"], scan["incompatible"], scan["unverified"]) == (1, 0, 0)
     assert scan["bindings"][0]["contexts"] == [{"scenario": "safe", "family": "nominal"}]
+
+
+def _write_legacy_checkpoint(path):
+    """Save a checkpoint in the serialized layout of the registered release predictors."""
+    import torch
+
+    save_predictive_checkpoint(
+        path,
+        model=PredictiveTrajectoryModel(PredictiveModelConfig(horizon_steps=8)),
+        optimizer=None,
+        epoch=0,
+    )
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    del payload["config"]["input_dim"]
+    payload.pop("feature_schema", None)
+    torch.save(payload, path)
+
+
+def test_legacy_checkpoint_without_input_dim_or_feature_schema_is_accepted(tmp_path):
+    """Registered release predictors omit both fields; the runtime loader infers them."""
+    from robot_sf.benchmark.campaign.predictive_checkpoint_validation import (
+        checkpoint_forecast_steps,
+    )
+
+    checkpoint = tmp_path / "legacy.pt"
+    _write_legacy_checkpoint(checkpoint)
+    assert checkpoint_forecast_steps(checkpoint, expected_feature_schema_name=None) == 8
+
+
+def test_every_tracked_non_frozen_campaign_config_passes_horizon_preflight(tmp_path):
+    """No tracked campaign roster may be refused for a legacy-layout release checkpoint."""
+    from scripts.benchmark.scan_predictive_horizons import scan_predictive_horizons
+
+    checkpoint = tmp_path / "legacy.pt"
+    _write_legacy_checkpoint(checkpoint)
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "models": [
+                    {"model_id": model_id, "local_path": str(checkpoint)}
+                    for model_id in (
+                        "predictive_proxy_selected_v1",
+                        "predictive_proxy_selected_v2_full",
+                        "predictive_proxy_selected_v2_xl_ego",
+                    )
+                ],
+            }
+        )
+    )
+    scan = scan_predictive_horizons(ROOT / "configs/benchmarks", registry_path=registry)
+    # Known finding, not an exemption of the check: the camera-ready MPPI config asks for 12
+    # forecast steps from an 8-step release predictor. Historical and frozen matrices share it,
+    # so it stays unchanged; any other refusal in a tracked matrix is a regression.
+    known_historical = "predictive_mppi_camera_ready.yaml"
+    bad = [
+        (Path(r["matrix"]).name, r["planner_key"], r["status"], r.get("unverified_reason"))
+        for r in scan["bindings"]
+        if "_frozen" not in Path(r["matrix"]).name
+        and r.get("unverified_reason") != "unfrozen_placeholder"
+        and r["status"] != "compatible"
+        and not (r["status"] == "incompatible" and Path(r["algo_config_path"]).name == known_historical)
+    ]
+    assert not bad
+    assert scan["compatible"] > 0
+    # The behaviour-gate sweeps derive their campaigns from these two templates.
+    sweep_templates = {
+        "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+        "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+    }
+    sweep_bad = [
+        (Path(r["matrix"]).name, r["planner_key"], r["status"])
+        for r in scan["bindings"]
+        if Path(r["matrix"]).name in sweep_templates and r["status"] != "compatible"
+    ]
+    assert not sweep_bad

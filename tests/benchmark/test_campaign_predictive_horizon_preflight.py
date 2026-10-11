@@ -690,7 +690,10 @@ def test_every_tracked_non_frozen_campaign_config_passes_horizon_preflight(tmp_p
         if "_frozen" not in Path(r["matrix"]).name
         and r.get("unverified_reason") != "unfrozen_placeholder"
         and r["status"] != "compatible"
-        and not (r["status"] == "incompatible" and Path(r["algo_config_path"]).name == known_historical)
+        and not (
+            r["status"] == "incompatible"
+            and Path(r["algo_config_path"]).name == known_historical
+        )
     ]
     assert not bad
     assert scan["compatible"] > 0

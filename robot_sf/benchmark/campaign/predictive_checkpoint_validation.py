@@ -66,7 +66,9 @@ def checkpoint_forecast_steps(path: Path, *, expected_feature_schema_name: str |
         _required_positive_int(feature_schema, "input_dim", section="feature_schema")
         if input_dim is not None:
             validate_predictive_feature_schema_metadata(
-                feature_schema, input_dim=input_dim, expected_schema_name=expected_feature_schema_name
+                feature_schema,
+                input_dim=input_dim,
+                expected_schema_name=expected_feature_schema_name,
             )
     if not isinstance(payload.get("state_dict"), dict):
         raise ValueError("Predictive checkpoint state_dict must be a mapping")

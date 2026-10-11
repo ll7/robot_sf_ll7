@@ -76,6 +76,39 @@ The preserved hub bundle contains:
   - `nice -n 15 scripts/dev/run_worktree_shared_venv.sh -- ruff check scripts/analysis/build_issue_2994_ch7_traces_008.py tests/analysis/test_build_issue_2994_ch7_traces_008.py`
   - `nice -n 15 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/analysis/test_build_issue_2994_ch7_traces_008.py -q`
 
+### PR #10316 Review Repair
+
+The exact-selection fixture now requires skipping early seeds: its first 30
+seeds are all successes, whereas the targets require collision and timeout
+outcomes available later in the development pool. A temporary mutation replacing
+the solver with `return complete_seeds[:30], "exact"` was run once with:
+
+```bash
+nice -n 15 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/analysis/test_build_issue_2994_ch7_traces_008.py -q --tb=short
+```
+
+The expected failure was recorded before restoring the solver:
+
+```text
+test_select_shared_subset_matches_two_planner_marginals_exactly
+At index 15 diff: 1016 != 1031
+7 failed, 14 passed in 0.15s
+```
+
+The `nearest` path now minimizes summed absolute count errors across every
+planner/outcome marginal, including outcomes absent from the targets. Its
+impossible-target test checks the selected seeds and compares the error against
+all possible subsets of the small fixture. The selection pool rejects seeds
+outside `1001..1200` and insufficient shared seeds. Outcome tests cover all five
+labels and success/collision/timeout/route-completion precedence.
+
+After restoring the solver and applying the fixes, Ruff format and check passed,
+and the same focused test command passed once: `21 passed in 0.31s`.
+Recomputing all five selections from the published rows and development sweep
+confirmed the same exact subsets for both planners in every cell. All 300
+preserved trace selections are unchanged; the hub bundle was not regenerated.
+Fresh hub readback with `nice -n 15 sha256sum --quiet -c SHA256SUMS` passed.
+
 ## Proposed Evidence Pins
 
 The complete proposed entry is preserved in the hub bundle at

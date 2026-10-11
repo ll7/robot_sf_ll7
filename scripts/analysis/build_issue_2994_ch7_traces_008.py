@@ -196,6 +196,59 @@ def _counts_vector(counter: Counter[str], labels: tuple[str, ...]) -> tuple[int,
     return tuple(counter.get(label, 0) for label in labels)
 
 
+def _nearest_bucket_subset(
+    buckets: dict[tuple[str, ...], list[int]],
+    label_space: tuple[str, ...],
+    target_vectors: tuple[tuple[int, ...], ...],
+    subset_size: int,
+) -> list[int]:
+    """Minimize summed absolute marginal-count error using integer bucket counts."""
+
+    import numpy as np
+    from scipy.optimize import Bounds, LinearConstraint, milp
+
+    categories = sorted(buckets)
+    bucket_count = len(categories)
+    targets = np.asarray(target_vectors, dtype=float).ravel()
+    marginal_count = len(targets)
+    coefficients = np.zeros((marginal_count, bucket_count))
+    for bucket_i, labels in enumerate(categories):
+        for planner_i, label in enumerate(labels):
+            coefficients[planner_i * len(label_space) + label_space.index(label), bucket_i] = 1
+
+    # Each deviation bounds both signs of (selected count - target count).
+    constraints = np.zeros((1 + 2 * marginal_count, bucket_count + marginal_count))
+    constraints[0, :bucket_count] = 1
+    constraints[1 : 1 + marginal_count, :bucket_count] = coefficients
+    constraints[1 : 1 + marginal_count, bucket_count:] = -np.eye(marginal_count)
+    constraints[1 + marginal_count :, :bucket_count] = coefficients
+    constraints[1 + marginal_count :, bucket_count:] = np.eye(marginal_count)
+    result = milp(
+        c=np.concatenate((np.zeros(bucket_count), np.ones(marginal_count))),
+        integrality=np.concatenate((np.ones(bucket_count), np.zeros(marginal_count))),
+        bounds=Bounds(
+            np.zeros(bucket_count + marginal_count),
+            [*(len(buckets[labels]) for labels in categories), *([np.inf] * marginal_count)],
+        ),
+        constraints=LinearConstraint(
+            constraints,
+            [subset_size, *([-np.inf] * marginal_count), *targets],
+            [subset_size, *targets, *([np.inf] * marginal_count)],
+        ),
+        options={"mip_rel_gap": 0.0},
+    )
+    if not result.success or result.x is None:
+        raise RuntimeError("nearest development-seed subset optimization failed")
+    selected = sorted(
+        seed
+        for labels, count in zip(categories, result.x[:bucket_count], strict=True)
+        for seed in buckets[labels][: round(count)]
+    )
+    if len(selected) != subset_size:
+        raise RuntimeError("nearest development-seed subset has an invalid size")
+    return selected
+
+
 def select_shared_subset(  # noqa: C901 - small dynamic program over paired outcome buckets.
     rows_by_planner: dict[str, list[dict[str, Any]]],
     target_counts_by_planner: dict[str, Counter[str]],
@@ -205,6 +258,10 @@ def select_shared_subset(  # noqa: C901 - small dynamic program over paired outc
     """Select shared seeds whose planner outcome marginals match target counts.
 
     Returns ``(seeds, status)`` where status is ``exact`` or ``nearest``.
+    Nearest minimizes the sum of absolute count errors across all planner/label
+    marginals, including labels absent from the targets. Within each selected
+    outcome bucket, the lowest seeds are used. Rejects candidate seeds outside
+    1001..1200 and pools too small to supply the requested shared subset.
     """
 
     planners = tuple(rows_by_planner)
@@ -217,6 +274,11 @@ def select_shared_subset(  # noqa: C901 - small dynamic program over paired outc
         for seed, planner_rows in rows_by_seed.items()
         if all(p in planner_rows for p in planners)
     )
+    # Every selected seed comes from this pool; enforce the policy on both paths.
+    if any(not 1001 <= seed <= 1200 for seed in complete_seeds):
+        raise ValueError("candidate seeds must be in the development range 1001..1200")
+    if len(complete_seeds) < subset_size:
+        raise ValueError("not enough shared development seeds for the requested subset")
 
     buckets: dict[tuple[str, ...], list[int]] = defaultdict(list)
     for seed in complete_seeds:
@@ -224,7 +286,10 @@ def select_shared_subset(  # noqa: C901 - small dynamic program over paired outc
         buckets[labels].append(seed)
 
     label_space = tuple(
-        sorted({label for counter in target_counts_by_planner.values() for label in counter})
+        sorted(
+            {label for counter in target_counts_by_planner.values() for label in counter}
+            | {label for labels in buckets for label in labels}
+        )
     )
     target_vectors = tuple(
         _counts_vector(target_counts_by_planner[p], label_space) for p in planners
@@ -276,8 +341,7 @@ def select_shared_subset(  # noqa: C901 - small dynamic program over paired outc
         assert solution is not None
         return solution, "exact"
 
-    # Deterministic fallback: choose the lexicographically first complete seeds.
-    return complete_seeds[:subset_size], "nearest"
+    return _nearest_bucket_subset(buckets, label_space, target_vectors, subset_size), "nearest"
 
 
 def _min_distance(

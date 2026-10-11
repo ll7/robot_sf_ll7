@@ -348,6 +348,40 @@ def test_optional_metrics_do_not_degrade_executed_controller_or_mutate_row():
     assert row == original
 
 
+@pytest.mark.parametrize("identity", ["missing", "null"])
+def test_missing_algorithm_is_invalid_execution_evidence(identity):
+    row = _executed_goal_with_optional_metrics()
+    row.pop("algo", None)
+    row.pop("algorithm", None)
+    if identity == "null":
+        row.update(algo=None, algorithm=None)
+    original = copy.deepcopy(row)
+
+    evidence = producer._execution_evidence(row)
+
+    assert evidence == {
+        "algorithm": "unknown",
+        "controller_executed": False,
+        "execution_mode": "native",
+        "fallback": False,
+        "degraded": True,
+    }
+    assert producer._audit_status([evidence]) == "fail"
+    assert row == original
+
+
+def test_algorithm_alias_preserves_valid_execution_evidence():
+    row = _executed_goal_with_optional_metrics()
+    row["algorithm"] = row.pop("algo")
+
+    evidence = producer._execution_evidence(row)
+
+    assert evidence["algorithm"] == "goal"
+    assert evidence["controller_executed"] is True
+    assert evidence["degraded"] is False
+    assert producer._audit_status([evidence]) == "pass"
+
+
 def _executed_orca_row():
     return {
         **json.loads((REAL_ROWS / "orca__differential_drive.jsonl").read_bytes()),

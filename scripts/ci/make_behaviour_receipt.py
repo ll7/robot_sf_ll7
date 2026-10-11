@@ -1405,7 +1405,11 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     ):
         if profile.get(f"supports_{mode}_commands") is not True:
             mode = "unknown"
-    marker = _controller_runtime_marker(row, metadata, algorithm)
+    marker = (
+        _controller_runtime_marker(row, metadata, algorithm)
+        if isinstance(algorithm, str)
+        else ("algorithm", "invalid")
+    )
     required = all(
         list(_runtime_objects(row, path)) == [(".".join(path), expected)]
         for path, (expected, _) in EXECUTION_EVIDENCE_LOCATIONS["required_values"].items()

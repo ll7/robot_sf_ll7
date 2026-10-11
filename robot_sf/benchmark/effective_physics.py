@@ -178,11 +178,7 @@ def campaign_physics(campaign_root: Path) -> dict[str, Any]:
         distinct snapshots and explicit missing markers. Partial coverage never
         establishes a campaign-wide design parameter.
     """
-    samples: dict[tuple[str, str, str], dict[str, Any]] = {}
-    signatures: set[tuple[str, str, str]] = set()
-    count = 0
-    witnessed = 0
-    common: dict[str, Any] | None = None
+    latest_by_identity: dict[tuple[str, str, str], dict[str, Any]] = {}
     for path in sorted((campaign_root / "runs").rglob("episodes.jsonl")):
         with path.open(encoding="utf-8") as stream:
             for line in stream:
@@ -190,27 +186,31 @@ def campaign_physics(campaign_root: Path) -> dict[str, Any]:
                     continue
                 row = json.loads(line)
                 sample = _episode_physics_sample(row)
-                count += 1
-                if sample["physics_witness"] == "missing":
-                    _retain_sample(samples, sample)
-                    continue
-                witnessed += 1
-                snapshot = sample["physics"]
-                parameters = snapshot["release_design_parameters"]
-                if common is None:
-                    common = {key: value for key, value in parameters.items() if value is not None}
-                else:
-                    common = {
-                        key: value for key, value in common.items() if parameters[key] == value
-                    }
-                signature = (
-                    sample["scenario_id"],
-                    sample["config_hash"],
-                    json.dumps(snapshot, sort_keys=True, allow_nan=False),
-                )
-                if signature not in signatures:
-                    _retain_sample(samples, sample)
-                    signatures.add(signature)
+                _retain_sample(latest_by_identity, sample)
+    count = len(latest_by_identity)
+    witnessed = 0
+    common: dict[str, Any] | None = None
+    samples: list[dict[str, Any]] = []
+    signatures: set[tuple[str, str, str]] = set()
+    for sample in latest_by_identity.values():
+        if sample["physics_witness"] == "missing":
+            samples.append(sample)
+            continue
+        witnessed += 1
+        snapshot = sample["physics"]
+        parameters = snapshot["release_design_parameters"]
+        if common is None:
+            common = {key: value for key, value in parameters.items() if value is not None}
+        else:
+            common = {key: value for key, value in common.items() if parameters[key] == value}
+        signature = (
+            sample["scenario_id"],
+            sample["config_hash"],
+            json.dumps(snapshot, sort_keys=True, allow_nan=False),
+        )
+        if signature not in signatures:
+            samples.append(sample)
+            signatures.add(signature)
     if not witnessed:
         return {"schema_version": "benchmark-camera-ready-campaign.v1"}
     missing = count - witnessed
@@ -221,7 +221,7 @@ def campaign_physics(campaign_root: Path) -> dict[str, Any]:
         "effective_physics_witnessed_episode_count": witnessed,
         "effective_physics_missing_episode_count": missing,
         "effective_physics_status": "incomplete" if missing else "complete",
-        "effective_physics_samples": list(samples.values()),
+        "effective_physics_samples": samples,
         "release_design_parameters": {} if missing else common or {},
     }
 
@@ -243,12 +243,25 @@ def _episode_physics_sample(row: dict[str, Any]) -> dict[str, Any]:
     return {**sample, "physics_witness": "recorded", "physics": snapshot}
 
 
-def _retain_sample(samples: dict, sample: dict[str, Any]) -> None:
-    """Keep different episode witnesses and reject conflicting duplicate source identities."""
+def _retain_sample(
+    samples: dict[tuple[str, str, str], dict[str, Any]], sample: dict[str, Any]
+) -> None:
+    """Upgrade missing witnesses on retry, rejecting conflicting recorded physics."""
     identity = _sample_identity(sample)
-    if identity in samples and samples[identity] != sample:
+    existing = samples.get(identity)
+    if existing is None or existing == sample:
+        samples[identity] = sample
+        return
+    if existing["seed"] != sample["seed"]:
         raise ValueError("conflicting physics for episode identity")
-    samples.setdefault(identity, sample)
+    existing_witness = existing.get("physics_witness", "recorded")
+    new_witness = sample.get("physics_witness", "recorded")
+    if existing_witness == "missing" and new_witness == "recorded":
+        samples[identity] = sample
+        return
+    if existing_witness == "recorded" and new_witness == "missing":
+        return
+    raise ValueError("conflicting physics for episode identity")
 
 
 def validate_campaign_physics(manifest: dict[str, Any]) -> dict[str, Any]:

@@ -4,6 +4,11 @@ These files contain the first complete written raw episode row per algorithm
 present in the captured baseline job 31302 output. Source commit:
 `373dbfde4f39667cf9e8732dabe7df5118bdeab1`. All fixture seeds are 1001.
 
+Archived JSONL evidence belongs in `tests/analysis/fixtures/`, the existing
+`check_seed_holdout_diff.py` exemption for stored raw episode data. Moving these
+files here changes no evidence bytes or manifest digests. They are not seed
+configuration, and no seed-holdout checker rule was changed.
+
 The goal row is the unchanged #10313 reproduction, including its newline:
 397583 bytes, SHA-256
 `6084b29551a667654d511dad222a96b777910d42e1672aad4617daff707b10ab`.

@@ -85,7 +85,7 @@ def test_compute_forces_accumulates_multiple_force_components():
 
 
 def test_simulator_emits_explicit_obstacle_force_law_metadata():
-    """Simulator metadata records legacy defaults and corrected opt-in dispatch."""
+    """Simulator metadata records legacy defaults and explicit opt-in dispatch."""
     state = np.zeros((0, 7), dtype=float)
     legacy = pysf.Simulator(state=state)
     corrected = pysf.Simulator(

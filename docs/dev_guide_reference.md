@@ -884,7 +884,7 @@ blocker. A pure-deletion file with a valid coverage row and no new-file line num
 `100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
 `not_required` verdict is only for a head with no executable Python changes in the configured
 coverage scope, and remains observable in the artifact rather than being inferred from a skipped
-job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+job. Hosted fast feedback runs the `all` lane with fast tests plus affected slow witnesses, so an optional-extra change cannot
 be proven by a core-only shard.
 
 The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
@@ -2656,11 +2656,12 @@ All figures must be **reproducible from code** and directly **integratable into 
   format check can be stale when the shared baseline moved.
 
 CI mapping to local tasks and CLI:
-- `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
-  also runs lint and advisory type checking. Pull requests exclude slow tests and upload one
+- `fast-feedback` matrix → six `scripts/dev/ci_driver.sh test` shards on every event; shard 1
+  also runs lint and advisory type checking. Pull requests run all fast tests plus selected slow
+  files and upload one
   trace-based coverage database per shard for exact-head changed coverage, while non-PR events
   run the complete suite and upload one coverage database per shard using the faster sysmon backend.
-- `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
+- `coverage-gate` job → combines all six non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
 - aggregate `ci` job → requires the coverage gate on non-PR events and all other split jobs while
@@ -2668,6 +2669,21 @@ CI mapping to local tasks and CLI:
 - local full equivalent → `scripts/dev/run_ci_local.sh`
 
 Workflow location: `.github/workflows/ci.yml`.
+
+PR slow-file selection is owned by `scripts/dev/affected_test_selection.py`. The preparation
+job scans tracked files once and writes a base/head/tree-bound artifact. Shards reuse it and
+admit `not slow or affected`. The CI log records each selected file's import/path chain,
+unconditional witness rule, or full-suite fallback reason. Package initializers, relative imports,
+vendored module aliases, joined path literals, unique basename pins and transitive text-input
+references participate in selection. Renames include both endpoints; deleted tests cannot execute.
+
+Pin, inventory, manifest and registry filenames, optimized-assert and issue-5303 witnesses,
+docs-evidence checks and tests using digest/inventory helpers always run, including an empty diff.
+Shared CI/build/collection changes, unparseable Python and inputs with no mapped test consumer
+retain full-suite admission. Static selection can overselect and cannot resolve arbitrary runtime
+path construction or dynamic imports. Train/main heads still run the complete suite. This changes
+admission within the existing test job and adds no process gate.
+
 
 ### Main CI signal and staleness-aware merge policy
 

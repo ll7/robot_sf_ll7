@@ -4,7 +4,7 @@
   "execution_class": "gpu_training",
   "title": "GPU training environment (NVIDIA driver, CUDA torch, single-GPU discipline)",
   "verification_status": "verified",
-  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "53fb2dc5e820b2e4a1779b586d77135973151bd1881b72926575e21a6446c5fb"},
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "da16ae855eb53d76fddf8a351c881f9b178dd8157367b30679bfd459a6040f28"},
   "prerequisites": [
     {"id": "nvidia-driver", "kind": "driver", "identity": "nvidia>=560", "probe": {"argv": ["nvidia-smi", "--query-gpu=driver_version,name", "--format=csv,noheader"], "expect_exit_code": 0}},
     {"id": "uv", "kind": "binary", "identity": "uv>=0.11", "probe": {"argv": ["uv", "--version"], "expect_exit_code": 0}}

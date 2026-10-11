@@ -4,7 +4,7 @@
   "execution_class": "carla_platform",
   "title": "CARLA platform environment (digest-pinned Docker server, host CARLA client group)",
   "verification_status": "verified",
-  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "a3a4d60ae3dc677aa33f94e412cf3743885c82ecd0ef230a755051f583d87c21"},
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "da16ae855eb53d76fddf8a351c881f9b178dd8157367b30679bfd459a6040f28"},
   "prerequisites": [
     {"id": "docker", "kind": "container-runtime", "identity": "docker>=29", "probe": {"argv": ["docker", "--version"], "expect_exit_code": 0}},
     {"id": "nvidia-container-toolkit", "kind": "container-runtime", "identity": "nvidia-container-toolkit>=1.17", "probe": {"argv": ["docker", "info", "--format", "{{.Runtimes}}"], "expect_exit_code": 0}}

@@ -1727,6 +1727,9 @@ def build_robot_config_from_scenario(
     _reject_required_platform_semantic_consumers(scenario)
 
     config = RobotSimulationConfig()
+    # Authored packets without a selector predate #10017. Preserve their
+    # historical identity; an explicit override below can opt into the 0.1.0 law.
+    config.sim_config.obstacle_force_law = {}
     consumed_inputs: list[dict[str, str]] | None = [] if runtime_input_records is not None else None
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))
@@ -3020,6 +3023,7 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "goal_completion_policy",
     "robot_goal_sampling_policy",
     "pedestrian_model",
+    "obstacle_force_law",
     "social_force_kernel_version",
     "ttc_predictive_force",
     "zanlungo_collision_prediction",

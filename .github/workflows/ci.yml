@@ -153,8 +153,8 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.draft
         run: |
           set -euo pipefail
-          uvx --from ruff==0.16.7 ruff check .
-          uvx --from ruff==0.16.7 ruff format --check .
+          uvx --from ruff==0.16.10 ruff check .
+          uvx --from ruff==0.16.10 ruff format --check .
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-project --with pytest==9.1.1 \
             python -m pytest tests/dev/test_ci_heavy_paths.py tests/ci/test_collect_pr_files.py \
             --noconftest -q -o addopts=''

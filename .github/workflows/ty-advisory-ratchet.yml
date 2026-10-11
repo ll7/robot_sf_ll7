@@ -1,10 +1,11 @@
 name: ty advisory ratchet
 
-# Non-gating downward ratchet over the ty advisory type-check baseline (issue #5004).
+# Downward ratchet over the ty advisory type-check baseline (issue #5004).
 # Re-runs `ty check`, diffs the per-module general-bucket counts against the committed
-# baseline at scripts/validation/ty_advisory_baseline.json, and reports net-new findings
-# (regressions in clean modules, or any per-module increase) as a non-blocking failure.
-# Promote to gating by removing `continue-on-error: true` once the ratchet has settled.
+# baseline at scripts/validation/ty_advisory_baseline.json, and fails on net-new
+# findings (regressions in clean modules, any per-module increase, or a total
+# general-bucket increase). Pull requests check the PR merge ref so the ratchet
+# evaluates the merged tree that would land on main, not only the head diff.
 #
 # Scope boundary: the optional-dependency import-resolution subset of ty findings
 # (check_name `unresolved-import`, "Cannot resolve imported module ...") is recorded
@@ -14,14 +15,6 @@ name: ty advisory ratchet
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-    paths:
-      - "**/*.py"
-      - "pyproject.toml"
-      - "scripts/dev/ty_advisory_ratchet.py"
-      - "scripts/validation/ty_advisory_baseline.json"
-      - "scripts/validation/ty_advisory_findings_fixture.json"
-      - "tests/dev/test_ty_advisory_ratchet.py"
-      - ".github/workflows/ty-advisory-ratchet.yml"
   schedule:
     - cron: "23 5 * * 3"
   workflow_dispatch:
@@ -35,13 +28,13 @@ concurrency:
 
 jobs:
   ty-advisory-ratchet:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.ref || github.sha }}
           persist-credentials: false
 
       - name: Set up CI Python environment
@@ -53,7 +46,7 @@ jobs:
 
       - name: Run ty advisory ratchet
         id: ty_ratchet
-        continue-on-error: true
+        shell: bash
         run: |
           mkdir -p output/ty
           uv run python scripts/dev/ty_advisory_ratchet.py --check 2>&1 | tee output/ty/ratchet.log

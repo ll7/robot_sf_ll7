@@ -108,6 +108,7 @@ def _github_context(
     triggering_actor: str = "ll7",
     repository: str = "ll7/robot_sf_ll7",
     head_repository: str = "ll7/robot_sf_ll7",
+    author: str | None = "ll7",
 ) -> dict[str, Any]:
     return {
         "event_name": event,
@@ -115,7 +116,12 @@ def _github_context(
         "triggering_actor": triggering_actor,
         "repository": repository,
         "run_attempt": "1",
-        "event": {"pull_request": {"head": {"repo": {"full_name": head_repository}}}},
+        "event": {
+            "pull_request": {
+                "head": {"repo": {"full_name": head_repository}},
+                "user": {"login": author} if author is not None else {},
+            }
+        },
     }
 
 
@@ -124,6 +130,21 @@ def _github_context(
     [
         (_github_context("push"), "robot-sf-ci-ephemeral"),
         (_github_context("pull_request"), "robot-sf-ci-ephemeral"),
+        pytest.param(
+            _github_context("pull_request", author="dependabot[bot]"),
+            "ubuntu-latest",
+            id="bot-author-maintainer-trigger",
+        ),
+        pytest.param(
+            _github_context("pull_request", author="outsider"),
+            "ubuntu-latest",
+            id="other-author-maintainer-trigger",
+        ),
+        pytest.param(
+            _github_context("pull_request", author=None),
+            "ubuntu-latest",
+            id="missing-author",
+        ),
         (_github_context("pull_request", head_repository="outsider/robot_sf_ll7"), "ubuntu-latest"),
         (_github_context("pull_request", actor="dependabot[bot]"), "ubuntu-latest"),
         (_github_context("pull_request", triggering_actor="dependabot[bot]"), "ubuntu-latest"),

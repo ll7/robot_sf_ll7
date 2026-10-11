@@ -9,6 +9,8 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -115,6 +117,55 @@ def test_pair_roster_preserves_default_bytes_and_changes_only_opt_in():
         assert configs[1].pop("v4_prediction_speed_error") == 0.2
         assert not configs[0].get("v4_predictive_braking_enabled", False)
         assert configs[0] == configs[1]
+
+
+@pytest.mark.parametrize("missing_simulator", [False, True])
+def test_native_diagnostics_require_simulator_after_reset(monkeypatch, missing_simulator):
+    """Reject missing native state, close the env, and preserve valid episode metrics."""
+    from scripts.validation import run_predictive_braking_diagnostics as runner
+
+    simulator = SimpleNamespace(
+        robot_pos=np.array([[0.0, 0.0]]),
+        goal_pos=np.array([[1.0, 0.0]]),
+        ped_pos=np.array([[1.5, 0.0]]),
+        ped_vel=np.zeros((1, 2)),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    env = SimpleNamespace(simulator=None, close=Mock())
+
+    def reset(*, seed):
+        assert seed == 1001
+        env.simulator = None if missing_simulator else simulator
+        return {}, {}
+
+    def step(_action):
+        simulator.robot_pos[0] = [0.1, 0.0]
+        return {}, 0.0, False, True, {"meta": {}}
+
+    env.reset = reset
+    env.step = step
+    policy = Mock(return_value=np.zeros(2))
+    policy._planner_adapter.diagnostics.return_value = {}
+    monkeypatch.setattr(runner, "_build_env_config", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runner, "hybrid_config", lambda _scenario: {})
+    monkeypatch.setattr(runner, "_build_policy", lambda *_args, **_kwargs: (policy, {}))
+    monkeypatch.setattr(runner, "make_robot_env", lambda **_kwargs: env)
+    monkeypatch.setattr(runner, "_policy_command_to_env_action", lambda **_kwargs: np.zeros(2))
+    task = ({"name": "native-test"}, 1001, True, False, 0)
+    if missing_simulator:
+        with pytest.raises(RuntimeError, match="initialized simulator"):
+            runner.run_cell(task)
+        policy.assert_not_called()
+    else:
+        result = runner.run_cell(task)
+        assert result["steps"] == 1
+        assert result["travel_m"] == pytest.approx(0.1)
+        assert result["duration_s"] == pytest.approx(0.1)
+        assert result["final_goal_distance_m"] == pytest.approx(0.9)
+        assert result["one_step_tube_checks"] == 1
+        assert result["one_step_tube_violations"] == 0
+        policy.assert_called_once()
+    env.close.assert_called_once()
 
 
 def test_analysis_keeps_success_gain_next_to_near_miss_cost_and_bound_rate():

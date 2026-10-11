@@ -97,7 +97,6 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
         "metrics.social_compliance.metrics.pedestrian_deviation_mean_m.status": "robot_sf/benchmark/social_compliance.py:72 derived social-compliance field availability.",
         "metrics.social_mini_game.rows.*.status": "robot_sf/benchmark/metrics.py:3879 per-game derived metric availability; wildcard is an array index only.",
         "metrics.social_mini_game.status": "robot_sf/benchmark/metrics.py:4051 derived mini-game diagnostic scope.",
-        "pedestrian_model.fallback_degraded_status": "robot_sf/benchmark/ped_model_sensitivity.py:97 pedestrian-model provenance, not robot controller execution.",
         "public_requirement.status": "robot_sf/benchmark/public_requirement_events.py:128 optional public-requirement event availability.",
         "result_provenance.postprocessing.*.status": "robot_sf/benchmark/map_runner/map_runner_episode.py:5218 derived metric postprocessing provenance.",
         "scenario_params.metadata.plausibility.status": "robot_sf/benchmark/map_runner/map_runner_episode.py:4777 transports authored scenario configuration, not controller execution status.",
@@ -113,6 +112,9 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
         "spawn_validity.reset_clearance_status": "robot_sf/benchmark/spawn_validity.py:111 reset-clearance measurement availability.",
     },
     "runtime_objects": {
+        (
+            "pedestrian_model",
+        ): "ped_model_sensitivity.py:97/286-305 exports robot algorithm/planner faults; map_runner_episode.py:5088 transports the report.",
         (
             "integrity",
             "effective_view",
@@ -268,6 +270,22 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
         "fallback_controller_state": "Typed, independently bound guarded-controller state.",
         "fallback_diagnostics": "Typed runtime fallback diagnostic object.",
     },
+    "runtime_status_fields": {
+        "status": "Controller/algorithm execution status at named runtime parents.",
+        "row_status": "Runtime execution row status, independent of loader completion.",
+        "readiness_status": "Executed controller readiness, not optional feature availability.",
+        "availability_status": "Executed controller availability, not derived metrics.",
+        "execution_mode": "Runtime fault modes also invalidate command execution.",
+        "decision_label": "Fault labels in an executed controller/guard decision.",
+    },
+    "runtime_fault_statuses": {
+        "fallback": "An alternate controller or command executed.",
+        "degraded": "The controller reports degraded execution.",
+        "not_available": "The runtime controller is not available.",
+        "unavailable": "The runtime controller is unavailable.",
+        "failed": "ped_model_sensitivity.py:305 exports robot runtime failure; the shared predicate omits this value.",
+        "error": "A runtime error is not evidence of healthy controller execution.",
+    },
     "counter_objects": {
         (
             "algorithm_metadata",
@@ -316,6 +334,10 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
         "stop_best_effort": "Guarded native best-effort stop decision count.",
     },
     "runtime_aliases": {
+        "fallback_degraded_status": (
+            "controller_export_status",
+            "ped_model_sensitivity.py:286-305 derives robot faults from algorithm/planner runtime; :281 permits only native/null as clean evidence.",
+        ),
         "load_status": (
             "load_status",
             "socnav_sacadrl.py:228 and socnav_prediction.py:229 report failed/fallback controller asset loading, not optional metric availability.",
@@ -1069,14 +1091,7 @@ def _runtime_objects(
 def _runtime_value_error(view: dict[str, Any], *, counters: bool) -> str | None:
     """Reject malformed present runtime statuses and counter scalars."""
     for key, value in view.items():
-        if key in {
-            "status",
-            "row_status",
-            "readiness_status",
-            "availability_status",
-            "execution_mode",
-            "decision_label",
-        }:
+        if key in EXECUTION_EVIDENCE_LOCATIONS["runtime_status_fields"]:
             if not isinstance(value, str) or not value.strip():
                 return key
         if counters:
@@ -1149,13 +1164,26 @@ def _runtime_reason_counts_marker(value: Any) -> str | None:
     return None
 
 
+def _controller_export_status_marker(value: Any) -> str | None:
+    if value is None or value == "native":
+        return None
+    return (
+        value
+        if isinstance(value, str)
+        and value in EXECUTION_EVIDENCE_LOCATIONS["runtime_fault_statuses"]
+        else "invalid"
+    )
+
+
 def _runtime_alias_value_marker(kind: str, value: Any) -> str | None:
-    if kind == "load_status":
-        return None if value in ("loaded", "not_attempted") else "degraded"
-    if kind == "qp_status":
-        return (
-            None if value in ("pass_through", "filtered", "disabled", "ineligible") else "degraded"
-        )
+    if kind == "controller_export_status":
+        return _controller_export_status_marker(value)
+    if kind in {"load_status", "qp_status"}:
+        clean = {
+            "load_status": ("loaded", "not_attempted"),
+            "qp_status": ("pass_through", "filtered", "disabled", "ineligible"),
+        }[kind]
+        return None if value in clean else "degraded"
     if kind == "degraded":
         return None if value is False else "true" if value is True else "invalid"
     if kind == "reasons":
@@ -1208,6 +1236,17 @@ def _runtime_decision_marker(view: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+def _runtime_status_marker(view: dict[str, Any]) -> tuple[str, str] | None:
+    """Close the shared predicate's vocabulary gap only in the runtime projection."""
+    for key in EXECUTION_EVIDENCE_LOCATIONS["runtime_status_fields"]:
+        value = view.get(key)
+        if isinstance(value, str):
+            normalized = value.strip().lower().replace("-", "_")
+            if normalized in EXECUTION_EVIDENCE_LOCATIONS["runtime_fault_statuses"]:
+                return key, normalized
+    return None
+
+
 def _required_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     """Present integrity and cumulative-use reports must not omit their assertions."""
     for path, required in EXECUTION_EVIDENCE_LOCATIONS["required_object_fields"].items():
@@ -1257,7 +1296,7 @@ def _controller_runtime_marker(
                 # Containers retain their typed/bound check; their contents are
                 # checked only at separately named runtime locations above.
                 view = _bound_runtime_view(view, path, counters=counters, original=obj)
-                decision_marker = _runtime_decision_marker(view)
+                decision_marker = _runtime_status_marker(view) or _runtime_decision_marker(view)
                 if decision_marker is not None:
                     return f"{name}.{decision_marker[0]}" if name else decision_marker[
                         0

@@ -355,6 +355,142 @@ def _executed_orca_row():
     }
 
 
+def _attach_real_controller_fault_export(row, metadata):
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark.ped_model_sensitivity import (
+        attach_pedestrian_model_fields,
+        build_pedestrian_model_provenance,
+    )
+
+    report = build_pedestrian_model_provenance(
+        sim_config=SimpleNamespace(pedestrian_model="social_force_default"),
+        policy_cfg={},
+        algorithm_metadata=metadata,
+    )
+    attach_pedestrian_model_fields(row, report)
+    return report
+
+
+@pytest.mark.parametrize(
+    "status,consistent",
+    [("fallback", False), ("degraded", False), ("failed", False), ("failed", True)],
+)
+def test_real_writer_robot_fault_export_rejects_faults(status, consistent):
+    row = _executed_orca_row()
+    metadata = row["algorithm_metadata"]
+    clean = _attach_real_controller_fault_export(row, metadata)
+    assert clean["fallback_degraded_status"] == "native"
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    faulty = copy.deepcopy(metadata)
+    faulty["planner_runtime"]["status"] = status
+    if consistent:
+        row["algorithm_metadata"] = faulty
+    report = _attach_real_controller_fault_export(row, faulty)
+    assert report["fallback_degraded_status"] == status
+    evidence = producer._execution_evidence(row)
+    assert evidence["controller_executed"] is True
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) == (
+        "pedestrian_model.fallback_degraded_status",
+        status,
+    )
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("status", ["failed", "error", "not_available", "unavailable"])
+def test_real_row_planner_runtime_fault_status_rejects_without_export(status):
+    row = _executed_orca_row()
+    assert row["pedestrian_model"]["fallback_degraded_status"] == "native"
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["planner_runtime"]["status"] = status
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) == (
+        "algorithm_metadata.planner_runtime.status",
+        status,
+    )
+    assert producer._audit_status([producer._execution_evidence(row)]) == "degraded"
+
+
+@pytest.mark.parametrize("status", ["native", None])
+def test_real_row_robot_fault_export_exact_clean_vocabulary(status):
+    row = _executed_orca_row()
+    row["pedestrian_model"]["fallback_degraded_status"] = status
+    original = copy.deepcopy(row)
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    assert row == original
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "fallback",
+        "degraded",
+        "not_available",
+        "unavailable",
+        "failed",
+        "error",
+        "bad",
+        "NATIVE",
+        " native ",
+        "null",
+        "",
+        False,
+        True,
+        0,
+        1,
+        {},
+        [],
+        ["native"],
+    ],
+)
+def test_real_row_robot_fault_export_rejects_malformed_or_fault_values(status):
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["pedestrian_model"]["fallback_degraded_status"] = status
+    evidence = producer._execution_evidence(row)
+    assert evidence["controller_executed"] is True
+    marker = producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"])
+    assert marker is not None
+    assert marker[0] == "pedestrian_model.fallback_degraded_status"
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("status", ["failed", "error", "not_available", "unavailable"])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "status",
+        "row_status",
+        "readiness_status",
+        "availability_status",
+        "execution_mode",
+        "decision_label",
+        "runtime_status",
+        "last_step_status",
+        "observation_validation_status",
+        "load_status",
+        "qp_status",
+    ],
+)
+def test_all_named_runtime_status_locations_reject_fault_vocabulary(field, status):
+    for path in producer.EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]:
+        name = ".".join(path)
+        if f"{name}.{field}" in producer.EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]:
+            continue  # Exact optional availability paths are not runtime statuses.
+        row = _executed_orca_row()
+        if "fallback_controller_state" in path:
+            row["algo"] = "guarded_ppo"
+            row["algorithm_metadata"].update(algorithm="ppo", canonical_algorithm="guarded_ppo")
+            row["algorithm_metadata"]["planner_contract"]["planner_id"] = "guarded_ppo"
+        if "*" in path and path[:2] == ("algorithm_metadata", "cbf_safety_filter"):
+            row["algorithm_metadata"]["cbf_safety_filter"] = {"steps": [{}]}
+        report = _runtime_object_for_fault(row, path)
+        assert producer._audit_status([producer._execution_evidence(row)]) == "pass", path
+        report[field] = status
+        evidence = producer._execution_evidence(row)
+        assert evidence["degraded"] is True, (path, field, status)
+        assert producer._audit_status([evidence]) in {"degraded", "fail"}, (path, field, status)
+
+
 @pytest.mark.parametrize(
     "mode,label",
     [

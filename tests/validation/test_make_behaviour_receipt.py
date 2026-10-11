@@ -517,7 +517,8 @@ def test_real_row_executed_uncertainty_guard_decisions_are_runtime_counters(
     guard = GuardedPPOAdapter(
         config=GuardedPPOConfig(uncertainty_fallback_mode=mode), fallback_adapter=fallback
     )
-    command, decision, _ = guard._uncertainty_fallback_command({}, (0.8, 0.2))
+    command, decision, _, diagnostics = guard._uncertainty_fallback_command({}, (0.8, 0.2))
+    assert diagnostics is None
     assert decision == label
     assert fallback.calls == (1 if mode == "fallback" else 0)
     assert command == (
@@ -939,6 +940,37 @@ def test_planner_adapter_guard_emitted_fault_keys_are_classified():
     assert any(key == "fallback_stop_count" for _, _, key in inventory)
     assert any(key == "fallback_count" for _, _, key in inventory)
     assert not _unclassified_emitter_keys(inventory), sorted(_unclassified_emitter_keys(inventory))
+
+
+def test_risk_dwa_candidate_score_emission_is_an_exact_diagnostic_exception():
+    site = ("robot_sf/planner/risk_dwa.py", "plan_with_diagnostics", "candidate_score_status")
+    root = Path(__file__).resolve().parents[2]
+    assert (site[1], site[2]) in _emitted_fault_keys((root / site[0]).read_text())
+    assert not _unclassified_emitter_keys({site})
+    other_sites = {
+        ("robot_sf/planner/future_planner.py", site[1], site[2]),
+        (site[0], "future_controller_report", site[2]),
+        (site[0], site[1], "new_candidate_score_status"),
+    }
+    assert _unclassified_emitter_keys(other_sites) == other_sites
+    reason = producer.EXECUTION_EVIDENCE_LOCATIONS["non_runtime_emissions"][site]
+    assert reason.startswith("robot_sf/planner/risk_dwa.py:666 ")
+    assert (
+        'progress_escape["candidate_score_status"]'
+        in (root / site[0]).read_text().splitlines()[665]
+    )
+
+
+@pytest.mark.parametrize("status", ["finite", "infeasible", "non_finite", "failed"])
+def test_candidate_score_emission_exception_does_not_admit_unknown_runtime_transports(status):
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["new_controller_report"] = {"candidate_score_status": status}
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) == (
+        "algorithm_metadata.new_controller_report.candidate_score_status",
+        "unclassified_degraded",
+    )
+    assert producer._audit_status([producer._execution_evidence(row)]) == "degraded"
 
 
 def test_emitter_catcher_distinguishes_writes_from_reads_and_detects_new_keys():

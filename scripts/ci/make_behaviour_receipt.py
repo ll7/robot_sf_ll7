@@ -465,6 +465,11 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
     },
     "non_runtime_emissions": {
         (
+            "robot_sf/planner/risk_dwa.py",
+            "plan_with_diagnostics",
+            "candidate_score_status",
+        ): "robot_sf/planner/risk_dwa.py:666 Reports score finiteness (finite/infeasible/non_finite), not controller execution health.",
+        (
             "robot_sf/benchmark/forecast/forecast_heavy_model_adapter.py",
             "<module>",
             "degraded_status",

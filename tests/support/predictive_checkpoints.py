@@ -6,11 +6,6 @@ import pytest
 import yaml
 
 from robot_sf.models import registry as model_registry
-from robot_sf.planner.predictive_model import (
-    PredictiveModelConfig,
-    PredictiveTrajectoryModel,
-    save_predictive_checkpoint,
-)
 
 
 def stage_predictive_checkpoint_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -19,6 +14,13 @@ def stage_predictive_checkpoint_registry(tmp_path: Path, monkeypatch: pytest.Mon
     Returns:
         The isolated registry path; its checkpoint is test setup, not benchmark evidence.
     """
+    # Model classes initialize torch; unrelated selectors must collect without it.
+    from robot_sf.planner.predictive_model import (
+        PredictiveModelConfig,
+        PredictiveTrajectoryModel,
+        save_predictive_checkpoint,
+    )
+
     checkpoint = tmp_path / "orchestrator_predictor.pt"
     save_predictive_checkpoint(
         checkpoint,

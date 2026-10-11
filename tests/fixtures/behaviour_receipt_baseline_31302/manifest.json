@@ -1,0 +1,87 @@
+{
+  "job_id": "31302",
+  "source_sha": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "reproduction_sha256": "6084b29551a667654d511dad222a96b777910d42e1672aad4617daff707b10ab",
+  "rows": [
+    {
+      "path": "goal__differential_drive.jsonl",
+      "algorithm": "goal",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 203,
+      "sha256": "6084b29551a667654d511dad222a96b777910d42e1672aad4617daff707b10ab",
+      "bytes": 397583,
+      "source_file": "campaigns/empty_world_main/runs/goal__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "orca__differential_drive.jsonl",
+      "algorithm": "orca",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 109,
+      "sha256": "ef99ea73c9566cdc7573e6e9f0f2472185e32d3440783ac4b1a4d435fe4fec9a",
+      "bytes": 227501,
+      "source_file": "campaigns/empty_world_main/runs/orca__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "ppo__differential_drive.jsonl",
+      "algorithm": "ppo",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 109,
+      "sha256": "c07543ab31951fb4c90b90426df0048141323b7b205bac7de259c4021bf4f488",
+      "bytes": 222985,
+      "source_file": "campaigns/empty_world_main/runs/ppo__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "prediction_planner__differential_drive.jsonl",
+      "algorithm": "prediction_planner",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 132,
+      "sha256": "5745b3320ae072865e9de411d00a7bd62396b8379de507ba43e2220a089148ce",
+      "bytes": 259619,
+      "source_file": "campaigns/empty_world_main/runs/prediction_planner__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "sacadrl__differential_drive.jsonl",
+      "algorithm": "sacadrl",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 202,
+      "sha256": "62b94ff1ee518edad3ac9ccf6a1e11bfc269ea9402ca1878852caef50f4d7ede",
+      "bytes": 376325,
+      "source_file": "campaigns/empty_world_main/runs/sacadrl__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive.jsonl",
+      "algorithm": "hybrid_rule_local_planner",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 112,
+      "sha256": "dceaa162fd70fbf66b9427445efc1b3cb4c7147a7d80b554816f8400d71ab23d",
+      "bytes": 240197,
+      "source_file": "campaigns/empty_world_main/runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "social_force__differential_drive.jsonl",
+      "algorithm": "social_force",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 221,
+      "sha256": "c3d0def2568b6f62943a48d402913c9c43ea93f56130bb5425e87bb90e874749",
+      "bytes": 432074,
+      "source_file": "campaigns/empty_world_main/runs/social_force__differential_drive/episodes.jsonl"
+    },
+    {
+      "path": "socnav_sampling__differential_drive.jsonl",
+      "algorithm": "socnav_sampling",
+      "seed": 1001,
+      "scenario_id": "classic_bottleneck_low",
+      "steps": 111,
+      "sha256": "efba877894e1f9d50d9c29222687f92240316db604813efd92dcbe294cbbf930",
+      "bytes": 230971,
+      "source_file": "campaigns/empty_world_main/runs/socnav_sampling__differential_drive/episodes.jsonl"
+    }
+  ]
+}

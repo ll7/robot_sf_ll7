@@ -1,8 +1,12 @@
 """Producer provenance, real-gate admission, and pre-fix negative controls."""
 
+import ast
+import copy
+import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +21,8 @@ from scripts.ci import make_behaviour_receipt as producer
 REVIEWED_HEAD = "e7fd36f98fab243ce95cf45bc50ca8a9f7c30893"
 ORIGINAL_MAIN = "de3e37774049b2c6d017116426ae522dc232f679"
 RELEASE_TAG = "paper-matrix-v2-h600-s30-synthetic"
+REAL_ROWS = Path(__file__).parents[1] / "fixtures/behaviour_receipt_baseline_31302"
+REAL_ROW_MANIFEST = json.loads((REAL_ROWS / "manifest.json").read_text())
 
 
 def _git_repo(root: Path):
@@ -296,6 +302,674 @@ def test_row_construction_audits_recorded_trace_evidence(tmp_path, fault):
     audit = tmp_path / "audit.json"
     producer.write_real_row_audit(audit, source_sha="a" * 40, rows=rows, classifications=classes)
     assert json.loads(audit.read_text())["status"] in {"fail", "degraded"}
+
+
+def _executed_goal_with_optional_metrics():
+    """Use the untouched #10313 record, with only the loader's written attachment."""
+    return {
+        **json.loads((REAL_ROWS / "goal__differential_drive.jsonl").read_bytes()),
+        "execution_status": "written",
+    }
+
+
+@pytest.mark.parametrize("record", REAL_ROW_MANIFEST["rows"], ids=lambda row: row["algorithm"])
+def test_byte_exact_baseline_controller_rows_are_admitted(record):
+    raw = (REAL_ROWS / record["path"]).read_bytes()
+    assert len(raw) == record["bytes"]
+    assert hashlib.sha256(raw).hexdigest() == record["sha256"]
+    if record["algorithm"] == "goal":
+        assert len(raw) == 397583
+        assert (
+            hashlib.sha256(raw).hexdigest()
+            == "6084b29551a667654d511dad222a96b777910d42e1672aad4617daff707b10ab"
+        )
+    row = json.loads(raw)
+    assert row["seed"] == 1001
+    original = copy.deepcopy(row)
+    evidence = producer._execution_evidence({**row, "execution_status": "written"})
+    assert evidence["controller_executed"] is True
+    assert evidence["algorithm"] == record["algorithm"]
+    assert producer._audit_status([evidence]) == "pass"
+    assert row == original
+
+
+def test_optional_metrics_do_not_degrade_executed_controller_or_mutate_row():
+    row = _executed_goal_with_optional_metrics()
+    original = copy.deepcopy(row)
+    evidence = producer._execution_evidence(row)
+    assert evidence == {
+        "algorithm": "goal",
+        "controller_executed": True,
+        "execution_mode": "native",
+        "fallback": False,
+        "degraded": False,
+    }
+    assert producer._audit_status([evidence]) == "pass"
+    assert row == original
+
+
+def _executed_orca_row():
+    return {
+        **json.loads((REAL_ROWS / "orca__differential_drive.jsonl").read_bytes()),
+        "execution_status": "written",
+    }
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "cbf_counter",
+        "nmpc_counter",
+        "guard_counter",
+        "cbf_decision",
+        "shield_decision",
+        "cbf_state_only",
+        "cbf_episode_steps",
+        "cbf_histogram",
+    ],
+)
+def test_real_row_emitted_runtime_fallback_reports_are_degraded(fault):
+    """The reviewed projection admitted these actual emitter-shaped fault reports."""
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    if fault == "cbf_counter":
+        metadata["planner_runtime"]["cbf_safety_filter"] = {
+            "schema_version": "cbf-safety-filter-stats.v1",
+            "fallback_count": 1,
+        }
+    elif fault == "nmpc_counter":
+        row["algo"] = "nmpc_social"
+        metadata.update(algorithm="nmpc_social", canonical_algorithm="nmpc_social")
+        metadata["planner_contract"]["planner_id"] = "nmpc_social"
+        metadata["planner_runtime"] = {"calls": 1, "solver_failures": 1, "fallback_stop_count": 1}
+    elif fault == "guard_counter":
+        metadata["guard_stats"] = {"fallback_count": 1}
+    elif fault == "cbf_episode_steps":
+        metadata["cbf_safety_filter"] = {
+            "fallback_step_count": 0,
+            "steps": [{"fallback_applied": True}],
+        }
+    elif fault == "cbf_histogram":
+        metadata["shield_stats"] = {"decision_counts": {"cbf_best_effort": 1}}
+    else:
+        decision = {
+            "schema_version": "shield-decision.v1",
+            "decision_label": "cbf_best_effort",
+            "fallback_controller_state": {
+                "filter": "CollisionConeCbfSafetyFilter",
+                "variant": "collision_cone",
+                "fallback": True,
+            },
+        }
+        if fault == "cbf_state_only":
+            decision["decision_label"] = "cbf_feasible"
+        if fault == "cbf_decision":
+            metadata["planner_runtime"]["cbf_safety_filter"] = {"last_decision": decision}
+        else:
+            metadata["shield_stats"] = {"last_decision": decision}
+    evidence = producer._execution_evidence(row)
+    assert evidence["controller_executed"] is True
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("location", ["cbf", "nmpc", "guard"])
+@pytest.mark.parametrize("counter", [1, "0", True, -1, float("nan"), float("inf"), {}, []])
+def test_real_row_emitted_fallback_counters_fail_closed(location, counter):
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    if location == "cbf":
+        metadata["planner_runtime"]["cbf_safety_filter"] = {"fallback_count": counter}
+    elif location == "nmpc":
+        metadata["planner_runtime"]["fallback_stop_count"] = counter
+    else:
+        metadata["guard_stats"] = {"fallback_count": counter}
+    assert producer._audit_status([producer._execution_evidence(row)]) == "degraded"
+
+
+def test_real_row_live_cbf_reports_distinguish_feasible_and_fallback():
+    from robot_sf.planner.cbf_safety_filter import (
+        CbfSafetyFilterConfig,
+        CollisionConeCbfSafetyFilter,
+    )
+    from robot_sf.planner.safety_shield import new_shield_stats, update_shield_stats
+
+    def audit(agents):
+        filter_ = CollisionConeCbfSafetyFilter(CbfSafetyFilterConfig(enabled=True))
+        decision = filter_.filter_command(
+            {
+                "robot": {
+                    "position": [0.0, 0.0],
+                    "velocity": [0.0, 0.0],
+                    "heading": 0.0,
+                    "radius": 0.3,
+                },
+                "agents": agents,
+            },
+            (0.8, 0.0),
+        )
+        row = _executed_orca_row()
+        row["algorithm_metadata"]["planner_runtime"]["cbf_safety_filter"] = filter_.diagnostics()
+        row["algorithm_metadata"]["shield_stats"] = update_shield_stats(
+            new_shield_stats(), decision
+        )
+        return producer._audit_status([producer._execution_evidence(row)]), filter_.diagnostics()
+
+    healthy, clean_report = audit([])
+    assert clean_report["fallback_count"] == 0
+    assert healthy == "pass"
+    faulty, fault_report = audit(
+        [
+            {"position": [0.1, 0.0], "velocity": [-0.6, 0.0], "radius": 0.3},
+            {"position": [-0.1, 0.0], "velocity": [0.6, 0.0], "radius": 0.3},
+        ]
+    )
+    assert fault_report["fallback_count"] == 1
+    assert fault_report["last_decision"]["decision_label"] == "cbf_best_effort"
+    assert faulty == "degraded"
+
+
+_EMITTER_KEY = re.compile(
+    r"fallback|degrad|(?:^|_)status(?:$|_)|stop_count|stop_safe|stop_best_effort|safe_stop|execution_mode|decision_label",
+    re.IGNORECASE,
+)
+
+
+def _serialized_dataclass_keys(node, owner):
+    if not isinstance(node.target, ast.Name) or not isinstance(owner, ast.ClassDef):
+        return []
+    dataclass_decorated = any(
+        (isinstance(decorator, ast.Name) and decorator.id == "dataclass")
+        or (
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Name)
+            and decorator.func.id == "dataclass"
+        )
+        for decorator in owner.decorator_list
+    )
+    return [node.target.id] if dataclass_decorated else []
+
+
+def _emitted_fault_keys(source):
+    """Scan writes, not reads/comments: dict literals, store subscripts, dict/update/setdefault."""
+    tree = ast.parse(source)
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    emitted = set()
+    for node in ast.walk(tree):
+        keys = []
+        if isinstance(node, ast.Dict):
+            keys = [
+                key.value
+                for key in node.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            ]
+        elif (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.ctx, ast.Store)
+            and isinstance(node.slice, ast.Constant)
+        ):
+            keys = [node.slice.value] if isinstance(node.slice.value, str) else []
+        elif isinstance(node, ast.Call):
+            if (isinstance(node.func, ast.Name) and node.func.id == "dict") or (
+                isinstance(node.func, ast.Attribute) and node.func.attr in {"update", "setdefault"}
+            ):
+                keys = [kw.arg for kw in node.keywords if kw.arg]
+                if (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "setdefault"
+                    and node.args
+                ):
+                    if isinstance(node.args[0], ast.Constant) and isinstance(
+                        node.args[0].value, str
+                    ):
+                        keys.append(node.args[0].value)
+        elif isinstance(node, ast.AnnAssign):
+            # asdict serializes these fields without literal emitted keys.
+            keys = _serialized_dataclass_keys(node, parents.get(node))
+        parent = node
+        while parent in parents and not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            parent = parents[parent]
+        function = (
+            parent.name
+            if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef))
+            else "<module>"
+        )
+        emitted.update((function, key) for key in keys if _EMITTER_KEY.search(key))
+    return emitted
+
+
+def _runtime_emitter_inventory():
+    root = Path(__file__).resolve().parents[2]
+    directories = (
+        "robot_sf/planner",
+        "robot_sf/baselines",
+        "robot_sf/sim",
+        "robot_sf/benchmark/map_runner",
+        "robot_sf/benchmark/map_runner_policies",
+        "robot_sf/benchmark/safety",
+        "fast-pysf/pysocialforce",
+    )
+    paths = set()
+    for directory in directories:
+        files = set((root / directory).rglob("*.py"))
+        assert files, f"missing emitter source tree: {directory}"
+        paths.update(files)
+    paths.update((root / "robot_sf").rglob("*adapter*.py"))
+    return {
+        (str(path.relative_to(root)), function, key)
+        for path in paths
+        for function, key in _emitted_fault_keys(path.read_text())
+    }
+
+
+def _unclassified_emitter_keys(inventory):
+    locations = producer.EXECUTION_EVIDENCE_LOCATIONS
+    runtime = (
+        set(locations["runtime_fields"])
+        | set(locations["counter_fields"])
+        | set(locations.get("runtime_aliases", {}))
+    )
+    non_runtime = set(locations.get("non_runtime_fields", {}))
+    exceptions = locations.get("non_runtime_emissions", {})
+    return {
+        site
+        for site in inventory
+        if site[2] not in runtime | non_runtime and site not in exceptions
+    }
+
+
+def test_planner_adapter_guard_emitted_fault_keys_are_classified():
+    inventory = _runtime_emitter_inventory()
+    assert any(key == "fallback_stop_count" for _, _, key in inventory)
+    assert any(key == "fallback_count" for _, _, key in inventory)
+    assert not _unclassified_emitter_keys(inventory), sorted(_unclassified_emitter_keys(inventory))
+
+
+def test_emitter_catcher_distinguishes_writes_from_reads_and_detects_new_keys():
+    emitted = _emitted_fault_keys("""
+from dataclasses import dataclass
+@dataclass
+class FutureReport:
+    new_degraded_status: str = "none"
+def report(out):
+    ignored = out.get("unseen_read_fallback")
+    out["new_fallback_count"] = 1
+    out.update(new_degraded_flag=True)
+    out.setdefault("new_safe_stop_count", 0)
+    return dict(new_used_fallback=True, **{"new_status": "fallback"})
+""")
+    assert {key for _, key in emitted} == {
+        "new_fallback_count",
+        "new_degraded_flag",
+        "new_safe_stop_count",
+        "new_used_fallback",
+        "new_status",
+        "new_degraded_status",
+    }
+    inventory = {("robot_sf/planner/future_planner.py", function, key) for function, key in emitted}
+    assert _unclassified_emitter_keys(inventory) == inventory
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("ever_degraded", True),
+        ("degradation_reasons", ["missing_controller_input"]),
+        ("fallback_reasons", {"numerical_force_fallback": 1}),
+        ("fallback_status", "goal_fallback"),
+        ("fallback_from", "failed_planner_head"),
+        ("runtime_status", "failed"),
+        ("last_step_status", "failed"),
+        ("observation_validation_status", "invalid"),
+        ("guard_or_fallback_reason", "fallback_to_stop"),
+    ],
+)
+def test_real_row_inventory_runtime_aliases_cannot_hide_faults(key, value):
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["planner_runtime"][key] = value
+    assert producer._audit_status([producer._execution_evidence(row)]) == "degraded"
+
+
+@pytest.mark.parametrize(
+    "binding_fault",
+    ["wrong_filter", "wrong_variant", "wrong_schema", "non_boolean", "non_string_filter"],
+)
+def test_real_row_cbf_state_binding_rejects_malformed_reports(binding_fault):
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    decision = {
+        "schema_version": "shield-decision.v1",
+        "decision_label": "cbf_feasible",
+        "fallback_controller_state": {
+            "filter": "CollisionConeCbfSafetyFilter",
+            "variant": "collision_cone",
+            "fallback": False,
+        },
+    }
+    if binding_fault == "wrong_schema":
+        decision["schema_version"] = "unbound"
+    else:
+        field, value = {
+            "wrong_filter": ("filter", "unknown_filter"),
+            "wrong_variant": ("variant", "unknown_variant"),
+            "non_boolean": ("fallback", "false"),
+            "non_string_filter": ("filter", []),
+        }[binding_fault]
+        decision["fallback_controller_state"][field] = value
+    row["algorithm_metadata"]["shield_stats"] = {"last_decision": decision}
+    assert producer._audit_status([producer._execution_evidence(row)]) == "degraded"
+
+
+@pytest.mark.parametrize("location", ["nmpc", "cbf", "wrapper"])
+def test_real_row_zero_emitted_fallback_counters_remain_healthy(location):
+    row = _executed_orca_row()
+    if location == "nmpc":
+        row["algorithm_metadata"]["planner_runtime"]["fallback_stop_count"] = 0
+    elif location == "cbf":
+        row["algorithm_metadata"]["planner_runtime"]["cbf_safety_filter"] = {"fallback_count": 0}
+    else:
+        row["algorithm_metadata"]["planner_runtime"]["fast_pysf_wrapper"] = {
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        }
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+
+
+@pytest.mark.parametrize(
+    "fault, axis, expected, audit_status",
+    [
+        ("row_fallback", "fallback", True, "degraded"),
+        ("controller_fallback", "fallback", True, "degraded"),
+        ("positive_counter", "fallback", True, "degraded"),
+        ("negative_counter", "degraded", True, "degraded"),
+        ("string_counter", "degraded", True, "degraded"),
+        ("nonfinite_counter", "degraded", True, "degraded"),
+        ("boolean_counter", "degraded", True, "degraded"),
+        ("controller_status", "controller_executed", False, "fail"),
+        ("nested_controller_status", "degraded", True, "degraded"),
+        ("unavailable_controller_status", "degraded", True, "degraded"),
+        ("missing_action", "controller_executed", False, "fail"),
+        ("empty_action", "controller_executed", False, "fail"),
+        ("missing_trace", "controller_executed", False, "fail"),
+        ("incomplete_trace", "controller_executed", False, "fail"),
+        ("wrong_mode", "execution_mode", "unknown", "fail"),
+        ("contradictory_mode", "execution_mode", "unknown", "fail"),
+        ("no_controller", "controller_executed", False, "fail"),
+    ],
+)
+def test_optional_metrics_do_not_excuse_runtime_faults(fault, axis, expected, audit_status):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    trace = metadata["simulation_step_trace"]
+    counters = metadata["planner_diagnostics"]
+    actions = trace["steps"][0]["planner"]
+    target, key, value = {
+        "row_fallback": (row, "fallback", True),
+        "controller_fallback": (metadata, "fallback_used", True),
+        "positive_counter": (counters, "fallback_count", 1),
+        "negative_counter": (counters, "fallback_count", -1),
+        "string_counter": (counters, "fallback_count", "0"),
+        "nonfinite_counter": (counters, "fallback_count", float("nan")),
+        "boolean_counter": (counters, "fallback_count", False),
+        "controller_status": (metadata, "status", "degraded"),
+        "nested_controller_status": (metadata, "controller", {"status": "degraded"}),
+        "unavailable_controller_status": (metadata, "controller", {"status": "unavailable"}),
+        "missing_action": (actions, "selected_action", None),
+        "empty_action": (actions, "selected_action", {}),
+        "missing_trace": (metadata, "simulation_step_trace", None),
+        "incomplete_trace": (trace, "steps", trace["steps"][:-1]),
+        "wrong_mode": (metadata["planner_kinematics"], "execution_mode", "unknown"),
+        "contradictory_mode": (row, "execution_mode", "adapter"),
+        "no_controller": (row, "controller_executed", False),
+    }[fault]
+    if value is None:
+        target.pop(key)
+    else:
+        target[key] = value
+    evidence = producer._execution_evidence(row)
+    assert evidence[axis] == expected
+    assert producer._audit_status([evidence]) == audit_status
+
+
+@pytest.mark.parametrize("location", ["row", "metadata", "controller"])
+def test_metric_subtree_cannot_mask_controller_degradation(location):
+    row = _executed_goal_with_optional_metrics()
+    metadata = row["algorithm_metadata"]
+    metrics = metadata["paired_effect_metric_producer"]
+    metrics["fields"]["false_positive_stop_rate"]["status"] = "degraded"
+    metrics["fields"]["false_positive_stop_rate"]["fallback_used"] = True
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    if location == "row":
+        row["controller"] = {"status": "degraded"}
+    elif location == "metadata":
+        metadata["status"] = "degraded"
+    else:
+        metadata["controller"] = {"status": "degraded"}
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == ("fail" if location == "metadata" else "degraded")
+
+
+def _runtime_object_for_fault(row, path):
+    value = row
+    for key in path:
+        value = value[-1] if key == "*" else value.setdefault(key, {})
+    return value
+
+
+@pytest.mark.parametrize("status", ["degraded", "fallback", "unavailable"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        (),
+        ("controller",),
+        ("algorithm_metadata",),
+        ("algorithm_metadata", "controller"),
+        ("algorithm_metadata", "planner_diagnostics"),
+        ("algorithm_metadata", "planner_runtime"),
+        ("algorithm_metadata", "planner_runtime", "last_decision"),
+        ("algorithm_metadata", "planner_runtime", "checkpoint_provenance"),
+        ("algorithm_metadata", "foresight_prediction"),
+        ("algorithm_metadata", "planner_runtime", "foresight_prediction"),
+        ("fallback_diagnostics",),
+        ("algorithm_metadata", "fallback_diagnostics"),
+        ("algorithm_metadata", "planner_runtime", "fallback_diagnostics"),
+        ("algorithm_metadata", "fallback_controller_state"),
+        ("algorithm_metadata", "planner_runtime", "fallback_controller_state"),
+        ("algorithm_metadata", "simulation_step_trace", "steps", "*", "planner"),
+    ],
+)
+def test_real_row_rejects_fault_status_at_each_runtime_location(path, status):
+    row = _executed_goal_with_optional_metrics()
+    if "fallback_controller_state" in path:
+        row["algo"] = "guarded_ppo"
+        row["algorithm_metadata"].update(algorithm="ppo", canonical_algorithm="guarded_ppo")
+        row["algorithm_metadata"]["planner_contract"]["planner_id"] = "guarded_ppo"
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    _runtime_object_for_fault(row, path)["status"] = status
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == (
+        "fail" if path == ("algorithm_metadata",) else "degraded"
+    )
+
+
+@pytest.mark.parametrize(
+    "counter",
+    [1, -1, "0", False, None, float("nan"), float("inf"), [], {}, 10**1000],
+    ids=[
+        "positive",
+        "negative",
+        "string",
+        "boolean",
+        "null",
+        "nan",
+        "infinite",
+        "list",
+        "mapping",
+        "oversized",
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        (),
+        ("algorithm_metadata",),
+        ("algorithm_metadata", "planner_diagnostics"),
+        ("algorithm_metadata", "planner_runtime"),
+        ("algorithm_metadata", "planner_runtime", "last_decision"),
+        ("algorithm_metadata", "simulation_step_trace", "steps", "*", "planner"),
+    ],
+)
+def test_real_row_rejects_bad_runtime_counter_shapes(path, counter):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    _runtime_object_for_fault(row, path)["fallback_count"] = counter
+    evidence = producer._execution_evidence(row)
+    assert evidence["fallback"] is True
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "identity",
+        "written",
+        "metadata",
+        "status",
+        "mode",
+        "step_count",
+        "trace",
+        "empty_trace",
+        "malformed_trace",
+        "schema",
+        "dt",
+        "reset",
+        "empty_steps",
+        "last_action",
+        "empty_last_action",
+        "malformed_last_action",
+        "malformed_last_planner",
+        "controller_flag",
+    ],
+)
+def test_real_row_missing_required_execution_evidence_fails_closed(fault):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    trace = metadata["simulation_step_trace"]
+    action = trace["steps"][-1]["planner"]
+    target, key, replacement = {
+        "identity": (row, "algo", None),
+        "written": (row, "execution_status", None),
+        "metadata": (row, "algorithm_metadata", None),
+        "status": (metadata, "status", None),
+        "mode": (metadata["planner_kinematics"], "execution_mode", None),
+        "step_count": (row, "steps", None),
+        "trace": (metadata, "simulation_step_trace", None),
+        "empty_trace": (metadata, "simulation_step_trace", {}),
+        "malformed_trace": (metadata, "simulation_step_trace", "not-a-trace"),
+        "schema": (trace, "schema_version", None),
+        "dt": (trace, "dt", None),
+        "reset": (trace, "reset", None),
+        "empty_steps": (trace, "steps", []),
+        "last_action": (action, "selected_action", None),
+        "empty_last_action": (action, "selected_action", {}),
+        "malformed_last_action": (action, "selected_action", "not-an-action"),
+        "malformed_last_planner": (trace["steps"][-1], "planner", "not-a-planner"),
+        "controller_flag": (row, "controller_executed", "true"),
+    }[fault]
+    if replacement is None:
+        target.pop(key)
+    else:
+        target[key] = replacement
+    assert producer._audit_status([producer._execution_evidence(row)]) == "fail"
+
+
+@pytest.mark.parametrize("mode", ["adapter", "unknown", "fallback", "degraded"])
+@pytest.mark.parametrize("location", ["legacy", "adapter"])
+def test_real_row_rejects_secondary_mode_contradictions(location, mode):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    target = metadata if location == "legacy" else metadata.setdefault("adapter_impact", {})
+    target["execution_mode"] = mode
+    evidence = producer._execution_evidence(row)
+    assert evidence["execution_mode"] == "unknown"
+    assert producer._audit_status([evidence]) == "fail"
+
+
+def test_real_row_rejects_unsupported_primary_command_space():
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "adapter"
+    evidence = producer._execution_evidence(row)
+    assert evidence["execution_mode"] == "unknown"
+    assert producer._audit_status([evidence]) == "fail"
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["fallback_used", "degraded", "degraded_reason", "degraded_statuses", "decision_label"],
+)
+def test_real_row_rejects_typed_runtime_fault_reports(marker):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    value = {
+        "fallback_used": True,
+        "degraded": True,
+        "degraded_reason": "controller_failure",
+        "degraded_statuses": ["degraded"],
+        "decision_label": "fallback",
+    }[marker]
+    row["algorithm_metadata"].setdefault("planner_runtime", {})[marker] = value
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("counter", [False, None, -1, float("inf"), {}])
+def test_real_row_rejects_malformed_guarded_native_counters(counter):
+    row = _executed_goal_with_optional_metrics()
+    row["algo"] = "guarded_ppo"
+    metadata = row["algorithm_metadata"]
+    metadata.update(algorithm="ppo", canonical_algorithm="guarded_ppo")
+    metadata["planner_contract"]["planner_id"] = "guarded_ppo"
+    metadata["guard_stats"] = {"fallback_safe": 2}
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata["guard_stats"]["fallback_safe"] = counter
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("status", ["unavailable", "fallback", "degraded"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("metrics", "social_compliance"),
+        ("metrics", "distributional_disruption"),
+        ("algorithm_metadata", "simulation_step_trace", "reset", "routes"),
+        ("algorithm_metadata", "simulation_step_trace", "reset", "spawn"),
+        ("algorithm_metadata", "paired_effect_metric_producer"),
+        ("algorithm_metadata", "controller", "optional_metric"),
+        ("non_runtime_provenance",),
+    ],
+)
+def test_real_row_non_runtime_markers_cannot_taint_execution(path, status):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    _runtime_object_for_fault(row, path).update(status=status, fallback=True, degraded=True)
+    original = copy.deepcopy(row)
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    assert row == original
 
 
 def _payload_fixture(tmp_path, monkeypatch):

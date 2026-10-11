@@ -7,6 +7,7 @@ import os
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
+from typing import Protocol, cast
 
 import numpy as np
 import yaml
@@ -44,12 +45,31 @@ class _DoorwaySimulation:
         )
 
 
+class _DoorwayForceFactory(Protocol):
+    """Constructor interface for the diagnostic's minimal obstacle geometry."""
+
+    def __call__(self, config: ObstacleForceConfig, sim: _DoorwaySimulation) -> ObstacleForce:
+        """Build the native force from the probe's positions, radius and raw surfaces."""
+        ...
+
+
 def doorway_braking_force(law: str, scale: float) -> float:
     """Evaluate the declared 1.2 m doorway approach point with the runtime factor."""
     config = ObstacleForceConfig(law_version=law)
     config.factor *= scale
-    force = ObstacleForce(config, _DoorwaySimulation())()[0, 0]
+    # The native constructor reads only pos, agent_radius and get_raw_obstacles;
+    # its shared provider annotation requires additional members it never reads.
+    factory = cast("_DoorwayForceFactory", ObstacleForce)
+    force = factory(config, _DoorwaySimulation())()[0, 0]
     return -float(force)
+
+
+def _svg_number(node: ET.Element, attribute: str) -> float:
+    """Parse required fixture geometry, retaining float(None)'s error for missing fields."""
+    value = node.get(attribute)
+    if value is None:
+        raise TypeError("float() argument must be a string or a real number, not 'NoneType'")
+    return float(value)
 
 
 def width_crossing(version: str, index: int) -> tuple[bool, float]:
@@ -64,9 +84,9 @@ def width_crossing(version: str, index: int) -> tuple[bool, float]:
     )
     svg = ET.parse((manifest.parent / scenario["map_file"]).resolve())
     posts = [node for node in svg.iter() if node.tag.endswith("rect") and node.get("x") == "15"]
-    assert len(posts) == 2 and all(float(node.get("width")) == 1 for node in posts)
-    low = float(posts[0].get("y")) + float(posts[0].get("height"))
-    high = float(posts[1].get("y"))
+    assert len(posts) == 2 and all(_svg_number(node, "width") == 1 for node in posts)
+    low = _svg_number(posts[0], "y") + _svg_number(posts[0], "height")
+    high = _svg_number(posts[1], "y")
     receipt = indexed[(version, index)]
     path = root / "measurements" / version / str(index) / "trajectory.npz"
     assert (

@@ -15,6 +15,7 @@ from typing import Any
 
 import numpy as np
 import yaml
+from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.benchmark.map_runner.map_runner import build_map_policy
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
@@ -346,6 +347,7 @@ def robot_env_config(
         ped_density_by_difficulty=[ped_density],
         difficulty=0,
         max_total_pedestrians=12,
+        obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1,
         social_force_kernel_version=social_force_kernel_version,
     )
     config.map_pool = MapDefinitionPool(map_defs={"metamorphic": map_def})

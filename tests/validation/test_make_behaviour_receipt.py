@@ -1,6 +1,7 @@
 """Producer provenance, real-gate admission, and pre-fix negative controls."""
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,8 @@ from scripts.ci import make_behaviour_receipt as producer
 REVIEWED_HEAD = "e7fd36f98fab243ce95cf45bc50ca8a9f7c30893"
 ORIGINAL_MAIN = "de3e37774049b2c6d017116426ae522dc232f679"
 RELEASE_TAG = "paper-matrix-v2-h600-s30-synthetic"
+REAL_ROWS = Path(__file__).parents[1] / "fixtures/behaviour_receipt_baseline_31302"
+REAL_ROW_MANIFEST = json.loads((REAL_ROWS / "manifest.json").read_text())
 
 
 def _git_repo(root: Path):
@@ -300,26 +303,32 @@ def test_row_construction_audits_recorded_trace_evidence(tmp_path, fault):
 
 
 def _executed_goal_with_optional_metrics():
-    """Mirror #10313's seed-1001 goal row with 203 complete controller actions."""
-    row = {**_raw_row(1001), "scenario_id": "classic_bottleneck_low", "execution_status": "written"}
-    row["steps"] = 203
-    metadata = row["algorithm_metadata"]
-    step = metadata["simulation_step_trace"]["steps"][0]
-    metadata["simulation_step_trace"]["steps"] = [copy.deepcopy(step) for _ in range(203)]
-    metadata["planner_diagnostics"] = {"fallback_count": 0, "degraded_count": 0}
-    metadata["paired_effect_metric_producer"] = {
-        "schema_version": "paired_effect_metric_producer.v1",
-        "status": "unavailable",
-        "reason": "one_or_more_fields_unavailable",
-        "metric_values": {},
-        "fields": {
-            "false_positive_stop_rate": {
-                "status": "unavailable",
-                "reason": "missing_safety_wrapper_summary",
-            }
-        },
+    """Use the untouched #10313 record, with only the loader's written attachment."""
+    return {
+        **json.loads((REAL_ROWS / "goal__differential_drive.jsonl").read_bytes()),
+        "execution_status": "written",
     }
-    return row
+
+
+@pytest.mark.parametrize("record", REAL_ROW_MANIFEST["rows"], ids=lambda row: row["algorithm"])
+def test_byte_exact_baseline_controller_rows_are_admitted(record):
+    raw = (REAL_ROWS / record["path"]).read_bytes()
+    assert len(raw) == record["bytes"]
+    assert hashlib.sha256(raw).hexdigest() == record["sha256"]
+    if record["algorithm"] == "goal":
+        assert len(raw) == 397583
+        assert (
+            hashlib.sha256(raw).hexdigest()
+            == "6084b29551a667654d511dad222a96b777910d42e1672aad4617daff707b10ab"
+        )
+    row = json.loads(raw)
+    assert row["seed"] == 1001
+    original = copy.deepcopy(row)
+    evidence = producer._execution_evidence({**row, "execution_status": "written"})
+    assert evidence["controller_executed"] is True
+    assert evidence["algorithm"] == record["algorithm"]
+    assert producer._audit_status([evidence]) == "pass"
+    assert row == original
 
 
 def test_optional_metrics_do_not_degrade_executed_controller_or_mutate_row():
@@ -411,6 +420,222 @@ def test_metric_subtree_cannot_mask_controller_degradation(location):
     evidence = producer._execution_evidence(row)
     assert evidence["degraded"] is True
     assert producer._audit_status([evidence]) == ("fail" if location == "metadata" else "degraded")
+
+
+def _runtime_object_for_fault(row, path):
+    value = row
+    for key in path:
+        value = value[-1] if key == "*" else value.setdefault(key, {})
+    return value
+
+
+@pytest.mark.parametrize("status", ["degraded", "fallback", "unavailable"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        (),
+        ("controller",),
+        ("algorithm_metadata",),
+        ("algorithm_metadata", "controller"),
+        ("algorithm_metadata", "planner_diagnostics"),
+        ("algorithm_metadata", "planner_runtime"),
+        ("algorithm_metadata", "planner_runtime", "last_decision"),
+        ("algorithm_metadata", "planner_runtime", "checkpoint_provenance"),
+        ("algorithm_metadata", "foresight_prediction"),
+        ("algorithm_metadata", "planner_runtime", "foresight_prediction"),
+        ("fallback_diagnostics",),
+        ("algorithm_metadata", "fallback_diagnostics"),
+        ("algorithm_metadata", "planner_runtime", "fallback_diagnostics"),
+        ("algorithm_metadata", "fallback_controller_state"),
+        ("algorithm_metadata", "planner_runtime", "fallback_controller_state"),
+        ("algorithm_metadata", "simulation_step_trace", "steps", "*", "planner"),
+    ],
+)
+def test_real_row_rejects_fault_status_at_each_runtime_location(path, status):
+    row = _executed_goal_with_optional_metrics()
+    if "fallback_controller_state" in path:
+        row["algo"] = "guarded_ppo"
+        row["algorithm_metadata"].update(algorithm="ppo", canonical_algorithm="guarded_ppo")
+        row["algorithm_metadata"]["planner_contract"]["planner_id"] = "guarded_ppo"
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    _runtime_object_for_fault(row, path)["status"] = status
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == (
+        "fail" if path == ("algorithm_metadata",) else "degraded"
+    )
+
+
+@pytest.mark.parametrize(
+    "counter",
+    [1, -1, "0", False, None, float("nan"), float("inf"), [], {}, 10**1000],
+    ids=[
+        "positive",
+        "negative",
+        "string",
+        "boolean",
+        "null",
+        "nan",
+        "infinite",
+        "list",
+        "mapping",
+        "oversized",
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        (),
+        ("algorithm_metadata",),
+        ("algorithm_metadata", "planner_diagnostics"),
+        ("algorithm_metadata", "planner_runtime"),
+        ("algorithm_metadata", "planner_runtime", "last_decision"),
+        ("algorithm_metadata", "simulation_step_trace", "steps", "*", "planner"),
+    ],
+)
+def test_real_row_rejects_bad_runtime_counter_shapes(path, counter):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    _runtime_object_for_fault(row, path)["fallback_count"] = counter
+    evidence = producer._execution_evidence(row)
+    assert evidence["fallback"] is True
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "identity",
+        "written",
+        "metadata",
+        "status",
+        "mode",
+        "step_count",
+        "trace",
+        "empty_trace",
+        "malformed_trace",
+        "schema",
+        "dt",
+        "reset",
+        "empty_steps",
+        "last_action",
+        "empty_last_action",
+        "malformed_last_action",
+        "malformed_last_planner",
+        "controller_flag",
+    ],
+)
+def test_real_row_missing_required_execution_evidence_fails_closed(fault):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    trace = metadata["simulation_step_trace"]
+    action = trace["steps"][-1]["planner"]
+    target, key, replacement = {
+        "identity": (row, "algo", None),
+        "written": (row, "execution_status", None),
+        "metadata": (row, "algorithm_metadata", None),
+        "status": (metadata, "status", None),
+        "mode": (metadata["planner_kinematics"], "execution_mode", None),
+        "step_count": (row, "steps", None),
+        "trace": (metadata, "simulation_step_trace", None),
+        "empty_trace": (metadata, "simulation_step_trace", {}),
+        "malformed_trace": (metadata, "simulation_step_trace", "not-a-trace"),
+        "schema": (trace, "schema_version", None),
+        "dt": (trace, "dt", None),
+        "reset": (trace, "reset", None),
+        "empty_steps": (trace, "steps", []),
+        "last_action": (action, "selected_action", None),
+        "empty_last_action": (action, "selected_action", {}),
+        "malformed_last_action": (action, "selected_action", "not-an-action"),
+        "malformed_last_planner": (trace["steps"][-1], "planner", "not-a-planner"),
+        "controller_flag": (row, "controller_executed", "true"),
+    }[fault]
+    if replacement is None:
+        target.pop(key)
+    else:
+        target[key] = replacement
+    assert producer._audit_status([producer._execution_evidence(row)]) == "fail"
+
+
+@pytest.mark.parametrize("mode", ["adapter", "unknown", "fallback", "degraded"])
+@pytest.mark.parametrize("location", ["legacy", "adapter"])
+def test_real_row_rejects_secondary_mode_contradictions(location, mode):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata = row["algorithm_metadata"]
+    target = metadata if location == "legacy" else metadata.setdefault("adapter_impact", {})
+    target["execution_mode"] = mode
+    evidence = producer._execution_evidence(row)
+    assert evidence["execution_mode"] == "unknown"
+    assert producer._audit_status([evidence]) == "fail"
+
+
+def test_real_row_rejects_unsupported_primary_command_space():
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "adapter"
+    evidence = producer._execution_evidence(row)
+    assert evidence["execution_mode"] == "unknown"
+    assert producer._audit_status([evidence]) == "fail"
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["fallback_used", "degraded", "degraded_reason", "degraded_statuses", "decision_label"],
+)
+def test_real_row_rejects_typed_runtime_fault_reports(marker):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    value = {
+        "fallback_used": True,
+        "degraded": True,
+        "degraded_reason": "controller_failure",
+        "degraded_statuses": ["degraded"],
+        "decision_label": "fallback",
+    }[marker]
+    row["algorithm_metadata"].setdefault("planner_runtime", {})[marker] = value
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("counter", [False, None, -1, float("inf"), {}])
+def test_real_row_rejects_malformed_guarded_native_counters(counter):
+    row = _executed_goal_with_optional_metrics()
+    row["algo"] = "guarded_ppo"
+    metadata = row["algorithm_metadata"]
+    metadata.update(algorithm="ppo", canonical_algorithm="guarded_ppo")
+    metadata["planner_contract"]["planner_id"] = "guarded_ppo"
+    metadata["guard_stats"] = {"fallback_safe": 2}
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    metadata["guard_stats"]["fallback_safe"] = counter
+    evidence = producer._execution_evidence(row)
+    assert evidence["degraded"] is True
+    assert producer._audit_status([evidence]) == "degraded"
+
+
+@pytest.mark.parametrize("status", ["unavailable", "fallback", "degraded"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("metrics", "social_compliance"),
+        ("metrics", "distributional_disruption"),
+        ("algorithm_metadata", "simulation_step_trace", "reset", "routes"),
+        ("algorithm_metadata", "simulation_step_trace", "reset", "spawn"),
+        ("algorithm_metadata", "paired_effect_metric_producer"),
+        ("algorithm_metadata", "controller", "optional_metric"),
+        ("non_runtime_provenance",),
+    ],
+)
+def test_real_row_non_runtime_markers_cannot_taint_execution(path, status):
+    row = _executed_goal_with_optional_metrics()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    _runtime_object_for_fault(row, path).update(status=status, fallback=True, degraded=True)
+    original = copy.deepcopy(row)
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    assert row == original
 
 
 def _payload_fixture(tmp_path, monkeypatch):

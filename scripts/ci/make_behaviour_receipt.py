@@ -6,12 +6,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -25,6 +29,209 @@ GATE_SEED_MAX = 1030
 DEFAULT_SEEDS = tuple(range(DEV_SEED_MIN, GATE_SEED_MAX + 1))
 PLACEHOLDER_REVIEW_URI = "https://example.org/replace-with-independent-exact-head-refute-review"
 PLACEHOLDER_EVIDENCE_URI = "https://example.org/replace-with-durable-behaviour-evidence"
+
+# Fields are selected directly at these objects, never recursively. The sole
+# wildcard enumerates recorded controller steps, not arbitrary metadata keys.
+EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
+    "runtime_objects": {
+        (): "Episode-level controller execution and fallback reports.",
+        ("controller",): "Episode controller's runtime report.",
+        ("algorithm_metadata",): "Executed algorithm's runtime report, not its config/contracts.",
+        ("algorithm_metadata", "controller"): "Algorithm controller's runtime report.",
+        ("algorithm_metadata", "planner_diagnostics"): "Episode controller fault counters.",
+        ("algorithm_metadata", "planner_runtime"): "Runtime planner's execution diagnostics.",
+        ("algorithm_metadata", "planner_runtime", "last_decision"): "Last controller decision.",
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "checkpoint_provenance",
+        ): "Checkpoint fallback actually used at runtime.",
+        (
+            "algorithm_metadata",
+            "foresight_prediction",
+        ): "Prediction fallback actually used by the controller.",
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "foresight_prediction",
+        ): "Runtime prediction fallback before metadata promotion.",
+        ("fallback_diagnostics",): "Episode fallback diagnostics.",
+        ("algorithm_metadata", "fallback_diagnostics"): "Algorithm fallback diagnostics.",
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "fallback_diagnostics",
+        ): "Planner fallback diagnostics.",
+        (
+            "algorithm_metadata",
+            "fallback_controller_state",
+        ): "Bound guarded-controller runtime state.",
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "fallback_controller_state",
+        ): "Bound planner fallback-controller state.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "steps",
+            "*",
+            "planner",
+        ): "Every recorded controller step's execution report.",
+    },
+    "runtime_fields": {
+        "status": "Controller/algorithm runtime status, not derived-metric availability.",
+        "row_status": "Runtime execution row status.",
+        "readiness_status": "Controller runtime readiness.",
+        "availability_status": "Executed controller's availability.",
+        "execution_mode": "Command execution mode and explicit fallback/degraded mode markers.",
+        "fallback": "Explicit runtime fallback flag.",
+        "degraded": "Explicit runtime degradation flag.",
+        "fallback_triggered": "Sticky runtime fallback activation.",
+        "fallback_or_degraded": "Combined runtime fault flag.",
+        "fallback_used": "Fallback implementation actually executed.",
+        "fallback_applied": "Fallback command actually applied.",
+        "fallback_to_another_checkpoint": "Runtime checkpoint substitution.",
+        "fallback_to_goal_seeking": "Runtime goal-controller substitution.",
+        "fallback_count": "Number of runtime fallback events.",
+        "fallback_steps": "Number of fallback controller steps.",
+        "fallback_events": "Runtime fallback event count.",
+        "fallback_reason": "Runtime fallback reason, valid empty only beside an explicit false flag.",
+        "degraded_count": "Number of degraded runtime events.",
+        "degraded_steps": "Number of degraded controller steps.",
+        "step_degraded": "Per-step runtime degradation marker.",
+        "degraded_reason": "Typed runtime degradation reason.",
+        "degraded_statuses": "Typed list of runtime degradation statuses.",
+        "stop_best_effort": "Runtime best-effort stop counter/decision.",
+        "decision_label": "Runtime shield/controller decision label.",
+        "fallback_controller_state": "Typed, independently bound guarded-controller state.",
+        "fallback_diagnostics": "Typed runtime fallback diagnostic object.",
+    },
+    "counter_objects": {
+        (
+            "guard_stats",
+        ): "Native guarded decision counters, bound to the original algorithm identity.",
+        ("algorithm_metadata", "guard_stats"): "Algorithm's native guarded decision counters.",
+        ("shield_stats", "decision_counts"): "Native shield decision counters.",
+        (
+            "algorithm_metadata",
+            "shield_stats",
+            "decision_counts",
+        ): "Algorithm's native shield decision counters.",
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "proposal_status_counts",
+        ): "Planner proposal fallback/degraded counters.",
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "last_decision",
+            "proposal_status_counts",
+        ): "Last controller proposal status counters.",
+        (
+            "algorithm_metadata",
+            "planner_diagnostics",
+            "proposal_status_counts",
+        ): "Episode proposal status counters.",
+    },
+    "counter_fields": {
+        "fallback": "Fallback proposal count, not a boolean flag.",
+        "degraded": "Degraded proposal count, not a boolean flag.",
+        "fallback_safe": "Guarded native safe-fallback decision count.",
+        "fallback_best_effort": "Guarded native best-effort fallback decision count.",
+        "stop_safe": "Guarded native safe-stop decision count.",
+        "stop_best_effort": "Guarded native best-effort stop decision count.",
+    },
+    "required_values": {
+        ("execution_status",): ("written", "Loader confirms the controller row was written."),
+        ("algorithm_metadata", "status"): (
+            "ok",
+            "Executed algorithm must explicitly report success.",
+        ),
+    },
+    "mode_locations": {
+        ("execution_mode",): "Episode mode must agree with algorithm/controller mode.",
+        (
+            "algorithm_metadata",
+            "planner_kinematics",
+            "execution_mode",
+        ): "Primary command-space mode.",
+        (
+            "algorithm_metadata",
+            "execution_mode",
+        ): "Legacy runtime mode must not contradict primary mode.",
+        (
+            "algorithm_metadata",
+            "adapter_impact",
+            "execution_mode",
+        ): "Recorded adapter mode must agree with executed mode.",
+    },
+    "mode_capabilities": {
+        (
+            "algorithm_metadata",
+            "planner_kinematics",
+            "supports_native_commands",
+        ): "A declared capability contract must support the executed native command space.",
+        (
+            "algorithm_metadata",
+            "planner_kinematics",
+            "supports_adapter_commands",
+        ): "A declared capability contract must support the executed adapter command space.",
+    },
+    "required_evidence": {
+        ("algo",): "Algorithm identity, with the legacy algorithm field as an alternative.",
+        ("algorithm",): "Legacy algorithm identity alternative; one identity must exist.",
+        ("steps",): "Positive integral executed-step count must equal trace length.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+        ): "Complete finite reset/step geometry is required, independent of optional provenance.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "schema_version",
+        ): "Recorded trace must use a supported execution schema.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "dt",
+        ): "Executed timestep must be finite and positive.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "reset",
+            "robot",
+            "position",
+        ): "Finite initial robot geometry is required.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "steps",
+            "*",
+            "robot",
+            "position",
+        ): "Finite robot geometry is required at every controller step.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "steps",
+            "*",
+            "pedestrians",
+        ): "Every executed step must record its actor list, including an empty list.",
+        (
+            "algorithm_metadata",
+            "simulation_step_trace",
+            "steps",
+            "*",
+            "planner",
+            "selected_action",
+        ): "Every executed controller step must have a nonempty action object.",
+        (
+            "controller_executed",
+        ): "Optional override cannot deny execution or have a malformed type; absence requires trace/action proof.",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -350,44 +557,164 @@ def _row_collisions(row: dict[str, Any]) -> int:
     return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
 
 
-def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
+def _runtime_objects(
+    value: Any, path: tuple[str, ...], prefix: str = ""
+) -> Iterator[tuple[str, Any]]:
+    """Enumerate only named locations; malformed present parents remain evidence."""
+    if not path:
+        yield prefix, value
+    elif path[0] == "*":
+        if isinstance(value, list):
+            for index, child in enumerate(value):
+                yield from _runtime_objects(child, path[1:], f"{prefix}[{index}]")
+        else:
+            yield prefix, value
+    elif not isinstance(value, dict):
+        yield prefix, value
+    elif path[0] in value:
+        name = f"{prefix}.{path[0]}" if prefix else path[0]
+        yield from _runtime_objects(value[path[0]], path[1:], name)
+
+
+def _runtime_value_error(view: dict[str, Any], *, counters: bool) -> str | None:
+    """Reject malformed present runtime statuses and counter scalars."""
+    for key, value in view.items():
+        if key in {
+            "status",
+            "row_status",
+            "readiness_status",
+            "availability_status",
+            "execution_mode",
+            "decision_label",
+        }:
+            if not isinstance(value, str) or not value.strip():
+                return key
+        if counters:
+            try:
+                valid = (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                    and value >= 0
+                )
+            except (OverflowError, ValueError):
+                valid = False
+            if not valid:
+                return key
+    return None
+
+
+def _bound_runtime_view(
+    view: dict[str, Any], path: tuple[str, ...], *, counters: bool
+) -> dict[str, Any]:
+    """Preserve existing typed-container and guarded-counter identity checks."""
+    for key in ("fallback_controller_state", "fallback_diagnostics"):
+        if key in view and isinstance(view[key], dict):
+            view[key] = {}
+    if not counters:
+        return view
+    if path[-1] == "guard_stats":
+        return {"guard_stats": view}
+    if path[-1] == "decision_counts":
+        return {"shield_stats": {"decision_counts": view}}
+    return {"proposal_status_counts": view}
+
+
+def _controller_runtime_marker(
+    row: dict[str, Any], metadata: dict[str, Any], algorithm: str
+) -> tuple[str, str] | None:
+    """Check an allowlisted runtime projection without traversing optional evidence."""
     from robot_sf.benchmark.fallback_policy import (
-        resolve_execution_mode,
         runtime_fallback_or_degraded_marker,
     )
+
+    for group, fields in (
+        ("runtime_objects", "runtime_fields"),
+        ("counter_objects", "counter_fields"),
+    ):
+        for path in EXECUTION_EVIDENCE_LOCATIONS[group]:
+            for name, obj in _runtime_objects(row, path):
+                if not isinstance(obj, dict):
+                    return name, "invalid"
+                view = {key: obj[key] for key in EXECUTION_EVIDENCE_LOCATIONS[fields] if key in obj}
+                counters = group == "counter_objects"
+                error = _runtime_value_error(view, counters=counters)
+                if error:
+                    return f"{name}.{error}" if name else error, "invalid"
+                # Containers retain their typed/bound check; their contents are
+                # checked only at separately named runtime locations above.
+                view = _bound_runtime_view(view, path, counters=counters)
+                if "decision_label" in view:
+                    decision_marker = runtime_fallback_or_degraded_marker(
+                        {"status": view["decision_label"]}
+                    )
+                    if decision_marker is not None:
+                        return (
+                            f"{name}.decision_label" if name else "decision_label",
+                            decision_marker[1],
+                        )
+                marker = runtime_fallback_or_degraded_marker(
+                    view, expected_algorithm=algorithm, algorithm_metadata=metadata
+                )
+                if marker is not None:
+                    field = (
+                        marker[0].rsplit(".", 1)[-1] if group == "counter_objects" else marker[0]
+                    )
+                    return f"{name}.{field}" if name else field, marker[1]
+    return None
+
+
+def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
+    from robot_sf.benchmark.fallback_policy import resolve_execution_mode
     from scripts.validation.run_empty_world_sweep import _trace_complete
 
-    metadata = row.get("algorithm_metadata") or {}
+    metadata = row.get("algorithm_metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
     algorithm = row.get("algo") or row.get("algorithm")
     mode = resolve_execution_mode(metadata)
-    # Optional derived-metric availability is not controller execution status.
-    runtime_row = {
-        **row,
-        "algorithm_metadata": {
-            key: value for key, value in metadata.items() if key != "paired_effect_metric_producer"
-        },
-    }
-    marker = runtime_fallback_or_degraded_marker(
-        runtime_row,
-        expected_algorithm=algorithm,
-        algorithm_metadata=metadata,
+    modes = [
+        value
+        for path in EXECUTION_EVIDENCE_LOCATIONS["mode_locations"]
+        for _, value in _runtime_objects(row, path)
+    ]
+    if mode not in {"native", "adapter"} or any(value != mode for value in modes):
+        mode = "unknown"
+    profile = metadata.get("planner_kinematics") or {}
+    if isinstance(profile, dict) and any(
+        path[-1] in profile for path in EXECUTION_EVIDENCE_LOCATIONS["mode_capabilities"]
+    ):
+        if profile.get(f"supports_{mode}_commands") is not True:
+            mode = "unknown"
+    marker = _controller_runtime_marker(row, metadata, algorithm)
+    required = all(
+        list(_runtime_objects(row, path)) == [(".".join(path), expected)]
+        for path, (expected, _) in EXECUTION_EVIDENCE_LOCATIONS["required_values"].items()
     )
-    trace = metadata.get("simulation_step_trace") or {}
-    steps = trace.get("steps") or []
-    executed = (
-        row.get("execution_status") == "written"
-        and metadata.get("status") == "ok"
-        and _trace_complete(row)
-        and all(
-            isinstance((step.get("planner") or {}).get("selected_action"), dict)
-            and step["planner"]["selected_action"]
-            for step in steps
+    try:
+        trace = metadata.get("simulation_step_trace") or {}
+        steps = trace.get("steps") or []
+        complete = (
+            type(row.get("steps")) is int
+            and row["steps"] > 0
+            and _trace_complete(row)
+            and all(
+                isinstance((step.get("planner") or {}).get("selected_action"), dict)
+                and step["planner"]["selected_action"]
+                for step in steps
+            )
         )
+    except (AttributeError, TypeError, ValueError):
+        complete = False
+    executed = (
+        required
+        and complete
+        and isinstance(algorithm, str)
+        and bool(algorithm.strip())
         and row.get("controller_executed", True) is True
     )
     return {
         "algorithm": algorithm or "unknown",
-        "execution_mode": mode if row.get("execution_mode", mode) == mode else "unknown",
+        "execution_mode": mode,
         "controller_executed": bool(executed),
         "fallback": row.get("fallback") is True
         or (marker is not None and "fallback" in str(marker)),

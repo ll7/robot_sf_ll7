@@ -94,10 +94,13 @@ if __name__ == "__main__":
     try:
         if sys.argv[1] == "capture":
             capture(Path(sys.argv[2]))
-        elif sys.argv[1] == "replay":
-            replay(Path(sys.argv[2]), Path(sys.argv[3]))
+        elif sys.argv[1] == "replay-pair":
+            # Each batch constructs a fresh environment/planner and reads the
+            # checkpoint again. Share only the pinned compiler/import context.
+            for number in (1, 2):
+                replay(Path(sys.argv[2]) / f"replay-{number}.jsonl", Path(sys.argv[3]))
         else:
-            raise ValueError("expected capture or replay")
+            raise ValueError("expected capture or replay-pair")
     except pytest.skip.Exception as exc:
         # Preserve an installed pytest audit interlock across the process boundary.
         print(str(exc), file=sys.stderr)

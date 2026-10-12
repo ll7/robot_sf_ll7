@@ -42,12 +42,12 @@ def _run_source_pinned_runtime(mode: str, output: Path, scenario: Path | None = 
     environment = os.environ.copy()
     environment["NUMBA_CPU_NAME"] = "znver2"
     environment.pop("NUMBA_CPU_FEATURES", None)
-    command = [
-        sys.executable,
-        str(ROOT / "tests/support/hardcase_window_runtime.py"),
-        mode,
-        str(output),
-    ]
+    command = [sys.executable]
+    if environment.get("ROBOT_SF_PYTEST_COVERAGE") == "1":
+        # pytest-cov 7 no longer starts coverage in subprocesses. Retain the
+        # existing CI coverage source/branch settings and shard data-file prefix.
+        command.extend(["-m", "coverage", "run", "--parallel-mode"])
+    command.extend([str(ROOT / "tests/support/hardcase_window_runtime.py"), mode, str(output)])
     if scenario is not None:
         command.append(str(scenario))
     result = subprocess.run(
@@ -152,9 +152,9 @@ def test_seed1001_checkpoint_replays_exact_near_miss_window_twice(
     assert scenario["simulation_config"]["goal_completion_policy"] == "goal_zone_entry_v1"
     replay_path = tmp_path / "window.yaml"
     replay_path.write_text(dump_generated_scenario_yaml(result))
+    _run_source_pinned_runtime("replay-pair", tmp_path, replay_path)
     for index in (1, 2):
         output = tmp_path / f"replay-{index}.jsonl"
-        _run_source_pinned_runtime("replay", output, replay_path)
         summary = json.loads(output.with_suffix(".summary.json").read_text())
         assert summary["successful_jobs"] == 1 and summary["failed_jobs"] == 0
         row = json.loads(output.read_text())

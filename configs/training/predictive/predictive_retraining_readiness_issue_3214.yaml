@@ -30,7 +30,7 @@ expected_checkpoint_lineage:
   registry_policy: promote only after checkpoint provenance and hard-seed evaluation evidence exist
 
 evaluation_config:
-  hard_seed_benchmark: training_predictive_hard_seeds_v1.yaml
+  hard_seed_benchmark: configs/benchmarks/predictive_hard_seeds_v1.yaml
   planner_grid: configs/benchmarks/predictive_sweep_planner_grid_v1.yaml
   summary_path: output/tmp/predictive_planner/pipeline/evaluation/predictive_crossing_conflict_weighted_issue_3254_xl_ego_hard_seeds/summary.json
   gate_note: keep trajectory validation metrics separate from closed-loop hard-seed benchmark gate

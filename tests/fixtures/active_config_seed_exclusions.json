@@ -487,6 +487,10 @@
     "sha256": "5c78b8750f6d0c3ca87391d63bf798f173f04ac74d96fac9e9c70a6c67afdca0",
     "reason": "Declared companion of preserved historical contract configs/benchmarks/issue_5591_hybrid_ablation_runner.yaml"
   },
+  "configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon600_probe.yaml": {
+    "reason": "Historical H600 scientific-surface comparator for the registered hybrid-roster campaign; preserve original cohort and calibration identity.",
+    "sha256": "f30ef29a5c0da104b490325547205198b1600cc99d720bc3ca9fe8817779a762"
+  },
   "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml": {
     "sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
     "reason": "transitive frozen/versioned release dependency"
@@ -659,7 +663,11 @@
     "sha256": "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a",
     "reason": "transitive frozen/versioned release dependency"
   },
-  "configs/benchmarks/seed_sets_0_0_8.yaml": {"sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706", "reason": "frozen/versioned release or sealed-job input", "annotation": "# seed-holdout: setup-only (immutable artifact hash identity; never dispatched)"},
+  "configs/benchmarks/seed_sets_0_0_8.yaml": {
+    "sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706",
+    "reason": "frozen/versioned release or sealed-job input",
+    "annotation": "# seed-holdout: setup-only (immutable artifact hash identity; never dispatched)"
+  },
   "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml": {
     "sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
     "reason": "transitive frozen/versioned release dependency"
@@ -2008,6 +2016,10 @@
     "sha256": "0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d",
     "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
   },
+  "configs/training/ppo_curriculum_issue_3068_launch_packet.yaml": {
+    "reason": "Historical issue-3068 source-bound launch packet and checksum keys; preserve original registered inputs and digests.",
+    "sha256": "9853eeb2b7ce7c288d0ec80bcad8d6a28154256e8b10d5614a41d2e1aaf4ac68"
+  },
   "configs/training/ppo_imitation/bc_pretrain_issue_1496_comparison.yaml": {
     "sha256": "7a866235acdf36a628c4327964edb6f8749756ba2d0851848fb3d2c46540b06d",
     "reason": "Declared companion of preserved historical contract configs/training/ppo_imitation/oracle_imitation_comparison_issue_1496.yaml"
@@ -2060,9 +2072,17 @@
     "sha256": "a63d95a54211c75c0312604586250be269d2c6dc7d5e0d487c3db61df9e9206f",
     "reason": "Declared companion of preserved historical contract configs/training/ppo_imitation/oracle_imitation_comparison_issue_1496.yaml"
   },
+  "configs/training/predictive/predictive_ego_features_contract_v1.yaml": {
+    "reason": "Historical issue-1490 same-seed decision contract; preserve recorded negative-campaign provenance and source paths.",
+    "sha256": "3c5fd0b06e49bc6937380b15267997f97f6657ca284e22225a2d468dd4f32bde"
+  },
   "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml": {
     "sha256": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
     "reason": "Registered historical hash: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/README.md, docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/summary.json"
+  },
+  "configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml": {
+    "reason": "Historical issue-3214 negative-result decision packet; preserve original source references and blocked readiness contract.",
+    "sha256": "45580cf0608693d55dc230027a888a32086f850d55693481b76dc917d990eda6"
   },
   "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py": {
     "sha256": "eb4f1fdf9e98dfad8bd0d00c9cf3ce33046b8b72cbcdfd7037010bb437ee55c1",

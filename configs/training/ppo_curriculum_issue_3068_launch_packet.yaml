@@ -69,7 +69,7 @@ training_starting_points:
   ppo_algo_config: configs/algos/ppo_v3_camera_ready.yaml
   guarded_algo_config: configs/algos/guarded_ppo_relaxed_v2.yaml
   scenario_config: configs/scenarios/classic_interactions_francis2023.yaml
-  seed_manifest: configs/benchmarks/dev_seed_sets.yaml
+  seed_manifest: configs/benchmarks/seed_sets_v1.yaml
   # The base training config supplies architecture (grid_socnav), reward
   # (route_completion_v3) and env overrides. The curriculum and baseline arms below
   # only modify density/complexity sampling; architecture, reward and seeds are held fixed.
@@ -80,7 +80,7 @@ training_starting_points:
     configs/algos/ppo_v3_camera_ready.yaml: ee914f1167da5d8513b90f1e3d90adabc83420d993306be9885f49c83f5b2efc
     configs/algos/guarded_ppo_relaxed_v2.yaml: 666eda5a47de6e452eba9b2f3cb15bda16fc97abcd7137434661a87ac9ff85d8
     configs/scenarios/classic_interactions_francis2023.yaml: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
-    configs/benchmarks/dev_seed_sets.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    configs/benchmarks/seed_sets_v1.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
 curriculum:
   # Density/complexity stages, expressed over real env knobs:
   #   - ped_density: scenario simulation_config.ped_density (peds per m^2)
@@ -133,7 +133,7 @@ seeds:
   training: [123, 231, 777, 992, 1337]
   randomize_seeds: true
   evaluation:
-    manifest: configs/benchmarks/dev_seed_sets.yaml
+    manifest: configs/benchmarks/seed_sets_v1.yaml
     dev: [101, 102, 103]
     eval: [111, 112, 113]
   note: >

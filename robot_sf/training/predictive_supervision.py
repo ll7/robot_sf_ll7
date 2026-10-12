@@ -10,7 +10,11 @@ cross-episode joins. Do not substitute observation-derived tracking IDs here.
 from __future__ import annotations
 
 import json
+import re
+import warnings
 from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,7 +52,9 @@ def supervision_metadata(collector_id: str) -> dict[str, Any]:
     }
 
 
-def observation_episode_ids(env: Any, *, episode_id: str) -> tuple[str, ...]:
+def observation_episode_ids(
+    env: Any, *, episode_id: str, observation: dict | None = None
+) -> tuple[str, ...]:
     """Return identity rows aligned with the *last emitted* SOCNAV observation.
 
     An absent or malformed producer side channel is an error, not permission to
@@ -78,6 +84,17 @@ def observation_episode_ids(env: Any, *, episode_id: str) -> tuple[str, ...]:
     positions = getattr(simulator, "ped_pos", None)
     if positions is None or any(index >= len(positions) for index in indices):
         raise ValueError("Pedestrian source indices exceed the current simulator population")
+    if observation is not None:
+        block = observation.get("pedestrians", observation)
+        rows = np.asarray(block.get("positions", block.get("pedestrians_positions", [])))
+        count = np.asarray(block.get("count", block.get("pedestrians_count", []))).reshape(-1)
+        if count.size != 1 or count[0] != len(indices) or rows.ndim != 2:
+            raise ValueError("Observation/source identity count mismatch")
+        expected = np.asarray(positions, dtype=np.float32)[list(indices)]
+        cap = sensor._position_cap()
+        expected = np.clip(expected, 0.0, cap)
+        if not np.array_equal(rows[: len(indices)], expected):
+            raise ValueError("Borrowed or stale observation/source pedestrian identity alignment")
     # Current simulator rows are fixed within an episode, unlike the sorted SOCNAV rows.
     # A route respawn teleports the row to a new start, so it gets a new identity.
     epochs = _respawn_epochs(simulator)
@@ -199,6 +216,17 @@ def validate_supervision_metadata(  # noqa: C901
             or any(source not in {"base", "hardcase"} for source in sources)
         ):
             raise ValueError(f"Invalid mixed predictive source_collectors in {path}")
+    sample_schema = metadata.get("sample_identity_schema")
+    if sample_schema is None:
+        warnings.warn(
+            "Historical identity-v2 dataset lacks checkable sample scenario/episode/seed/step "
+            "provenance; it is not sample-identity verified.",
+            stacklevel=2,
+        )
+    elif sample_schema != SAMPLE_IDENTITY_SCHEMA:
+        raise ValueError(f"Unsupported predictive sample identity schema in {path}")
+    else:
+        validate_sample_identities(raw)
     manifest_path = path.with_suffix(path.suffix + ".manifest.json")
     if manifest_path.exists():
         try:
@@ -238,6 +266,149 @@ def compatible_mixed_supervision(
             )
     if base.get("collector_id") == "mixed" or hardcase.get("collector_id") == "mixed":
         raise ValueError("Mixed predictive datasets cannot be used as input components")
+    if base.get("sample_identity_schema") != hardcase.get("sample_identity_schema"):
+        raise ValueError(
+            "Incompatible predictive sample identity provenance: never mix marked/unmarked rows"
+        )
     result = supervision_metadata("mixed")
+    if base.get("sample_identity_schema") is not None:
+        result["sample_identity_schema"] = base["sample_identity_schema"]
     result["source_collectors"] = [base["collector_id"], hardcase["collector_id"]]
     return result
+
+
+SAMPLE_IDENTITY_SCHEMA = "predictive_sample_identity_v1"
+SAMPLE_IDENTITY_KEYS = (
+    "sample_scenario_id",
+    "sample_episode_id",
+    "sample_seed",
+    "sample_step",
+    "sample_pedestrian_id",
+    "sample_target_pedestrian_id",
+    "sample_target_step",
+)
+
+
+def collection_metadata(collector_id: str) -> dict[str, Any]:
+    """Mark newly collected rows without relabelling historical identity-v2 data.
+
+    Returns:
+        Supervision metadata with the independently versioned sample identity marker.
+    """
+    return {**supervision_metadata(collector_id), "sample_identity_schema": SAMPLE_IDENTITY_SCHEMA}
+
+
+def sample_identity_arrays(
+    frames: list[Any],
+    *,
+    scenario_id: str,
+    episode_id: str,
+    seed: int,
+    mask: Any,
+    target_mask: Any,
+) -> dict[str, Any]:
+    """Serialize the source/future actor IDs alongside the exact supervision rows.
+
+    Returns:
+        NPZ arrays aligned with the source masks and each target horizon.
+    """
+    n, agents = mask.shape
+    horizon = target_mask.shape[-1]
+    identities = [[*frame.ped_ids, *([""] * (agents - len(frame.ped_ids)))] for frame in frames]
+    width = max((len(value) for row in identities for value in row), default=1)
+    source = np.asarray(identities[:n], dtype=f"U{max(width, 1)}").reshape(n, agents)
+    future = np.full((n, agents, horizon), "", dtype=source.dtype)
+    for t in range(n):
+        for k in range(horizon):
+            matches = identity_match_indices(frames[t].ped_ids, frames[t + k + 1].ped_ids)
+            for i, j in matches.items():
+                if target_mask[t, i, k]:
+                    future[t, i, k] = frames[t + k + 1].ped_ids[j]
+    step = np.arange(n, dtype=np.int64)
+    result = {
+        "sample_scenario_id": np.full(n, scenario_id),
+        "sample_episode_id": np.full(n, episode_id),
+        "sample_seed": np.full(n, seed, dtype=np.int64),
+        "sample_step": step,
+        "sample_pedestrian_id": source,
+        "sample_target_pedestrian_id": future,
+        "sample_target_step": step[:, None] + np.arange(1, horizon + 1, dtype=np.int64),
+    }
+    validate_sample_identities({**result, "mask": mask, "target_mask": target_mask})
+    return result
+
+
+def validate_sample_identities(raw: Any) -> None:  # noqa: C901, PLR0912
+    """Reject missing, ambiguous, padded or borrowed persisted source/target identities."""
+    missing = set(SAMPLE_IDENTITY_KEYS) - set(raw)
+    if missing:
+        raise ValueError(f"Missing predictive sample identity fields: {sorted(missing)}")
+    mask, target_mask = np.asarray(raw["mask"]), np.asarray(raw["target_mask"])
+    n, agents = mask.shape
+    horizon = target_mask.shape[-1]
+    shapes = {
+        "sample_scenario_id": (n,),
+        "sample_episode_id": (n,),
+        "sample_seed": (n,),
+        "sample_step": (n,),
+        "sample_pedestrian_id": (n, agents),
+        "sample_target_pedestrian_id": (n, agents, horizon),
+        "sample_target_step": (n, horizon),
+    }
+    for key, shape in shapes.items():
+        value = np.asarray(raw[key])
+        if value.shape != shape:
+            raise ValueError(f"Malformed predictive sample identity shape: {key}")
+        if key in {"sample_seed", "sample_step", "sample_target_step"}:
+            if value.dtype.kind not in "iu" or np.any(value < 0):
+                raise ValueError(f"Invalid predictive sample identity integer: {key}")
+        elif value.dtype.kind != "U":
+            raise ValueError(f"Invalid predictive sample identity string: {key}")
+    if not np.all(np.isin(mask, [0, 1])) or not np.all(np.isin(target_mask, [0, 1])):
+        raise ValueError("Predictive identity masks must be binary")
+    active, future_active = mask.astype(bool), target_mask.astype(bool)
+    source, future = raw["sample_pedestrian_id"], raw["sample_target_pedestrian_id"]
+    if np.any(future_active & ~active[..., None]):
+        raise ValueError("Predictive target identity belongs to a padded source")
+    if np.any(source[active] == "") or np.any(source[~active] != ""):
+        raise ValueError("Missing or padded predictive source identity")
+    if np.any(future[~future_active] != ""):
+        raise ValueError("Masked predictive targets must not carry borrowed identities")
+    expected = np.broadcast_to(source[..., None], future.shape)
+    if np.any(future[future_active] != expected[future_active]):
+        raise ValueError("Borrowed predictive target pedestrian identity")
+    expected_steps = raw["sample_step"][:, None] + np.arange(1, horizon + 1)
+    if not np.array_equal(raw["sample_target_step"], expected_steps):
+        raise ValueError("Predictive target steps do not follow source steps")
+    episodes: dict[str, tuple[str, int]] = {}
+    samples: dict[tuple[str, int], int] = {}
+    for i in range(n):
+        episode = str(raw["sample_episode_id"][i])
+        scenario = str(raw["sample_scenario_id"][i])
+        if not episode or not scenario:
+            raise ValueError("Missing predictive scenario or episode identity")
+        identity = (scenario, int(raw["sample_seed"][i]))
+        if episodes.setdefault(episode, identity) != identity:
+            raise ValueError("Ambiguous predictive episode scenario/seed association")
+        sample_key = (episode, int(raw["sample_step"][i]))
+        previous = samples.setdefault(sample_key, i)
+        # Oversampling can repeat a sample, but cannot attach different data to its key.
+        for key in (
+            "sample_pedestrian_id",
+            "sample_target_pedestrian_id",
+            "mask",
+            "target_mask",
+            "state",
+            "target",
+        ):
+            if key in raw and not np.array_equal(raw[key][i], raw[key][previous]):
+                raise ValueError("Ambiguous predictive sample identity reused with different rows")
+        ids = source[i, active[i]].tolist()
+        if len(set(ids)) != len(ids):
+            raise ValueError("Duplicate predictive sample pedestrian identity")
+        if any(
+            re.fullmatch(re.escape(episode) + r":simulator-slot-\d+(?::respawn-[1-9]\d*)?", value)
+            is None
+            for value in ids
+        ):
+            raise ValueError("Borrowed predictive source episode identity")

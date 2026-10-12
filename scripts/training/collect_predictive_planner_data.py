@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,9 +29,11 @@ from robot_sf.planner.obstacle_features import (
 )
 from robot_sf.training.predictive_supervision import (
     PREDICTIVE_DATASET_SCHEMA,
+    SAMPLE_IDENTITY_KEYS,
+    collection_metadata,
     identity_match_indices,
     observation_episode_ids,
-    supervision_metadata,
+    sample_identity_arrays,
 )
 
 
@@ -328,7 +332,15 @@ def parse_args() -> argparse.Namespace:
         default="predictive_legacy_v1",
         help="Predictive input schema/model family to collect.",
     )
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Master seed for training episode seeds."
+    )
+    parser.add_argument(
+        "--episode-seeds",
+        type=int,
+        nargs="+",
+        help="Explicit development episode seeds (1001-1200); one per episode.",
+    )
     parser.add_argument("--max-speed", type=float, default=1.0)
     parser.add_argument("--min-goal-distance", type=float, default=2.0)
     parser.add_argument("--max-reset-attempts", type=int, default=12)
@@ -361,32 +373,40 @@ def _reset_with_min_goal(
     rng: np.random.Generator,
     min_goal_distance: float,
     max_reset_attempts: int,
-) -> tuple[dict | None, int]:
+    episode_seed: int | None = None,
+) -> tuple[dict | None, int, int]:
     """Reset env until a valid observation with sufficient goal distance is obtained.
 
     Returns:
-        tuple[dict | None, int]: Observation or ``None`` and number of reset failures.
+        Observation or ``None``, reset failure count and the actual reset seed.
     """
     skipped = 0
     obs = None
-    for _attempt in range(max(1, int(max_reset_attempts))):
-        seed = int(rng.integers(0, 2**31 - 1))
+    seed = -1
+    for _attempt in range(1 if episode_seed is not None else max(1, int(max_reset_attempts))):
+        seed = int(episode_seed) if episode_seed is not None else int(rng.integers(100000, 200000))
         try:
             obs, _info = env.reset(seed=seed)
         except Exception:
             skipped += 1
             continue
         if _goal_distance(obs) >= float(min_goal_distance):
-            return obs, skipped
-    return obs, skipped
+            return obs, skipped, seed
+    return None, skipped, seed
 
 
-def main() -> int:  # noqa: C901
+def main() -> int:  # noqa: C901, PLR0915
     """Collect dataset and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     logger.remove()
     logger.add(sys.stderr, level="INFO")
     rng = np.random.default_rng(args.seed)
+    episode_seeds = getattr(args, "episode_seeds", None)
+    if episode_seeds is not None and (
+        len(episode_seeds) != args.episodes
+        or any(not 1001 <= seed <= 1200 for seed in episode_seeds)
+    ):
+        raise ValueError("--episode-seeds requires one development seed (1001-1200) per episode")
 
     cfg = RobotSimulationConfig()
     cfg.observation_mode = ObservationMode.SOCNAV_STRUCT
@@ -395,7 +415,12 @@ def main() -> int:  # noqa: C901
     cfg.sim_config.difficulty = int(args.difficulty)
     cfg.sim_config.max_peds_per_group = int(args.max_peds_per_group)
 
-    env = make_robot_env(config=cfg, debug=False, recording_enabled=False)
+    env = make_robot_env(
+        config=cfg,
+        seed=int(episode_seeds[0]) if episode_seeds else int(rng.integers(100000, 200000)),
+        debug=False,
+        recording_enabled=False,
+    )
     map_def = getattr(env, "map_def", None)
     if map_def is None:
         map_def = getattr(getattr(env, "simulator", None), "map_def", None)
@@ -405,27 +430,44 @@ def main() -> int:  # noqa: C901
     all_targets: list[np.ndarray] = []
     all_masks: list[np.ndarray] = []
     all_target_masks: list[np.ndarray] = []
+    all_identities: list[dict] = []
+    collection_id = uuid.uuid4().hex
 
     skipped_resets = 0
     for episode in range(args.episodes):
-        obs, skipped = _reset_with_min_goal(
+        obs, skipped, seed = _reset_with_min_goal(
             env=env,
             rng=rng,
             min_goal_distance=float(args.min_goal_distance),
             max_reset_attempts=int(args.max_reset_attempts),
+            episode_seed=episode_seeds[episode] if episode_seeds else None,
         )
         skipped_resets += skipped
         if obs is None:
             continue
         episode_frames: list[Frame] = []
-        episode_id = f"base-episode-{episode}"
+        episode_id = f"{collection_id}:base-episode-{episode}"
+        scenario_id = (
+            "base-config-"
+            + hashlib.sha256(
+                json.dumps(
+                    {
+                        "difficulty": args.difficulty,
+                        "max_peds_per_group": args.max_peds_per_group,
+                        "use_global_routing": args.use_global_routing,
+                        "map_geometry": repr(getattr(env, "map_def", None)),
+                    },
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest()
+        )
 
         for _step in range(args.max_steps):
             episode_frames.append(
                 _extract_frame(
                     obs,
                     args.max_agents,
-                    ped_ids=observation_episode_ids(env, episode_id=episode_id),
+                    ped_ids=observation_episode_ids(env, episode_id=episode_id, observation=obs),
                 )
             )
             action = _goal_policy(obs, max_speed=args.max_speed)
@@ -446,6 +488,16 @@ def main() -> int:  # noqa: C901
             all_targets.append(targets)
             all_masks.append(masks)
             all_target_masks.append(target_masks)
+            all_identities.append(
+                sample_identity_arrays(
+                    episode_frames,
+                    scenario_id=scenario_id,
+                    episode_id=episode_id,
+                    seed=seed,
+                    mask=masks,
+                    target_mask=target_masks,
+                )
+            )
 
         if (episode + 1) % 10 == 0:
             logger.info("Collected episode {}/{}", episode + 1, args.episodes)
@@ -465,11 +517,15 @@ def main() -> int:  # noqa: C901
         raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
     np.savez_compressed(
         args.output,
+        **{
+            key: np.concatenate([identity[key] for identity in all_identities], axis=0)
+            for key in SAMPLE_IDENTITY_KEYS
+        },
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,
         target_mask=target_masks_cat,
-        supervision_metadata_json=json.dumps(supervision_metadata("base"), sort_keys=True),
+        supervision_metadata_json=json.dumps(collection_metadata("base"), sort_keys=True),
         feature_schema_json=json.dumps(
             _effective_predictive_feature_schema(
                 model_family=str(args.model_family),
@@ -480,8 +536,10 @@ def main() -> int:  # noqa: C901
     )
 
     summary = {
-        **supervision_metadata("base"),
-        "supervision_metadata": supervision_metadata("base"),
+        **collection_metadata("base"),
+        "supervision_metadata": collection_metadata("base"),
+        "master_seed": int(args.seed),
+        "collection_seed_role": "development" if episode_seeds else "training",
         "episodes": int(args.episodes),
         "max_steps": int(args.max_steps),
         "max_agents": int(args.max_agents),
@@ -510,7 +568,7 @@ def main() -> int:  # noqa: C901
             {
                 "dataset_id": args.output.stem,
                 "dataset_schema": PREDICTIVE_DATASET_SCHEMA,
-                "supervision_metadata": supervision_metadata("base"),
+                "supervision_metadata": collection_metadata("base"),
                 "model_family": str(args.model_family),
                 "feature_schema": summary["feature_schema"],
                 "obstacle_feature_source": summary.get("obstacle_feature_source"),

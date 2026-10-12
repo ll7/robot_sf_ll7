@@ -18,7 +18,9 @@ from robot_sf.planner.obstacle_features import (
     predictive_ego_motion_channel_producer_key,
 )
 from robot_sf.training.predictive_supervision import (
+    SAMPLE_IDENTITY_KEYS,
     compatible_mixed_supervision,
+    validate_sample_identities,
     validate_supervision_metadata,
 )
 
@@ -370,6 +372,16 @@ def main() -> int:
         "mask": mask,
         "target_mask": target_mask,
     }
+    if mixed_supervision and mixed_supervision.get("sample_identity_schema"):
+        with (
+            np.load(args.base_dataset, allow_pickle=False) as base_raw,
+            np.load(args.hardcase_dataset, allow_pickle=False) as hard_raw,
+        ):
+            for key in SAMPLE_IDENTITY_KEYS:
+                payload[key] = np.concatenate(
+                    [base_raw[key], np.repeat(hard_raw[key], hard_rep, axis=0)], axis=0
+                )[idx]
+        validate_sample_identities(payload)
     if feature_schema_json is not None:
         payload["feature_schema_json"] = feature_schema_json
     if mixed_supervision is not None:

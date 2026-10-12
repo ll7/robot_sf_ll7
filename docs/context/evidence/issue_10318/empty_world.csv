@@ -1,0 +1,103 @@
+suite,scenario,seed,before_outcome,after_outcome,before_steps,after_steps,before_collisions,after_collisions,before_min_wall_distance_m,after_min_wall_distance_m,trace_changed,trajectory_changed,max_position_delta_m,classification
+main,classic_bottleneck_high,1001,success,success,132,132,0,0,1.5191934470168238,1.5191934470168238,True,False,0.0,commands changed; identical plant trajectory
+main,classic_bottleneck_high,1002,success,success,136,136,0,0,1.0146747040194593,1.0146747040194593,False,False,0.0,unchanged success
+main,classic_bottleneck_low,1001,success,success,132,132,0,0,1.5191934470168238,1.5191934470168238,True,False,0.0,commands changed; identical plant trajectory
+main,classic_bottleneck_low,1002,success,success,136,136,0,0,1.0146747040194593,1.0146747040194593,False,False,0.0,unchanged success
+main,classic_bottleneck_medium,1001,success,success,132,132,0,0,1.5191934470168238,1.5191934470168238,True,False,0.0,commands changed; identical plant trajectory
+main,classic_bottleneck_medium,1002,success,success,136,136,0,0,1.0146747040194593,1.0146747040194593,False,False,0.0,unchanged success
+main,classic_cross_trap_high,1001,success,success,276,276,0,0,1.006759161140813,1.0221369342742226,True,True,0.073929,trajectory changed; success retained
+main,classic_cross_trap_high,1002,success,success,271,271,0,0,1.0253554644154124,1.0025794599192743,True,True,0.086974,trajectory changed; success retained
+main,classic_cross_trap_low,1001,success,success,276,276,0,0,1.006759161140813,1.0221369342742226,True,True,0.073929,trajectory changed; success retained
+main,classic_cross_trap_low,1002,success,success,271,271,0,0,1.0253554644154124,1.0025794599192743,True,True,0.086974,trajectory changed; success retained
+main,classic_cross_trap_medium,1001,success,success,276,276,0,0,1.006759161140813,1.0221369342742226,True,True,0.073929,trajectory changed; success retained
+main,classic_cross_trap_medium,1002,success,success,271,271,0,0,1.0253554644154124,1.0025794599192743,True,True,0.086974,trajectory changed; success retained
+main,classic_doorway_high,1001,success,success,84,84,0,0,1.1003294956666956,1.0635490087619537,True,True,0.310878,trajectory changed; success retained
+main,classic_doorway_high,1002,success,success,86,86,0,0,1.1429822234210119,1.1749929098471055,True,True,0.042827,trajectory changed; success retained
+main,classic_doorway_low,1001,success,success,84,84,0,0,1.1003294956666956,1.0635490087619537,True,True,0.310878,trajectory changed; success retained
+main,classic_doorway_low,1002,success,success,86,86,0,0,1.1429822234210119,1.1749929098471055,True,True,0.042827,trajectory changed; success retained
+main,classic_doorway_medium,1001,success,success,84,84,0,0,1.1003294956666956,1.0635490087619537,True,True,0.310878,trajectory changed; success retained
+main,classic_doorway_medium,1002,success,success,86,86,0,0,1.1429822234210119,1.1749929098471055,True,True,0.042827,trajectory changed; success retained
+main,classic_group_crossing_high,1001,success,success,111,111,0,0,1.9510977326664791,1.9439733949287266,True,True,0.033197,trajectory changed; success retained
+main,classic_group_crossing_high,1002,success,success,105,105,0,0,2.1208665035912326,2.1208665035912326,True,False,0.0,commands changed; identical plant trajectory
+main,classic_group_crossing_low,1001,success,success,111,111,0,0,1.9510977326664791,1.9439733949287266,True,True,0.033197,trajectory changed; success retained
+main,classic_group_crossing_low,1002,success,success,105,105,0,0,2.1208665035912326,2.1208665035912326,True,False,0.0,commands changed; identical plant trajectory
+main,classic_group_crossing_medium,1001,success,success,111,111,0,0,1.9510977326664791,1.9439733949287266,True,True,0.033197,trajectory changed; success retained
+main,classic_group_crossing_medium,1002,success,success,105,105,0,0,2.1208665035912326,2.1208665035912326,True,False,0.0,commands changed; identical plant trajectory
+main,classic_head_on_corridor_low,1001,success,success,195,195,0,0,1.622035605766589,1.622035605766589,True,False,0.0,commands changed; identical plant trajectory
+main,classic_head_on_corridor_low,1002,success,success,196,196,0,0,1.5657354692752037,1.5657354692752037,True,False,0.0,commands changed; identical plant trajectory
+main,classic_head_on_corridor_medium,1001,success,success,195,195,0,0,1.622035605766589,1.622035605766589,True,False,0.0,commands changed; identical plant trajectory
+main,classic_head_on_corridor_medium,1002,success,success,196,196,0,0,1.5657354692752037,1.5657354692752037,True,False,0.0,commands changed; identical plant trajectory
+main,classic_merging_low,1001,success,success,438,435,0,0,1.730787014445372,1.9142363657500556,True,True,0.430788,trajectory changed; success retained
+main,classic_merging_low,1002,success,success,431,432,0,0,1.7081074424015055,1.9226663191762734,True,True,0.314488,trajectory changed; success retained
+main,classic_merging_medium,1001,success,success,438,435,0,0,1.730787014445372,1.9142363657500556,True,True,0.430788,trajectory changed; success retained
+main,classic_merging_medium,1002,success,success,431,432,0,0,1.7081074424015055,1.9226663191762734,True,True,0.314488,trajectory changed; success retained
+main,classic_overtaking_low,1001,success,success,229,229,0,0,1.026746971330733,1.031231886334254,True,True,0.170978,trajectory changed; success retained
+main,classic_overtaking_low,1002,success,success,226,226,0,0,1.0073624513221675,1.034951736077082,True,True,0.139137,trajectory changed; success retained
+main,classic_overtaking_medium,1001,success,success,229,229,0,0,1.026746971330733,1.031231886334254,True,True,0.170978,trajectory changed; success retained
+main,classic_overtaking_medium,1002,success,success,226,226,0,0,1.0073624513221675,1.034951736077082,True,True,0.139137,trajectory changed; success retained
+main,classic_realworld_double_bottleneck_high,1001,success,success,302,302,0,0,1.8716362246879916,1.9100705039555965,True,True,0.102042,trajectory changed; success retained
+main,classic_realworld_double_bottleneck_high,1002,success,success,299,299,0,0,1.946713246332985,1.946713246332985,True,True,0.03498,trajectory changed; success retained
+main,classic_station_platform_medium,1001,success,success,551,551,0,0,2.0774309806005142,2.0774309806005142,True,True,0.213691,trajectory changed; success retained
+main,classic_station_platform_medium,1002,success,success,546,546,0,0,2.549240171828601,2.549240171828601,True,True,0.265188,trajectory changed; success retained
+main,classic_t_intersection_low,1001,success,success,155,155,0,0,1.417706192562309,1.4888869212918308,True,True,0.194214,trajectory changed; success retained
+main,classic_t_intersection_low,1002,success,success,166,167,0,0,1.2768134340810726,1.3050524847448521,True,True,0.192011,trajectory changed; success retained
+main,classic_t_intersection_medium,1001,success,success,155,155,0,0,1.417706192562309,1.4888869212918308,True,True,0.194214,trajectory changed; success retained
+main,classic_t_intersection_medium,1002,success,success,166,167,0,0,1.2768134340810726,1.3050524847448521,True,True,0.192011,trajectory changed; success retained
+main,classic_urban_crossing_medium,1001,success,success,190,190,0,0,1.783630402798743,1.783630402798743,False,False,0.0,unchanged success
+main,classic_urban_crossing_medium,1002,success,success,187,187,0,0,1.7323193156297831,1.7323193156297831,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_accompanying_peer,1001,success,success,200,200,0,0,2.034231511108141,2.0357062161865245,True,True,0.001475,trajectory changed; success retained
+main,francis2023_accompanying_peer,1002,success,success,199,198,0,0,1.814811702294707,1.814811702294707,True,True,0.04496,trajectory changed; success retained
+main,francis2023_blind_corner,1001,success,success,277,278,0,0,1.3918006783214043,1.3918006783214043,True,True,0.468625,trajectory changed; success retained
+main,francis2023_blind_corner,1002,success,success,276,276,0,0,1.3803897726212893,1.3803897726212893,True,True,0.133404,trajectory changed; success retained
+main,francis2023_circular_crossing,1001,success,success,82,82,0,0,2.909512353782149,2.8812903699417034,True,True,0.034665,trajectory changed; success retained
+main,francis2023_circular_crossing,1002,success,success,80,80,0,0,2.9598764761035246,2.9051699868661394,True,True,0.055224,trajectory changed; success retained
+main,francis2023_crowd_navigation,1001,success,success,144,144,0,0,2.9623362918077403,2.9613694942348867,True,True,0.041968,trajectory changed; success retained
+main,francis2023_crowd_navigation,1002,success,success,142,142,0,0,2.984293718274995,2.984293718274995,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_down_path,1001,success,success,200,200,0,0,2.034231511108141,2.0357062161865245,True,True,0.001475,trajectory changed; success retained
+main,francis2023_down_path,1002,success,success,199,198,0,0,1.814811702294707,1.814811702294707,True,True,0.04496,trajectory changed; success retained
+main,francis2023_entering_elevator,1001,success,success,69,69,0,0,2.048443341487324,2.081155727810576,True,True,0.08884,trajectory changed; success retained
+main,francis2023_entering_elevator,1002,success,success,68,67,0,0,2.063890417657229,2.063890417657229,True,True,0.045017,trajectory changed; success retained
+main,francis2023_entering_room,1001,success,success,107,107,0,0,1.6561261379468868,1.6561261379468868,True,True,0.001537,trajectory changed; success retained
+main,francis2023_entering_room,1002,success,success,105,105,0,0,1.6798160381548028,1.6798160381548028,True,True,0.044961,trajectory changed; success retained
+main,francis2023_exiting_elevator,1001,success,success,80,80,0,0,1.4479003579886585,1.4479003579886585,False,False,0.0,unchanged success
+main,francis2023_exiting_elevator,1002,success,success,82,82,0,0,1.6695324570003582,1.6695324570003582,False,False,0.0,unchanged success
+main,francis2023_exiting_room,1001,success,success,118,118,0,0,1.690570917495463,1.6806425352545349,True,True,0.108941,trajectory changed; success retained
+main,francis2023_exiting_room,1002,success,success,120,120,0,0,1.7256274999213248,1.668138013947419,True,True,0.088153,trajectory changed; success retained
+main,francis2023_following_human,1001,success,success,200,200,0,0,2.034231511108141,2.0357062161865245,True,True,0.001475,trajectory changed; success retained
+main,francis2023_following_human,1002,success,success,199,198,0,0,1.814811702294707,1.814811702294707,True,True,0.04496,trajectory changed; success retained
+main,francis2023_frontal_approach,1001,success,success,207,207,0,0,2.9099584003590424,2.883195595760058,True,True,0.026825,trajectory changed; success retained
+main,francis2023_frontal_approach,1002,success,success,205,205,0,0,2.9583054017543606,2.9061298968567146,True,True,0.080174,trajectory changed; success retained
+main,francis2023_intersection_no_gesture,1001,success,success,143,143,0,0,1.3918006783214079,1.3918006783214079,True,True,0.015,trajectory changed; success retained
+main,francis2023_intersection_no_gesture,1002,success,success,142,142,0,0,1.3801954288940428,1.3801954288940428,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_intersection_proceed,1001,success,success,143,143,0,0,1.3918006783214079,1.3918006783214079,True,True,0.015,trajectory changed; success retained
+main,francis2023_intersection_proceed,1002,success,success,142,142,0,0,1.3801954288940428,1.3801954288940428,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_intersection_wait,1001,success,success,143,143,0,0,1.3918006783214079,1.3918006783214079,True,True,0.015,trajectory changed; success retained
+main,francis2023_intersection_wait,1002,success,success,142,142,0,0,1.3801954288940428,1.3801954288940428,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_join_group,1001,success,success,82,82,0,0,2.909512353782149,2.8812903699417034,True,True,0.034665,trajectory changed; success retained
+main,francis2023_join_group,1002,success,success,80,80,0,0,2.9598764761035246,2.9051699868661394,True,True,0.055224,trajectory changed; success retained
+main,francis2023_leading_human,1001,success,success,200,200,0,0,2.034231511108141,2.0357062161865245,True,True,0.001475,trajectory changed; success retained
+main,francis2023_leading_human,1002,success,success,199,198,0,0,1.814811702294707,1.814811702294707,True,True,0.04496,trajectory changed; success retained
+main,francis2023_leave_group,1001,success,success,82,82,0,0,2.909512353782149,2.8812903699417034,True,True,0.034665,trajectory changed; success retained
+main,francis2023_leave_group,1002,success,success,80,80,0,0,2.9598764761035246,2.9051699868661394,True,True,0.055224,trajectory changed; success retained
+main,francis2023_narrow_doorway,1001,timeout,timeout,400,400,0,0,1.0020768193246543,1.0193482906382447,True,True,0.155966,trajectory changed; existing physical-infeasibility timeout
+main,francis2023_narrow_doorway,1002,timeout,timeout,400,400,0,0,1.0000691004446,1.0000691004446,True,False,0.0,commands changed; identical physical-infeasibility timeout
+main,francis2023_narrow_hallway,1001,success,success,143,143,0,0,1.391800678321407,1.391800678321407,True,True,0.015,trajectory changed; success retained
+main,francis2023_narrow_hallway,1002,success,success,142,142,0,0,1.3801954288940421,1.3801954288940421,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_parallel_traffic,1001,success,success,207,207,0,0,2.9099584003590424,2.883195595760058,True,True,0.026825,trajectory changed; success retained
+main,francis2023_parallel_traffic,1002,success,success,205,205,0,0,2.9583054017543606,2.9061298968567146,True,True,0.080174,trajectory changed; success retained
+main,francis2023_pedestrian_obstruction,1001,success,success,207,207,0,0,2.9099584003590424,2.883195595760058,True,True,0.026825,trajectory changed; success retained
+main,francis2023_pedestrian_obstruction,1002,success,success,205,205,0,0,2.9583054017543606,2.9061298968567146,True,True,0.080174,trajectory changed; success retained
+main,francis2023_pedestrian_overtaking,1001,success,success,457,457,0,0,2.9812502360599074,2.938694526910515,True,True,0.543317,trajectory changed; success retained
+main,francis2023_pedestrian_overtaking,1002,success,success,452,451,0,0,2.9808199062434624,2.9968128279776702,True,True,0.7347,trajectory changed; success retained
+main,francis2023_perpendicular_traffic,1001,success,success,143,143,0,0,1.3918006783214079,1.3918006783214079,True,True,0.015,trajectory changed; success retained
+main,francis2023_perpendicular_traffic,1002,success,success,142,142,0,0,1.3801954288940428,1.3801954288940428,True,False,0.0,commands changed; identical plant trajectory
+main,francis2023_robot_crowding,1001,success,success,82,82,0,0,2.909512353782149,2.8812903699417034,True,True,0.034665,trajectory changed; success retained
+main,francis2023_robot_crowding,1002,success,success,80,80,0,0,2.9598764761035246,2.9051699868661394,True,True,0.055224,trajectory changed; success retained
+main,francis2023_robot_overtaking,1001,success,success,207,207,0,0,2.9099584003590424,2.883195595760058,True,True,0.026825,trajectory changed; success retained
+main,francis2023_robot_overtaking,1002,success,success,205,205,0,0,2.9583054017543606,2.9061298968567146,True,True,0.080174,trajectory changed; success retained
+width,francis2023_narrow_doorway_width_2p20,1001,success,success,186,186,0,0,1.0019357818736128,1.0019357818736128,True,False,0.0,commands changed; identical plant trajectory
+width,francis2023_narrow_doorway_width_2p20,1002,success,success,170,170,0,0,1.002784363948528,1.002784363948528,True,True,0.064331,trajectory changed; success retained
+width,francis2023_narrow_doorway_width_2p80,1001,success,success,150,150,0,0,1.0046419365638029,1.0046419365638029,True,True,0.005637,trajectory changed; success retained
+width,francis2023_narrow_doorway_width_2p80,1002,success,success,143,143,0,0,1.0268651293000695,1.0268651293000695,True,False,0.0,commands changed; identical plant trajectory
+width,francis2023_narrow_doorway_width_3p60,1001,success,success,146,146,0,0,1.0293426980957734,1.0293426980957734,True,False,0.0,commands changed; identical plant trajectory
+width,francis2023_narrow_doorway_width_3p60,1002,success,success,143,143,0,0,1.4264228988868637,1.4264228988868637,True,False,0.0,commands changed; identical plant trajectory

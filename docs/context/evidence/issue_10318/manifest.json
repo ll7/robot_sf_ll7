@@ -1,0 +1,32 @@
+{
+  "schema": "issue-10318-development-diagnostic.v1",
+  "evidence_tier": "diagnostic-only",
+  "base_sha": "53721be3248600e08641a9816d094b605e3c93e4",
+  "runtime_fix_sha": "386e1f500d3fa8cdbdf490bd10b3b298ca3905f3",
+  "affected_seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "empty_world_seeds": [
+    1001,
+    1002
+  ],
+  "affected_horizon_steps": 400,
+  "dt_s": 0.1,
+  "predictor_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+  "environment": "3.13.14 2.13.0+cu130 2.4.6",
+  "inputs_sha256": {
+    "configs/algos/prediction_planner_release_v0_0_8.yaml": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c",
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
+  },
+  "compact_artifacts_sha256": {
+    "native_probe_before.json": "c9dfcff7d3e2401d791eed1c48a5704acc1fa3e27a05c70aa3c192220daf02e1",
+    "native_probe_after.json": "90f10602219d1ec8e6656852aadf72c8602c0994637fa854cffea8d0b38340bf",
+    "empty_summary.json": "fe3a8118ff5c618911f017b766bac6cba1720ccd8eb9f2f16002152f58b2e836",
+    "empty_world.csv": "6a700d0e11fab41995ec4119936327d978d5162a0e0cfe2c05215146aac3d30f",
+    "affected.csv": "ac65ab74c03ff0e8d6947e441162389e17d2cbd916b822a6d5f73c42c736dfeb"
+  },
+  "fallback_or_degraded_rows": 0,
+  "claim_boundary": "Contributor-specific development diagnostic; residual timeouts and clearance reductions require independent review. No release result or safety claim."
+}

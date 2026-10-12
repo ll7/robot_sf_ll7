@@ -261,7 +261,7 @@ def test_flat_observation_pedestrian_velocity_stays_ego_native_in_model_input() 
 
 
 @pytest.mark.parametrize("pedestrian_x,should_progress", [(2.27, True), (1.4, False)])
-def test_sequence_search_progresses_past_clear_pedestrian_without_contact(
+def test_sequence_search_preserves_clear_near_field_progress(
     pedestrian_x: float, should_progress: bool
 ) -> None:
     """A clear near-field forecast permits motion; a touching body still yields.

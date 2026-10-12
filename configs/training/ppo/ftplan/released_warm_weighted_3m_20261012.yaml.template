@@ -1,3 +1,4 @@
+# Prepared dependent template, excluded from the canonical runnable *.yaml inventory.
 # Prepared pilot only. Do not launch before the controlled seed replication reports.
 # Preserve the source observation/action contract; no alignment-lane config changes.
 base_config: ../ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml

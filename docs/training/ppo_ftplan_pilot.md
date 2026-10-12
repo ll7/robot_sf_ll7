@@ -6,14 +6,31 @@ packet. No frozen artifact, reward implementation, alignment config, or seed-pol
 PR file is changed.
 
 The machine-readable [protocol](../../configs/training/ppo/ftplan/pilot_protocol_20261012.yaml)
-and [training config](../../configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml)
+and [prepared training template](../../configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml.template)
 bind the released checkpoint (job 11724, W&B `ibo3aqus`), three initialization seeds
 100001/100002/100003, 3M steps per seed, and a factor-two training oversample of
 bottleneck, doorway, exiting elevator/room and frontal approach. Sampling factors
 are a predeclared pilot choice, not optimized on released results. Training layouts
 use the training-only range under each logged master. Initialization changes future
 optimizer/minibatch draws; the initial deterministic actor/value weights remain the
-same released policy in all three runs.
+same April policy in all three runs. The template is deliberately named
+`.yaml.template`: it is dependent preparation, not a canonical runnable `.yaml`
+leaf. The stock 149-leaf inventory and its load checks remain unchanged. The
+launcher materializes an isolated runtime YAML only after its dependency gates.
+
+The source is the **April issue-791** checkpoint named in the author task, not the
+plain PPO checkpoint in release 0.0.8. The April source's historical training cap is
+**3.0 m/s with reverse**, with a configured reward curriculum. This prepared recipe
+inherits that 3.0 m/s cap; any benchmark-plant migration still needs the reviewed
+alignment contract. Plain PPO in 0.0.8 uses the **October B1002** retrain
+`ppo_release_robot_b1002_last_20261001`, trained at **2.0 m/s, no reverse and no
+curriculum** ([baseline](../../configs/baselines/ppo_release_robot_0_0_8_cpu.yaml),
+[recipe](../../configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml)).
+Guarded PPO instead uses the **March BR06 v3** checkpoint
+`ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200`, whose historical training
+cap is 3.0 m/s ([guarded baseline](../../configs/algos/guarded_ppo_release_v0_0_8.yaml)).
+Their release adapters cap target speed at 2.0 m/s; evaluation cap and source training
+cap are different provenance fields.
 
 Use the released observation/action contract. The canonical trainer must reject
 any space mismatch. The initialization check found released linear action bounds
@@ -30,9 +47,11 @@ also retains its historical reward/curriculum settings: this pilot isolates warm
 initialization plus family sampling, and does not claim to implement the reward
 lane's improvements. Record the resolved settings alongside every segment.
 
-The five-dev-seed diagnostic found the strict signature on 1/5, with static contact
-on all five. Partial replication does not establish a consistent actor mechanism;
-therefore the conditional obstacle observation extension is deferred on #9609.
+The corrected five-dev-seed diagnostic reports **5/5** for the absolute-target
+signature: all 20 sampled commands target 2 m/s and all five trajectories have
+static contact. Raw Gaussian outputs are velocity deltas; the previous 1/5 threshold
+and "partly slows" interpretation were incorrect. The optional obstacle feature
+remains implementation work tracked on #9609, outside this custody/inventory repair.
 
 The [Slurm script](../../SLURM/ftplan/released_ppo_pilot.slurm) is staged in 1M-step
 segments. **Do not submit before the controlled seed-policy replication reports**
@@ -86,7 +105,13 @@ Report success, static and pedestrian collisions, cap-speed fractions, per-famil
 outcomes and training-seed variability; publish negative results equally. Preserve
 released source pointers, initialization ZIPs, every segment final, selection best,
 resolved configs, source SHA, worker receipts, manifests, selection rows, logs and
-normalization companions if any to the external hub and W&B. The script copies and
+normalization companions if any to the external hub and W&B. EXIT, INT and TERM paths preserve partial artifacts as well as successful
+segments. A bound `segment_status.json` and W&B metadata record complete/incomplete
+status and the original exit code. Failed/interrupted segments retain that exit
+code even if custody also fails; successful training with failed custody exits
+nonzero and cannot continue. An early Slurm TERM request provides a custody window;
+uncatchable SIGKILL or unavailable storage can still prevent preservation, and
+must leave the segment blocked with local outputs retained. The script copies and
 checks hub bytes and waits for W&B commit; an independent readback is still required
 before the next segment's selection receipt. Register new checkpoints only with
 those durable pointers and hashes. Record all attempts in the extra-tuning ledger;

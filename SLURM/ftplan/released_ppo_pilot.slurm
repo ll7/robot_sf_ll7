@@ -5,6 +5,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=96G
 #SBATCH --time=04:00:00
+#SBATCH --signal=B:TERM@120
 #SBATCH --output=output/slurm/%j-ppo-ftplan.out
 # PREPARED, NOT SUBMITTED. Site partition/QoS comes from the private overlay.
 # One segment per submission. CPU selection runs between GPU segments.
@@ -26,6 +27,64 @@ export ROBOT_SF_ARTIFACT_ROOT="output/ftplan/init${FTPLAN_INIT_SEED}/segment${FT
 export OMP_NUM_THREADS=1
 export WANDB_MODE=online
 mkdir -p "$ROBOT_SF_ARTIFACT_ROOT"
+# Custody runs for success, failure and catchable interruption, including preflight.
+training_pid=''
+training_completed=0
+preserve_segment() {
+scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- python - <<'PY'
+import hashlib, json, os, shutil
+from pathlib import Path
+import wandb
+root = Path(os.environ['ROBOT_SF_ARTIFACT_ROOT'])
+(root / 'segment_status.json').write_text(json.dumps({'status': os.environ['FTPLAN_SEGMENT_STATUS'], 'original_exit_code': int(os.environ['FTPLAN_ORIGINAL_EXIT_CODE']), 'source_head': os.environ['FTPLAN_SOURCE_HEAD']}, indent=2) + '\n')
+dest = Path(os.environ['FTPLAN_HUB_ROOT']) / 'ppo-ftplan-20261012' / root.relative_to('output/ftplan')
+if dest.exists():
+    raise ValueError('Hub segment already exists; do not overwrite custody')
+shutil.copytree(root, dest)
+for source in root.rglob('*'):
+    if source.is_file():
+        copied = dest / source.relative_to(root)
+        if hashlib.sha256(source.read_bytes()).digest() != hashlib.sha256(copied.read_bytes()).digest():
+            raise ValueError('Hub checkpoint preservation mismatch')
+with wandb.init(project='robot_sf', group='ppo-ftplan-released-20261012', job_type='segment-preservation') as run:
+    artifact = wandb.Artifact(f'ppo-ftplan-init{os.environ["FTPLAN_INIT_SEED"]}-segment{os.environ["FTPLAN_SEGMENT"]}', type='training-segment', metadata={'source_head': os.environ['FTPLAN_SOURCE_HEAD'], 'status': os.environ['FTPLAN_SEGMENT_STATUS'], 'original_exit_code': int(os.environ['FTPLAN_ORIGINAL_EXIT_CODE'])})
+    artifact.add_dir(str(root))
+    committed = run.log_artifact(artifact)
+    committed.wait()
+print('Segment copied to hub and W&B; independent readback and CPU selection required')
+PY
+}
+finish_segment() {
+    local original_rc=$?
+    trap - EXIT
+    trap '' INT TERM
+    set +e
+    export FTPLAN_ORIGINAL_EXIT_CODE="$original_rc"
+    export FTPLAN_SEGMENT_STATUS=incomplete
+    if [[ "$original_rc" -eq 0 && "$training_completed" -eq 1 ]]; then
+        export FTPLAN_SEGMENT_STATUS=complete
+    fi
+    preserve_segment
+    local custody_rc=$?
+    if [[ "$custody_rc" -ne 0 ]]; then
+        echo "Segment preservation failed; retain local outputs and block continuation" >&2
+        if [[ "$original_rc" -eq 0 ]]; then original_rc=$custody_rc; fi
+    fi
+    exit "$original_rc"
+}
+interrupt_segment() {
+    local signal_name=$1 exit_code=$2
+    trap '' INT TERM
+    if [[ -n "$training_pid" ]]; then
+        kill -s "$signal_name" "$training_pid" 2>/dev/null || true
+        wait "$training_pid" 2>/dev/null || true
+        training_pid=''
+    fi
+    exit "$exit_code"
+}
+trap finish_segment EXIT
+trap 'interrupt_segment INT 130' INT
+trap 'interrupt_segment TERM 143' TERM
 # Validate bound reports before creating a warm checkpoint or invoking training.
 scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- python - <<'PY'
 import hashlib, json, os
@@ -85,7 +144,7 @@ else:
     checkpoint = verified(receipt['checkpoint_artifact'])
     if receipt['checkpoint_sha256'] != receipt['checkpoint_artifact']['sha256']:
         raise ValueError('Selection checkpoint identity mismatch')
-base = Path('configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml').resolve()
+base = Path('configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml.template').resolve()
 runtime = Path(os.environ['ROBOT_SF_ARTIFACT_ROOT']) / 'runtime.yaml'
 runtime.write_text(yaml.safe_dump({
     'base_config': os.path.relpath(base, runtime.parent),
@@ -105,26 +164,13 @@ PY
 scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- \
   python -m scripts.training.train_ppo_with_family_weights \
   --config "$ROBOT_SF_ARTIFACT_ROOT/runtime.yaml" \
-  --run-id "ftplan_init${FTPLAN_INIT_SEED}_segment${FTPLAN_SEGMENT}"
-# Preserve the complete segment. No continuation until external CPU selection.
-scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- python - <<'PY'
-import hashlib, os, shutil
-from pathlib import Path
-import wandb
-root = Path(os.environ['ROBOT_SF_ARTIFACT_ROOT'])
-dest = Path(os.environ['FTPLAN_HUB_ROOT']) / 'ppo-ftplan-20261012' / root.relative_to('output/ftplan')
-if dest.exists():
-    raise ValueError('Hub segment already exists; do not overwrite custody')
-shutil.copytree(root, dest)
-for source in root.rglob('*'):
-    if source.is_file():
-        copied = dest / source.relative_to(root)
-        if hashlib.sha256(source.read_bytes()).digest() != hashlib.sha256(copied.read_bytes()).digest():
-            raise ValueError('Hub checkpoint preservation mismatch')
-with wandb.init(project='robot_sf', group='ppo-ftplan-released-20261012', job_type='segment-preservation') as run:
-    artifact = wandb.Artifact(f'ppo-ftplan-init{os.environ["FTPLAN_INIT_SEED"]}-segment{os.environ["FTPLAN_SEGMENT"]}', type='training-segment', metadata={'source_head': os.environ['FTPLAN_SOURCE_HEAD']})
-    artifact.add_dir(str(root))
-    committed = run.log_artifact(artifact)
-    committed.wait()
-print('Segment copied to hub and W&B; independent readback and CPU selection required')
-PY
+  --run-id "ftplan_init${FTPLAN_INIT_SEED}_segment${FTPLAN_SEGMENT}" &
+training_pid=$!
+if wait "$training_pid"; then
+    training_completed=1
+    training_pid=''
+else
+    training_rc=$?
+    training_pid=''
+    exit "$training_rc"
+fi

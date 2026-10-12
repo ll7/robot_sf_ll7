@@ -1291,12 +1291,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_traj: np.ndarray,
         future_peds: np.ndarray,
         mask: np.ndarray,
-        speeds: np.ndarray,
     ) -> bool:
         """Veto physical rollouts spending the configured pedestrian surface margin.
 
-        Check the learned forecast and constant-velocity motion of *all*
-        observed actors, including actors beyond the model's capacity. This
+        Check the learned forecast and constant-velocity motion of all
+        observed actors. Refuse incomplete forecasts beyond model capacity. This
         is a candidate guard, not a guarantee against pedestrian-driven contact.
         Legacy center-distance objectives retain their historical semantics.
 
@@ -1311,18 +1310,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             + float(self.config.predictive_pedestrian_radius)
             + float(self.config.predictive_safe_distance)
         )
-        moving_margin = center_margin + float(self.config.predictive_speed_clearance_gain) * np.abs(
-            speeds
-        )
         valid = future_peds[mask > 0.5, :horizon]
         if valid.size and not np.all(
-            np.linalg.norm(valid - local_traj[None, :horizon], axis=-1) >= moving_margin[:horizon]
+            np.linalg.norm(valid - local_traj[None, :horizon], axis=-1) >= center_margin
         ):
             return False
         robot, _, pedestrians = self._socnav_fields(observation)
         positions, velocities = self._normalize_pedestrians(pedestrians)
         if positions.size == 0:
             return True
+        if len(positions) > int(self.config.predictive_max_agents):
+            return False
         heading = float(self._as_1d_float(robot.get("heading", [0.0]), pad=1)[0])
         cos_h, sin_h = np.cos(heading), np.sin(heading)
         relative = (positions - np.asarray(robot.get("position", [0.0, 0.0]))[:2]) @ np.array(
@@ -1332,7 +1330,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         observed_future = relative[:, None, :] + velocities[:, None, :] * times[None, :, None]
         return bool(
             np.all(np.linalg.norm(relative, axis=-1) >= center_margin)
-            and np.all(np.linalg.norm(observed_future - local_traj[None], axis=-1) >= moving_margin)
+            and np.all(np.linalg.norm(observed_future - local_traj[None], axis=-1) >= center_margin)
         )
 
     def _score_action(
@@ -1355,9 +1353,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
         if self._static_footprint_clearance(observation, robot_traj) <= 0.0:
             return float("inf")
-        if not self._pedestrian_margin_clear(
-            observation, robot_traj, future_peds, mask, np.full(len(robot_traj), v)
-        ):
+        if not self._pedestrian_margin_clear(observation, robot_traj, future_peds, mask):
             return float("inf")
 
         valid_idx = np.where(mask > 0.5)[0]
@@ -1498,8 +1494,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_headings = local_headings[:horizon]
         if self._static_footprint_clearance(observation, local_traj) <= 0.0:
             return float("inf")
-        speeds = np.repeat([v for v, _ in sequence], segment_steps)[:horizon]
-        if not self._pedestrian_margin_clear(observation, local_traj, future_peds, mask, speeds):
+        if not self._pedestrian_margin_clear(observation, local_traj, future_peds, mask):
             return float("inf")
 
         radius_margin = (

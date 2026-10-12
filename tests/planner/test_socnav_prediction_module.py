@@ -296,15 +296,17 @@ def test_sequence_search_preserves_clear_near_field_progress(
         angles = w * 0.1 * np.arange(1, 9)
         robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
         clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
-        assert np.min(clearance) >= config.predictive_safe_distance
+        assert np.min(clearance) >= (config.predictive_safe_distance)
     else:
         assert v == 0.0
 
 
 @pytest.mark.parametrize(
-    "forecast_x", [1.8, 10.0], ids=["forecast-close", "forecast-misses-close-actor"]
+    "forecast_x",
+    [1.8, 10.0, 2.1],
+    ids=["forecast-close", "forecast-misses-close-actor", "compliant-progress"],
 )
-def test_sequence_search_brakes_before_spending_surface_safety_margin(forecast_x: float) -> None:
+def test_sequence_search_enforces_surface_margin_under_goal_pressure(forecast_x: float) -> None:
     """Goal pressure cannot admit motion into an observed 0.4 m surface gap.
 
     The second case represents an actor missing from the learned forecast (as
@@ -316,11 +318,35 @@ def test_sequence_search_brakes_before_spending_surface_safety_margin(forecast_x
     config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
     config.predictive_goal_weight = 100.0
     adapter = prediction.PredictionPlannerAdapter(config)
-    positions = [(1.8, 0.0)] if forecast_x == 1.8 else [(10.0, 0.0)] * 16 + [(1.8, 0.0)]
+    positions = [(10.0, 0.0)] * 16 + [(1.8, 0.0)] if forecast_x == 10.0 else [(forecast_x, 0.0)]
     observation = prediction_contracts._make_obs_with_peds(positions, goal=(30.0, 0.0))
     forecast_agents = min(len(positions), config.predictive_max_agents)
     future = np.tile([forecast_x, 0.0], (forecast_agents, 8, 1))
-    v, _w = adapter._plan_sequence_search(
+    v, w = adapter._plan_sequence_search(
         observation=observation, future_batch=future[None], mask=np.ones(forecast_agents), steps=8
     )
-    assert v == 0.0, "A moving candidate spends the configured surface safety margin"
+    if forecast_x == 2.1:
+        assert v > 0.0, "The margin guard must retain compliant slow progress"
+        angles = w * 0.1 * np.arange(1, 9)
+        robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
+        clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
+        assert np.min(clearance) >= (config.predictive_safe_distance), (
+            "Selected motion spends its surface safety margin"
+        )
+    else:
+        assert v == 0.0, "A moving candidate spends the configured surface safety margin"
+
+
+def test_sequence_search_brakes_when_observed_population_exceeds_forecast_capacity() -> None:
+    """An incomplete learned forecast cannot authorize motion, even before actors approach."""
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    adapter = prediction.PredictionPlannerAdapter(config)
+    observation = prediction_contracts._make_obs_with_peds([(10.0, 0.0)] * 17)
+    future = np.tile([10.0, 0.0], (16, 8, 1))
+    v, w = adapter._plan_sequence_search(
+        observation=observation, future_batch=future[None], mask=np.ones(16), steps=8
+    )
+    assert (v, w) == (0.0, 0.0), "Incomplete population forecasts must brake"

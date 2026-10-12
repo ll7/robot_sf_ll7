@@ -132,9 +132,6 @@ def _trace_has_intent_metadata(ped: dict[str, Any]) -> bool:
 def _trace_metadata_coverage(trace: dict[str, Any]) -> dict[str, Any]:
     """Return pedestrian metadata coverage statistics from a raw trace."""
 
-    result["seed"] = (trace.get("source") or {}).get("seed")
-    result["seed_provenance"] = "recorded_trace_source"
-    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     coverage: dict[str, Any] = {
         "pedestrian_observations": 0,
@@ -229,9 +226,6 @@ def _extract_trace_steps(trace: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _compute_dt_s(trace: dict[str, Any]) -> float:
     """Infer dt_s from the first two frames of the trace."""
-    result["seed"] = (trace.get("source") or {}).get("seed")
-    result["seed_provenance"] = "recorded_trace_source"
-    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     if len(frames) < 2:
         return 0.1
@@ -243,9 +237,6 @@ def _compute_dt_s(trace: dict[str, Any]) -> float:
 
 def _trace_has_motion(trace: dict[str, Any]) -> bool:
     """Check whether any pedestrian has non-zero velocity in any frame."""
-    result["seed"] = (trace.get("source") or {}).get("seed")
-    result["seed_provenance"] = "recorded_trace_source"
-    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     for frame in frames:
         for ped in frame.get("pedestrians", []):
@@ -257,9 +248,6 @@ def _trace_has_motion(trace: dict[str, Any]) -> bool:
 
 def _pedestrian_count(trace: dict[str, Any]) -> int:
     """Return the max number of pedestrians in any single frame."""
-    result["seed"] = (trace.get("source") or {}).get("seed")
-    result["seed_provenance"] = "recorded_trace_source"
-    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     max_peds = 0
     for frame in frames:
@@ -274,9 +262,6 @@ def _get_actor_classes(trace: dict[str, Any]) -> list[str]:
 
 def _actor_class_counts(trace: dict[str, Any]) -> dict[str, int]:
     """Count trace actors by declared actor_type, defaulting legacy traces to pedestrian."""
-    result["seed"] = (trace.get("source") or {}).get("seed")
-    result["seed_provenance"] = "recorded_trace_source"
-    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     counts: dict[str, int] = {}
     for frame in frames:

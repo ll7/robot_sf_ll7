@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 from pathlib import Path
 from types import CodeType, FunctionType
@@ -32,23 +33,31 @@ def load_function(path, name, globals_dict):
     return FunctionType(body, globals_dict, name, defaults or None)
 
 
-def test_cv_evaluation_publishes_recorded_source_seed(tmp_path):
-    """A candidate label must never overwrite the historical trace identity."""
-    trace_path = tmp_path / "trace.json"
-    trace_path.write_text(json.dumps({"source": {"seed": 1008}, "frames": []}))
-    namespace = {"REPO_ROOT": tmp_path, "_load_trace": lambda path: json.loads(path.read_text())}
-    for helper in (
-        "_pedestrian_count",
-        "_get_actor_classes",
-        "_actor_class_counts",
-        "_trace_metadata_coverage",
-        "_trace_has_motion",
-    ):
-        namespace[helper] = lambda trace: False
-    evaluate = load_function(CV_SCRIPT, "evaluate_single_trace", namespace)
-    result = evaluate({"path": "trace.json", "label": "probe", "family": "synthetic", "seed": 1101})
-    assert result["seed"] == 1008
+def test_cv_evaluation_publishes_recorded_source_seed():
+    """Run recorded-trace evaluation with the real loader, helpers and forecast metrics."""
+    spec = importlib.util.spec_from_file_location("_seed_audit_cv_evaluator", CV_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    evaluator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluator)
+    path = (
+        ROOT
+        / "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json"
+    )
+    recorded = json.loads(path.read_text())
+    result = evaluator.evaluate_single_trace(
+        {"path": str(path), "label": "recorded_probe", "family": "occluded_emergence", "seed": 1101}
+    )
+    assert result["status"] == "evaluated"
+    assert result["seed"] == recorded["source"]["seed"]
+    assert result["seed"] != 1101
     assert result["seed_provenance"] == "recorded_trace_source"
+    assert result["episode_execution"] == "historical_trace_read_only"
+    assert result["pedestrians_per_frame"] == 1
+    assert result["actor_class_counts"] == {"pedestrian": len(recorded["frames"])}
+    assert result["metadata_coverage"]["pedestrian_observations"] == len(recorded["frames"])
+    assert result["has_motion"] is True
+    assert result["dt_s"] == 0.1
+    assert result["metrics"]["forecast_evaluable_samples"] > 0
 
 
 def test_cv_candidates_do_not_relabel_repository_artifacts():

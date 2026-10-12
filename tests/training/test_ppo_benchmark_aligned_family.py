@@ -109,6 +109,8 @@ def test_launch_consumes_existing_sampler_loader(monkeypatch):
     assert configured.seeds == ()
     assert configured.scenario_sampling["episode_seed_pool"] is None
     assert stock.seeds == (100000,)  # Hook binding must not mutate the stock template.
+    monkeypatch.setattr(train_ppo, "_training_seed_policy_interface_available", lambda: True)
+    train_ppo._require_training_seed_policy(configured)
 
 
 def test_runner_reuses_training_acceleration_conversion(monkeypatch):
@@ -258,3 +260,64 @@ def test_stock_trainer_loads_family_without_sampler_fields():
     config = train_ppo.load_expert_training_config(aligned.FAMILY)
     assert config.evaluation.evaluation_seeds == tuple(range(1031, 1061))
     assert config.env_overrides["ppo_action_semantics"] == "velocity_delta"
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_stock_cli_refuses_family_before_training_dispatch(monkeypatch, tmp_path, dry_run):
+    """The stock CLI must refuse this loadable leaf before dispatch or log/artifact creation."""
+    calls = []
+    monkeypatch.setattr(
+        train_ppo, "_training_seed_policy_interface_available", lambda: False, raising=False
+    )
+    monkeypatch.setattr(train_ppo, "run_expert_training", lambda *_a, **_k: calls.append(True))
+    log_file = tmp_path / "training.log"
+    argv = ["--config", str(aligned.FAMILY), "--log-file", str(log_file)]
+    if dry_run:
+        argv.append("--dry-run")
+    with pytest.raises(RuntimeError, match="integrate PR #10324"):
+        train_ppo.main(argv)
+    assert calls == []
+    assert not log_file.exists()
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_stock_execution_refuses_family_before_initialisation(monkeypatch, dry_run):
+    """Direct execution without a config path must refuse before seed/backend setup."""
+    config = train_ppo.load_expert_training_config(aligned.FAMILY)
+    calls = []
+    monkeypatch.setattr(
+        train_ppo, "_training_seed_policy_interface_available", lambda: False, raising=False
+    )
+
+    def reached_initialisation():
+        calls.append(True)
+        raise RuntimeError("training initialisation reached before sampler refusal")
+
+    monkeypatch.setattr(train_ppo, "_ensure_cuda_determinism_env", reached_initialisation)
+    with pytest.raises(RuntimeError, match="integrate PR #10324"):
+        train_ppo.run_expert_training(config, dry_run=dry_run)
+    assert calls == []
+
+
+@pytest.mark.parametrize("boundary", ["cli", "direct"])
+def test_stock_refuses_unbound_template_with_sampler_interface(monkeypatch, boundary):
+    """Installing the interface must not make the stock single-seed template executable."""
+    config = train_ppo.load_expert_training_config(aligned.FAMILY)
+    monkeypatch.setattr(
+        train_ppo, "_training_seed_policy_interface_available", lambda: True, raising=False
+    )
+    calls = []
+
+    def reached_initialisation():
+        calls.append(True)
+        raise RuntimeError("training initialisation reached with unbound template")
+
+    monkeypatch.setattr(train_ppo, "_ensure_cuda_determinism_env", reached_initialisation)
+    if boundary == "cli":
+        monkeypatch.setattr(train_ppo, "run_expert_training", lambda *_a, **_k: calls.append(True))
+    with pytest.raises(RuntimeError, match="requires a bound #10324 training-seed policy"):
+        if boundary == "cli":
+            train_ppo.main(["--config", str(aligned.FAMILY)])
+        else:
+            train_ppo.run_expert_training(config)
+    assert calls == []

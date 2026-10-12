@@ -3274,6 +3274,50 @@ def _apply_synthetic_metrics_fallback(
     return True
 
 
+def _training_seed_policy_interface_available() -> bool:
+    """Return whether the trainer declares #10324's consumed seed-policy interface."""
+    required = {"training_seed_range", "training_master_seed", "development_evaluation_seeds"}
+    return required.issubset(ExpertTrainingConfig.__dataclass_fields__)
+
+
+def _has_training_only_range(value: object) -> bool:
+    """Validate inclusive bounds without exposing rejected seed values."""
+    if not isinstance(value, (tuple, list)) or len(value) != 2:
+        return False
+    return all(type(bound) is int for bound in value) and 100000 <= value[0] <= value[1] <= 199999
+
+
+def _require_training_seed_policy(config: ExpertTrainingConfig) -> None:
+    """Refuse marked configs before dispatch or any training initialisation.
+
+    Loading a config remains independent of execution dependencies. A marked
+    template must be bound to the supported range/master interface before use;
+    CLI dispatch, direct API execution and dry runs obey the same requirement.
+    """
+    required = config.scenario_sampling.get("require_training_seed_policy", False)
+    if type(required) is not bool:
+        raise ValueError("scenario_sampling.require_training_seed_policy must be boolean")
+    if not required:
+        return
+    if not _training_seed_policy_interface_available():
+        raise RuntimeError("Training disabled: integrate PR #10324's training-seed interface first")
+    master = getattr(config, "training_master_seed", None)
+    bound_conditions = (
+        _has_training_only_range(getattr(config, "training_seed_range", None)),
+        type(master) is int and master >= 0,
+        config.randomize_seeds is True,
+        not config.seeds,
+        not config.scenario_sampling.get("episode_seed_pool"),
+        config.evaluation.randomize_seeds is False,
+        bool(config.evaluation.evaluation_seeds),
+        bool(getattr(config, "development_evaluation_seeds", ())),
+    )
+    if not all(bound_conditions):
+        raise RuntimeError(
+            "Training requires a bound #10324 training-seed policy; use the guarded family launcher"
+        )
+
+
 def run_expert_training(
     config: ExpertTrainingConfig,
     *,
@@ -3291,6 +3335,7 @@ def run_expert_training(
     per-seed scheduler invocation explicit and artifact-isolated.
     """
 
+    _require_training_seed_policy(config)
     if training_seed is not None:
         training_seed = int(training_seed)
         if training_seed not in config.seeds:
@@ -3545,6 +3590,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     config_path = Path(args.config).resolve()
     config_sha256 = hashlib.sha256(config_path.read_bytes()).hexdigest()
     config = load_expert_training_config(config_path)
+    _require_training_seed_policy(config)
     resume_from = Path(args.resume_from).expanduser() if args.resume_from else config.resume_from
 
     log_level = str(args.log_level).upper()

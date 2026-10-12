@@ -52,12 +52,17 @@ entrypoint refuses until #10324's `training_seed_range`, `training_master_seed` 
 live in `configs/training/ppo/benchmark_aligned_v1_seed_policy.yaml`, a marked
 sidecar, rather than the canonical leaf. The stock loader validates the leaf today;
 its fixed seed/pool `[100000]` is a parsing template, not an approved campaign.
+The leaf sets `scenario_sampling.require_training_seed_policy: true`. The stock
+trainer checks it before CLI dispatch and again at direct API execution, before
+backend/seed initialisation or artifacts. Loading still succeeds, while execution
+(including dry runs) refuses an absent interface or an unbound single-seed template.
 Always launch this family through the guarded entrypoint. Once #10324 is integrated,
 it replaces the template with the sidecar's range/master/reporting metadata through
 the supported dataclass interface, then delegates to the existing training API.
-No sampler or reset logic is implemented here. Sampler/telemetry runtime files from
-#10324/#10343 remain unchanged; review requested the canonical inventory assertion
-be updated for the newly loadable leaf, retaining all key validation. Archive both
+No sampler or reset logic is implemented here. The reviewed execution-boundary
+fix adds only the dependency refusal to the stock trainer; seed sampling and worker
+telemetry remain owned by #10324/#10343. The canonical inventory still requires
+150 loadable leaves, retaining all key validation. Archive both
 the leaf and its sidecar in future launch packets.
 
 Use the guarded launcher for this family. The guard requires the exact approved

@@ -126,6 +126,7 @@ def validate_family(config_path: Path = FAMILY) -> dict[str, Any]:
         stock.get("seeds") != [100000]
         or stock.get("randomize_seeds") is not False
         or stock["scenario_sampling"].get("episode_seed_pool") != [100000]
+        or stock["scenario_sampling"].get("require_training_seed_policy") is not True
     ):
         raise ValueError("stock leaf must retain the declared loader-only training seed template")
     # Keep the stock loader authoritative for every normal config key. Sampler
@@ -235,9 +236,7 @@ def _validate_scenarios(source: Path, data: Mapping[str, Any], selected: tuple[i
 
 def sampler_interface_available() -> bool:
     """Check for #10324's consumed dataclass interface without implementing its sampler."""
-    return {"training_seed_range", "training_master_seed", "development_evaluation_seeds"}.issubset(
-        train_ppo.ExpertTrainingConfig.__dataclass_fields__
-    )
+    return train_ppo._training_seed_policy_interface_available()
 
 
 def load_launch_config(config_path: Path = FAMILY):

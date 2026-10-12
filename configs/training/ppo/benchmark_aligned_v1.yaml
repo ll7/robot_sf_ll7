@@ -6,7 +6,8 @@ policy_id: ppo_benchmark_aligned_v1
 scenario_config: benchmark_aligned_v1_scenarios.yaml
 # Loader-compatible seed template only. The guarded launcher replaces this
 # with the sidecar's master stream once #10324 is integrated; do not launch
-# this leaf directly as a campaign.
+# this leaf directly as a campaign. The stock execution boundary refuses
+# the template until the required policy is bound.
 seeds: [100000]
 randomize_seeds: false
 env_overrides:
@@ -24,6 +25,7 @@ env_overrides:
     time_per_step_in_secs: 0.1
     sim_time_in_secs: 60.0
 scenario_sampling:
+  require_training_seed_policy: true
   episode_seed_pool: [100000]
 convergence:
   success_rate: 1.1

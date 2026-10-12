@@ -410,6 +410,7 @@ _ROUTE_COMPLETION_V2_WEIGHTS: dict[str, float] = {
     "comfort": -0.4,
     "smoothness": -0.15,
     "terminal_bonus": 2.0,
+    "static_speed": 0.0,
 }
 
 _ROUTE_COMPLETION_V3_WEIGHTS: dict[str, float] = {
@@ -423,6 +424,7 @@ _ROUTE_COMPLETION_V3_WEIGHTS: dict[str, float] = {
     "timeout": -3.0,
     "stagnation": -1.2,
     "terminal_bonus": 3.0,
+    "static_speed": 0.0,
 }
 
 _SOCIAL_QUALITY_V1_WEIGHTS: dict[str, float] = {
@@ -434,6 +436,7 @@ _SOCIAL_QUALITY_V1_WEIGHTS: dict[str, float] = {
     "comfort": -0.9,
     "smoothness": -0.2,
     "terminal_bonus": 1.5,
+    "static_speed": 0.0,
 }
 
 
@@ -571,6 +574,8 @@ def _reward_with_terms(
         "smoothness": _bounded(_float(meta, "jerk_mean", 0.0), 0.0, 5.0) / 5.0,
         "timeout": _timeout_term(meta),
         "stagnation": _stagnation_term(meta),
+        "static_speed": abs(_float(meta, "robot_speed", 0.0))
+        * _bounded(1.0 - _float(meta, "static_obstacle_clearance", float("inf")), 0.0, 1.0),
         "terminal_bonus": 1.0 if route_complete and not collision_flag else 0.0,
     }
     weighted_terms = {name: float(weights.get(name, 0.0)) * value for name, value in terms.items()}
@@ -578,6 +583,20 @@ def _reward_with_terms(
     meta["reward_terms"] = weighted_terms
     meta["reward_total"] = total
     return total
+
+
+def uses_static_speed_penalty(reward_func: Callable[[dict], float]) -> bool:
+    """Return whether a built-in reward or curriculum opts into static speed cost."""
+    if isinstance(reward_func, RewardCurriculumReward):
+        return any(uses_static_speed_penalty(stage) for stage in reward_func.stage_callables)
+    if isinstance(reward_func, partial) and reward_func.func in {
+        route_completion_v2_reward,
+        route_completion_v3_reward,
+        social_quality_v1_reward,
+    }:
+        weights = reward_func.keywords.get("weights") or {}
+        return float(weights.get("static_speed", 0.0)) != 0.0
+    return False
 
 
 def route_completion_v2_reward(

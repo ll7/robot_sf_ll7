@@ -31,6 +31,7 @@ from robot_sf.training.predictive_supervision import (
     supervision_metadata,
 )
 from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.training.seed_policy import load_collection_seed_policy
 
 
 @dataclass
@@ -343,7 +344,13 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI args for hard-case data collection."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario-matrix", type=Path, required=True)
-    parser.add_argument("--seed-manifest", type=Path, required=True)
+    seed_source = parser.add_mutually_exclusive_group(required=True)
+    seed_source.add_argument("--seed-manifest", type=Path)
+    seed_source.add_argument(
+        "--training-config",
+        type=Path,
+        help="Resolve a guarded training range and logged master seed.",
+    )
     parser.add_argument("--max-steps", type=int, default=220)
     parser.add_argument("--max-agents", type=int, default=24)
     parser.add_argument("--horizon-steps", type=int, default=8)
@@ -366,14 +373,68 @@ def parse_args() -> argparse.Namespace:
             "output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_identity_v2.npz"
         ),
     )
+    parser.add_argument(
+        "--seed-split", choices=("training", "selection", "evaluation"), default="training"
+    )
+    parser.add_argument("--seed-worker-index", type=int, default=0)
+    parser.add_argument("--seed-worker-count", type=int, default=1)
     return parser.parse_args()
+
+
+def _resolve_collection_seed_manifest(
+    args: argparse.Namespace, scenarios: list[dict]
+) -> dict[str, list[int]]:
+    """Resolve seeds before construction and archive the reproducible collection manifest.
+
+    Returns:
+        Explicit episode identities for every scenario.
+    """
+    if args.training_config is not None:
+        collection_config, collection_policy = load_collection_seed_policy(args.training_config)
+        episodes = collection_config.get("collection_episodes_per_scenario", 15)
+        if isinstance(episodes, bool) or not isinstance(episodes, int) or episodes < 1:
+            raise ValueError("collection_episodes_per_scenario must be a positive integer")
+        stream = collection_policy.stream(args.seed_worker_index, args.seed_worker_count)
+        seed_manifest = {}
+        for scenario in scenarios:
+            scenario_id = str(
+                scenario.get("name")
+                or scenario.get("scenario_id")
+                or scenario.get("id")
+                or "unknown"
+            )
+            seed_manifest[scenario_id] = (
+                [stream.next_seed() for _ in range(episodes)]
+                if args.seed_split == "training"
+                else list(collection_config[f"{args.seed_split}_seeds"])
+            )
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.with_suffix(".seed-manifest.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "training_seed_range": list(collection_policy.seed_range),
+                    "training_master_seed": collection_policy.master_seed,
+                    "selection_seeds": collection_config["selection_seeds"],
+                    "evaluation_seeds": collection_config["evaluation_seeds"],
+                    "scenario_seeds": seed_manifest,
+                    "split": args.seed_split,
+                    "seed_worker_index": args.seed_worker_index,
+                    "seed_worker_count": args.seed_worker_count,
+                }
+            ),
+            encoding="utf-8",
+        )
+    else:
+        seed_manifest = _load_seed_manifest(args.seed_manifest)
+
+    return seed_manifest
 
 
 def main() -> int:  # noqa: C901
     """Collect hard-case trajectories and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     scenarios = load_scenarios(args.scenario_matrix)
-    seed_manifest = _load_seed_manifest(args.seed_manifest)
+    seed_manifest = _resolve_collection_seed_manifest(args, scenarios)
 
     selected: list[tuple[dict, int]] = []
     for scenario in scenarios:

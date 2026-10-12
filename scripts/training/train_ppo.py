@@ -95,6 +95,7 @@ from robot_sf.training.scenario_sampling import (
     ScenarioSwitchingEnv,
     scenario_id_from_definition,
 )
+from robot_sf.training.seed_policy import TrainingSeedPolicy, validate_seed_splits
 from robot_sf.training.snqi_utils import (
     TrainingSNQIContext,
     compute_training_snqi,
@@ -975,6 +976,62 @@ def _load_expert_training_config_mapping(
     return _deep_merge_config(base_data, data)
 
 
+def _resolve_training_seed_policy(
+    data: Mapping[str, Any],
+    evaluation_raw: Mapping[str, Any],
+    training_seeds: tuple[int, ...],
+    evaluation_seeds: tuple[int, ...],
+    evaluation_seed_manifest: Path | None,
+) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, int] | None, int | None]:
+    """Resolve seed modes before environment construction.
+
+    Returns:
+        Selection identities, development identities, training range and master seed.
+    """
+    inline_selection = evaluation_raw.get("evaluation_seeds", ())
+    if inline_selection and evaluation_seed_manifest is not None:
+        raise ValueError("bind selection seeds inline or through a manifest, not both")
+    evaluation_seeds = tuple(inline_selection or evaluation_seeds)
+    development_evaluation_seeds = tuple(data.get("development_evaluation_seeds", ()))
+    pool = tuple(data.get("scenario_sampling", {}).get("episode_seed_pool") or ())
+    validate_seed_splits(
+        pool,
+        evaluation_seeds,
+        development_evaluation_seeds,
+        validate_heldout=(
+            data.get("training_seed_range") is not None
+            or bool(development_evaluation_seeds)
+            or bool(inline_selection)
+        ),
+    )
+    if set(training_seeds).intersection(evaluation_seeds + development_evaluation_seeds):
+        raise ValueError("training seeds overlap held-out selection or evaluation seeds")
+    training_seed_range = data.get("training_seed_range")
+    training_master_seed = data.get("training_master_seed")
+    if training_seed_range is None and training_master_seed is None:
+        return evaluation_seeds, development_evaluation_seeds, None, None
+    if (training_seed_range is None) != (training_master_seed is None):
+        raise ValueError("training_seed_range and training_master_seed must be configured together")
+    if not data.get("randomize_seeds", False):
+        raise ValueError("training seed range requires randomize_seeds=true")
+    if training_seeds or pool:
+        raise ValueError("training seed range requires empty seeds and episode_seed_pool")
+    if evaluation_raw.get("randomize_seeds", False) or not evaluation_seeds:
+        raise ValueError("training seed range requires fixed checkpoint-selection seeds")
+    if not development_evaluation_seeds:
+        raise ValueError("training seed range requires fixed development evaluation seeds")
+    policy = TrainingSeedPolicy.resolve(
+        training_seed_range,
+        training_master_seed,
+        selection_seeds=evaluation_seeds,
+        evaluation_seeds=development_evaluation_seeds,
+    )
+    training_seed_range = policy.seed_range
+    if data.get("resume_from") or data.get("resume_model_id"):
+        raise ValueError("range-seeded resume requires persisted episode-stream state")
+    return evaluation_seeds, development_evaluation_seeds, training_seed_range, training_master_seed
+
+
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
     """Load an :class:`ExpertTrainingConfig` from a YAML file."""
 
@@ -1004,6 +1061,11 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     evaluation_seeds = _load_evaluation_seed_manifest(
         evaluation_seed_manifest,
         training_seeds=training_seeds,
+    )
+    evaluation_seeds, development_evaluation_seeds, training_seed_range, training_master_seed = (
+        _resolve_training_seed_policy(
+            data, evaluation_raw, training_seeds, evaluation_seeds, evaluation_seed_manifest
+        )
     )
     socnav_orca_raw = (
         data.get("socnav_orca", {}) if isinstance(data.get("socnav_orca"), Mapping) else {}
@@ -1059,6 +1121,9 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         scenario_id=str(scenario_id) if scenario_id else None,
         seeds=training_seeds,
         randomize_seeds=bool(data.get("randomize_seeds", False)),
+        training_seed_range=training_seed_range,
+        training_master_seed=training_master_seed,
+        development_evaluation_seeds=development_evaluation_seeds,
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
         convergence=convergence,
@@ -1248,7 +1313,7 @@ class _TrainingEnvFactory:
 
     def __call__(self) -> Any:
         """Build one training environment instance."""
-        if self.scenario is not None:
+        if self.scenario is not None and not self.scenario_sampling.get("training_seed_range"):
             env_config = self._build_config(self.scenario)
             scenario_id = scenario_id_from_definition(self.scenario, index=0)
             return make_robot_env(
@@ -1259,11 +1324,11 @@ class _TrainingEnvFactory:
                 algorithm_name=self.algorithm_name,
                 **self.env_factory_kwargs,
             )
-        if self.scenario_definitions is None:
+        if self.scenario_definitions is None and self.scenario is None:
             raise ValueError("scenario_definitions required when scenario is None.")
 
         sampler = ScenarioSampler(
-            self.scenario_definitions,
+            (self.scenario,) if self.scenario is not None else self.scenario_definitions,
             include_scenarios=tuple(
                 str(name)
                 for name in self.scenario_sampling.get(  # type: ignore[union-attr]
@@ -1302,6 +1367,17 @@ class _TrainingEnvFactory:
             density_curriculum=self.density_curriculum,
             domain_randomization=self.domain_randomization,
             episode_seed_pool=self.scenario_sampling.get("episode_seed_pool"),
+            episode_seed_stream=(
+                TrainingSeedPolicy(
+                    self.scenario_sampling["training_seed_range"],
+                    self.scenario_sampling["training_master_seed"],
+                ).stream(
+                    self.scenario_sampling["seed_worker_index"],
+                    self.scenario_sampling["seed_worker_count"],
+                )
+                if self.scenario_sampling.get("training_seed_range")
+                else None
+            ),
             seed=self.seed,
         )
 
@@ -1594,6 +1670,9 @@ def _init_wandb(
             "total_timesteps": config.total_timesteps,
             "seeds": list(config.seeds),
             "randomize_seeds": bool(config.randomize_seeds),
+            "training_seed_range": config.training_seed_range,
+            "training_master_seed": config.training_master_seed,
+            "development_evaluation_seeds": list(config.development_evaluation_seeds),
             "evaluation_randomize_seeds": bool(_randomize_eval_seeds(config)),
             "evaluation_seed_manifest": (
                 str(config.evaluation.evaluation_seed_manifest)
@@ -1871,7 +1950,15 @@ def _resolve_scenario_context(
             if isinstance(config.scenario_sampling.get("weights"), Mapping)
             else None
         ),
-        seed=None if _randomize_seeds(config) else int(config.seeds[0]) if config.seeds else None,
+        seed=(
+            config.training_master_seed
+            if config.training_seed_range
+            else None
+            if _randomize_seeds(config)
+            else int(config.seeds[0])
+            if config.seeds
+            else None
+        ),
         strategy=str(config.scenario_sampling.get("profile_strategy", "cycle")),
     )
     return ScenarioContext(
@@ -2631,8 +2718,18 @@ def _init_training_model(
 
     If ``resume_from`` is provided, load the checkpoint and continue training.
     """
+    if config.training_seed_range is not None and resume_from is not None:
+        raise ValueError("range-seeded resume requires persisted episode-stream state")
     use_random = _randomize_seeds(config)
-    base_seed = None if use_random else int(config.seeds[0]) if config.seeds else 0
+    base_seed = (
+        config.training_master_seed
+        if config.training_seed_range
+        else None
+        if use_random
+        else int(config.seeds[0])
+        if config.seeds
+        else 0
+    )
     density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
     if not density_curriculum.enabled:
         density_curriculum = None
@@ -2640,7 +2737,7 @@ def _init_training_model(
     worker_mode = _resolve_worker_mode(config, num_envs)
     env_seeds = (
         [None for _ in range(num_envs)]
-        if use_random
+        if use_random and config.training_seed_range is None
         else [base_seed + idx for idx in range(num_envs)]
     )  # type: ignore[operator]
     env_fns = [
@@ -2654,11 +2751,21 @@ def _init_training_model(
             algorithm_name=config.policy_id,
             env_overrides=config.env_overrides,
             env_factory_kwargs=config.env_factory_kwargs,
-            scenario_sampling=config.scenario_sampling,
+            scenario_sampling=(
+                {
+                    **config.scenario_sampling,
+                    "training_seed_range": config.training_seed_range,
+                    "training_master_seed": config.training_master_seed,
+                    "seed_worker_index": worker_index,
+                    "seed_worker_count": num_envs,
+                }
+                if config.training_seed_range
+                else config.scenario_sampling
+            ),
             domain_randomization=config.domain_randomization,
             density_curriculum=density_curriculum,
         )
-        for seed in env_seeds
+        for worker_index, seed in enumerate(env_seeds)
     ]
     if worker_mode == "subproc":
         with _subproc_worker_log_environment(worker_mode):
@@ -3088,7 +3195,14 @@ def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> N
 
 def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
     """Apply training seed configuration and warn when randomness overrides it."""
-    if _randomize_seeds(config):
+    if config.training_seed_range is not None:
+        common.set_global_seed(config.training_master_seed)
+        logger.info(
+            "Training episode seed policy: master={} range={} no reuse; fixed held-out selection",
+            config.training_master_seed,
+            config.training_seed_range,
+        )
+    elif _randomize_seeds(config):
         if config.seeds:
             logger.warning("randomize_seeds enabled; ignoring provided seeds for training.")
     elif config.seeds:
@@ -3171,6 +3285,11 @@ def _build_training_notes(  # noqa: C901, PLR0912
         weights = reward_kwargs.get("weights")
         if isinstance(weights, Mapping):
             notes.append(f"reward_weights={json.dumps(dict(weights), sort_keys=True)}")
+    if config.training_seed_range is not None:
+        notes.append(f"training_seed_range={config.training_seed_range}")
+        notes.append(f"training_master_seed={config.training_master_seed}")
+        notes.append("episode_seed_stream=master_permutation_worker_stride_v1")
+        notes.append(f"development_evaluation_seeds={config.development_evaluation_seeds}")
     if _randomize_seeds(config):
         notes.append("randomize_seeds=true")
     else:

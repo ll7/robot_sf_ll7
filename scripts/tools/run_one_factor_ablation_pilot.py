@@ -16,7 +16,7 @@ from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = Path(
-    "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml"
+    "configs/policy_search/ablation_manifests/dev_one_factor_hybrid_component_manifest.yaml"
 )
 DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
 METRICS = (

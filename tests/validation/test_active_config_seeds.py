@@ -395,3 +395,68 @@ def test_live_optuna_launcher_uses_training_reset_seeds():
     base = yaml.safe_load((launcher.parent / payload["base_config"]).read_text())
     assert base["seeds"] == [101043, 100231, 100777, 100992]
     assert all(100000 <= seed <= 199999 for seed in base["seeds"])
+
+
+PREDICTIVE_HISTORICAL_CONTRACT = (
+    "configs/training/predictive/predictive_ego_features_contract_v1.yaml"
+)
+
+
+def declared_config_dependencies(path: Path):
+    """Follow actual YAML config references, including relative inherited inputs."""
+    payload = yaml.safe_load(path.read_text())
+
+    def walk(value):
+        if isinstance(value, dict):
+            for child in value.values():
+                yield from walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from walk(child)
+        elif isinstance(value, str) and value.endswith((".yaml", ".yml")):
+            target = ROOT / value if value.startswith("configs/") else path.parent / value
+            if target.resolve().is_relative_to(ROOT / "configs"):
+                assert target.is_file(), f"Missing historical config dependency: {target}"
+                yield target.resolve()
+
+    yield from walk(payload)
+
+
+def test_protected_predictive_contract_dependencies_keep_original_bytes():
+    """Preservation includes declared row configs and their transitive seed transports."""
+    entries = json.loads(EXCLUSIONS.read_text())
+    pending = [ROOT / PREDICTIVE_HISTORICAL_CONTRACT]
+    visited = set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        name = path.relative_to(ROOT).as_posix()
+        assert name in entries, f"Unpinned historical contract dependency: {name}"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == entries[name]["sha256"], name
+        pending.extend(declared_config_dependencies(path))
+
+
+def test_retrospective_ablation_manifests_are_preserved():
+    """Completed campaign inputs cannot be treated as fresh development proposals."""
+    entries = json.loads(EXCLUSIONS.read_text())
+    for name in (
+        "configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml",
+        "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml",
+    ):
+        assert name in entries, f"Unpinned historical campaign manifest: {name}"
+        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == entries[name]["sha256"], (
+            name
+        )
+
+
+def test_live_one_factor_launcher_uses_development_manifest():
+    """The default executable pilot cannot reuse a completed campaign's seed identities."""
+    from scripts.tools.run_one_factor_ablation_pilot import DEFAULT_MANIFEST
+
+    assert DEFAULT_MANIFEST.name == "dev_one_factor_hybrid_component_manifest.yaml"
+    seeds = yaml.safe_load((ROOT / DEFAULT_MANIFEST).read_text())["scenario_slice"]["seed_policy"][
+        "seeds"
+    ]
+    assert seeds and all(1031 <= seed <= 1060 for seed in seeds), "selection seeds outside pool"

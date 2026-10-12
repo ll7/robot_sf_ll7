@@ -34,7 +34,15 @@ def test_h600_extended_roster_preserves_probe_contract_and_appends_new_arms() ->
 
     assert extended_payload["horizon"] == probe_payload["horizon"] == 600
     assert extended_payload["dt"] == probe_payload["dt"]
-    assert extended_payload["seed_policy"] == probe_payload["seed_policy"]
+    assert extended_payload["seed_policy"] == {
+        **probe_payload["seed_policy"],
+        "seed_sets_path": "configs/benchmarks/dev_seed_sets.yaml",
+    }
+    assert _load_yaml(ROOT / extended_payload["seed_policy"]["seed_sets_path"])["eval"] == [
+        1101,
+        1102,
+        1103,
+    ]
     assert extended_payload["kinematics_matrix"] == probe_payload["kinematics_matrix"]
     assert extended_payload["scenario_matrix"] == probe_payload["scenario_matrix"]
     assert extended_planners[: len(probe_planners)] == probe_planners

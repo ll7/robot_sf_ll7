@@ -62,3 +62,17 @@ The live Optuna launcher resolves `dev_expert_ppo.yaml`, a training-only copy.
 The historical `expert_ppo.yaml` reset identities and recipe digests stay unchanged.
 A regression checks the resolved live reset list against the approved training
 pool after the historical archive is restored.
+
+Historical preservation also covers the retrospective component-ablation manifest,
+the executed one-factor manifest and the recorded predictive paired schedule and
+its four row recipes. The protected predictive contract's declared config inputs
+are traversed transitively and pinned, including the planner grid and hard-seed
+transport. Its original rows and previously reported negative outcomes remain
+unchanged.
+
+The executable one-factor pilot defaults to
+`dev_one_factor_hybrid_component_manifest.yaml`. The predictive training CLI
+routes the four archived paired recipe paths to explicitly named `dev_` successors;
+those successors use a separate training-only base seed manifest and distinct run
+and model identities. Existing historical paths remain available for provenance
+inspection. Development copies confer no authority on archived outcomes.

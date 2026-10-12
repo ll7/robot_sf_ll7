@@ -24,16 +24,16 @@ scenario_slice:
   seed_policy:
     mode: seed-set
     seeds:
-      - 1031
-      - 1032
-      - 1033
-      - 1034
-      - 1035
-      - 1036
-      - 1037
-      - 1038
-      - 1039
-      - 1040
+      - 111
+      - 112
+      - 113
+      - 114
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
   note: >-
     This pilot reuses already tracked scenario/seed rows. It is not a newly executed
     one-factor experiment, and interaction effects remain confounded.

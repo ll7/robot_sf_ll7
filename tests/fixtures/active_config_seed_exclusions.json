@@ -555,6 +555,14 @@
     "sha256": "e3a26ccfb9df1cea343fba9f83aba1e9505494cbead7121132922bffb5c75039",
     "reason": "transitive frozen/versioned release dependency"
   },
+  "configs/benchmarks/predictive_hard_seeds_v1.yaml": {
+    "sha256": "535dfc5e2382a75140e128c98a32d898ab6655ab2925c45b565512924ca5c575",
+    "reason": "Transitive declared dependency of preserved historical predictive-v2 contract; original source bytes retained."
+  },
+  "configs/benchmarks/predictive_sweep_planner_grid_v1.yaml": {
+    "sha256": "0cd1998d4471e0f637ba7d9b16ec4a271ce7afb588d59879469182fd91504c2f",
+    "reason": "Transitive declared dependency of preserved historical predictive-v2 contract; original source bytes retained."
+  },
   "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml": {
     "sha256": "957fd00493ed5f6e525591805484255d42c729517548c975cb4372fb0f364d21",
     "reason": "frozen/versioned release or sealed-job input"
@@ -791,6 +799,14 @@
   "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_socnav_sampling.yaml": {
     "sha256": "c97d5ccf2e5c4359e415bdc27962218495f7c5a3eae6471b6131f4c61fb7a0ea",
     "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml": {
+    "sha256": "15e2f13cb0596da3991fd5eb934d70b6072e0c6d47c24194e72ae90eec7305d1",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml": {
+    "sha256": "abad4861c3bcf2cd1e8b673a5673f76bdafe0eaa2046a4740a50d367106bf976",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
   },
   "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml": {
     "sha256": "cf2e6844b3c8e8315c31e6cf115f66ea2c7051526ff2e1f9cfe3a1c5a3f23cc4",
@@ -2072,9 +2088,25 @@
     "sha256": "a63d95a54211c75c0312604586250be269d2c6dc7d5e0d487c3db61df9e9206f",
     "reason": "Declared companion of preserved historical contract configs/training/ppo_imitation/oracle_imitation_comparison_issue_1496.yaml"
   },
+  "configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml": {
+    "sha256": "688a81ebd3664846e12b2ba34f2ca13c5c629609fb29861f7691c9172b3b93ff",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
   "configs/training/predictive/predictive_ego_features_contract_v1.yaml": {
     "reason": "Historical issue-1490 same-seed decision contract; preserve recorded negative-campaign provenance and source paths.",
     "sha256": "3c5fd0b06e49bc6937380b15267997f97f6657ca284e22225a2d468dd4f32bde"
+  },
+  "configs/training/predictive/predictive_ego_features_same_seed_issue_1504.yaml": {
+    "sha256": "b60f181731a287ae514f3f7da3df09f50fa6df2177d2055c13189828469dd39d",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/training/predictive/predictive_ego_obstacle_features_same_seed_issue_1504.yaml": {
+    "sha256": "2cf4baba04bcbdfccd96b7c0121ac9b564c80643cd432b9c21e41a3df3e45c92",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml": {
+    "sha256": "56b592f0f80c5a2462d9be931ef8991eb24c65ee004776ae7a18ef949bda999e",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
   },
   "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml": {
     "sha256": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
@@ -2083,6 +2115,10 @@
   "configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml": {
     "reason": "Historical issue-3214 negative-result decision packet; preserve original source references and blocked readiness contract.",
     "sha256": "45580cf0608693d55dc230027a888a32086f850d55693481b76dc917d990eda6"
+  },
+  "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml": {
+    "sha256": "ca06af9baf5522dde99c2da26cb2a06e8341c97417a3923994d3b6491239953a",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
   },
   "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py": {
     "sha256": "eb4f1fdf9e98dfad8bd0d00c9cf3ce33046b8b72cbcdfd7037010bb437ee55c1",

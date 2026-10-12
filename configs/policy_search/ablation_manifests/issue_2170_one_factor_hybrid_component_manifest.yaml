@@ -43,7 +43,7 @@ scenario_slice:
     or SLURM execution issue.
   seed_policy:
     mode: explicit_per_scenario
-    seeds: [1031, 1032, 1033]
+    seeds: [111, 112, 113]
   scenarios:
     - id: classic_cross_trap_high
       family: cross_trap

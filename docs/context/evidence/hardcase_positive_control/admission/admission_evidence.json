@@ -12,6 +12,19 @@
   "critical_event_reproduced": "pass",
   "exact_replay": "pass",
   "feasibility": "unknown",
+  "final_evidence_registry": {
+    "admission_pr_readiness": "draft",
+    "baseline_changed": false,
+    "baseline_evidence_files": 3066,
+    "baseline_findings": 492,
+    "evidence_files": 3115,
+    "findings": 502,
+    "inherited_parent_locator_findings": 8,
+    "introduced_locator_findings": 2,
+    "prewrite_review": "needs_human_review; not approved",
+    "status": "fail",
+    "tracking_issue": 6839
+  },
   "first_admission": "admitted",
   "implementation_commit": "4fe503aadbaed2bd48dc82c58509bde71b4af2d8",
   "inherited_typing_ci": {

@@ -3,6 +3,9 @@
 The seed-1001 critical window is admitted once through the existing persistence
 replay/event gate. Two native window replays match the source exactly; missing
 parity proof is refused and duplicate admission preserves the immutable entry.
+The final evidence-registry ratchet fails on config/custody locator bookkeeping;
+the admission PR remains draft pending the maintainer disposition detailed in
+the report. No registry baseline was increased.
 
 Read [the stage report](report.md) for commands, provenance, required tests and
 the main comparison (132 pre-existing failure/error IDs; zero introduced).

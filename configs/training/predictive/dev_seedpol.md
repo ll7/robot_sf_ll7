@@ -19,7 +19,9 @@ Resolution refuses range overlap with selection, comparison, reserved developmen
 and either sealed band, covering the complete sealed interval. An explicit legacy
 reset pool also refuses selection leakage and sealed identities. Legacy scalar
 seed configs retain their static loading behavior and remain subject to existing
-runtime sealed-seed guards. A range requires fixed selection/comparison seeds,
+runtime sealed-seed guards. A range requires fixed selection/comparison seeds and explicit
+`evaluation.randomize_seeds: false` (the randomized training flag must not leak
+into evaluation),
 empty legacy seeds/pool, and randomization enabled. Worker seed fields in
 `scenario_sampling` are reserved for runtime allocation and rejected in YAML,
 so they cannot bypass root-level range validation. Resume is refused until episode

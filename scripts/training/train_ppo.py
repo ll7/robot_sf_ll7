@@ -1029,7 +1029,10 @@ def _resolve_training_seed_policy(
         raise ValueError("training seed range requires randomize_seeds=true")
     if training_seeds or pool:
         raise ValueError("training seed range requires empty seeds and episode_seed_pool")
-    if evaluation_raw.get("randomize_seeds", False) or not evaluation_seeds:
+    if (
+        evaluation_raw.get("randomize_seeds", data.get("randomize_seeds", False))
+        or not evaluation_seeds
+    ):
         raise ValueError("training seed range requires fixed checkpoint-selection seeds")
     if not development_evaluation_seeds:
         raise ValueError("training seed range requires fixed development evaluation seeds")

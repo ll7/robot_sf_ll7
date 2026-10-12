@@ -52,9 +52,16 @@ def test_resolution_refuses_reset_pool_selection_overlap(tmp_path: Path) -> None
         train_ppo.load_expert_training_config(path)
 
 
-def test_resolution_refuses_sealed_interior_in_reset_pool(tmp_path: Path) -> None:
-    """Reject the entire sealed interval, including values absent from its seed list."""
-    interior = min(seed_bands.EVAL_SEEDS_0_0_8) + 1
+@pytest.mark.parametrize("band", ["current", "retired"])
+def test_resolution_refuses_sealed_interior_in_reset_pool(tmp_path: Path, band: str) -> None:
+    """Reject both protected bands, including unlisted points in the current interval."""
+    interior = (
+        min(seed_bands.EVAL_SEEDS_0_0_8) + 1
+        if band == "current"
+        else min(seed_bands.RETIRED_EVAL_SEEDS_0_0_7) + 1
+    )
+    if band == "current":
+        assert interior not in seed_bands.EVAL_SEEDS_0_0_8
     path = _config(tmp_path, [interior])
     with pytest.raises(ValueError, match="training.*sealed"):
         train_ppo.load_expert_training_config(path)
@@ -88,6 +95,16 @@ def _range_config(tmp_path: Path, **changes) -> Path:
     raw.update(changes)
     path.write_text(yaml.safe_dump(raw))
     return path
+
+
+def test_range_resolution_refuses_inherited_random_evaluation(tmp_path: Path) -> None:
+    """The inherited randomized flag must not override declared fixed selection identities."""
+    path = _range_config(tmp_path)
+    raw = yaml.safe_load(path.read_text())
+    raw["evaluation"].pop("randomize_seeds")
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match="fixed checkpoint-selection seeds"):
+        train_ppo.load_expert_training_config(path)
 
 
 @pytest.mark.parametrize("split", ["selection", "evaluation"])

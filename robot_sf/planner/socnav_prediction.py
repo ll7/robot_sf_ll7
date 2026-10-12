@@ -1304,6 +1304,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         settings = self._prediction_drive_settings
         if settings is None:
             return cover
+        linear_decel = (
+            settings.max_linear_accel
+            if settings.max_linear_decel is None
+            else settings.max_linear_decel
+        )
         state, _, _ = self._socnav_fields(observation)
         velocity = np.array(
             [
@@ -1321,7 +1326,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 step_dt = min(control_dt, remaining)
                 action = np.clip(
                     (command - velocity) / step_dt,
-                    [-settings.max_linear_decel, -settings.max_angular_accel],
+                    [-linear_decel, -settings.max_angular_accel],
                     [settings.max_linear_accel, settings.max_angular_accel],
                 )
                 updated = np.clip(

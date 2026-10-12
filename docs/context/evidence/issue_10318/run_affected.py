@@ -60,7 +60,9 @@ def main():
     for key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS"):
         os.environ[key] = "1"
     os.environ["SDL_VIDEODRIVER"] = "dummy"
-    scenes = [s for s in load_classic_matrix(MATRIX) if s.get("name") in IDS or s.get("id") in IDS]
+    scenes = [
+        s for s in load_classic_matrix(str(MATRIX)) if s.get("name") in IDS or s.get("id") in IDS
+    ]
     if len(scenes) != 6:
         raise ValueError("The released matrix must resolve all six affected cells")
     tasks = [(scenario, seed) for scenario in scenes for seed in args.seeds]

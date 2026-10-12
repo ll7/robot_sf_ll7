@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10318/empty_world.csv",
+  "artifact_sha256": "5c8adfdced5f7b1b4d74c09389680069c3b4d9e5acd4b4c72d31193ec5a2c0d8",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

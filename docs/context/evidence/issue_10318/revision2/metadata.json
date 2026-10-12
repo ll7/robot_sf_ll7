@@ -1,0 +1,29 @@
+{
+  "definitions": {
+    "center_center": "Euclidean robot-center displacement between paired trajectories or robot-center to goal distance.",
+    "center_segment": "Reported clearing_distance_min uses robot-center distance to sampled obstacle points; no robot radius subtraction. It is not swept footprint clearance.",
+    "surface_clearance": "Pedestrian center distance minus the 1.0 m robot and 0.4 m pedestrian radii; no second radius subtraction."
+  },
+  "distance_convention": {
+    "affected.csv": {
+      "guarded_final_clearance_m": "surface_clearance",
+      "guarded_min_clearance_m": "surface_clearance",
+      "guarded_remaining_m": "center_center",
+      "main_final_clearance_m": "surface_clearance",
+      "main_min_clearance_m": "surface_clearance",
+      "reviewed_min_clearance_m": "surface_clearance"
+    },
+    "empty_world.csv": {
+      "after_min_wall_distance_m": "center_segment",
+      "before_min_wall_distance_m": "center_segment",
+      "max_position_delta_m": "center_center"
+    },
+    "reviewed_crowding_minima.csv": {
+      "surface_clearance_m": "surface_clearance"
+    }
+  },
+  "evidence_tier": "diagnostic-only",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "Requires evidence review; these declarations do not admit results.",
+  "schema_version": "issue-10318-distance-metadata.v1"
+}

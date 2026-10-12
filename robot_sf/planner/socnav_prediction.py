@@ -1285,6 +1285,52 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             - self._prediction_drive_settings.radius
         )
 
+    def _pedestrian_margin_clear(
+        self,
+        observation: dict,
+        local_traj: np.ndarray,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+    ) -> bool:
+        """Veto physical rollouts spending the configured pedestrian surface margin.
+
+        Check the learned forecast and constant-velocity motion of *all*
+        observed actors, including actors beyond the model's capacity. This
+        is a candidate guard, not a guarantee against pedestrian-driven contact.
+        Legacy center-distance objectives retain their historical semantics.
+
+        Returns:
+            bool: Whether both forecast sources retain the surface safety margin.
+        """
+        if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1:
+            return True
+        horizon = min(len(local_traj), future_peds.shape[1])
+        center_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            + float(self.config.predictive_safe_distance)
+        )
+        valid = future_peds[mask > 0.5, :horizon]
+        if valid.size and not np.all(
+            np.linalg.norm(valid - local_traj[None, :horizon], axis=-1) >= center_margin
+        ):
+            return False
+        robot, _, pedestrians = self._socnav_fields(observation)
+        positions, velocities = self._normalize_pedestrians(pedestrians)
+        if positions.size == 0:
+            return True
+        heading = float(self._as_1d_float(robot.get("heading", [0.0]), pad=1)[0])
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        relative = (positions - np.asarray(robot.get("position", [0.0, 0.0]))[:2]) @ np.array(
+            [[cos_h, -sin_h], [sin_h, cos_h]]
+        )
+        times = np.arange(1, len(local_traj) + 1) * float(self.config.predictive_rollout_dt)
+        observed_future = relative[:, None, :] + velocities[:, None, :] * times[None, :, None]
+        return bool(
+            np.all(np.linalg.norm(relative, axis=-1) >= center_margin)
+            and np.all(np.linalg.norm(observed_future - local_traj[None], axis=-1) >= center_margin)
+        )
+
     def _score_action(
         self,
         *,
@@ -1304,6 +1350,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps_val = max(1, int(steps))
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
         if self._static_footprint_clearance(observation, robot_traj) <= 0.0:
+            return float("inf")
+        if not self._pedestrian_margin_clear(observation, robot_traj, future_peds, mask):
             return float("inf")
 
         valid_idx = np.where(mask > 0.5)[0]
@@ -1443,6 +1491,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_traj = local_traj[:horizon]
         local_headings = local_headings[:horizon]
         if self._static_footprint_clearance(observation, local_traj) <= 0.0:
+            return float("inf")
+        if not self._pedestrian_margin_clear(observation, local_traj, future_peds, mask):
             return float("inf")
 
         radius_margin = (
@@ -1611,6 +1661,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         branch = max(1, int(self.config.predictive_sequence_branch_factor))
         beam_width = max(1, int(self.config.predictive_sequence_beam_width))
         segments = max(1, int(self.config.predictive_sequence_segments))
+        base_ranked = [item for item in base_ranked if np.isfinite(item[0])]
         # Use the beam's objective for admission too. Single-action scoring has
         # different speed margins and no phase cost; it can fill this shortlist
         # with stationary turns and prune every progressing sequence.
@@ -1642,7 +1693,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                         sequence=new_seq,
                         steps=steps,
                     )
-                    expanded.append((score, new_seq))
+                    if np.isfinite(score):
+                        expanded.append((score, new_seq))
             expanded.sort(key=lambda item: float(item[0]))
             beam = expanded[:beam_width]
         return beam[0][1][0] if beam else (0.0, 0.0)
@@ -1927,7 +1979,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             steps=steps,
             best=best,
         )
-        return best
+        return best if np.isfinite(_best_cost) else (0.0, 0.0)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics, including before adapter initialization."""

@@ -1478,7 +1478,133 @@ def _add_diagnostic_input_reference(
     return path
 
 
-def _diagnostic_input_contract(root: Path) -> _DiagnosticInputContract:  # noqa: C901
+def _contains_snqi_v2_signal(value: Any) -> bool:
+    """Recognize v2 declarations and metric names independently of a version value.
+
+    Returns:
+        Whether any named field or declared metric identifies v2.
+    """
+    if isinstance(value, str):
+        return re.search(r"(?:^|[/._ -])snqi[-_]v2(?:$|[/._ -])", value, re.IGNORECASE) is not None
+    if isinstance(value, dict):
+        return any(
+            _contains_snqi_v2_signal(key) or _contains_snqi_v2_signal(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_snqi_v2_signal(item) for item in value)
+    return False
+
+
+def _campaign_weights_are_v2(  # noqa: C901
+    campaign: dict[str, Any], root: Path, source_root: Path | None
+) -> bool:
+    """Recognize v2 weights without trusting their path's version spelling.
+
+    Returns:
+        Whether any retained or declared weights file has the v2 format.
+    """
+    candidates = set(root.rglob("*weights*.json"))
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {
+                    "weights_path",
+                    "weights_file",
+                    "snqi_weights_path",
+                    "snqi_weights_file",
+                }:
+                    if not isinstance(item, str) or not item:
+                        raise ValueError("diagnostic input weights path must be a nonempty string")
+                    relative = Path(item)
+                    if relative.is_absolute() or ".." in relative.parts:
+                        raise ValueError("diagnostic input weights path must stay within the root")
+                    paths = [
+                        root / relative,
+                        root / "diagnostic_inputs" / relative,
+                        root / "release_metadata/snqi" / relative.name,
+                    ]
+                    if source_root is not None:
+                        paths.append(source_root / relative)
+                    existing = [path for path in paths if path.is_file()]
+                    if not existing:
+                        raise ValueError("diagnostic input declared weights file is missing")
+                    candidates.update(existing)
+                else:
+                    visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(campaign)
+    for path in sorted(candidates):
+        if any(part.is_symlink() for part in (path, *path.parents)):
+            raise ValueError("diagnostic input refuses symlink weights files")
+        document = _read_json_file(path)
+        weights = document.get("weights")
+        if _contains_snqi_v2_signal(document.get("version")) or (
+            isinstance(weights, dict) and {"w_S", "w_C"} <= set(weights)
+        ):
+            return True
+    return False
+
+
+def _campaign_v2_declarations(
+    campaign: dict[str, Any], root: Path, source_root: Path | None
+) -> list[dict[str, Any]]:
+    """Require complete, consistent v2 provenance whenever any independent signal is present.
+
+    Returns:
+        Campaign provenance declarations to join with the diagnostic input pins.
+    """
+    active = (
+        (root / "reports/snqi_v2_diagnostics.json").exists()
+        or _contains_snqi_v2_signal(campaign)
+        or _campaign_weights_are_v2(campaign, root, source_root)
+    )
+    if not active:
+        return []
+    metadata_keys = {"snqi_v2_version"} | {
+        f"snqi_v2_{role}_{suffix}"
+        for role in ("weights", "anchors", "family")
+        for suffix in ("path", "sha256")
+    }
+    metrics = campaign.get("metrics")
+    declarations = [
+        candidate
+        for candidate in (campaign, metrics)
+        if isinstance(candidate, dict) and metadata_keys.intersection(candidate)
+    ]
+    if not declarations or any(item.get("snqi_v2_version") != "SNQI-v2" for item in declarations):
+        raise ValueError(
+            "diagnostic input v2 campaign requires an explicit consistent SNQI-v2 version"
+        )
+    if "snqi_v2" in campaign and campaign["snqi_v2"] != "SNQI-v2":
+        raise ValueError("diagnostic input v2 campaign has a conflicting scoring state")
+    for declaration in (campaign, metrics):
+        if not isinstance(declaration, dict):
+            continue
+        for key in ("metrics", "metric_list", "metric_names", "required_metrics", "scored_metrics"):
+            if key not in declaration or isinstance(declaration[key], dict):
+                continue
+            names = declaration[key]
+            if (
+                not isinstance(names, list)
+                or not names
+                or not all(isinstance(name, str) for name in names)
+            ):
+                raise ValueError(
+                    "diagnostic input v2 campaign requires a valid declared metric list"
+                )
+            if not _contains_snqi_v2_signal(names):
+                raise ValueError("diagnostic input v2 campaign has a conflicting metric list")
+    return declarations
+
+
+def _diagnostic_input_contract(  # noqa: C901
+    root: Path, *, source_root: Path | None = None
+) -> _DiagnosticInputContract:
     """Join campaign and report declarations, refusing missing reports or conflicting roles.
 
     Returns:
@@ -1534,9 +1660,10 @@ def _diagnostic_input_contract(root: Path) -> _DiagnosticInputContract:  # noqa:
     campaign_path = root / "campaign_manifest.json"
     if campaign_path.is_file():
         campaign = _read_json_file(campaign_path)
-        metrics = campaign.get("metrics")
-        if isinstance(metrics, dict) and metrics.get("snqi_v2_version") == "SNQI-v2":
-            bind_v2(metrics)
+        declarations = _campaign_v2_declarations(campaign, root, source_root)
+        if declarations:
+            for declaration in declarations:
+                bind_v2(declaration)
             if not (root / "reports/snqi_v2_diagnostics.json").is_file():
                 raise ValueError("diagnostic input v2 campaign requires diagnostics")
             schedule = campaign.get("scenario_horizons")
@@ -1614,10 +1741,10 @@ def _diagnostic_input_sources(run_root: Path) -> dict[Path, tuple[Path, str]]:
     Returns:
         Stable cold payload paths, source files and declared digests.
     """
-    contract = _diagnostic_input_contract(run_root)
+    repo_root = get_repository_root().resolve()
+    contract = _diagnostic_input_contract(run_root, source_root=repo_root)
     sources = {}
     resolved = {}
-    repo_root = get_repository_root().resolve()
     for relative, digest in contract.references.items():
         source = None
         for root in (run_root, repo_root):
@@ -1948,9 +2075,11 @@ def _read_json_file(path: Path) -> dict[str, Any]:
     Raises:
         ValueError: If the file is missing, malformed, or not a JSON object.
     """
+    from robot_sf.benchmark.snqi.v2_spec import parse_v2_json  # noqa: PLC0415
+
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        payload = parse_v2_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"{path}: expected a JSON object")
@@ -3142,6 +3271,9 @@ def verify_publication_bundle_preflight(
 
     try:
         manifest = _read_json_file(manifest_path)
+        campaign_path = payload_dir / "campaign_manifest.json"
+        if campaign_path.is_file():
+            _read_json_file(campaign_path)
     except ValueError as exc:
         raise PublicationPreflightError(f"Publication preflight failed: {exc}") from exc
     if not manifest.get("schema_version"):

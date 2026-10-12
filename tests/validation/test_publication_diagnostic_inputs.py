@@ -113,6 +113,7 @@ def _declare_campaign(repo, run, provenance):
             {
                 "legacy_snqi": "excluded",
                 "metrics": {"snqi_v2_version": "SNQI-v2", **provenance},
+                "metric_list": ["success", "snqi_v2"],
                 "scenario_horizons": schedule,
             }
         )
@@ -426,3 +427,163 @@ def test_campaign_schedule_and_assets_validate_from_detached_inputs(tmp_path, mo
         bundle.bundle_dir, require_release_reconciliation=False
     )
     assert report["status"] == "pass"
+
+
+def _round2_campaign(tmp_path, monkeypatch, cold):
+    """Stage a valid campaign before applying a custody-erasing metadata mutation."""
+    repo, run, pins = _run(tmp_path, monkeypatch)
+    _declare_campaign(repo, run, pins)
+    bundle = _export(run, tmp_path) if cold else None
+    target = bundle.bundle_dir / "payload" if cold else run
+    return repo, target, pins, bundle
+
+
+def _strip_v2_custody(repo, target, pins, bundle):
+    """Erase reports and anchors, then re-sign cold bytes to isolate activation logic."""
+    (target / "reports/snqi_v2_diagnostics.json").unlink()
+    ((target / "diagnostic_inputs" if bundle else repo) / pins["snqi_v2_anchors_path"]).unlink()
+    if bundle:
+        _resign(bundle)
+
+
+def _assert_round2_rejected(target, tmp_path, bundle, reason="diagnostic input"):
+    """Assert on the semantic refusal, rather than an incidental checksum failure."""
+    if bundle:
+        with pytest.raises(PublicationPreflightError, match=reason):
+            verify_publication_bundle_preflight(
+                bundle.bundle_dir, require_release_reconciliation=False
+            )
+    else:
+        with pytest.raises(ValueError, match=reason):
+            _export(target, tmp_path)
+
+
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize(
+    "probe", ["remove_version", "alter_version", "metric_list_only", "duplicate_metrics"]
+)
+def test_round2_campaign_activation_bypass_probes(tmp_path, monkeypatch, cold, probe):
+    """Version erasure, list declarations and duplicate-key replacement cannot erase custody."""
+    repo, target, pins, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    campaign_path = target / "campaign_manifest.json"
+    campaign = json.loads(campaign_path.read_text())
+    if probe == "remove_version":
+        del campaign["metrics"]["snqi_v2_version"]
+    elif probe == "alter_version":
+        campaign["metrics"]["snqi_v2_version"] = "SNQI-v1"
+    elif probe == "metric_list_only":
+        campaign["metrics"] = ["success", "snqi_v2"]
+        del campaign["metric_list"]
+    if probe == "duplicate_metrics":
+        campaign_path.write_text(json.dumps(campaign)[:-1] + ', "metrics": {}}')
+    else:
+        campaign_path.write_text(json.dumps(campaign))
+    _strip_v2_custody(repo, target, pins, bundle)
+    _assert_round2_rejected(
+        target,
+        tmp_path,
+        bundle,
+        "duplicate JSON key" if probe == "duplicate_metrics" else "diagnostic input.*v2",
+    )
+
+
+@pytest.mark.parametrize("cold", [False, True])
+def test_v2_weights_file_independently_requires_campaign_custody(tmp_path, monkeypatch, cold):
+    """The actual weights format activates v2 even through an unversioned legacy path field."""
+    repo, target, pins, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    campaign_path = target / "campaign_manifest.json"
+    campaign = json.loads(campaign_path.read_text())
+    campaign["metrics"] = {}
+    del campaign["metric_list"]
+    campaign["snqi_weights_path"] = pins["snqi_v2_weights_path"]
+    campaign["snqi_weights_sha256"] = pins["snqi_v2_weights_sha256"]
+    campaign_path.write_text(json.dumps(campaign))
+    _strip_v2_custody(repo, target, pins, bundle)
+    _assert_round2_rejected(target, tmp_path, bundle, "diagnostic input.*v2")
+
+
+_ACTIVATION_SIGNALS = [
+    "snqi_v2_version",
+    "snqi_v2_weights_path",
+    "snqi_v2_weights_sha256",
+    "snqi_v2_anchors_path",
+    "snqi_v2_anchors_sha256",
+    "snqi_v2_family_path",
+    "snqi_v2_family_sha256",
+    "metric_list",
+    "weights_file_version",
+]
+
+
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize("mutation", ["remove", "alter"])
+@pytest.mark.parametrize("signal", _ACTIVATION_SIGNALS)
+def test_removing_or_altering_any_one_v2_signal_cannot_erase_custody(
+    tmp_path, monkeypatch, cold, mutation, signal
+):
+    """Every remaining signal independently preserves the report/input obligations."""
+    repo, target, pins, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    campaign_path = target / "campaign_manifest.json"
+    campaign = json.loads(campaign_path.read_text())
+    if signal == "weights_file_version":
+        weights = (target / "diagnostic_inputs" if cold else repo) / pins["snqi_v2_weights_path"]
+        document = json.loads(weights.read_text())
+        if mutation == "remove":
+            del document["version"]
+        else:
+            document["version"] = "SNQI-v1"
+        weights.write_text(json.dumps(document))
+        campaign["metrics"]["snqi_v2_weights_sha256"] = hashlib.sha256(
+            weights.read_bytes()
+        ).hexdigest()
+    else:
+        declaration = campaign if signal == "metric_list" else campaign["metrics"]
+        if mutation == "remove":
+            del declaration[signal]
+        else:
+            declaration[signal] = (
+                ["success", "snqi"]
+                if signal == "metric_list"
+                else "SNQI-v1"
+                if signal == "snqi_v2_version"
+                else "configs/wrong.json"
+                if signal.endswith("_path")
+                else "f" * 64
+            )
+    campaign_path.write_text(json.dumps(campaign))
+    _strip_v2_custody(repo, target, pins, bundle)
+    _assert_round2_rejected(target, tmp_path, bundle)
+
+
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize("mutation", ["remove_version", "alter_version", "alter_metric_list"])
+def test_v2_campaign_signals_must_agree_even_with_complete_custody(
+    tmp_path, monkeypatch, cold, mutation
+):
+    """Existing calibrated inputs do not excuse a missing or contradictory campaign declaration."""
+    _, target, _, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    campaign_path = target / "campaign_manifest.json"
+    campaign = json.loads(campaign_path.read_text())
+    if mutation == "remove_version":
+        del campaign["metrics"]["snqi_v2_version"]
+    elif mutation == "alter_version":
+        campaign["metrics"]["snqi_v2_version"] = "SNQI-v1"
+    else:
+        campaign["metric_list"] = ["success", "snqi"]
+    campaign_path.write_text(json.dumps(campaign))
+    if bundle:
+        _resign(bundle)
+    _assert_round2_rejected(target, tmp_path, bundle, "diagnostic input.*v2")
+
+
+@pytest.mark.parametrize("cold", [False, True])
+def test_nested_duplicate_campaign_version_is_refused_at_parse_time(tmp_path, monkeypatch, cold):
+    """Duplicate keys below metrics cannot replace the positive v2 version with a non-v2 value."""
+    repo, target, pins, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    campaign_path = target / "campaign_manifest.json"
+    text = campaign_path.read_text().replace(
+        '"snqi_v2_version": "SNQI-v2"', '"snqi_v2_version": "SNQI-v2", "snqi_v2_version": "SNQI-v1"'
+    )
+    campaign_path.write_text(text)
+    _strip_v2_custody(repo, target, pins, bundle)
+    _assert_round2_rejected(target, tmp_path, bundle, "duplicate JSON key")

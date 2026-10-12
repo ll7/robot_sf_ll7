@@ -16,9 +16,9 @@ scenario_config: ../../scenarios/classic_interactions.yaml
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 1043
-  - 231
-  - 1337
+  - 101043
+  - 100231
+  - 101337
 randomize_seeds: true
 total_timesteps: 12000000
 best_checkpoint_metric: success_rate

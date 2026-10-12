@@ -1,0 +1,12 @@
+# Training-only seed transport; historical failure outcomes do not transfer.
+classic_cross_trap_high:
+- 100101
+- 100102
+- 100103
+classic_cross_trap_medium:
+- 100102
+- 100103
+classic_cross_trap_low:
+- 100102
+classic_group_crossing_high:
+- 100171

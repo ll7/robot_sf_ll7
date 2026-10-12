@@ -54,7 +54,7 @@ model:
 training:
   max_epochs: 200
   batch_size: 64
-  seed: 1472
+  seed: 101472
   # Number of synthetic episodes the CPU smoke fabricates when no real trace data
   # is supplied. Real training ignores this and reads durable manifest traces.
   smoke_rows: 48

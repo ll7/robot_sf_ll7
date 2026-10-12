@@ -5,5 +5,5 @@ policy_output_id: issue_1496_bc_warm_start_v1
 bc_epochs: 10
 batch_size: 32
 learning_rate: 0.0003
-random_seeds: [1043, 231, 777, 992, 1337]
+random_seeds: [101043, 100231, 100777, 100992, 101337]
 device: auto

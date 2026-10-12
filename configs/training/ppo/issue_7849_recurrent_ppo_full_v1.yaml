@@ -17,7 +17,7 @@ evaluation:
 policy_id: recurrent_ppo_issue_7849_full_v1
 algorithm: recurrent_ppo
 recurrent_policy: MultiInputLstmPolicy
-seeds: [1043, 231, 777, 992, 1337]
+seeds: [101043, 100231, 100777, 100992, 101337]
 randomize_seeds: false
 total_timesteps: 15000000
 

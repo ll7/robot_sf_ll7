@@ -17,7 +17,7 @@ scenario_config: ../../scenarios/classic_interactions.yaml
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 1043
+  - 101043
 total_timesteps: 32000  # overridden by the Optuna study per trial
 
 # Placeholder extractor — the study replaces this for every trial.

@@ -5,7 +5,7 @@ scenario_config: ../../../scenarios/sets/ppo_all_available_training_v1_h500_sche
 num_envs: 1
 worker_mode: dummy
 seeds:
-  - 4018
+  - 104018
 total_timesteps: 96
 best_checkpoint_metric: success_rate
 feature_extractor: mlp

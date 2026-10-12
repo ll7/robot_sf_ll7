@@ -8,7 +8,7 @@ output:
 
 scenarios:
   scenario_matrix: ../../scenarios/classic_interactions.yaml
-  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  hard_seed_manifest: configs/training/predictive/training_predictive_hard_seeds_v1.yaml
   planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
 
 base_collection:
@@ -26,7 +26,7 @@ hardcase_collection:
 
 mixing:
   hardcase_repeat: 2
-  shuffle_seed: 42
+  shuffle_seed: 100042
 
 training:
   model_id: predictive_obstacle_features_same_seed_issue_1427
@@ -36,7 +36,7 @@ training:
   lr: 0.0003
   weight_decay: 0.00001
   val_split: 0.2
-  seed: 42
+  seed: 100042
   hidden_dim: 128
   message_passing_steps: 3
   max_val_ade: 1.2

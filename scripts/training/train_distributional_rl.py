@@ -287,7 +287,7 @@ def load_distributional_rl_training_config(
         algorithm=algorithm,
         scenario_config=_resolve_path(data["scenario_config"], base_dir=base_dir),
         total_timesteps=total_timesteps,
-        seed=int(data.get("seed", 0)),
+        seed=int(data.get("seed", 100000)),
         device=str(data.get("device", "cpu")),
         num_envs=num_envs,
         output_dir=output_dir,

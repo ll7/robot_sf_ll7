@@ -7,7 +7,7 @@ scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
 num_envs: 2
 worker_mode: subproc
 seeds:
-  - 1043
+  - 101043
 randomize_seeds: true
 total_timesteps: 8192
 best_checkpoint_metric: success_rate

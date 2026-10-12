@@ -84,7 +84,7 @@ artifact_promotion_policy:
 collection_command_shape: >
   uv run python scripts/training/collect_expert_trajectories.py --dataset-id
   issue_1397_oracle_imitation_v1 --policy-id hybrid_rule_v3_static_margin0_waypoint2
-  --scenario-config configs/policy_search/nominal_sanity_matrix.yaml --seeds 201 202 203
+  --scenario-config configs/policy_search/nominal_sanity_matrix.yaml --seeds 100201 100202 100203
   204 205 206
 local_preflight_command: >
   uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config

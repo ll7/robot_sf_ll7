@@ -2,11 +2,11 @@
 base_config: expert_ppo_issue_403_grid_base.yaml
 policy_id: ppo_expert_grid_socnav_403_diffdrive_reverse
 seeds:
-  - 1043
-  - 231
-  - 777
-  - 992
-  - 1337
+  - 101043
+  - 100231
+  - 100777
+  - 100992
+  - 101337
 total_timesteps: 10000000
 env_overrides:
   robot_config:

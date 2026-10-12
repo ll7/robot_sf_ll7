@@ -1,7 +1,7 @@
 policy_id: issue_4245_sac_offline_pretrain
 scenario_config: ../../scenarios/classic_interactions.yaml
 total_timesteps: 1
-seed: 4245
+seed: 104245
 output_dir: ../../../output/issue_4245_offline_pretrain_smoke
 device: cpu
 action_semantics: delta

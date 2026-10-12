@@ -104,7 +104,7 @@ execution_boundary:
     --training-config
     configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
     --env-config configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
-    --seeds 1031 1032 1033
+    --seeds 101031 101032 101033
   bc_training_command_shape: >-
     uv run python scripts/training/pretrain_from_expert.py --config
     configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml

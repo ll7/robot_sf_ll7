@@ -600,7 +600,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optuna storage URL.  Defaults to sqlite under output/optuna/.",
     )
-    p.add_argument("--seed", type=int, default=42, help="Optuna sampler seed.")
+    p.add_argument("--seed", type=int, default=100042, help="Optuna sampler seed.")
     p.add_argument("--worker-index", type=int, default=None, help=argparse.SUPPRESS)
     p.add_argument(
         "--fps-warn-threshold",

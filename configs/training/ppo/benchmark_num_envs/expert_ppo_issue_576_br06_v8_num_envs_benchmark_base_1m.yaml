@@ -4,11 +4,11 @@ scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
 resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 worker_mode: subproc
 seeds:
-- 1043
-- 231
-- 777
-- 992
-- 1337
+- 101043
+- 100231
+- 100777
+- 100992
+- 101337
 randomize_seeds: true
 total_timesteps: 16000000
 best_checkpoint_metric: success_rate

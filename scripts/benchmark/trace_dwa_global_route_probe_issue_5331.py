@@ -65,6 +65,15 @@ DT = 0.1
 # Development replacements for the two episodes named by the #5262 manifest's canonical config point. The seeds come
 # from the standard classic archetype matrix declaration used by both the #5020 and #5262
 # diagnostics; the global-route probe config applies waypoint-following bias.
+# The bottleneck development probe changes the historical episode identity.
+# Episode IDs below remain compatibility labels, not claims about future outcomes.
+SEED_MIGRATION = {
+    "historical_seed": 131,  # seed-holdout: setup-only (archived identity; never dispatched)
+    "development_seed": 1121,
+    "prior_outcome_descriptions": "superseded",
+    "replacement_trace_recorded_by_seed_migration": False,
+}
+
 TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
     ("classic_bottleneck_medium", 1121, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
@@ -187,6 +196,9 @@ def _write_evidence_readme(
     bottleneck = next((s for s in summaries if s["episode_id"] == "bottleneck_timeout"), None)
     t_inter = next((s for s in summaries if s["episode_id"] == "t_intersection_collision"), None)
     lines: list[str] = []
+    lines.append(
+        "Prior outcome descriptions are superseded for the changed seed (historical identity to development seed 1121). No replacement trace is recorded by this migration; legacy episode IDs are compatibility labels."
+    )
     lines.append("<!-- AI-GENERATED (robot_sf#5331, 2026-07-11) - NEEDS-REVIEW -->")
     lines.append("# Issue #5331 — DWA Global-Route Integration Probe for Bottleneck Convergence")
     lines.append("")
@@ -317,6 +329,7 @@ def run_trace(
         "issue": FOLLOW_UP_ISSUE,
         "config": repo_relative_path(algo_config),
         "schema_version": "dwa-global-route-probe-trace.v1",
+        "seed_migration": SEED_MIGRATION,
         "episodes": summaries,
     }
     write_json_atomic(summary_json, summary_payload, review_marker=True)

@@ -6,13 +6,13 @@ output:
 
 scenarios:
   scenario_matrix: ../../scenarios/classic_interactions.yaml
-  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  hard_seed_manifest: configs/training/predictive/training_predictive_hard_seeds_v1.yaml
   planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
 
 base_collection:
   # Expanded random-seed coverage to improve generalization across all maps.
   seeds_per_scenario: 24
-  random_seed_base: 31000
+  random_seed_base: 131000
   max_steps: 260
   max_agents: 24
   horizon_steps: 12
@@ -28,7 +28,7 @@ hardcase_collection:
 mixing:
   # Stronger hardcase emphasis for planner-relevant failure modes.
   hardcase_repeat: 8
-  shuffle_seed: 42
+  shuffle_seed: 100042
 
 training:
   model_id: predictive_proxy_selected_v2_xl
@@ -38,7 +38,7 @@ training:
   lr: 0.0002
   weight_decay: 0.00001
   val_split: 0.2
-  seed: 42
+  seed: 100042
   hidden_dim: 256
   message_passing_steps: 4
   max_val_ade: 1.0

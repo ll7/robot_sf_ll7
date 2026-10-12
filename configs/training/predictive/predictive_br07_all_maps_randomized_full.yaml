@@ -6,13 +6,13 @@ output:
 
 scenarios:
   scenario_matrix: ../../scenarios/classic_interactions.yaml
-  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  hard_seed_manifest: configs/training/predictive/training_predictive_hard_seeds_v1.yaml
   planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
 
 base_collection:
   # Larger base coverage for a full run.
   seeds_per_scenario: 8
-  random_seed_base: 21000
+  random_seed_base: 121000
   max_steps: 240
   max_agents: 24
   horizon_steps: 8
@@ -26,7 +26,7 @@ hardcase_collection:
 
 mixing:
   hardcase_repeat: 3
-  shuffle_seed: 42
+  shuffle_seed: 100042
 
 training:
   model_id: predictive_proxy_selected_v2_full
@@ -36,7 +36,7 @@ training:
   lr: 0.0002
   weight_decay: 0.00001
   val_split: 0.2
-  seed: 42
+  seed: 100042
   # Safe CPU defaults; set these explicitly on GPU hosts when worker transfer is desired.
   num_workers: 0
   pin_memory: false

@@ -3,7 +3,7 @@
 base_config: expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml
 policy_id: ppo_expert_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231
 seeds:
-- 231
+- 100231
 tracking:
   wandb:
     job_type: expert-ppo-3m-weekend-seed231

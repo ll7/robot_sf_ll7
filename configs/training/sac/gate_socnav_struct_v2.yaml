@@ -14,7 +14,7 @@
 policy_id: sac_gate_socnav_struct_v2
 scenario_config: ../../scenarios/classic_interactions.yaml
 total_timesteps: 200000
-seed: 42
+seed: 100042
 action_semantics: absolute
 relative_obs: true
 

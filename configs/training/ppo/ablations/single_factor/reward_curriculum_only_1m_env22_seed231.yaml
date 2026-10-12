@@ -10,7 +10,7 @@
 base_config: reward_curriculum_only_base.yaml
 policy_id: ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231
 seeds:
-- 231
+- 100231
 total_timesteps: 1000000
 evaluation:
   evaluation_episodes: 70

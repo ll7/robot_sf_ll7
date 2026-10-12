@@ -647,7 +647,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         base=base_dir,
     )
     hard_seed_manifest = _resolve(
-        scenario_cfg.get("hard_seed_manifest", "configs/benchmarks/predictive_hard_seeds_v1.yaml"),
+        scenario_cfg.get("hard_seed_manifest", "configs/training/predictive/training_predictive_hard_seeds_v1.yaml"),
         base=base_dir,
     )
     planner_grid = _resolve(
@@ -709,7 +709,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         _build_random_seed_manifest(
             scenario_matrix=scenario_matrix,
             seeds_per_scenario=int(base_collection.get("seeds_per_scenario", 4)),
-            random_seed_base=int(base_collection.get("random_seed_base", 11_000)),
+            random_seed_base=int(base_collection.get("random_seed_base", 111000)),
             output_path=base_manifest,
         )
         base_manifest_generated = True
@@ -932,7 +932,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "--val-split",
         str(float(train_cfg.get("val_split", 0.2))),
         "--seed",
-        str(int(train_cfg.get("seed", 42))),
+        str(int(train_cfg.get("seed", 100042))),
         "--num-workers",
         str(num_workers),
         "--prefetch-factor",

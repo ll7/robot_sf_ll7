@@ -8,7 +8,7 @@ horizon_steps: 5
 rollout_dt: 0.4
 hidden_dim: 128
 device: cpu
-seed: 4013
+seed: 104013
 num_samples: 512
 epochs: 400
 learning_rate: 0.001

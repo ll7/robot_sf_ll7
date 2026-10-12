@@ -10,7 +10,7 @@
 base_config: expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml
 policy_id: ppo_expert_issue_852_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed
 seeds:
-- 1337
+- 101337
 randomize_seeds: false
 tracking:
   wandb:

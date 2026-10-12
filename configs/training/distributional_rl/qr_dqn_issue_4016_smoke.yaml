@@ -2,7 +2,7 @@ policy_id: qr_dqn_issue_4016_smoke
 algorithm: qr_dqn
 scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
 total_timesteps: 128
-seed: 4016
+seed: 104016
 device: cpu
 num_envs: 1
 env_overrides:

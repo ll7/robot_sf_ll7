@@ -292,7 +292,7 @@ def _parse_experiment_settings(payload: dict[str, object]) -> ExperimentSettings
     )
     train_iterations = int(experiment_raw.get("train_iterations", 20))
     checkpoint_every = int(experiment_raw.get("checkpoint_every", 5))
-    seed = int(experiment_raw.get("seed", 1043))
+    seed = int(experiment_raw.get("seed", 101043))
     if train_iterations < 1:
         raise ValueError("experiment.train_iterations must be >= 1.")
     if checkpoint_every < 1:

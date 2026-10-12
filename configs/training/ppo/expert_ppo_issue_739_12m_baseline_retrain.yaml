@@ -16,11 +16,11 @@ policy_id: ppo_expert_issue_739_12m_baseline_retrain
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
 num_envs: auto_throughput
 seeds:
-  - 1043
-  - 231
-  - 777
-  - 992
-  - 1337
+  - 101043
+  - 100231
+  - 100777
+  - 100992
+  - 101337
 
 # Reduced from 30M to 12M based on issue-739 ablation findings
 total_timesteps: 12000000

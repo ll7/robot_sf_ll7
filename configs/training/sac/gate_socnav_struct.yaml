@@ -10,7 +10,7 @@
 policy_id: sac_gate_socnav_struct_v1
 scenario_config: ../../scenarios/classic_interactions.yaml
 total_timesteps: 50000
-seed: 42
+seed: 100042
 # Canonical benchmark-facing SAC gate profile:
 # - delta action semantics, consumed natively by map_runner
 # - relative SocNav observations, so the checkpoint is not tied to a map origin

@@ -5,7 +5,7 @@ experiment:
   output_root: output/dreamerv3
   train_iterations: 6000
   checkpoint_every: 100
-  seed: 1043
+  seed: 101043
   log_level: WARNING
 
 ray:

@@ -46,7 +46,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json",
         "scenario_id": "classic_head_on_corridor_low",
         "planner_id": "default_social_force",
-        "seed": 1101,
     },
     {
         "family": "corridor_interaction",
@@ -54,7 +53,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
         "scenario_id": "classic_head_on_corridor_low",
         "planner_id": "ammv_social_force",
-        "seed": 1101,
     },
     {
         "family": "crossing_proxy",
@@ -62,7 +60,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
         "scenario_id": "crossing_proxy",
         "planner_id": "orca",
-        "seed": 1101,
     },
     {
         "family": "bottleneck",
@@ -70,7 +67,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json",
         "scenario_id": "classic_bottleneck_medium",
         "planner_id": "hybrid_rule_v0_minimal",
-        "seed": 1101,
     },
     {
         "family": "occluded_emergence",
@@ -78,7 +74,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
         "scenario_id": "issue_2756_occluded_emergence",
         "planner_id": "hybrid_rule_v0_minimal",
-        "seed": 1101,
     },
     {
         "family": "signalized_crossing",
@@ -86,7 +81,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
         "scenario_id": "issue_2868_signalized_crossing",
         "planner_id": "hybrid_rule_v0_minimal",
-        "seed": 2868,
     },
     {
         "family": "goal_directed_crossing",
@@ -94,7 +88,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json",
         "scenario_id": "issue_2868_goal_directed_crossing",
         "planner_id": "hybrid_rule_v0_minimal",
-        "seed": 2868,
     },
     {
         "family": "waiting_with_intent_change",
@@ -102,7 +95,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json",
         "scenario_id": "issue_2868_waiting_intent_change",
         "planner_id": "hybrid_rule_v0_minimal",
-        "seed": 2868,
     },
     {
         "family": "route_conflict_goal",
@@ -110,7 +102,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json",
         "scenario_id": "issue_2868_route_conflict_goal",
         "planner_id": "hybrid_rule_v0_minimal",
-        "seed": 2868,
     },
 ]
 
@@ -141,6 +132,9 @@ def _trace_has_intent_metadata(ped: dict[str, Any]) -> bool:
 def _trace_metadata_coverage(trace: dict[str, Any]) -> dict[str, Any]:
     """Return pedestrian metadata coverage statistics from a raw trace."""
 
+    result["seed"] = (trace.get("source") or {}).get("seed")
+    result["seed_provenance"] = "recorded_trace_source"
+    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     coverage: dict[str, Any] = {
         "pedestrian_observations": 0,
@@ -235,6 +229,9 @@ def _extract_trace_steps(trace: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _compute_dt_s(trace: dict[str, Any]) -> float:
     """Infer dt_s from the first two frames of the trace."""
+    result["seed"] = (trace.get("source") or {}).get("seed")
+    result["seed_provenance"] = "recorded_trace_source"
+    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     if len(frames) < 2:
         return 0.1
@@ -246,6 +243,9 @@ def _compute_dt_s(trace: dict[str, Any]) -> float:
 
 def _trace_has_motion(trace: dict[str, Any]) -> bool:
     """Check whether any pedestrian has non-zero velocity in any frame."""
+    result["seed"] = (trace.get("source") or {}).get("seed")
+    result["seed_provenance"] = "recorded_trace_source"
+    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     for frame in frames:
         for ped in frame.get("pedestrians", []):
@@ -257,6 +257,9 @@ def _trace_has_motion(trace: dict[str, Any]) -> bool:
 
 def _pedestrian_count(trace: dict[str, Any]) -> int:
     """Return the max number of pedestrians in any single frame."""
+    result["seed"] = (trace.get("source") or {}).get("seed")
+    result["seed_provenance"] = "recorded_trace_source"
+    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     max_peds = 0
     for frame in frames:
@@ -271,6 +274,9 @@ def _get_actor_classes(trace: dict[str, Any]) -> list[str]:
 
 def _actor_class_counts(trace: dict[str, Any]) -> dict[str, int]:
     """Count trace actors by declared actor_type, defaulting legacy traces to pedestrian."""
+    result["seed"] = (trace.get("source") or {}).get("seed")
+    result["seed_provenance"] = "recorded_trace_source"
+    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     counts: dict[str, int] = {}
     for frame in frames:
@@ -317,7 +323,7 @@ def evaluate_single_trace(
         "trace_path": rel_path,
         "scenario_id": candidate.get("scenario_id", ""),
         "planner_id": candidate.get("planner_id", ""),
-        "seed": candidate.get("seed"),
+        "seed": None,
         "status": "evaluated",
     }
 
@@ -327,6 +333,9 @@ def evaluate_single_trace(
         return result
 
     trace = _load_trace(abs_path)
+    result["seed"] = (trace.get("source") or {}).get("seed")
+    result["seed_provenance"] = "recorded_trace_source"
+    result["episode_execution"] = "historical_trace_read_only"
     frames = trace.get("frames") or trace.get("steps") or []
     result["frame_count"] = len(frames)
     result["pedestrians_per_frame"] = _pedestrian_count(trace)

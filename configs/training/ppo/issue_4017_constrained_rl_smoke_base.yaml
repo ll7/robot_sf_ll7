@@ -3,7 +3,7 @@
 algorithm: ppo
 scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
 total_timesteps: 256
-seed: 4017
+seed: 104017
 num_envs: 1
 device: cpu
 policy: MultiInputPolicy

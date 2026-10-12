@@ -9,11 +9,11 @@ resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 num_envs: 8
 worker_mode: subproc
 seeds:
-  - 1043
-  - 231
-  - 777
-  - 992
-  - 1337
+  - 101043
+  - 100231
+  - 100777
+  - 100992
+  - 101337
 randomize_seeds: true
 # Important:
 # - resume_model_id resolves through model/registry.yaml and downloads from W&B

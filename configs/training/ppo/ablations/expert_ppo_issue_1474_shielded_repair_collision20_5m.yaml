@@ -11,11 +11,11 @@ scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 1043
-  - 231
-  - 777
-  - 992
-  - 1337
+  - 101043
+  - 100231
+  - 100777
+  - 100992
+  - 101337
 randomize_seeds: true
 total_timesteps: 5000000
 best_checkpoint_metric: success_rate

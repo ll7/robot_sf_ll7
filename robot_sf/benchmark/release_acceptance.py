@@ -2749,6 +2749,7 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
                 resolved_seeds=seeds,
                 campaign_root=campaign_root.resolve(),
                 campaign_manifest=campaign_manifest_payload,
+                cfg=campaign_config,
             )
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
             _append_blocker(blockers, f"campaign integrity recomputation failed: {exc}")

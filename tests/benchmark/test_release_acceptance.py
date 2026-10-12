@@ -1919,6 +1919,7 @@ def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monke
     """
     from copy import deepcopy
 
+    from tests.benchmark import test_release_acceptance as fixtures
     from tests.benchmark.test_doorway_release_acceptance import build_doorway
 
     _, _, manifest, scenarios = build_doorway(tmp_path / "fixed", monkeypatch)
@@ -1926,7 +1927,7 @@ def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monke
     scenarios = deepcopy(scenarios)
     scenarios[0]["simulation_config"]["max_episode_steps"] = budget
     budgets = {s["name"]: s["simulation_config"]["max_episode_steps"] for s in scenarios}
-    campaign, cfg = _write_provenance_bound_full_campaign(
+    campaign, cfg = fixtures._write_provenance_bound_full_campaign(
         tmp_path / "scheduled", monkeypatch, scenarios=scenarios, budgets=budgets
     )
     manifest.expected_horizon_steps = None

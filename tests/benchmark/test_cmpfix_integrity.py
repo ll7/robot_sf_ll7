@@ -8,15 +8,17 @@ import yaml
 from robot_sf.benchmark.artifact_publication import _preflight_check_checksums
 from robot_sf.benchmark.camera_ready._resume_plan import ResumeMismatchError, build_resume_plan
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
-from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_identity_payload
+from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
 from robot_sf.benchmark.utils import _config_hash
+from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
 
 
 def _row(scenario, seed, *, algo="social_force", config=None):
-    params = _scenario_identity_payload(
-        scenario, algo=algo, algo_config=config or {}, horizon=600, dt=0.1, record_forces=False
-    )
-    params["seed"] = seed
+    cfg = fixture_campaign([{"key": "social_force", "algo": algo}], horizon=600, dt=0.1)
+    scoped = expected_arm_scenarios(
+        [scenario], cfg=cfg, planner=cfg.planners[0], kinematics="differential_drive"
+    )[0]
+    params = producer_params(scoped, seed, algo=algo, algo_config=config or {}, horizon=600, dt=0.1)
     digest = _config_hash(params)
     return {
         "scenario_id": scenario["name"],
@@ -43,7 +45,10 @@ def _integrity(tmp_path, rows, scenarios, planner=None):
         [
             {
                 "status": "ok",
-                "planner": planner or {"key": "social_force", "algo": "social_force"},
+                "planner": {
+                    **(planner or {"key": "social_force", "algo": "social_force"}),
+                    "kinematics": "differential_drive",
+                },
                 "episodes_path": str(path),
                 "summary": {"episodes_total": len(rows)},
             }
@@ -52,6 +57,9 @@ def _integrity(tmp_path, rows, scenarios, planner=None):
         resolved_seeds=[1001, 1002],
         campaign_root=tmp_path,
         campaign_manifest={"git": {"commit": "commit-a"}},
+        cfg=fixture_campaign(
+            [planner or {"key": "social_force", "algo": "social_force"}], horizon=600, dt=0.1
+        ),
     )
 
 

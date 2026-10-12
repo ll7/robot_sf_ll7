@@ -482,6 +482,7 @@ def test_analyze_campaign_recomputes_legacy_contamination_blockers(tmp_path: Pat
         "duplicate_logical_coverage",
         "mixed_commit_provenance",
         "mixed_config_provenance",
+        "runtime_identity_mismatch",
     }
     aggregate_findings = [
         finding for finding in analysis["findings"] if finding.startswith("aggregate_integrity:")
@@ -491,6 +492,7 @@ def test_analyze_campaign_recomputes_legacy_contamination_blockers(tmp_path: Pat
         "duplicate_logical_coverage",
         "mixed_commit_provenance",
         "mixed_config_provenance",
+        "runtime_identity_mismatch",
     }
     assert all(
         any(invariant in finding for finding in aggregate_findings)
@@ -498,8 +500,10 @@ def test_analyze_campaign_recomputes_legacy_contamination_blockers(tmp_path: Pat
     )
 
 
-def test_analyze_campaign_recomputes_legacy_clean_bundle(tmp_path: Path) -> None:
-    """Legacy clean bundles remain valid without a persisted integrity report."""
+def test_analyze_campaign_refuses_legacy_bundle_without_runtime_configuration(
+    tmp_path: Path,
+) -> None:
+    """Logical coverage alone cannot admit legacy rows without complete runtime inputs."""
     campaign_root = tmp_path / "campaign"
     _write_legacy_integrity_campaign(
         campaign_root,
@@ -511,8 +515,16 @@ def test_analyze_campaign_recomputes_legacy_clean_bundle(tmp_path: Path) -> None
 
     analysis = analyze_campaign(campaign_root)
 
-    assert analysis["campaign_integrity"]["status"] == "valid"
-    assert not any(finding.startswith("aggregate_integrity:") for finding in analysis["findings"])
+    assert analysis["campaign_integrity"]["status"] == "invalid"
+    assert all(
+        b["invariant"] == "runtime_identity_mismatch"
+        for b in analysis["campaign_integrity"]["blockers"]
+    )
+    assert all(
+        "complete campaign configuration is required" in str(b)
+        for b in analysis["campaign_integrity"]["blockers"]
+    )
+    assert any(finding.startswith("aggregate_integrity:") for finding in analysis["findings"])
 
 
 def test_analyze_campaign_fails_closed_when_legacy_provenance_is_missing(tmp_path: Path) -> None:

@@ -18,9 +18,11 @@ from urllib.parse import urlsplit, urlunsplit
 
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._runtime_identity import (
+    ExpectedEpisodeIdentity,
     expected_arm_scenarios,
-    expected_runtime_identity,
+    expected_episode_identity,
     row_runtime_identity_errors,
+    selected_campaign_planner,
 )
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
@@ -241,16 +243,22 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
         arm = f"{planner.get('key', 'unknown')} ({planner.get('kinematics', 'unknown')})"
         arm_scenarios_by_id = scenarios_by_id
         if cfg is not None:
-            scoped = expected_arm_scenarios(
-                [dict(sc) for sc in scenarios],
-                cfg=cfg,
-                planner=next(p for p in cfg.planners if p.key == str(planner["key"])),
-                kinematics=str(planner["kinematics"]),
-            )
-            arm_scenarios_by_id = {
-                str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
-                for sc in scoped
-            }
+            try:
+                scoped = expected_arm_scenarios(
+                    [dict(sc) for sc in scenarios],
+                    cfg=cfg,
+                    planner=selected_campaign_planner(cfg, planner),
+                    kinematics=str(planner["kinematics"]),
+                )
+                arm_scenarios_by_id = {
+                    str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
+                    for sc in scoped
+                }
+            except (KeyError, StopIteration, TypeError, ValueError) as exc:
+                blockers.append(
+                    _integrity_blocker(arm, "runtime_identity_mismatch", error=str(exc))
+                )
+                continue
         raw_path = str(entry.get("episodes_path", "")).strip()
         if not raw_path:
             blockers.append(_integrity_blocker(arm, "missing_episode_artifact"))
@@ -319,22 +327,21 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
 
         commits: set[str] = set()
         configs_by_identity: dict[tuple[str, int | str | None], set[str]] = {}
-        runtime_identities: dict[tuple[str, int], tuple[str, str]] = {}
+        runtime_identities: dict[tuple[str, int], ExpectedEpisodeIdentity] = {}
         for record in records:
             identity = _episode_identity(record)
             try:
                 scenario = arm_scenarios_by_id[identity[0]]
                 runtime_key = (identity[0], int(identity[1]))
                 if runtime_key not in runtime_identities:
-                    runtime_identities[runtime_key] = expected_runtime_identity(
+                    runtime_identities[runtime_key] = expected_episode_identity(
                         entry.get("planner") or {},
                         scenario,
                         runtime_key[1],
                         config_root=config_root,
+                        cfg=cfg,
                     )
-                errors = row_runtime_identity_errors(
-                    record, runtime_identities[runtime_key], scenario=scenario, seed=runtime_key[1]
-                )
+                errors = row_runtime_identity_errors(record, runtime_identities[runtime_key])
             except (KeyError, TypeError, ValueError, OSError) as exc:
                 errors = {"expected_runtime_identity": str(exc)}
             if errors:

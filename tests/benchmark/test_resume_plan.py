@@ -22,17 +22,33 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
     _expected_jobs,
     _validate_resume_job_identities,
     _validate_resume_runtime_identities,
-    build_resume_plan,
     emit_resume_plan_log,
     resume_plan_summary,
     verify_resume_context,
     write_resume_plan,
 )
-from robot_sf.benchmark.map_runner.map_runner_identity import (
-    _scenario_identity_payload,
-    _scenario_with_episode_seed_defaults,
+from robot_sf.benchmark.camera_ready._resume_plan import (
+    build_resume_plan as _build_resume_plan,
 )
+from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
 from robot_sf.benchmark.utils import _config_hash
+from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
+
+
+def build_resume_plan(runs_dir, *, planners, kinematics_matrix, scenarios, **kwargs):
+    """Supply trusted fixture settings to the real resume preflight.
+
+    Returns:
+        Real resume verdicts.
+    """
+    return _build_resume_plan(
+        runs_dir,
+        planners=planners,
+        kinematics_matrix=kinematics_matrix,
+        scenarios=scenarios,
+        cfg=fixture_campaign(planners, kinematics=tuple(kinematics_matrix)),
+        **kwargs,
+    )
 
 
 def _write_manifest(
@@ -50,7 +66,7 @@ def _write_manifest(
     (campaign_root / "campaign_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def _write_episodes_jsonl(path: Path, count: int) -> None:
+def _write_episodes_jsonl(path: Path, count: int, *, scenario=None) -> None:
     """Write a JSONL file with *count* fake episode records."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -60,9 +76,22 @@ def _write_episodes_jsonl(path: Path, count: int) -> None:
                 "episode": i,
                 "seed": i,
                 "scenario_id": "s1",
-                "config_hash": _config_hash({"algo": "test", "algo_config_hash": _config_hash({})}),
-                "scenario_params": {"algo": "test", "algo_config_hash": _config_hash({})},
+                "config_hash": _config_hash({"algo": "goal", "algo_config_hash": _config_hash({})}),
+                "algo": "goal",
+                "scenario_params": producer_params(
+                    expected_arm_scenarios(
+                        [scenario or {"name": "s1", "id": "s1"}],
+                        cfg=(cfg := fixture_campaign([{"key": "sf", "algo": "goal"}])),
+                        planner=cfg.planners[0],
+                        kinematics=path.parent.name.split("__")[-1]
+                        if "__" in path.parent.name
+                        else "differential_drive",
+                    )[0],
+                    i,
+                    algo="goal",
+                ),
             }
+            record["config_hash"] = _config_hash(record["scenario_params"])
             f.write(json.dumps(record) + "\n")
 
 
@@ -72,13 +101,14 @@ def _write_arm(
     episodes: int,
     *,
     write_summary: bool = True,
+    scenario=None,
 ) -> None:
     """Create an arm directory with *episodes* JSONL records."""
     arm_dir = runs_dir / arm_name
     arm_dir.mkdir(parents=True, exist_ok=True)
     episodes_path = arm_dir / "episodes.jsonl"
     if episodes > 0:
-        _write_episodes_jsonl(episodes_path, episodes)
+        _write_episodes_jsonl(episodes_path, episodes, scenario=scenario)
     elif episodes_path.exists():
         pass
     if write_summary:
@@ -221,7 +251,7 @@ class TestBuildResumePlan:
     def test_fresh_arm_when_no_directory(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1", "repeats": 3}]
         verdicts = build_resume_plan(
             runs_dir,
@@ -240,8 +270,10 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         arm_name = "sf__differential_drive"
-        _write_arm(runs_dir, arm_name, episodes=3)
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        _write_arm(
+            runs_dir, arm_name, episodes=3, scenario={"name": "s1", "repeats": 3, "id": "s1"}
+        )
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1", "repeats": 3}]
         verdicts = build_resume_plan(
             runs_dir,
@@ -258,8 +290,10 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         arm_name = "sf__differential_drive"
-        _write_arm(runs_dir, arm_name, episodes=2)
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        _write_arm(
+            runs_dir, arm_name, episodes=2, scenario={"name": "s1", "repeats": 5, "id": "s1"}
+        )
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1", "repeats": 5}]
         verdicts = build_resume_plan(
             runs_dir,
@@ -276,8 +310,8 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [
-            {"key": "sf", "algo": "test", "enabled": True},
-            {"key": "rl", "algo": "test", "enabled": False},
+            {"key": "sf", "algo": "goal", "enabled": True},
+            {"key": "rl", "algo": "goal", "enabled": False},
         ]
         scenarios = [{"name": "s1"}]
         verdicts = build_resume_plan(
@@ -292,11 +326,13 @@ class TestBuildResumePlan:
     def test_multiple_kinematics(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1"}]
 
         # Pre-populate one arm with 1 episode, leave other empty
-        _write_arm(runs_dir, "sf__differential_drive", episodes=1)
+        _write_arm(
+            runs_dir, "sf__differential_drive", episodes=1, scenario={"name": "s1", "id": "s1"}
+        )
         # holonomic_arm has no directory
 
         verdicts = build_resume_plan(
@@ -314,7 +350,7 @@ class TestBuildResumePlan:
     def test_uses_precomputed_expected_jobs(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1", "repeats": 10}]
 
         # Supply a precomputed count matching all ten job identities
@@ -335,7 +371,7 @@ class TestBuildResumePlan:
         with pytest.raises(NotADirectoryError, match="not a directory"):
             build_resume_plan(
                 runs_dir,
-                planners=[{"key": "sf", "algo": "test", "enabled": True}],
+                planners=[{"key": "sf", "algo": "goal", "enabled": True}],
                 kinematics_matrix=["differential_drive"],
                 scenarios=[{"name": "s1"}],
             )
@@ -350,13 +386,23 @@ class TestResumePlanSummary:
     def test_totals(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
-        _write_arm(runs_dir, "sf__differential_drive", episodes=10)  # complete
-        _write_arm(runs_dir, "rl__differential_drive", episodes=3)  # partial
+        _write_arm(
+            runs_dir,
+            "sf__differential_drive",
+            episodes=10,
+            scenario={"name": "s1", "repeats": 10, "id": "s1"},
+        )  # complete
+        _write_arm(
+            runs_dir,
+            "rl__differential_drive",
+            episodes=3,
+            scenario={"name": "s1", "repeats": 10, "id": "s1"},
+        )  # partial
         # ho__differential_drive not created -> continue-from-0
 
         planners = [
-            {"key": "sf", "algo": "test", "enabled": True},
-            {"key": "rl", "algo": "test", "enabled": True},
+            {"key": "sf", "algo": "goal", "enabled": True},
+            {"key": "rl", "algo": "goal", "enabled": True},
             {"key": "ho", "enabled": True},
         ]
         scenarios = [{"name": "s1", "repeats": 10}]
@@ -388,9 +434,14 @@ class TestWriteResumePlan:
         runs_dir = campaign_root / "runs"
         runs_dir.mkdir()
 
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1", "repeats": 5}]
-        _write_arm(runs_dir, "sf__differential_drive", episodes=3)
+        _write_arm(
+            runs_dir,
+            "sf__differential_drive",
+            episodes=3,
+            scenario={"name": "s1", "repeats": 5, "id": "s1"},
+        )
 
         verdicts = build_resume_plan(
             runs_dir,
@@ -425,12 +476,22 @@ class TestWriteResumePlan:
         # 5 complete arms (expect 1000 episodes each)
         for i in range(5):
             arm_name = f"arm{i}__differential_drive"
-            _write_arm(runs_dir, arm_name, episodes=1000)
+            _write_arm(
+                runs_dir,
+                arm_name,
+                episodes=1000,
+                scenario={"name": "s1", "repeats": 1000, "id": "s1"},
+            )
 
         # 1 partial arm
-        _write_arm(runs_dir, "arm5__differential_drive", episodes=562)
+        _write_arm(
+            runs_dir,
+            "arm5__differential_drive",
+            episodes=562,
+            scenario={"name": "s1", "repeats": 1000, "id": "s1"},
+        )
 
-        planners = [{"key": f"arm{i}", "algo": "test", "enabled": True} for i in range(6)]
+        planners = [{"key": f"arm{i}", "algo": "goal", "enabled": True} for i in range(6)]
         scenarios = [{"name": "s1", "repeats": 1000}]
         verdicts = build_resume_plan(
             runs_dir,
@@ -460,7 +521,7 @@ class TestEmitResumePlanLog:
     def test_does_not_raise(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
-        planners = [{"key": "sf", "algo": "test", "enabled": True}]
+        planners = [{"key": "sf", "algo": "goal", "enabled": True}]
         scenarios = [{"name": "s1"}]
         verdicts = build_resume_plan(
             runs_dir,
@@ -485,12 +546,22 @@ class TestFullResumePlanFlow:
         runs_dir = campaign_root / "runs"
         runs_dir.mkdir()
 
-        _write_arm(runs_dir, "sf__differential_drive", episodes=5)
-        _write_arm(runs_dir, "rl__differential_drive", episodes=2)
+        _write_arm(
+            runs_dir,
+            "sf__differential_drive",
+            episodes=5,
+            scenario={"name": "s1", "repeats": 5, "id": "s1"},
+        )
+        _write_arm(
+            runs_dir,
+            "rl__differential_drive",
+            episodes=2,
+            scenario={"name": "s1", "repeats": 5, "id": "s1"},
+        )
 
         planners = [
-            {"key": "sf", "algo": "test", "enabled": True},
-            {"key": "rl", "algo": "test", "enabled": True},
+            {"key": "sf", "algo": "goal", "enabled": True},
+            {"key": "rl", "algo": "goal", "enabled": True},
         ]
         scenarios = [{"name": "s1", "repeats": 5}]
 
@@ -584,16 +655,16 @@ def _write_saved_rows(tmp_path: Path, records: list[dict[str, Any]]) -> Path:
 _VALID_ROW: dict[str, Any] = {
     "scenario_id": "a",
     "seed": 1001,
-    "scenario_params": _scenario_identity_payload(
-        _scenario_with_episode_seed_defaults(
-            {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4},
-            seed=1001,
-        ),
+    "algo": "goal",
+    "scenario_params": producer_params(
+        expected_arm_scenarios(
+            [{"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4}],
+            cfg=(fixture_cfg := fixture_campaign([{"key": "sf", "algo": "goal"}])),
+            planner=fixture_cfg.planners[0],
+            kinematics="differential_drive",
+        )[0],
+        1001,
         algo="goal",
-        algo_config={},
-        horizon=None,
-        dt=None,
-        record_forces=False,
     ),
 }
 _VALID_ROW["config_hash"] = _config_hash(_VALID_ROW["scenario_params"])
@@ -607,7 +678,17 @@ def test_valid_integer_seed_row_is_accepted_by_both_identity_checks(tmp_path):
     """Control: the row used by the strict-seed tests is valid, so only its seed can fail."""
     path = _write_saved_rows(tmp_path, [_VALID_ROW])
     _validate_resume_job_identities(path, {("a", 1001)})
-    _validate_resume_runtime_identities(path, _RUNTIME_PLANNER, _RUNTIME_SCENARIOS)
+    _validate_resume_runtime_identities(
+        path,
+        {**_RUNTIME_PLANNER, "kinematics": "differential_drive"},
+        expected_arm_scenarios(
+            _RUNTIME_SCENARIOS,
+            cfg=(cfg := fixture_campaign([_RUNTIME_PLANNER])),
+            planner=cfg.planners[0],
+            kinematics="differential_drive",
+        ),
+        cfg=cfg,
+    )
 
 
 @pytest.mark.parametrize("bad_seed", ["1001", 1001.7], ids=["string", "fractional"])
@@ -623,4 +704,14 @@ def test_saved_row_with_non_integer_seed_cannot_pass_runtime_identity_check(tmp_
     """The runtime-identity preflight must refuse the same row instead of re-reading a coerced seed."""
     path = _write_saved_rows(tmp_path, [{**_VALID_ROW, "seed": bad_seed}])
     with pytest.raises(ResumeMismatchError, match="malformed resume job identity"):
-        _validate_resume_runtime_identities(path, _RUNTIME_PLANNER, _RUNTIME_SCENARIOS)
+        _validate_resume_runtime_identities(
+            path,
+            {**_RUNTIME_PLANNER, "kinematics": "differential_drive"},
+            expected_arm_scenarios(
+                _RUNTIME_SCENARIOS,
+                cfg=(cfg := fixture_campaign([_RUNTIME_PLANNER])),
+                planner=cfg.planners[0],
+                kinematics="differential_drive",
+            ),
+            cfg=cfg,
+        )

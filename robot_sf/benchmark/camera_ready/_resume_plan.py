@@ -27,9 +27,11 @@ if TYPE_CHECKING:
 
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._runtime_identity import (
+    ExpectedEpisodeIdentity,
     expected_arm_scenarios,
-    expected_runtime_identity,
+    expected_episode_identity,
     row_runtime_identity_errors,
+    selected_campaign_planner,
 )
 from robot_sf.benchmark.camera_ready._util import _utc_now
 from robot_sf.benchmark.utils import load_optional_json
@@ -252,14 +254,18 @@ def _build_verdict_str(
 
 
 def _validate_resume_runtime_identities(
-    episodes_path: Path, planner: dict[str, Any], scenarios: list[dict[str, Any]]
+    episodes_path: Path,
+    planner: dict[str, Any],
+    scenarios: list[dict[str, Any]],
+    *,
+    cfg: CampaignConfig | None = None,
 ) -> None:
     """Refuse contaminated complete or partial arms before any rows are reused."""
     scenarios_by_id = {
         str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
         for sc in scenarios
     }
-    expected_identities: dict[tuple[str, int], tuple[str, str]] = {}
+    expected_identities: dict[tuple[str, int], ExpectedEpisodeIdentity] = {}
     with episodes_path.open(encoding="utf-8") as handle:
         for line in handle:
             if not line.strip():
@@ -269,16 +275,43 @@ def _validate_resume_runtime_identities(
                 key = (str(record["scenario_id"]), _resume_job_identity_seed(record["seed"]))
                 scenario = scenarios_by_id[key[0]]
                 if key not in expected_identities:
-                    expected_identities[key] = expected_runtime_identity(planner, scenario, key[1])
-                errors = row_runtime_identity_errors(
-                    record, expected_identities[key], scenario=scenario, seed=key[1]
-                )
+                    expected_identities[key] = expected_episode_identity(
+                        planner, scenario, key[1], cfg=cfg
+                    )
+                errors = row_runtime_identity_errors(record, expected_identities[key])
             except (KeyError, TypeError, ValueError, OSError) as exc:
                 errors = {"expected_runtime_identity": str(exc)}
             if errors:
                 raise ResumeMismatchError(
                     f"resume runtime identity mismatch in {episodes_path}: {errors}"
                 )
+
+
+def _selected_resume_scenarios(
+    scenarios: list[dict[str, Any]],
+    planner: dict[str, Any],
+    *,
+    cfg: CampaignConfig | None,
+    kinematics: str,
+) -> list[dict[str, Any]]:
+    """Resolve selected arm inputs or refuse an unavailable campaign contract.
+
+    Returns:
+        Trusted scoped scenarios; saved rows never provide this input.
+    """
+    if cfg is None:
+        return scenarios
+    try:
+        return expected_arm_scenarios(
+            scenarios,
+            cfg=cfg,
+            planner=selected_campaign_planner(cfg, {**planner, "kinematics": kinematics}),
+            kinematics=kinematics,
+        )
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise ResumeMismatchError(
+            "resume runtime identity mismatch: selected arm unavailable"
+        ) from exc
 
 
 def build_resume_plan(
@@ -341,15 +374,9 @@ def build_resume_plan(
                 _validate_resume_job_identities(episodes_path, identities)
                 _validate_resume_runtime_identities(
                     episodes_path,
-                    planner,
-                    expected_arm_scenarios(
-                        scenarios,
-                        cfg=cfg,
-                        planner=next(p for p in cfg.planners if p.key == planner_key),
-                        kinematics=kinematics,
-                    )
-                    if cfg is not None
-                    else scenarios,
+                    {**planner, "kinematics": kinematics},
+                    _selected_resume_scenarios(scenarios, planner, cfg=cfg, kinematics=kinematics),
+                    cfg=cfg,
                 )
 
             episodes_remaining = max(0, expected_jobs - episodes_found)

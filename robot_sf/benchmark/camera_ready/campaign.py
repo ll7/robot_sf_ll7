@@ -860,8 +860,10 @@ def _resolve_campaign_planner_batch_result(
                 "key": planner.key,
                 "algo": planner.algo,
                 "algo_config_path": planner.algo_config_path,
+                "kinematics": run.kinematics,
             },
             run.scoped_scenarios,
+            cfg=context.cfg if context is not None else None,
         )
         logger.info(
             "Skipping completed campaign arm: planner={} kinematics={} episodes={}/{}",

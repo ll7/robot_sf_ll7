@@ -11,6 +11,8 @@ import pytest
 import yaml
 
 import robot_sf.benchmark.runtime_smoke_admission as admission_module
+from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
+from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.result_provenance import build_result_provenance_manifest
 from robot_sf.benchmark.runtime_smoke_admission import (
@@ -30,6 +32,7 @@ from robot_sf.benchmark.runtime_smoke_admission import (
 )
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.evidence.writers import review_marker_comment, write_json
+from tests.benchmark.campaign_identity_support import producer_params
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -80,7 +83,14 @@ def _fixture(
     manifest = tmp_path / RUNTIME_SMOKE_MANIFEST
     config = tmp_path / RUNTIME_SMOKE_CONFIG
     scenario = tmp_path / "configs/scenarios/single/francis2023_blind_corner.yaml"
-    _write_yaml(scenario, {"scenarios": [{"name": "runtime-smoke-scenario"}]})
+    _write_yaml(
+        scenario,
+        {
+            "scenarios": [
+                {"name": "runtime-smoke-scenario", "simulation_config": {"max_episode_steps": 400}}
+            ]
+        },
+    )
     schema = tmp_path / "robot_sf/benchmark/schemas/episode.schema.v1.json"
     _write_json(schema, {"$schema": "https://json-schema.org/draft/2020-12/schema"})
     planner_configs: dict[str, str] = {}
@@ -93,6 +103,11 @@ def _fixture(
         schedule, {"scenarios": {"runtime-smoke-scenario": {"recommended_horizon_steps": 400}}}
     )
     config_payload = {
+        "name": "runtime-smoke-fixture",
+        "scenario_matrix": scenario.relative_to(tmp_path).as_posix(),
+        "protocol_version": "0.0.9",
+        "record_forces": False,
+        "observation_mode": "socnav_state",
         "scenario_horizons": "configs/benchmarks/horizon_schedules/smoke.yaml",
         "scenario_horizons_sha256": sha256_file(schedule),
         "kinematics_matrix": ["differential_drive"],
@@ -100,7 +115,7 @@ def _fixture(
         "planners": [
             {
                 "key": key,
-                "algo": f"algo-{index}",
+                "algo": "goal",
                 "algo_config": planner_configs[key],
             }
             for index, key in enumerate(planners)
@@ -124,18 +139,26 @@ def _fixture(
     checkpoint_receipt = tmp_path / "output/release/checkpoints/smoke.json"
     _write_json(checkpoint_receipt, {"submit_safe": True})
     finished = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    cfg = load_campaign_config(config, repository_root=tmp_path)
+    selected = _load_campaign_scenarios(cfg, repository_root=tmp_path)
     runs: list[dict] = []
     planner_rows: list[dict] = []
     for index, planner in enumerate(planners):
         episodes = root / "runs" / f"{planner}__differential_drive" / "episodes.jsonl"
-        scenario_params = {
-            "algo": f"algo-{index}",
-            "algo_config_hash": _config_hash({"planner_key": planner}),
-        }
+        scoped = expected_arm_scenarios(
+            selected, cfg=cfg, planner=cfg.planners[index], kinematics="differential_drive"
+        )[0]
+        scenario_params = producer_params(
+            scoped,
+            seed,
+            algo="goal",
+            algo_config={"planner_key": planner},
+            observation_mode=cfg.observation_mode,
+        )
         config_hash = _config_hash(scenario_params)
         episode_row = {
             "scenario_params": scenario_params,
-            "algo": f"algo-{index}",
+            "algo": "goal",
             "episode_id": f"runtime-smoke-scenario--1003--{index}",
             "scenario_id": "runtime-smoke-scenario",
             "seed": seed,
@@ -149,9 +172,9 @@ def _fixture(
                 "config_hash": config_hash,
             },
             "algorithm_metadata": {
-                "algorithm": "ppo" if planner == "guarded_ppo" else f"algo-{index}",
-                "canonical_algorithm": f"algo-{index}",
-                "planner_contract": {"planner_id": f"algo-{index}"},
+                "algorithm": "ppo" if planner == "guarded_ppo" else "goal",
+                "canonical_algorithm": "goal",
+                "planner_contract": {"planner_id": "goal"},
                 "status": "ok",
             },
         }
@@ -166,9 +189,10 @@ def _fixture(
                     "name": "runtime-smoke-scenario",
                     "seeds": [seed],
                     "robot_config": {"type": "differential_drive"},
+                    "simulation_config": {"max_episode_steps": 400},
                 }
             ],
-            algo=f"algo-{index}",
+            algo="goal",
             algo_config_path=tmp_path / planner_configs[planner],
             benchmark_profile="baseline-safe",
             suite_key="francis2023",
@@ -198,7 +222,7 @@ def _fixture(
             {
                 "planner": {
                     "key": planner,
-                    "algo": f"algo-{index}",
+                    "algo": "goal",
                     "algo_config_path": planner_configs[planner],
                     "kinematics": "differential_drive",
                     "horizon": None,
@@ -267,7 +291,7 @@ def _fixture(
             "planners": [
                 {
                     "key": planner,
-                    "algo": f"algo-{index}",
+                    "algo": "goal",
                     "algo_config_path": planner_configs[planner],
                     "checkpoint_provenance": _fixture_checkpoint_provenance(planner, index),
                 }
@@ -316,7 +340,6 @@ def _fixture(
             "planner_rows": planner_rows,
         },
     )
-    monkeypatch.setattr(admission_module, "load_campaign_config", lambda _path: object())
     monkeypatch.setattr(
         admission_module,
         "validate_checkpoint_staging_receipt",
@@ -1327,13 +1350,19 @@ def test_runtime_smoke_accepts_authored_producer_paths_and_horizon(tmp_path, mon
     old = tmp_path / "configs/scenarios/single/francis2023_blind_corner.yaml"
     new = old.with_name("francis2023_blind_corner_release_0_0_8_v1.yaml")
     old.rename(new)
+    config_path = tmp_path / RUNTIME_SMOKE_CONFIG
+    config = yaml.safe_load(config_path.read_bytes())
+    config["scenario_matrix"] = new.relative_to(tmp_path).as_posix()
+    _write_yaml(config_path, config)
     manifest_path = tmp_path / RUNTIME_SMOKE_MANIFEST
     manifest = yaml.safe_load(manifest_path.read_bytes())
+    manifest["campaign_config_sha256"] = sha256_file(config_path)
     manifest["scenario"]["matrix_path"] = "../../scenarios/single/" + new.name
     _write_yaml(manifest_path, manifest)
     for path in (result, root / "campaign_manifest.json", root / "manifest.json"):
         payload = json.loads(path.read_bytes())
         payload["benchmark_release"]["manifest_sha256"] = sha256_file(manifest_path)
+        payload["benchmark_release"]["canonical_campaign_config_sha256"] = sha256_file(config_path)
         if path.name == "campaign_manifest.json":
             payload["scenario_matrix"] = new.relative_to(tmp_path).as_posix()
         if path == result:

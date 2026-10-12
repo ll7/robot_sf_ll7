@@ -37,6 +37,7 @@ from robot_sf.benchmark.camera_ready._preflight import (
     _build_preflight_preview_payload,
     _build_preflight_validate_payload,
 )
+from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
 from robot_sf.benchmark.camera_ready._util import (
     _kinematics_matrix_or_default,
     _stable_json_bytes,
@@ -70,10 +71,6 @@ from robot_sf.benchmark.camera_ready_campaign import (
     write_campaign_report,
 )
 from robot_sf.benchmark.campaign.campaign_runtime_preflight import CampaignScenarioMapPreflightError
-from robot_sf.benchmark.map_runner.map_runner_identity import (
-    _scenario_identity_payload,
-    _scenario_with_episode_seed_defaults,
-)
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile,
 )
@@ -90,6 +87,7 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
+from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
 
 
 @pytest.fixture(autouse=True)
@@ -400,31 +398,39 @@ def test_campaign_integrity_accepts_exact_unique_coverage(tmp_path: Path) -> Non
     rows = [
         {
             "scenario_id": "smoke",
-            "seed": 111,
+            "seed": 1001,
             "config_hash": "scenario-config-smoke",
             "git_hash": "commit-a",
             "result_provenance": {
                 "scenario_id": "smoke",
-                "seed": 111,
+                "seed": 1001,
                 "config_hash": "scenario-config-smoke",
                 "repo_commit": "commit-a",
             },
         },
         {
             "scenario_id": "corner",
-            "seed": 222,
+            "seed": 1002,
             "config_hash": "scenario-config-corner",
             "git_hash": "commit-a",
             "result_provenance": {
                 "scenario_id": "corner",
-                "seed": 222,
+                "seed": 1002,
                 "config_hash": "scenario-config-corner",
                 "repo_commit": "commit-a",
             },
         },
     ]
     for row in rows:
-        row["scenario_params"] = {"algo": "goal", "algo_config_hash": _config_hash({})}
+        cfg = fixture_campaign([{"key": "goal", "algo": "goal"}])
+        scoped = expected_arm_scenarios(
+            [{"id": row["scenario_id"]}],
+            cfg=cfg,
+            planner=cfg.planners[0],
+            kinematics="differential_drive",
+        )[0]
+        row["algo"] = "goal"
+        row["scenario_params"] = producer_params(scoped, row["seed"], algo="goal")
         row["config_hash"] = _config_hash(row["scenario_params"])
         row["result_provenance"]["config_hash"] = row["config_hash"]
     episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
@@ -437,10 +443,11 @@ def test_campaign_integrity_accepts_exact_unique_coverage(tmp_path: Path) -> Non
                 "summary": {"episodes_total": 2},
             }
         ],
-        scenarios=[{"id": "smoke", "seeds": [111]}, {"id": "corner", "seeds": [222]}],
-        resolved_seeds=[111, 222],
+        scenarios=[{"id": "smoke", "seeds": [1001]}, {"id": "corner", "seeds": [1002]}],
+        resolved_seeds=[1001, 1002],
         campaign_root=tmp_path,
         campaign_manifest={"git": {"commit": "commit-a"}},
+        cfg=cfg,
     )
     assert verdict["status"] == "valid"
     assert verdict["blockers"] == []
@@ -456,19 +463,27 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
     rows = [
         {
             "scenario_id": "smoke",
-            "seed": 111,
+            "seed": 1001,
             "config_hash": "scenario-config-smoke",
             "git_hash": "commit-a",
             "result_provenance": {
                 "scenario_id": "smoke",
-                "seed": 111,
+                "seed": 1001,
                 "config_hash": "scenario-config-smoke",
                 "repo_commit": "commit-a",
             },
         }
     ]
     for row in rows:
-        row["scenario_params"] = {"algo": "goal", "algo_config_hash": _config_hash({})}
+        cfg = fixture_campaign([{"key": "goal", "algo": "goal"}])
+        scoped = expected_arm_scenarios(
+            [{"id": row["scenario_id"]}],
+            cfg=cfg,
+            planner=cfg.planners[0],
+            kinematics="differential_drive",
+        )[0]
+        row["algo"] = "goal"
+        row["scenario_params"] = producer_params(scoped, row["seed"], algo="goal")
         row["config_hash"] = _config_hash(row["scenario_params"])
         row["result_provenance"]["config_hash"] = row["config_hash"]
     episodes_path.write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
@@ -486,10 +501,11 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
                 "summary": {"episodes_total": 1},
             }
         ],
-        scenarios=[{"id": "smoke", "seeds": [111]}],
-        resolved_seeds=[111],
+        scenarios=[{"id": "smoke", "seeds": [1001]}],
+        resolved_seeds=[1001],
         campaign_root=relocated_root,
         campaign_manifest={"git": {"commit": "commit-a"}},
+        cfg=cfg,
     )
     assert verdict["status"] == "valid"
     assert verdict["blockers"] == []
@@ -5429,13 +5445,8 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
 
     def _fake_run_batch(*args, **kwargs):
         """Write an episode record with failed status despite successful metrics."""
-        params = _scenario_identity_payload(
-            _scenario_with_episode_seed_defaults(args[0][0], seed=1001),
-            algo="goal",
-            algo_config={},
-            horizon=None,
-            dt=None,
-            record_forces=False,
+        params = producer_params(
+            args[0][0], 1001, algo="goal", **{k: v for k, v in kwargs.items() if k != "algo"}
         )
         out_path = Path(kwargs["out_path"])
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -5444,6 +5455,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                 {
                     "episode_id": "e-goal-0",
                     "scenario_id": "smoke",
+                    "algo": "goal",
                     "seed": 1001,
                     "config_hash": _config_hash(params),
                     "git_hash": _git_hash_fallback(),

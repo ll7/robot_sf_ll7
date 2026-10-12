@@ -273,8 +273,8 @@ def test_base_contact_table_keeps_guard_fields_na() -> None:
 
 
 @pytest.mark.parametrize("arm", [GUARDED_ARM, BASE_ARM])
-def test_arm_passes_pinned_runtime_identity_to_integrity(tmp_path, monkeypatch, arm):
-    """The published-arm caller must admit a coherent dev row at its integrity boundary."""
+def test_arm_refuses_pinned_policy_without_complete_campaign_identity(tmp_path, monkeypatch, arm):
+    """A policy hash alone cannot admit an under-specified historical runtime."""
     import json
 
     import scripts.analysis.analyze_guarded_ppo_obstacle_trade_issue_9480 as analyzer
@@ -319,19 +319,7 @@ def test_arm_passes_pinned_runtime_identity_to_integrity(tmp_path, monkeypatch, 
         analyzer, "_read_json", lambda p: summary if p.name == "summary.json" else {}
     )
     monkeypatch.setattr(analyzer, "EXPECTED_SEEDS", (1001,))
-    original = analyzer._require_equal
-
-    class IntegrityBoundaryReached(Exception):
-        pass
-
-    def check_boundary(actual, wanted, label):
-        original(actual, wanted, label)
-        if label == f"{arm} canonical campaign integrity":
-            raise IntegrityBoundaryReached
-
-    # Stop after the real checker accepts, before unrelated full-release provenance checks.
-    monkeypatch.setattr(analyzer, "_require_equal", check_boundary)
-    with pytest.raises(IntegrityBoundaryReached):
+    with pytest.raises(ValueError, match="canonical campaign integrity mismatch"):
         analyzer._validate_arm(
             tmp_path,
             arm=arm,

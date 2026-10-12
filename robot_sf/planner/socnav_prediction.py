@@ -66,9 +66,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._bound_obstacle_lines: list = []
         self._static_obstacle_geometry: MultiLineString | None = None
         self._prediction_drive_settings: DifferentialDriveSettings | None = None
-        self._prediction_robot_radius: float | None = None
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
+        self._prediction_robot_radius: float | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
         # Issue #6190: structured foresight-model-load provenance so a silent
         # constant-velocity fallback is observable and checker-actionable. The

@@ -1291,6 +1291,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_traj: np.ndarray,
         future_peds: np.ndarray,
         mask: np.ndarray,
+        speeds: np.ndarray,
     ) -> bool:
         """Veto physical rollouts spending the configured pedestrian surface margin.
 
@@ -1310,9 +1311,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             + float(self.config.predictive_pedestrian_radius)
             + float(self.config.predictive_safe_distance)
         )
+        moving_margin = center_margin + float(self.config.predictive_speed_clearance_gain) * np.abs(
+            speeds
+        )
         valid = future_peds[mask > 0.5, :horizon]
         if valid.size and not np.all(
-            np.linalg.norm(valid - local_traj[None, :horizon], axis=-1) >= center_margin
+            np.linalg.norm(valid - local_traj[None, :horizon], axis=-1) >= moving_margin[:horizon]
         ):
             return False
         robot, _, pedestrians = self._socnav_fields(observation)
@@ -1328,7 +1332,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         observed_future = relative[:, None, :] + velocities[:, None, :] * times[None, :, None]
         return bool(
             np.all(np.linalg.norm(relative, axis=-1) >= center_margin)
-            and np.all(np.linalg.norm(observed_future - local_traj[None], axis=-1) >= center_margin)
+            and np.all(np.linalg.norm(observed_future - local_traj[None], axis=-1) >= moving_margin)
         )
 
     def _score_action(
@@ -1351,7 +1355,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
         if self._static_footprint_clearance(observation, robot_traj) <= 0.0:
             return float("inf")
-        if not self._pedestrian_margin_clear(observation, robot_traj, future_peds, mask):
+        if not self._pedestrian_margin_clear(
+            observation, robot_traj, future_peds, mask, np.full(len(robot_traj), v)
+        ):
             return float("inf")
 
         valid_idx = np.where(mask > 0.5)[0]
@@ -1492,7 +1498,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_headings = local_headings[:horizon]
         if self._static_footprint_clearance(observation, local_traj) <= 0.0:
             return float("inf")
-        if not self._pedestrian_margin_clear(observation, local_traj, future_peds, mask):
+        speeds = np.repeat([v for v, _ in sequence], segment_steps)[:horizon]
+        if not self._pedestrian_margin_clear(observation, local_traj, future_peds, mask, speeds):
             return float("inf")
 
         radius_margin = (

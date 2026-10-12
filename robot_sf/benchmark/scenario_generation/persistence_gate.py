@@ -16,14 +16,20 @@ unregistered (non-frozen) configuration.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import math
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.step_trace_comparator import (
+    canonical_step_trace_digest,
+    find_first_trace_difference,
+)
 from robot_sf.errors import RobotSfError
 
 if TYPE_CHECKING:
@@ -71,8 +77,13 @@ def _verify_schema(record: Mapping[str, Any]) -> None:
     global _SCHEMA_VALIDATOR
     if _SCHEMA_VALIDATOR is None:
         _SCHEMA_VALIDATOR = Draft202012Validator(load_persistence_schema())
+    validator = _SCHEMA_VALIDATOR
+    if record.get("schema_version") == "generated_scenario_persistence.v2":
+        validator = Draft202012Validator(
+            json.loads((_SCHEMA_PATH.parent / "generated_scenario_persistence.v2.json").read_text())
+        )
     errors = sorted(
-        _SCHEMA_VALIDATOR.iter_errors(dict(record)),
+        validator.iter_errors(dict(record)),
         key=lambda error: list(error.absolute_path),
     )
     if errors:
@@ -97,6 +108,7 @@ def compute_persistence_record(
     perturbation_grid: Mapping[str, Any],
     cell_verdicts: Sequence[Mapping[str, Any]],
     missing_cell_reasons: Sequence[Mapping[str, Any]] | None = None,
+    replay_scope: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble a schema-valid ``generated_scenario_persistence.v1`` record.
 
@@ -119,6 +131,7 @@ def compute_persistence_record(
         perturbation_grid: timing_offsets_s and speed_deltas_m_s lists.
         cell_verdicts: One verdict per preregistered grid cell.
         missing_cell_reasons: Optional per-cell exclusion reasons.
+        replay_scope: Explicit verified window scope; emits persistence v2 when supplied.
 
     Returns:
         A schema-valid persistence record with the promotion verdict filled in.
@@ -168,6 +181,9 @@ def compute_persistence_record(
             missing_cell_reasons=missing_cell_reasons,
         ),
     }
+    if replay_scope is not None:
+        record["schema_version"] = "generated_scenario_persistence.v2"
+        record["replay_scope"] = dict(replay_scope)
     _verify_schema(record)
     return record
 
@@ -294,6 +310,328 @@ def _episode_digest(episode: Mapping[str, Any]) -> str:
         The deterministic identity digest.
     """
     return _stable_digest({field: episode.get(field) for field in _REQUIRED_EPISODE_FIELDS})
+
+
+def extract_episode_steps(episode: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return detailed frames, allowing the native integer episode step count."""
+    steps = episode.get("steps")
+    if not isinstance(steps, list):
+        meta = episode.get("algorithm_metadata")
+        trace = meta.get("simulation_step_trace") if isinstance(meta, dict) else None
+        steps = trace.get("steps") if isinstance(trace, dict) else None
+    return steps if isinstance(steps, list) else []
+
+
+def resolve_bound_window_artifact(root: Path, binding: Mapping[str, str]) -> Path:
+    """Return a verified repository-relative artifact without path escape."""
+    relative = Path(binding["path"])
+    path = (root / relative).resolve()
+    if relative.is_absolute() or not path.is_relative_to(root) or not path.is_file():
+        raise ScenarioPersistenceValidationError(
+            "window artifact must be a file under receipt root"
+        )
+    if hashlib.sha256(path.read_bytes()).hexdigest() != binding["sha256"]:
+        raise ScenarioPersistenceValidationError(f"window artifact digest mismatch: {relative}")
+    return path
+
+
+def _read_bound_json(root: Path, binding: Mapping[str, str]) -> dict[str, Any]:
+    """Return one hash-bound JSON or compressed native JSONL episode."""
+    path = resolve_bound_window_artifact(root, binding)
+    data = path.read_bytes()
+    if path.suffix == ".gz":
+        data = gzip.decompress(data)
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        raise ScenarioPersistenceValidationError("window artifact must contain one object")
+    return value
+
+
+def _window_event(steps: Sequence[Mapping[str, Any]], source: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the recorded near-miss/contact from geometry and source radii."""
+    radii = source["effective_physics"]["clearance_definition"]
+    radius = radii["robot_radius_m"] + radii["pedestrian_radius_m"]
+    threshold = source["metric_parameters"]["threshold_profile"]["near_miss_distance_m"]
+    clearances = [
+        min(math.dist(s["robot"]["position"], p["position"]) for p in s["pedestrians"]) - radius
+        for s in steps
+    ]
+    near = [s for s, c in zip(steps, clearances, strict=True) if 0 <= c < threshold]
+    contacts = [s for s in steps if any(s.get("collision", {}).values())]
+    minimum = steps[clearances.index(min(clearances))]
+    return {
+        "near_miss_samples": len(near),
+        "first_near_miss_step": near[0]["step"] if near else None,
+        "first_contact_step": contacts[0]["step"] if contacts else None,
+        "min_clearance_m": min(clearances),
+        "time_s": minimum["time_s"],
+        "location": minimum["robot"]["position"],
+    }
+
+
+def _verify_checkpoint_runtime_code(
+    root: Path, receipt: dict[str, Any], checkpoint: dict[str, Any]
+) -> None:
+    """Bind the supported checkpoint inventory to recorded and current runtime code."""
+    code_files = [
+        "robot_sf/benchmark/scenario_generation/continuation.py",
+        "robot_sf/benchmark/map_runner/map_runner_episode.py",
+        "robot_sf/planner/socnav_social_force.py",
+        "robot_sf/planner/socnav.py",
+        "robot_sf/gym_env/robot_env.py",
+        "robot_sf/robot/robot_state.py",
+    ]
+    for revision in receipt["parity_proof"]["replay_commits"]:
+        code = {}
+        for name in code_files:
+            historical = subprocess.run(
+                ["git", "show", f"{revision}:{name}"], cwd=root, capture_output=True, check=False
+            )
+            if historical.returncode:
+                raise ScenarioPersistenceValidationError("window replay code revision unavailable")
+            code[name] = hashlib.sha256(historical.stdout).hexdigest()
+            if code[name] != hashlib.sha256((root / name).read_bytes()).hexdigest():
+                raise ScenarioPersistenceValidationError("window runtime code changed since replay")
+        fingerprint = hashlib.sha256(json.dumps(code, sort_keys=True).encode()).hexdigest()
+        if fingerprint != checkpoint["compatibility"]["code_revision"]:
+            raise ScenarioPersistenceValidationError(
+                "window checkpoint/replay code binding mismatch"
+            )
+
+
+def _verify_model_bindings(root: Path, receipt: dict[str, Any]) -> None:
+    """Verify supported model/config/map bytes against their recorded source revision."""
+    planner = receipt["planner"]
+    bindings = receipt["bindings"]
+    model = planner["model"]
+    if (
+        planner["id"] != "social_force"
+        or model["kind"] != "analytic"
+        or set(model["files"])
+        != {
+            "robot_sf/baselines/social_force.py",
+            "robot_sf/planner/socnav.py",
+            "robot_sf/planner/socnav_social_force.py",
+        }
+    ):
+        raise ScenarioPersistenceValidationError(
+            "window receipt v1 supports the analytic social-force model"
+        )
+    for name, digest in model["files"].items():
+        resolve_bound_window_artifact(root, {"path": name, "sha256": digest})
+    # Visible input bytes alone do not prove their source-revision provenance.
+    for binding in [
+        bindings["map"],
+        bindings["planner_config"],
+        *[{"path": n, "sha256": h} for n, h in model["files"].items()],
+    ]:
+        historical = subprocess.run(
+            ["git", "show", f"{receipt['source_commit']}:{binding['path']}"],
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+        if (
+            historical.returncode
+            or hashlib.sha256(historical.stdout).hexdigest() != binding["sha256"]
+        ):
+            raise ScenarioPersistenceValidationError(
+                "window input is not bound to its source commit"
+            )
+    model_digest = (
+        _stable_digest(model["files"])
+        if model["kind"] == "analytic"
+        else next(iter(model["files"].values()))
+        if len(model["files"]) == 1
+        else None
+    )
+    if model_digest != model["digest"]:
+        raise ScenarioPersistenceValidationError("window model digest mismatch")
+
+
+def _verify_window_runs(
+    root: Path, receipt: dict[str, Any], source: dict[str, Any], expected: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return both native replays after binding inputs, run identities and every channel."""
+    bindings = receipt["bindings"]
+    planner = receipt["planner"]
+    w = receipt["window"]
+    proof = receipt["parity_proof"]
+    replays = [_read_bound_json(root, b) for b in bindings["replays"]]
+    manifests = [_read_bound_json(root, b) for b in bindings["replay_manifests"]]
+    if bindings["replays"][0] == bindings["replays"][1]:
+        raise ScenarioPersistenceValidationError("window requires two distinct replay artifacts")
+    if manifests[0]["run"]["run_id"] == manifests[1]["run"]["run_id"]:
+        raise ScenarioPersistenceValidationError(
+            "window requires independent replay run identities"
+        )
+    for index, row in enumerate([source, *replays]):
+        if (
+            row.get("algo") != planner["id"]
+            or row["algorithm_metadata"].get("config_hash") != planner["effective_config_hash"]
+            or row["algorithm_metadata"].get("status") != "ok"
+            or row.get("integrity", {}).get("effective_view", {}).get("degraded") is not False
+        ):
+            raise ScenarioPersistenceValidationError("window planner/config/execution mismatch")
+        if index == 0:
+            continue
+        manifest = manifests[index - 1]
+        inputs = manifest["inputs"]
+        if (
+            inputs["scenario_matrix"]["sha256"] != bindings["scenario"]["sha256"]
+            or inputs["algo_config"]["sha256"] != bindings["planner_config"]["sha256"]
+            or manifest["run"]["repo_commit"] != row["git_hash"]
+            or manifest["rows"][0]["episode_id"] != row["episode_id"]
+            or not any(
+                r.get("role") == "map_file" and r.get("sha256") == bindings["map"]["sha256"]
+                for r in row.get("runtime_input_records", [])
+            )
+        ):
+            raise ScenarioPersistenceValidationError(
+                "window replay input-manifest binding mismatch"
+            )
+        continuation = row["algorithm_metadata"].get("generated_window_continuation", {})
+        if (
+            row["seed"] != receipt["seed"]
+            or row["git_hash"] != proof["replay_commits"][index - 1]
+            or continuation.get("checkpoint_sha256") != bindings["checkpoint"]["sha256"]
+            or continuation.get("source_episode_id") != source["episode_id"]
+            or continuation.get("start_step") != w["start_step"]
+            or continuation.get("window_steps") != w["steps"]
+        ):
+            raise ScenarioPersistenceValidationError("window replay provenance mismatch")
+        actual = extract_episode_steps(row)
+        difference = find_first_trace_difference(expected, actual)
+        if difference is not None:
+            raise ScenarioPersistenceValidationError(f"window replay parity failed: {difference}")
+    return replays
+
+
+def verify_window_replay_receipt(receipt_path: Path, *, repo_root: Path) -> dict[str, Any]:
+    """Verify a source-bound window from actual artifacts, not an asserted pass.
+
+    Two distinct replay records must reproduce every source-window channel.
+    Episode IDs remain distinct; this never asserts full-episode termination or
+    perturbation persistence. Missing/bad bindings or parity raise before admission.
+
+    Returns:
+        Verified receipt plus independent exact-replay and critical-event blocks.
+    """
+    import yaml  # noqa: PLC0415 - window materialization dependency only
+
+    from robot_sf.benchmark.scenario_generation.catalog_schema import validate_catalog_entry  # noqa: PLC0415
+    from robot_sf.benchmark.scenario_generation.continuation import read_window_checkpoint  # noqa: PLC0415
+
+    root = repo_root.resolve()
+    receipt = json.loads(receipt_path.read_text())
+    schema = json.loads((_SCHEMA_PATH.parent / "source_bound_window_replay.v1.json").read_text())
+    errors = list(Draft202012Validator(schema).iter_errors(receipt))
+    if errors:
+        raise ScenarioPersistenceValidationError(
+            f"window parity proof/schema invalid: {errors[0].message}"
+        )
+    bindings = receipt["bindings"]
+    source = _read_bound_json(root, bindings["source_episode"])
+    entry = _read_bound_json(root, bindings["catalog_entry"])
+    validate_catalog_entry(entry)
+    scenario_path = resolve_bound_window_artifact(root, bindings["scenario"])
+    document = yaml.safe_load(scenario_path.read_text())
+    if not isinstance(document, dict) or len(document.get("scenarios", [])) != 1:
+        raise ScenarioPersistenceValidationError("window scenario must contain exactly one case")
+    scenario = document["scenarios"][0]
+    checkpoint_path = resolve_bound_window_artifact(root, bindings["checkpoint"])
+    checkpoint = read_window_checkpoint(
+        checkpoint_path, expected_sha256=bindings["checkpoint"]["sha256"]
+    )
+    map_path = resolve_bound_window_artifact(root, bindings["map"])
+    resolve_bound_window_artifact(root, bindings["planner_config"])
+    runtime = scenario.get("generated_replay", {})
+    w = receipt["window"]
+    source_identity = entry["source_episode"]
+    expected_runtime = {
+        "schema_version": "robot_sf.generated_replay_runtime.v2",
+        "checkpoint_file": runtime.get("checkpoint_file"),
+        "checkpoint_sha256": bindings["checkpoint"]["sha256"],
+        "start_step": w["start_step"],
+        "window_steps": w["steps"],
+    }
+    checks = [
+        source["git_hash"] == receipt["source_commit"],
+        source["config_hash"] == receipt["source_config_hash"],
+        source["seed"]
+        == receipt["seed"]
+        == source_identity["source_seed"]
+        == checkpoint["source_seed"],
+        source["episode_id"] == source_identity["episode_id"] == checkpoint["source_episode_id"],
+        bindings["map"]["path"] == source_identity["source_map"],
+        checkpoint["compatibility"]["map_sha256"] == bindings["map"]["sha256"],
+        source.get("selected_map_identity", {}).get("sha256") == bindings["map"]["sha256"],
+        runtime == expected_runtime,
+        (scenario_path.parent / str(runtime.get("checkpoint_file"))).resolve() == checkpoint_path,
+        (scenario_path.parent / str(scenario.get("map_file"))).resolve() == map_path,
+        scenario["seeds"] == [receipt["seed"]],
+        checkpoint["start_step"] == w["start_step"],
+        checkpoint["window_steps"] == w["steps"],
+        checkpoint["compatibility"]["dt_s"] == w["dt_s"],
+        math.isclose(w["start_s"], w["start_step"] * w["dt_s"], abs_tol=1e-9),
+        math.isclose(w["end_s"], (w["start_step"] + w["steps"]) * w["dt_s"], abs_tol=1e-9),
+        math.isclose(entry["segment"]["window_start_s"], w["start_s"], abs_tol=1e-9),
+        math.isclose(entry["segment"]["window_end_s"], w["end_s"], abs_tol=1e-9),
+        scenario["simulation_config"]["max_episode_steps"] == checkpoint["original_budget_steps"],
+    ]
+    if not all(checks):
+        raise ScenarioPersistenceValidationError(
+            "window source/scenario/checkpoint binding mismatch"
+        )
+    _verify_checkpoint_runtime_code(root, receipt, checkpoint)
+    _verify_model_bindings(root, receipt)
+    trace = extract_episode_steps(source)
+    expected = trace[w["start_step"] : w["start_step"] + w["steps"]]
+    proof = receipt["parity_proof"]
+    digest = canonical_step_trace_digest(expected)
+    if (
+        len(expected) != w["steps"]
+        or digest != proof["source_window_trace_sha256"]
+        or canonical_step_trace_digest(trace) != proof["source_full_trace_sha256"]
+    ):
+        raise ScenarioPersistenceValidationError("window source trace/bounds mismatch")
+    if [s["step"] for s in expected] != list(
+        range(w["start_step"], w["start_step"] + w["steps"])
+    ) or not math.isclose(expected[-1]["time_s"], w["end_s"], abs_tol=1e-9):
+        raise ScenarioPersistenceValidationError("window absolute step/time mismatch")
+    replays = _verify_window_runs(root, receipt, source, expected)
+    event = _window_event(expected, source)
+    if not event["near_miss_samples"] and event["first_contact_step"] is None:
+        raise ScenarioPersistenceValidationError("window has no verified critical event")
+    critical = assess_critical_event_reproduction(
+        event_type="min_clearance",
+        source_event_time_s=event["time_s"],
+        source_event_location=event["location"],
+        replayed_event_time_s=event["time_s"],
+        replayed_event_location=event["location"],
+    )
+    return {
+        "receipt": receipt,
+        "original_budget_steps": checkpoint["original_budget_steps"],
+        "source_scenario_id": source["scenario_id"],
+        "scenario_id": entry["scenario_id"],
+        "source_episode_id": source["episode_id"],
+        "replay_scope": {
+            "kind": "source_bound_window",
+            "receipt_sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            "window": w,
+            "source_episode_id": source["episode_id"],
+            "replay_episode_ids": [r["episode_id"] for r in replays],
+        },
+        "replay_episode_ids": [r["episode_id"] for r in replays],
+        "exact_replay": {
+            "status": PASS,
+            "divergence_reason": "two source-bound window traces matched",
+            "replay_digest": digest,
+        },
+        "critical_event_reproduced": critical,
+        "event": event,
+    }
 
 
 def assess_critical_event_reproduction(

@@ -1,0 +1,411 @@
+{
+  "$id": "generated_scenario_persistence.v2.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Evidence gate between a generated scenario candidate and a reusable critical scenario. Exact replay, critical-event reproduction, and perturbation persistence are reported independently; promotion fails closed on any fail/unknown required status.",
+  "properties": {
+    "commit_hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "config": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "config"
+      ],
+      "type": "object"
+    },
+    "config": {
+      "additionalProperties": false,
+      "properties": {
+        "config_hash": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "config_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "frozen": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "config_id",
+        "frozen"
+      ],
+      "type": "object"
+    },
+    "critical_event_reproduced": {
+      "additionalProperties": false,
+      "properties": {
+        "event_type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "location_tolerance_m": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "observed_location_delta_m": {
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "observed_time_delta_s": {
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown"
+          ]
+        },
+        "time_tolerance_s": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "event_type",
+        "time_tolerance_s",
+        "location_tolerance_m",
+        "observed_time_delta_s",
+        "observed_location_delta_m"
+      ],
+      "type": "object"
+    },
+    "exact_replay": {
+      "additionalProperties": false,
+      "properties": {
+        "divergence_reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "replay_digest": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "divergence_reason",
+        "replay_digest"
+      ],
+      "type": "object"
+    },
+    "generated_scenario": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_entry_digest": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "catalog_schema_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog_schema_version",
+        "scenario_id"
+      ],
+      "type": "object"
+    },
+    "perturbation_persistence": {
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "speed_delta_m_s": {
+                "type": "number"
+              },
+              "timing_offset_s": {
+                "type": "number"
+              },
+              "verdict": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "timing_offset_s",
+              "speed_delta_m_s",
+              "verdict"
+            ],
+            "type": "object"
+          },
+          "minItems": 0,
+          "type": "array"
+        },
+        "grid": {
+          "additionalProperties": false,
+          "properties": {
+            "speed_deltas_m_s": {
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "timing_offsets_s": {
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "timing_offsets_s",
+            "speed_deltas_m_s"
+          ],
+          "type": "object"
+        },
+        "missing_cell_reasons": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "speed_delta_m_s": {
+                "type": "number"
+              },
+              "timing_offset_s": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "timing_offset_s",
+              "speed_delta_m_s",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "persistence_interval": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "persistence_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "grid",
+        "cells",
+        "persistence_rate",
+        "persistence_interval",
+        "missing_cell_reasons"
+      ],
+      "type": "object"
+    },
+    "planner": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "promotion": {
+      "additionalProperties": false,
+      "properties": {
+        "exclusion_reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "required_statuses": {
+          "items": {
+            "enum": [
+              "exact_replay",
+              "critical_event_reproduced",
+              "perturbation_persistence"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "verdict": {
+          "enum": [
+            "promote",
+            "reject",
+            "blocked"
+          ]
+        }
+      },
+      "required": [
+        "verdict",
+        "exclusion_reason",
+        "required_statuses"
+      ],
+      "type": "object"
+    },
+    "replay_scope": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "source_bound_window"
+        },
+        "receipt_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "replay_episode_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "source_episode_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "window": {
+          "additionalProperties": false,
+          "properties": {
+            "dt_s": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "end_s": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "start_s": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "start_step": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "steps": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "stop_kind": {
+              "const": "window_censored"
+            }
+          },
+          "required": [
+            "start_step",
+            "steps",
+            "start_s",
+            "end_s",
+            "dt_s",
+            "stop_kind"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "receipt_sha256",
+        "window",
+        "source_episode_id",
+        "replay_episode_ids"
+      ],
+      "type": "object"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "generated_scenario_persistence.v2"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "source_episode": {
+      "additionalProperties": false,
+      "properties": {
+        "episode_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "replay_digest": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_map": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_seed": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "episode_id",
+        "source_seed",
+        "source_map",
+        "replay_digest"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "source_episode",
+    "generated_scenario",
+    "planner",
+    "seed",
+    "config",
+    "commit_hashes",
+    "exact_replay",
+    "critical_event_reproduced",
+    "perturbation_persistence",
+    "promotion",
+    "replay_scope"
+  ],
+  "title": "RobotSF Generated Scenario Persistence (v1)",
+  "type": "object"
+}

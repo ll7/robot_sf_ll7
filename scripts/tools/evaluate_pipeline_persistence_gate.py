@@ -62,6 +62,8 @@ from robot_sf.benchmark.scenario_generation.persistence_gate import (
     assess_exact_replay,
     compute_persistence_record,
     evaluate_perturbation_grid,
+    extract_episode_steps,
+    verify_window_replay_receipt,
 )
 
 if TYPE_CHECKING:
@@ -122,10 +124,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Hash for the config bytes (default: computed from --config).",
     )
+    parser.add_argument(
+        "--window-receipt", type=Path, help="Hash-bound two-replay continuation receipt."
+    )
+    parser.add_argument("--receipt-root", type=Path, default=Path(__file__).resolve().parents[2])
     return parser
 
 
-def evaluate_pipeline_candidates(
+def evaluate_pipeline_candidates(  # noqa: PLR0913 - retain public arguments plus opt-in window receipt
     manifest_path: Path | None,
     candidate_path: Path | None,
     episodes_path: Path | None,
@@ -134,6 +140,8 @@ def evaluate_pipeline_candidates(
     replay_results_path: Path | None = None,
     commit_hash: str | None = None,
     config_hash: str | None = None,
+    window_receipt_path: Path | None = None,
+    receipt_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Load pipeline artifacts and produce persistence records for each candidate.
 
@@ -159,6 +167,13 @@ def evaluate_pipeline_candidates(
     episodes_index = _build_episodes_index(resolved_episodes)
 
     replay_data = _load_replay_results(replay_results_path)
+    window_verification = (
+        verify_window_replay_receipt(
+            window_receipt_path, repo_root=receipt_root or Path(__file__).resolve().parents[2]
+        )
+        if window_receipt_path is not None
+        else None
+    )
 
     records: list[dict[str, Any]] = []
 
@@ -172,6 +187,7 @@ def evaluate_pipeline_candidates(
                 episodes_index=episodes_index,
                 replay_data=replay_data,
                 entry_count=len(entries),
+                window_verification=window_verification,
             )
         )
 
@@ -242,6 +258,7 @@ def _evaluate_one_candidate(
     episodes_index: Mapping[str, dict[str, Any]],
     replay_data: Mapping[str, Any] | None,
     entry_count: int,
+    window_verification: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a persistence record for one catalog entry, failing closed on missing data."""
 
@@ -257,12 +274,24 @@ def _evaluate_one_candidate(
         raise FileNotFoundError(
             f"episode {episode_id!r} for candidate {scenario_id!r} not found in episodes data"
         )
-    _validate_trace_identity(
-        trace_episode,
-        episode_id=episode_id,
-        source_seed=source_seed,
-        source_map=source_map,
-    )
+    if window_verification is None:
+        _validate_trace_identity(
+            trace_episode,
+            episode_id=episode_id,
+            source_seed=source_seed,
+            source_map=source_map,
+        )
+    else:
+        receipt = window_verification["receipt"]
+        if (
+            trace_episode.get("episode_id") != episode_id
+            or trace_episode.get("seed") != source_seed
+            or trace_episode.get("git_hash") != receipt["source_commit"]
+            or trace_episode.get("config_hash") != receipt["source_config_hash"]
+            or trace_episode.get("selected_map_identity", {}).get("sha256")
+            != receipt["bindings"]["map"]["sha256"]
+        ):
+            raise ValueError("native source identity does not match the verified window receipt")
 
     replayed, replay_error, replay_info = _load_replay_info(
         replay_data,
@@ -290,6 +319,19 @@ def _evaluate_one_candidate(
         time_tolerance_s=float(critical_config["time_tolerance_s"]),
         location_tolerance_m=float(critical_config["location_tolerance_m"]),
     )
+    if window_verification is not None:
+        from robot_sf.benchmark.step_trace_comparator import canonical_step_trace_digest
+
+        receipt = window_verification["receipt"]
+        if (
+            window_verification["scenario_id"] != scenario_id
+            or window_verification["source_episode_id"] != episode_id
+            or canonical_step_trace_digest(_extract_steps(trace_episode))
+            != receipt["parity_proof"]["source_full_trace_sha256"]
+        ):
+            raise ValueError("window receipt does not bind this catalog/source trace")
+        exact_replay_block = window_verification["exact_replay"]
+        critical_block = window_verification["critical_event_reproduced"]
 
     # Perturbation grid.
     config_grid = frozen_config["perturbation"]
@@ -318,7 +360,7 @@ def _evaluate_one_candidate(
         scenario_id=scenario_id,
         source_episode=source_episode_fields,
         generated_scenario=_build_generated_scenario(entry, scenario_id),
-        planner=str(frozen_config.get("planner", "goal")),
+        planner=str(frozen_config.get("planner", trace_episode.get("algo", "goal"))),
         seed=source_seed,
         config=_build_promotion_config(frozen_config),
         commit_hashes=commit_hashes,
@@ -327,6 +369,9 @@ def _evaluate_one_candidate(
         perturbation_grid=perturbation_grid,
         cell_verdicts=cells,
         missing_cell_reasons=missing,
+        replay_scope=window_verification["replay_scope"]
+        if window_verification is not None
+        else None,
     )
 
 
@@ -848,14 +893,7 @@ def _find_critical_event(trace: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _extract_steps(trace: Mapping[str, Any]) -> list[dict[str, Any]]:
-    steps = trace.get("steps") or []
-    if not steps and "algorithm_metadata" in trace:
-        meta = trace["algorithm_metadata"]
-        if isinstance(meta, dict):
-            sim_trace = meta.get("simulation_step_trace", {})
-            if isinstance(sim_trace, dict):
-                steps = sim_trace.get("steps", [])
-    return list(steps) if isinstance(steps, list) else []
+    return extract_episode_steps(trace)
 
 
 def _build_cpu_verdict_fn(
@@ -1011,6 +1049,8 @@ def main() -> int:
             replay_results_path=args.replay_results,
             commit_hash=args.commit_hash,
             config_hash=args.config_hash,
+            window_receipt_path=args.window_receipt,
+            receipt_root=args.receipt_root,
         )
     except (FileNotFoundError, RuntimeError, ValueError, ScenarioPersistenceValidationError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

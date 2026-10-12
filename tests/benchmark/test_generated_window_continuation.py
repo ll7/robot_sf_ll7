@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+# evidence-writer-exempt: temporary pytest checkpoint and malformed-companion
+# fixtures are not durable generated evidence; exact native traces are preserved.
+
 import gzip
 import hashlib
 import json

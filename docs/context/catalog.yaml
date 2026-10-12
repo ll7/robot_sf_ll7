@@ -8313,3 +8313,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

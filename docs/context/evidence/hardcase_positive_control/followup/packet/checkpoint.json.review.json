@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/packet/checkpoint.json",
+  "artifact_sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

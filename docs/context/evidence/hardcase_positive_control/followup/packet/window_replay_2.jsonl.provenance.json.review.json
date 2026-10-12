@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl.provenance.json",
+  "artifact_sha256": "efe55dc955875c5dde7edf3506a25cb326f6a4ba40e476b40a395dc6f8f24f04",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

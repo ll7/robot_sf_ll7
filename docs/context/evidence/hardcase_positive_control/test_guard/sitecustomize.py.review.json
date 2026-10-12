@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/test_guard/sitecustomize.py",
+  "artifact_sha256": "739609089497a45ec858ad1296bec6da9c74552010a045e5416c1b875dde440d",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

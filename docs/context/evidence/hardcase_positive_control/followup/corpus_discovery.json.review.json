@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/corpus_discovery.json",
+  "artifact_sha256": "88ab8dc97059032073034c13e0b01cf64a86534f2efe68dadce56549e1e8eebe",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

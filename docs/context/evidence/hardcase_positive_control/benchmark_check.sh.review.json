@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/benchmark_check.sh",
+  "artifact_sha256": "1d58d2b9979fcbd699dc1f479d64d6e6ee16dcad8441e068071f9189d3749940",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

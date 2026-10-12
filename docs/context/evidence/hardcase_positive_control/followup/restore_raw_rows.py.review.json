@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py",
+  "artifact_sha256": "b9e18ab0d6f5e0bf6dcefc08ed8ab25cdbe350ffc08384c39accefd2e3c3e50c",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

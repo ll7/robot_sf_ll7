@@ -60,6 +60,9 @@ class ExpertTrainingConfig:
     randomize_seeds: bool = False
     ppo_initialization_seed: int | None = None
     training_seed_telemetry: bool = False
+    training_seed_range: tuple[int, int] | None = None
+    training_master_seed: int | None = None
+    development_evaluation_seeds: tuple[int, ...] = ()
     scenario_id: str | None = None
     feature_extractor: str = "default"
     feature_extractor_kwargs: dict[str, object] = field(default_factory=dict)
@@ -89,6 +92,9 @@ class ExpertTrainingConfig:
         randomize_seeds: bool = False,
         ppo_initialization_seed: int | None = None,
         training_seed_telemetry: bool = False,
+        training_seed_range: tuple[int, int] | None = None,
+        training_master_seed: int | None = None,
+        development_evaluation_seeds: tuple[int, ...] = (),
         total_timesteps: int,
         policy_id: str,
         convergence: ConvergenceCriteria,
@@ -146,6 +152,9 @@ class ExpertTrainingConfig:
             randomize_seeds=bool(randomize_seeds),
             ppo_initialization_seed=ppo_initialization_seed,
             training_seed_telemetry=training_seed_telemetry,
+            training_seed_range=training_seed_range,
+            training_master_seed=training_master_seed,
+            development_evaluation_seeds=tuple(development_evaluation_seeds),
             total_timesteps=total_timesteps,
             policy_id=policy_id,
             convergence=convergence,

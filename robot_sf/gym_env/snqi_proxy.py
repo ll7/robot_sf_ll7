@@ -291,7 +291,8 @@ def compute_snqi_step_proxies(
 def _minimum_pedestrian_ttc(simulator: Any, deltas: np.ndarray, radius_sum: float) -> float:
     """Return seconds until first constant-velocity disc contact, or infinity.
 
-    Use physical forward speed and heading, and the backend's pedestrian velocities.
+    Use the drivetrain's Cartesian velocity when available; otherwise project its
+    signed forward speed along the pose heading. Pedestrian velocities are world-frame.
     Unknown velocities cannot establish a future collision; existing overlap is TTC zero.
     """
     distance_sq = np.einsum("ij,ij->i", deltas, deltas) - radius_sum**2
@@ -304,9 +305,16 @@ def _minimum_pedestrian_ttc(simulator: Any, deltas: np.ndarray, radius_sum: floa
     pose = first_robot_pose(getattr(simulator, "robot_poses", ()))
     if pose is None:
         return float("inf")
-    speed = float(robots[0].current_speed[0])
-    heading = float(pose[1])
-    robot_vel = speed * np.array([math.cos(heading), math.sin(heading)])
+    cartesian_velocity = getattr(getattr(robots[0], "state", None), "velocity_xy", None)
+    if cartesian_velocity is None:
+        speed = float(robots[0].current_speed[0])
+        heading = float(pose[1])
+        robot_vel = speed * np.array([math.cos(heading), math.sin(heading)])
+    else:
+        velocity_rows = coerce_xy_rows([cartesian_velocity])
+        if velocity_rows.shape != (1, 2):
+            return float("inf")
+        robot_vel = velocity_rows[0]
     relative_vel = ped_vel - robot_vel
     a = np.einsum("ij,ij->i", relative_vel, relative_vel)
     b = np.einsum("ij,ij->i", deltas, relative_vel)

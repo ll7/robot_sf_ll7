@@ -1,44 +1,38 @@
 {
   "schema": "ppo-wall-probe-dev.v1",
-  "source_head": "64204ecf9f4187af76cda3bb1a12d57e4ddd05a8",
+  "source_head": "c5b697a6237d96a8e59dd8cefab556d3d36dceb0",
   "producer_path": "scripts/analysis/ppo_wall_probe_dev.py",
-  "producer_sha256": "5248d8a9c8f825ec7cd8e470e4953b232b35bef51924d82a65e2d4bd8d9b428e",
+  "producer_sha256": "33626c45cc17a9655e3c4613543eee935cfbb250ad2469fb79af8e27183d423f",
   "scenario_path": "configs/scenarios/single/francis2023_narrow_doorway.yaml",
   "scenario_sha256": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
   "artifacts": {
     "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417": {
-      "artifact": {
-        "registry_path": "model/registry.yaml",
-        "registry_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
-        "source": "github_release",
-        "location": "github_release",
-        "repo": "ll7/robot_sf_ll7",
-        "tag": "artifact/models-2026-05-registry-v1",
-        "asset_name": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
-        "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
-        "sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
-        "size_bytes": 93662266,
-        "metadata_asset": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json",
-        "published_at_utc": "2026-05-24T05:32:03+00:00"
-      },
-      "sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d"
+      "registry_path": "model/registry.yaml",
+      "registry_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+      "source": "github_release",
+      "location": "github_release",
+      "repo": "ll7/robot_sf_ll7",
+      "tag": "artifact/models-2026-05-registry-v1",
+      "asset_name": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+      "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+      "sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+      "size_bytes": 93662266,
+      "metadata_asset": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json",
+      "published_at_utc": "2026-05-24T05:32:03+00:00"
     },
     "predictive_proxy_selected_v2_full": {
-      "artifact": {
-        "registry_path": "model/registry.yaml",
-        "registry_model_id": "predictive_proxy_selected_v2_full",
-        "source": "github_release",
-        "location": "github_release",
-        "repo": "ll7/robot_sf_ll7",
-        "tag": "artifact/models-2026-05-registry-v1",
-        "asset_name": "predictive_proxy_selected_v2_full-predictive_model.pt",
-        "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt",
-        "sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
-        "size_bytes": 4958329,
-        "metadata_asset": "predictive_proxy_selected_v2_full-metadata.json",
-        "published_at_utc": "2026-05-24T05:32:03+00:00"
-      },
-      "sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
+      "registry_path": "model/registry.yaml",
+      "registry_model_id": "predictive_proxy_selected_v2_full",
+      "source": "github_release",
+      "location": "github_release",
+      "repo": "ll7/robot_sf_ll7",
+      "tag": "artifact/models-2026-05-registry-v1",
+      "asset_name": "predictive_proxy_selected_v2_full-predictive_model.pt",
+      "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt",
+      "sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+      "size_bytes": 4958329,
+      "metadata_asset": "predictive_proxy_selected_v2_full-metadata.json",
+      "published_at_utc": "2026-05-24T05:32:03+00:00"
     }
   },
   "fallback_used": false,

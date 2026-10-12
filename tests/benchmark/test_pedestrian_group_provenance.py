@@ -9,8 +9,6 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark import map_runner_episode
-from robot_sf.benchmark.result_provenance import capture_pedestrian_group_provenance
-from scripts.analysis import replay_pedestrian_groups as replay
 from tests.benchmark.test_map_runner_episode_algo_meta_isolation import (
     _EpisodeEnv,
     _patch_episode_runtime,
@@ -71,6 +69,8 @@ def test_episode_preserves_reset_groups_after_runtime_membership_changes(monkeyp
 
 def test_empty_crowd_is_recorded_but_missing_groups_are_unavailable() -> None:
     """Distinguish measured emptiness from absent runtime provenance."""
+    from robot_sf.benchmark.result_provenance import capture_pedestrian_group_provenance
+
     empty = capture_pedestrian_group_provenance(
         SimpleNamespace(ped_pos=np.empty((0, 2)), groups=SimpleNamespace(groups={}))
     )
@@ -85,6 +85,8 @@ def test_empty_crowd_is_recorded_but_missing_groups_are_unavailable() -> None:
 
 def test_authorized_replay_is_zero_step_and_preserves_inputs(tmp_path, monkeypatch) -> None:
     """An authorized export creates derived provenance without stepping or overwriting."""
+    from scripts.analysis import replay_pedestrian_groups as replay
+
     episodes = tmp_path / "episodes.jsonl"
     original = json.dumps(
         {"scenario_id": "one", "seed": 1001, "episode_id": "old", "git_hash": "old-source"}
@@ -129,6 +131,8 @@ def test_replay_rejects_missing_authorization_and_non_dev_batch_before_reset(
     tmp_path, monkeypatch
 ) -> None:
     """A mixed unsupported seed batch is rejected before any simulator is constructed."""
+    from scripts.analysis import replay_pedestrian_groups as replay
+
     episodes = tmp_path / "episodes.jsonl"
     episodes.write_text("\n".join(json.dumps({"seed": seed}) for seed in [1001, 1000]))
     matrix = tmp_path / "matrix.yaml"

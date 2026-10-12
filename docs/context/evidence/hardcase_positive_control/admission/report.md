@@ -412,3 +412,57 @@ nine unknown perturbation cells. The original completed benchmark audit is
 retained; no full-directory audit was restarted for these focused repairs.
 The orchestrator-owned behaviour receipt remains outstanding. Neither PR body
 nor the behaviour gate was edited; both PRs remain unmerged.
+
+
+## Round-6 design replacement (2026-10-12)
+
+Both P1s are addressed by a configuration-owning checkpoint contract. The
+source capture records the complete immutable environment/planner/drive JSON,
+bound to the typed simulator snapshot's config digest, plus actual run inputs,
+seed, map and window. The gate reconstructs configurations through production
+builders, regenerates the expected scenario through the existing materializer,
+and recomputes complete native scenario/run identities. Full JSON input
+envelopes are compared by digest; no projection drops run options. All four
+native carriers (continuation metadata, result simulator settings, manifest
+simulator settings and detailed trace) must equal the captured contract.
+Historical v1 reading remains available; admission requires v2.
+
+Exact reviewer regression command:
+`HARDCASE_NO_TEST_SIMULATION=1 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run pytest tests/adversarial/test_window_admission_input_contract.py -q`.
+Before the fix, all four reviewer probes were admitted: RED4 failures in2.71s.
+After the fix, the full command passed1662 tests in508.29s. It mutates every
+one of414 captured leaves independently in each of four carriers, adds/removes
+keys, and repeats the exact four invalid combinations. Fourteen selected
+mutations also failed with DID NOT RAISE in4.60s when only whole-input binding
+was disabled under the new producer format; every other code/custody/parity
+check remained enabled. This counterfactual does not claim oldv1 supports v2.
+
+PASS: full configuration reconstruction matches the captured SHA. The independent
+source600-frame and both20-frame numeric oracles are unchanged. Producer commit
+`f3787b507ffd1af9755da86d85eeada34f816252` ran one real source capture and two
+fresh window replays on seed1001, with NUMBA_CPU_NAME=znver2. Exact command:
+`NUMBA_CPU_NAME=znver2 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python docs/context/evidence/hardcase_positive_control/followup/reproduce.py --runtime-revision f3787b507ffd1af9755da86d85eeada34f816252 --output docs/context/evidence/hardcase_positive_control/admission/packet`.
+The recipe's final gate subprocess initially lacked a worktree-local interpreter;
+use sys.executable now. Only that final gate was resumed; completed episodes
+were not restarted. Each new native raw row is257805bytes; both reconstruct
+exactly from committed gzip. All raw outputs have durable lane-host locators,
+SHA256 and size in packet provenance; the parent packet stays unchanged.
+
+PASS: the v2 receipt verifies actual replays; scoped persistence has replay and
+event PASS, robustness REJECT for nine UNKNOWN cells. Actual admission and
+idempotent re-admission use clean gate code
+`a9abc6b828b583ce8e6c92f03f2753ae35857672`; source-bound case now is
+`case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf`.
+Previous fixture records are preserved in Git/lane backups. The new immutable
+scenario hash changes the identity; the API remains append-only.
+
+Other actual checks: fresh continuation regressions8PASS41.68s; related modules
+117PASS38simulation-interlockSKIPs2.70s; expanded focus107PASS3SKIPs12FAIL18.08s.
+All12 failures exactly match the original main132-ID audit, and the fresh pinned
+main provenance-module command reproduces12FAIL47PASS2.06s. No new failure was
+introduced. These execution-context/optional-policy-stack defects are left in
+their existing baseline groups. No completed full benchmark audit was restarted.
+The full focused commands and the12-ID comparison are in the lane report.
+Registry debt may not grow; remaining delivery gates and exact final head are
+recorded there. Both PR bodies and orchestrator-owned behaviour receipts remain
+untouched. No merge, sealed replay/reset, or frozen artifact edit occurred.

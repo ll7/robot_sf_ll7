@@ -2,8 +2,8 @@
   "admission_policy": "9652 observed replay-verified critical case; independent perturbation persistence is a separate5600robust promotion gate",
   "base_replay_documentation_head": "d6a71d75fe6b35de3b7afe68d46c5be49e14c416",
   "base_replay_head_at_creation": "748830c03fee517701a4ec98b8173ee7a30e17ba",
-  "case_file_sha256": "391433ef920210f3b49c28e4620488f099fa004afdfdf9d242c964dea43ff68a",
-  "case_id": "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490",
+  "case_file_sha256": "211c74d521ee518ca9832193d9a7464c02624f3db70e63751b99f6841aa59b74",
+  "case_id": "case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf",
   "commands": {
     "admit": "scripts/tools/admit_counterexample_window.py --candidate docs/context/evidence/hardcase_positive_control/admission/candidate.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --corpus docs/context/evidence/hardcase_positive_control/admission/corpus",
     "persistence": "scripts/tools/evaluate_pipeline_persistence_gate.py --candidate docs/context/evidence/hardcase_positive_control/entry.json --episodes ../rereview_admission_source.jsonl --config configs/analysis/issue_5600_persistence_gate.yaml --output docs/context/evidence/hardcase_positive_control/admission/persistence --replay-results ../rereview_admission_gate_replays.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --receipt-root ."
@@ -29,7 +29,7 @@
     "typing_baseline_changed": false
   },
   "first_admission": "admitted",
-  "implementation_commit": "bc0e6a9cd0081f065daab6b4f5b5eff46297cec9",
+  "implementation_commit": "a9abc6b828b583ce8e6c92f03f2753ae35857672",
   "inherited_typing_ci": {
     "admission_delta_relative_to_replay_parent": 0,
     "baseline_not_raised": true,
@@ -68,6 +68,24 @@
   },
   "raw_inputs": "Historical source unchanged; checkpoint and both actual windows/native manifests refreshed by parent runtime 3551282a86cad12ea825a0f701b4a24406dde2d0; raw outputs retained in the lane-host custody plane.",
   "robust_promotion": "reject",
+  "round6_contract": {
+    "admission_commit": "a9abc6b828b583ce8e6c92f03f2753ae35857672",
+    "all414leaves_in_four_carriers_refused": true,
+    "checkpoint_path": "docs/context/evidence/hardcase_positive_control/admission/packet/checkpoint.json",
+    "exhaustive_result": "1662 passed in508.29s",
+    "expanded_focused": "107passed3interlockskips12preexistingfailures; exact12IDs reproducedonpinnedmain47passed12failed; zero introduced",
+    "fresh_replay_regressions": "8passed41.68s",
+    "generic_red": "14 counterfactual whole-binding-disabled failures4.60s, allothercustody/code/parity checksretained",
+    "own_configuration_digest_verified": true,
+    "previous_fixture_case_id": "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490",
+    "producer_commit": "f3787b507ffd1af9755da86d85eeada34f816252",
+    "refreshed_case_id": "case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf",
+    "related": "117passed38interlockskips",
+    "reviewer_red": "4 invalid admissions beforefix,4 failures2.71s",
+    "schema": "robot_sf.generated_continuation.v2",
+    "source_and_window_oracles_unchanged": true,
+    "whole_input_envelopes_verified": true
+  },
   "schema_version": "hardcase-corpus-admission-evidence.v1",
   "second_admission": "already_admitted",
   "security_followup": {
@@ -87,6 +105,7 @@
     "focused": "49 passed, 3 task-interlock skips in16.30s",
     "full_benchmark": "12122 passed,119 failed,340 skipped,13 errors; all132 IDs/kinds match main; zero introduced;25m21s",
     "remediation_focused": "156 passed,14 task-interlock skips in17.74s",
+    "round6": "See round6_contract; original completed full benchmark audit retained, not restarted.",
     "security_followup_focused": "37 passed in 9.11s; includes actual admission, no-parity refusal, mutated-density refusal and idempotent re-admission.",
     "sidecar_red": "1 failed in2.09s: review sidecar mistaken for a case",
     "ty_pinned": "ty0.0.58/all-extras Python3.12 PASS; general6430<=6435; adjusted6427<=6432"

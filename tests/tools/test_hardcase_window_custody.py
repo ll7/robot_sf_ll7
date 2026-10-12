@@ -11,7 +11,7 @@ from scripts.tools.lint_evidence_registry import _artifact_findings
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = Path("docs/context/evidence/hardcase_positive_control")
-CASE_ID = "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490"
+CASE_ID = "case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf"
 
 
 @pytest.mark.parametrize(

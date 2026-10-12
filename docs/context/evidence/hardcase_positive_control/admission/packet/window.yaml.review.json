@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/packet/window.yaml",
+  "artifact_sha256": "907a80efb4863b89455c69ea590d487ad8c4664aa6d4397a8ce2ca7e2eea5cb5",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

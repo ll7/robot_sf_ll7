@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/packet/persistence/generated-54fdcdbc905bf047.persistence.json",
+  "artifact_sha256": "01b099e91c4e72bbc9c700ba3b99314ea9dd4e35131182840bb482a12e8a9a5b",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

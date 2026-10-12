@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/packet/provenance.json",
+  "artifact_sha256": "3831e2d28959737da469db5e6bae17bfd27479d402ffc1bbabf0dc20ca6844e2",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

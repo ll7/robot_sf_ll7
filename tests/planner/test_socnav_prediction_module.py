@@ -335,6 +335,17 @@ def test_sequence_search_enforces_surface_margin_under_goal_pressure(forecast_x:
         )
     else:
         assert v == 0.0, "A moving candidate spends the configured surface safety margin"
+        unsafe_action_score = adapter._score_action(
+            observation=observation,
+            future_peds=future,
+            mask=np.ones(forecast_agents),
+            v=0.4,
+            w=0.0,
+            steps=8,
+        )
+        assert np.isinf(unsafe_action_score), (
+            "Constant-action selection must enforce the same margin"
+        )
 
 
 def test_sequence_search_brakes_when_observed_population_exceeds_forecast_capacity() -> None:

@@ -118,8 +118,13 @@ verified(receipt['results_artifact'])
 seed, segment = int(os.environ['FTPLAN_INIT_SEED']), int(os.environ['FTPLAN_SEGMENT'])
 if receipt['evaluation_seeds'] != list(range(1031, 1061)) or receipt['scenario_count'] != 48:
     raise ValueError('Wrong selection pairs')
-if receipt['fallback_used'] or receipt['execution_errors']:
-    raise ValueError('Selection degraded or failed')
+if receipt.get('status') != 'completed':
+    raise ValueError('Selection status must be completed')
+if receipt.get('fallback_used') is not False:
+    raise ValueError('Selection fallback_used must be explicitly false')
+execution_errors = receipt.get('execution_errors')
+if type(execution_errors) is not int or execution_errors != 0:
+    raise ValueError('Selection execution_errors must be integer zero')
 if receipt['completed_segment'] != segment - 1:
     raise ValueError('Selection receipt is from the wrong segment')
 protocol = yaml.safe_load(Path('configs/training/ppo/ftplan/pilot_protocol_20261012.yaml').read_text())

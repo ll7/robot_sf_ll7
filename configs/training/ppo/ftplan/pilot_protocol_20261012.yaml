@@ -22,6 +22,9 @@ training_episode_range: [100000, 199999]
 steps_per_seed: 3000000
 segment_steps: 1000000
 selection:
+  receipt_status: completed
+  fallback_used: false
+  execution_errors: 0
   seed_range: [1031, 1060]
   scenario_count: 48
   runner: canonical_benchmark_runner_and_released_checkpoint_adapter

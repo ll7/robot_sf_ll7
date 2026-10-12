@@ -83,13 +83,15 @@ file for pilot checkpoint choice. The externally evaluated segment final export
 is the continuation checkpoint. Rollout rounding is recorded as actual steps and
 must not silently change the planned 3M budget cap interpretation.
 
-Selection receipt contract: exact `evaluation_seeds`, `scenario_count: 48`,
-`fallback_used: false`, `execution_errors: 0`, `completed_segment`,
+Selection receipt contract: `status: completed`, exact `evaluation_seeds`, `scenario_count: 48`,
+`fallback_used: false` (JSON boolean), `execution_errors: 0` (JSON integer), `completed_segment`,
 `checkpoint_sha256`, and a `results_artifact` with the same path/digest/custody
 fields as the report manifest. Later segments also require `initialization_seed`,
 `checkpoint_artifact` and `previous_success_mean`/`success_mean`. The first receipt
-must bind the released checkpoint digest. Every later receipt must bind that
-replica's final checkpoint and show **strictly rising selection success** against
+must bind the released checkpoint digest. Missing, null, empty-string and incorrectly
+typed fallback/error fields fail admission, as do failed or incomplete statuses.
+Every later receipt must bind that replica's final checkpoint and show
+**strictly rising selection success** against
 the previous selection, starting with the released baseline. Stop that seed when
 success fails to rise, or on NaN, execution error or fallback. Keep stopped seeds
 in the record and do not replace them. This exploratory stop rule has no claimed

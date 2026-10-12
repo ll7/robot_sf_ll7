@@ -453,8 +453,35 @@ def _verify_model_bindings(root: Path, receipt: dict[str, Any]) -> None:
         raise ScenarioPersistenceValidationError("window model digest mismatch")
 
 
+def _verify_window_effective_inputs(
+    scenario_path: Path, seed: int, replays: list[dict[str, Any]]
+) -> None:
+    """Bind the loaded scenario to producer inputs using the existing runner projection."""
+    from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
+        planner_independent_scenario_case_payload,
+    )
+    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+
+    selected = load_scenarios(scenario_path)
+    if len(selected) != 1:
+        raise ScenarioPersistenceValidationError("window requires one effective scenario")
+    selected_inputs = planner_independent_scenario_case_payload(selected[0], seed=seed)
+    for row in replays:
+        params = row.get("scenario_params")
+        if not isinstance(params, dict) or selected_inputs != (
+            planner_independent_scenario_case_payload(params, seed=seed)
+        ):
+            raise ScenarioPersistenceValidationError(
+                "window replay effective configuration mismatch"
+            )
+
+
 def _verify_window_runs(
-    root: Path, receipt: dict[str, Any], source: dict[str, Any], expected: list[dict[str, Any]]
+    root: Path,
+    receipt: dict[str, Any],
+    source: dict[str, Any],
+    expected: list[dict[str, Any]],
+    scenario_path: Path,
 ) -> list[dict[str, Any]]:
     """Return both native replays after binding inputs, run identities and every channel."""
     bindings = receipt["bindings"]
@@ -463,6 +490,7 @@ def _verify_window_runs(
     proof = receipt["parity_proof"]
     replays = [_read_bound_json(root, b) for b in bindings["replays"]]
     manifests = [_read_bound_json(root, b) for b in bindings["replay_manifests"]]
+    _verify_window_effective_inputs(scenario_path, receipt["seed"], replays)
     if bindings["replays"][0] == bindings["replays"][1]:
         raise ScenarioPersistenceValidationError("window requires two distinct replay artifacts")
     if manifests[0]["run"]["run_id"] == manifests[1]["run"]["run_id"]:
@@ -603,7 +631,7 @@ def verify_window_replay_receipt(receipt_path: Path, *, repo_root: Path) -> dict
         range(w["start_step"], w["start_step"] + w["steps"])
     ) or not math.isclose(expected[-1]["time_s"], w["end_s"], abs_tol=1e-9):
         raise ScenarioPersistenceValidationError("window absolute step/time mismatch")
-    replays = _verify_window_runs(root, receipt, source, expected)
+    replays = _verify_window_runs(root, receipt, source, expected, scenario_path)
     event = _window_event(expected, source)
     if not event["near_miss_samples"] and event["first_contact_step"] is None:
         raise ScenarioPersistenceValidationError("window has no verified critical event")

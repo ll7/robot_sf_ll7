@@ -9,9 +9,12 @@ import hashlib
 import json
 import subprocess
 import sys
+import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf.adversarial.counterexample_corpus import (
     admit_window,
@@ -28,6 +31,55 @@ EVIDENCE = ROOT / "docs/context/evidence/hardcase_positive_control/admission"
 CANDIDATE = EVIDENCE / "candidate.json"
 RECEIPT = EVIDENCE / "window_receipt.json"
 pytestmark = pytest.mark.new_feature_no_base(reason="base has no versioned corpus admission API")
+
+
+def test_refuse_density_change_even_with_rebound_scenario_and_manifests(tmp_path: Path) -> None:
+    """Rehashing a changed scenario cannot turn unchanged replay rows into evidence."""
+    receipt = json.loads(RECEIPT.read_text())
+    # Bound artifacts must live under the repository; this isolated temporary
+    # directory exercises the real resolver without editing retained evidence.
+    with ExitStack() as stack:
+        location = stack.enter_context(
+            tempfile.TemporaryDirectory(prefix=".hardcase-receipt-test-", dir=ROOT)
+        )
+        folder = Path(location)
+        scenario_path = ROOT / receipt["bindings"]["scenario"]["path"]
+        document = yaml.safe_load(scenario_path.read_text())
+        scenario = document["scenarios"][0]
+        assert scenario["simulation_config"]["ped_density"] == 0.08
+        scenario["simulation_config"]["ped_density"] = 0.0
+        temporary = stack.enter_context(
+            tempfile.NamedTemporaryFile(
+                prefix=".density-negative-", suffix=".yaml", dir=scenario_path.parent
+            )
+        )
+        # Keep its directory and every other setting identical to the producer.
+        changed = Path(temporary.name)
+        changed.write_text(yaml.safe_dump(document))
+        binding = {
+            "path": changed.relative_to(ROOT).as_posix(),
+            "sha256": hashlib.sha256(changed.read_bytes()).hexdigest(),
+        }
+        receipt["bindings"]["scenario"] = binding
+        for index, original in enumerate(receipt["bindings"]["replay_manifests"]):
+            manifest = json.loads((ROOT / original["path"]).read_text())
+            manifest["inputs"]["scenario_matrix"]["sha256"] = binding["sha256"]
+            manifest_path = folder / f"manifest-{index}.json"
+            manifest_path.write_text(json.dumps(manifest))
+            receipt["bindings"]["replay_manifests"][index] = {
+                "path": manifest_path.relative_to(ROOT).as_posix(),
+                "sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            }
+        path = tmp_path / "receipt.json"
+        path.write_text(json.dumps(receipt))
+        candidate = json.loads(CANDIDATE.read_text())
+        candidate["window_receipt_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        candidate_path = tmp_path / "candidate.json"
+        candidate_path.write_text(json.dumps(candidate))
+        corpus = tmp_path / "corpus"
+        with pytest.raises(ScenarioPersistenceValidationError, match="effective configuration"):
+            admit_window(candidate_path, path, corpus_dir=corpus, repo_root=ROOT)
+        assert not corpus.exists()
 
 
 def test_admit_real_seed1001_window_and_export_slice(tmp_path: Path) -> None:

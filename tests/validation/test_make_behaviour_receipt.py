@@ -17,6 +17,13 @@ import pytest
 
 from scripts.ci import behaviour_receipt as gate
 from scripts.ci import make_behaviour_receipt as producer
+from tests.validation.receipt_scheduler_fixture import install_scheduler
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 REVIEWED_HEAD = "e7fd36f98fab243ce95cf45bc50ca8a9f7c30893"
 ORIGINAL_MAIN = "de3e37774049b2c6d017116426ae522dc232f679"
@@ -79,6 +86,8 @@ def _fake_release_api(tmp_path, monkeypatch):
 
 def _raw_row(seed, *, failing=False):
     return {
+        "scheduler_job_id": "123",
+        "scheduler_node": "auxme-imech142",
         "algo": "goal",
         "scenario_id": "open",
         "seed": seed,
@@ -105,15 +114,19 @@ def _raw_row(seed, *, failing=False):
     }
 
 
-def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
-    out = root / label
-    out.mkdir()
+def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
+    out = root / label / job
+    out.mkdir(parents=True)
     raw_path = out / "campaigns/empty_world_main/runs/goal__differential_drive/episodes.jsonl"
     raw_path.parent.mkdir(parents=True)
     raw_rows = [_raw_row(seed, failing=failing) for seed in range(1001, 1031)]
+    for row in raw_rows:
+        row["scheduler_job_id"] = job
     raw_path.write_text("".join(json.dumps(row) + "\n" for row in raw_rows))
     rows = [
         {
+            "scheduler_job_id": job,
+            "scheduler_node": "auxme-imech142",
             "arm": "goal",
             "scenario": "open",
             "seed": row["seed"],
@@ -147,7 +160,7 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
     (out / "execution_main.json").write_text(json.dumps(meta))
     from tests.validation.test_behaviour_receipt_gate import _hardware
 
-    for name, entry in _hardware(source_sha, "123").items():
+    for name, entry in _hardware(source_sha, job).items():
         (out / name).write_text(entry["content"])
     (out / "README.md").write_text(label + "\n")
     return out
@@ -1503,6 +1516,7 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         "make_behaviour_receipt.py",
         "behaviour_receipt.py",
         "behaviour_receipt.schema.json",
+        "behaviour_receipt_nodes.json",
     ):
         destination = tmp_path / "scripts/ci" / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1529,7 +1543,7 @@ def _install_cli_fixture(tmp_path, monkeypatch):
     git("commit", "-m", "synthetic behaviour change")
     source = git("rev-parse", "HEAD")
     head = _sweep_rows(tmp_path, "head", source_sha=source, failing=True)
-    baseline = _sweep_rows(tmp_path, "baseline", source_sha=baseline_source)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha=baseline_source, job="456")
     request = baseline / "execution_request.json"
     metadata = json.loads(request.read_text())
     metadata["job_id"] = "456"
@@ -1602,6 +1616,14 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     assert original.latest_release("ll7/robot_sf_ll7") == "0.0.7"
     legacy_payload = json.loads((tmp_path / header["rows_artifact"]["path"]).read_text())
     legacy_payload.pop("hardware")
+    for row in legacy_payload["rows"]:
+        for key in (
+            "scheduler_job_id",
+            "scheduler_node",
+            "baseline_scheduler_job_id",
+            "baseline_scheduler_node",
+        ):
+            row.pop(key)
     legacy_raw = json.dumps(legacy_payload).encode()
     (tmp_path / header["rows_artifact"]["path"]).write_bytes(legacy_raw)
     git("add", header["rows_artifact"]["path"])

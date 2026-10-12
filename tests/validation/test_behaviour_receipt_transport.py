@@ -13,11 +13,18 @@ import yaml
 from scripts.ci import behaviour_receipt as adapter
 from scripts.ci import pr_contract_check as checker
 from scripts.validation import check_seed_holdout_diff as seed_checker
+from tests.validation.receipt_scheduler_fixture import install_scheduler
 from tests.validation.test_behaviour_receipt_gate import (
     _commit_receipt,
     _header,
     _inventory_receipt,
 )
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -201,6 +208,7 @@ def _trusted_fixture(root):
         ".gitattributes",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
+        "scripts/ci/behaviour_receipt_nodes.json",
         "scripts/dev/check_dependabot_update_policy.py",
         "scripts/dev/check_dependency_coherence.py",
         "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
@@ -217,6 +225,13 @@ def _trusted_fixture(root):
     return git, git("rev-parse", "HEAD")
 
 
+def _tamper_candidate_policies(root):
+    (root / "scripts/ci/behaviour_receipt.py").write_text("raise SystemExit(0)\n")
+    (root / "scripts/ci/behaviour_receipt.schema.json").write_text("{}\n")
+    (root / "scripts/ci/behaviour_receipt_nodes.json").write_text('{"nodes": {}}\n')
+    (root / adapter.SCOPE_FILE).write_text('{"arms": []}\n')
+
+
 def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     """The deployed shell accepts compact source data and rejects head-policy bypasses."""
     root = tmp_path / "repo"
@@ -226,17 +241,16 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     path = "receipts/behaviour/sweep.json"
     target = root / path
     target.parent.mkdir(parents=True)
-    # A behaviour PR tampers with all three head policy surfaces. Base execution
+    # A behaviour PR tampers with all four head policy surfaces. Base execution
     # must still accept honest rows and reject absent/corrupted receipts.
-    (root / "scripts/ci/behaviour_receipt.py").write_text("raise SystemExit(0)\n")
-    (root / "scripts/ci/behaviour_receipt.schema.json").write_text("{}\n")
-    (root / adapter.SCOPE_FILE).write_text('{"arms": []}\n')
+    _tamper_candidate_policies(root)
     planner = root / "robot_sf/planner/new_policy.py"
     planner.write_text("VALUE = 1\n")
     git(
         "add",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
+        "scripts/ci/behaviour_receipt_nodes.json",
         adapter.SCOPE_FILE,
         "robot_sf/planner/new_policy.py",
     )

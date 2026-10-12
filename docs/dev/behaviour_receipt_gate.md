@@ -59,30 +59,51 @@ empty-world sweeps on the same single node;
 after both jobs finish, rerun with `--mode existing` and the two completed sweep
 directories to write `receipts/behaviour/<id>.json` and print the header.
 
-The node argument must be one literal hostname; node lists and range expressions
-are refused before submission. Each sweep must preserve four regular identity
-files: `execution_node.txt` (observed hostname), `execution_cpu.json` (raw
-`lscpu --json`), `execution_node_class.txt` (Slurm partition, or `local` for
-local execution), and `execution_request.json` (requested node, execution SHA
-and job ID). The launch script refuses an observed hostname that differs from
-the requested node.
+The node argument must be one literal hostname from the checked-in
+[`behaviour_receipt_nodes.json`](../../scripts/ci/behaviour_receipt_nodes.json)
+inventory; node lists and range expressions are refused before submission.
+The inventory is owned by the trusted base policy and maps scheduler node names
+to CPU model, architecture and node class (partition). Unknown nodes are refused.
+Updating this mapping requires review; job-written CPU claims cannot update it.
 
-Collection validates both identities before comparing outcomes. Both must have
-the same CPU model, architecture, node class and observed node, and each
-requested node must equal its observed node. Missing, malformed or mismatched
-identity evidence explicitly invalidates the comparison: collection exits
-without a receipt, header, audit or outcome report, even if outcomes are
-unchanged. The committed payload embeds the exact identity file contents and
-their SHA-256 digests, bound by the existing payload digest. Admission repeats
-the identity and digest checks and binds their execution SHAs and job IDs to
-the header. Receipts without these files cannot be admitted; acquire new
-execution evidence rather than backfilling observations into frozen artifacts.
+Each job creates `sweeps/<side>/<SLURM_JOB_ID>` with an exclusive `mkdir` before
+writing any evidence. An existing directory causes failure. Resubmission receives
+a new job ID and a new directory; it never overwrites previous execution evidence.
+Submission manifests are separately keyed by job ID. After the sweep command
+succeeds, its summary and raw rows receive `scheduler_job_id` and `scheduler_node`
+from the Slurm allocation environment. Existing or inconsistent row bindings fail.
+Local execution cannot produce an admissible scheduler-backed receipt.
 
-CPU-dependent floating-point inference can change learned trajectories even
-with deterministic action selection and one numerical thread. A same-commit
-comparison on the same node measures repeatability; a cross-CPU comparison
-measures numerical sensitivity. Neither comparison admits a tolerance or
-waives any existing receipt classification or audit requirement.
+Collection queries `sacct` through the authenticated, read-only scheduler endpoint
+on `imech192`, using allocation records rather than job-written state. Every
+selected shard must have exactly one `COMPLETED` record with exit code `0:0` and
+a single known node. It refuses mixed nodes within either side. Both sides must
+match node, CPU model, architecture and node class. Every summary and raw row's
+job ID must match its job-keyed directory; node claims and source execution
+contexts must agree with the authoritative allocation and inventory.
+
+The four job-written identity files are claims only. Collection checks them
+against scheduler records and the trusted inventory, and embeds an additional
+`execution_scheduler.json` verification snapshot with inventory artifact path and
+digest. SHA-256 digests preserve bytes; they do not grant job-written evidence
+authority. Admission independently queries the same scheduler endpoint and
+compares the snapshot to fresh authoritative records, then checks both job/node
+bindings on every joined row. Rehashed invented CPU claims remain invalid.
+
+Missing, unavailable, failed or inconsistent scheduler evidence explicitly
+invalidates collection and admission with `hardware comparison invalid`, even
+when outcomes are unchanged. Collection exits without writing a receipt, header,
+audit or outcome report. There is no unsigned offline fallback. Hosted admission
+requires authenticated scheduler read access; absence blocks admission rather
+than silently trusting the stored snapshot. Read-access integration is tracked
+under the gate owner issue #10000 and must be available before promoting this
+policy for behaviour-changing PRs.
+
+Legacy receipts without scheduler verification or row allocation bindings cannot
+be admitted. Acquire fresh job-keyed evidence; do not backfill observations or
+bindings into frozen artifacts. CPU-dependent inference can still differ across
+hosts. Same-node selection does not promise numerical equality or admit a
+tolerance, and it waives no classification or real-row audit requirement.
 
 One-command collection flow after both sweeps complete (no `PYTHONPATH` needed):
 
@@ -101,6 +122,12 @@ uv run python scripts/ci/make_behaviour_receipt.py \
   --audit-uri https://example.org/replace-with-real-row-audit \
   --classification-evidence-base-uri https://example.org/replace-with-classifications
 ```
+
+For a sharded side, pass its parent directory and a comma-separated allocation
+list, for example `--head-sweep-dir "$HEAD_SIDE_DIR" --job-id "$HEAD_JOB_IDS"`.
+Only the selected job-keyed directories enter the receipt artifact digest and
+row comparison. Their combined coverage must still exactly satisfy the gate;
+duplicate rows across shards are refused.
 
 Production receipt generation uses the full gate seed set (`1001..1030`) because
 that is what the validator admits today; the producer rejects seeds outside the

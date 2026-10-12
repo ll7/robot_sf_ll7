@@ -10,7 +10,13 @@ import pytest
 
 from scripts.ci import behaviour_receipt as gate
 from scripts.ci import make_behaviour_receipt as producer
+from tests.validation.receipt_scheduler_fixture import install_scheduler
 from tests.validation.test_make_behaviour_receipt import RELEASE_TAG, _install_cli_fixture
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
 
 
 def _args(tmp_path, *extra):
@@ -74,13 +80,13 @@ REVIEWER_CASES = (
 
 
 def _write_hardware(root, source, job):
-    (root / "execution_node.txt").write_text("compute-1\n")
-    (root / "execution_node_class.txt").write_text("cpu-class-a\n")
+    (root / "execution_node.txt").write_text("auxme-imech142\n")
+    (root / "execution_node_class.txt").write_text("pro6000\n")
     (root / "execution_cpu.json").write_text(
         json.dumps(
             {
                 "lscpu": [
-                    {"field": "Model name:", "data": "Test CPU A"},
+                    {"field": "Model name:", "data": "AMD EPYC 9115 16-Core Processor"},
                     {"field": "Architecture:", "data": "x86_64"},
                 ]
             }
@@ -90,7 +96,7 @@ def _write_hardware(root, source, job):
         json.dumps(
             {
                 "schema_version": "behaviour-hardware-request.v1",
-                "requested_node": "compute-1",
+                "requested_node": "auxme-imech142",
                 "source_sha": source,
                 "job_id": job,
             }
@@ -127,19 +133,19 @@ def _collection(tmp_path, monkeypatch):
 
 def _fault(files, fault):
     if fault in ("cpu_node_mismatch", "mismatch_unchanged_outcomes"):
-        files["execution_node.txt"] = "compute-2\n"
+        files["execution_node.txt"] = "auxme-imech172\n"
         cpu = json.loads(files["execution_cpu.json"])
-        cpu["lscpu"][0]["data"] = "Test CPU B"
+        cpu["lscpu"][0]["data"] = "Intel(R) Xeon(R) Silver 4310 CPU @ 2.10GHz"
         files["execution_cpu.json"] = json.dumps(cpu)
         submission = json.loads(files["execution_request.json"])
-        submission["requested_node"] = "compute-2"
+        submission["requested_node"] = "auxme-imech172"
         files["execution_request.json"] = json.dumps(submission)
     elif fault == "missing_files":
         files.pop("execution_cpu.json")
     elif fault == "requested_observed_mismatch":
-        files["execution_node.txt"] = "compute-2\n"
+        files["execution_node.txt"] = "auxme-imech172\n"
     elif fault == "node_class_mismatch":
-        files["execution_node_class.txt"] = "cpu-class-b\n"
+        files["execution_node_class.txt"] = "a30\n"
     elif fault == "wrong_job":
         request = json.loads(files["execution_request.json"])
         request["job_id"] = "999"
@@ -275,7 +281,7 @@ def test_admission_refuses_identity_digest_tampering(tmp_path, monkeypatch, side
     ), blockers
 
 
-@pytest.mark.parametrize("observed_node", ["compute-1", "compute-2"])
+@pytest.mark.parametrize("observed_node", ["auxme-imech142", "auxme-imech172"])
 def test_submitted_scripts_execute_hardware_checks(tmp_path, monkeypatch, observed_node):
     """Execute the generated jobs with a synthetic scheduler instead of inspecting text."""
     _write_hardware(tmp_path, "a" * 40, "123")
@@ -284,11 +290,16 @@ def test_submitted_scripts_execute_hardware_checks(tmp_path, monkeypatch, observ
     for name, script in {
         "hostname": f"#!/bin/sh\nprintf '%s\\n' {observed_node}\n",
         "lscpu": f"#!/bin/sh\ncat '{tmp_path / 'execution_cpu.json'}'\n",
-        "sbatch": '#!/bin/sh\nset -eu\nSLURM_JOB_PARTITION=cpu-class-a bash "$2"\nprintf "123\\n"\n',
+        "sbatch": '#!/bin/sh\nset -eu\npartition=$(sed -n \'s/^#SBATCH --partition=//p\' "$2")\nSLURM_JOB_ID=123 SLURM_JOB_NODELIST=auxme-imech142 SLURM_JOB_PARTITION="$partition" bash "$2"\nprintf "123\\n"\n',
     }.items():
         executable = tools / name
         executable.write_text(script)
         executable.chmod(0o755)
+    uv = tools / "uv"
+    uv.write_text(
+        f"#!{sys.executable}\nimport os,sys\nassert sys.argv[1:3] == ['run','python']\nos.execv(sys.executable, [sys.executable,*sys.argv[3:]])\n"
+    )
+    uv.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tools}:{os.environ['PATH']}")
     monkeypatch.setattr(producer, "_ensure_worktree", lambda *args: tmp_path)
     marker = tmp_path / "sweep_executed"
@@ -301,8 +312,8 @@ def test_submitted_scripts_execute_hardware_checks(tmp_path, monkeypatch, observ
             f"from pathlib import Path; Path({str(marker)!r}).touch()",
         ],
     )
-    args = _args(tmp_path, "--sbatch-node", "compute-1")
-    if observed_node != "compute-1":
+    args = _args(tmp_path, "--sbatch-node", "auxme-imech142")
+    if observed_node != "auxme-imech142":
         with pytest.raises(subprocess.CalledProcessError):
             producer._prepare_sweeps(args, tmp_path, "b" * 40)
         assert not marker.exists()
@@ -317,5 +328,9 @@ def test_submitted_scripts_execute_hardware_checks(tmp_path, monkeypatch, observ
         }
     )
     assert marker.exists()
-    assert identities["head"]["node"] == "compute-1"
-    assert identities["baseline"]["node_class"] == "cpu-class-a"
+    assert identities["head"]["node"] == "auxme-imech142"
+    assert identities["baseline"]["node_class"] == "pro6000"
+    before = (head.output_dir / "execution_request.json").read_bytes()
+    with pytest.raises(subprocess.CalledProcessError):
+        producer._prepare_sweeps(args, tmp_path, "b" * 40)
+    assert (head.output_dir / "execution_request.json").read_bytes() == before

@@ -169,6 +169,22 @@
           },
           "degraded": {
             "type": "boolean"
+          },
+          "scheduler_job_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scheduler_node": {
+            "type": "string",
+            "minLength": 1
+          },
+          "baseline_scheduler_job_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "baseline_scheduler_node": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
@@ -183,7 +199,11 @@
           "execution_mode",
           "algorithm",
           "controller_executed",
-          "degraded"
+          "degraded",
+          "scheduler_job_id",
+          "scheduler_node",
+          "baseline_scheduler_job_id",
+          "baseline_scheduler_node"
         ],
         "additionalProperties": false
       }
@@ -697,6 +717,22 @@
               },
               "degraded": {
                 "type": "boolean"
+              },
+              "scheduler_job_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scheduler_node": {
+                "type": "string",
+                "minLength": 1
+              },
+              "baseline_scheduler_job_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "baseline_scheduler_node": {
+                "type": "string",
+                "minLength": 1
               }
             },
             "required": [
@@ -711,7 +747,11 @@
               "execution_mode",
               "algorithm",
               "controller_executed",
-              "degraded"
+              "degraded",
+              "scheduler_job_id",
+              "scheduler_node",
+              "baseline_scheduler_job_id",
+              "baseline_scheduler_node"
             ],
             "additionalProperties": false
           }
@@ -811,13 +851,17 @@
         },
         "execution_request.json": {
           "$ref": "#/$defs/hardware_file"
+        },
+        "execution_scheduler.json": {
+          "$ref": "#/$defs/hardware_file"
         }
       },
       "required": [
         "execution_node.txt",
         "execution_cpu.json",
         "execution_node_class.txt",
-        "execution_request.json"
+        "execution_request.json",
+        "execution_scheduler.json"
       ],
       "additionalProperties": false
     },

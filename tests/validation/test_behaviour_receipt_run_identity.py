@@ -8,8 +8,15 @@ from pathlib import Path
 import pytest
 
 from scripts.ci import behaviour_receipt as adapter
+from tests.validation.receipt_scheduler_fixture import install_scheduler
 from tests.validation.test_behaviour_receipt_gate import _commit_receipt, _receipt
 from tests.validation.test_behaviour_receipt_transport import _git_repo
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 

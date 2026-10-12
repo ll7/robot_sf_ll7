@@ -13,6 +13,7 @@ import itertools
 import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -155,6 +156,7 @@ HARDWARE_FILES = (
     "execution_cpu.json",
     "execution_node_class.txt",
     "execution_request.json",
+    "execution_scheduler.json",
 )
 
 
@@ -165,6 +167,148 @@ class HardwareIdentityError(ValueError):
 def _hardware_require(condition: bool, reason: str) -> None:
     if not condition:
         raise HardwareIdentityError(f"hardware comparison invalid: {reason}")
+
+
+def scheduler_job_ids(value: str) -> list[str]:
+    """Admit literal allocation IDs, with an explicit comma-separated shard list."""
+    _hardware_require(
+        isinstance(value, str) and re.fullmatch(r"[1-9]\d*(?:,[1-9]\d*)*", value) is not None,
+        "invalid scheduler job IDs",
+    )
+    jobs = value.split(",")
+    _hardware_require(len(set(jobs)) == len(jobs), "duplicate scheduler job IDs")
+    return jobs
+
+
+def scheduler_inventory() -> tuple[dict, dict]:
+    """Read inventory beside the trusted policy, never from the candidate checkout."""
+    path = Path(__file__).with_name("behaviour_receipt_nodes.json")
+    try:
+        raw = path.read_bytes()
+        inventory = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        raise HardwareIdentityError(
+            "hardware comparison invalid: trusted node inventory unavailable"
+        ) from exc
+    _hardware_require(
+        isinstance(inventory, dict)
+        and inventory.get("schema_version") == "behaviour-receipt-node-inventory.v1"
+        and isinstance(inventory.get("nodes"), dict),
+        "invalid trusted node inventory",
+    )
+    return inventory["nodes"], {
+        "path": "scripts/ci/behaviour_receipt_nodes.json",
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def scheduler_records(jobs: list[str]) -> list[dict[str, str]]:
+    """Fetch allocation state directly from the authenticated scheduler read endpoint."""
+    scheduler_job_ids(",".join(jobs))
+    command = [
+        "sacct",
+        "-X",
+        "--parsable2",
+        "--noheader",
+        f"--jobs={','.join(jobs)}",
+        "--format=JobIDRaw,State,ExitCode,NodeList,Partition",
+    ]
+    try:
+        result = subprocess.run(
+            ["ssh", "-oBatchMode=yes", "-oConnectTimeout=10", "imech192", shlex.join(command)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HardwareIdentityError(
+            "hardware comparison invalid: authoritative scheduler records unavailable"
+        ) from exc
+    records = {}
+    nodes, _ = scheduler_inventory()
+    for line in result.stdout.splitlines():
+        values = line.split("|")
+        _hardware_require(len(values) == 5, "malformed scheduler allocation record")
+        job, state, exit_code, node, partition = values
+        _hardware_require(
+            job in jobs and job not in records, "unexpected or duplicate scheduler allocation"
+        )
+        _hardware_require(
+            state == "COMPLETED" and exit_code == "0:0",
+            "scheduler allocation did not complete successfully",
+        )
+        _hardware_require(node in nodes, "scheduler node is absent from trusted inventory")
+        _hardware_require(
+            partition == nodes[node]["node_class"],
+            "scheduler node class differs from trusted inventory",
+        )
+        records[job] = dict(
+            zip(("job_id", "state", "exit_code", "node", "partition"), values, strict=True)
+        )
+    _hardware_require(set(records) == set(jobs), "missing authoritative scheduler allocations")
+    _hardware_require(
+        len({r["node"] for r in records.values()}) == 1, "mixed scheduler nodes within one side"
+    )
+    return [records[job] for job in jobs]
+
+
+def scheduler_snapshot(jobs: list[str]) -> dict:
+    """Capture verified records with the exact trusted inventory artifact identity."""
+    _, inventory = scheduler_inventory()
+    return {
+        "schema_version": "behaviour-scheduler-verification.v1",
+        "inventory": inventory,
+        "records": scheduler_records(jobs),
+    }
+
+
+def validate_scheduler_rows(rows: list[dict], identities: dict[str, dict[str, str]]) -> None:
+    """Every joined row must retain both source allocations and their actual nodes."""
+    _hardware_require(isinstance(rows, list), "invalid row allocation inventory")
+    for row in rows:
+        _hardware_require(isinstance(row, dict), "invalid row allocation record")
+        for side, prefix in (("head", ""), ("baseline", "baseline_")):
+            _hardware_require(
+                row.get(prefix + "scheduler_job_id")
+                in scheduler_job_ids(identities[side]["job_id"]),
+                f"{side} row job differs from scheduler shard",
+            )
+            _hardware_require(
+                row.get(prefix + "scheduler_node") == identities[side]["node"],
+                f"{side} row node differs from scheduler allocation",
+            )
+
+
+def validate_source_row_context(row: dict, job: str, node: str) -> None:
+    """Reject mixed contexts in source rows before projection into the receipt."""
+    inventory, _ = scheduler_inventory()
+    _hardware_require(node in inventory, "source row node is absent from trusted inventory")
+    _hardware_require(
+        row.get("scheduler_job_id") == job, "source row job differs from scheduler shard"
+    )
+    _hardware_require(
+        row.get("scheduler_node") == node, "source row node differs from scheduler allocation"
+    )
+    contexts = [row]
+    for parent in (row, row.get("algorithm_metadata", {}), row.get("result_provenance", {})):
+        if isinstance(parent, dict) and "execution_context" in parent:
+            context = parent["execution_context"]
+            _hardware_require(isinstance(context, dict), "invalid source execution context")
+            contexts.append(context)
+    expected = {
+        "cpu_model": inventory[node]["cpu_model"],
+        "hostname": node,
+        "node_name": node,
+        "scheduler_node": node,
+        "scheduler_job_id": job,
+    }
+    for context in contexts:
+        for field, value in expected.items():
+            _hardware_require(
+                field not in context or context[field] == value,
+                f"source {field} differs from scheduler context",
+            )
 
 
 def hardware_identity(files: dict) -> dict[str, str]:
@@ -224,16 +368,39 @@ def hardware_identity(files: dict) -> dict[str, str]:
     )
     _hardware_require(request.get("requested_node") == node, "requested and observed nodes differ")
     _hardware_require(_digest(request.get("source_sha"), 40), "invalid hardware source SHA")
+    jobs = scheduler_job_ids(request.get("job_id"))
+    try:
+        snapshot = json.loads(texts["execution_scheduler.json"])
+    except ValueError as exc:
+        raise HardwareIdentityError(
+            "hardware comparison invalid: malformed scheduler verification"
+        ) from exc
     _hardware_require(
-        isinstance(request.get("job_id"), str)
-        and re.fullmatch(r"[1-9]\d*(?:_\d+)?", request["job_id"]) is not None,
-        "invalid hardware job identity",
+        snapshot == scheduler_snapshot(jobs),
+        "stored scheduler evidence differs from authoritative records",
+    )
+    # Derive identity from accounting and the trusted inventory. Job-written bytes
+    # are compared as claims; their hashes do not grant them authority.
+    observed = snapshot["records"][0]["node"]
+    inventory, _ = scheduler_inventory()
+    trusted = inventory[observed]
+    _hardware_require(
+        node == observed and request.get("requested_node") == observed,
+        "requested or claimed node differs from scheduler allocation",
+    )
+    _hardware_require(
+        fields["Model name:"] == trusted["cpu_model"]
+        and fields["Architecture:"] == trusted["architecture"],
+        "CPU claim differs from trusted node inventory",
+    )
+    _hardware_require(
+        node_class == trusted["node_class"], "node class claim differs from trusted node inventory"
     )
     return {
-        "node": node,
-        "node_class": node_class,
-        "cpu_model": fields["Model name:"],
-        "architecture": fields["Architecture:"],
+        "node": observed,
+        "node_class": trusted["node_class"],
+        "cpu_model": trusted["cpu_model"],
+        "architecture": trusted["architecture"],
         "source_sha": request["source_sha"],
         "job_id": request["job_id"],
     }
@@ -306,6 +473,7 @@ def validate_receipt(
 
     identities = validate_hardware_pair(receipt.get("hardware"))
     schema = json.loads((Path(__file__).with_name("behaviour_receipt.schema.json")).read_text())
+    validate_scheduler_rows(receipt.get("rows", []), identities)
     jsonschema.Draft202012Validator(schema).validate(receipt)
     scope_digest = hashlib.sha256(
         json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()
@@ -329,13 +497,13 @@ def validate_receipt(
             f"{side} hardware source differs from execution",
         )
     jobs = [identities[side]["job_id"] for side in ("head", "baseline")]
-    expected_job = jobs[0] if jobs[0] == jobs[1] else "_".join(jobs)
+    expected_job = (jobs[0] if jobs[0] == jobs[1] else "_".join(jobs)).replace(",", "_")
     _hardware_require(
         expected_job == receipt["scheduler"]["job_id"],
         "hardware jobs differ from scheduler identity",
     )
     _require(
-        bool(re.fullmatch(r"[1-9]\d*(?:_\d+)?", receipt["scheduler"]["job_id"])),
+        bool(re.fullmatch(r"[1-9]\d*(?:_\d+)*", receipt["scheduler"]["job_id"])),
         "missing scheduler job identity",
     )
     _require(
@@ -573,7 +741,8 @@ def load_receipt(header: dict, head: str) -> dict:
     )
     payload = json.loads(raw)
     _hardware_require(isinstance(payload, dict), "invalid receipt hardware payload")
-    validate_hardware_pair(payload.get("hardware"))
+    identities = validate_hardware_pair(payload.get("hardware"))
+    validate_scheduler_rows(payload.get("rows", []), identities)
     jsonschema.Draft202012Validator(schema).evolve(
         schema=schema["$defs"]["rows_artifact"]
     ).validate(payload)

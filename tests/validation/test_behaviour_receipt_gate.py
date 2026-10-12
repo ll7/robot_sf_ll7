@@ -6,6 +6,13 @@ import json
 import pytest
 
 from scripts.ci import pr_contract_check as checker
+from tests.validation.receipt_scheduler_fixture import install_scheduler
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 HEAD = "a" * 40
 
@@ -56,12 +63,12 @@ def test_behaviour_changes_without_receipt_are_blocked(monkeypatch, path):
 def _hardware(source, job="12345"):
     """Observed scheduler identity bound to a synthetic execution."""
     texts = {
-        "execution_node.txt": "compute-1\n",
-        "execution_node_class.txt": "cpu-class-a\n",
+        "execution_node.txt": "auxme-imech142\n",
+        "execution_node_class.txt": "pro6000\n",
         "execution_cpu.json": json.dumps(
             {
                 "lscpu": [
-                    {"field": "Model name:", "data": "Test CPU A"},
+                    {"field": "Model name:", "data": "AMD EPYC 9115 16-Core Processor"},
                     {"field": "Architecture:", "data": "x86_64"},
                 ]
             }
@@ -69,12 +76,34 @@ def _hardware(source, job="12345"):
         "execution_request.json": json.dumps(
             {
                 "schema_version": "behaviour-hardware-request.v1",
-                "requested_node": "compute-1",
+                "requested_node": "auxme-imech142",
                 "source_sha": source,
                 "job_id": job,
             }
         ),
     }
+    from pathlib import Path
+
+    inventory = Path(__file__).resolve().parents[2] / "scripts/ci/behaviour_receipt_nodes.json"
+    texts["execution_scheduler.json"] = json.dumps(
+        {
+            "schema_version": "behaviour-scheduler-verification.v1",
+            "inventory": {
+                "path": "scripts/ci/behaviour_receipt_nodes.json",
+                "sha256": hashlib.sha256(inventory.read_bytes()).hexdigest(),
+            },
+            "records": [
+                {
+                    "job_id": identity,
+                    "state": "COMPLETED",
+                    "exit_code": "0:0",
+                    "node": "auxme-imech142",
+                    "partition": "pro6000",
+                }
+                for identity in job.split(",")
+            ],
+        }
+    )
     return {
         name: {"content": text, "sha256": hashlib.sha256(text.encode()).hexdigest()}
         for name, text in texts.items()
@@ -94,6 +123,10 @@ def _receipt():
             "algorithm": arm,
             "controller_executed": True,
             "degraded": False,
+            "scheduler_job_id": "12345",
+            "scheduler_node": "auxme-imech142",
+            "baseline_scheduler_job_id": "12345",
+            "baseline_scheduler_node": "auxme-imech142",
             "baseline_success": True,
             "baseline_collisions": 0,
         }

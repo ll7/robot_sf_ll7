@@ -10,6 +10,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -515,12 +516,13 @@ def main() -> int:  # noqa: C901, PLR0915
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
         raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
+    identity_payload: dict[str, Any] = {
+        key: np.concatenate([identity[key] for identity in all_identities], axis=0)
+        for key in SAMPLE_IDENTITY_KEYS
+    }
     np.savez_compressed(
         args.output,
-        **{
-            key: np.concatenate([identity[key] for identity in all_identities], axis=0)
-            for key in SAMPLE_IDENTITY_KEYS
-        },
+        **identity_payload,
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,

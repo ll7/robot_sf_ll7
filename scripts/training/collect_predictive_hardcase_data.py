@@ -9,6 +9,7 @@ import uuid
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -372,7 +373,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:  # noqa: C901
+def main() -> int:  # noqa: C901, PLR0915
     """Collect hard-case trajectories and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     scenarios = load_scenarios(args.scenario_matrix)
@@ -473,12 +474,13 @@ def main() -> int:  # noqa: C901
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
         raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
+    identity_payload: dict[str, Any] = {
+        key: np.concatenate([identity[key] for identity in all_identities], axis=0)
+        for key in SAMPLE_IDENTITY_KEYS
+    }
     np.savez_compressed(
         args.output,
-        **{
-            key: np.concatenate([identity[key] for identity in all_identities], axis=0)
-            for key in SAMPLE_IDENTITY_KEYS
-        },
+        **identity_payload,
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,

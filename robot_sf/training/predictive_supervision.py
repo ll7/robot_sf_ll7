@@ -52,7 +52,7 @@ def supervision_metadata(collector_id: str) -> dict[str, Any]:
     }
 
 
-def observation_episode_ids(
+def observation_episode_ids(  # noqa: C901
     env: Any, *, episode_id: str, observation: dict | None = None
 ) -> tuple[str, ...]:
     """Return identity rows aligned with the *last emitted* SOCNAV observation.
@@ -91,7 +91,10 @@ def observation_episode_ids(
         if count.size != 1 or count[0] != len(indices) or rows.ndim != 2:
             raise ValueError("Observation/source identity count mismatch")
         expected = np.asarray(positions, dtype=np.float32)[list(indices)]
-        cap = sensor._position_cap()
+        position_cap = getattr(sensor, "_position_cap", None)
+        if not callable(position_cap):
+            raise ValueError("Predictive observation identity requires the sensor position cap")
+        cap = position_cap()
         expected = np.clip(expected, 0.0, cap)
         if not np.array_equal(rows[: len(indices)], expected):
             raise ValueError("Borrowed or stale observation/source pedestrian identity alignment")
@@ -343,6 +346,8 @@ def validate_sample_identities(raw: Any) -> None:  # noqa: C901, PLR0912
     missing = set(SAMPLE_IDENTITY_KEYS) - set(raw)
     if missing:
         raise ValueError(f"Missing predictive sample identity fields: {sorted(missing)}")
+    payload = raw
+    raw = {key: payload[key] for key in (*SAMPLE_IDENTITY_KEYS, "mask", "target_mask")}
     mask, target_mask = np.asarray(raw["mask"]), np.asarray(raw["target_mask"])
     n, agents = mask.shape
     horizon = target_mask.shape[-1]
@@ -394,13 +399,19 @@ def validate_sample_identities(raw: Any) -> None:  # noqa: C901, PLR0912
         previous = samples.setdefault(sample_key, i)
         # Oversampling can repeat a sample, but cannot attach different data to its key.
         for key in (
-            "sample_pedestrian_id",
-            "sample_target_pedestrian_id",
-            "mask",
-            "target_mask",
-            "state",
-            "target",
+            ()
+            if previous == i
+            else (
+                "sample_pedestrian_id",
+                "sample_target_pedestrian_id",
+                "mask",
+                "target_mask",
+                "state",
+                "target",
+            )
         ):
+            if key not in raw and key in payload:
+                raw[key] = payload[key]
             if key in raw and not np.array_equal(raw[key][i], raw[key][previous]):
                 raise ValueError("Ambiguous predictive sample identity reused with different rows")
         ids = source[i, active[i]].tolist()

@@ -340,6 +340,9 @@
     "scope_sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "hardware": {
+      "$ref": "#/$defs/hardware"
     }
   },
   "required": [
@@ -355,7 +358,8 @@
     "totals",
     "interaction_audit",
     "refute_review",
-    "scope_sha256"
+    "scope_sha256",
+    "hardware"
   ],
   "additionalProperties": false,
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -762,12 +766,74 @@
             ],
             "additionalProperties": false
           }
+        },
+        "hardware": {
+          "$ref": "#/$defs/hardware"
         }
       },
       "required": [
         "schema_version",
         "rows",
-        "classifications"
+        "classifications",
+        "hardware"
+      ],
+      "additionalProperties": false
+    },
+    "hardware_file": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "content",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "hardware_files": {
+      "type": "object",
+      "properties": {
+        "execution_node.txt": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_cpu.json": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_node_class.txt": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_request.json": {
+          "$ref": "#/$defs/hardware_file"
+        }
+      },
+      "required": [
+        "execution_node.txt",
+        "execution_cpu.json",
+        "execution_node_class.txt",
+        "execution_request.json"
+      ],
+      "additionalProperties": false
+    },
+    "hardware": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "$ref": "#/$defs/hardware_files"
+        },
+        "baseline": {
+          "$ref": "#/$defs/hardware_files"
+        }
+      },
+      "required": [
+        "head",
+        "baseline"
       ],
       "additionalProperties": false
     }

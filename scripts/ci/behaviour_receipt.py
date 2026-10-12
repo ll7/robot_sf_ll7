@@ -150,6 +150,110 @@ def _digest(value: object, length: int = 64) -> bool:
     return isinstance(value, str) and re.fullmatch(rf"[0-9a-f]{{{length}}}", value) is not None
 
 
+HARDWARE_FILES = (
+    "execution_node.txt",
+    "execution_cpu.json",
+    "execution_node_class.txt",
+    "execution_request.json",
+)
+
+
+class HardwareIdentityError(ValueError):
+    """Hardware evidence cannot support a base/head outcome comparison."""
+
+
+def _hardware_require(condition: bool, reason: str) -> None:
+    if not condition:
+        raise HardwareIdentityError(f"hardware comparison invalid: {reason}")
+
+
+def hardware_identity(files: dict) -> dict[str, str]:
+    """Validate hashed identity-file bytes without inferring missing observations."""
+    _hardware_require(isinstance(files, dict), "missing hardware identity files")
+    _hardware_require(set(files) == set(HARDWARE_FILES), "missing or unexpected hardware files")
+    texts = {}
+    for name in HARDWARE_FILES:
+        entry = files[name]
+        _hardware_require(isinstance(entry, dict), f"invalid {name} record")
+        content = entry.get("content")
+        _hardware_require(isinstance(content, str) and bool(content), f"missing {name} bytes")
+        try:
+            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        except UnicodeError as exc:
+            raise HardwareIdentityError(
+                f"hardware comparison invalid: invalid {name} encoding"
+            ) from exc
+        _hardware_require(entry.get("sha256") == digest, f"{name} digest mismatch")
+        texts[name] = content
+    node = texts["execution_node.txt"].strip()
+    node_class = texts["execution_node_class.txt"].strip()
+    for label, value in (("observed node", node), ("node class", node_class)):
+        _hardware_require(
+            re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?", value) is not None
+            and value.casefold() != "unknown",
+            f"invalid {label}",
+        )
+    try:
+        cpu = json.loads(texts["execution_cpu.json"])
+        request = json.loads(texts["execution_request.json"])
+    except ValueError as exc:
+        raise HardwareIdentityError("hardware comparison invalid: malformed identity JSON") from exc
+    _hardware_require(
+        isinstance(cpu, dict) and isinstance(cpu.get("lscpu"), list), "invalid CPU identity"
+    )
+    fields = {}
+    for label in ("Model name:", "Architecture:"):
+        values = [
+            row.get("data")
+            for row in cpu["lscpu"]
+            if isinstance(row, dict) and row.get("field") == label
+        ]
+        _hardware_require(
+            len(values) == 1
+            and isinstance(values[0], str)
+            and bool(values[0].strip())
+            and values[0].strip().casefold() != "unknown"
+            and not any(ord(char) < 32 for char in values[0].strip()),
+            f"missing or ambiguous CPU {label}",
+        )
+        fields[label] = values[0].strip()
+    _hardware_require(isinstance(request, dict), "invalid hardware request")
+    _hardware_require(
+        request.get("schema_version") == "behaviour-hardware-request.v1",
+        "invalid hardware request schema",
+    )
+    _hardware_require(request.get("requested_node") == node, "requested and observed nodes differ")
+    _hardware_require(_digest(request.get("source_sha"), 40), "invalid hardware source SHA")
+    _hardware_require(
+        isinstance(request.get("job_id"), str)
+        and re.fullmatch(r"[1-9]\d*(?:_\d+)?", request["job_id"]) is not None,
+        "invalid hardware job identity",
+    )
+    return {
+        "node": node,
+        "node_class": node_class,
+        "cpu_model": fields["Model name:"],
+        "architecture": fields["Architecture:"],
+        "source_sha": request["source_sha"],
+        "job_id": request["job_id"],
+    }
+
+
+def validate_hardware_pair(hardware: dict) -> dict[str, dict[str, str]]:
+    """Reject unmatched execution contexts independently of episode outcomes."""
+    _hardware_require(
+        isinstance(hardware, dict) and set(hardware) == {"head", "baseline"},
+        "missing paired hardware evidence",
+    )
+    identities = {side: hardware_identity(hardware[side]) for side in ("head", "baseline")}
+    for field in ("cpu_model", "architecture", "node_class", "node"):
+        _hardware_require(
+            identities["head"][field] == identities["baseline"][field],
+            f"head and baseline {field} differ",
+        )
+    return identities
+
+
 def _uri(value: object) -> bool:
     if not isinstance(value, str):
         return False
@@ -200,6 +304,7 @@ def validate_receipt(
     """Check exact coverage, provenance, exceptions and exhaustive classifications."""
     import jsonschema
 
+    identities = validate_hardware_pair(receipt.get("hardware"))
     schema = json.loads((Path(__file__).with_name("behaviour_receipt.schema.json")).read_text())
     jsonschema.Draft202012Validator(schema).validate(receipt)
     scope_digest = hashlib.sha256(
@@ -214,6 +319,20 @@ def validate_receipt(
     require_receipt_only_ancestor(receipt["scheduler"]["source_sha"], head, "job")
     require_receipt_only_ancestor(
         receipt["interaction_audit"]["source_sha"], head, "real-row audit"
+    )
+    for side, source in (
+        ("head", receipt["scheduler"]["source_sha"]),
+        ("baseline", baseline_source),
+    ):
+        _hardware_require(
+            identities[side]["source_sha"] == source,
+            f"{side} hardware source differs from execution",
+        )
+    jobs = [identities[side]["job_id"] for side in ("head", "baseline")]
+    expected_job = jobs[0] if jobs[0] == jobs[1] else "_".join(jobs)
+    _hardware_require(
+        expected_job == receipt["scheduler"]["job_id"],
+        "hardware jobs differ from scheduler identity",
     )
     _require(
         bool(re.fullmatch(r"[1-9]\d*(?:_\d+)?", receipt["scheduler"]["job_id"])),
@@ -453,7 +572,11 @@ def load_receipt(header: dict, head: str) -> dict:
         "receipt payload digest mismatch",
     )
     payload = json.loads(raw)
-    jsonschema.Draft202012Validator(schema["$defs"]["rows_artifact"]).validate(payload)
+    _hardware_require(isinstance(payload, dict), "invalid receipt hardware payload")
+    validate_hardware_pair(payload.get("hardware"))
+    jsonschema.Draft202012Validator(schema).evolve(
+        schema=schema["$defs"]["rows_artifact"]
+    ).validate(payload)
     classifications = payload["classifications"]
     _require(
         header["classifications"]
@@ -470,6 +593,7 @@ def load_receipt(header: dict, head: str) -> dict:
         schema_version="behaviour-change-receipt.v1",
         rows=payload["rows"],
         classifications=classifications,
+        hardware=payload["hardware"],
     )
     return receipt
 
@@ -512,6 +636,8 @@ def check_receipt(
         subprocess.SubprocessError,
         jsonschema.ValidationError,
     ) as exc:
+        if isinstance(exc, HardwareIdentityError):
+            return [f"BLOCKER: {exc}"]
         return [
             f"BLOCKER: behaviour receipt rejected ({type(exc).__name__}); verify scope, exact head, baseline, job, payload digest and classification inventory"
         ]

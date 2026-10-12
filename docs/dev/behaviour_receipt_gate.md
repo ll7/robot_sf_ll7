@@ -60,9 +60,24 @@ after both jobs finish, rerun with `--mode existing` and the two completed sweep
 directories to write `receipts/behaviour/<id>.json` and print the header.
 
 The node argument must be one literal hostname; node lists and range expressions
-are refused before submission. Each job preserves `execution_node.txt` and
-`execution_cpu.json` in its sweep directory. Include these files in artifact
-custody and check them before interpreting a learned-planner difference.
+are refused before submission. Each sweep must preserve four regular identity
+files: `execution_node.txt` (observed hostname), `execution_cpu.json` (raw
+`lscpu --json`), `execution_node_class.txt` (Slurm partition, or `local` for
+local execution), and `execution_request.json` (requested node, execution SHA
+and job ID). The launch script refuses an observed hostname that differs from
+the requested node.
+
+Collection validates both identities before comparing outcomes. Both must have
+the same CPU model, architecture, node class and observed node, and each
+requested node must equal its observed node. Missing, malformed or mismatched
+identity evidence explicitly invalidates the comparison: collection exits
+without a receipt, header, audit or outcome report, even if outcomes are
+unchanged. The committed payload embeds the exact identity file contents and
+their SHA-256 digests, bound by the existing payload digest. Admission repeats
+the identity and digest checks and binds their execution SHAs and job IDs to
+the header. Receipts without these files cannot be admitted; acquire new
+execution evidence rather than backfilling observations into frozen artifacts.
+
 CPU-dependent floating-point inference can change learned trajectories even
 with deterministic action selection and one numerical thread. A same-commit
 comparison on the same node measures repeatability; a cross-CPU comparison

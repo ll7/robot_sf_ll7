@@ -145,6 +145,10 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
         "incomplete_trace_slots": [],
     }
     (out / "execution_main.json").write_text(json.dumps(meta))
+    from tests.validation.test_behaviour_receipt_gate import _hardware
+
+    for name, entry in _hardware(source_sha, "123").items():
+        (out / name).write_text(entry["content"])
     (out / "README.md").write_text(label + "\n")
     return out
 
@@ -163,6 +167,11 @@ def _existing(source_sha, out, digest=None):
 def test_existing_sweep_rejects_relabelled_source(tmp_path, claimed_sha):
     """Foreign recorded source cannot become either claimed execution source."""
     out = _sweep_rows(tmp_path, "foreign", source_sha="b" * 40)
+    # Keep hardware valid for the claimed source to isolate the execution-metadata guard.
+    request = out / "execution_request.json"
+    hardware_request = json.loads(request.read_text())
+    hardware_request["source_sha"] = claimed_sha
+    request.write_text(json.dumps(hardware_request))
     with pytest.raises(ValueError, match="recorded SHA differs"):
         _existing(claimed_sha, out)
 
@@ -1431,13 +1440,15 @@ def test_placeholder_review_fails_real_gate(monkeypatch, tmp_path):
 def _revision_module(tmp_path, revision, filename):
     name = f"receipt_{revision[:8]}_{filename.removesuffix('.py')}"
     source = subprocess.check_output(
-        ["git", "show", f"{revision}:scripts/ci/{filename}"], cwd=producer.ROOT, text=True
+        ["git", "show", f"{revision}:scripts/ci/{filename}"],
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
     )
     path = tmp_path / filename
     path.write_text(source)
     schema = subprocess.check_output(
         ["git", "show", f"{revision}:scripts/ci/behaviour_receipt.schema.json"],
-        cwd=producer.ROOT,
+        cwd=Path(__file__).resolve().parents[2],
     )
     (tmp_path / "behaviour_receipt.schema.json").write_bytes(schema)
     spec = importlib.util.spec_from_file_location(name, path)
@@ -1467,6 +1478,8 @@ def test_p1_regression_controls_fail_on_reviewed_head(monkeypatch, tmp_path, fin
             with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
                 test_existing_sweep_rejects_relabelled_source(fixture_dir, "a" * 40)
         elif finding == "review":
+            old_gate = _revision_module(tmp_path, REVIEWED_HEAD, "behaviour_receipt.py")
+            monkeypatch.setattr(sys.modules[__name__], "gate", old_gate)
             header = _payload_fixture(fixture_dir, monkeypatch)
             body = "<!-- behaviour-change-receipt:v2\n" + json.dumps(header) + "\n-->"
             assert (
@@ -1517,6 +1530,10 @@ def _install_cli_fixture(tmp_path, monkeypatch):
     source = git("rev-parse", "HEAD")
     head = _sweep_rows(tmp_path, "head", source_sha=source, failing=True)
     baseline = _sweep_rows(tmp_path, "baseline", source_sha=baseline_source)
+    request = baseline / "execution_request.json"
+    metadata = json.loads(request.read_text())
+    metadata["job_id"] = "456"
+    request.write_text(json.dumps(metadata))
     _fake_release_api(tmp_path, monkeypatch)
     monkeypatch.delenv("PYTHONPATH", raising=False)
     monkeypatch.setattr(gate, "ROOT", tmp_path)
@@ -1583,10 +1600,21 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     original = _revision_module(tmp_path, ORIGINAL_MAIN, "behaviour_receipt.py")
     original.ROOT, original.SCOPE_PATH = tmp_path, gate.SCOPE_PATH
     assert original.latest_release("ll7/robot_sf_ll7") == "0.0.7"
-    receipt = original.load_receipt(header, final_head)
+    legacy_payload = json.loads((tmp_path / header["rows_artifact"]["path"]).read_text())
+    legacy_payload.pop("hardware")
+    legacy_raw = json.dumps(legacy_payload).encode()
+    (tmp_path / header["rows_artifact"]["path"]).write_bytes(legacy_raw)
+    git("add", header["rows_artifact"]["path"])
+    git("commit", "-m", "historical transport control")
+    legacy_head = git("rev-parse", "HEAD")
+    legacy_header = copy.deepcopy(header)
+    legacy_header["rows_artifact"]["sha256"] = hashlib.sha256(legacy_raw).hexdigest()
+    legacy_header["head_sha"] = legacy_head
+    legacy_header["refute_review"]["head_sha"] = legacy_head
+    receipt = original.load_receipt(legacy_header, legacy_head)
     with pytest.raises(ValueError, match="baseline is not the latest published software release"):
         original.validate_receipt(
-            receipt, _scope(), final_head, "0.0.7", original.release_source("0.0.7")
+            receipt, _scope(), legacy_head, "0.0.7", original.release_source("0.0.7")
         )
     assert original.check_receipt(body, changed, "ll7/robot_sf_ll7")
 

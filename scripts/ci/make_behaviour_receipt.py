@@ -755,6 +755,44 @@ class SweepRun:
     artifact_uri: str
     artifact_sha256: str
     job_id: str
+    hardware: dict[str, Any] | None = None
+
+
+def _record_request(output_dir: Path, source_sha: str, job_id: str, node: str) -> None:
+    (output_dir / "execution_request.json").write_bytes(
+        _json_bytes(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": node,
+                "source_sha": source_sha,
+                "job_id": job_id,
+            }
+        )
+    )
+
+
+def _read_hardware(output_dir: Path, source_sha: str, job_id: str) -> dict[str, Any]:
+    files = {}
+    for name in behaviour_receipt.HARDWARE_FILES:
+        path = output_dir / name
+        if path.is_symlink() or not path.is_file():
+            raise behaviour_receipt.HardwareIdentityError(
+                f"hardware comparison invalid: missing regular {name} identity file"
+            )
+        try:
+            raw = path.read_bytes()
+            content = raw.decode("utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise behaviour_receipt.HardwareIdentityError(
+                f"hardware comparison invalid: unreadable {name} identity file"
+            ) from exc
+        files[name] = {"content": content, "sha256": hashlib.sha256(raw).hexdigest()}
+    identity = behaviour_receipt.hardware_identity(files)
+    if identity["source_sha"] != source_sha or identity["job_id"] != job_id:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: hardware request differs from sweep source or job"
+        )
+    return files
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -878,6 +916,12 @@ def _run_local_sweep(  # noqa: PLR0913
         check_only=check_only,
     )
     subprocess.run(cmd, cwd=checkout, check=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    node = subprocess.check_output(["hostname"], text=True).strip()
+    (output_dir / "execution_node.txt").write_text(node + "\n", encoding="utf-8")
+    (output_dir / "execution_cpu.json").write_bytes(subprocess.check_output(["lscpu", "--json"]))
+    (output_dir / "execution_node_class.txt").write_text("local\n", encoding="utf-8")
+    _record_request(output_dir, source_sha, "1", node)
     manifest = output_dir / "README.md"
     artifact_sha = _sha256(manifest) if manifest.is_file() else _canonical_digest(cmd)
     return SweepRun(
@@ -886,6 +930,7 @@ def _run_local_sweep(  # noqa: PLR0913
         artifact_uri=f"{PLACEHOLDER_EVIDENCE_URI}/{label}",
         artifact_sha256=artifact_sha,
         job_id="1",
+        hardware=_read_hardware(output_dir, source_sha, "1"),
     )
 
 
@@ -930,6 +975,8 @@ def _submit_sbatch_sweep(
                 f"cd {shlex.quote(str(checkout))}",
                 f"hostname > {shlex.quote(str(output_dir / 'execution_node.txt'))}",
                 f"lscpu --json > {shlex.quote(str(output_dir / 'execution_cpu.json'))}",
+                f'printf "%s\\n" "${{SLURM_JOB_PARTITION:?}}" > {shlex.quote(str(output_dir / "execution_node_class.txt"))}',
+                f'test "$(cat {shlex.quote(str(output_dir / "execution_node.txt"))})" = {shlex.quote(node)}',
                 shlex.join(cmd),
                 "",
             ]
@@ -948,6 +995,7 @@ def _submit_sbatch_sweep(
     }
     manifest = output_dir / "submission.json"
     manifest.write_bytes(_json_bytes(submission))
+    _record_request(output_dir, source_sha, job_id, node)
     return SweepRun(
         source_sha=source_sha,
         output_dir=output_dir,
@@ -967,6 +1015,7 @@ def _existing_sweep(
 ) -> SweepRun:
     if not output_dir.is_dir():
         raise FileNotFoundError(output_dir)
+    hardware = _read_hardware(output_dir, source_sha, job_id)
     _verify_sweep_metadata(output_dir, source_sha)
     digest = _canonical_digest(
         {
@@ -977,7 +1026,7 @@ def _existing_sweep(
     )
     if artifact_sha256 is not None and artifact_sha256 != digest:
         raise ValueError("supplied sweep digest differs from actual artifact bytes")
-    return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id)
+    return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id, hardware)
 
 
 def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
@@ -1586,8 +1635,11 @@ def write_receipt_and_header(  # noqa: PLR0913
     output_dir: Path,
 ) -> tuple[Path, dict[str, Any]]:
     """Write the committed rows payload and return the compact PR header."""
+    hardware = {"head": scheduler.hardware, "baseline": baseline.hardware}
+    behaviour_receipt.validate_hardware_pair(hardware)
     payload = {
         "schema_version": "behaviour-change-rows.v1",
+        "hardware": hardware,
         "rows": rows,
         "classifications": classifications,
     }
@@ -1716,6 +1768,18 @@ def _prepare_sweeps(
     if args.mode == "existing":
         if args.head_sweep_dir is None or args.baseline_sweep_dir is None:
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
+        behaviour_receipt.validate_hardware_pair(
+            {
+                "head": _read_hardware(
+                    args.head_sweep_dir.resolve(),
+                    args.head_source_sha or args.head_sha,
+                    args.job_id,
+                ),
+                "baseline": _read_hardware(
+                    args.baseline_sweep_dir.resolve(), baseline_source, args.baseline_job_id
+                ),
+            }
+        )
         return (
             _existing_sweep(
                 args.head_source_sha or args.head_sha,
@@ -1794,6 +1858,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.submit_only:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
+    behaviour_receipt.validate_hardware_pair(
+        {"head": scheduler.hardware, "baseline": baseline.hardware}
+    )
     scope = _load_scope(args.scope_path)
     head_rows = _load_sweep_rows(scheduler.output_dir)
     baseline_rows = _load_sweep_rows(baseline.output_dir)
@@ -1852,4 +1919,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except behaviour_receipt.HardwareIdentityError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc

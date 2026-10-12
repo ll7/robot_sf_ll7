@@ -55,9 +55,7 @@ def test_rows_committed_after_execution_are_accepted(monkeypatch, tmp_path, fiel
     git("merge-base", "--is-ancestor", run, head)
     assert git("diff", "--name-only", run, head) == "receipts/behaviour/sweep.json"
     assert header["refute_review"]["head_sha"] == head
-    # Isolate each execution identity; the shared transport fixtures also exercise both.
-    other = "interaction_audit" if field == "scheduler" else "scheduler"
-    header[other]["source_sha"] = head
+    # Both executed sources remain bound to their committed observations.
     assert (
         adapter.check_receipt(_body(header), ["robot_sf/planner/policy.py"], "ll7/robot_sf_ll7")
         == []
@@ -158,8 +156,7 @@ def test_committed_lfs_receipt_uses_verified_object(monkeypatch, tmp_path, fault
         object_file.unlink()
     elif fault == "wrong_digest":
         header["rows_artifact"]["sha256"] = "0" * 64
-    # This test isolates LFS transport; the run identity fixtures cover ancestry.
-    header["scheduler"]["source_sha"] = header["interaction_audit"]["source_sha"] = head
+    # Keep recorded sources intact while isolating committed LFS transport.
     blockers = adapter.check_receipt(
         _body(header), ["robot_sf/planner/policy.py"], "ll7/robot_sf_ll7"
     )

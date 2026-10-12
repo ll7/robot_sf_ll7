@@ -53,6 +53,34 @@ def test_behaviour_changes_without_receipt_are_blocked(monkeypatch, path):
     assert any("behaviour receipt" in blocker.lower() for blocker in blockers), blockers
 
 
+def _hardware(source, job="12345"):
+    """Observed scheduler identity bound to a synthetic execution."""
+    texts = {
+        "execution_node.txt": "compute-1\n",
+        "execution_node_class.txt": "cpu-class-a\n",
+        "execution_cpu.json": json.dumps(
+            {
+                "lscpu": [
+                    {"field": "Model name:", "data": "Test CPU A"},
+                    {"field": "Architecture:", "data": "x86_64"},
+                ]
+            }
+        ),
+        "execution_request.json": json.dumps(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": "compute-1",
+                "source_sha": source,
+                "job_id": job,
+            }
+        ),
+    }
+    return {
+        name: {"content": text, "sha256": hashlib.sha256(text.encode()).hexdigest()}
+        for name, text in texts.items()
+    }
+
+
 def _receipt():
     rows = [
         {
@@ -88,6 +116,7 @@ def _receipt():
             ).encode()
         ).hexdigest(),
         "head_sha": HEAD,
+        "hardware": {"head": _hardware(HEAD), "baseline": _hardware("c" * 40)},
         "scheduler": {"kind": "slurm", "job_id": "12345", "source_sha": HEAD},
         "artifact": {"uri": "https://example.org/sweep.json", "sha256": "b" * 64},
         "baseline": {
@@ -121,7 +150,9 @@ def _receipt():
 def _header(receipt, raw, path="receipts/behaviour/sweep.json"):
     """Build the independently specified compact body around payload bytes."""
     header = {
-        key: value for key, value in receipt.items() if key not in {"rows", "classifications"}
+        key: value
+        for key, value in receipt.items()
+        if key not in {"rows", "classifications", "hardware"}
     }
     header["schema_version"] = "behaviour-change-receipt-header.v2"
     header["rows_artifact"] = {"path": path, "sha256": hashlib.sha256(raw).hexdigest()}
@@ -151,9 +182,11 @@ def _commit_receipt(monkeypatch, tmp_path, receipt):
     path = "receipts/behaviour/sweep.json"
     file = tmp_path / path
     file.parent.mkdir(parents=True)
+    receipt["hardware"]["head"] = _hardware(run_source)
     raw = json.dumps(
         {
             "schema_version": "behaviour-change-rows.v1",
+            "hardware": receipt["hardware"],
             "rows": receipt["rows"],
             "classifications": receipt["classifications"],
         }
@@ -367,6 +400,7 @@ def test_contract_checkout_uses_source_identity_and_hydrates_release_tags(monkey
     receipt["head_sha"] = receipt["scheduler"]["source_sha"] = head
     receipt["interaction_audit"]["source_sha"] = receipt["refute_review"]["head_sha"] = head
     receipt["baseline"]["source_sha"] = baseline
+    receipt["hardware"] = {"head": _hardware(head), "baseline": _hardware(baseline)}
     scope = {
         "arms": ["goal", "orca"],
         "maps": ["open", "door"],

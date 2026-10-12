@@ -223,17 +223,9 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     git, base = _trusted_fixture(root)
     scope = json.loads((ROOT / adapter.SCOPE_FILE).read_text())
     receipt = _inventory_receipt(scope)
-    raw = json.dumps(
-        {
-            "schema_version": "behaviour-change-rows.v1",
-            "rows": receipt["rows"],
-            "classifications": receipt["classifications"],
-        }
-    ).encode()
     path = "receipts/behaviour/sweep.json"
     target = root / path
     target.parent.mkdir(parents=True)
-    target.write_bytes(raw)
     # A behaviour PR tampers with all three head policy surfaces. Base execution
     # must still accept honest rows and reject absent/corrupted receipts.
     (root / "scripts/ci/behaviour_receipt.py").write_text("raise SystemExit(0)\n")
@@ -250,6 +242,18 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     )
     git("commit", "-m", "executed source with untrusted policy edits")
     run_source = git("rev-parse", "HEAD")
+    from tests.validation.test_behaviour_receipt_gate import _hardware
+
+    receipt["hardware"] = {"head": _hardware(run_source), "baseline": _hardware(base)}
+    raw = json.dumps(
+        {
+            "schema_version": "behaviour-change-rows.v1",
+            "hardware": receipt["hardware"],
+            "rows": receipt["rows"],
+            "classifications": receipt["classifications"],
+        }
+    ).encode()
+    target.write_bytes(raw)
     git("add", path)
     git("commit", "-m", "preserve run rows after execution")
     head = git("rev-parse", "HEAD")

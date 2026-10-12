@@ -1,0 +1,52 @@
+{
+  "base": {
+    "argv": [
+      "--episodes",
+      "3",
+      "--seed",
+      "1001",
+      "--episode-seeds",
+      "1001",
+      "1002",
+      "1003",
+      "--min-goal-distance",
+      "0",
+      "--max-steps",
+      "12",
+      "--horizon-steps",
+      "4",
+      "--max-agents",
+      "16",
+      "--output",
+      "tests/fixtures/predictive_sample_identity/base.npz"
+    ],
+    "episodes": 3,
+    "samples": 24,
+    "active_source_rows": 384,
+    "checked_target_points": 1522,
+    "identity_check": "pass",
+    "simulator_target_oracle": "pass"
+  },
+  "hardcase": {
+    "argv": [
+      "--scenario-matrix",
+      "tests/fixtures/predictive_sample_identity/scenario.yaml",
+      "--seed-manifest",
+      "tests/fixtures/predictive_sample_identity/seeds.yaml",
+      "--max-steps",
+      "12",
+      "--horizon-steps",
+      "4",
+      "--max-agents",
+      "16",
+      "--output",
+      "tests/fixtures/predictive_sample_identity/hardcase.npz"
+    ],
+    "episodes": 3,
+    "samples": 24,
+    "active_source_rows": 48,
+    "checked_target_points": 192,
+    "identity_check": "pass",
+    "simulator_target_oracle": "pass"
+  }
+}

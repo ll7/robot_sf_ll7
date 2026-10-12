@@ -971,8 +971,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         control_dt = self._simulation_timestep(observation) if observation is not None else dt
         ticks_per_sample = dt / control_dt
         control_ticks = round(ticks_per_sample) if np.isfinite(ticks_per_sample) else 0
+        # Observations quantize the control clock to float32. Allow its relative
+        # rounding error at each ratio magnitude, while still taking whole ticks.
         if control_ticks < 1 or not np.isclose(
-            ticks_per_sample, control_ticks, rtol=0.0, atol=1e-9
+            ticks_per_sample, control_ticks, rtol=1e-6, atol=0.0
         ):
             raise ValueError(
                 "Bound prediction rollout timestep must be an integer multiple of the control "

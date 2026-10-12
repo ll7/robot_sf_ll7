@@ -55,6 +55,10 @@ class ScenarioPersistenceValidationError(RobotSfError, ValueError):
     """Raised when a persistence record is incomplete or internally inconsistent."""
 
 
+class UnsupportedWindowAdmissionError(ScenarioPersistenceValidationError):
+    """Raised when a replay checkpoint cannot establish admission authority."""
+
+
 def load_persistence_schema() -> dict[str, Any]:
     """Return the versioned JSON Schema for persistence records."""
 
@@ -351,28 +355,6 @@ def _read_bound_json(root: Path, binding: Mapping[str, str]) -> dict[str, Any]:
     return value
 
 
-def _window_event(steps: Sequence[Mapping[str, Any]], source: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the recorded near-miss/contact from geometry and source radii."""
-    radii = source["effective_physics"]["clearance_definition"]
-    radius = radii["robot_radius_m"] + radii["pedestrian_radius_m"]
-    threshold = source["metric_parameters"]["threshold_profile"]["near_miss_distance_m"]
-    clearances = [
-        min(math.dist(s["robot"]["position"], p["position"]) for p in s["pedestrians"]) - radius
-        for s in steps
-    ]
-    near = [s for s, c in zip(steps, clearances, strict=True) if 0 <= c < threshold]
-    contacts = [s for s in steps if any(s.get("collision", {}).values())]
-    minimum = steps[clearances.index(min(clearances))]
-    return {
-        "near_miss_samples": len(near),
-        "first_near_miss_step": near[0]["step"] if near else None,
-        "first_contact_step": contacts[0]["step"] if contacts else None,
-        "min_clearance_m": min(clearances),
-        "time_s": minimum["time_s"],
-        "location": minimum["robot"]["position"],
-    }
-
-
 def _verify_checkpoint_runtime_code(
     root: Path, receipt: dict[str, Any], checkpoint: dict[str, Any]
 ) -> None:
@@ -517,14 +499,19 @@ def _verify_window_runs(
 
 
 def verify_window_replay_receipt(receipt_path: Path, *, repo_root: Path) -> dict[str, Any]:
-    """Verify a source-bound window from actual artifacts, not an asserted pass.
+    """Check window custody/parity, then refuse unsupported admission authority.
 
     Two distinct replay records must reproduce every source-window channel.
-    Episode IDs remain distinct; this never asserts full-episode termination or
-    perturbation persistence. Missing/bad bindings or parity raise before admission.
+    That establishes replay parity, not event criteria or provenance identity.
+    Current v1/v2 checkpoints do not own metric thresholds or source/replay
+    commits. Neither trajectory geometry nor matching copies of native metadata
+    can recover those missing inputs. This evidence class therefore cannot be
+    admitted, including when its trajectories genuinely match.
 
-    Returns:
-        Verified receipt plus independent exact-replay and critical-event blocks.
+    Raises:
+        UnsupportedWindowAdmissionError: Valid replay evidence lacks complete
+            checkpoint-owned authority. Existing custody/parity errors remain
+            distinguishable. No current checkpoint schema can return success.
     """
     import yaml  # noqa: PLC0415 - window materialization dependency only
 
@@ -626,39 +613,17 @@ def verify_window_replay_receipt(receipt_path: Path, *, repo_root: Path) -> dict
         )
     except ValueError as exc:
         raise ScenarioPersistenceValidationError(str(exc)) from exc
-    replays = _verify_window_runs(root, receipt, source, expected)
-    event = _window_event(expected, source)
-    if not event["near_miss_samples"] and event["first_contact_step"] is None:
-        raise ScenarioPersistenceValidationError("window has no verified critical event")
-    critical = assess_critical_event_reproduction(
-        event_type="min_clearance",
-        source_event_time_s=event["time_s"],
-        source_event_location=event["location"],
-        replayed_event_time_s=event["time_s"],
-        replayed_event_location=event["location"],
+    _verify_window_runs(root, receipt, source, expected)
+    # Fail closed for the whole class; adding another list of metadata checks
+    # cannot establish inputs that the capture never recorded. Do not infer a
+    # metric profile from current defaults or a Git commit from a partial code
+    # fingerprint. Reopening requires a complete capture/reconstruction design
+    # and fresh proof, rather than promotion of this legacy packet.
+    raise UnsupportedWindowAdmissionError(
+        "window evidence lacks checkpoint-owned admission authority: metric "
+        "thresholds and source/replay commit identities are not recorded; "
+        "continuation v1/v2 windows are replay evidence only, not corpus-admissible"
     )
-    return {
-        "receipt": receipt,
-        "original_budget_steps": checkpoint["original_budget_steps"],
-        "source_scenario_id": source["scenario_id"],
-        "scenario_id": entry["scenario_id"],
-        "source_episode_id": source["episode_id"],
-        "replay_scope": {
-            "kind": "source_bound_window",
-            "receipt_sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
-            "window": w,
-            "source_episode_id": source["episode_id"],
-            "replay_episode_ids": [r["episode_id"] for r in replays],
-        },
-        "replay_episode_ids": [r["episode_id"] for r in replays],
-        "exact_replay": {
-            "status": PASS,
-            "divergence_reason": "two source-bound window traces matched",
-            "replay_digest": digest,
-        },
-        "critical_event_reproduced": critical,
-        "event": event,
-    }
 
 
 def assess_critical_event_reproduction(

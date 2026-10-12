@@ -1,14 +1,21 @@
+<!-- AI-GENERATED (#9652) - NEEDS-REVIEW -->
 # Source-bound observed-window corpus entry
 
-The seed-1001 critical window is admitted once through the existing persistence
-replay/event gate. Two native window replays match the source exactly; missing
+**Round-7 disposition: admission FAIL; parking recommended.** The retained
+corpus and persistence outputs are historical results from the superseded
+gate, not valid current admissions. Continuation v1/v2 checkpoints lack
+checkpoint-owned metric criteria and source/replay commit identities.
+Admission and export of historical cases now refuse this evidence class.
+#10331 ends at replay parity and is unchanged. See [round7_report.md](round7_report.md).
+
+The historical seed-1001 admission is invalid under the required authority contract. Two native window replays match the source exactly; missing
 parity proof is refused and duplicate admission preserves the immutable entry.
 All ten evidence-registry locator findings are remediated. Existing debt remains
 at 492 findings; no new finding was baselined. Raw rows have lane-host custody and
 a byte-exact offline regeneration command. See the report for final checks.
 
 Read [the stage report](report.md) for commands, provenance, required tests and
-the main comparison (132 pre-existing failure/error IDs; zero introduced).
+the historical main comparison; the round-7 report lists four current introduced failures.
 [window_receipt.json](window_receipt.json) binds the retained source/checkpoint/
 scenario/model and both native runs. [corpus.json](corpus/corpus.json) indexes
 the first case; [replay_slice.json](replay_slice.json) exports existing runner
@@ -18,7 +25,7 @@ results, and [CHECKSUMS.sha256](CHECKSUMS.sha256) covers this packet.
 This is an observed simulator regression case. Feasibility and nine perturbation
 cells are unknown; separate robust promotion is rejected. No paper-facing
 benchmark, release or safety claim is admitted. Original and replay-stage
-reports are retained as historical records; this report supersedes their corpus
+reports are retained as historical records; the round-7 report reinstates the corpus
 blocker. No simulation was run during admission.
 
 

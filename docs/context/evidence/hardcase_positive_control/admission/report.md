@@ -1,6 +1,14 @@
+<!-- AI-GENERATED (#9652) - NEEDS-REVIEW -->
 # Seed-1001 source-bound window admission
 
-The observed critical-case chain passes through versioned corpus admission.
+**Round-7 disposition: admission FAIL; parking recommended.** The retained
+corpus and persistence outputs are historical results from the superseded
+gate, not valid current admissions. Continuation v1/v2 checkpoints lack
+checkpoint-owned metric criteria and source/replay commit identities.
+Admission and export of historical cases now refuse this evidence class.
+#10331 ends at replay parity and is unchanged. See [round7_report.md](round7_report.md).
+
+The former admission result is superseded by the round-7 refusal below.
 All ten registry findings were remediated under the maintainer disposition;
 the registry has returned to 492 findings without adding debt. PR
 [#10331](https://github.com/ll7/robot_sf_ll7/pull/10331) is ready for review and
@@ -458,10 +466,12 @@ scenario hash changes the identity; the API remains append-only.
 
 Other actual checks: fresh continuation regressions8PASS41.68s; related modules
 117PASS38simulation-interlockSKIPs2.70s; expanded focus107PASS3SKIPs12FAIL18.08s.
-All12 failures exactly match the original main132-ID audit, and the fresh pinned
-main provenance-module command reproduces12FAIL47PASS2.06s. No new failure was
-introduced. These execution-context/optional-policy-stack defects are left in
-their existing baseline groups. No completed full benchmark audit was restarted.
+Correction (round 7): the earlier 12 failures occurred in the local partial
+Python 3.13 dependency profile. They are not established defects on main;
+the general pre-existing-defect claim is withdrawn. The same dedicated
+provenance module now passes 59/59 on this branch and pinned main using
+the all-extras Python 3.12 environment, matching the reviewer. The old
+12-ID comparison is retained only as historical environment-specific evidence. No completed full benchmark audit was restarted.
 The full focused commands and the12-ID comparison are in the lane report.
 Registry debt may not grow; remaining delivery gates and exact final head are
 recorded there. Both PR bodies and orchestrator-owned behaviour receipts remain

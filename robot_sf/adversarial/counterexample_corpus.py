@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.scenario_generation.persistence_gate import (
     ScenarioPersistenceValidationError,
+    UnsupportedWindowAdmissionError,
     resolve_bound_window_artifact,
     verify_window_replay_receipt,
 )
@@ -75,7 +76,11 @@ def _atomic_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) 
 
 
 def read_corpus(corpus_dir: Path) -> list[dict[str, Any]]:
-    """Read authoritative immutable cases; a stale index never hides a case."""
+    """Read historical immutable records without certifying current admissibility.
+
+    This remains available for forensic inspection. Admission and replay export
+    must establish authority independently; a historical status is not proof.
+    """
     records = []
     index = corpus_dir / "corpus.json"
     if index.exists() and json.loads(index.read_text()).get("schema_version") != CORPUS_SCHEMA:
@@ -230,7 +235,13 @@ def admit_window(
 
 
 def export_replay_slice(corpus_dir: Path) -> dict[str, Any]:
-    """Export immutable scenario/receipt references for canonical replay tooling."""
+    """Refuse legacy admissions; an old recorded pass cannot authorize replay export."""
+    records = read_corpus(corpus_dir)
+    if records:
+        raise UnsupportedWindowAdmissionError(
+            "historical corpus cases lack checkpoint-owned admission authority; "
+            "replay export is disabled pending a complete capture/reconstruction contract"
+        )
     return {
         "schema_version": "counterexample-replay-slice.v1",
         "cases": [
@@ -252,6 +263,6 @@ def export_replay_slice(corpus_dir: Path) -> dict[str, Any]:
                     "resume": False,
                 },
             }
-            for r in read_corpus(corpus_dir)
+            for r in records
         ],
     }

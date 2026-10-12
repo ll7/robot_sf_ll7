@@ -16,6 +16,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.map_runner.map_runner import build_map_policy, run_map_batch
@@ -90,9 +91,14 @@ def replay(output: Path, scenario: Path) -> None:
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "capture":
-        capture(Path(sys.argv[2]))
-    elif sys.argv[1] == "replay":
-        replay(Path(sys.argv[2]), Path(sys.argv[3]))
-    else:
-        raise ValueError("expected capture or replay")
+    try:
+        if sys.argv[1] == "capture":
+            capture(Path(sys.argv[2]))
+        elif sys.argv[1] == "replay":
+            replay(Path(sys.argv[2]), Path(sys.argv[3]))
+        else:
+            raise ValueError("expected capture or replay")
+    except pytest.skip.Exception as exc:
+        # Preserve an installed pytest audit interlock across the process boundary.
+        print(str(exc), file=sys.stderr)
+        sys.exit(77)

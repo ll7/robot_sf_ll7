@@ -53,6 +53,8 @@ def _run_source_pinned_runtime(mode: str, output: Path, scenario: Path | None = 
     result = subprocess.run(
         command, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=120, check=False
     )
+    if result.returncode == 77:
+        pytest.skip(result.stderr.strip().splitlines()[-1])
     assert result.returncode == 0, result.stderr[-4000:]
 
 

@@ -3284,7 +3284,10 @@ def _has_training_only_range(value: object) -> bool:
     """Validate inclusive bounds without exposing rejected seed values."""
     if not isinstance(value, (tuple, list)) or len(value) != 2:
         return False
-    return all(type(bound) is int for bound in value) and 100000 <= value[0] <= value[1] <= 199999
+    low, high = value
+    if type(low) is not int or type(high) is not int:
+        return False
+    return 100000 <= low <= high <= 199999
 
 
 def _require_training_seed_policy(config: ExpertTrainingConfig) -> None:

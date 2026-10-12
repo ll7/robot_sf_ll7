@@ -107,6 +107,8 @@ def row_runtime_identity_errors(
     params = record.get("scenario_params")
     if not isinstance(params, Mapping):
         return {"scenario_params": "missing"}
+    if "metadata" in params and not isinstance(params["metadata"], Mapping):
+        return {"scenario_params.metadata": "must be a mapping"}
     provenance = record.get("result_provenance")
     provenance = provenance if isinstance(provenance, Mapping) else {}
     expected_fields = {
@@ -118,7 +120,9 @@ def row_runtime_identity_errors(
         selected = planner_independent_scenario_case_payload(
             _historical_authored_identity(dict(scenario)), seed=seed
         )
-        saved_params = _historical_authored_identity(dict(params))
+        # The producer already canonicalizes historical inputs before signing them.
+        # Saved annotations cannot authorize restoring a different simulator budget.
+        saved_params = dict(params)
         saved = planner_independent_scenario_case_payload(saved_params, seed=seed)
         # Saved rows already contain runner-seeded inputs. Do not synthesize missing
         # simulator defaults when validating the producer; absence must stay visible.

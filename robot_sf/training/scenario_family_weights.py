@@ -17,6 +17,39 @@ if TYPE_CHECKING:
 FAMILIES = ("bottleneck", "doorway", "exiting_elevator", "exiting_room", "frontal_approach")
 
 
+def _scenario_names(raw: object) -> tuple[str, ...]:
+    """Validate a config filter before passing it to the canonical sampler.
+
+    Returns:
+        Declared scenario identifiers.
+    """
+    if not isinstance(raw, (list, tuple)) or any(not isinstance(v, str) for v in raw):
+        raise ValueError("Scenario filters must be lists of names")
+    return tuple(str(v) for v in raw)
+
+
+def _numeric_weights(raw: object) -> dict[str, float] | None:
+    """Validate numeric YAML weights without dropping malformed entries.
+
+    Returns:
+        Validated weights, or None when absent.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError("Scenario weights must be a mapping")
+    result = {}
+    for name, value in raw.items():
+        if (
+            not isinstance(name, str)
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float))
+        ):
+            raise ValueError("Scenario weight names must be strings and values numeric")
+        result[name] = float(value)
+    return result
+
+
 def compile_family_weights(
     scenario_ids: Sequence[str],
     family_weights: Mapping[str, float] | None = None,
@@ -64,12 +97,12 @@ def with_family_weights(config: ExpertTrainingConfig) -> ExpertTrainingConfig:
     """
     sampling = dict(config.scenario_sampling)
     families = sampling.pop("family_weights", None)
+    if families is not None and not isinstance(families, Mapping):
+        raise ValueError("scenario_sampling.family_weights must be a mapping")
     if not families:
         return replace(config, scenario_sampling=sampling)
     if config.scenario_id:
         raise ValueError("Family weighting requires multi-scenario training")
-    if not isinstance(families, Mapping):
-        raise ValueError("scenario_sampling.family_weights must be a mapping")
     if sampling.get("strategy", "random") != "random":
         raise ValueError("Family weighting requires random scenario sampling")
     protocol = config.multi_map_protocol
@@ -77,11 +110,11 @@ def with_family_weights(config: ExpertTrainingConfig) -> ExpertTrainingConfig:
         load_scenarios(config.scenario_config),
         include_scenarios=protocol.train_scenarios
         if protocol
-        else tuple(sampling.get("include_scenarios", ())),
+        else _scenario_names(sampling.get("include_scenarios", ())),
         exclude_scenarios=tuple(config.evaluation.hold_out_scenarios)
-        + tuple(sampling.get("exclude_scenarios", ())),
+        + _scenario_names(sampling.get("exclude_scenarios", ())),
     )
     sampling["weights"] = compile_family_weights(
-        sampler.scenario_ids, families, sampling.get("weights")
+        sampler.scenario_ids, _numeric_weights(families), _numeric_weights(sampling.get("weights"))
     )
     return replace(config, scenario_sampling=sampling)

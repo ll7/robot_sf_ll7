@@ -9,6 +9,10 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
+from robot_sf.benchmark.map_runner.map_runner_identity import (
+    _scenario_identity_payload,
+    _scenario_with_episode_seed_defaults,
+)
 from robot_sf.benchmark.utils import _config_hash
 
 
@@ -116,11 +120,14 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
                     "episode_id": episode_id,
                     "scenario_id": scenario_id,
                     "seed": seed,
-                    "scenario_params": {
-                        "algo": algo,
-                        "algo_config_hash": _config_hash({}),
-                        "metadata": {"archetype": "crossing"},
-                    },
+                    "scenario_params": _scenario_identity_payload(
+                        _scenario_with_episode_seed_defaults(scenario, seed=seed),
+                        algo=algo,
+                        algo_config={},
+                        horizon=None,
+                        dt=None,
+                        record_forces=False,
+                    ),
                     "metrics": {
                         "success": 1.0,
                         "collisions": 0.0,

@@ -23,8 +23,11 @@ from loguru import logger
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._runtime_identity import (
+    expected_arm_scenarios,
     expected_runtime_identity,
     row_runtime_identity_errors,
 )
@@ -267,7 +270,9 @@ def _validate_resume_runtime_identities(
                 scenario = scenarios_by_id[key[0]]
                 if key not in expected_identities:
                     expected_identities[key] = expected_runtime_identity(planner, scenario, key[1])
-                errors = row_runtime_identity_errors(record, expected_identities[key])
+                errors = row_runtime_identity_errors(
+                    record, expected_identities[key], scenario=scenario, seed=key[1]
+                )
             except (KeyError, TypeError, ValueError, OSError) as exc:
                 errors = {"expected_runtime_identity": str(exc)}
             if errors:
@@ -284,6 +289,7 @@ def build_resume_plan(
     scenarios: list[dict[str, Any]],
     expected_jobs: int | None = None,
     scenario_path: Path | None = None,
+    cfg: CampaignConfig | None = None,
 ) -> list[ArmResumeVerdict]:
     """Build a resume plan by inspecting existing arm directories.
 
@@ -296,6 +302,7 @@ def build_resume_plan(
         expected_jobs: Optional precomputed expected job count. If not given,
             computed from the actual batch job identities.
         scenario_path: Campaign matrix path used for map-runner seed-suite fallbacks.
+        cfg: Optional campaign contract for arm-specific runtime scenario transforms.
 
     Returns:
         List of ``ArmResumeVerdict`` objects describing the plan for each arm.
@@ -332,7 +339,15 @@ def build_resume_plan(
 
             if episodes_path is not None and episodes_path.is_file():
                 _validate_resume_job_identities(episodes_path, identities)
-                _validate_resume_runtime_identities(episodes_path, planner, scenarios)
+                _validate_resume_runtime_identities(
+                    episodes_path,
+                    planner,
+                    expected_arm_scenarios(
+                        scenarios, cfg=cfg, planner_key=planner_key, kinematics=kinematics
+                    )
+                    if cfg is not None
+                    else scenarios,
+                )
 
             episodes_remaining = max(0, expected_jobs - episodes_found)
             verdict = _build_verdict_str(episodes_found, expected_jobs)

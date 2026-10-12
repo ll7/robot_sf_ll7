@@ -70,6 +70,10 @@ from robot_sf.benchmark.camera_ready_campaign import (
     write_campaign_report,
 )
 from robot_sf.benchmark.campaign.campaign_runtime_preflight import CampaignScenarioMapPreflightError
+from robot_sf.benchmark.map_runner.map_runner_identity import (
+    _scenario_identity_payload,
+    _scenario_with_episode_seed_defaults,
+)
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile,
 )
@@ -5425,7 +5429,14 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
 
     def _fake_run_batch(*args, **kwargs):
         """Write an episode record with failed status despite successful metrics."""
-        del args
+        params = _scenario_identity_payload(
+            _scenario_with_episode_seed_defaults(args[0][0], seed=1001),
+            algo="goal",
+            algo_config={},
+            horizon=None,
+            dt=None,
+            record_forces=False,
+        )
         out_path = Path(kwargs["out_path"])
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(
@@ -5434,29 +5445,13 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                     "episode_id": "e-goal-0",
                     "scenario_id": "smoke",
                     "seed": 1001,
-                    "config_hash": _config_hash(
-                        {
-                            "algo": "goal",
-                            "algo_config_hash": _config_hash({}),
-                            "metadata": {"archetype": "crossing"},
-                        }
-                    ),
+                    "config_hash": _config_hash(params),
                     "git_hash": _git_hash_fallback(),
-                    "scenario_params": {
-                        "algo": "goal",
-                        "algo_config_hash": _config_hash({}),
-                        "metadata": {"archetype": "crossing"},
-                    },
+                    "scenario_params": params,
                     "result_provenance": {
                         "scenario_id": "smoke",
                         "seed": 1001,
-                        "config_hash": _config_hash(
-                            {
-                                "algo": "goal",
-                                "algo_config_hash": _config_hash({}),
-                                "metadata": {"archetype": "crossing"},
-                            }
-                        ),
+                        "config_hash": _config_hash(params),
                         "repo_commit": _git_hash_fallback(),
                     },
                     "metrics": {

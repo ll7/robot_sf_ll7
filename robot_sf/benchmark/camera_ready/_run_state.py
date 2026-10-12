@@ -18,6 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._runtime_identity import (
+    expected_arm_scenarios,
     expected_runtime_identity,
     row_runtime_identity_errors,
 )
@@ -209,6 +210,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
     campaign_root: Path,
     campaign_manifest: Mapping[str, Any],
     config_root: Path | None = None,
+    cfg: CampaignConfig | None = None,
 ) -> dict[str, Any]:
     """Validate final arm aggregates without modifying or deduplicating their rows.
 
@@ -237,6 +239,18 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
         planner = entry.get("planner")
         planner = planner if isinstance(planner, Mapping) else {}
         arm = f"{planner.get('key', 'unknown')} ({planner.get('kinematics', 'unknown')})"
+        arm_scenarios_by_id = scenarios_by_id
+        if cfg is not None:
+            scoped = expected_arm_scenarios(
+                [dict(sc) for sc in scenarios],
+                cfg=cfg,
+                planner_key=str(planner["key"]),
+                kinematics=str(planner["kinematics"]),
+            )
+            arm_scenarios_by_id = {
+                str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
+                for sc in scoped
+            }
         raw_path = str(entry.get("episodes_path", "")).strip()
         if not raw_path:
             blockers.append(_integrity_blocker(arm, "missing_episode_artifact"))
@@ -309,7 +323,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
         for record in records:
             identity = _episode_identity(record)
             try:
-                scenario = scenarios_by_id[identity[0]]
+                scenario = arm_scenarios_by_id[identity[0]]
                 runtime_key = (identity[0], int(identity[1]))
                 if runtime_key not in runtime_identities:
                     runtime_identities[runtime_key] = expected_runtime_identity(
@@ -318,7 +332,9 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
                         runtime_key[1],
                         config_root=config_root,
                     )
-                errors = row_runtime_identity_errors(record, runtime_identities[runtime_key])
+                errors = row_runtime_identity_errors(
+                    record, runtime_identities[runtime_key], scenario=scenario, seed=runtime_key[1]
+                )
             except (KeyError, TypeError, ValueError, OSError) as exc:
                 errors = {"expected_runtime_identity": str(exc)}
             if errors:

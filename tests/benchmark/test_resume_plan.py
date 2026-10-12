@@ -28,6 +28,10 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
     verify_resume_context,
     write_resume_plan,
 )
+from robot_sf.benchmark.map_runner.map_runner_identity import (
+    _scenario_identity_payload,
+    _scenario_with_episode_seed_defaults,
+)
 from robot_sf.benchmark.utils import _config_hash
 
 
@@ -580,9 +584,19 @@ def _write_saved_rows(tmp_path: Path, records: list[dict[str, Any]]) -> Path:
 _VALID_ROW: dict[str, Any] = {
     "scenario_id": "a",
     "seed": 1001,
-    "scenario_params": {"algo": "goal", "algo_config_hash": "44136fa355b3678a"},
-    "config_hash": "77e8b7a11f8d8196",
+    "scenario_params": _scenario_identity_payload(
+        _scenario_with_episode_seed_defaults(
+            {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4},
+            seed=1001,
+        ),
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=False,
+    ),
 }
+_VALID_ROW["config_hash"] = _config_hash(_VALID_ROW["scenario_params"])
 _RUNTIME_PLANNER: dict[str, Any] = {"key": "sf", "algo": "goal"}
 _RUNTIME_SCENARIOS: list[dict[str, Any]] = [
     {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4}

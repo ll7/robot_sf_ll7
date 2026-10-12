@@ -296,7 +296,7 @@ def test_sequence_search_preserves_clear_near_field_progress(
         angles = w * 0.1 * np.arange(1, 9)
         robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
         clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
-        assert np.min(clearance) >= (config.predictive_safe_distance)
+        assert np.min(clearance) >= config.predictive_safe_distance
     else:
         assert v == 0.0
 
@@ -309,8 +309,8 @@ def test_sequence_search_preserves_clear_near_field_progress(
 def test_sequence_search_enforces_surface_margin_under_goal_pressure(forecast_x: float) -> None:
     """Goal pressure cannot admit motion into an observed 0.4 m surface gap.
 
-    The second case represents an actor missing from the learned forecast (as
-    happened at the reviewed crowding minimum with simulator-slot-16).
+    The second case represents a learned forecast missing an observed close
+    actor; the population-capacity regression below covers actor truncation.
     """
     config_path = (
         Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
@@ -318,7 +318,7 @@ def test_sequence_search_enforces_surface_margin_under_goal_pressure(forecast_x:
     config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
     config.predictive_goal_weight = 100.0
     adapter = prediction.PredictionPlannerAdapter(config)
-    positions = [(10.0, 0.0)] * 16 + [(1.8, 0.0)] if forecast_x == 10.0 else [(forecast_x, 0.0)]
+    positions = [(1.8, 0.0)] if forecast_x == 10.0 else [(forecast_x, 0.0)]
     observation = prediction_contracts._make_obs_with_peds(positions, goal=(30.0, 0.0))
     forecast_agents = min(len(positions), config.predictive_max_agents)
     future = np.tile([forecast_x, 0.0], (forecast_agents, 8, 1))
@@ -330,7 +330,7 @@ def test_sequence_search_enforces_surface_margin_under_goal_pressure(forecast_x:
         angles = w * 0.1 * np.arange(1, 9)
         robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
         clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
-        assert np.min(clearance) >= (config.predictive_safe_distance), (
+        assert np.min(clearance) >= config.predictive_safe_distance, (
             "Selected motion spends its surface safety margin"
         )
     else:

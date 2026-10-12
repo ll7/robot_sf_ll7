@@ -216,16 +216,20 @@ def _commit_receipt(monkeypatch, tmp_path, receipt):
     file = tmp_path / path
     file.parent.mkdir(parents=True)
     receipt["hardware"]["head"] = _hardware(run_source)
+    from tests.validation.test_behaviour_receipt_provenance import source_artifacts_for_receipt
+
+    sources = source_artifacts_for_receipt(tmp_path, receipt)
     raw = json.dumps(
         {
             "schema_version": "behaviour-change-rows.v1",
             "hardware": receipt["hardware"],
+            "source_artifacts": sources,
             "rows": receipt["rows"],
             "classifications": receipt["classifications"],
         }
     ).encode()
     file.write_bytes(raw)
-    git("add", path)
+    git("add", "receipts/behaviour")
     git("commit", "-m", "receipt payload")
     head = git("rev-parse", "HEAD")
     if receipt["head_sha"] == HEAD:

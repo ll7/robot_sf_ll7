@@ -166,6 +166,9 @@ def _unchanged_outcomes(head):
     for r in records:
         r["metrics"]["success"] = True
     raw.write_text("".join(json.dumps(r) + "\n" for r in records))
+    from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
+
+    refresh_sweep_binding(head)
 
 
 @pytest.mark.parametrize("fault", REVIEWER_CASES)

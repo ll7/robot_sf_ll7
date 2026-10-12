@@ -129,6 +129,26 @@ Only the selected job-keyed directories enter the receipt artifact digest and
 row comparison. Their combined coverage must still exactly satisfy the gate;
 duplicate rows across shards are refused.
 
+Allocation stamping writes a separate, exclusively created
+`execution_binding.json`; it never edits raw episodes, summaries or their
+producer sidecars. The binding hashes every comparison input and identifies
+its job and node. Both normal raw sidecars (`.provenance.json` and
+`.manifest.json`) are required. Collection invokes the repository publication
+digest verifier against their sealed raw hashes and the allocation binding;
+any mismatch invalidates the comparison before a receipt or outcomes are emitted.
+
+Collection also preserves exact source bytes in job-keyed `.tar.gz` bundles
+under `receipts/behaviour/<receipt-id>-sources/`, referenced and hashed by the
+receipt payload's `source_artifacts`. Commit these bundles with the payload
+(use Git LFS for large evidence). Admission reads their exact committed bytes,
+verifies the artifact/LFS digest, rejects unsafe archive entries, and reruns
+the same producer-seal and binding verifier. It compares the joined outcomes
+and allocation identities against those verified raw rows. Dirty checkout
+files and a collector's verification flag cannot substitute for source evidence.
+The compact payload retains its 32 MiB limit; each source bundle is limited to
+512 MiB compressed and 2 GiB expanded. Existing identical bundles are preserved;
+conflicting bytes at an existing evidence path are refused.
+
 Production receipt generation uses the full gate seed set (`1001..1030`) because
 that is what the validator admits today; the producer rejects seeds outside the
 wider development range (`1001..1200`) and also rejects currently unsupported

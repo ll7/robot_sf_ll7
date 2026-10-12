@@ -163,6 +163,9 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
     for name, entry in _hardware(source_sha, job).items():
         (out / name).write_text(entry["content"])
     (out / "README.md").write_text(label + "\n")
+    from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
+
+    refresh_sweep_binding(out)
     return out
 
 
@@ -1430,7 +1433,7 @@ def _payload_fixture(tmp_path, monkeypatch):
         "output_dir": tmp_path / "receipts/behaviour",
     }
     producer.write_receipt_and_header(**kwargs)
-    git("add", "receipts/behaviour/synthetic.json")
+    git("add", "receipts/behaviour")
     git("commit", "-m", "receipt payload")
     kwargs["head_sha"] = git("rev-parse", "HEAD")
     _, header = producer.write_receipt_and_header(**kwargs)
@@ -1517,6 +1520,7 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         "behaviour_receipt.py",
         "behaviour_receipt.schema.json",
         "behaviour_receipt_nodes.json",
+        "receipt_provenance.py",
     ):
         destination = tmp_path / "scripts/ci" / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1584,7 +1588,7 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
         json.loads(first.stdout.split("\n", 1)[1].rsplit("-->", 1)[0])["baseline"]["release"]
         == RELEASE_TAG
     )
-    git("add", "receipts/behaviour/synthetic.json")
+    git("add", "receipts/behaviour")
     git("commit", "-m", "receipt payload")
     final_head = git("rev-parse", "HEAD")
     command[command.index("--head-sha") + 1] = final_head
@@ -1616,6 +1620,7 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     assert original.latest_release("ll7/robot_sf_ll7") == "0.0.7"
     legacy_payload = json.loads((tmp_path / header["rows_artifact"]["path"]).read_text())
     legacy_payload.pop("hardware")
+    legacy_payload.pop("source_artifacts")
     for row in legacy_payload["rows"]:
         for key in (
             "scheduler_job_id",

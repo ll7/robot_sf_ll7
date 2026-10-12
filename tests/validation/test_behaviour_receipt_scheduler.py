@@ -53,6 +53,9 @@ def _row_fault(root, fault):
                 "auxme-imech172" if fault == "mixed_node_rows" and index == 0 else NODE
             )
         path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
+
+    refresh_sweep_binding(root)
 
 
 def _invent_cpu(root):
@@ -216,6 +219,10 @@ def test_collection_rejects_unverified_allocations_and_contexts(tmp_path, monkey
         else:
             rows[0]["algorithm_metadata"]["execution_context"] = {"cpu_model": "Invented CPU"}
         raw.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    if fault in {"wrong_row_job", "nested_cpu"}:
+        from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
+
+        refresh_sweep_binding(head)
     records.write_text(json.dumps(data))
     result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode != 0 and "hardware comparison invalid" in result.stderr.lower(), (
@@ -245,6 +252,9 @@ def _split_shards(tmp_path, source, head):
             total_episodes=15,
         )
         path.write_text(json.dumps(meta))
+        from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
+
+        refresh_sweep_binding(shard)
     return second
 
 

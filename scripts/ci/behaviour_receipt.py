@@ -9,14 +9,19 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import itertools
 import json
 import os
 import re
 import shlex
 import subprocess
+import tarfile
+import tempfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
+
+from scripts.ci.receipt_provenance import HardwareIdentityError
 
 ROOT = Path(__file__).resolve().parents[2]
 SCOPE_FILE = "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
@@ -158,10 +163,6 @@ HARDWARE_FILES = (
     "execution_request.json",
     "execution_scheduler.json",
 )
-
-
-class HardwareIdentityError(ValueError):
-    """Hardware evidence cannot support a base/head outcome comparison."""
 
 
 def _hardware_require(condition: bool, reason: str) -> None:
@@ -743,6 +744,7 @@ def load_receipt(header: dict, head: str) -> dict:
     _hardware_require(isinstance(payload, dict), "invalid receipt hardware payload")
     identities = validate_hardware_pair(payload.get("hardware"))
     validate_scheduler_rows(payload.get("rows", []), identities)
+    verify_source_artifacts(payload, identities, head)
     jsonschema.Draft202012Validator(schema).evolve(
         schema=schema["$defs"]["rows_artifact"]
     ).validate(payload)
@@ -765,6 +767,141 @@ def load_receipt(header: dict, head: str) -> dict:
         hardware=payload["hardware"],
     )
     return receipt
+
+
+def _source_artifact_bytes(reference: dict, head: str) -> bytes:
+    """Read exact committed source evidence, including authenticated LFS objects."""
+    path, expected = reference["path"], reference["sha256"]
+    relative = PurePosixPath(path)
+    _hardware_require(
+        path.startswith("receipts/behaviour/")
+        and path.endswith(".tar.gz")
+        and not relative.is_absolute()
+        and ".." not in relative.parts
+        and relative.as_posix() == path
+        and not any(ord(c) < 32 for c in path)
+        and _digest(expected),
+        "provenance digest artifact reference is invalid",
+    )
+    entry = subprocess.check_output(
+        ["git", "ls-tree", head, "--", path], cwd=ROOT, text=True
+    ).split()
+    _hardware_require(
+        bool(entry) and entry[0] == "100644", "provenance digest artifact is not regular"
+    )
+    blob = f"{head}:{path}"
+    limit = 512 * 1024 * 1024
+    size = int(subprocess.check_output(["git", "cat-file", "-s", blob], cwd=ROOT, text=True))
+    _hardware_require(size <= limit, "provenance digest artifact exceeds size limit")
+    raw = subprocess.check_output(["git", "cat-file", "blob", blob], cwd=ROOT)
+    if raw.startswith(b"version https://git-lfs.github.com/spec/v1\n"):
+        pointer = re.fullmatch(
+            rb"version https://git-lfs.github.com/spec/v1\noid sha256:([0-9a-f]{64})\nsize ([0-9]+)\n",
+            raw,
+        )
+        if pointer is None:
+            raise HardwareIdentityError(
+                "hardware comparison invalid: provenance digest LFS pointer is invalid"
+            )
+        oid, object_size = pointer.groups()
+        _hardware_require(
+            oid.decode() == expected and int(object_size) <= limit,
+            "provenance digest LFS identity differs",
+        )
+        raw = subprocess.run(
+            ["git", "-c", "lfs.skipdownloaderrors=false", "lfs", "smudge", "--", path],
+            input=raw,
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+            env={**os.environ, "GIT_LFS_SKIP_SMUDGE": "0"},
+        ).stdout
+        _hardware_require(len(raw) == int(object_size), "provenance digest LFS size differs")
+    _hardware_require(
+        hashlib.sha256(raw).hexdigest() == expected, "provenance digest artifact mismatch"
+    )
+    return raw
+
+
+def verify_source_artifacts(payload: dict, identities: dict, head: str) -> None:
+    """Independently verify sealed source bytes and their allocation/row projection."""
+    from scripts.ci import make_behaviour_receipt as producer
+    from scripts.ci.receipt_provenance import BINDING_FILE, verified_raw_rows
+
+    references = payload.get("source_artifacts")
+    if not isinstance(references, dict):
+        raise HardwareIdentityError(
+            "hardware comparison invalid: provenance digest evidence missing"
+        )
+    _hardware_require(
+        set(references) == {"head", "baseline"},
+        "provenance digest evidence missing",
+    )
+    for side, prefix in (("head", ""), ("baseline", "baseline_")):
+        jobs = set(scheduler_job_ids(identities[side]["job_id"]))
+        _hardware_require(
+            isinstance(references[side], dict) and set(references[side]) == jobs,
+            "provenance digest shard coverage differs",
+        )
+        source_rows = {}
+        for job, reference in references[side].items():
+            raw = _source_artifact_bytes(reference, head)
+            with tempfile.TemporaryDirectory(prefix="receipt-sources-") as temporary:
+                root = Path(temporary) / job
+                root.mkdir()
+                seen = set()
+                total_size = 0
+                with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+                    for member in archive:
+                        path = PurePosixPath(member.name)
+                        total_size += member.size
+                        _hardware_require(
+                            member.isfile()
+                            and not path.is_absolute()
+                            and ".." not in path.parts
+                            and path.as_posix() == member.name
+                            and member.name not in seen
+                            and total_size <= 2 * 1024 * 1024 * 1024,
+                            "provenance digest archive is unsafe or oversized",
+                        )
+                        seen.add(member.name)
+                        target = root / member.name
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        stream = archive.extractfile(member)
+                        _hardware_require(
+                            stream is not None, "provenance digest archive member missing"
+                        )
+                        if stream is None:
+                            raise HardwareIdentityError(
+                                "hardware comparison invalid: provenance digest archive member missing"
+                            )
+                        target.write_bytes(stream.read())
+                binding = reference.get("binding")
+                _hardware_require(
+                    isinstance(binding, dict)
+                    and binding.get("path") == BINDING_FILE
+                    and binding.get("sha256")
+                    == hashlib.sha256((root / BINDING_FILE).read_bytes()).hexdigest(),
+                    "provenance digest allocation binding mismatch",
+                )
+                rows = verified_raw_rows(root, job, identities[side]["node"])
+                _hardware_require(
+                    not (set(rows) & set(source_rows)), "provenance digest duplicate source rows"
+                )
+                source_rows.update(rows)
+        _hardware_require(
+            set(source_rows) == {_key(row) for row in payload["rows"]},
+            "provenance digest source row coverage differs",
+        )
+        for row in payload["rows"]:
+            source = source_rows[_key(row)]
+            _hardware_require(
+                source["scheduler_job_id"] == row[prefix + "scheduler_job_id"]
+                and source["scheduler_node"] == row[prefix + "scheduler_node"]
+                and producer._row_success(source) == row[prefix + "success"]
+                and producer._row_collisions(source) == row[prefix + "collisions"],
+                "provenance digest source projection differs",
+            )
 
 
 def check_receipt(

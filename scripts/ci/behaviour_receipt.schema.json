@@ -809,13 +809,102 @@
         },
         "hardware": {
           "$ref": "#/$defs/hardware"
+        },
+        "source_artifacts": {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "const": "execution_binding.json"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "baseline": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "const": "execution_binding.json"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "head",
+            "baseline"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "schema_version",
         "rows",
         "classifications",
-        "hardware"
+        "hardware",
+        "source_artifacts"
       ],
       "additionalProperties": false
     },

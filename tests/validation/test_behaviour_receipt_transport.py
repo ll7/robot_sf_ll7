@@ -206,9 +206,12 @@ def _trusted_fixture(root):
     )
     files = [
         ".gitattributes",
+        "scripts/__init__.py",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
         "scripts/ci/behaviour_receipt_nodes.json",
+        "scripts/ci/make_behaviour_receipt.py",
+        "scripts/ci/receipt_provenance.py",
         "scripts/dev/check_dependabot_update_policy.py",
         "scripts/dev/check_dependency_coherence.py",
         "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
@@ -259,16 +262,20 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     from tests.validation.test_behaviour_receipt_gate import _hardware
 
     receipt["hardware"] = {"head": _hardware(run_source), "baseline": _hardware(base)}
+    from tests.validation.test_behaviour_receipt_provenance import source_artifacts_for_receipt
+
+    sources = source_artifacts_for_receipt(root, receipt)
     raw = json.dumps(
         {
             "schema_version": "behaviour-change-rows.v1",
             "hardware": receipt["hardware"],
+            "source_artifacts": sources,
             "rows": receipt["rows"],
             "classifications": receipt["classifications"],
         }
     ).encode()
     target.write_bytes(raw)
-    git("add", path)
+    git("add", "receipts/behaviour")
     git("commit", "-m", "preserve run rows after execution")
     head = git("rev-parse", "HEAD")
     # Leave CI at a distinct synthetic merge identity.

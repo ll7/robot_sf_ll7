@@ -60,7 +60,11 @@ def test_rows_committed_after_execution_are_accepted(monkeypatch, tmp_path, fiel
     head = header["head_sha"]
     assert run != head
     git("merge-base", "--is-ancestor", run, head)
-    assert git("diff", "--name-only", run, head) == "receipts/behaviour/sweep.json"
+    assert set(git("diff", "--name-only", run, head).splitlines()) == {
+        "receipts/behaviour/sweep.json",
+        "receipts/behaviour/fixture-sources/head/12345.tar.gz",
+        "receipts/behaviour/fixture-sources/baseline/12345.tar.gz",
+    }
     assert header["refute_review"]["head_sha"] == head
     # Both executed sources remain bound to their committed observations.
     assert (

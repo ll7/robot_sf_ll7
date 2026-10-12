@@ -12,6 +12,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tarfile
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.ci import behaviour_receipt  # noqa: E402
+from scripts.ci import (  # noqa: E402
+    behaviour_receipt,
+    receipt_provenance,
+)
 
 DEV_SEED_MIN = 1001
 DEV_SEED_MAX = 1200
@@ -836,7 +840,7 @@ def _read_hardware(output_dir: Path, source_sha: str, job_id: str) -> dict[str, 
 
 
 def _stamp_scheduler_rows(output_dir: Path) -> int:
-    """Attach the allocation identity after the sweep command succeeds, without inferring it."""
+    """Bind sealed comparison inputs without modifying any producer bytes."""
     job = os.environ.get("SLURM_JOB_ID", "")
     node = os.environ.get("SLURM_JOB_NODELIST", "")
     behaviour_receipt.scheduler_job_ids(job)
@@ -854,9 +858,10 @@ def _stamp_scheduler_rows(output_dir: Path) -> int:
                 raise behaviour_receipt.HardwareIdentityError(
                     "hardware comparison invalid: row already has an allocation binding"
                 )
-            row.update(scheduler_job_id=job, scheduler_node=node)
-            behaviour_receipt.validate_source_row_context(row, job, node)
-        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            behaviour_receipt.validate_source_row_context(
+                {**row, "scheduler_job_id": job, "scheduler_node": node}, job, node
+            )
+    receipt_provenance.write_binding(output_dir, job, node)
     return 0
 
 
@@ -1146,12 +1151,17 @@ def _validate_row_allocation(summary: dict, raw: dict, job: str | None, node: st
             "hardware comparison invalid: missing verified allocation node"
         )
     for context in (summary, raw):
+        # Fields absent from sealed producer rows come from the verified binding.
+        # Present fields remain claims and must agree with the scheduler.
+        context.setdefault("scheduler_job_id", job)
+        context.setdefault("scheduler_node", node)
         behaviour_receipt.validate_source_row_context(context, job, node)
 
 
 def _load_sweep_rows(
     sweep_dir: Path, *, scheduler_job_id: str | None = None, scheduler_node: str | None = None
 ) -> dict[tuple[str, str, int], dict[str, Any]]:
+    receipt_provenance.verify_optional_binding(sweep_dir, scheduler_job_id, scheduler_node)
     rows: dict[tuple[str, str, int], dict[str, Any]] = {}
     for path in sorted(sweep_dir.glob("episodes_*.jsonl")):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -1709,6 +1719,31 @@ def write_real_row_audit(
     return _sha256(path)
 
 
+def _archive_source_bundle(shard: Path, bundle: Path) -> None:
+    """Preserve an existing identical evidence bundle; refuse conflicting bytes."""
+    files = [*receipt_provenance.source_files(shard), shard / receipt_provenance.BINDING_FILE]
+    expected = {path.relative_to(shard).as_posix(): path.read_bytes() for path in files}
+    if bundle.exists():
+        with tarfile.open(bundle, "r:gz") as archive:
+            actual = {}
+            for member in archive:
+                stream = archive.extractfile(member) if member.isfile() else None
+                if stream is None or member.name in actual:
+                    raise behaviour_receipt.HardwareIdentityError(
+                        "hardware comparison invalid: provenance digest bundle is invalid"
+                    )
+                actual[member.name] = stream.read()
+        if actual != expected:
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: provenance digest bundle already exists with different bytes"
+            )
+        return
+    bundle.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(bundle, "x:gz") as archive:
+        for path in files:
+            archive.add(path, arcname=path.relative_to(shard).as_posix(), recursive=False)
+
+
 def write_receipt_and_header(  # noqa: PLR0913
     *,
     repo_root: Path,
@@ -1734,9 +1769,26 @@ def write_receipt_and_header(  # noqa: PLR0913
     hardware = {"head": scheduler.hardware, "baseline": baseline.hardware}
     identities = behaviour_receipt.validate_hardware_pair(hardware)
     behaviour_receipt.validate_scheduler_rows(rows, identities)
+    source_artifacts = {}
+    for side, run in (("head", scheduler), ("baseline", baseline)):
+        references = {}
+        for shard in run.shard_dirs:
+            receipt_provenance.verify_binding(shard, shard.name, identities[side]["node"])
+            bundle = output_dir / f"{receipt_id}-sources" / side / f"{shard.name}.tar.gz"
+            _archive_source_bundle(shard, bundle)
+            references[shard.name] = {
+                "path": bundle.relative_to(repo_root).as_posix(),
+                "sha256": _sha256(bundle),
+                "binding": {
+                    "path": receipt_provenance.BINDING_FILE,
+                    "sha256": _sha256(shard / receipt_provenance.BINDING_FILE),
+                },
+            }
+        source_artifacts[side] = references
     payload = {
         "schema_version": "behaviour-change-rows.v1",
         "hardware": hardware,
+        "source_artifacts": source_artifacts,
         "rows": rows,
         "classifications": classifications,
     }

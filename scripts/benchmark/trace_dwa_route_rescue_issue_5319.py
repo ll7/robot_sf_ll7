@@ -204,7 +204,8 @@ def paired_comparisons(cases, lines):
         if rescue is None or base is None:
             continue
         if (rescue.get("scenario_id"), rescue.get("seed")) != (
-            base.get("scenario_id"), base.get("seed")
+            base.get("scenario_id"),
+            base.get("seed"),
         ):
             lines.append(f"- {label}: baseline identity differs; paired delta withheld.")
             continue

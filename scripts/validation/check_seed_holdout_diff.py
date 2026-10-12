@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import ast
 import io
+import json
 import re
 import subprocess
 import sys
@@ -771,6 +772,38 @@ def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
     return lines, _marked_block_lines(lines, path)
 
 
+def _hash_inventory_path_reference(path: str, content: str, lines: list[str]) -> bool:
+    """Recognize only path keys in the static preservation fingerprint inventory."""
+    if path != "tests/fixtures/active_config_seed_exclusions.json":
+        return False
+    key = re.fullmatch(r'  ("(?:[^"\\]|\\.)*"): \{', content)
+    if key is None:
+        return False
+    try:
+        inventory = json.loads("\n".join(lines))
+        name = json.loads(key.group(1))
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(inventory, dict) or not inventory:
+        return False
+    for entry in inventory.values():
+        if (
+            not isinstance(entry, dict)
+            or not {"sha256", "reason"} <= set(entry)
+            or not set(entry) <= {"sha256", "reason", "annotation"}
+            or not isinstance(entry["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is None
+            or not isinstance(entry["reason"], str)
+            or not entry["reason"].strip()
+            or (
+                "annotation" in entry
+                and (not isinstance(entry["annotation"], str) or not entry["annotation"].strip())
+            )
+        ):
+            return False
+    return name in inventory and name.startswith(("configs/", "scripts/"))
+
+
 def _reference_finding(path: str, number: int, content: str, lines: list[str]) -> Finding | None:
     """Report misplaced markers and unreviewed named release-seed consumers."""
     if _eligible(path) and _misplaced_release_marker(path, content):
@@ -779,9 +812,10 @@ def _reference_finding(path: str, number: int, content: str, lines: list[str]) -
             number,
             f"{content.strip()}  [release-evaluation marker outside release manifests]",
         )
-    if _unallowlisted_sealed_reference(path, content) or _yaml_alias_holdout(
-        path, number, content, lines
-    ):
+    if (
+        _unallowlisted_sealed_reference(path, content)
+        and not _hash_inventory_path_reference(path, content, lines)
+    ) or _yaml_alias_holdout(path, number, content, lines):
         return Finding(path, number, content.strip())
     return None
 

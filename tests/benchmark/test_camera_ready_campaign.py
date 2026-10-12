@@ -3473,7 +3473,8 @@ def test_load_seed_variability_pilot_config_and_scenarios() -> None:
         "classic_t_intersection_low",
     ]
     assert all(
-        scenario["seeds"] == [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108] for scenario in scenarios
+        scenario["seeds"] == [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108]
+        for scenario in scenarios
     )
 
 

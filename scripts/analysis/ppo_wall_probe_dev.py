@@ -137,6 +137,7 @@ def run_probe(out: Path, *, max_steps: int = 600) -> dict:
             env.close()
     report = {
         "schema": "ppo-wall-probe-dev.v1",
+        "review_status": "AI-GENERATED NEEDS-REVIEW",
         "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "producer_path": "scripts/analysis/ppo_wall_probe_dev.py",
         "producer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

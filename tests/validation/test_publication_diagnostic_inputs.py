@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-from itertools import product
 from pathlib import Path
 
 import pytest
@@ -13,81 +12,7 @@ from robot_sf.benchmark.artifact_publication import (
     export_publication_bundle,
     verify_publication_bundle_preflight,
 )
-
-
-def _valid_asset_contents():
-    """Build synthetic calibrated metadata; no calibration or simulation is executed."""
-    from robot_sf.benchmark.metric_definitions import metric_definitions_sha256
-    from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
-    from robot_sf.benchmark.snqi.evaluation_seeds import SEALED_EVALUATION_SEEDS_SHA256
-    from robot_sf.benchmark.snqi.v2_spec import FAMILY, SIMULATED_FORCE, WEIGHTS
-
-    arms = [f"synthetic-arm-{i}" for i in range(14)]
-    scenarios = [f"synthetic-scenario-{i}" for i in range(48)]
-    seeds = [1001, 1002]
-    grid_hash = hashlib.sha256(
-        json.dumps(sorted(product(arms, scenarios, seeds)), separators=(",", ":")).encode()
-    ).hexdigest()
-    files = {f"runs/{arm}__differential_drive/episodes.jsonl": "a" * 64 for arm in arms}
-    anchors = {
-        "version": "SNQI-v2.0",
-        "status": "frozen",
-        "metric_schema_version": "robot-sf-metrics.v2",
-        "metric_definitions_sha256": metric_definitions_sha256(),
-        "evaluation_seeds_sha256": SEALED_EVALUATION_SEEDS_SHA256,
-        "anchors": {
-            term: {
-                "lower": 0,
-                "upper": value,
-                "type": "normative" if term in ("T", "N") else "calibration_p95",
-            }
-            for term, value in {"T": 3, "N": 0.25, "F": 10, "J": 2, "K": 4}.items()
-        },
-        "force_decision": {
-            "source": SIMULATED_FORCE,
-            "selected_source_contract": declared_force_source_contract(SIMULATED_FORCE),
-            "spearman_rho_F_N": 0.8,
-            "threshold_absolute_rho": 0.90,
-            "N": "clip(near_misses/steps/0.25)",
-            "selected_source_coverage": 1344,
-        },
-        "calibration": {
-            "arms": arms,
-            "scenarios": scenarios,
-            "seeds": seeds,
-            "episode_count": 1344,
-            "quantile_method": "linear",
-            "benchmark_execution": "nonfallback",
-            "command_mode_counts": {arm: {"native": 96} for arm in arms},
-            "source_commit": "a" * 40,
-            "run_id": "synthetic-test-only",
-            "grid_sha256": grid_hash,
-            "split_id": f"snqi-v2-dev1001-1002-{grid_hash[:12]}",
-            "scenario_horizons": dict.fromkeys(scenarios, 600),
-            "episode_files_sha256": files,
-            "producer_sidecars_sha256": {name + ".provenance.json": "b" * 64 for name in files},
-            "episodes_sha256": hashlib.sha256(
-                json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest(),
-            "episodes_hash_rule": "sha256(sorted compact JSON relative-path-to-file-sha256 map)",
-            "campaign_config_hash": "c" * 64,
-            "campaign_config_identity": "c" * 16,
-            "campaign_manifest_sha256": "d" * 64,
-        },
-    }
-    return {
-        "weights": json.dumps(
-            {
-                "version": "SNQI-v2.0",
-                "weights": {
-                    "w_" + term: {"value": value, "rationale": "synthetic test fixture"}
-                    for term, value in WEIGHTS.items()
-                },
-            }
-        ),
-        "anchors": json.dumps(anchors),
-        "family": yaml.safe_dump(FAMILY),
-    }
+from tests._publication_fixtures import calibrated_asset_contents as _valid_asset_contents
 
 
 def _set_diagnostics(run, provenance):
@@ -659,10 +584,8 @@ def test_round3_review_bypasses(tmp_path, monkeypatch, cold, probe):
         "v2_pins",
     ],
 )
-def test_only_positive_historical_v1_proof_exempts_custody(  # noqa: C901
-    tmp_path, monkeypatch, cold, proof
-):
-    """Unscored or ambiguously labelled bundles require custody even with no v2 signals."""
+def test_no_historical_or_absent_signal_exempts_custody(tmp_path, monkeypatch, cold, proof):
+    """Every bundle needs custody, even a positively labelled historical-v1 one."""
     _, run, _ = _run(tmp_path, monkeypatch)
     bundle = _export(run, tmp_path) if cold else None
     target = bundle.bundle_dir / "payload" if cold else run
@@ -701,18 +624,7 @@ def test_only_positive_historical_v1_proof_exempts_custody(  # noqa: C901
     (target / "run_meta.json").write_text(json.dumps(meta))
     if cold:
         _resign(bundle)
-    if proof == "declared_v1":
-        if cold:
-            assert (
-                verify_publication_bundle_preflight(
-                    bundle.bundle_dir, require_release_reconciliation=False
-                )["status"]
-                == "pass"
-            )
-        else:
-            _export(target, tmp_path)
-    else:
-        _assert_round2_rejected(target, tmp_path, bundle)
+    _assert_round2_rejected(target, tmp_path, bundle)
 
 
 @pytest.mark.parametrize("cold", [False, True])
@@ -741,47 +653,222 @@ def test_complete_custody_validates_every_content_candidate(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("cold", [False, True])
-@pytest.mark.parametrize("input_state", ["pending", "v2_weights"])
-def test_historical_v1_exemption_inspects_its_retained_inputs(
+@pytest.mark.parametrize("input_state", ["pending", "conflicting_version"])
+def test_named_inputs_are_parsed_even_with_complete_custody(
     tmp_path, monkeypatch, cold, input_state
 ):
-    """The historical exemption also proves that external diagnostic inputs contain no v2 state."""
-    repo, run, _ = _run(tmp_path, monkeypatch)
-    (run / "reports/snqi_v2_diagnostics.json").unlink()
-    (run / "runs/goal/episodes.jsonl").write_text(
-        json.dumps({"event_ledger": {"software_commit": "abc123"}}) + "\n"
-    )
-    (run / "run_meta.json").write_text(
-        json.dumps({"repo": {"commit": "abc123"}, "snqi_score_version": "SNQI-v1"})
-    )
-    relative = "configs/input.json"
-    source = repo / relative
-    source.write_text(json.dumps({"historical": True}))
-    report = run / "reports/historical_diagnostics.json"
-    report.write_text(
-        json.dumps(
-            {
-                "input_path": relative,
-                "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-            }
-        )
-    )
+    """Every retained dependency participates in pending-state and version validation."""
+    repo, run, pins = _run(tmp_path, monkeypatch)
     bundle = _export(run, tmp_path) if cold else None
     target = bundle.bundle_dir / "payload" if cold else run
-    source = target / "diagnostic_inputs" / relative if cold else source
-    source.write_text(
-        json.dumps({"wrapped": [{"state": "pending_calibration"}]})
+    source = (target / "diagnostic_inputs" if cold else repo) / pins["snqi_v2_extra_path"]
+    content = (
+        {"wrapped": [{"state": "pending_calibration"}]}
         if input_state == "pending"
-        else _valid_asset_contents()["weights"]
+        else {"version": "SNQI-v1"}
     )
-    (target / "reports/historical_diagnostics.json").write_text(
-        json.dumps(
-            {
-                "input_path": relative,
-                "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-            }
-        )
-    )
+    source.write_text(json.dumps(content))
+    pins["snqi_v2_extra_sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+    _set_diagnostics(target, pins)
     if cold:
         _resign(bundle)
     _assert_round2_rejected(target, tmp_path, bundle)
+
+
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize(
+    "probe",
+    [
+        "renamed_yaml",
+        "bom_json",
+        "wrapped_diagnostic",
+        "episode_path",
+        "episode_digest",
+        "duplicate_csv",
+    ],
+)
+def test_round4_review_bypasses(tmp_path, monkeypatch, cold, probe):
+    """All twelve round-4 controls exercise public export and re-signed cold admission."""
+    repo, run, pins = _run(tmp_path, monkeypatch)
+    if probe not in {"renamed_yaml", "bom_json"}:
+        _declare_campaign(repo, run, pins)
+    bundle = _export(run, tmp_path) if cold else None
+    target = bundle.bundle_dir / "payload" if cold else run
+    if probe in {"renamed_yaml", "bom_json"}:
+        import shutil
+
+        (target / "reports/snqi_v2_diagnostics.json").unlink()
+        if cold:
+            shutil.rmtree(target / "diagnostic_inputs")
+        (target / "run_meta.json").write_text(
+            json.dumps({"repo": {"commit": "abc123"}, "snqi_score_version": "SNQI-v1"})
+        )
+        (target / "runs/goal/episodes.jsonl").write_text(
+            json.dumps({"event_ledger": {"software_commit": "abc123"}}) + "\n"
+        )
+        content = (
+            yaml.safe_dump({"snqi_v2_version": "SNQI-v2"}).encode()
+            if probe == "renamed_yaml"
+            else b"\xef\xbb\xbf" + json.dumps({"snqi_v2_version": "SNQI-v2"}).encode()
+        )
+        (target / "reports/unlabelled.data").write_bytes(content)
+    elif probe == "wrapped_diagnostic":
+        conflicting = {**pins, "snqi_v2_anchors_sha256": "f" * 64}
+        (target / "reports/wrapped.data").write_text(
+            json.dumps([{"schema_version": "snqi-v2-diagnostics.v1", "provenance": conflicting}])
+        )
+    elif probe in {"episode_path", "episode_digest"}:
+        episodes = target / "runs/goal/episodes.jsonl"
+        row = json.loads(episodes.read_text())
+        row["provenance"] = dict(pins)
+        if probe == "episode_path":
+            row["provenance"]["snqi_v2_anchors_path"] = "output/calibration/disagreeing.json"
+        else:
+            row["provenance"]["snqi_v2_anchors_sha256"] = "f" * 64
+        episodes.write_text(json.dumps(row) + "\n")
+    else:
+        (target / "reports/scoring.csv").write_text(
+            "snqi_v2_version,snqi_v2_version\nSNQI-v1,SNQI-v2\n"
+        )
+    if cold:
+        _resign(bundle)
+    _assert_round2_rejected(target, tmp_path, bundle)
+
+
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize(
+    "probe",
+    [
+        "yaml_conflict",
+        "bom_json",
+        "bom_jsonl",
+        "provenance_list",
+        "episode_metrics_list",
+        "duplicate_csv_identical",
+        "schema_list",
+        "episode_definitions_pin",
+        "episode_force_contract_pin",
+    ],
+)
+def test_complete_custody_strict_parser_controls(tmp_path, monkeypatch, cold, probe):
+    """Parser refusals are isolated from missing custody or historical scoring labels."""
+    _, target, pins, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    reason = "diagnostic input"
+    if probe == "yaml_conflict":
+        document = {
+            "schema_version": "snqi-v2-diagnostics.v1",
+            "episode_count": 1,
+            "provenance": {**pins, "snqi_v2_anchors_sha256": "f" * 64},
+        }
+        (target / "reports/other.data").write_text(yaml.safe_dump(document))
+        reason = "conflicting v2 anchors pins"
+    elif probe in {"bom_json", "bom_jsonl"}:
+        extension = "jsonl" if probe == "bom_jsonl" else "data"
+        (target / f"reports/other.{extension}").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps({"note": "typed object"}).encode()
+        )
+        reason = "BOM"
+    elif probe == "provenance_list":
+        (target / "reports/other.data").write_text(
+            json.dumps({"provenance": [{"note": "wrong container"}]})
+        )
+        reason = "provenance must be an object"
+    elif probe == "episode_metrics_list":
+        episodes = target / "runs/goal/episodes.jsonl"
+        row = json.loads(episodes.read_text())
+        row["metrics"] = ["snqi_v2"]
+        episodes.write_text(json.dumps(row) + "\n")
+        reason = "metrics must be an object"
+    elif probe == "schema_list":
+        (target / "reports/other.data").write_text(
+            json.dumps({"schema_version": ["snqi-v2-diagnostics.v1"]})
+        )
+        reason = "schema_version must be a scalar"
+    elif probe in {"episode_definitions_pin", "episode_force_contract_pin"}:
+        episodes = target / "runs/goal/episodes.jsonl"
+        row = json.loads(episodes.read_text())
+        key = (
+            "metric_definitions_sha256"
+            if probe == "episode_definitions_pin"
+            else "snqi_v2_force_source_contract"
+        )
+        row["provenance"] = {
+            key: "f" * 64 if probe == "episode_definitions_pin" else {"source": "fabricated-source"}
+        }
+        episodes.write_text(json.dumps(row) + "\n")
+        reason = "conflicting scoring provenance pin"
+    else:
+        (target / "reports/other.csv").write_text(
+            "snqi_v2_version,snqi_v2_version\nSNQI-v2,SNQI-v2\n"
+        )
+        reason = "duplicate.*CSV headers"
+    if cold:
+        _resign(bundle)
+    _assert_round2_rejected(target, tmp_path, bundle, reason)
+
+
+def test_renamed_yaml_diagnostics_retain_inputs_and_verify_cold(tmp_path, monkeypatch):
+    """A genuine schema, rather than a filename/extension, carries detached custody."""
+    repo, run, pins = _run(tmp_path, monkeypatch)
+    report = run / "reports/snqi_v2_diagnostics.json"
+    document = json.loads(report.read_text())
+    report.unlink()
+    (run / "reports/typed-content.data").write_text(yaml.safe_dump(document))
+    bundle = _export(run, tmp_path)
+    for key, relative in pins.items():
+        if key.endswith("_path"):
+            retained = bundle.bundle_dir / "payload/diagnostic_inputs" / relative
+            assert retained.read_bytes() == (repo / relative).read_bytes()
+            (repo / relative).unlink()
+    assert (
+        verify_publication_bundle_preflight(
+            bundle.bundle_dir, require_release_reconciliation=False
+        )["status"]
+        == "pass"
+    )
+
+
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize("encoding", ["jsonl", "yaml", "csv"])
+def test_matching_partial_episode_pins_are_reconciled(tmp_path, monkeypatch, cold, encoding):
+    """Matching partial pin copies are accepted across every supported content grammar."""
+    _, target, pins, bundle = _round2_campaign(tmp_path, monkeypatch, cold)
+    key = "snqi_v2_anchors_sha256"
+    if encoding == "jsonl":
+        episodes = target / "runs/goal/episodes.jsonl"
+        row = json.loads(episodes.read_text())
+        row["provenance"] = {key: pins[key]}
+        episodes.write_text(json.dumps(row) + "\n")
+    elif encoding == "yaml":
+        (target / "reports/partial.data").write_text(
+            yaml.safe_dump({"provenance": {key: pins[key]}})
+        )
+    else:
+        (target / "reports/partial.data").write_text(f"provenance.{key}\n{pins[key]}\n")
+    if cold:
+        _resign(bundle)
+        assert (
+            verify_publication_bundle_preflight(
+                bundle.bundle_dir, require_release_reconciliation=False
+            )["status"]
+            == "pass"
+        )
+    else:
+        _export(target, tmp_path)
+
+
+@pytest.mark.parametrize("cold", [False, True])
+def test_additional_v2_asset_candidates_use_canonical_scorer(tmp_path, monkeypatch, cold):
+    """A named extra input cannot smuggle a second noncanonical v2 weights definition."""
+    repo, run, pins = _run(tmp_path, monkeypatch)
+    bundle = _export(run, tmp_path) if cold else None
+    target = bundle.bundle_dir / "payload" if cold else run
+    source = (target / "diagnostic_inputs" if cold else repo) / pins["snqi_v2_extra_path"]
+    document = json.loads(_valid_asset_contents()["weights"])
+    document["weights"]["w_S"]["value"] = 100
+    source.write_text(json.dumps(document))
+    pins["snqi_v2_extra_sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+    _set_diagnostics(target, pins)
+    if cold:
+        _resign(bundle)
+    _assert_round2_rejected(target, tmp_path, bundle, "scoring assets invalid")

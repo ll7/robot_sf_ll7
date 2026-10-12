@@ -239,6 +239,7 @@ def compute_snqi_step_proxies(
     min_distance = float("nan")
     min_clearance = float("nan")
     center_distance_near_miss_diagnostic = 0.0
+    time_to_collision = float("inf")
     if ped_pos.size > 0:
         deltas = ped_pos[:, :2] - robot_pos
         min_distance = float(np.linalg.norm(deltas, axis=1).min())
@@ -246,6 +247,7 @@ def compute_snqi_step_proxies(
         min_clearance = min_distance - radius_sum
         near_misses = 1.0 if 0.0 <= min_clearance < d_near else 0.0
         center_distance_near_miss_diagnostic = 1.0 if d_coll <= min_distance < d_near else 0.0
+        time_to_collision = _minimum_pedestrian_ttc(simulator, deltas, radius_sum)
 
     ped_forces = coerce_xy_rows(
         getattr(simulator, "last_ped_forces", np.zeros((0, 2), dtype=float))
@@ -275,6 +277,7 @@ def compute_snqi_step_proxies(
     )
 
     return {
+        "time_to_collision": time_to_collision,
         "near_misses": float(near_misses),
         "min_distance": float(min_distance),
         "min_clearance": float(min_clearance),
@@ -283,3 +286,33 @@ def compute_snqi_step_proxies(
         "comfort_exposure": float(comfort_exposure),
         "jerk_mean": float(jerk_mean),
     }
+
+
+def _minimum_pedestrian_ttc(simulator: Any, deltas: np.ndarray, radius_sum: float) -> float:
+    """Return seconds until first constant-velocity disc contact, or infinity.
+
+    Use physical forward speed and heading, and the backend's pedestrian velocities.
+    Unknown velocities cannot establish a future collision; existing overlap is TTC zero.
+    """
+    distance_sq = np.einsum("ij,ij->i", deltas, deltas) - radius_sum**2
+    if np.any(distance_sq <= 0.0):
+        return 0.0
+    robots = getattr(simulator, "robots", ())
+    ped_vel = coerce_xy_rows(getattr(simulator, "ped_vel", None))
+    if not robots or ped_vel.shape != deltas.shape:
+        return float("inf")
+    pose = first_robot_pose(getattr(simulator, "robot_poses", ()))
+    if pose is None:
+        return float("inf")
+    speed = float(robots[0].current_speed[0])
+    heading = float(pose[1])
+    robot_vel = speed * np.array([math.cos(heading), math.sin(heading)])
+    relative_vel = ped_vel - robot_vel
+    a = np.einsum("ij,ij->i", relative_vel, relative_vel)
+    b = np.einsum("ij,ij->i", deltas, relative_vel)
+    discriminant = b**2 - a * distance_sq
+    valid = (a > 1e-12) & (b < 0.0) & (discriminant >= 0.0)
+    if not np.any(valid):
+        return float("inf")
+    contact = (-b[valid] - np.sqrt(discriminant[valid])) / a[valid]
+    return float(contact.min())

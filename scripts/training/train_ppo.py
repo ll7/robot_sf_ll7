@@ -2764,6 +2764,17 @@ def _train_with_schedule(  # noqa: C901,PLR0913,PLR0915
     return metrics_raw, episode_records, best_summary, eval_timeline, perf_timeline
 
 
+def _resolve_policy_initialization_seed(
+    config: ExpertTrainingConfig, layout_seed: int | None
+) -> int | None:
+    """Resolve a policy control without losing the independent physical reset seed."""
+    if config.ppo_initialization_seed is None:
+        return layout_seed
+    if layout_seed is None:
+        raise ValueError("separate PPO initialisation requires a seeded layout schedule")
+    return config.ppo_initialization_seed
+
+
 def _init_training_model(
     config: ExpertTrainingConfig,
     *,
@@ -2790,8 +2801,7 @@ def _init_training_model(
         if config.seeds
         else 0
     )
-    if config.ppo_initialization_seed is not None and base_seed is None:
-        raise ValueError("separate PPO initialisation requires a seeded layout schedule")
+    policy_seed = _resolve_policy_initialization_seed(config, base_seed)
     density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
     if not density_curriculum.enabled:
         density_curriculum = None
@@ -2868,9 +2878,7 @@ def _init_training_model(
             policy_class,
             vec_env,
             verbose=1,
-            seed=config.ppo_initialization_seed
-            if config.ppo_initialization_seed is not None
-            else base_seed,
+            seed=policy_seed,
             tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
             policy_kwargs=policy_kwargs,
             **ppo_kwargs,

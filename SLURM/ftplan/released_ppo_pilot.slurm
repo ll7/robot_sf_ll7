@@ -54,11 +54,26 @@ with wandb.init(project='robot_sf', group='ppo-ftplan-released-20261012', job_ty
 print('Segment copied to hub and W&B; independent readback and CPU selection required')
 PY
 }
+terminate_trainer() {
+    if [[ -n "$training_pid" ]]; then
+        # Asynchronous trainers can inherit ignored INT. Stop their entire session
+        # with TERM, then bound shutdown even if the uv/trainer chain ignores it.
+        local deadline=$((SECONDS + 5))
+        kill -TERM -- "-$training_pid" 2>/dev/null || true
+        while kill -0 -- "-$training_pid" 2>/dev/null && [[ "$SECONDS" -lt "$deadline" ]]; do
+            sleep 0.1
+        done
+        kill -KILL -- "-$training_pid" 2>/dev/null || true
+        wait "$training_pid" 2>/dev/null || true
+        training_pid=''
+    fi
+}
 finish_segment() {
     local original_rc=$?
     trap - EXIT
     trap '' INT TERM
     set +e
+    terminate_trainer
     export FTPLAN_ORIGINAL_EXIT_CODE="$original_rc"
     export FTPLAN_SEGMENT_STATUS=incomplete
     if [[ "$original_rc" -eq 0 && "$training_completed" -eq 1 ]]; then
@@ -73,18 +88,14 @@ finish_segment() {
     exit "$original_rc"
 }
 interrupt_segment() {
-    local signal_name=$1 exit_code=$2
+    local exit_code=$1
     trap '' INT TERM
-    if [[ -n "$training_pid" ]]; then
-        kill -s "$signal_name" "$training_pid" 2>/dev/null || true
-        wait "$training_pid" 2>/dev/null || true
-        training_pid=''
-    fi
+    # EXIT owns bounded trainer shutdown and custody for both interruption paths.
     exit "$exit_code"
 }
 trap finish_segment EXIT
-trap 'interrupt_segment INT 130' INT
-trap 'interrupt_segment TERM 143' TERM
+trap 'interrupt_segment 130' INT
+trap 'interrupt_segment 143' TERM
 # Validate bound reports before creating a warm checkpoint or invoking training.
 scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- python - <<'PY'
 import hashlib, json, os
@@ -174,7 +185,9 @@ if getattr(config, 'training_seed_range', None) != (100000, 199999):
     raise ValueError('Training-only seed-policy implementation is required')
 print('Pilot prerequisites validated; bound runtime config prepared')
 PY
-scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- \
+# Keep the trainer group separate from the pilot and custody subprocesses.
+set +m
+setsid scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- \
   python -m scripts.training.train_ppo_with_family_weights \
   --config "$ROBOT_SF_ARTIFACT_ROOT/runtime.yaml" \
   --run-id "ftplan_init${FTPLAN_INIT_SEED}_segment${FTPLAN_SEGMENT}" &

@@ -106,7 +106,11 @@ released source pointers, initialization ZIPs, every segment final, selection be
 resolved configs, source SHA, worker receipts, manifests, selection rows, logs and
 normalization companions if any to the external hub and W&B. EXIT, INT and TERM paths preserve partial artifacts as well as successful
 segments. A bound `segment_status.json` and W&B metadata record complete/incomplete
-status and the original exit code. Failed/interrupted segments retain that exit
+status and the original exit code. Training runs in an isolated process group via
+`setsid`. On INT or TERM, the EXIT handler sends TERM to that group, allows five
+seconds, then sends KILL and reaps the launcher before custody. This also stops a
+trainer that inherited ignored INT or ignores TERM. Interruption exits remain
+130 (INT) or 143 (TERM). Failed/interrupted segments retain that exit
 code even if custody also fails; successful training with failed custody exits
 nonzero and cannot continue. An early Slurm TERM request provides a custody window;
 uncatchable SIGKILL or unavailable storage can still prevent preservation, and

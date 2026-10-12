@@ -13,7 +13,7 @@ evaluation:
 policy_id: recurrent_ppo_issue_7849_gate1_canary_v1
 algorithm: recurrent_ppo
 recurrent_policy: MultiInputLstmPolicy
-seeds: [104014]
+seeds: [4014]
 randomize_seeds: false
 total_timesteps: 2048
 recurrent_ppo_hyperparams:

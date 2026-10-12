@@ -47,7 +47,7 @@ lanes:
     config: configs/adversarial_routes/default.yaml
     scenario_file: configs/scenarios/classic_interactions.yaml
     scenario_id: classic_head_on_corridor_low
-    seed: 1113
+    seed: 123
     trial_count: 20
     output_dir: output/adversarial_routes
     expected_status: route_generation_smoke

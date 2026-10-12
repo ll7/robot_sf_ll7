@@ -233,10 +233,10 @@ def _write_evidence_readme(  # noqa: PLR0915
         (s for s in baseline_summaries if s["episode_id"] == "t_intersection_collision"), None
     )
     lines: list[str] = []
+    lines.append("<!-- AI-GENERATED (robot_sf#5319, 2026-07-11) - NEEDS-REVIEW -->")
     lines.append(
         "Prior outcome descriptions are superseded for the changed seed (historical identity to development seed 1121). No replacement trace is recorded by this migration; legacy episode IDs are compatibility labels."
     )
-    lines.append("<!-- AI-GENERATED (robot_sf#5319, 2026-07-11) - NEEDS-REVIEW -->")
     lines.append("# Issue #5319 — DWA Route-Rescue Diagnostic Probe")
     lines.append("")
     lines.append("Date: 2026-07-11")

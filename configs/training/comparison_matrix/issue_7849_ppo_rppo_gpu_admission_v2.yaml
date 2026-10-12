@@ -58,11 +58,11 @@ frozen_contract:
   scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
   scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
   training_seeds:
-  - 101043
-  - 100231
-  - 100777
-  - 100992
-  - 101337
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
   total_timesteps_per_arm_seed: 15000000
   independent_training_runs: 10
   total_planned_environment_steps: 150000000
@@ -73,9 +73,9 @@ evaluation_seed_manifest:
   path: configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml
   sha256: 3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482
   evaluation_seeds:
-  - 1112
-  - 1113
-  - 1114
+  - 111
+  - 112
+  - 113
   disjoint_from_training_seeds: true
   consumed_by:
   - scripts/training/train_ppo.py
@@ -104,7 +104,7 @@ gate_1_canary:
   status: not_run
   evidence_tier: diagnostic-only
   outcome_use: forbidden
-  training_seed: 104014
+  training_seed: 4014
   ppo_config: configs/training/ppo/issue_7849_ppo_gate1_canary_v2.yaml
   ppo_config_sha256: a151561ed17afa59ec870e687a6015aad8718a8847aba33f99aacbd0bd659f24
   recurrent_config: configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v2.yaml

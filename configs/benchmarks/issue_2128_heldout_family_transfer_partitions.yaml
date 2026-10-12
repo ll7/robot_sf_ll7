@@ -32,14 +32,14 @@ benchmark_set_evaluation:
   description: Known benchmark surface used for same-matrix comparison.
   benchmark_config: configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml
   scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
-  seeds: [1101]
+  seeds: [111]
   claim_label: benchmark_set_performance
 
 heldout_family_evaluation:
   description: Pilot held-out family surface excluded from training, validation, and tuning.
   benchmark_config: configs/benchmarks/issue_2128_heldout_family_transfer_pilot.yaml
   scenario_matrix: configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
-  seeds: [1101]
+  seeds: [111]
   scenario_families:
     - classic_station_platform
     - francis2023_intersection_wait
@@ -74,7 +74,7 @@ metrics:
   uncertainty:
     bootstrap_samples: 300
     confidence: 0.95
-    seed: 1113
+    seed: 123
   reporting_rule: >
     Benchmark-set and held-out-family metrics must be rendered in separate tables before any
     transfer-delta table is computed.

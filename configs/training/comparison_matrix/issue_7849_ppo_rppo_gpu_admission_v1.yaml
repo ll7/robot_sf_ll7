@@ -62,7 +62,7 @@ frozen_contract:
   safety_wrapper: disabled
   scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
   scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
-  training_seeds: [101043, 100231, 100777, 100992, 101337]
+  training_seeds: [123, 231, 777, 992, 1337]
   total_timesteps_per_arm_seed: 15000000
   independent_training_runs: 10
   total_planned_environment_steps: 150000000
@@ -122,48 +122,48 @@ full_budget:
     ppo: >-
       ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_231
       .venv/bin/python scripts/training/train_ppo.py --config
-      configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 100231 --run-id
+      configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 231 --run-id
       issue7849-ppo-seed-231 --log-level INFO
     ppo_per_seed:
-      - seed: 101043
+      - seed: 123
         run_id: issue7849-ppo-seed-123
         artifact_root: output/training/issue_7849_full/ppo_seed_123
         command: >-
           ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_123
           .venv/bin/python scripts/training/train_ppo.py --config
-          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 101043 --run-id
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 123 --run-id
           issue7849-ppo-seed-123 --log-level INFO
-      - seed: 100231
+      - seed: 231
         run_id: issue7849-ppo-seed-231
         artifact_root: output/training/issue_7849_full/ppo_seed_231
         command: >-
           ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_231
           .venv/bin/python scripts/training/train_ppo.py --config
-          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 100231 --run-id
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 231 --run-id
           issue7849-ppo-seed-231 --log-level INFO
-      - seed: 100777
+      - seed: 777
         run_id: issue7849-ppo-seed-777
         artifact_root: output/training/issue_7849_full/ppo_seed_777
         command: >-
           ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_777
           .venv/bin/python scripts/training/train_ppo.py --config
-          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 100777 --run-id
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 777 --run-id
           issue7849-ppo-seed-777 --log-level INFO
-      - seed: 100992
+      - seed: 992
         run_id: issue7849-ppo-seed-992
         artifact_root: output/training/issue_7849_full/ppo_seed_992
         command: >-
           ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_992
           .venv/bin/python scripts/training/train_ppo.py --config
-          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 100992 --run-id
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 992 --run-id
           issue7849-ppo-seed-992 --log-level INFO
-      - seed: 101337
+      - seed: 1337
         run_id: issue7849-ppo-seed-1337
         artifact_root: output/training/issue_7849_full/ppo_seed_1337
         command: >-
           ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_1337
           .venv/bin/python scripts/training/train_ppo.py --config
-          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 101337 --run-id
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 1337 --run-id
           issue7849-ppo-seed-1337 --log-level INFO
     recurrent_ppo: >-
       .venv/bin/python scripts/training/train_recurrent_ppo.py --config
@@ -266,7 +266,7 @@ gate_1_canary:
   status: not_run
   evidence_tier: diagnostic-only
   outcome_use: forbidden
-  canary_seed: 104014
+  canary_seed: 4014
   canary_seed_is_disjoint_from_full_training_seeds: true
   canary_config_sha256s:
     ppo: e27c5ee24c066e56aa787fa278e08a8befaf4f941b5876e794d6f30b010c50fa
@@ -295,7 +295,7 @@ gate_1_canary:
   ppo_command: >-
     CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/training/train_ppo.py
     --config configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml
-    --seed 104014 --run-id issue7849-gate1-ppo-seed4014 --log-level INFO
+    --seed 4014 --run-id issue7849-gate1-ppo-seed4014 --log-level INFO
     --log-file output/training/issue_7849_gate1/ppo.log
   recurrent_ppo_command: >-
     CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/training/train_recurrent_ppo.py

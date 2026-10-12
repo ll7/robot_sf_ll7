@@ -3,7 +3,7 @@ base_config: expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_ali
 policy_id: ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_horizon100
 scenario_config: ../../../scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml
 seeds:
-  - 101043
+  - 123
 convergence:
   success_rate: 0.9
 env_factory_kwargs:

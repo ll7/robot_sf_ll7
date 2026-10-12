@@ -14,7 +14,7 @@ scenario_families:
   - dense_pedestrian_interaction
 
 seeds:
-  - 1101
+  - 111
   - 2868
 
 horizons_s:

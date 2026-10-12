@@ -2,11 +2,11 @@
 base_config: expert_ppo_issue_403_grid_base.yaml
 policy_id: ppo_expert_grid_socnav_403_r0_6
 seeds:
-  - 101043
-  - 100231
-  - 100777
-  - 100992
-  - 101337
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
 total_timesteps: 10000000
 socnav_orca:
   time_horizon: 6.0

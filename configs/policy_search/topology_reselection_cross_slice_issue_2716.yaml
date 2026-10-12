@@ -9,7 +9,7 @@ description: >
   benchmark or manuscript evidence.
 stage: full_matrix
 horizon: 160
-seed: 1031
+seed: 111
 max_hypotheses: 3
 min_hypotheses: 2
 block_radius_cells: 3

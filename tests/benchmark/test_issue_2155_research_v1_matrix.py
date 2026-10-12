@@ -300,12 +300,12 @@ def test_issue_2155_fallback_planners_have_prereq_policy() -> None:
 
 
 def test_issue_2155_benchmark_seed_policy() -> None:
-    """Seed policy should use paper_eval_s5 (5 seeds)."""
+    """Seed policy should use dev_eval_s5 (5 seeds)."""
     cfg = load_campaign_config(BENCHMARK_CONFIG)
     assert cfg.seed_policy.mode == "seed-set"
-    assert cfg.seed_policy.seed_set == "paper_eval_s5"
+    assert cfg.seed_policy.seed_set == "dev_eval_s5"
     seeds = _resolved_seed_inventory(BENCHMARK_CONFIG)
-    expected_seeds = [111, 112, 113, 114, 115]
+    expected_seeds = [1101, 1102, 1103, 1104, 1105]
     assert seeds == expected_seeds, f"Seeds mismatch: {seeds} != {expected_seeds}"
 
 

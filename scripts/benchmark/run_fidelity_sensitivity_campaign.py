@@ -2112,7 +2112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not scenarios:
         raise ValueError(f"scenario set produced no scenarios: {scenario_path}")
     scenario = scenarios[0]
-    seeds = tuple(args.seeds or config.get("fixed_scope", {}).get("seeds", [1101, 1102, 1103]))
+    seeds = tuple(args.seeds or config.get("fixed_scope", {}).get("seeds", [111, 112, 113]))
     variants = load_variant_specs(
         config,
         include_all_variants=not bool(args.first_variant_per_axis_only),

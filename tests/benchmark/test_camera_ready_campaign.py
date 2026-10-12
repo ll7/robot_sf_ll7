@@ -2409,7 +2409,7 @@ def test_load_paper_cross_kinematics_v1_campaign_config() -> None:
     assert cfg.export_publication_bundle is False
     assert cfg.stop_on_failure is False
     assert cfg.seed_policy.mode == "fixed-list"
-    assert list(cfg.seed_policy.seeds) == [111]
+    assert list(cfg.seed_policy.seeds) == [1101]
     assert [planner.key for planner in cfg.planners] == ["goal", "social_force", "orca"]
     assert all(planner.planner_group == "core" for planner in cfg.planners)
     assert (
@@ -2461,7 +2461,7 @@ def test_load_cross_kinematics_v1_campaign_config() -> None:
     assert cfg.export_publication_bundle is False
     assert cfg.stop_on_failure is False
     assert cfg.seed_policy.mode == "fixed-list"
-    assert list(cfg.seed_policy.seeds) == [111]
+    assert list(cfg.seed_policy.seeds) == [1101]
     assert [planner.key for planner in cfg.planners] == ["goal", "social_force", "orca"]
     assert all(planner.planner_group == "core" for planner in cfg.planners)
 
@@ -2508,7 +2508,7 @@ def test_socnav_bench_reentry_probe_config_is_focused_and_fail_fast() -> None:
         get_repository_root() / "configs/scenarios/single/francis2023_blind_corner.yaml"
     )
     assert cfg.seed_policy.mode == "fixed-list"
-    assert list(cfg.seed_policy.seeds) == [111, 112, 113]
+    assert list(cfg.seed_policy.seeds) == [1101, 1102, 1103]
     assert cfg.horizon == 30
     assert cfg.workers == 1
 
@@ -2613,7 +2613,7 @@ def test_sanity_v1_smoke_config_is_nominal_calibration_surface() -> None:
     assert cfg.export_publication_bundle is False
     assert cfg.kinematics_matrix == ("differential_drive",)
     assert cfg.seed_policy.mode == "fixed-list"
-    assert list(cfg.seed_policy.seeds) == [111]
+    assert list(cfg.seed_policy.seeds) == [1101]
     assert cfg.horizon == 250
     assert [planner.key for planner in cfg.planners] == ["goal", "orca"]
     assert {planner.planner_group for planner in cfg.planners} == {"core"}
@@ -2626,7 +2626,7 @@ def test_sanity_v1_smoke_config_is_nominal_calibration_surface() -> None:
         "goal_behind_robot",
         "single_ped_crossing_orthogonal",
     ]
-    assert all(scenario["seeds"] == [111] for scenario in scenarios)
+    assert all(scenario["seeds"] == [1101] for scenario in scenarios)
 
 
 def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
@@ -2640,8 +2640,8 @@ def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
     )
 
     for cfg, seed_set, expected_seeds in (
-        (s5_cfg, "paper_eval_s5", [111, 112, 113, 114, 115]),
-        (s10_cfg, "paper_eval_s10", [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]),
+        (s5_cfg, "dev_eval_s5", [1101, 1102, 1103, 1104, 1105]),
+        (s10_cfg, "dev_eval_s10", [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110]),
     ):
         assert cfg.paper_facing is True
         assert cfg.paper_profile_version == base_cfg.paper_profile_version == "paper-matrix-v1"
@@ -3462,7 +3462,7 @@ def test_load_seed_variability_pilot_config_and_scenarios() -> None:
     assert cfg.export_publication_bundle is False
     assert cfg.kinematics_matrix == ("differential_drive",)
     assert cfg.seed_policy.mode == "fixed-list"
-    assert list(cfg.seed_policy.seeds) == [111, 112, 113, 114, 115, 116, 117, 118]
+    assert list(cfg.seed_policy.seeds) == [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108]
     assert [planner.key for planner in cfg.planners] == ["orca", "ppo"]
 
     scenarios = _load_campaign_scenarios(cfg)
@@ -3473,7 +3473,7 @@ def test_load_seed_variability_pilot_config_and_scenarios() -> None:
         "classic_t_intersection_low",
     ]
     assert all(
-        scenario["seeds"] == [111, 112, 113, 114, 115, 116, 117, 118] for scenario in scenarios
+        scenario["seeds"] == [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108] for scenario in scenarios
     )
 
 

@@ -138,7 +138,7 @@ def main() -> int:
         map_file=map_file,
         objective_mode=str(opt_cfg.get("objective_mode", "composite")),  # type: ignore[arg-type]
         trial_count=int(opt_cfg.get("trial_count", 20)),
-        seed=int(opt_cfg.get("seed", 1113)),
+        seed=int(opt_cfg.get("seed", 123)),
         robot_route_count=int(opt_cfg.get("robot_route_count", 1)),
         ped_route_count=int(opt_cfg.get("ped_route_count", 2)),
         allow_inflation_fallback=bool(opt_cfg.get("allow_inflation_fallback", False)),

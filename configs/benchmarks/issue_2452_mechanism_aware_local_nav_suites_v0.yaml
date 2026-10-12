@@ -71,7 +71,7 @@ suites:
       - classic_bottleneck_low
       - classic_head_on_corridor_low
       - narrow_passage
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - orca
       - social_force
@@ -103,7 +103,7 @@ suites:
       - classic_realworld_double_bottleneck_high
       - classic_t_intersection_medium
       - symmetry_ambiguous_choice
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - hybrid_rule_base
       - orca
@@ -135,7 +135,7 @@ suites:
       - francis2023_intersection_wait
       - francis2023_join_group
       - classic_merging_low
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - orca
       - social_force
@@ -167,7 +167,7 @@ suites:
       - classic_group_crossing_high
       - classic_overtaking_medium
       - classic_t_intersection_medium
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - orca
       - social_force
@@ -200,7 +200,7 @@ suites:
       - classic_head_on_corridor_low
       - classic_overtaking_medium
       - classic_bottleneck_high
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - social_force
       - orca
@@ -232,7 +232,7 @@ suites:
       - classic_crossing_low
       - classic_bottleneck_low
       - classic_head_on_corridor_low
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - guarded_ppo
       - orca_residual
@@ -265,7 +265,7 @@ suites:
       - classic_cross_trap_low
       - classic_group_crossing_high
       - classic_head_on_corridor_low
-    seed_set: [1101, 1102, 1103]
+    seed_set: [111, 112, 113]
     baseline_candidates:
       - orca
       - hybrid_rule_base

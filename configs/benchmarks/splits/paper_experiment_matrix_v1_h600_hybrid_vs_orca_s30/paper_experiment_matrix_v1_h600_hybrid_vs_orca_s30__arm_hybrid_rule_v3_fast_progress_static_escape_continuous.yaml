@@ -23,8 +23,8 @@ amv_profile:
     - bottleneck
 seed_policy:
   mode: seed-set
-  seed_set: dev_eval_s30
-  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
 snqi_contract:
@@ -36,7 +36,7 @@ snqi_contract:
   outcome_separation_fail_threshold: 0.0
   max_component_dominance_warn_threshold: 0.24
   max_component_dominance_fail_threshold: 0.27
-  calibration_seed: 1113
+  calibration_seed: 123
   calibration_trials: 6000
 workers: 2
 horizon: 600
@@ -46,7 +46,7 @@ resume: true
 stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 1113
+bootstrap_seed: 123
 kinematics_matrix:
 - differential_drive
 export_publication_bundle: false

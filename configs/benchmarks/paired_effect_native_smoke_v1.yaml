@@ -14,7 +14,7 @@ scenario_candidates:
   - classic_head_on_corridor_medium
 seed_policy:
   mode: fixed-list
-  seeds: [1101]
+  seeds: [111]
 
 workers: 1
 horizon: 100

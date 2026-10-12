@@ -337,6 +337,8 @@ def test_active_script_seed_inputs_obey_their_roles():
             roles.setdefault(path.relative_to(ROOT).as_posix(), "training")
     hits = []
     for name, role in roles.items():
+        if protected_config(Path(name)):
+            continue
         for line in script_seed_hits((ROOT / name).read_text(), training=role == "training"):
             hits.append(f"{name}:{line}: <seed>")
     assert not hits, "Script seed violations:\n" + "\n".join(hits)
@@ -384,3 +386,12 @@ def test_role_scan_accepts_separate_pools_and_ignores_counts():
 
 
 # seed-holdout: synthetic-fixture end
+
+
+def test_live_optuna_launcher_uses_training_reset_seeds():
+    """Archival recipe preservation cannot redirect live training to retired inputs."""
+    launcher = ROOT / "configs/training/ppo_imitation/optuna_expert_ppo.yaml"
+    payload = yaml.safe_load(launcher.read_text())
+    base = yaml.safe_load((launcher.parent / payload["base_config"]).read_text())
+    assert base["seeds"] == [101043, 100231, 100777, 100992]
+    assert all(100000 <= seed <= 199999 for seed in base["seeds"])

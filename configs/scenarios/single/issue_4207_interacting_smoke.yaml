@@ -42,6 +42,6 @@ scenarios:
         future CPU re-run; the committed evidence packet is generated from a synthetic smoke
         episode fixture, not from a physics run of this matrix.
   seeds:
-  - 1101
-  - 1102
-  - 1103
+  - 111
+  - 112
+  - 113

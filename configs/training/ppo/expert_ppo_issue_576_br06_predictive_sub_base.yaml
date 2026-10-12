@@ -28,11 +28,11 @@ ppo_hyperparams:
   clip_range: 0.1
   target_kl: 0.02
 seeds:
-  - 101043
-  - 100231
-  - 100777
-  - 100992
-  - 101337
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
 randomize_seeds: true
 total_timesteps: 30000000
 # Keep this intermediate overlay independently loadable. Every predictive

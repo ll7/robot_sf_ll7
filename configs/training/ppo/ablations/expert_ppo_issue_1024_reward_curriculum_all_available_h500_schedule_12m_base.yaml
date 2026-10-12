@@ -4,7 +4,7 @@
 scenario_config: ../../../scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml
 worker_mode: subproc
 seeds:
-  - 101043
+  - 123
 randomize_seeds: true
 total_timesteps: 12000000
 best_checkpoint_metric: success_rate

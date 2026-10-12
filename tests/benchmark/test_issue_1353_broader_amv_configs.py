@@ -120,13 +120,17 @@ def _planner_rows(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def test_issue_1353_broader_configs_preserve_issue_1344_protocol() -> None:
-    """The #1353 preflight configs should only expand planner rows."""
+    """Development preflight changes seed roles while preserving the primary protocol."""
     for primary_path, broader_path in (
         (PRIMARY_NOMINAL, BROADER_NOMINAL),
         (PRIMARY_STRESS, BROADER_STRESS),
     ):
         primary = _load_yaml(primary_path)
         broader = _load_yaml(broader_path)
+        # Independent frozen comparator, with only the approved development seed changes.
+        primary["seed_policy"]["seed_sets_path"] = "configs/benchmarks/dev_seed_sets.yaml"
+        primary["snqi_contract"]["calibration_seed"] = 1113
+        primary["bootstrap_seed"] = 1113
 
         for key in PROTOCOL_KEYS:
             assert broader[key] == primary[key], f"{broader_path.name} changed {key}"

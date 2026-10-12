@@ -76,7 +76,7 @@ arms:
 scenario:
   template: configs/scenarios/templates/crossing_ttc.yaml
   template_id: crossing_ttc_template
-  template_seed: 1113
+  template_seed: 123
   search_space: configs/adversarial/issue_6921_crossing_ttc_space.yaml
   source_search_space: configs/adversarial/crossing_ttc_space.yaml
   description: >
@@ -134,7 +134,7 @@ budget:
     status is reserved for the separately reviewed successor canary.
 seeds:
   frozen_scenario_seeds:
-    - 1113
+    - 123
   search_seed: 42
   open_loop_search_seed: 42
   residual_adversary_seed: 42

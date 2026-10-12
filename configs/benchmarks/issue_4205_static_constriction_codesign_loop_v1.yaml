@@ -13,7 +13,7 @@ scenario_ids:
   - classic_bottleneck_low
   - classic_head_on_corridor_low
   - narrow_passage
-seeds: [1101, 1102, 1103]
+seeds: [111, 112, 113]
 arms:
   - ppo_frozen
   - ppo_frozen_wrapper_on

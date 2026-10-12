@@ -7,7 +7,7 @@ output:
 # This is a deterministic, non-degenerate training fixture. It is not a benchmark
 # dataset and must not be promoted as policy or paper evidence.
 fixture:
-  seed: 107254
+  seed: 7254
   dataset_id: issue_7254_predictive_fixture_v1
   samples: 512
   max_agents: 3
@@ -20,7 +20,7 @@ training:
   lr: 0.0003
   weight_decay: 0.00001
   val_split: 0.25
-  seed: 107254
+  seed: 7254
   hidden_dim: 32
   message_passing_steps: 1
 

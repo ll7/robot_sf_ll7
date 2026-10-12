@@ -119,8 +119,8 @@ inference_contract:
 
 seed_policy:
   mode: seed-set
-  seed_set: dev_eval_s30
-  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
 # Primary endpoints (typed ledger). These match the issue specification.
 primary_endpoints:
@@ -153,7 +153,7 @@ multiplicity_policy:
 seed_budget:
   mode: paired
   pairing_key_fields: [scenario_id, seed]
-  seed_set: dev_eval_s30
+  seed_set: paper_eval_s30
   seeds_per_arm: 30
 
 # Stop rules.

@@ -58,7 +58,7 @@ class BenchmarkCLIConfig:
     scenario_matrix_path: str
     output_root: str
     workers: int = 1
-    master_seed: int = 1113
+    master_seed: int = 123
     smoke: bool = False
     algo: str = "unknown"
     capture_replay: bool = True
@@ -115,7 +115,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--seed",
         type=int,
-        default=1113,
+        default=123,
         help="Master seed for deterministic planning",
     )
     parser.add_argument("--algo", default="ppo", help="Algorithm label for manifest/records")

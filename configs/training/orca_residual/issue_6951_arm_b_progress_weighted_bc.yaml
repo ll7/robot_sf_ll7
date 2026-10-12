@@ -17,7 +17,7 @@ scenario_id: planner_sanity_simple
 bc_epochs: 8
 batch_size: 64
 learning_rate: 0.0003
-random_seeds: [101031, 101032, 101033]
+random_seeds: [111, 112, 113]
 device: cpu
 env_overrides:
   predictive_foresight_device: cpu
@@ -32,10 +32,10 @@ progress_weighted_objective:
   weight_max: 2.0
   remaining_route_length_key: remaining_route_length
   dataset_digest: ""
-  random_seed: 101031
+  random_seed: 111
 
 execution_boundary:
   submit_slurm_from_this_issue: false
   no_launch_experiment: true
-  preregistered_seeds: [101031, 101032, 101033]
+  preregistered_seeds: [111, 112, 113]
   preregistered_scenario: planner_sanity_simple

@@ -1,7 +1,7 @@
 scenario_id: classic_head_on_corridor_low
 map_file: maps/svg_maps/classic_head_on_corridor.svg
 optimizer: optuna_tpe
-seed: 1113
+seed: 123
 trial_count: 100
 objective_mode: composite
 best_score: 0.3876022791660954

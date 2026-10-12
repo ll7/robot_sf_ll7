@@ -59,7 +59,7 @@ benchmark_contract:
   scenario_set:
     - classic_realworld_double_bottleneck_high
   seed_list:
-    - 1101
+    - 111
   horizon: 160
   output_mode_requirement: native_or_adapter_only
   paired_metrics:

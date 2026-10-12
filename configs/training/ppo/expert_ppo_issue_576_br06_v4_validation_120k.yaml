@@ -9,7 +9,7 @@ resume_source_step: 15240000
 num_envs: 4
 worker_mode: subproc
 seeds:
-  - 101043
+  - 123
 randomize_seeds: true
 # Important:
 # - resume_model_id resolves through model/registry.yaml and downloads from W&B

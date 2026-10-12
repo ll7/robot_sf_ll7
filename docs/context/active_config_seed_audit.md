@@ -41,9 +41,13 @@ Dynamic generation and environment overrides still require runtime admission.
 Diagnostics show file, line, field and `<seed>`.
 
 The exclusion inventory pins exact frozen/versioned release paths, transitive
-dependencies, frozen preregistrations and historical inputs by original hash.
-The regression verifies those bytes remain unchanged. No new exclusion is added
-by the role or provenance corrections.
+dependencies, frozen preregistrations, registered historical campaign inputs and
+pre-refactor resolved-config baselines by original hash. Historical inherited
+parents are traversed even when the leaf itself did not change.
+The regression verifies those bytes remain unchanged. CI digest failures identified additional historical contracts and source
+companions; those inputs were restored to origin/main bytes and their existing
+registered digests retained. Live tests now assert development identities, while
+historical digest and resolved-baseline assertions remain unchanged.
 
 Run focused static proof without importing or stepping the simulation stack:
 
@@ -53,3 +57,8 @@ scripts/dev/run_worktree_shared_venv.sh --standalone -- uv run python -m pytest 
 
 This is configuration and provenance integrity proof, not training, planner
 performance, hosted CI or release-admission evidence.
+
+The live Optuna launcher resolves `dev_expert_ppo.yaml`, a training-only copy.
+The historical `expert_ppo.yaml` reset identities and recipe digests stay unchanged.
+A regression checks the resolved live reset list against the approved training
+pool after the historical archive is restored.

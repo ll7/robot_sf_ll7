@@ -241,7 +241,7 @@ row_identifiers:
 
 same_seed_comparability:
   seed_manifest: "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml"
-  hard_seed_manifest: "configs/training/predictive/training_predictive_hard_seeds_v1.yaml"
+  hard_seed_manifest: "training_predictive_hard_seeds_v1.yaml"
   scenario_matrix: "configs/scenarios/classic_interactions.yaml"
   planner_grid: "configs/benchmarks/predictive_sweep_planner_grid_v1.yaml"
   horizon_steps: 8

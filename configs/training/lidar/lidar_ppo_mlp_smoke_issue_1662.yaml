@@ -9,7 +9,7 @@ scenario_config: ../../scenarios/classic_interactions.yaml
 num_envs: 4
 worker_mode: subproc
 seeds:
-  - 101043
+  - 123
 randomize_seeds: false
 total_timesteps: 32000
 

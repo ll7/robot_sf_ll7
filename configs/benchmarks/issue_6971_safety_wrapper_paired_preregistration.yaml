@@ -41,7 +41,7 @@ source_contracts:
   design_config: configs/research/safety_wrapper_ablation_v1.yaml
   metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml
   scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
-  seed_sets: configs/benchmarks/dev_seed_sets.yaml
+  seed_sets: configs/benchmarks/seed_sets_v1.yaml
   runtime_validator: robot_sf/benchmark/safety/safety_wrapper_runtime.py
   report_builder: robot_sf/benchmark/safety/safety_wrapper_factorial_report.py
   timing_reference: docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json
@@ -75,8 +75,8 @@ design:
       source_arm_keys: [prediction_planner__wrapper_off, prediction_planner__wrapper_on]
       role: experimental model-based planner
   seed_schedule:
-    name: dev_eval_s20
-    source: configs/benchmarks/dev_seed_sets.yaml::dev_eval_s20
+    name: paper_eval_s20
+    source: configs/benchmarks/seed_sets_v1.yaml::paper_eval_s20
     values: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130]
     count: 20
   pairing_key: [planner, scenario_id, seed]
@@ -221,7 +221,7 @@ analysis_plan:
     pairing manifest; never pool planners to manufacture a universal estimate.
   bootstrap_samples: 1000
   bootstrap_confidence: 0.95
-  bootstrap_seed: 1113
+  bootstrap_seed: 123
   ties_and_degenerate_episodes: >
     Retain exact zero paired differences as data. If all paired differences are identical or a
     planner has no valid complete pairs, report the degenerate/incomplete status and do not infer gain.

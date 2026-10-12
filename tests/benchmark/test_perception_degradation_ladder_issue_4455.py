@@ -44,7 +44,7 @@ def test_issue_4455_ladder_generates_loadable_profile_configs(tmp_path: Path) ->
     assert (
         profiles["occlusion_range_4m"].observation_noise["pedestrian_occlusion_max_range_m"] == 4.0
     )
-    assert all(cfg.seed_policy.seeds == (111, 112) for cfg in loaded)
+    assert all(cfg.seed_policy.seeds == (1101, 1102) for cfg in loaded)
     assert all(len(cfg.planners) == 3 for cfg in loaded)
 
 

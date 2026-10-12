@@ -13,10 +13,10 @@ scenario_ids:
   - classic_overtaking_low
   - francis2023_following_human
 seed_set_refs:
-  manifest: configs/benchmarks/dev_seed_sets.yaml
+  manifest: configs/benchmarks/seed_sets_v1.yaml
   validation: dev
   evaluation: eval
-  train_excludes: dev_eval_s20
+  train_excludes: paper_eval_s20
 seeds_by_split:
   train: [201, 202, 203, 204, 205, 206]
   validation: [101, 102, 103]
@@ -48,7 +48,7 @@ hard_slice_assignment:
     reason: "Recovery relabeling examples belong to train unless a holdout slice is predeclared."
 relabeling_policy: null
 exclusion_rules:
-  - "Exclude every validation/evaluation seed from train, including dev_eval_s20."
+  - "Exclude every validation/evaluation seed from train, including paper_eval_s20."
   - "Exclude hard-slice recovery examples from evaluation unless predeclared in this packet."
 provenance: >
   Pre-Slurm launch packet for #1397. The selected oracle source is the best current
@@ -84,7 +84,7 @@ artifact_promotion_policy:
 collection_command_shape: >
   uv run python scripts/training/collect_expert_trajectories.py --dataset-id
   issue_1397_oracle_imitation_v1 --policy-id hybrid_rule_v3_static_margin0_waypoint2
-  --scenario-config configs/policy_search/nominal_sanity_matrix.yaml --seeds 100201 100202 100203
+  --scenario-config configs/policy_search/nominal_sanity_matrix.yaml --seeds 201 202 203
   204 205 206
 local_preflight_command: >
   uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config

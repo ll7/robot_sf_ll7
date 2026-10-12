@@ -19,7 +19,7 @@ comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
 seed_policy:
   mode: seed-set
   seed_set: eval
-  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
 workers: 2
 horizon: 100
@@ -29,7 +29,7 @@ resume: true
 stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 1113
+bootstrap_seed: 123
 
 kinematics_matrix:
   - differential_drive

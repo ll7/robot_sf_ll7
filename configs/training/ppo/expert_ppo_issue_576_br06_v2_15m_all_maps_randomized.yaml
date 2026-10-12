@@ -6,11 +6,11 @@ policy_id: ppo_expert_br06_v2_15m_all_maps_randomized
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 101043
-  - 100231
-  - 100777
-  - 100992
-  - 101337
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
 randomize_seeds: true
 total_timesteps: 15000000
 env_factory_kwargs:

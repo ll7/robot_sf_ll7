@@ -39,7 +39,7 @@ snqi_contract:
   outcome_separation_fail_threshold: 0.0
   max_component_dominance_warn_threshold: 0.24
   max_component_dominance_fail_threshold: 0.27
-  calibration_seed: 1113
+  calibration_seed: 123
   calibration_trials: 6000
 workers: 16
 horizon: 600
@@ -51,7 +51,7 @@ resume: false
 stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 1113
+bootstrap_seed: 123
 kinematics_matrix:
 - differential_drive
 export_publication_bundle: false

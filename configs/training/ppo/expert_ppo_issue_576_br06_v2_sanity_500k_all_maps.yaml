@@ -5,7 +5,7 @@ policy_id: ppo_expert_br06_v2_sanity_500k_all_maps
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 101043
+  - 123
 total_timesteps: 500000
 env_factory_kwargs:
   reward_name: route_completion_v2

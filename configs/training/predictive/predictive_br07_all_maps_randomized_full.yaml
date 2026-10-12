@@ -6,7 +6,7 @@ output:
 
 scenarios:
   scenario_matrix: ../../scenarios/classic_interactions.yaml
-  hard_seed_manifest: configs/training/predictive/training_predictive_hard_seeds_v1.yaml
+  hard_seed_manifest: training_predictive_hard_seeds_v1.yaml
   planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
 
 base_collection:

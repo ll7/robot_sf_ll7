@@ -3,7 +3,7 @@
 # mode, recurrent hyperparameters, and worker metadata stay variant-owned.
 scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
 total_timesteps: 2048
-seeds: [104014]
+seeds: [4014]
 randomize_seeds: false
 env_factory_kwargs:
   reward_name: route_completion_v2

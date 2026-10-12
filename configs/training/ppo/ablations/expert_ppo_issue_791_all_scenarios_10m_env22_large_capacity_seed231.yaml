@@ -6,7 +6,7 @@
 base_config: expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml
 policy_id: ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_seed231
 seeds:
-- 100231
+- 231
 tracking:
   wandb:
     job_type: expert-ppo-10m-all-scenarios-large-capacity-seed231

@@ -171,10 +171,10 @@ def _write_evidence_readme(  # noqa: PLR0915
     bottleneck = next((s for s in summaries if s["episode_id"] == "bottleneck_timeout"), None)
     t_inter = next((s for s in summaries if s["episode_id"] == "t_intersection_collision"), None)
     lines: list[str] = []
+    lines.append("<!-- AI-GENERATED (robot_sf#5298, 2026-07-11) - NEEDS-REVIEW -->")
     lines.append(
         "Prior outcome descriptions are superseded for the changed seed (historical identity to development seed 1121). No replacement trace is recorded by this migration; legacy episode IDs are compatibility labels."
     )
-    lines.append("<!-- AI-GENERATED (robot_sf#5298, 2026-07-11) - NEEDS-REVIEW -->")
     lines.append(
         "# Issue #5298 — DWA Decision Trace for the #5262 Timeout and T-Intersection Collision"
     )

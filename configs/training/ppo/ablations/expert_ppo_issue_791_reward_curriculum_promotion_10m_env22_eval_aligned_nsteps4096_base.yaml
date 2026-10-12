@@ -5,7 +5,7 @@
 # file, not this base config.
 worker_mode: subproc
 seeds:
-  - 101043
+  - 123
 randomize_seeds: true
 best_checkpoint_metric: success_rate
 feature_extractor: grid_socnav

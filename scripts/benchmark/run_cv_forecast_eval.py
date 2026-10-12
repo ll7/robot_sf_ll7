@@ -46,6 +46,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json",
         "scenario_id": "classic_head_on_corridor_low",
         "planner_id": "default_social_force",
+        "seed": 111,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "corridor_interaction",
@@ -53,6 +54,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
         "scenario_id": "classic_head_on_corridor_low",
         "planner_id": "ammv_social_force",
+        "seed": 111,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "crossing_proxy",
@@ -60,6 +62,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
         "scenario_id": "crossing_proxy",
         "planner_id": "orca",
+        "seed": 111,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "bottleneck",
@@ -67,6 +70,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json",
         "scenario_id": "classic_bottleneck_medium",
         "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 111,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "occluded_emergence",
@@ -74,6 +78,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
         "scenario_id": "issue_2756_occluded_emergence",
         "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 111,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "signalized_crossing",
@@ -81,6 +86,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
         "scenario_id": "issue_2868_signalized_crossing",
         "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "goal_directed_crossing",
@@ -88,6 +94,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json",
         "scenario_id": "issue_2868_goal_directed_crossing",
         "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "waiting_with_intent_change",
@@ -95,6 +102,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json",
         "scenario_id": "issue_2868_waiting_intent_change",
         "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
     {
         "family": "route_conflict_goal",
@@ -102,6 +110,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json",
         "scenario_id": "issue_2868_route_conflict_goal",
         "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,  # seed-holdout: setup-only (recorded trace identity; never dispatched)
     },
 ]
 

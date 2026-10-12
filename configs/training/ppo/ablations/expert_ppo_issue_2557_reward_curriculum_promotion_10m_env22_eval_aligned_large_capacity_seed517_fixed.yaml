@@ -6,7 +6,7 @@
 base_config: expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml
 policy_id: ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed517_fixed
 seeds:
-- 100517
+- 517
 tracking:
   wandb:
     job_type: expert-ppo-10m-eval-aligned-large-capacity-seed517-fixed

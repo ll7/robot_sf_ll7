@@ -93,7 +93,7 @@ shared_budget:
   # analysis may prove a different budget infeasible, but the frozen budget is
   # the default contract.
   total_timesteps: 15000000
-  seeds: [101043, 100231, 100777, 100992, 101337]
+  seeds: [123, 231, 777, 992, 1337]
   per_seed_independent_config_and_job: true
   seed_list_single_invocation_rejected_unless_proven_independent: true
   num_envs: auto

@@ -510,3 +510,56 @@ def test_budget_timeout_normalization_preserves_terminal_precedence():
     assert resolve_termination_reason(**{**flags, "success": True}, reached_max_steps=True) == (
         "success"
     )
+
+
+@pytest.mark.parametrize("protocol", ["0.0.7", "0.0.9"])
+def test_pinned_external_schedule_loads_with_explicit_repository_root(tmp_path, protocol):
+    """An external pinned schedule still loads and enforces authored horizon budgets."""
+    from hashlib import sha256
+
+    from robot_sf.benchmark.camera_ready._config import _apply_scenario_horizon_schedule
+    from robot_sf.evidence.writers import write_text
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    schedule = tmp_path / "external" / "schedule.yaml"
+    schedule.parent.mkdir()
+    write_text(
+        schedule,
+        "# AI-GENERATED / NEEDS-REVIEW: synthetic dev-seed schedule\n"
+        "scenarios:\n  external_dev:\n"
+        "    recommended_horizon_steps: 600\n    status: authored\n",
+    )
+    scenario = {
+        "name": "external_dev",
+        "seeds": [1001],
+        "simulation_config": {"max_episode_steps": 600},
+    }
+    digest = sha256(schedule.read_bytes()).hexdigest()
+    result = _apply_scenario_horizon_schedule(
+        [scenario],
+        schedule_path=schedule,
+        expected_sha256=digest,
+        protocol_version=protocol,
+        repository_root=repository,
+    )[0]
+    assert result["simulation_config"]["max_episode_steps"] == 600
+    assert result["metadata"]["scenario_horizon"]["source"] == str(schedule.resolve())
+    with pytest.raises(ValueError, match="differs from schedule bytes"):
+        _apply_scenario_horizon_schedule(
+            [scenario],
+            schedule_path=schedule,
+            expected_sha256="incorrect",
+            protocol_version=protocol,
+            repository_root=repository,
+        )
+    if protocol == "0.0.9":
+        assert result["metadata"]["scenario_horizon"]["sha256"] == digest
+        with pytest.raises(ValueError, match="authored limit"):
+            _apply_scenario_horizon_schedule(
+                [{**scenario, "simulation_config": {"max_episode_steps": 700}}],
+                schedule_path=schedule,
+                expected_sha256=digest,
+                protocol_version=protocol,
+                repository_root=repository,
+            )

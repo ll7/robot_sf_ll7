@@ -74,20 +74,20 @@ def _write_episodes_jsonl(path: Path, count: int, *, scenario=None) -> None:
             record: dict[str, Any] = {
                 "success": True,
                 "episode": i,
-                "seed": i,
+                "seed": 1001 + i,
                 "scenario_id": "s1",
                 "config_hash": _config_hash({"algo": "goal", "algo_config_hash": _config_hash({})}),
                 "algo": "goal",
                 "scenario_params": producer_params(
                     expected_arm_scenarios(
-                        [scenario or {"name": "s1", "id": "s1"}],
+                        _with_synthetic_ids([scenario or {"name": "s1", "id": "s1"}]),
                         cfg=(cfg := fixture_campaign([{"key": "sf", "algo": "goal"}])),
                         planner=cfg.planners[0],
                         kinematics=path.parent.name.split("__")[-1]
                         if "__" in path.parent.name
                         else "differential_drive",
                     )[0],
-                    i,
+                    1001 + i,
                     algo="goal",
                 ),
             }
@@ -117,8 +117,16 @@ def _write_arm(
 
 
 def _with_synthetic_ids(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Give synthetic fixtures the explicit id used by the synthetic runner's rows."""
-    return [dict(sc, id=sc["name"]) for sc in scenarios]
+    """Use explicit map-job inventories so saved fixture rows stay in the dev band."""
+    return [
+        dict(
+            sc,
+            id=sc["name"],
+            simulation_config={},
+            seeds=list(range(1001, 1001 + sc.get("repeats", 1))),
+        )
+        for sc in scenarios
+    ]
 
 
 # --- _count_jsonl_episodes ---
@@ -467,32 +475,32 @@ class TestWriteResumePlan:
         assert data["generated_at_utc"] is not None
 
     def test_summary_totals_in_fixture(self, tmp_path: Path) -> None:
-        """Simulate the job-13376 fixture: 5 complete arms + 1 partial with 562 episodes."""
+        """Use a dev-seed-sized analogue of the job-13376 fixture: 5 complete arms + 1 partial with 56 episodes."""
         campaign_root = tmp_path / "campaign"
         campaign_root.mkdir()
         runs_dir = campaign_root / "runs"
         runs_dir.mkdir()
 
-        # 5 complete arms (expect 1000 episodes each)
+        # 5 complete arms (expect 100 episodes each)
         for i in range(5):
             arm_name = f"arm{i}__differential_drive"
             _write_arm(
                 runs_dir,
                 arm_name,
-                episodes=1000,
-                scenario={"name": "s1", "repeats": 1000, "id": "s1"},
+                episodes=100,
+                scenario={"name": "s1", "repeats": 100, "id": "s1"},
             )
 
         # 1 partial arm
         _write_arm(
             runs_dir,
             "arm5__differential_drive",
-            episodes=562,
-            scenario={"name": "s1", "repeats": 1000, "id": "s1"},
+            episodes=56,
+            scenario={"name": "s1", "repeats": 100, "id": "s1"},
         )
 
         planners = [{"key": f"arm{i}", "algo": "goal", "enabled": True} for i in range(6)]
-        scenarios = [{"name": "s1", "repeats": 1000}]
+        scenarios = [{"name": "s1", "repeats": 100}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -504,12 +512,12 @@ class TestWriteResumePlan:
         assert summary["arms_skip_complete"] == 5
         assert summary["arms_continue"] == 1
         assert summary["arms_fresh"] == 0
-        assert summary["episodes_banked"] == 5562
+        assert summary["episodes_banked"] == 556
 
-        # Partial arm should show continue-from-562
+        # Partial arm should show continue-from-56
         partial = next(v for v in verdicts if v.verdict.startswith("continue-from-"))
-        assert partial.episodes_found == 562
-        assert partial.episodes_remaining == 438
+        assert partial.episodes_found == 56
+        assert partial.episodes_remaining == 44
 
 
 # --- emit_resume_plan_log (smoke test) ---

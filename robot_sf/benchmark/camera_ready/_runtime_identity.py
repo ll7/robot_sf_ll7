@@ -29,6 +29,7 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
+from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
 from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
@@ -131,6 +132,7 @@ IDENTITY_EXCLUSIONS = {
     "scenario.seed/seeds": "Producer removes inventories; exact integer row seed is checked separately.",
     "algorithm_metadata": "Adapter diagnostics may expand defaults or describe a child planner; signed algo_config_hash binds the selected policy.",
     "git_hash/result_provenance.repo_commit": "Software provenance is checked separately against the campaign manifest by final integrity.",
+    "result_provenance.schema_version/episode_id/raw_artifact/jsonl_line/postprocessing": "Envelope and artifact lineage, not runtime settings; provenance validation checks artifact evidence separately.",
     "metrics/outcome/trajectories/timing": "Measured outputs, not runtime configuration; behaviour receipts provide execution evidence.",
 }
 
@@ -143,6 +145,7 @@ class ExpectedEpisodeIdentity:
     seed: int
     params: dict[str, Any]
     optional_copies: dict[str, Any]
+    simulator_settings: dict[str, Any]
 
 
 def expected_runtime_identity(
@@ -243,44 +246,56 @@ def expected_episode_identity(
     unknown = set(params) - (set(selected) | {"id"} | RUNTIME_IDENTITY_FIELDS)
     if unknown:
         raise ValueError("producer runtime fields lack an explicit admission decision")
+    effective_horizon = (
+        int(horizon)
+        if horizon is not None and horizon > 0
+        else int(selected.get("simulation_config", {}).get("max_episode_steps") or 200)
+    )
+    noise_hash = observation_noise_hash(normalize_observation_noise_spec(cfg.observation_noise))
+    precision_hash = tracking_precision_hash(normalize_tracking_precision_spec(None))
     return ExpectedEpisodeIdentity(
         str(selected.get("name") or selected.get("scenario_id") or selected.get("id") or "unknown"),
         seed,
         params,
         {
             **params,
-            "horizon": int(horizon)
-            if horizon is not None and horizon > 0
-            else int(selected.get("simulation_config", {}).get("max_episode_steps") or 200),
+            "horizon": effective_horizon,
+            "dt": float(effective_dt),
             "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
-            "observation_noise_hash": observation_noise_hash(
-                normalize_observation_noise_spec(cfg.observation_noise)
-            ),
+            "observation_noise_hash": noise_hash,
             "tracking_precision": normalize_tracking_precision_spec(None),
-            "tracking_precision_hash": tracking_precision_hash(
-                normalize_tracking_precision_spec(None)
-            ),
+            "tracking_precision_hash": precision_hash,
         },
+        build_simulator_settings_provenance(
+            horizon=effective_horizon,
+            dt=float(effective_dt),
+            record_forces=cfg.record_forces,
+            active_observation_mode=mode,
+            active_observation_level=str(contract["observation_level"]["key"]),
+            noise_hash=noise_hash,
+            tracking_precision_hash=precision_hash,
+        ),
     )
 
 
-def _payload_errors(params: Mapping[str, Any], expected: Mapping[str, Any]) -> dict[str, Any]:
+def _payload_errors(
+    params: Mapping[str, Any], expected: Mapping[str, Any], *, prefix: str = "scenario_params"
+) -> dict[str, Any]:
     """Return exact presence/value differences across the closed producer payload.
 
     Returns:
         Field-specific mismatches, without observed seed/config disclosure.
     """
     errors: dict[str, Any] = {}
-    allowed = set(expected) | RUNTIME_IDENTITY_FIELDS
     for field in sorted(set(params) | set(expected)):
-        if field not in allowed or field not in expected:
-            errors[f"scenario_params.{field}"] = "unexpected field"
+        if field not in expected:
+            errors[f"{prefix}.{field}"] = "unexpected field"
         elif field not in params:
-            errors[f"scenario_params.{field}"] = "missing field"
+            errors[f"{prefix}.{field}"] = "missing field"
         elif json.dumps(params[field], sort_keys=True) != json.dumps(
             expected[field], sort_keys=True
         ):
-            errors[f"scenario_params.{field}"] = "different from selected campaign"
+            errors[f"{prefix}.{field}"] = "different from selected campaign"
     return errors
 
 
@@ -291,7 +306,7 @@ def _runtime_copy_errors(record: Mapping[str, Any], expected: Mapping[str, Any])
         Conflicting runtime-label fields, including unsigned row-level copies.
     """
     errors: dict[str, Any] = {}
-    for field in RUNTIME_IDENTITY_FIELDS | {"horizon", "observation_noise"}:
+    for field in RUNTIME_IDENTITY_FIELDS | {"horizon", "dt", "observation_noise"}:
         if field in record and json.dumps(record[field], sort_keys=True) != json.dumps(
             expected.get(field), sort_keys=True
         ):
@@ -328,17 +343,50 @@ def row_runtime_identity_errors(
         if record.get(field) != value:
             errors[field] = "missing or different from selected campaign"
     errors.update(_runtime_copy_errors(record, expected.optional_copies))
-    provenance = record.get("result_provenance")
-    if isinstance(provenance, Mapping):
-        for field, value in (
-            ("scenario_id", expected.scenario_id),
-            ("seed", expected.seed),
-            ("config_hash", _config_hash(expected.params)),
+    if "result_provenance" in record:
+        errors.update(_provenance_runtime_identity_errors(record["result_provenance"], expected))
+    return errors
+
+
+def _provenance_runtime_identity_errors(
+    provenance: Any, expected: ExpectedEpisodeIdentity
+) -> dict[str, Any]:
+    """Refuse any conflicting saved provenance copy of the trusted runtime identity.
+
+    Returns:
+        Exact copy mismatches, or a malformed-block error.
+    """
+    if not isinstance(provenance, Mapping):
+        return {"result_provenance": "must be a mapping"}
+    errors: dict[str, Any] = {}
+    # Provenance is another saved copy, never an authority for resolving runtime.
+    errors.update(
+        {
+            f"result_provenance.{field}": error
+            for field, error in _runtime_copy_errors(provenance, expected.optional_copies).items()
+        }
+    )
+    if "simulator_settings" in provenance:
+        settings = provenance["simulator_settings"]
+        if not isinstance(settings, Mapping):
+            errors["result_provenance.simulator_settings"] = "must be a mapping"
+        else:
+            errors.update(
+                _payload_errors(
+                    settings,
+                    expected.simulator_settings,
+                    prefix="result_provenance.simulator_settings",
+                )
+            )
+    for field, value in (
+        ("scenario_id", expected.scenario_id),
+        ("seed", expected.seed),
+        ("config_hash", _config_hash(expected.params)),
+    ):
+        if (
+            field not in provenance
+            or type(provenance[field]) is not type(value)
+            or provenance[field] != value
         ):
-            if (
-                field not in provenance
-                or type(provenance[field]) is not type(value)
-                or provenance[field] != value
-            ):
-                errors[f"result_provenance.{field}"] = "missing or different from selected campaign"
+            errors[f"result_provenance.{field}"] = "missing or different from selected campaign"
     return errors

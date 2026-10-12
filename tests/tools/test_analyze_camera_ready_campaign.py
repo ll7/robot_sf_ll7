@@ -48,15 +48,15 @@ def _write_legacy_integrity_campaign(campaign_root: Path, rows: list[dict]) -> N
         {
             "truncated": False,
             "scenarios": [
-                {"id": "smoke", "seeds": [111]},
-                {"id": "corner", "seeds": [222]},
+                {"id": "smoke", "seeds": [1001]},
+                {"id": "corner", "seeds": [1002]},
             ],
         },
     )
     _write_json(
         campaign_root / "campaign_manifest.json",
         {
-            "seed_policy": {"resolved_seeds": [111, 222]},
+            "seed_policy": {"resolved_seeds": [1001, 1002]},
             "git": {"commit": "commit-a"},
             "artifacts": {"preflight_preview_scenarios": "preflight/preview_scenarios.json"},
         },
@@ -446,7 +446,7 @@ def test_analyze_campaign_surfaces_frozen_integrity_blocker(tmp_path: Path) -> N
                     {
                         "arm": "goal (differential_drive)",
                         "invariant": "duplicate_logical_coverage",
-                        "details": {"identities": [["smoke", 111]]},
+                        "details": {"identities": [["smoke", 1001]]},
                     }
                 ],
             },
@@ -468,9 +468,9 @@ def test_analyze_campaign_recomputes_legacy_contamination_blockers(tmp_path: Pat
     _write_legacy_integrity_campaign(
         campaign_root,
         [
-            _legacy_integrity_row("smoke", 111, "config-v1", "commit-a"),
-            _legacy_integrity_row("smoke", 111, "config-v2", "commit-b"),
-            _legacy_integrity_row("corner", 222, "config-corner", "commit-a"),
+            _legacy_integrity_row("smoke", 1001, "config-v1", "commit-a"),
+            _legacy_integrity_row("smoke", 1001, "config-v2", "commit-b"),
+            _legacy_integrity_row("corner", 1002, "config-corner", "commit-a"),
         ],
     )
 
@@ -508,8 +508,8 @@ def test_analyze_campaign_refuses_legacy_bundle_without_runtime_configuration(
     _write_legacy_integrity_campaign(
         campaign_root,
         [
-            _legacy_integrity_row("smoke", 111, "config-smoke", "commit-a"),
-            _legacy_integrity_row("corner", 222, "config-corner", "commit-a"),
+            _legacy_integrity_row("smoke", 1001, "config-smoke", "commit-a"),
+            _legacy_integrity_row("corner", 1002, "config-corner", "commit-a"),
         ],
     )
 
@@ -532,7 +532,7 @@ def test_analyze_campaign_fails_closed_when_legacy_provenance_is_missing(tmp_pat
     campaign_root = tmp_path / "campaign"
     _write_json(
         campaign_root / "campaign_manifest.json",
-        {"seed_policy": {"resolved_seeds": [111]}, "git": {"commit": "commit-a"}},
+        {"seed_policy": {"resolved_seeds": [1001]}, "git": {"commit": "commit-a"}},
     )
     _write_json(
         campaign_root / "reports" / "campaign_summary.json",
@@ -572,7 +572,7 @@ def test_legacy_recomputation_does_not_mutate_nested_run_entries(
     campaign_root = tmp_path / "campaign"
     _write_legacy_integrity_campaign(
         campaign_root,
-        [_legacy_integrity_row("smoke", 111, "config-smoke", "commit-a")],
+        [_legacy_integrity_row("smoke", 1001, "config-smoke", "commit-a")],
     )
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
@@ -603,9 +603,9 @@ def test_analyze_campaign_cli_returns_nonzero_for_invalid_legacy_bundle(
     _write_legacy_integrity_campaign(
         campaign_root,
         [
-            _legacy_integrity_row("smoke", 111, "config-v1", "commit-a"),
-            _legacy_integrity_row("smoke", 111, "config-v2", "commit-b"),
-            _legacy_integrity_row("corner", 222, "config-corner", "commit-a"),
+            _legacy_integrity_row("smoke", 1001, "config-v1", "commit-a"),
+            _legacy_integrity_row("smoke", 1001, "config-v2", "commit-b"),
+            _legacy_integrity_row("corner", 1002, "config-corner", "commit-a"),
         ],
     )
     monkeypatch.setattr(

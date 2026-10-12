@@ -620,6 +620,12 @@ def _apply_scenario_horizon_schedule(
             f"{preview}{suffix}"
         )
 
+    source = _repo_relative(schedule_path)
+    if repository_root is not None and schedule_path.resolve().is_relative_to(
+        repository_root.resolve()
+    ):
+        source = schedule_path.resolve().relative_to(repository_root.resolve()).as_posix()
+
     patched_scenarios: list[dict[str, Any]] = []
     for scenario in scenarios:
         scenario_id = _campaign_scenario_id(scenario)
@@ -647,9 +653,7 @@ def _apply_scenario_horizon_schedule(
         if not isinstance(metadata, dict):
             raise ValueError(f"Scenario '{scenario_id}' metadata must be a mapping")
         metadata["scenario_horizon"] = {
-            "source": schedule_path.resolve().relative_to(repository_root.resolve()).as_posix()
-            if repository_root is not None
-            else _repo_relative(schedule_path),
+            "source": source,
             "recommended_horizon_steps": horizon_steps,
             "status": entry["status"],
             "bucket": entry["bucket"],

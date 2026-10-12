@@ -485,3 +485,141 @@ def test_unsigned_runtime_copy_cannot_contradict_signed_identity(tmp_path, field
     row[field] = value
     _resign(row)
     _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("horizon", 60),
+        ("dt", 0.2),
+        ("record_forces", True),
+        ("observation_mode", "vector"),
+        ("observation_level", "lidar"),
+        ("observation_noise_hash", "different"),
+        ("tracking_precision_hash", "different"),
+    ],
+)
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_provenance_runtime_copy_cannot_contradict_campaign(tmp_path, field, value, boundary):
+    """Even a re-signed row cannot hide contradictory producer provenance settings."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    _attach_producer_provenance_settings(row)
+    clean = _configured_check(tmp_path, cfg, scenario, row, boundary)
+    if boundary == "admission":
+        assert clean["benchmark_success_allowed"] is True
+    else:
+        assert clean[0].verdict == "skip-complete"
+    row["result_provenance"]["simulator_settings"][field] = value
+    _resign(row)
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+def _attach_producer_provenance_settings(row, *, horizon=600, dt=0.1):
+    """Use the real producer builder, independently of the admission oracle."""
+    from robot_sf.benchmark.observation_noise import (
+        normalize_observation_noise_spec,
+        observation_noise_hash,
+    )
+    from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
+    from robot_sf.benchmark.tracking_precision_contract import (
+        normalize_tracking_precision_spec,
+        tracking_precision_hash,
+    )
+
+    row["result_provenance"]["simulator_settings"] = build_simulator_settings_provenance(
+        horizon=horizon,
+        dt=dt,
+        record_forces=False,
+        active_observation_mode="socnav_state",
+        active_observation_level="tracked_agents_no_noise",
+        noise_hash=observation_noise_hash(normalize_observation_noise_spec(None)),
+        tracking_precision_hash=tracking_precision_hash(normalize_tracking_precision_spec(None)),
+    )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "horizon",
+        "dt",
+        "record_forces",
+        "observation_mode",
+        "observation_level",
+        "observation_noise_hash",
+        "tracking_precision_hash",
+    ],
+)
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_provenance_runtime_copy_requires_complete_settings(tmp_path, field, boundary):
+    """A present provenance settings copy must carry the complete producer contract."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    _attach_producer_provenance_settings(row)
+    del row["result_provenance"]["simulator_settings"][field]
+    _resign(row)
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize("settings", [None, [], "invalid", "extra"])
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_provenance_runtime_copy_refuses_malformed_or_extra_settings(tmp_path, settings, boundary):
+    """Malformed and unknown settings cannot bypass the closed runtime comparison."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    if settings == "extra":
+        _attach_producer_provenance_settings(row)
+        row["result_provenance"]["simulator_settings"]["unknown_setting"] = True
+    else:
+        row["result_provenance"]["simulator_settings"] = settings
+    _resign(row)
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("horizon", 60),
+        ("dt", 0.2),
+        ("record_forces", True),
+        ("observation_mode", "vector"),
+        ("observation_level", "lidar"),
+        ("observation_noise_hash", "different"),
+        ("tracking_precision_hash", "different"),
+    ],
+)
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_direct_provenance_runtime_copy_cannot_contradict_campaign(
+    tmp_path, field, value, boundary
+):
+    """Provenance labels outside the nested block are still redundant runtime copies."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    _attach_producer_provenance_settings(row)
+    row["result_provenance"][field] = value
+    _resign(row)
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_provenance_uses_resolved_scenario_budget_and_timestep(tmp_path, boundary):
+    """The producer's resolved settings remain valid without explicit campaign overrides."""
+    from dataclasses import replace
+
+    cfg, scenario, row = _runtime_case(tmp_path)
+    cfg = replace(cfg, horizon=None, dt=None, horizon_policy=None, protocol_version="0.0.9")
+    scenario["simulation_config"]["time_per_step_in_secs"] = 0.2
+    scoped = expected_arm_scenarios(
+        [scenario], cfg=cfg, planner=cfg.planners[0], kinematics="differential_drive"
+    )[0]
+    row["scenario_params"] = producer_params(
+        scoped,
+        1001,
+        algo="social_force",
+        horizon=None,
+        dt=None,
+        observation_mode="socnav_state",
+    )
+    _attach_producer_provenance_settings(row, horizon=600, dt=0.2)
+    _resign(row)
+    result = _configured_check(tmp_path, cfg, scenario, row, boundary)
+    if boundary == "admission":
+        assert result["benchmark_success_allowed"] is True
+    else:
+        assert result[0].verdict == "skip-complete"

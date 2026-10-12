@@ -36,7 +36,7 @@ _PLANNER_ALGORITHMS = {
     for planner_key in _PLANNER_KEYS
 }
 _SCENARIO_IDS = tuple(f"scenario_{index:02d}" for index in range(48))
-_SEEDS = tuple(range(111, 141))
+_SEEDS = tuple(range(1001, 1031))
 _SOURCE_SHA = "a" * 40
 
 
@@ -1558,14 +1558,14 @@ def test_release_acceptance_resolves_config_axes_and_rejects_drift(
     monkeypatch.setattr(
         release_acceptance,
         "_resolved_seed_inventory",
-        lambda _scenarios: (1, 2, 3),
+        lambda _scenarios: (1001, 1002, 1003),
     )
-    manifest = SimpleNamespace(resolved_seeds=(1, "bad"))
+    manifest = SimpleNamespace(resolved_seeds=(1001, "bad"))
 
     scenario_ids, seeds, blockers = _resolve_expected_matrix_axes(manifest, object())
 
     assert scenario_ids == ("first", "second", "third", "")
-    assert seeds == (1, 2, 3)
+    assert seeds == (1001, 1002, 1003)
     assert "empty scenario identifier" in " ".join(blockers)
     assert "resolved seeds do not match" in " ".join(blockers)
 
@@ -1609,8 +1609,8 @@ def test_release_acceptance_rejects_malformed_run_and_aggregate_rows(tmp_path: P
         "\n".join(
             [
                 json.dumps({"status": "failed", "seed": "bad"}),
-                json.dumps({"scenario_id": "scenario_00", "seed": 1, "git_hash": "bad"}),
-                json.dumps({"scenario_id": "scenario_00", "seed": 1, "git_hash": "bad"}),
+                json.dumps({"scenario_id": "scenario_00", "seed": 1002, "git_hash": "bad"}),
+                json.dumps({"scenario_id": "scenario_00", "seed": 1002, "git_hash": "bad"}),
             ]
         )
         + "\n",
@@ -1913,16 +1913,18 @@ def test_three_width_v02_binds_merged_authored_h400_schedule():
 
 @pytest.mark.parametrize("budget", [400, 399])
 def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monkeypatch, budget):
-    """Real rows/sidecars admit authored H400 and refuse a rehashed H399 width.
+    """Dev-seed rows preserve H400 budgets and refuse a rehashed H399 width.
 
-    Static metadata only: no environment or planner is constructed or stepped.
+    Static metadata only; the synthetic slice retains its release seed blocker.
     """
     from copy import deepcopy
 
     from tests.benchmark import test_release_acceptance as fixtures
     from tests.benchmark.test_doorway_release_acceptance import build_doorway
 
-    _, _, manifest, scenarios = build_doorway(tmp_path / "fixed", monkeypatch)
+    _, _, manifest, scenarios = build_doorway(
+        tmp_path / "fixed", monkeypatch, seeds=tuple(range(1001, 1031))
+    )
     manifest.width_slice_contract["requested_horizon_steps"] = 600  # Retained legacy request hint.
     scenarios = deepcopy(scenarios)
     scenarios[0]["simulation_config"]["max_episode_steps"] = budget
@@ -1940,7 +1942,8 @@ def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monke
         source_repository_root=cfg.source_repository_root,
     )
     if budget == 400:
-        assert report["status"] == "valid", report["blockers"]
+        assert report["status"] == "invalid"
+        assert report["blockers"] == ["doorway slice requires the exact sealed 30-seed inventory"]
         assert report["unique_episode_identities"] == 1260
     else:
         assert report["status"] == "invalid"

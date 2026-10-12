@@ -30,9 +30,9 @@ if TYPE_CHECKING:
 
 def _guarded_contact_row() -> dict:
     return {
-        "episode_id": "classic_bottleneck_low--111--abc123",
+        "episode_id": "classic_bottleneck_low--1001--abc123",
         "scenario_id": "classic_bottleneck_low",
-        "seed": 111,
+        "seed": 1001,
         "metrics": {"obstacle_collision_count": 1},
         "event_ledger": {
             "collision_events": [
@@ -99,7 +99,7 @@ def test_contact_table_contains_retained_fields_and_explicit_na() -> None:
     table_row = _contact_table_row(_guarded_contact_row(), arm=GUARDED_ARM)
     assert table_row["scenario_cell"] == "classic_bottleneck_low"
     assert table_row["map_file"].endswith("classic_bottleneck_low.svg")
-    assert table_row["seed"] == 111
+    assert table_row["seed"] == 1001
     assert table_row["contact_time_s"] == 4.3
     assert table_row["contact_step"] == 42
     assert table_row["final_guard_substitution"] is True

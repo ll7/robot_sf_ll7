@@ -62,7 +62,7 @@
       "kind": "episodes_jsonl",
       "path": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_2.jsonl",
       "sha256": "746b454f84736b729dea74ad419d2384bc3e41cac34b78ee5e7e75a170f99286",
-      "artifact_status": "available_lane_host_reproducible",
+      "artifact_status": "available",
       "location": "imech156-u:/home/luttkule/lanes/hardcase/custody_raw/window_replay_2.jsonl",
       "size_bytes": 206932,
       "regeneration_command": "python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py --output /home/luttkule/lanes/hardcase/custody_raw",

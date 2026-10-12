@@ -1,0 +1,191 @@
+{
+  "admission_code_commit": "4fe503aadbaed2bd48dc82c58509bde71b4af2d8",
+  "admission_status": "admitted",
+  "benchmark_evidence": false,
+  "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
+  "claim_boundary": "observed simulator regression case only",
+  "discovery": {
+    "budget": {
+      "new_search_evaluations": 0,
+      "source_episode_steps": 600,
+      "window_transitions": 20
+    },
+    "kind": "known_failure_positive_control",
+    "objective": "near_miss",
+    "parameters": {
+      "scenario": "classic_cross_trap_high",
+      "seed": 1001,
+      "window_end_s": 39.0,
+      "window_start_s": 37.0
+    },
+    "round": 0,
+    "source_manifest": {
+      "path": "docs/context/evidence/hardcase_positive_control/provenance.json",
+      "sha256": "4efdfe4a9401b03b011f47a56aba62274dc7d79000f275e785a768b37798d871"
+    }
+  },
+  "feasibility": {
+    "reason": "No independent feasibility oracle or alternate-planner proof was executed.",
+    "status": "unknown"
+  },
+  "identity": {
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "model_digest": "fe4e5b99c0a9f51ada80cfccbf1361bb4f1872c0c523e2b35ce89e94e7b32958",
+    "planner": "social_force",
+    "scenario_sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e",
+    "seed": 1001,
+    "source_commit": "53721be3248600e08641a9816d094b605e3c93e4",
+    "source_config_hash": "f330dd29077077ac",
+    "source_window_trace_sha256": "37488c586d0a7fd203b9385377434516f108edb8bef011a6003a3236e135fed3",
+    "window": {
+      "dt_s": 0.1,
+      "end_s": 39.0,
+      "start_s": 37.0,
+      "start_step": 370,
+      "steps": 20,
+      "stop_kind": "window_censored"
+    }
+  },
+  "perturbation_persistence": {
+    "reason": "independent grid not executed",
+    "status": "unknown"
+  },
+  "planner_status": {
+    "social_force": "observed_critical"
+  },
+  "replay_verification": {
+    "critical_event_reproduced": {
+      "event_type": "min_clearance",
+      "location_tolerance_m": 0.0,
+      "observed_location_delta_m": 0.0,
+      "observed_time_delta_s": 0.0,
+      "status": "pass",
+      "time_tolerance_s": 0.0
+    },
+    "event": {
+      "first_contact_step": null,
+      "first_near_miss_step": 374,
+      "location": [
+        11.314409899320733,
+        22.583874439422985
+      ],
+      "min_clearance_m": 0.47727323760374385,
+      "near_miss_samples": 11,
+      "time_s": 38.0
+    },
+    "exact_replay": {
+      "divergence_reason": "two source-bound window traces matched",
+      "replay_digest": "37488c586d0a7fd203b9385377434516f108edb8bef011a6003a3236e135fed3",
+      "status": "pass"
+    },
+    "original_budget_steps": 600,
+    "replay_episode_ids": [
+      "classic_cross_trap_high--1001--29ae7331749e5a6d",
+      "classic_cross_trap_high--1001--29ae7331749e5a6d"
+    ],
+    "replay_scope": {
+      "kind": "source_bound_window",
+      "receipt_sha256": "46899c3407cd0e56b3232e3741f06981aaaf3b5523b30db46a8201a6cb22cb1e",
+      "replay_episode_ids": [
+        "classic_cross_trap_high--1001--29ae7331749e5a6d",
+        "classic_cross_trap_high--1001--29ae7331749e5a6d"
+      ],
+      "source_episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+      "window": {
+        "dt_s": 0.1,
+        "end_s": 39.0,
+        "start_s": 37.0,
+        "start_step": 370,
+        "steps": 20,
+        "stop_kind": "window_censored"
+      }
+    },
+    "scenario_id": "generated-54fdcdbc905bf047",
+    "source_episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+    "source_scenario_id": "classic_cross_trap_high"
+  },
+  "schema_version": "counterexample-case.v1",
+  "window_receipt": {
+    "bindings": {
+      "catalog_entry": {
+        "path": "docs/context/evidence/hardcase_positive_control/followup/packet/entry.json",
+        "sha256": "aa8214a036d29ed26f4bcfbbe4d9db5695db3b8828d9bcdb069862a3dcf32f7e"
+      },
+      "checkpoint": {
+        "path": "docs/context/evidence/hardcase_positive_control/followup/packet/checkpoint.json",
+        "sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348"
+      },
+      "map": {
+        "path": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+        "sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8"
+      },
+      "planner_config": {
+        "path": "configs/algos/social_force_release_v0_0_8.yaml",
+        "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773"
+      },
+      "replay_manifests": [
+        {
+          "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl.provenance.json",
+          "sha256": "f7b21b42b60c2958b90dc8d93ce7cb0f8713e96550f3515057dfeb11f0810264"
+        },
+        {
+          "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl.provenance.json",
+          "sha256": "81c25d063c49dfac23250c5d15216a43f511fc691b8de39e00d938ce274073a2"
+        }
+      ],
+      "replays": [
+        {
+          "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl.gz",
+          "sha256": "a2db55191def89e7b5a712b29b8654cfe738b1259ed9c480ae292b93a8e2ecaa"
+        },
+        {
+          "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl.gz",
+          "sha256": "2aab72c8a7108eb52be318b51e1cef1349e32af0650b8a6f298949880f2b747b"
+        }
+      ],
+      "scenario": {
+        "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window.yaml",
+        "sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e"
+      },
+      "source_episode": {
+        "path": "docs/context/evidence/hardcase_positive_control/source.jsonl.gz",
+        "sha256": "a64dae51581180fe2589502a31bd50bda7eb28a20576b7ed2b7d1f8767617562"
+      }
+    },
+    "parity_proof": {
+      "position_tolerance_m": 1e-09,
+      "replay_commits": [
+        "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
+        "1baaa3eb08cfbc1866f18702eb939c1f60b400fd"
+      ],
+      "source_full_trace_sha256": "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34",
+      "source_window_trace_sha256": "37488c586d0a7fd203b9385377434516f108edb8bef011a6003a3236e135fed3",
+      "status": "pass"
+    },
+    "planner": {
+      "effective_config_hash": "a4913be8bee6f3f3",
+      "id": "social_force",
+      "model": {
+        "digest": "fe4e5b99c0a9f51ada80cfccbf1361bb4f1872c0c523e2b35ce89e94e7b32958",
+        "files": {
+          "robot_sf/baselines/social_force.py": "2857f8dc8468fd40c113020127ffbb6cb12f8b5ce1eba2aae9782b0b39e73817",
+          "robot_sf/planner/socnav.py": "6c44c3eb50b1af77c1f731e789bf9d1df2145d9684ed0fb1cdf6b586e3b234f7",
+          "robot_sf/planner/socnav_social_force.py": "0c172ef446a5ef74cbb7a6cfd8aa67a52f11b9466ae43f192397ab56b827035e"
+        },
+        "kind": "analytic"
+      }
+    },
+    "schema_version": "source-bound-window-replay.v1",
+    "seed": 1001,
+    "source_commit": "53721be3248600e08641a9816d094b605e3c93e4",
+    "source_config_hash": "f330dd29077077ac",
+    "window": {
+      "dt_s": 0.1,
+      "end_s": 39.0,
+      "start_s": 37.0,
+      "start_step": 370,
+      "steps": 20,
+      "stop_kind": "window_censored"
+    }
+  }
+}

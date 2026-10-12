@@ -1,0 +1,141 @@
+{
+  "commit_hashes": {
+    "code": "4fe503aadbaed2bd48dc82c58509bde71b4af2d8",
+    "config": "25fd37b51b93a48efba5d3df11fc9e9dc69547ea9b9cc957a68ab364d9c66cf6"
+  },
+  "config": {
+    "config_hash": "25fd37b51b93a48efba5d3df11fc9e9dc69547ea9b9cc957a68ab364d9c66cf6",
+    "config_id": "issue-5600-persistence-gate",
+    "frozen": true
+  },
+  "critical_event_reproduced": {
+    "event_type": "min_clearance",
+    "location_tolerance_m": 0.0,
+    "observed_location_delta_m": 0.0,
+    "observed_time_delta_s": 0.0,
+    "status": "pass",
+    "time_tolerance_s": 0.0
+  },
+  "exact_replay": {
+    "divergence_reason": "two source-bound window traces matched",
+    "replay_digest": "37488c586d0a7fd203b9385377434516f108edb8bef011a6003a3236e135fed3",
+    "status": "pass"
+  },
+  "generated_scenario": {
+    "catalog_entry_digest": "f2fcc440eb74245c",
+    "catalog_schema_version": "generated-scenario-catalog-entry.v1",
+    "scenario_id": "generated-54fdcdbc905bf047"
+  },
+  "perturbation_persistence": {
+    "cells": [
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": -0.2,
+        "timing_offset_s": -0.25,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": 0.0,
+        "timing_offset_s": -0.25,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": 0.2,
+        "timing_offset_s": -0.25,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": -0.2,
+        "timing_offset_s": 0.0,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": 0.0,
+        "timing_offset_s": 0.0,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": 0.2,
+        "timing_offset_s": 0.0,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": -0.2,
+        "timing_offset_s": 0.25,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": 0.0,
+        "timing_offset_s": 0.25,
+        "verdict": "unknown"
+      },
+      {
+        "reason": "independent simulator perturbation not executed",
+        "speed_delta_m_s": 0.2,
+        "timing_offset_s": 0.25,
+        "verdict": "unknown"
+      }
+    ],
+    "grid": {
+      "speed_deltas_m_s": [
+        -0.2,
+        0.0,
+        0.2
+      ],
+      "timing_offsets_s": [
+        -0.25,
+        0.0,
+        0.25
+      ]
+    },
+    "missing_cell_reasons": [],
+    "persistence_interval": [
+      0.0,
+      0.0
+    ],
+    "persistence_rate": 0.0
+  },
+  "planner": "social_force",
+  "promotion": {
+    "exclusion_reason": "perturbation_cell:-0.25:-0.2:unknown; perturbation_cell:-0.25:0.0:unknown; perturbation_cell:-0.25:0.2:unknown; perturbation_cell:0.0:-0.2:unknown; perturbation_cell:0.0:0.0:unknown; perturbation_cell:0.0:0.2:unknown; perturbation_cell:0.25:-0.2:unknown; perturbation_cell:0.25:0.0:unknown; perturbation_cell:0.25:0.2:unknown",
+    "required_statuses": [
+      "exact_replay",
+      "critical_event_reproduced",
+      "perturbation_persistence"
+    ],
+    "verdict": "reject"
+  },
+  "replay_scope": {
+    "kind": "source_bound_window",
+    "receipt_sha256": "46899c3407cd0e56b3232e3741f06981aaaf3b5523b30db46a8201a6cb22cb1e",
+    "replay_episode_ids": [
+      "classic_cross_trap_high--1001--29ae7331749e5a6d",
+      "classic_cross_trap_high--1001--29ae7331749e5a6d"
+    ],
+    "source_episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+    "window": {
+      "dt_s": 0.1,
+      "end_s": 39.0,
+      "start_s": 37.0,
+      "start_step": 370,
+      "steps": 20,
+      "stop_kind": "window_censored"
+    }
+  },
+  "scenario_id": "generated-54fdcdbc905bf047",
+  "schema_version": "generated_scenario_persistence.v2",
+  "seed": 1001,
+  "source_episode": {
+    "episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+    "replay_digest": "37488c586d0a7fd203b9385377434516f108edb8bef011a6003a3236e135fed3",
+    "source_map": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "source_seed": 1001
+  }
+}

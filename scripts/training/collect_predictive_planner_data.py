@@ -433,6 +433,7 @@ def main() -> int:  # noqa: C901, PLR0915
     all_target_masks: list[np.ndarray] = []
     all_identities: list[dict] = []
     collection_id = uuid.uuid4().hex
+    scenario_definitions: dict[str, Any] = {}
 
     skipped_resets = 0
     for episode in range(args.episodes):
@@ -448,20 +449,17 @@ def main() -> int:  # noqa: C901, PLR0915
             continue
         episode_frames: list[Frame] = []
         episode_id = f"{collection_id}:base-episode-{episode}"
+        scenario_definition = {
+            "difficulty": args.difficulty,
+            "max_peds_per_group": args.max_peds_per_group,
+            "use_global_routing": args.use_global_routing,
+            "map_geometry": repr(getattr(env, "map_def", None)),
+        }
         scenario_id = (
             "base-config-"
-            + hashlib.sha256(
-                json.dumps(
-                    {
-                        "difficulty": args.difficulty,
-                        "max_peds_per_group": args.max_peds_per_group,
-                        "use_global_routing": args.use_global_routing,
-                        "map_geometry": repr(getattr(env, "map_def", None)),
-                    },
-                    sort_keys=True,
-                ).encode()
-            ).hexdigest()
+            + hashlib.sha256(json.dumps(scenario_definition, sort_keys=True).encode()).hexdigest()
         )
+        scenario_definitions[scenario_id] = scenario_definition
 
         for _step in range(args.max_steps):
             episode_frames.append(
@@ -523,6 +521,7 @@ def main() -> int:  # noqa: C901, PLR0915
     np.savez_compressed(
         args.output,
         **identity_payload,
+        scenario_definitions_json=json.dumps(scenario_definitions, sort_keys=True),
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,

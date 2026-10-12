@@ -9,6 +9,7 @@ cross-episode joins. Do not substitute observation-derived tracking IDs here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import warnings
@@ -385,6 +386,7 @@ def validate_sample_identities(raw: Any) -> None:  # noqa: C901, PLR0912
     expected_steps = raw["sample_step"][:, None] + np.arange(1, horizon + 1)
     if not np.array_equal(raw["sample_target_step"], expected_steps):
         raise ValueError("Predictive target steps do not follow source steps")
+    _validate_scenario_definitions(raw["sample_scenario_id"], payload)
     episodes: dict[str, tuple[str, int]] = {}
     samples: dict[tuple[str, int], int] = {}
     for i in range(n):
@@ -423,3 +425,16 @@ def validate_sample_identities(raw: Any) -> None:  # noqa: C901, PLR0912
             for value in ids
         ):
             raise ValueError("Borrowed predictive source episode identity")
+
+
+def _validate_scenario_definitions(scenarios: Any, payload: Any) -> None:
+    """Verify the preserved preimage of each base scenario configuration digest."""
+    for scenario in np.unique(scenarios):
+        if str(scenario).startswith("base-config-"):
+            if "scenario_definitions_json" not in payload:
+                raise ValueError("Missing predictive scenario identity definition")
+            definitions = json.loads(payload["scenario_definitions_json"].item())
+            definition = definitions.get(str(scenario))
+            digest = hashlib.sha256(json.dumps(definition, sort_keys=True).encode()).hexdigest()
+            if definition is None or str(scenario) != f"base-config-{digest}":
+                raise ValueError("Borrowed predictive scenario identity definition")

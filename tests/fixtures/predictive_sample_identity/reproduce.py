@@ -162,9 +162,15 @@ def main() -> None:
             )
         ],
     ]
+    snapshots = []
+    for source in sources:
+        snapshot = ROOT / "producer_sources" / (source + ".txt")
+        snapshot.parent.mkdir(parents=True, exist_ok=True)
+        snapshot.write_bytes(Path(source).read_bytes())
+        snapshots.append(snapshot)
     files = [
         *sorted(p for p in ROOT.iterdir() if p.is_file() and p.name != "manifest.json"),
-        *map(Path, sources),
+        *snapshots,
     ]
     manifest = {
         "schema_version": "predictive-identity-dev-proof.v1",

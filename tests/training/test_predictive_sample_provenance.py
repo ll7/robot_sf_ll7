@@ -257,3 +257,23 @@ def test_reset_records_actual_seed_after_rejected_attempt():
     )
     assert obs is not None and skipped == 0 and seed == 100002
     assert used == [100001, 100002]
+
+
+def test_preserved_dev_collection_hashes_and_target_oracle():
+    """The durable bundle remains readable, checksum-bound and simulator-verifiable."""
+    import hashlib
+    import runpy
+
+    root = Path("tests/fixtures/predictive_sample_identity")
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert manifest["seeds"] == [1001, 1002, 1003]
+    for entry in manifest["artifacts"]:
+        artifact = Path(entry["artifact_path"])
+        assert not artifact.is_absolute()
+        assert hashlib.sha256(artifact.read_bytes()).hexdigest() == entry["sha256"]
+    verify = runpy.run_path(str(root / "reproduce.py"))["verify"]
+    for collector_id in ("base", "hardcase"):
+        frames = json.loads((root / f"{collector_id}-source-frames.json").read_text())
+        result = verify(root / f"{collector_id}.npz", frames)
+        assert result["episodes"] == 3 and result["samples"] == 24
+        assert result["checked_target_points"] > 0

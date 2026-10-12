@@ -285,6 +285,37 @@ def _load_npz(
     return state, target, mask, target_mask, feature_schema, supervision
 
 
+def _mix_sample_identities(
+    base_path: Path, hardcase_path: Path, repeat: int, permutation: np.ndarray
+) -> dict[str, Any]:
+    """Apply the feature permutation/repetition to provenance and retain scenario definitions.
+
+    Returns:
+        Identity fields ready to merge into the output NPZ payload.
+    """
+    payload: dict[str, Any] = {}
+    with (
+        np.load(base_path, allow_pickle=False) as base_raw,
+        np.load(hardcase_path, allow_pickle=False) as hard_raw,
+    ):
+        for key in SAMPLE_IDENTITY_KEYS:
+            payload[key] = np.concatenate(
+                [base_raw[key], np.repeat(hard_raw[key], repeat, axis=0)], axis=0
+            )[permutation]
+        definitions: dict[str, Any] = {}
+        for raw in (base_raw, hard_raw):
+            if "scenario_definitions_json" in raw:
+                for scenario_id, definition in json.loads(
+                    raw["scenario_definitions_json"].item()
+                ).items():
+                    if scenario_id in definitions and definitions[scenario_id] != definition:
+                        raise ValueError("Conflicting predictive scenario identity definitions")
+                    definitions[scenario_id] = definition
+        if definitions:
+            payload["scenario_definitions_json"] = json.dumps(definitions, sort_keys=True)
+    return payload
+
+
 def main() -> int:
     """Create mixed dataset and write metadata sidecar."""
     args = parse_args()
@@ -373,14 +404,9 @@ def main() -> int:
         "target_mask": target_mask,
     }
     if mixed_supervision and mixed_supervision.get("sample_identity_schema"):
-        with (
-            np.load(args.base_dataset, allow_pickle=False) as base_raw,
-            np.load(args.hardcase_dataset, allow_pickle=False) as hard_raw,
-        ):
-            for key in SAMPLE_IDENTITY_KEYS:
-                payload[key] = np.concatenate(
-                    [base_raw[key], np.repeat(hard_raw[key], hard_rep, axis=0)], axis=0
-                )[idx]
+        payload.update(
+            _mix_sample_identities(args.base_dataset, args.hardcase_dataset, hard_rep, idx)
+        )
         validate_sample_identities(payload)
     if feature_schema_json is not None:
         payload["feature_schema_json"] = feature_schema_json

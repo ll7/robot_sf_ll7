@@ -60,12 +60,12 @@
   "raw_artifacts": [
     {
       "kind": "episodes_jsonl",
-      "path": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl",
+      "path": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl", "_allow-abs-path:path": "Intentional durable lane-host custody locator; committed gzip and exact regeneration command are portable.",
       "sha256": "1a2f954113d3a240d96dadc7c293da13008d128066217dae7bf4b9b3b4fffa50",
       "artifact_status": "available",
-      "location": "imech156-u:/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl",
+      "location": "imech156-u:/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl", "_allow-abs-path:location": "Intentional durable lane-host custody locator; committed gzip and exact regeneration command are portable.",
       "size_bytes": 206932,
-      "regeneration_command": "python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py --output /home/luttkule/lanes/hardcase/custody_raw",
+      "regeneration_command": "python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py --output /home/luttkule/lanes/hardcase/custody_raw", "_allow-abs-path:regeneration_command": "Historical lane-host destination; choose any --output directory for byte-exact regeneration.",
       "regeneration_note": "Byte-exact reconstruction from committed compressed row; reverses only the recorded producer-prefix normalization; no simulation or reset."
     }
   ],
@@ -76,7 +76,7 @@
       "seed": 1001,
       "config_hash": "29ae7331749e5a6d",
       "repo_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
-      "raw_artifact": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl",
+      "raw_artifact": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl", "_allow-abs-path:raw_artifact": "Intentional durable lane-host custody locator; committed gzip and exact regeneration command are portable.",
       "jsonl_line": 0,
       "simulator_settings": {
         "horizon": 600,

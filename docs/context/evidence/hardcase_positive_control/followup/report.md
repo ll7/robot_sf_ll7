@@ -191,7 +191,7 @@ Both wrappers set `HARDCASE_NO_TEST_SIMULATION=1`,
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh \
-  --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run pytest \
+  --venv ../repo/.venv -- uv run pytest \
   tests/benchmark -q --tb=short --continue-on-collection-errors \
   --junitxml=../main_benchmark.xml
 ```
@@ -251,3 +251,42 @@ in that PR, not silently closed. Corpus/persistence integration is the external
 blocker above; no author permission question or merger action is pending.
 
 TERMINAL=BLOCKED_EXTERNAL
+
+
+Review remediation (2026-10-12)
+
+| Review item | Result | Verification |
+| --- | --- | --- |
+| Type regressions | PASS on reviewed head | Pinned ty 0.0.58 with locked all-extras Python 3.12: docs 4, benchmark 1684 (main ceilings 4 and 1688). No ratchet increase. |
+| Native artifact custody / registry | PASS on reviewed head | Both native provenance validators accept the retained paths; the registry retains exactly 492 findings with the original finding map. |
+| New status emitters | PASS | Existing emitter registry classifies restoration provenance and materialization status by exact writer/function/key; neither grants a controller or parity verdict. |
+| Absolute paths | PASS | The main-baseline command uses `../repo/.venv`. Intentional raw custody locators and the original-byte reconstruction prefix carry the existing line-specific `allow-abs-path` annotation; no global exemption or baseline entry. |
+| Source digest on hosted CI | CPU-sensitive cause reproduced; strict source-target regression added | Changing only `NUMBA_CPU_NAME=generic` makes the independently retained oracle fail at the first frame, in `planner.ammv.pedestrian_force_vectors[2][1]`, by 1.387779e-17. The first-difference diagnostic retains the full digest assertion. Fresh runtime interpreters select the producer's LLVM target `znver2` before importing any Numba kernels, including both consecutive replays. |
+| Non-behaviour PR contract findings | PASS on reviewed head | Byte-bound NEEDS-REVIEW sidecars and temporary-fixture writer exemptions address the 42 blockers. No human approval or behaviour receipt is fabricated. |
+
+CPU diagnosis commands (dev seed 1001 only):
+
+```bash
+# Before CPU pinning: FAIL, independent oracle remains unchanged.
+NUMBA_CPU_NAME=generic uv run --no-sync pytest \
+  tests/benchmark/test_generated_window_continuation.py::test_seed1001_checkpoint_rejects_parent_companion_path \
+  -q --tb=short
+# After pinning: the same host dispatch perturbation must still pass all four.
+NUMBA_CPU_NAME=generic uv run --no-sync pytest \
+  tests/benchmark/test_generated_window_continuation.py -q --tb=short
+```
+
+These checks used the lane's locked all-extras Python 3.12 environment and the
+same dev-only seed guard. Serial source capture, module-wide source capture,
+and one-thread source capture all matched the original full-source digest.
+The earlier hosted run recorded only its different digest, not the source
+trace or CPU name, so its exact first differing field cannot be reconstructed
+from that log. The current d6a71d75fe hosted run already passed the source
+capture/companion shard; the CPU perturbation supplies a controlled reproducer
+for the missing cross-host execution constraint, rather than an oracle update.
+The six checkpoint-bound runtime files, frozen inputs, retained numeric traces,
+checkpoint companions and independent parity oracle are unchanged. The source
+CPU pin is confined to this regression's subprocesses, leaving suite-wide and
+production compiler settings alone. Final exact heads and hosted check results
+are recorded in the lane report after push. The behaviour receipt remains with
+the orchestrator's receipt batch; corpus admission remains out of this PR.

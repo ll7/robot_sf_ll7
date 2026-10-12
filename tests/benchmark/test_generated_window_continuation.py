@@ -8,24 +8,52 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import shutil
+import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
-import yaml
 
-from robot_sf.benchmark.map_runner.map_runner import build_map_policy, run_map_batch
-from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_generation.replay_adapter import (
     dump_generated_scenario_yaml,
     materialize_generated_scenario,
 )
-from robot_sf.benchmark.step_trace_comparator import canonical_step_trace_digest
+from robot_sf.benchmark.step_trace_comparator import (
+    canonical_step_trace_digest,
+    find_first_trace_difference,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "docs/context/evidence/hardcase_positive_control"
+
+
+def _run_source_pinned_runtime(mode: str, output: Path, scenario: Path | None = None) -> None:
+    """Use the producer's LLVM CPU target before any Numba kernel is imported.
+
+    The retained oracle was produced on AMD Zen 2. Native fastmath dispatch on
+    another CPU changes the exact trace even with identical checkout/dependency
+    bytes. A fresh interpreter also avoids reusing a worker's compiled kernels.
+    """
+    environment = os.environ.copy()
+    environment["NUMBA_CPU_NAME"] = "znver2"
+    environment.pop("NUMBA_CPU_FEATURES", None)
+    command = [
+        sys.executable,
+        str(ROOT / "tests/support/hardcase_window_runtime.py"),
+        mode,
+        str(output),
+    ]
+    if scenario is not None:
+        command.append(str(scenario))
+    result = subprocess.run(
+        command, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=120, check=False
+    )
+    assert result.returncode == 0, result.stderr[-4000:]
 
 
 def test_seed1001_window_does_not_complete_at_its_boundary(tmp_path: Path) -> None:
@@ -69,8 +97,6 @@ def captured_seed1001(tmp_path_factory: pytest.TempPathFactory) -> dict:
     Returns:
         Source, independent reference, and checkpoint bindings.
     """
-    from robot_sf.benchmark.scenario_generation.continuation import capture_window_checkpoint
-
     tmp_path = tmp_path_factory.mktemp("seed1001-checkpoint")
     reference = json.loads(gzip.decompress((EVIDENCE / "source.jsonl.gz").read_bytes()))
     expected = reference["algorithm_metadata"]["simulation_step_trace"]["steps"][370:390]
@@ -82,41 +108,13 @@ def captured_seed1001(tmp_path_factory: pytest.TempPathFactory) -> dict:
     checkpoint = tmp_path / "checkpoint.json"
     config_path = "configs/algos/social_force_release_v0_0_8.yaml"
 
-    def capture(**context) -> None:
-        if context["step_idx"] == 370:
-            capture_window_checkpoint(
-                checkpoint,
-                env=context["env"],
-                state=context["state"],
-                loop_config=context["loop_config"],
-                source_episode_id=reference["episode_id"],
-                seed=1001,
-                source_map=ROOT
-                / "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
-                window_steps=20,
-            )
-
-    captured = run_map_episode(
-        source,
-        1001,
-        horizon=600,
-        dt=0.1,
-        record_forces=True,
-        snqi_weights=None,
-        snqi_baseline=None,
-        algo="social_force",
-        scenario_path=matrix,
-        algo_config=yaml.safe_load((ROOT / config_path).read_text()),
-        algo_config_path=config_path,
-        record_simulation_step_trace=True,
-        before_step_hook=capture,
-        policy_builder=build_map_policy,
-    )
-    assert (
-        canonical_step_trace_digest(
-            captured["algorithm_metadata"]["simulation_step_trace"]["steps"]
-        )
-        == "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34"
+    _run_source_pinned_runtime("capture", tmp_path)
+    captured = json.loads((tmp_path / "captured.json").read_text())
+    captured_steps = captured["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    assert canonical_step_trace_digest(captured_steps) == (
+        "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34"
+    ), find_first_trace_difference(
+        captured_steps, reference["algorithm_metadata"]["simulation_step_trace"]["steps"]
     )
     entry = json.loads((EVIDENCE / "entry.json").read_text())
     return {
@@ -139,7 +137,6 @@ def test_seed1001_checkpoint_replays_exact_near_miss_window_twice(
     source = captured_seed1001["source"]
     checkpoint = captured_seed1001["checkpoint"]
     entry = captured_seed1001["entry"]
-    config_path = captured_seed1001["config_path"]
     result = materialize_generated_scenario(
         entry,
         max_episode_steps=20,
@@ -155,20 +152,8 @@ def test_seed1001_checkpoint_replays_exact_near_miss_window_twice(
     replay_path.write_text(dump_generated_scenario_yaml(result))
     for index in (1, 2):
         output = tmp_path / f"replay-{index}.jsonl"
-        summary = run_map_batch(
-            replay_path,
-            output,
-            ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
-            horizon=600,
-            dt=0.1,
-            record_forces=True,
-            algo="social_force",
-            algo_config_path=config_path,
-            benchmark_profile="experimental",
-            workers=1,
-            resume=False,
-            record_simulation_step_trace=True,
-        )
+        _run_source_pinned_runtime("replay", output, replay_path)
+        summary = json.loads(output.with_suffix(".summary.json").read_text())
         assert summary["successful_jobs"] == 1 and summary["failed_jobs"] == 0
         row = json.loads(output.read_text())
         actual = row["algorithm_metadata"]["simulation_step_trace"]["steps"]

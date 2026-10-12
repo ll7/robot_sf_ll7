@@ -8,6 +8,7 @@ import json
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml
@@ -32,6 +33,9 @@ from robot_sf.training.predictive_supervision import (
 )
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.seed_policy import load_collection_seed_policy
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 @dataclass
@@ -383,7 +387,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _resolve_collection_seed_manifest(
-    args: argparse.Namespace, scenarios: list[dict]
+    args: argparse.Namespace, scenarios: Sequence[Mapping[str, object]]
 ) -> dict[str, list[int]]:
     """Resolve seeds before construction and archive the reproducible collection manifest.
 

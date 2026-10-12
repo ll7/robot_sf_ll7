@@ -1023,7 +1023,7 @@ def _resolve_training_seed_policy(
     training_master_seed = data.get("training_master_seed")
     if training_seed_range is None and training_master_seed is None:
         return evaluation_seeds, development_evaluation_seeds, None, None
-    if (training_seed_range is None) != (training_master_seed is None):
+    if training_seed_range is None or training_master_seed is None:
         raise ValueError("training_seed_range and training_master_seed must be configured together")
     if not data.get("randomize_seeds", False):
         raise ValueError("training seed range requires randomize_seeds=true")
@@ -1346,7 +1346,9 @@ class _TrainingEnvFactory:
             raise ValueError("scenario_definitions required when scenario is None.")
 
         sampler = ScenarioSampler(
-            (self.scenario,) if self.scenario is not None else self.scenario_definitions,
+            (self.scenario,)
+            if self.scenario is not None
+            else cast("tuple[dict[str, Any], ...]", self.scenario_definitions),
             include_scenarios=tuple(
                 str(name)
                 for name in self.scenario_sampling.get(  # type: ignore[union-attr]
@@ -1387,11 +1389,11 @@ class _TrainingEnvFactory:
             episode_seed_pool=self.scenario_sampling.get("episode_seed_pool"),
             episode_seed_stream=(
                 TrainingSeedPolicy(
-                    self.scenario_sampling["training_seed_range"],
-                    self.scenario_sampling["training_master_seed"],
+                    cast("tuple[int, int]", self.scenario_sampling["training_seed_range"]),
+                    cast("int", self.scenario_sampling["training_master_seed"]),
                 ).stream(
-                    self.scenario_sampling["seed_worker_index"],
-                    self.scenario_sampling["seed_worker_count"],
+                    cast("int", self.scenario_sampling["seed_worker_index"]),
+                    cast("int", self.scenario_sampling["seed_worker_count"]),
                 )
                 if self.scenario_sampling.get("training_seed_range")
                 else None
@@ -2756,8 +2758,8 @@ def _init_training_model(
     env_seeds = (
         [None for _ in range(num_envs)]
         if use_random and config.training_seed_range is None
-        else [base_seed + idx for idx in range(num_envs)]
-    )  # type: ignore[operator]
+        else [cast("int", base_seed) + idx for idx in range(num_envs)]
+    )
     env_fns = [
         _make_training_env(
             seed if seed is None else int(seed),
@@ -3214,7 +3216,7 @@ def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> N
 def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
     """Apply training seed configuration and warn when randomness overrides it."""
     if config.training_seed_range is not None:
-        common.set_global_seed(config.training_master_seed)
+        common.set_global_seed(cast("int", config.training_master_seed))
         logger.info(
             "Training episode seed policy: master={} range={} no reuse; fixed held-out selection",
             config.training_master_seed,

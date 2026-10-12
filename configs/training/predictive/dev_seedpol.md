@@ -54,3 +54,6 @@ hash readback; W&B artifacts provide independent preservation. Public issue and
 PR comments contain no infrastructure identities or storage paths. Both linked
 issues remain open; this bounded seed-policy work does not finish #9628's broader
 curriculum and reward programme.
+
+The completed comparison is diagnosed in [dev_seedpol_diagnosis.md](dev_seedpol_diagnosis.md).
+The reported checkpoint outcome does not isolate a causal episode-seed-policy effect.

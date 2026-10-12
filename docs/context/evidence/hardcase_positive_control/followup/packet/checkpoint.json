@@ -1,0 +1,172 @@
+{
+  "aux_file": "checkpoint.npz",
+  "aux_sha256": "a069ed9561e749690da1060944341c06a918312b51c1fa02f7ab42bd3fb20e60",
+  "compatibility": {
+    "checkpoint_sha256": null,
+    "code_revision": "125f0e5f20f41ef9bd99de1fdb504350b406b8eb8783efe7d13c59797188334e",
+    "config_sha256": "3e6a10bdcc89c477aa0cdfc1510564f6c0f04a7d2b6f1fd3a8b74dcbaeea5258",
+    "dt_s": 0.1,
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "planner_id": "social_force",
+    "platform_tag": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39"
+  },
+  "original_budget_steps": 600,
+  "schema_version": "robot_sf.generated_continuation.v1",
+  "simulator_file": "checkpoint.simulator.json",
+  "simulator_payload_sha256": "21c40d4406eb534cb462deb9bcf70fb871c6dfef54c0872f28b6c5b338a49f88",
+  "simulator_sha256": "2a01e252e78c67da88189146812c40ef59d70e7c352bd5a030345b7092e5868a",
+  "source_episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+  "source_seed": 1001,
+  "start_step": 370,
+  "state": {
+    "clock": {
+      "d_t": 0.1,
+      "distance_to_goal": 25.3176531069352,
+      "episode": 1,
+      "episode_step_limit": null,
+      "is_collision_with_obst": false,
+      "is_collision_with_ped": false,
+      "is_collision_with_robot": false,
+      "is_timeout": false,
+      "prev_distance_to_goal": 25.34923039687487,
+      "sim_time_elapsed": 37.000000000000256,
+      "sim_time_limit": 60.0,
+      "timestep": 370
+    },
+    "last_action": {
+      "$tuple": [
+        0.24175889376593762,
+        -0.4245390225211665
+      ]
+    },
+    "observation": {
+      "goal_current": {
+        "$array": "continuation_observation_goal_current"
+      },
+      "goal_next": {
+        "$array": "continuation_observation_goal_next"
+      },
+      "map_size": {
+        "$array": "continuation_observation_map_size"
+      },
+      "occupancy_grid": {
+        "$array": "continuation_observation_occupancy_grid"
+      },
+      "occupancy_grid_meta_center_on_robot": {
+        "$array": "continuation_observation_occupancy_grid_meta_center_on_robot"
+      },
+      "occupancy_grid_meta_channel_indices": {
+        "$array": "continuation_observation_occupancy_grid_meta_channel_indices"
+      },
+      "occupancy_grid_meta_origin": {
+        "$array": "continuation_observation_occupancy_grid_meta_origin"
+      },
+      "occupancy_grid_meta_resolution": {
+        "$array": "continuation_observation_occupancy_grid_meta_resolution"
+      },
+      "occupancy_grid_meta_robot_pose": {
+        "$array": "continuation_observation_occupancy_grid_meta_robot_pose"
+      },
+      "occupancy_grid_meta_size": {
+        "$array": "continuation_observation_occupancy_grid_meta_size"
+      },
+      "occupancy_grid_meta_use_ego_frame": {
+        "$array": "continuation_observation_occupancy_grid_meta_use_ego_frame"
+      },
+      "pedestrians_count": {
+        "$array": "continuation_observation_pedestrians_count"
+      },
+      "pedestrians_positions": {
+        "$array": "continuation_observation_pedestrians_positions"
+      },
+      "pedestrians_radius": {
+        "$array": "continuation_observation_pedestrians_radius"
+      },
+      "pedestrians_velocities": {
+        "$array": "continuation_observation_pedestrians_velocities"
+      },
+      "robot_angular_velocity": {
+        "$array": "continuation_observation_robot_angular_velocity"
+      },
+      "robot_heading": {
+        "$array": "continuation_observation_robot_heading"
+      },
+      "robot_position": {
+        "$array": "continuation_observation_robot_position"
+      },
+      "robot_radius": {
+        "$array": "continuation_observation_robot_radius"
+      },
+      "robot_speed": {
+        "$array": "continuation_observation_robot_speed"
+      },
+      "robot_velocity_xy": {
+        "$array": "continuation_observation_robot_velocity_xy"
+      },
+      "sim_timestep": {
+        "$array": "continuation_observation_sim_timestep"
+      }
+    },
+    "planner": {
+      "_avoid_side": 0.0,
+      "_blocked_latched": false,
+      "_filtered_target": {
+        "$array": "continuation_planner__filtered_target"
+      },
+      "_goal_approach_applied": false,
+      "_goal_approach_runtime_parameters": {},
+      "_last_simulation_timestep": {
+        "seconds": 0.10000000149011612,
+        "source": "observation.sim_timestep"
+      },
+      "_last_turn_sign": 1.0,
+      "_obstacle_force_applied": true,
+      "_obstacle_force_runtime_parameters": {
+        "grid_frame": "ego",
+        "grid_origin": [
+          -16.0,
+          -16.0
+        ],
+        "grid_resolution": 0.20000000298023224,
+        "obstacle_channel_index": 0,
+        "robot_radius": 1.0,
+        "visible_obstacle_terms": 1
+      },
+      "_sampling_drive_limits": {
+        "allow_backwards": false,
+        "interaxis_length": 0.3,
+        "limited_reverse": false,
+        "max_angular_accel": 1.0,
+        "max_angular_speed": 1.0,
+        "max_linear_accel": 1.0,
+        "max_linear_decel": 1.0,
+        "max_linear_speed": 2.0,
+        "max_reverse_speed": 0.5,
+        "radius": 1.0,
+        "wheel_radius": 0.05
+      },
+      "_sampling_obstacle_segments": null,
+      "_sampling_path_fields": {},
+      "_surface_v3_contact": false,
+      "_target_speed": 0.39171312763547284,
+      "_target_velocity": {
+        "$array": "continuation_planner__target_velocity"
+      }
+    },
+    "sensor_heading": null,
+    "snqi_history": {
+      "jerk_count": 368,
+      "jerk_sum": 182.850963216639,
+      "prev_robot_acc": {
+        "$array": "continuation_snqi_history_prev_robot_acc"
+      },
+      "prev_robot_pos": {
+        "$array": "continuation_snqi_history_prev_robot_pos"
+      },
+      "prev_robot_vel": {
+        "$array": "continuation_snqi_history_prev_robot_vel"
+      }
+    }
+  },
+  "window_steps": 20
+}

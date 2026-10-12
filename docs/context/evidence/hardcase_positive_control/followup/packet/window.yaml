@@ -1,0 +1,46 @@
+scenarios:
+- generated_replay:
+    checkpoint_file: checkpoint.json
+    checkpoint_sha256: 51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348
+    schema_version: robot_sf.generated_replay_runtime.v2
+    start_step: 370
+    window_steps: 20
+  map_file: ../../../../../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+  map_id: null
+  metadata:
+    archetype: cross_trap
+    benchmark_evidence: false
+    density: high
+    flow: bi
+    generated_replay:
+      claim_boundary: generated scenario hypotheses only
+      replay_status: loads_only
+      scenario_id: generated-54fdcdbc905bf047
+    groups: 0.0
+    label: cross-trap local-minimum circulation
+    plausibility:
+      method: null
+      metrics:
+        force_q95: 0.739349157779526
+        mean_distance: 10.02981557058951
+        min_distance: 2.8766785893771702
+        ped_force_mean: 0.19881092600791625
+        robot_ped_within_5m_frac: 0.17466666666666666
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+      notes: null
+      status: verified
+      verified_by: ll7
+      verified_on: '2026-01-29'
+    required_manual_review: true
+    source: auto_generated
+  name: classic_cross_trap_high
+  robot_config: {}
+  seeds:
+  - 1001
+  simulation_config:
+    goal_completion_policy: goal_zone_entry_v1
+    max_episode_steps: 600
+    ped_density: 0.08
+    robot_goal_sampling_policy: footprint_clearance_v1
+    social_force_kernel_version: wrapped_v2
+schema_version: robot_sf.scenario_matrix.v1

@@ -1,9 +1,9 @@
 # Context Retrieval Index
 
-Current-main positive control #10330: a dev-seed near-miss is reproducible, but
-generated-window replay terminates before the event. Exact replay and corpus
-admission remain blocked:
-[hardcase positive-control report](evidence/hardcase_positive_control/report.md).
+Current-main positive control #10330: the seed-1001 near-miss window now replays
+exactly twice with a supported continuation repair. Persistence/corpus admission
+remains blocked, and the matched main audit has no introduced failures:
+[hardcase window repair and matched benchmark audit](evidence/hardcase_positive_control/followup/report.md).
 
 Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:

@@ -1,0 +1,84 @@
+{
+  "analytic_implementation_sha256": "fe4e5b99c0a9f51ada80cfccbf1361bb4f1872c0c523e2b35ce89e94e7b32958",
+  "artifacts": [
+    {
+      "name": "source.jsonl",
+      "normalized_sha256": "cc050b0a59eadf11fd6166032e36ae16c25870a4b55deef07dc9e8afa0fa0f21",
+      "raw_bytes": 4928161,
+      "raw_sha256": "cc050b0a59eadf11fd6166032e36ae16c25870a4b55deef07dc9e8afa0fa0f21",
+      "reason": "duplicate 600-step trace; gold source retained in parent and rerun equality receipt in comparison.json",
+      "retained": false
+    },
+    {
+      "compressed_sha256": "a2db55191def89e7b5a712b29b8654cfe738b1259ed9c480ae292b93a8e2ecaa",
+      "name": "window_replay_1.jsonl",
+      "normalized_sha256": "8807641c337cd6239054810299a3dc7957a71e53710e89ca9b616ef75db58762",
+      "raw_bytes": 206932,
+      "raw_sha256": "1a2f954113d3a240d96dadc7c293da13008d128066217dae7bf4b9b3b4fffa50",
+      "retained": "window_replay_1.jsonl.gz"
+    },
+    {
+      "compressed_sha256": "2aab72c8a7108eb52be318b51e1cef1349e32af0650b8a6f298949880f2b747b",
+      "name": "window_replay_2.jsonl",
+      "normalized_sha256": "7a87cc9b576716500ee4ec2f1c4cc210031b80eddceaeb69286fb989e3744651",
+      "raw_bytes": 206932,
+      "raw_sha256": "746b454f84736b729dea74ad419d2384bc3e41cac34b78ee5e7e75a170f99286",
+      "retained": "window_replay_2.jsonl.gz"
+    },
+    {
+      "name": "gate_source.jsonl",
+      "normalized_sha256": "d7cb87c8edf770a8fa7058b0db63face6287e6a23950b5f6b0c6f9d993537bb9",
+      "raw_bytes": 4928274,
+      "raw_sha256": "d7cb87c8edf770a8fa7058b0db63face6287e6a23950b5f6b0c6f9d993537bb9",
+      "reason": "duplicate 600-step trace; gold source retained in parent and rerun equality receipt in comparison.json",
+      "retained": false
+    },
+    {
+      "compressed_sha256": "d3d42cd51cea7a76da38be9513b38d91fad74115959fba3b79ee4c7754710b40",
+      "name": "gate_replay_results.json",
+      "normalized_sha256": "081022d78515311cc36aae6e68007723f2c2b4e3e6b00ee3628f822bd2e19de7",
+      "raw_bytes": 397768,
+      "raw_sha256": "43fdeb418bff91a352be13867fd354a630ffbca1be1421d5e2102b385f6a6bc7",
+      "retained": "gate_replay_results.json.gz"
+    },
+    {
+      "name": "window_replay_1.jsonl.provenance.json",
+      "normalized_sha256": "f7b21b42b60c2958b90dc8d93ce7cb0f8713e96550f3515057dfeb11f0810264",
+      "note": "native receipt refers to the original raw JSONL hash; compressed normalized trace is bound separately",
+      "raw_sha256": "55ae1a30d9d1fbb03fe44968d83d5c0b3924547392e920f8536f48e2cfec9de9",
+      "retained": "window_replay_1.jsonl.provenance.json"
+    },
+    {
+      "name": "window_replay_2.jsonl.provenance.json",
+      "normalized_sha256": "81c25d063c49dfac23250c5d15216a43f511fc691b8de39e00d938ce274073a2",
+      "note": "native receipt refers to the original raw JSONL hash; compressed normalized trace is bound separately",
+      "raw_sha256": "0a144085bca04c9f889c120bd3283b6387c2474c695bcaa93fc5737a92f7c9af",
+      "retained": "window_replay_2.jsonl.provenance.json"
+    }
+  ],
+  "checkpoint_compatibility": {
+    "checkpoint_sha256": null,
+    "code_revision": "125f0e5f20f41ef9bd99de1fdb504350b406b8eb8783efe7d13c59797188334e",
+    "config_sha256": "3e6a10bdcc89c477aa0cdfc1510564f6c0f04a7d2b6f1fd3a8b74dcbaeea5258",
+    "dt_s": 0.1,
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "planner_id": "social_force",
+    "platform_tag": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39"
+  },
+  "checkpoint_sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python docs/context/evidence/hardcase_positive_control/followup/reproduce.py --output docs/context/evidence/hardcase_positive_control/followup/packet",
+  "custody": "packet was produced in this final repository-relative namespace; native records compressed after capture; duplicate complete source omitted",
+  "episode_seed": 1001,
+  "fix_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
+  "historical_source_provenance": "../../provenance.json",
+  "learned_model_digest": null,
+  "learned_model_status": "not_applicable_analytic_planner",
+  "materialized_window_sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e",
+  "original_run_config_hash": "f330dd29077077ac",
+  "planner": "social_force",
+  "planner_config_sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+  "record_normalization": "literal checkout/lane prefixes only; numeric trace payload unchanged; checkpoint companions remain byte-exact",
+  "scenario": "classic_cross_trap_high",
+  "schema_version": "hardcase-window-followup.v1",
+  "source_commit": "53721be3248600e08641a9816d094b605e3c93e4"
+}

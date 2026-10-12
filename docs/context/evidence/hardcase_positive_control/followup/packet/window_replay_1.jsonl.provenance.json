@@ -1,0 +1,117 @@
+{
+  "schema_version": "benchmark_result_provenance.v1",
+  "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
+  "run": {
+    "run_id": "a0e70fd943c6424985433f9e8e47e424",
+    "repo_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
+    "python_version": "3.13.14",
+    "invocation": "docs/context/evidence/hardcase_positive_control/followup/reproduce.py --output docs/context/evidence/hardcase_positive_control/followup/packet",
+    "benchmark_profile": "experimental",
+    "runner": "map_runner.run_map_batch",
+    "protocol_version": "0.1.0",
+    "execution_context": {
+      "hostname": "imech156-u",
+      "schema_version": "benchmark_execution_context.v1",
+      "cpu_model": "AMD Ryzen 9 3950X 16-Core Processor",
+      "platform": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39",
+      "python_version": "3.13.14",
+      "thread_env": {
+        "OMP_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null
+      },
+      "numpy_version": "2.4.6",
+      "numba_version": "0.67.0",
+      "execution_context_sha256": "deadacda1f7da04473f21385798639c71cfb68111cc77d979342bd9517a273b3"
+    }
+  },
+  "inputs": {
+    "schema_path": {
+      "path": "<repository_root>/robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "sha256": "180d6bb952811535ec3b2182bb4e21d47eb7679c8daa238abf9eef41958fd162",
+      "artifact_status": "available"
+    },
+    "scenario_matrix": {
+      "path": "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/window.yaml",
+      "sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e",
+      "artifact_status": "available"
+    },
+    "algo_config": {
+      "path": "configs/algos/social_force_release_v0_0_8.yaml",
+      "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+      "artifact_status": "available"
+    }
+  },
+  "campaign_identity": {
+    "scenario_matrix_hash": "597d90abe5eb819f",
+    "input_bundle_sha256": "6b34de2e027923e450c90e62d8f306fd750e7f5c614cc2bdb8f25ce16ed3b50d",
+    "algorithm": "social_force",
+    "config_hash": "cc41726c5df4c331",
+    "suite_key": "default",
+    "total_jobs": 1,
+    "written": 1
+  },
+  "raw_artifacts": [
+    {
+      "kind": "episodes_jsonl",
+      "path": "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl",
+      "sha256": "1a2f954113d3a240d96dadc7c293da13008d128066217dae7bf4b9b3b4fffa50",
+      "artifact_status": "available"
+    }
+  ],
+  "rows": [
+    {
+      "episode_id": "classic_cross_trap_high--1001--29ae7331749e5a6d",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "config_hash": "29ae7331749e5a6d",
+      "repo_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
+      "raw_artifact": "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl",
+      "jsonl_line": 0,
+      "simulator_settings": {
+        "horizon": 600,
+        "dt": 0.1,
+        "record_forces": true,
+        "observation_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_noise_hash": "0a5609f0b2b1",
+        "tracking_precision_hash": "d06cee655fee"
+      },
+      "postprocessing": [
+        {
+          "step": "compute_all_metrics",
+          "status": "completed"
+        },
+        {
+          "step": "post_process_metrics",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "derived_artifacts": [],
+  "completeness": {
+    "status": "complete",
+    "required_fields_checked": [
+      "algorithm",
+      "campaign_identity",
+      "completeness",
+      "config_hash",
+      "episode_id",
+      "input_binding_schema_version",
+      "input_bundle_sha256",
+      "inputs",
+      "repo_commit",
+      "repo_commit",
+      "run",
+      "run_id",
+      "runner",
+      "scenario_id",
+      "scenario_matrix_hash",
+      "schema_version",
+      "seed",
+      "total_jobs",
+      "written"
+    ]
+  }
+}

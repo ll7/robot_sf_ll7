@@ -62,3 +62,31 @@ def test_real_config_compilation_keeps_evaluation_unweighted():
     )
     with pytest.raises(ValueError, match="no sampleable"):
         with_family_weights(excluded)
+
+
+def test_empty_base_weights_keep_uniform_mass_through_config_and_sampler():
+    """An explicit uniform mapping retains open-family mass after oversampling."""
+    from dataclasses import replace
+
+    from robot_sf.training.scenario_family_weights import with_family_weights
+    from scripts.training.train_ppo import load_expert_training_config
+
+    ids = ("classic_doorway_low", "francis2023_frontal_approach")
+    original = load_expert_training_config("configs/training/ppo/dev_train010_fixed_5m.yaml")
+    configured = replace(
+        original,
+        scenario_sampling={
+            "strategy": "random",
+            "include_scenarios": list(ids),
+            "weights": {},
+            "family_weights": {"doorway": 3},
+        },
+    )
+    resolved = with_family_weights(configured)
+    assert compile_family_weights(ids, {"doorway": 3}, {}) == {ids[0]: 3.0, ids[1]: 1.0}
+    sampler = ScenarioSampler(
+        [{"name": sid} for sid in ids], weights=resolved.scenario_sampling["weights"], seed=100001
+    )
+    assert sampler._weights_array.tolist() == [0.75, 0.25]
+    assert resolved.evaluation is original.evaluation
+    assert configured.scenario_sampling["weights"] == {}

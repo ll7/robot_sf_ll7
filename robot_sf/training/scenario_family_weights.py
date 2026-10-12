@@ -70,7 +70,7 @@ def compile_family_weights(
     if unknown:
         raise ValueError(f"Unknown scenario families: {sorted(unknown)}")
     weights = {
-        sid: float(base_weights.get(sid, 0.0)) if base_weights is not None else 1.0
+        sid: float(base_weights.get(sid, 0.0)) if base_weights else 1.0
         for sid in scenario_ids
     }
     if any(not math.isfinite(w) or w < 0 for w in weights.values()):

@@ -82,3 +82,32 @@ def test_action_bound_migration_is_explicit_and_preserves_raw_actor(tmp_path):
             path, target_action_space=gym.spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32)
         )
     env.close()
+
+
+def test_prepared_seed_survives_canonical_resume_round_trip(tmp_path):
+    """Saving/reloading keeps requested optimizer RNGs distinct and reproducible."""
+    env = DummyVecEnv([lambda: gym.make("Pendulum-v1")])
+    source = PPO("MlpPolicy", env, seed=100000, n_steps=8, batch_size=8, device="cpu")
+    source_path = tmp_path / "source.zip"
+    source.save(source_path)
+    fixed = np.array([0.6, 0.8, 0.25], dtype=np.float32)
+    stochastic = []
+    for seed in (100001, 100002):
+        prepared, _ = load_warm_start(source_path, init_seed=seed)
+        path = tmp_path / f"init{seed}.zip"
+        prepared.save(path)
+        resumed = PPO.load(path, env=env, device="cpu")
+        assert resumed.seed == seed
+        first = torch.rand(8)
+        action, _ = resumed.predict(fixed, deterministic=False)
+        again = PPO.load(path, env=env, device="cpu")
+        assert again.seed == seed
+        assert torch.equal(torch.rand(8), first)
+        np.testing.assert_array_equal(again.predict(fixed, deterministic=False)[0], action)
+        np.testing.assert_array_equal(
+            resumed.predict(fixed, deterministic=True)[0],
+            source.predict(fixed, deterministic=True)[0],
+        )
+        stochastic.append(action)
+    assert not np.array_equal(stochastic[0], stochastic[1])
+    env.close()

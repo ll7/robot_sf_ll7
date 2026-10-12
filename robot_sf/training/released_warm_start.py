@@ -77,6 +77,8 @@ def load_warm_start(
     model = PPO.load(
         str(checkpoint), env=env, device=device, force_reset=True, custom_objects=custom_objects
     )
+    # SB3's setter changes live generators, but save/load restores this field.
+    model.seed = init_seed
     model.set_random_seed(init_seed)
     model.num_timesteps = 0
     model._n_updates = 0

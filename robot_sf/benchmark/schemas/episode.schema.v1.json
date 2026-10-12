@@ -18,6 +18,73 @@
         {
             "if": {
                 "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "exclusiveMinimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": false
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "maximum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "properties": {
         "pedestrian_group_provenance": {
             "type": "object",
             "description": "Reset-time simulator slot memberships; optional for historical rows. Empty and singleton groups retain their IDs. This is not a persistent actor identity.",
@@ -124,73 +191,6 @@
             ],
             "additionalProperties": false
         },
-                    "outcome": {
-                        "properties": {
-                            "collision_event": {
-                                "const": true
-                            }
-                        },
-                        "required": [
-                            "collision_event"
-                        ]
-                    }
-                },
-                "required": [
-                    "outcome"
-                ]
-            },
-            "then": {
-                "properties": {
-                    "metrics": {
-                        "properties": {
-                            "collisions": {
-                                "type": [
-                                    "number",
-                                    "integer"
-                                ],
-                                "exclusiveMinimum": 0
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        {
-            "if": {
-                "properties": {
-                    "outcome": {
-                        "properties": {
-                            "collision_event": {
-                                "const": false
-                            }
-                        },
-                        "required": [
-                            "collision_event"
-                        ]
-                    }
-                },
-                "required": [
-                    "outcome"
-                ]
-            },
-            "then": {
-                "properties": {
-                    "metrics": {
-                        "properties": {
-                            "collisions": {
-                                "type": [
-                                    "number",
-                                    "integer"
-                                ],
-                                "maximum": 0
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    ],
-    "properties": {
         "version": {
             "const": "v1"
         },

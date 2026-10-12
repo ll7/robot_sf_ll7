@@ -1341,7 +1341,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def _synchronized_margin_clear(
         robot_points: np.ndarray, pedestrian_points: np.ndarray, cover: np.ndarray, margin: float
     ) -> bool:
-        """Analytically minimize relative chord distance, minus robot motion cover."""
+        """Analytically minimize relative chord distance, minus robot motion cover.
+
+        Returns:
+            bool: Whether every synchronized interval preserves the margin.
+        """
         relative = pedestrian_points - robot_points[None]
         start = relative[:, :-1]
         delta = np.diff(relative, axis=1)

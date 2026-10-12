@@ -409,7 +409,7 @@ def test_prediction_rejects_submargin_between_clear_samples(monkeypatch, source,
     assert np.min(sampled_gaps) == pytest.approx(0.350257135, abs=1e-9)
     assert 1.7498 - 1.4 == pytest.approx(0.3498)
     assert np.min(sampled_gaps) > config.predictive_safe_distance > 0.3498
-    kwargs = dict(observation=obs, future_peds=future, mask=mask, steps=8)
+    kwargs = {"observation": obs, "future_peds": future, "mask": mask, "steps": 8}
     if path == "action":
         assert adapter._score_action(**kwargs, v=1.04, w=0.0) == float("inf")
     elif path == "sequence":
@@ -475,7 +475,7 @@ def test_prediction_covers_curved_motion_between_samples(path, control_dt):
     obs["robot"]["angular_velocity"] = [1.0]
     obs["sim"] = {"timestep": [control_dt]}
     future = np.tile(pedestrian, (1, 2, 1))
-    kwargs = dict(observation=obs, future_peds=future, mask=np.ones(1), steps=2)
+    kwargs = {"observation": obs, "future_peds": future, "mask": np.ones(1), "steps": 2}
     if path == "action":
         assert adapter._score_action(**kwargs, v=1.0, w=1.0) == float("inf")
     else:

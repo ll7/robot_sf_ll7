@@ -43,15 +43,17 @@
     },
     {
       "name": "window_replay_1.jsonl.provenance.json",
-      "normalized_sha256": "f7b21b42b60c2958b90dc8d93ce7cb0f8713e96550f3515057dfeb11f0810264",
-      "note": "native receipt refers to the original raw JSONL hash; compressed normalized trace is bound separately",
+      "normalized_sha256": "73466ee05406b51a49f05ce13ef1db3e285ddc7968286fb505e7cb64f8801172",
+      "note": "Original native run identities/hashes preserved; paths resolved and byte-exact regenerable lane-host raw-row custody added under maintainer REMEDIATE disposition.",
+      "pre_custody_annotation_sha256": "f7b21b42b60c2958b90dc8d93ce7cb0f8713e96550f3515057dfeb11f0810264",
       "raw_sha256": "55ae1a30d9d1fbb03fe44968d83d5c0b3924547392e920f8536f48e2cfec9de9",
       "retained": "window_replay_1.jsonl.provenance.json"
     },
     {
       "name": "window_replay_2.jsonl.provenance.json",
-      "normalized_sha256": "81c25d063c49dfac23250c5d15216a43f511fc691b8de39e00d938ce274073a2",
-      "note": "native receipt refers to the original raw JSONL hash; compressed normalized trace is bound separately",
+      "normalized_sha256": "b088892c6b452421286a0a37d11d8e7512fa6d80af060c86fd2414c1477b82ea",
+      "note": "Original native run identities/hashes preserved; paths resolved and byte-exact regenerable lane-host raw-row custody added under maintainer REMEDIATE disposition.",
+      "pre_custody_annotation_sha256": "81c25d063c49dfac23250c5d15216a43f511fc691b8de39e00d938ce274073a2",
       "raw_sha256": "0a144085bca04c9f889c120bd3283b6387c2474c695bcaa93fc5737a92f7c9af",
       "retained": "window_replay_2.jsonl.provenance.json"
     }
@@ -68,6 +70,15 @@
   "checkpoint_sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348",
   "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python docs/context/evidence/hardcase_positive_control/followup/reproduce.py --output docs/context/evidence/hardcase_positive_control/followup/packet",
   "custody": "packet was produced in this final repository-relative namespace; native records compressed after capture; duplicate complete source omitted",
+  "custody_remediation": {
+    "disposition": "REMEDIATE all ten findings; no new debt baseline",
+    "native_manifest_note": "Metadata-only custody annotations; the original raw producer manifest and pre-annotation digest are retained as provenance.",
+    "new_simulator_episodes": 0,
+    "new_simulator_resets": 0,
+    "raw_row_bytes_each": 206932,
+    "raw_row_location": "imech156-u:/home/luttkule/lanes/hardcase/custody_raw",
+    "regeneration_command": "python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py --output /home/luttkule/lanes/hardcase/custody_raw"
+  },
   "episode_seed": 1001,
   "fix_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
   "historical_source_provenance": "../../provenance.json",

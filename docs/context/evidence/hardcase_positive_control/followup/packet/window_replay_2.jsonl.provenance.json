@@ -27,19 +27,25 @@
   },
   "inputs": {
     "schema_path": {
-      "path": "<repository_root>/robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
       "sha256": "180d6bb952811535ec3b2182bb4e21d47eb7679c8daa238abf9eef41958fd162",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "resolved_path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "size_bytes": 60080
     },
     "scenario_matrix": {
-      "path": "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/window.yaml",
+      "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window.yaml",
       "sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "resolved_path": "docs/context/evidence/hardcase_positive_control/followup/packet/window.yaml",
+      "size_bytes": 1509
     },
     "algo_config": {
       "path": "configs/algos/social_force_release_v0_0_8.yaml",
       "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "resolved_path": "configs/algos/social_force_release_v0_0_8.yaml",
+      "size_bytes": 441
     }
   },
   "campaign_identity": {
@@ -54,9 +60,13 @@
   "raw_artifacts": [
     {
       "kind": "episodes_jsonl",
-      "path": "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl",
+      "path": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_2.jsonl",
       "sha256": "746b454f84736b729dea74ad419d2384bc3e41cac34b78ee5e7e75a170f99286",
-      "artifact_status": "available"
+      "artifact_status": "available_lane_host_reproducible",
+      "location": "imech156-u:/home/luttkule/lanes/hardcase/custody_raw/window_replay_2.jsonl",
+      "size_bytes": 206932,
+      "regeneration_command": "python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py --output /home/luttkule/lanes/hardcase/custody_raw",
+      "regeneration_note": "Byte-exact reconstruction from committed compressed row; reverses only the recorded producer-prefix normalization; no simulation or reset."
     }
   ],
   "rows": [
@@ -66,7 +76,7 @@
       "seed": 1001,
       "config_hash": "29ae7331749e5a6d",
       "repo_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
-      "raw_artifact": "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl",
+      "raw_artifact": "/home/luttkule/lanes/hardcase/custody_raw/window_replay_2.jsonl",
       "jsonl_line": 0,
       "simulator_settings": {
         "horizon": 600,

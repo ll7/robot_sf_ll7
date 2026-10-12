@@ -68,8 +68,10 @@ def main() -> int:  # noqa: PLR0915 - explicit one-case stage order
     from robot_sf.training.scenario_loader import load_scenarios
 
     logger.remove()
-    scenario = copy.deepcopy(
-        next(s for s in load_scenarios(root / MATRIX) if s["name"] == "classic_cross_trap_high")
+    scenario = dict(
+        copy.deepcopy(
+            next(s for s in load_scenarios(root / MATRIX) if s["name"] == "classic_cross_trap_high")
+        )
     )
     scenario["seeds"] = [1001]
     checkpoint = out / "checkpoint.json"

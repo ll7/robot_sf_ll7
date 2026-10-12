@@ -8309,3 +8309,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

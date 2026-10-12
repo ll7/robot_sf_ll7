@@ -14,6 +14,7 @@ import math
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 SOURCE = "53721be3248600e08641a9816d094b605e3c93e4"
 MATRIX = "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
@@ -106,12 +107,12 @@ def main() -> int:  # noqa: PLR0915 - linear evidence recipe preserves stage ord
     from robot_sf.training.scenario_loader import load_scenarios
 
     logger.remove()
-    scenario = copy.deepcopy(
-        next(s for s in load_scenarios(root / MATRIX) if s["name"] == SCENARIO)
+    scenario = dict(
+        copy.deepcopy(next(s for s in load_scenarios(root / MATRIX) if s["name"] == SCENARIO))
     )
     scenario["seeds"] = [SEED]
     write_json(out / "effective_scenario.json", scenario)
-    options = {
+    options: dict[str, Any] = {
         "horizon": 600,
         "dt": 0.1,
         "record_forces": True,
@@ -179,12 +180,14 @@ def main() -> int:  # noqa: PLR0915 - linear evidence recipe preserves stage ord
         - 1,
         "replays": [],
     }
+    window_options = options.copy()
+    window_options["horizon"] = len(frames) - 1
     for index in (1, 2):
         summary = run_map_batch(
             out / "window.yaml",
             out / f"window_replay_{index}.jsonl",
             schema,
-            **{**options, "horizon": len(frames) - 1},
+            **window_options,
         )
         write_json(out / f"window_replay_{index}_summary.json", summary)
         replay = json.loads((out / f"window_replay_{index}.jsonl").read_text())

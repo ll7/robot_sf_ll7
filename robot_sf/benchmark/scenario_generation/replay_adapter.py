@@ -11,7 +11,7 @@ import hashlib
 from copy import deepcopy
 from dataclasses import dataclass
 from math import isfinite
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
@@ -177,6 +177,7 @@ def apply_generated_replay_runtime(  # noqa: C901
 
     if not isinstance(runtime, dict):
         raise ValueError("generated_replay must be a mapping")
+    runtime = cast("dict[str, Any]", runtime)
     if runtime.get("schema_version") == "robot_sf.generated_replay_runtime.v2":
         _validate_continuation_runtime(runtime)
         # The checkpoint restores into the original source world. Replacing its
@@ -191,6 +192,7 @@ def apply_generated_replay_runtime(  # noqa: C901
     robot = runtime.get("robot")
     if not isinstance(robot, dict) or set(robot) != {"start", "goal", "trajectory"}:
         raise ValueError("generated_replay.robot must contain only start, goal, and trajectory")
+    robot = cast("dict[str, Any]", robot)
     start = _point(robot["start"], "generated_replay.robot.start")
     goal = _point(robot["goal"], "generated_replay.robot.goal")
     trajectory = _trajectory(robot["trajectory"], "generated_replay.robot.trajectory")
@@ -209,6 +211,7 @@ def apply_generated_replay_runtime(  # noqa: C901
             raise ValueError(
                 f"generated_replay.pedestrians[{index}] must contain only id, start, and trajectory"
             )
+        pedestrian = cast("dict[str, Any]", pedestrian)
         pedestrian_id = pedestrian["id"]
         if not isinstance(pedestrian_id, str) or not pedestrian_id.strip():
             raise ValueError(f"generated_replay.pedestrians[{index}].id must be non-empty")
@@ -270,10 +273,10 @@ def _point(value: object, field_name: str) -> tuple[float, float]:
 
     if not isinstance(value, list) or len(value) != 2:
         raise ValueError(f"{field_name} must be a two-item list")
-    coordinates = tuple(float(coordinate) for coordinate in value)
+    coordinates = (float(cast("Any", value[0])), float(cast("Any", value[1])))
     if not all(isfinite(coordinate) for coordinate in coordinates):
         raise ValueError(f"{field_name} must contain finite coordinates")
-    return coordinates  # type: ignore[return-value]
+    return coordinates
 
 
 def _trajectory(value: object, field_name: str) -> list[tuple[float, float]]:
@@ -284,13 +287,17 @@ def _trajectory(value: object, field_name: str) -> list[tuple[float, float]]:
     return [_point(point, f"{field_name}[{index}]") for index, point in enumerate(value)]
 
 
-def _point_zone(point: tuple[float, float]) -> tuple[tuple[float, float], ...]:
+def _point_zone(
+    point: tuple[float, float],
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
     """Return a degenerate triangular zone so runtime placement is exactly pinned."""
 
     return (point, point, point)
 
 
-def _endpoint_zone(point: tuple[float, float]) -> tuple[tuple[float, float], ...]:
+def _endpoint_zone(
+    point: tuple[float, float],
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
     """Return a finite one-centimetre endpoint zone for directional load smoke."""
     x, y = point
     half_width = 0.005

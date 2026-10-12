@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "artifacts": [
+    {
+      "artifact": "source.jsonl.gz",
+      "trace_steps": 600,
+      "canonical_trace_sha256": "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34",
+      "ledger_valid": true
+    },
+    {
+      "artifact": "window_replay_1.jsonl.gz",
+      "trace_steps": 1,
+      "canonical_trace_sha256": "8806cbcc2b66d30773ef24b62d64deaaf5d4c43f5ddc8684fb99889da6965d65",
+      "ledger_valid": true
+    },
+    {
+      "artifact": "window_replay_2.jsonl.gz",
+      "trace_steps": 1,
+      "canonical_trace_sha256": "8806cbcc2b66d30773ef24b62d64deaaf5d4c43f5ddc8684fb99889da6965d65",
+      "ledger_valid": true
+    }
+  ],
+  "source_input_count": 48,
+  "catalog_schema": "PASS",
+  "materialized_loader": "PASS",
+  "seed": "1001 only; no simulations in this check"
+}

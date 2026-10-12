@@ -44,6 +44,12 @@ timestep. Acceleration, asymmetric braking, steering curvature and limited rever
 therefore use the execution plant's settings. Static footprint scoring includes
 motion while a stop command brakes. Unbound calls retain the unicycle fallback.
 
+Bound forecasts require the rollout timestep to be an integer multiple of the
+observed control timestep. Each sample advances only whole, fixed control ticks;
+nondivisible ratios (for example control 0.15 s / forecast 0.2 s) raise a clear
+`ValueError` in both searches. No shortened plant tick or interpolated plant state
+is scored. Control 0.15 s / forecast 0.3 s is supported and tested against execution.
+
 `tests/planner/test_prediction_bicycle_rollout.py` compares candidate positions and
 headings with executed commands and checks the braking-contact veto. This is
 implementation agreement evidence; the matched T-intersection diagnostic in

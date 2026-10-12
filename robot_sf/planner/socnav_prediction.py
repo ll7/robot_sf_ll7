@@ -968,6 +968,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         if observation is None and len(commands) > 0:
             raise ValueError("Bound prediction requires a measured-motion observation")
+        control_dt = self._simulation_timestep(observation) if observation is not None else dt
+        ticks_per_sample = dt / control_dt
+        control_ticks = round(ticks_per_sample) if np.isfinite(ticks_per_sample) else 0
+        if control_ticks < 1 or not np.isclose(
+            ticks_per_sample, control_ticks, rtol=0.0, atol=1e-9
+        ):
+            raise ValueError(
+                "Bound prediction rollout timestep must be an integer multiple of the control "
+                f"timestep; got rollout={dt}s, control={control_dt}s"
+            )
         state, _, _ = self._socnav_fields(observation or {})
         speed = float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0])
         if isinstance(self._prediction_drive_settings, BicycleDriveSettings):
@@ -980,22 +990,18 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
             )
             drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
-        control_dt = self._simulation_timestep(observation) if observation is not None else dt
         positions, headings = [], []
         for command in commands:
-            remaining = dt
-            while remaining > 1e-12:
-                step_dt = min(control_dt, remaining)
+            for _ in range(control_ticks):
                 if isinstance(drive, BicycleDriveRobot):
                     # Reuse execution's projection, achievable-speed steering and
                     # asymmetric acceleration/braking limits, including reverse.
-                    adapter = PlannerActionAdapter(drive, drive.action_space, step_dt)
-                    drive.apply_action(tuple(adapter.from_velocity_command(command)), step_dt)
+                    adapter = PlannerActionAdapter(drive, drive.action_space, control_dt)
+                    drive.apply_action(tuple(adapter.from_velocity_command(command)), control_dt)
                 else:
                     drive.apply_action(
-                        tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
+                        tuple((np.asarray(command) - drive.current_speed) / control_dt), control_dt
                     )
-                remaining -= step_dt
             positions.append(drive.pos)
             headings.append(drive.pose[1])
         return np.asarray(positions), np.asarray(headings)

@@ -1,0 +1,37 @@
+base_config: dev_seedpol_safety_5m.yaml
+policy_id: ppo_seedpol_repl_safety_a_pair2
+ppo_initialization_seed: 1002
+training_seed_telemetry: true
+training_seed_range: null
+training_master_seed: null
+seeds:
+- 100001
+randomize_seeds: false
+scenario_sampling:
+  strategy: random
+  episode_seed_pool:
+  - 100001
+  - 100002
+  - 100003
+  - 100004
+  - 100005
+  - 100006
+  - 100007
+  - 100008
+  - 100009
+  - 100010
+  - 100011
+  - 100012
+  - 100013
+  - 100014
+  - 100015
+  - 100016
+  - 100017
+  - 100018
+  - 100019
+  - 100020
+tracking:
+  wandb:
+    group: seedpol-controlled-safety-20261012
+    name: seedpol-a-pair2
+    job_type: controlled-development-replication

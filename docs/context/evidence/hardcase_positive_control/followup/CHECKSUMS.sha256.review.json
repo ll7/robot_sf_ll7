@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/CHECKSUMS.sha256",
-  "artifact_sha256": "ca9da6920bfb7f8d69766b0b48653e96c2cbde442076bd7b2fea88c6f21f955f",
+  "artifact_sha256": "a699047b162ba7300306f2f68f4d99698dac15d67c9570efac115562224c369e",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

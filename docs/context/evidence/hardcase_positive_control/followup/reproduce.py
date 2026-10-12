@@ -33,6 +33,11 @@ def main() -> int:  # noqa: PLR0915 - explicit one-case stage order
     """Produce source, checkpoint, two fresh replays and a fail-closed gate receipt."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--runtime-revision",
+        default=FIX,
+        help="Committed replay runtime to verify before capture (default: original repair).",
+    )
     args = parser.parse_args()
     root = Path.cwd()
     evidence = Path(__file__).resolve().parent.parent
@@ -40,7 +45,7 @@ def main() -> int:  # noqa: PLR0915 - explicit one-case stage order
     out.mkdir(parents=True, exist_ok=True)
     if any(out.iterdir()):
         raise SystemExit("output must be empty; preserve previous runs")
-    fix = subprocess.check_output(["git", "rev-parse", FIX], text=True).strip()
+    fix = subprocess.check_output(["git", "rev-parse", args.runtime_revision], text=True).strip()
     subprocess.run(
         ["git", "diff", "--exit-code", fix, "--", "robot_sf", "fast-pysf", "configs", "maps"],
         check=True,

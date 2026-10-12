@@ -32,6 +32,31 @@ ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "docs/context/evidence/hardcase_positive_control"
 
 
+@pytest.mark.new_feature_no_base(reason="base lacks continuation companion validation")
+@pytest.mark.parametrize("member", ["aux_file", "simulator_file", "simulator_payload"])
+def test_checkpoint_refuses_digest_valid_external_symlink(tmp_path: Path, member: str) -> None:
+    """A valid hash does not authorize reading outside the retained packet."""
+    from robot_sf.benchmark.scenario_generation.continuation import read_window_checkpoint
+
+    packet = tmp_path / "packet"
+    shutil.copytree(EVIDENCE / "followup/packet", packet)
+    checkpoint = packet / "checkpoint.json"
+    record = json.loads(checkpoint.read_text())
+    companion = (
+        (packet / record["simulator_file"]).with_suffix(".json.npz")
+        if member == "simulator_payload"
+        else packet / record[member]
+    )
+    external = tmp_path / "external-payload"
+    external.write_bytes(companion.read_bytes())
+    companion.unlink()
+    companion.symlink_to(external)
+    with pytest.raises(ValueError, match="outside checkpoint packet"):
+        read_window_checkpoint(
+            checkpoint, expected_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        )
+
+
 def _run_source_pinned_runtime(mode: str, output: Path, scenario: Path | None = None) -> None:
     """Use the producer's LLVM CPU target before any Numba kernel is imported.
 

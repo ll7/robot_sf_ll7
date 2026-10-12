@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/reproduce.py",
-  "artifact_sha256": "1b10e7a8d3a1a92801c02225e012bc957206c44557c5a0fa1b4cd40954cf91b8",
+  "artifact_sha256": "086f8efab5f7d6a55543534bbd337bcf58159599762675f2167f41cd5b06f801",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

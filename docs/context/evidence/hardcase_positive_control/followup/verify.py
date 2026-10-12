@@ -45,7 +45,9 @@ def main() -> None:
         assert len(near) == 11 and near[0] == 374
         assert all(not s["rl"]["terminated"] and not s["rl"]["truncated"] for s in actual)
         assert row["outcome"] == source["outcome"]
-    gate = json.loads(next((packet / "persistence").glob("*.json")).read_text())
+    entry = json.loads((folder.parent / "entry.json").read_text())
+    gate_path = packet / "persistence" / f"{entry['scenario_id']}.persistence.json"
+    gate = json.loads(gate_path.read_text())
     assert gate["promotion"]["verdict"] == "reject"
     assert gate["exact_replay"]["status"] == "fail"
     assert len(gate["perturbation_persistence"]["cells"]) == 9

@@ -268,10 +268,15 @@ def read_window_checkpoint(path: Path, *, expected_sha256: str) -> dict[str, Any
         name = record.get(key)
         if not isinstance(name, str) or Path(name).name != name:
             raise ValueError("checkpoint companion must be a basename")
+        companion = path.parent / name
+        if not companion.resolve().is_relative_to(path.parent.resolve()):
+            raise ValueError("checkpoint companion resolves outside checkpoint packet")
         digest_key = "simulator_sha256" if key == "simulator_file" else "aux_sha256"
-        if _sha(path.parent / name) != record[digest_key]:
+        if _sha(companion) != record[digest_key]:
             raise ValueError("window checkpoint companion digest mismatch")
     simulator_payload = (path.parent / record["simulator_file"]).with_suffix(".json.npz")
+    if not simulator_payload.resolve().is_relative_to(path.parent.resolve()):
+        raise ValueError("simulator payload resolves outside checkpoint packet")
     if _sha(simulator_payload) != record["simulator_payload_sha256"]:
         raise ValueError("window simulator payload digest mismatch")
     return record

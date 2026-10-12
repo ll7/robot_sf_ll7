@@ -74,10 +74,7 @@ def run_probe(out: Path, *, max_steps: int = 600) -> dict:
         path = Path(resolve_model_path(model_id))
         expected = replay._release_artifact_metadata(model_id)
         replay._verify_resolved_release_artifact(path, expected)
-        artifacts[model_id] = {
-            "artifact": expected,
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        }
+        artifacts[model_id] = expected
     planner = replay._make_planner()
     results = []
     for seed in SEEDS:

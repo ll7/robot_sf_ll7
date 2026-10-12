@@ -280,3 +280,33 @@ def test_collector_materializes_separate_split_manifests(tmp_path: Path, split: 
     saved = yaml.safe_load(args.output.with_suffix(".seed-manifest.yaml").read_text())
     assert saved["training_master_seed"] == 20261012
     assert saved["split"] == split
+
+
+def test_collection_seed_policy_retains_train010_hardcase_filter(tmp_path: Path) -> None:
+    """A new seed policy must not expand the scientific hardcase portfolio."""
+    from argparse import Namespace
+
+    from scripts.training.collect_predictive_hardcase_data import _resolve_collection_seed_manifest
+
+    root = Path(__file__).resolve().parents[2]
+    args = Namespace(
+        training_config=root / "configs/training/predictive/dev_seedpol_forecast_collection.yaml",
+        scenario_matrix=root
+        / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+        collection_subset=None,
+        seed_split="training",
+        seed_worker_index=1,
+        seed_worker_count=2,
+        output=tmp_path / "data.npz",
+    )
+    manifest = _resolve_collection_seed_manifest(
+        args,
+        [
+            {"name": "classic_bottleneck_medium"},
+            {"name": "classic_overtaking_low"},
+        ],
+    )
+    assert set(manifest) == {"classic_bottleneck_medium"}
+    assert len(manifest["classic_bottleneck_medium"]) == 15
+    sidecar = yaml.safe_load(args.output.with_suffix(".seed-manifest.yaml").read_text())
+    assert sidecar["collection_subset"] == "hardcase"

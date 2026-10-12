@@ -35,6 +35,8 @@ accepts `--training-config configs/training/predictive/dev_seedpol_forecast_coll
 (or the prediction sibling) instead of `--seed-manifest`. Supply the existing
 matrix, output and scientific CLI settings from that config. Collection creates
 15 fresh episodes per scenario and writes a `.seed-manifest.yaml` sidecar.
+The configured hardcase matrix retains train010's `hardcase_names_contain` filter;
+custom subset matrices can declare `--collection-subset hardcase` explicitly.
 For base/hardcase collection in one run, use `--seed-worker-count 2` and distinct
 `--seed-worker-index 0` / `1`, so the two datasets use disjoint identities.
 `--seed-split selection` and `--seed-split evaluation` collect the fixed held-out

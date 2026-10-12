@@ -378,6 +378,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed-worker-index", type=int, default=0)
     parser.add_argument("--seed-worker-count", type=int, default=1)
+    parser.add_argument("--collection-subset", choices=("base", "hardcase"), default=None)
     return parser.parse_args()
 
 
@@ -396,6 +397,10 @@ def _resolve_collection_seed_manifest(
             raise ValueError("collection_episodes_per_scenario must be a positive integer")
         stream = collection_policy.stream(args.seed_worker_index, args.seed_worker_count)
         seed_manifest = {}
+        subset = getattr(args, "collection_subset", None)
+        if subset is None:
+            matrix = str(getattr(args, "scenario_matrix", ""))
+            subset = "hardcase" if matrix.endswith(collection_config["hardcase_matrix"]) else "base"
         for scenario in scenarios:
             scenario_id = str(
                 scenario.get("name")
@@ -403,6 +408,10 @@ def _resolve_collection_seed_manifest(
                 or scenario.get("id")
                 or "unknown"
             )
+            if subset == "hardcase" and not any(
+                token in scenario_id for token in collection_config["hardcase_names_contain"]
+            ):
+                continue
             seed_manifest[scenario_id] = (
                 [stream.next_seed() for _ in range(episodes)]
                 if args.seed_split == "training"
@@ -420,6 +429,7 @@ def _resolve_collection_seed_manifest(
                     "split": args.seed_split,
                     "seed_worker_index": args.seed_worker_index,
                     "seed_worker_count": args.seed_worker_count,
+                    "collection_subset": subset,
                 }
             ),
             encoding="utf-8",

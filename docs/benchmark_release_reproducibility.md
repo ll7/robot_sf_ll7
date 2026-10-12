@@ -79,8 +79,13 @@ Scientific reconstruction binds the tagged source, actual resolved manifest,
 scenario schedule, planner/checkpoint identities and exact diagnostic inputs.
 The software release lane remains separate. Evaluation seed identities are
 recorded by the frozen release contract; any release replay requires its own
-explicit authorization. Development validation uses only seeds 1001–1200 and
-does not reproduce the frozen evaluation dataset.
+explicit authorization. The general project development range is 1001–1200.
+For **0.0.8 release smoke and rehearsal**, use only authorized subsets of
+**1001–1030**, as specified by the [frozen runbook](release/0.0.8/runbook.md)
+and [D-068](release/0.0.8/decisions.md); the rehearsal validator rejects 1031
+and 1200. **SNQI-v2 calibration uses exactly 1001/1002**, with 1003 held apart
+for the N2 diagnostic. These development activities do not reproduce the frozen
+evaluation dataset.
 
 Install the tagged source's dependencies with `uv sync --all-extras --frozen` in
 an isolated checkout. Prepare and review development-only smoke inputs before
@@ -337,9 +342,11 @@ The release manifest also records:
 
 ## Smoke Validation
 
-For local development, use a reviewed development-only configuration with seeds
-1001–1200 and the authored budget for each selected scenario. The old
-`runtime_smoke_v0_5` examples document an earlier release and are not a current
+For 0.0.8 release smoke and rehearsal, use a reviewed development-only
+configuration with authorized seeds **1001–1030** and the authored budget for
+each selected scenario. The broader 1001–1200 range applies to general project
+development, not this release rehearsal contract. Calibration uses 1001/1002.
+The old `runtime_smoke_v0_5` examples document an earlier release and are not a current
 approved reproduction route. Smoke success is runtime evidence only and does
 not establish the 0.0.8 benchmark result or admit SNQI ranking.
 

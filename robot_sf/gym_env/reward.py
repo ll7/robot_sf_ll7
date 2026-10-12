@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib
 import math
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import partial
 
@@ -751,20 +752,28 @@ def _merge_curriculum_stage_kwargs(
     Returns:
         A fresh kwargs map; input dictionaries are never modified.
     """
-    resolved = dict(default_kwargs or {})
+    resolved = deepcopy(dict(default_kwargs or {}))
+    _validate_curriculum_weight_mapping(resolved)
     if stage_kwargs is None:
         return resolved
     if not isinstance(stage_kwargs, Mapping):
         raise ValueError("reward_curriculum stage reward_kwargs must be a mapping")
-    overrides = dict(stage_kwargs)
+    overrides = deepcopy(dict(stage_kwargs))
+    _validate_curriculum_weight_mapping(overrides)
     if merge_mode == "merge" and "weights" in overrides:
-        base_weights = resolved.get("weights") or {}
+        base_weights = resolved.get("weights", {})
         stage_weights = overrides["weights"]
         if not isinstance(base_weights, Mapping) or not isinstance(stage_weights, Mapping):
             raise ValueError("reward_curriculum weights must be mappings in merge mode")
         overrides["weights"] = {**base_weights, **stage_weights}
     resolved.update(overrides)
     return resolved
+
+
+def _validate_curriculum_weight_mapping(kwargs: Mapping[str, object]) -> None:
+    """Reject every present non-mapping weight value, including falsy inputs."""
+    if "weights" in kwargs and not isinstance(kwargs["weights"], Mapping):
+        raise ValueError("reward_curriculum weights must be mappings")
 
 
 def _log_curriculum_stage_weights(

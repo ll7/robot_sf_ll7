@@ -3,7 +3,10 @@
 `reward_curriculum.stage_weight_merge` controls how a stage's nested `reward_kwargs.weights`
 interacts with top-level reward weights. The default is `merge`: inherit the top-level map,
 then apply stage overrides. Profile defaults fill only weights missing from both maps.
-Input mappings are copied. Invalid modes and non-mapping merge inputs fail at construction.
+Input kwargs are deep-copied per stage, so later caller mutations and changes to another
+stage's nested maps cannot change its rewards. Invalid modes and every present non-mapping
+`weights` value fail at construction in both modes, including null, false, zero, strings,
+and lists. Empty weight mappings remain valid: merge inherits, replace uses profile defaults.
 
 ```yaml
 reward_curriculum:

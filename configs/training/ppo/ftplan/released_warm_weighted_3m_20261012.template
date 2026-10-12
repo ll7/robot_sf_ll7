@@ -1,7 +1,7 @@
 # Prepared dependent template, excluded from the canonical runnable *.yaml inventory.
 # Prepared pilot only. Do not launch before the controlled seed replication reports.
 # Preserve the source observation/action contract; no alignment-lane config changes.
-base_config: ../ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml
+base_config: ../expert_ppo_release_contract_b_seed1002.yaml
 policy_id: ppo_ftplan_released_warm_weighted_3m_20261012
 seeds: []
 randomize_seeds: true
@@ -10,7 +10,7 @@ training_master_seed: 100001
 ppo_initialization_seed: 100001
 training_seed_telemetry: true
 total_timesteps: 3000000
-num_envs: 22
+num_envs: 18
 worker_mode: subproc
 scenario_sampling:
   strategy: random

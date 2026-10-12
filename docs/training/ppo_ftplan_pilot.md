@@ -7,51 +7,48 @@ PR file is changed.
 
 The machine-readable [protocol](../../configs/training/ppo/ftplan/pilot_protocol_20261012.yaml)
 and [prepared training template](../../configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template)
-bind the released checkpoint (job 11724, W&B `ibo3aqus`), three initialization seeds
+bind the released plain-PPO checkpoint `ppo_release_robot_b1002_last_20261001`, three initialization seeds
 100001/100002/100003, 3M steps per seed, and a factor-two training oversample of
 bottleneck, doorway, exiting elevator/room and frontal approach. Sampling factors
 are a predeclared pilot choice, not optimized on released results. Training layouts
 use the training-only range under each logged master. Initialization changes future
 optimizer/minibatch draws; the initial deterministic actor/value weights remain the
-same April policy in all three runs. The template is deliberately named
+same B1002 policy in all three runs. The template is deliberately named
 `.template`: it is dependent preparation, not a canonical runnable `.yaml`
 leaf. The stock 149-leaf inventory and its load checks remain unchanged. The
 launcher materializes an isolated runtime YAML only after its dependency gates.
 
-The source is the **April issue-791** checkpoint named in the author task, not the
-plain PPO checkpoint in release 0.0.8. The April source's historical training cap is
-**3.0 m/s with reverse**, with a configured reward curriculum. This prepared recipe
-inherits that 3.0 m/s cap; any benchmark-plant migration still needs the reviewed
-alignment contract. Plain PPO in 0.0.8 uses the **October B1002** retrain
-`ppo_release_robot_b1002_last_20261001`, trained at **2.0 m/s, no reverse and no
-curriculum** ([baseline](../../configs/baselines/ppo_release_robot_0_0_8_cpu.yaml),
+The default and only source is **October B1002**, the released plain PPO in 0.0.8:
+**2.0 m/s, no reverse, no curriculum, `route_completion_v3`, 18 workers and CNN
+32/64/64** ([baseline](../../configs/baselines/ppo_release_robot_0_0_8_cpu.yaml),
 [recipe](../../configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml)).
-Guarded PPO instead uses the **March BR06 v3** checkpoint
-`ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200`, whose historical training
-cap is 3.0 m/s ([guarded baseline](../../configs/algos/guarded_ppo_release_v0_0_8.yaml)).
-Their release adapters cap target speed at 2.0 m/s; evaluation cap and source training
-cap are different provenance fields.
+Its pinned GitHub release and complete W&B artifact are recorded in the model
+registry and protocol. The template inherits that recipe and pins 18 workers;
+its new training seeds replace the historical source recipe's seed. The April
+issue-791 policy is not this comparator, and the March BR06 v3 policy belongs to
+guarded PPO. No BR06 arm is retained: this pilot tests improvement of the plain
+PPO comparator, and no separate BR06 comparison is needed for that question.
 
-Use the released observation/action contract. The canonical trainer must reject
-any space mismatch. The initialization check found released linear action bounds
-±3 versus current native acceleration bounds ±1. An explicit bounds-only migration
-is available in the warm-start API, but its use requires a reviewed action-contract
-receipt bound to the exact source head and released checkpoint, with target bounds
-and `target_semantics: acceleration`, `mapping: bounds_only`, and a
-`review_artifact` carrying path/digest/hub/W&B readback references. Different
-action-semantic mappings remain with the alignment lane. No such approval receipt
-is asserted in this unsubmitted packet. This pilot does not silently remap the released policy to the
-alignment lane's new plant or action schema. If a migration is needed, stop and
-prepare a separately reviewed conversion before admission. The inherited recipe
-also retains its historical reward/curriculum settings: this pilot isolates warm
-initialization plus family sampling, and does not claim to implement the reward
-lane's improvements. Record the resolved settings alongside every segment.
+Preserve the B1002 observation/action contract. It uses velocity-delta actions
+with serialized bounds `[-2, -1]` to `[2, 1]`; the canonical trainer rejects any
+space mismatch. The launcher requires an action-contract receipt bound to the
+exact reviewed source head and checkpoint digest, with `mapping: identity`,
+`target_semantics: velocity_delta`, `target_action_low: [-2, -1]`,
+`target_action_high: [2, 1]`, `max_linear_speed: 2.0`, `allow_backwards: false`,
+and a `review_artifact` with path/digest/hub/W&B readback references. It does not
+use the generic bounds-migration option in the warm-start API. A new observation
+or action schema would require separate reviewed conversion and parity proof.
+The inherited source reward remains `route_completion_v3` without curriculum;
+this pilot does not incorporate the reward lane's proposed improvements. Record
+the resolved settings alongside every segment. The benchmark plant/action parity
+receipt remains an admission gate, including time step and acceleration limits.
 
-The corrected five-dev-seed diagnostic reports **5/5** for the absolute-target
-signature: all 20 sampled commands target 2 m/s and all five trajectories have
-static contact. Raw Gaussian outputs are velocity deltas; the previous 1/5 threshold
-and "partly slows" interpretation were incorrect. The optional obstacle feature
-remains implementation work tracked on #9609, outside this custody/inventory repair.
+The corrected five-dev-seed diagnostic for the **April issue-791 checkpoint**
+reports **5/5** for the absolute-target signature: all 20 sampled commands target
+2 m/s and all five trajectories have static contact. That historical result does
+not establish B1002's wall-approach behavior. B1002 requires its own diagnostic
+before interpreting or adding an obstacle feature; that follow-up remains on
+#9609. The prepared B1002 pilot has no obstacle-observation extension.
 
 The [Slurm script](../../SLURM/ftplan/released_ppo_pilot.slurm) is staged in 1M-step
 segments. **Do not submit before the controlled seed-policy replication reports**
@@ -117,13 +114,18 @@ before the next segment's selection receipt. Register new checkpoints only with
 those durable pointers and hashes. Record all attempts in the extra-tuning ledger;
 no release replacement or manuscript claim follows automatically.
 
-Job 11724 used 8h04m per 10M steps on one L40S with 22 workers. For 3 × 3M steps,
-the nominal training cost is **7.26 L40S GPU-hours**, or **3.63–10.89 hours** at the
-issue's ±50% planning uncertainty; reserve **12 GPU-hours** pending a measured first
-segment. Nominal training core-hours are 159.7 (22 workers). Rollout rounding and
-startup add cost. These are extrapolations, not a new throughput measurement or an
-A30 equivalence claim. CPU evaluation is separate and unmeasured: at most 14,400
-selection episodes (one common baseline plus nine checkpoint evaluations) and
-4,320 report episodes. Measure the baseline's CPU cost and update the estimate
-before admitting the full pilot; do not keep the GPU allocation while waiting for
-CPU selection.
+There is no measured B1002 fine-tuning throughput in this packet. As a provisional
+cross-recipe planning proxy, job 11724 used 8h04m per 10M steps on one L40S with
+22 workers. Scaling 3 × 3M steps by that rate and a heuristic **22/18 worker ratio**
+gives **8.87 L40S GPU-hours**, or **4.44–13.31 hours** at ±50%; reserve **15 GPU-hours**.
+This updates the previous 7.26-hour, 22-worker estimate. B1002's smaller CNN and
+changed scenario lengths may change throughput in either direction; neither the
+worker scaling nor an A30 equivalence is measured. Re-estimate after the first
+1M-step segment, before admitting later segments. Nominal worker core-hours are
+159.7 (18 workers); allocated core-hours also include launcher/evaluation overhead.
+Rollout rounding and startup add cost.
+
+CPU evaluation is separate and unmeasured: at most 14,400 selection episodes
+(one common baseline plus nine checkpoint evaluations) and 4,320 report episodes.
+Measure the baseline's CPU cost before admitting the full pilot; release the GPU
+allocation while waiting for CPU selection.

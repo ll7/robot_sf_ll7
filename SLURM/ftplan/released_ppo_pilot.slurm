@@ -122,18 +122,26 @@ if receipt['fallback_used'] or receipt['execution_errors']:
     raise ValueError('Selection degraded or failed')
 if receipt['completed_segment'] != segment - 1:
     raise ValueError('Selection receipt is from the wrong segment')
-source, provenance = released_checkpoint('ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417')
+protocol = yaml.safe_load(Path('configs/training/ppo/ftplan/pilot_protocol_20261012.yaml').read_text())
+source, provenance = released_checkpoint(protocol['source']['model_id'])
 action_contract = json.loads(Path(os.environ['FTPLAN_ACTION_CONTRACT_RECEIPT']).read_text())
 verified(action_contract['review_artifact'])
 if action_contract['source_head'] != os.environ['FTPLAN_SOURCE_HEAD'] or action_contract['source_checkpoint_sha256'] != provenance['sha256']:
     raise ValueError('Action contract is not bound to this source/checkpoint')
-if action_contract['mapping'] != 'bounds_only' or action_contract['target_semantics'] != 'acceleration':
-    raise ValueError('Other action-semantic migrations require the alignment lane integration')
+if action_contract['mapping'] != 'identity' or action_contract['target_semantics'] != 'velocity_delta':
+    raise ValueError('B1002 requires unchanged velocity-delta semantics')
+if action_contract['max_linear_speed'] != 2.0 or action_contract['allow_backwards'] is not False:
+    raise ValueError('B1002 requires the benchmark 2 m/s no-reverse plant')
 target_space = spaces.Box(np.asarray(action_contract['target_action_low'], dtype=np.float32), np.asarray(action_contract['target_action_high'], dtype=np.float32))
+expected_space = spaces.Box(np.array([-2.0, -1.0], dtype=np.float32), np.array([2.0, 1.0], dtype=np.float32))
+if target_space != expected_space:
+    raise ValueError('B1002 requires unchanged action bounds')
 if segment == 1:
     if receipt['checkpoint_sha256'] != provenance['sha256']:
         raise ValueError('First segment requires the released baseline selection')
-    model, _ = load_warm_start(source, init_seed=seed, target_action_space=target_space)
+    model, _ = load_warm_start(source, init_seed=seed)
+    if model.action_space != target_space:
+        raise ValueError('B1002 action space differs from the reviewed benchmark contract')
     checkpoint = Path(os.environ['ROBOT_SF_ARTIFACT_ROOT']) / 'warm.zip'
     model.save(checkpoint)
 else:

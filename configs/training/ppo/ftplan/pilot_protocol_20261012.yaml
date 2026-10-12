@@ -2,23 +2,19 @@ schema: ppo-ftplan-pilot.v1
 state: prepared_not_submitted
 author_approval_date: '2026-10-12'
 source:
-  model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
-  job: 11724
-  wandb_run: ll7/robot_sf/ibo3aqus
+  model_id: ppo_release_robot_b1002_last_20261001
+  release_role: plain_PPO_0_0_8
+  source_recipe: configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml
+  wandb_complete_artifact: ll7/robot_sf/ppotrain-b-seed1002-20260930-complete:v0
   normalization: none
-  historical_training_linear_speed_cap_m_s: 3.0
-  historical_training_reverse_enabled: true
-  configured_reward_curriculum: true
-  role: April_issue791_requested_source_not_plain_PPO_release_0_0_8
-release_0_0_8_sources:
-  plain_ppo:
-    model_id: ppo_release_robot_b1002_last_20261001
-    training_linear_speed_cap_m_s: 2.0
-    training_reverse_enabled: false
-    configured_reward_curriculum: false
-  guarded_ppo:
-    model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
-    historical_training_linear_speed_cap_m_s: 3.0
+  training_linear_speed_cap_m_s: 2.0
+  training_reverse_enabled: false
+  configured_reward_curriculum: false
+  reward_name: route_completion_v3
+  action_semantics: velocity_delta
+  num_envs: 18
+  cnn_channels: [32, 64, 64]
+additional_source_arms: []
 training_config: configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template
 initialization_seeds: [100001, 100002, 100003]
 training_master_seeds: [100001, 100002, 100003]
@@ -52,17 +48,19 @@ prerequisites:
   - seed_policy_and_spawn_receipt_implementation_independently_reviewed_and_merged
   - warm_start_and_family_weighting_implementation_independently_reviewed_and_merged
   - checkpoint_environment_observation_and_action_spaces_match_without_silent_conversion
-  - predictive_model_loaded_without_fallback
+  - plain_ppo_predictive_foresight_disabled
   - behaviour_receipt_and_hosted_required_checks
 cost:
-  reference: issue_9628_job11724_10m_steps_8h04m_one_l40s_22_workers
-  training_l40s_gpu_hours: 7.26
+  reference: issue_9628_job11724_10m_steps_8h04m_one_l40s_22_workers_cross_recipe_proxy
+  estimation: 9m_steps_times_8h04m_per_10m_times_22_over_18_workers
+  measured_b1002_throughput: false
+  training_l40s_gpu_hours: 8.87
   training_uncertainty_fraction: 0.5
-  rounded_training_budget_l40s_gpu_hours: 12
-  training_core_hours_nominal: 159.7
+  rounded_training_budget_l40s_gpu_hours: 15
+  training_worker_core_hours_nominal: 159.7
   cpu_selection_episodes_max: 14400
   cpu_report_episodes_max: 4320
   evaluation_cpu_hours: unmeasured_measure_first_baseline
-  note: no_hardware_equivalence_claim_A30_or_other_devices_require_a_throughput_update
+  note: heuristic_worker_scaling_and_smaller_CNN_are_unmeasured_reestimate_after_first_segment_no_hardware_equivalence_claim
 claim_boundary: development_tuning_only_no_release_or_paper_admission
-obstacle_observation_feature: implementation_followup_issue_9609_corrected_target_signature_5_of_5
+obstacle_observation_feature: deferred_issue_9609_April_probe_does_not_establish_B1002_signature

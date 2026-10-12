@@ -297,7 +297,8 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # The development-only train010 restart adds two runnable leaves: the fixed
     # arm (runnable on its own) and the safety overlay that inherits it.
     # Seed-policy successors replace their train010 bases as runnable leaves.
-    assert len(config_paths) == 150
+    # Six controlled leaves replace their shared seedpol safety parent as a runnable leaf.
+    assert len(config_paths) == 155
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",

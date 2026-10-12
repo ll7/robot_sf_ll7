@@ -114,7 +114,7 @@
   },
   "replay_scope": {
     "kind": "source_bound_window",
-    "receipt_sha256": "46899c3407cd0e56b3232e3741f06981aaaf3b5523b30db46a8201a6cb22cb1e",
+    "receipt_sha256": "df799619a194bf7a8cd6684735e4e9d586c30080068d5ba752328d90c8ae4e03",
     "replay_episode_ids": [
       "classic_cross_trap_high--1001--29ae7331749e5a6d",
       "classic_cross_trap_high--1001--29ae7331749e5a6d"

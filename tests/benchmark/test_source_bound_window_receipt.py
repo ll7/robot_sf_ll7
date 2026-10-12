@@ -54,6 +54,7 @@ def test_retained_seed1001_window_receipt_verifies_actual_replays() -> None:
         ("missing", "parity proof/schema invalid"),
         ("digest", "source trace/bounds mismatch"),
         ("repeated_run", "independent replay run identities"),
+        ("locator", "window artifact locator mismatch"),
     ],
 )
 def test_window_receipt_refuses_missing_false_or_duplicate_proof(
@@ -65,8 +66,10 @@ def test_window_receipt_refuses_missing_false_or_duplicate_proof(
         del receipt["parity_proof"]
     elif mutation == "digest":
         receipt["parity_proof"]["source_window_trace_sha256"] = "0" * 64
-    else:
+    elif mutation == "repeated_run":
         receipt["bindings"]["replay_manifests"][1] = receipt["bindings"]["replay_manifests"][0]
+    else:
+        receipt["bindings"]["planner_config"]["resolved_path"] = "other_config.yaml"
     path = tmp_path / "receipt.json"
     path.write_text(json.dumps(receipt))
     with pytest.raises(ScenarioPersistenceValidationError, match=reason):

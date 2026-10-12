@@ -1,7 +1,8 @@
 # Seed-1001 source-bound window admission
 
-The observed critical-case chain passes through versioned corpus admission;
-the final evidence-registry check fails and PR #10334 remains draft. PR
+The observed critical-case chain passes through versioned corpus admission.
+All ten registry findings were remediated under the maintainer disposition;
+the registry has returned to 492 findings without adding debt. PR
 [#10331](https://github.com/ll7/robot_sf_ll7/pull/10331) is ready for review and
 ends at replay parity; corpus admission is outside its scope and tracked in
 [#9652](https://github.com/ll7/robot_sf_ll7/issues/9652). The separate stacked PR
@@ -49,9 +50,9 @@ run manifests, map/config/model bytes, catalog entry, materialized scenario,
 typed checkpoint and companions. The verifier reads those files and recomputes
 parity/event facts; a receipt asserting pass is insufficient. Required source
 and replay Git objects must be available. The six continuation implementation
-files are unchanged after the recorded replay revision. Later commits add only
-evidence/catalogue and task-guard documentation/formatting, so completed tests
-and replay proofs remain applicable.
+files are unchanged after the recorded replay revision. Later updates correct custody metadata and types outside that six-file
+checkpoint inventory; the retained numerical replay proofs remain applicable,
+and affected tests were rerun after remediation.
 
 ## Per-stage results and exact commands
 
@@ -71,7 +72,7 @@ artifact edits occurred.
 | Idempotent re-admission / interrupted-index recovery | PASS | Same admission command repeated: `already_admitted`; original case bytes preserved; regression test verifies mtime/bytes and index recovery. |
 | New tests and tests touching changed modules | PASS | Focused command below: **49 passed, 3 simulator-interlock skips** in 16.30 s. |
 | Full benchmark comparison against main | PASS for zero introduced failures | Full command below: all **132** bad IDs/kinds match the completed main audit; **zero new**, zero missing baseline IDs. Raw pytest exit remains 1. |
-| Final evidence-registry ratchet / readiness | FAIL; author disposition required | Two new config-locator findings plus eight replay-parent findings; evidence-tree baseline refresh requires maintainer dispositions. Commands and diagnosis below. PR #10334 stays draft. |
+| Final evidence-registry ratchet / readiness | PASS after remediation | All ten new locator/custody findings removed; existing 492 finding counts unchanged. Only derived evidence-tree inventory refreshed. Commands and proof below. |
 | Robust-scenario promotion, separate from observed-case admission | FAIL / REJECT, unexecuted grid | Nine unknown cells; no cell was converted into pass or bypassed. This PR does not claim robust promotion. |
 
 The already-finished source/replay command is retained for reproducibility and
@@ -212,70 +213,129 @@ Ruff lint/format and local docs/evidence integrity pass. Parent evidence catalog
 registration and task-guard docstring/format fixes are documentation-only and
 also live in PR #10331, so its replay fix can be reviewed independently.
 
-The final evidence-registry ratchet is the first failing delivery gate. Exact
-check on the published admission evidence revision:
+The maintainer/orchestrator disposition was **REMEDIATE all ten findings; do
+not baseline any**. All ten were removed, not grandfathered:
+
+- Every config hash now has an explicit repository-relative `resolved_path` next
+  to its existing `path`; the receipt schema permits it and the verifier refuses
+  a disagreement between the two locators. Both native manifests resolve their
+  schema/scenario/config inputs to committed paths, with sizes.
+- Both uncommitted raw rows have a durable lane-host location, SHA-256 and size:
+  `imech156-u:/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl`
+  and `window_replay_2.jsonl`, **206,932 bytes each**. Native artifact status remains
+  `available`. The original native provenance validator passes both manifests.
+- Exact offline regeneration is recorded in both manifests:
+
+```bash
+python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py \
+  --output /home/luttkule/lanes/hardcase/custody_raw
+```
+
+This reverses only the archived literal producer-prefix substitution and verifies
+original raw SHA-256 values before writing. Both original digests are reproduced:
+`1a2f954113d3a240d96dadc7c293da13008d128066217dae7bf4b9b3b4fffa50` and
+`746b454f84736b729dea74ad419d2384bc3e41cac34b78ee5e7e75a170f99286`. No
+simulation or reset is needed. Regeneration refuses to overwrite different bytes.
+
+Custody-only manifest changes were rebound in the receipt, its candidate, the
+first case, persistence receipt and corpus index. Case identity, original
+discovery, admission commit, scenario/checkpoint bytes, all numeric trajectories
+and event proof remain unchanged. Previous receipt/case custody hashes are
+recorded in `admission_evidence.json`; prior committed versions remain in Git.
+The normal admission API still never replaces an existing case. Its idempotency
+regression passes after this explicitly authorized custody repair.
+
+The prior debt baseline digest was
+`7ad52af3e4328abdefb37bc89471dec0c84c089184a8d79757db1e587901aa71`.
+The regenerated machine baseline has **exactly the same `findings_by_path` and
+492 total findings**. No hardcase path was added to that finding map; no review
+companion or waiver was added. Only inventory/generation metadata changed to
+include the committed evidence tree (including the offline restorer).
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
-  scripts/dev/evidence_registry_ratchet.py --check \
-  --candidate-head e485939a9cf128446264e6098b6ada37a170500d \
-  --frozen-base cfa2bf6b5a16f0c3aa9a6e99ebc1268e400153b2 \
-  --report-output ../admission_registry_report.json
+  scripts/dev/evidence_registry_ratchet.py --write-baseline
 scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
-  scripts/dev/evidence_registry_ratchet.py --write-baseline --prewrite-review \
-  --review-template ../admission_registry_review_candidate.yaml
+  scripts/dev/evidence_registry_ratchet.py --check --report-output ../remediation_registry_final.json
+scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+  scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main
+scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run ruff check .
+scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run ruff format --check .
+uvx ty@0.0.58 check . --python /home/luttkule/lanes/hardcase/typing-venv \
+  --output-format gitlab --exit-zero > ../remediation_admission_pinned_ty.json
+UV_PROJECT_ENVIRONMENT=/home/luttkule/lanes/hardcase/typing-venv uv run --no-sync python \
+  scripts/dev/ty_advisory_ratchet.py --check --ty-output ../remediation_admission_pinned_ty.json
 ```
 
-The check reports **502 findings vs 492 baseline**, and **3,115 evidence files
-vs 3,066 baseline**. The two new findings are `hash_without_artifact_path` on
-`window_receipt.json` and the first immutable corpus case. Both concern the
-receipt's planner-config `{path, sha256}`: the generic registry reader excludes
-`configs/...` paths unless they carry `resolved_path`. The source-bound verifier
-independently validates that file and its original Git bytes; the file is
-available, its digest matches, and this is not a parity failure.
+The type environment is a separate Python 3.12 environment with frozen all-extras
+dependencies, matching CI. The gate pins **ty 0.0.58**; exploratory runs with the
+project's newer ty or the partial simulation dependency profile were not accepted
+as the CI equivalent. The accepted check passes: benchmark general findings
+**1,683 ≤ 1,688**, total **6,430 ≤ 6,435** (exception-adjusted **6,427 ≤ 6,432**);
+no module increases. Neither the typing baseline nor its exceptions were changed.
+Typing fixes describe the existing episode metadata, mutable recipe dictionaries
+and map point/triangle types. All six checkpoint-bound runtime files remain
+byte-identical to the actual replay commit, so numerical replay proof stays valid.
 
-The replay parent contributes eight findings on the two native provenance
-manifests: each has one identical config-locator finding and three
-`uncommitted_artifact_missing_location` findings for normalized
-`<repository_root>` schema/scenario/uncompressed-row paths. The actual retained
-scenario/schema and compressed row are bound in the new receipt, but this does
-not make those original manifest locator fields conform to the generic registry.
-Both native manifests remain unchanged so their previously recorded hashes and
-the immutable admitted discovery evidence stay valid.
+Touched tests include every previous admission/persistence check plus the adapter,
+scenario-generation and typed-episode checks affected by the parent annotation
+corrections, and four new custody regression cases:
 
-The pre-write guard returns a **non-approving `needs_human_review` template**
-and refuses to replace the baseline. Its source explicitly requires a maintainer
-to choose `baseline` or `remediate` for each new path/count. No baseline or human
-approval companion was changed; no approval was fabricated. Concrete templates
-for replay and admission are retained privately as
-`replay_registry_review_candidate.yaml` and
-`admission_registry_review_candidate.yaml`. The admission template enumerates
-exactly these four paths and ten findings; no unrelated increase is proposed.
-Existing evidence-tree refresh issue
-[#6839](https://github.com/ll7/robot_sf_ll7/issues/6839) owns the bookkeeping
-handoff, with receipt integration linked to #5600. Author disposition of this
-bounded custody/locator delta is required before refresh, a passing registry
-check and admission PR readiness. The replay PR stays ready per the user's
-explicit instruction; the new PR was returned to draft after this final check.
+```bash
+HARDCASE_NO_TEST_SIMULATION=1 ROBOT_SF_PYTEST_SEED_GUARD=1 \
+ROBOT_SF_PYTEST_SEED_AUDIT=/home/luttkule/lanes/hardcase/remediation_focused_seed_audit.jsonl \
+PYTHONPATH=/home/luttkule/lanes/hardcase/test_guard:$PWD/tests/support:$PWD \
+scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run pytest \
+  tests/tools/test_hardcase_window_custody.py \
+  tests/adversarial/test_counterexample_corpus.py \
+  tests/adversarial/test_adversarial_package_imports.py \
+  tests/benchmark/test_source_bound_window_receipt.py \
+  tests/benchmark/test_scenario_persistence_gate.py \
+  tests/benchmark/test_pipeline_persistence_gate_wiring.py \
+  tests/benchmark/test_map_runner_preflight_profiles.py \
+  tests/benchmark/test_generated_scenario_replay_adapter.py \
+  tests/benchmark/test_data_driven_scenario_generation.py \
+  tests/benchmark/test_map_runner_episode_typed.py \
+  tests/benchmark/test_map_runner_decomposition_helpers.py -q --tb=short
+```
 
-Hosted typing CI at the published implementation revision also fails with exactly the
-same findings as the replay parent: docs **4 → 67**, benchmark **1,688 → 1,698**,
-exception-adjusted total **6,432 → 6,505**. Admission added no typing findings
-relative to that parent. The full-suite baseline comparison above is against
-main; this separate typing comparison is against the replay parent. No baseline
-was raised to silence the typing check. New pushed documentation revisions may
-still have hosted checks pending. Review readiness does not claim green hosted
-CI, domain approval or merge readiness. The inherited typing debt is tracked on
-the replay repair issue #10330.
+Result: **156 passed, 10 simulator-interlock skips**. The new custody test failed
+on all four real files before remediation (**4 failed in 0.35 s**), then passed.
+It protects real hash/location resolution; dropping a locator recreates the actual
+registry failure; previous replay tests did not invoke the generic registry; it
+uses the existing production parser with no test-only seam. The added alias
+negative protects against contradicting `path`/`resolved_path`; existing path
+escape tests did not cover two explicit locators. The earlier completed full
+benchmark comparison is retained, not misrepresented as a new post-remediation
+run; this follow-up requested the touched tests and required gates.
+
+PR contract equivalent uses the actual published body, latest replay base and
+Git-derived changed/added lists, without posting a CI comment:
+
+```bash
+GH_TOKEN="$(gh auth token)" scripts/dev/run_worktree_shared_venv.sh \
+  --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+  scripts/ci/pr_contract_check.py --pr-body-file ../admission_pr_body.md \
+  --pr-title 'feat(corpus): admit source-bound replay-verified critical windows' \
+  --pr-number 10334 --repo ll7/robot_sf_ll7 \
+  --changed-files-file ../remediation_changed_files.txt \
+  --added-files-file ../remediation_added_files.txt \
+  --base-ref lane/hardcase-positive-control
+```
+
+The registry, documentation, Ruff lint/format, pinned typing ratchet, PR contract
+equivalent and touched tests must all pass before readiness. No new public
+host/driver/lab issue, frozen edit, sealed replay/reset, agent fan-out or merge
+occurs in this remediation. #6839/#5600 record the REMEDIATE outcome.
 
 The minimal slice deliberately leaves broader #9652 historical import and
 future-planner status recomputation for follow-up. Unknown feasibility and
 perturbation persistence remain explicit. Only this supported analytic
 social-force continuation is accepted by receipt v1; unsupported planners or
 missing/mismatched artifacts fail closed. Both PRs remain open and unmerged.
-The next action is maintainer disposition of the prepared registry delta and
-review of the replay fix, followed by the admission slice once its final gate
-passes; inherited typing CI must also be resolved before merge. No further campaign
+The next action is review of the replay fix and then the separate admission
+slice. The registry disposition is fulfilled and the local required checks pass;
+review readiness does not claim domain approval or authorize a merge. No further campaign
 or robust promotion is authorized by this evidence.
 
 TERMINAL=AUTHOR_DECISION_REQUIRED

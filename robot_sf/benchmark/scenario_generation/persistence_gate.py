@@ -35,11 +35,13 @@ from robot_sf.errors import RobotSfError
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from jsonschema.protocols import Validator
+
 PERSISTENCE_SCHEMA_VERSION = "generated_scenario_persistence.v1"
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "generated_scenario_persistence.v1.json"
 )
-_SCHEMA_VALIDATOR: Draft202012Validator | None = None
+_SCHEMA_VALIDATOR: Validator | None = None
 _REQUIRED_EPISODE_FIELDS = ("episode_id", "source_seed", "source_map")
 
 PASS = "pass"
@@ -324,6 +326,8 @@ def extract_episode_steps(episode: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def resolve_bound_window_artifact(root: Path, binding: Mapping[str, str]) -> Path:
     """Return a verified repository-relative artifact without path escape."""
+    if binding.get("resolved_path", binding["path"]) != binding["path"]:
+        raise ScenarioPersistenceValidationError("window artifact locator mismatch")
     relative = Path(binding["path"])
     path = (root / relative).resolve()
     if relative.is_absolute() or not path.is_relative_to(root) or not path.is_file():

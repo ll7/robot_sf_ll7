@@ -1,8 +1,8 @@
 {
   "admission_policy": "9652 observed replay-verified critical case; independent perturbation persistence is a separate5600robust promotion gate",
-  "base_replay_documentation_head": "cfa2bf6b5a16f0c3aa9a6e99ebc1268e400153b2",
+  "base_replay_documentation_head": "0fcc9d94f",
   "base_replay_head_at_creation": "748830c03fee517701a4ec98b8173ee7a30e17ba",
-  "case_file_sha256": "adc9a15aa0a5bba1b48edc8038a2b38cccae9ef77ebe4a893d0f76b60e16f778",
+  "case_file_sha256": "3183f07088104fc43f41d9cd90451e554571fcd9299442efdba370232dd19bd4",
   "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
   "commands": {
     "admit": "scripts/tools/admit_counterexample_window.py --candidate docs/context/evidence/hardcase_positive_control/admission/candidate.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --corpus docs/context/evidence/hardcase_positive_control/admission/corpus",
@@ -10,20 +10,35 @@
   },
   "corpus_cases": 1,
   "critical_event_reproduced": "pass",
+  "custody_remediation": {
+    "annotation_authority": "maintainer/orchestrator delegated disposition in this task",
+    "case_identity_unchanged": true,
+    "discovery_unchanged": true,
+    "disposition": "REMEDIATE all ten; no additional debt",
+    "new_episodes": 0,
+    "new_resets": 0,
+    "previous_case_file_sha256": "adc9a15aa0a5bba1b48edc8038a2b38cccae9ef77ebe4a893d0f76b60e16f778",
+    "previous_receipt_sha256": "46899c3407cd0e56b3232e3741f06981aaaf3b5523b30db46a8201a6cb22cb1e",
+    "receipt_sha256": "df799619a194bf7a8cd6684735e4e9d586c30080068d5ba752328d90c8ae4e03",
+    "traces_unchanged": true
+  },
   "exact_replay": "pass",
   "feasibility": "unknown",
   "final_evidence_registry": {
-    "admission_pr_readiness": "draft",
-    "baseline_changed": false,
-    "baseline_evidence_files": 3066,
+    "admission_pr_readiness": "ready only after all required checks pass",
     "baseline_findings": 492,
-    "evidence_files": 3115,
-    "findings": 502,
-    "inherited_parent_locator_findings": 8,
-    "introduced_locator_findings": 2,
-    "prewrite_review": "needs_human_review; not approved",
-    "status": "fail",
-    "tracking_issue": 6839
+    "disposition": "REMEDIATE; no new finding baselined",
+    "evidence_files": 3116,
+    "finding_map_unchanged": true,
+    "findings": 492,
+    "introduced_locator_findings": 0,
+    "remediated_parent_findings": 8,
+    "remediated_receipt_case_findings": 2,
+    "review_companion_changed": false,
+    "status": "pass",
+    "tracking_issue": 6839,
+    "tree_inventory_refreshed": true,
+    "typing_baseline_changed": false
   },
   "first_admission": "admitted",
   "implementation_commit": "4fe503aadbaed2bd48dc82c58509bde71b4af2d8",
@@ -57,6 +72,8 @@
   "second_admission": "already_admitted",
   "validation": {
     "focused": "49 passed, 3 task-interlock skips in16.30s",
-    "full_benchmark": "12122 passed,119 failed,340 skipped,13 errors; all132 IDs/kinds match main; zero introduced;25m21s"
+    "full_benchmark": "12122 passed,119 failed,340 skipped,13 errors; all132 IDs/kinds match main; zero introduced;25m21s",
+    "remediation_focused": "156 passed,10 task-interlock skips in17.95s",
+    "ty_pinned": "ty0.0.58/all-extras Python3.12 PASS; general6430<=6435; adjusted6427<=6432"
   }
 }

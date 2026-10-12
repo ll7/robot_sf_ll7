@@ -14,16 +14,17 @@
     },
     "planner_config": {
       "path": "configs/algos/social_force_release_v0_0_8.yaml",
+      "resolved_path": "configs/algos/social_force_release_v0_0_8.yaml",
       "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773"
     },
     "replay_manifests": [
       {
         "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl.provenance.json",
-        "sha256": "f7b21b42b60c2958b90dc8d93ce7cb0f8713e96550f3515057dfeb11f0810264"
+        "sha256": "1d16276660c606191dcf9948138e060be3acde8fb8a3e9eae1eac6d22ac00b7c"
       },
       {
         "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl.provenance.json",
-        "sha256": "81c25d063c49dfac23250c5d15216a43f511fc691b8de39e00d938ce274073a2"
+        "sha256": "efe55dc955875c5dde7edf3506a25cb326f6a4ba40e476b40a395dc6f8f24f04"
       }
     ],
     "replays": [

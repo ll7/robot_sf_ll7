@@ -66,6 +66,11 @@
               "minLength": 1,
               "type": "string"
             },
+            "resolved_path": {
+              "description": "Explicit repository artifact locator; must equal path. Optional for existing v1 receipts.",
+              "minLength": 1,
+              "type": "string"
+            },
             "sha256": {
               "pattern": "^[0-9a-f]{64}$",
               "type": "string"

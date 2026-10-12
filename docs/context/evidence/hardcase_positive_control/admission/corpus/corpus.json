@@ -1,7 +1,7 @@
 {
   "cases": [
     {
-      "canonical_record_sha256": "686fd235ce497a5a33b47af5d45746c92fe96016f976678745279133abccd3a8",
+      "canonical_record_sha256": "0d69ee1b7888fb7aa0ccb0bc3c83b3259600b4451124ca3fb70442c71d9a5d8c",
       "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
       "path": "cases/case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524.json"
     }

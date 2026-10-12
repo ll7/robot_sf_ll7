@@ -361,3 +361,122 @@ def test_sequence_search_brakes_when_observed_population_exceeds_forecast_capaci
         observation=observation, future_batch=future[None], mask=np.ones(16), steps=8
     )
     assert (v, w) == (0.0, 0.0), "Incomplete population forecasts must brake"
+
+
+@pytest.mark.parametrize("source", ["both", "learned", "observed"])
+@pytest.mark.parametrize("path", ["action", "sequence", "command"])
+def test_prediction_rejects_submargin_between_clear_samples(monkeypatch, source, path):
+    """The exact review witness crosses the margin only inside its first interval."""
+    from types import SimpleNamespace
+
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    config.predictive_goal_weight = 100.0
+    adapter = prediction.PredictionPlannerAdapter(config)
+    adapter.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                robots=[SimpleNamespace(config=DifferentialDriveSettings(radius=1.0))]
+            )
+        )
+    )
+    origin = np.array([1.7498, -0.04])
+    velocity = np.array([1.04, 0.8])
+    obs = prediction_contracts._make_obs_with_peds([tuple(origin)], goal=(30.0, 0.0))
+    obs["robot"]["speed"] = np.array([1.04])
+    obs["robot"]["angular_velocity"] = np.array([0.0])
+    obs["sim"] = {"timestep": [0.1]}
+    obs["pedestrians"]["velocities"] = velocity[None].copy()
+    times = 0.1 * np.arange(1, 9)
+    future = np.zeros((config.predictive_max_agents, 8, 2))
+    future[0] = origin + times[:, None] * velocity
+    if source == "learned":
+        # The observed CV source is clear: constant relative (x,y).
+        obs["pedestrians"]["velocities"][0, 1] = 0.0
+    elif source == "observed":
+        # The learned source is clear from the measured origin onward.
+        future[0] = origin + times[:, None] * [1.04, 0.0]
+    mask = np.zeros(config.predictive_max_agents)
+    mask[0] = 1.0
+    # Independent relative geometry, including the measured origin. The
+    # minimum is at t=0.05, before the first prediction sample.
+    sample_times = 0.1 * np.arange(9)
+    sampled_gaps = np.hypot(1.7498, -0.04 + 0.8 * sample_times) - 1.4
+    assert np.min(sampled_gaps) == pytest.approx(0.350257135, abs=1e-9)
+    assert 1.7498 - 1.4 == pytest.approx(0.3498)
+    assert np.min(sampled_gaps) > config.predictive_safe_distance > 0.3498
+    kwargs = dict(observation=obs, future_peds=future, mask=mask, steps=8)
+    if path == "action":
+        assert adapter._score_action(**kwargs, v=1.04, w=0.0) == float("inf")
+    elif path == "sequence":
+        assert adapter._score_action_sequence(**kwargs, sequence=[(1.04, 0.0)]) == float("inf")
+    else:
+        monkeypatch.setattr(adapter, "_predict_trajectories", lambda _state, _mask: future)
+        v, w = adapter.plan(obs)
+        # Independently integrate the bound drive's first acceleration step.
+        t = np.linspace(0.0, 0.1, 1001)
+        accel = np.clip((v - 1.04) / 0.1, -1.0, 1.0)
+        angular_accel = np.clip(w / 0.1, -1.0, 1.0)
+        distance = 1.04 * t + 0.5 * accel * t**2
+        angle = 0.25 * angular_accel * t**2
+        robot_xy = distance[:, None] * np.column_stack([np.cos(angle), np.sin(angle)])
+        witness_ped = origin + t[:, None] * velocity
+        gap = np.linalg.norm(witness_ped - robot_xy, axis=1) - 1.4
+        assert np.min(gap) >= config.predictive_safe_distance, (v, w, np.min(gap))
+
+
+@pytest.mark.parametrize("path", ["action", "sequence"])
+@pytest.mark.parametrize("control_dt", [0.1, 0.025])
+def test_prediction_covers_curved_motion_between_samples(path, control_dt):
+    """The drive curve can approach a body between clear prediction endpoints."""
+    from types import SimpleNamespace
+
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    config = prediction.SocNavPlannerConfig(
+        predictive_clearance_model="surface_v2",
+        predictive_robot_radius=1.0,
+        predictive_pedestrian_radius=0.4,
+        predictive_safe_distance=0.35,
+        predictive_rollout_dt=0.1,
+    )
+    adapter = prediction.PredictionPlannerAdapter(config)
+    adapter.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                robots=[SimpleNamespace(config=DifferentialDriveSettings(radius=1.0))]
+            )
+        )
+    )
+
+    # Independent constant-wheel-speed mid-heading odometry at control times.
+    def position(t):
+        full_steps = int(np.floor((t + 1e-12) / control_dt))
+        angles = control_dt * (np.arange(1, full_steps + 1) - 0.5)
+        xy = control_dt * np.column_stack([np.cos(angles), np.sin(angles)]).sum(axis=0)
+        remainder = max(0.0, t - full_steps * control_dt)
+        partial_heading = (full_steps * control_dt + t) / 2
+        return xy + remainder * np.array([np.cos(partial_heading), np.sin(partial_heading)])
+
+    middle = position(0.05)
+    # Outward normal to the intervening motion; all sample endpoints are clear.
+    tangent_angle = 0.025 + np.arctan(0.025) if control_dt == 0.1 else 0.05
+    outward = np.array([np.sin(tangent_angle), -np.cos(tangent_angle)])
+    pedestrian = middle + 1.7498 * outward
+    assert np.linalg.norm(pedestrian - middle) - 1.4 == pytest.approx(0.3498)
+    sampled = np.array([position(t) for t in [0.0, 0.1, 0.2]])
+    assert np.min(np.linalg.norm(sampled - pedestrian, axis=1) - 1.4) > 0.35
+    obs = prediction_contracts._make_obs_with_peds([tuple(pedestrian)])
+    obs["robot"]["speed"] = [1.0]
+    obs["robot"]["angular_velocity"] = [1.0]
+    obs["sim"] = {"timestep": [control_dt]}
+    future = np.tile(pedestrian, (1, 2, 1))
+    kwargs = dict(observation=obs, future_peds=future, mask=np.ones(1), steps=2)
+    if path == "action":
+        assert adapter._score_action(**kwargs, v=1.0, w=1.0) == float("inf")
+    else:
+        assert adapter._score_action_sequence(**kwargs, sequence=[(1.0, 1.0)]) == float("inf")

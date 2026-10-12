@@ -87,3 +87,14 @@ embed those observation statistics. The preparation CLI is restricted to the
 known unnormalized release; it cannot be used to silently discard another source's
 normalization. Observation/action spaces must match; action-contract or observation
 schema migrations require a separately validated conversion.
+
+An initialization-only check against current main found a concrete action-space
+barrier: the released checkpoint declares `[-3, -1]` to `[3, 1]`, while the current
+native acceleration environment declares `[-1, -1]` to `[1, 1]`. Default loading
+rejects that mismatch. `load_warm_start(..., target_action_space=<Box>)` permits an
+**explicit bounds-only migration** with identical shape/dtype, preserving every
+actor/value tensor and the raw Gaussian mean. Clipped `predict()` actions may then
+change. This option does not translate velocity commands to acceleration or velocity
+deltas; an action-semantic migration still needs the alignment lane's reviewed
+contract and behavior receipt. The fixed-observation checkpoint parity test uses the original
+bounds, and equality is claimed only for that unchanged policy interface.

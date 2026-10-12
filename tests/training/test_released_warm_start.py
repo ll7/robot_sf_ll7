@@ -56,3 +56,29 @@ def test_normalization_companion_restored_and_affects_fixed_actions(tmp_path):
         load_warm_start(path, normalization_path=stats)
     env.close()
     restored.close()
+
+
+def test_action_bound_migration_is_explicit_and_preserves_raw_actor(tmp_path):
+    """New clipping bounds require opt-in; they never reinterpret action coordinates."""
+    env = DummyVecEnv([lambda: gym.make("Pendulum-v1")])
+    source = PPO("MlpPolicy", env, seed=100001, n_steps=8, batch_size=8, device="cpu")
+    with torch.no_grad():
+        source.policy.action_net.weight.zero_()
+        source.policy.action_net.bias.fill_(1.5)
+    path = tmp_path / "model.zip"
+    source.save(path)
+    target = gym.spaces.Box(-1.0, 1.0, shape=(1,), dtype=np.float32)
+    migrated, _ = load_warm_start(path, target_action_space=target)
+    fixed = np.array([0.6, 0.8, 0.25], dtype=np.float32)
+    assert source.predict(fixed, deterministic=True)[0].item() == 1.5
+    assert migrated.predict(fixed, deterministic=True)[0].item() == 1.0
+    tensor, _ = migrated.policy.obs_to_tensor(fixed)
+    with torch.no_grad():
+        assert migrated.policy.get_distribution(tensor).mode().item() == 1.5
+    for key, value in source.policy.state_dict().items():
+        assert torch.equal(value, migrated.policy.state_dict()[key])
+    with pytest.raises(ValueError, match="matching Box shape/dtype"):
+        load_warm_start(
+            path, target_action_space=gym.spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32)
+        )
+    env.close()

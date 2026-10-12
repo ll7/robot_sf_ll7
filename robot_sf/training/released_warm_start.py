@@ -6,6 +6,8 @@ import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from gymnasium import spaces
+
 from robot_sf.common.seed import _configure_torch_213_runtime
 from robot_sf.models import get_registry_entry, resolve_model_path
 
@@ -43,6 +45,7 @@ def load_warm_start(
     normalization_path: Path | None = None,
     init_seed: int = 100001,
     device: str = "cpu",
+    target_action_space: spaces.Box | None = None,
 ) -> tuple[PPO, VecEnv | None]:
     """Load actor/value weights and optional observation statistics for a fresh PPO run.
 
@@ -61,7 +64,19 @@ def load_warm_start(
             raise ValueError("Normalization restoration requires an environment")
         env = VecNormalize.load(str(normalization_path), env)
         env.training = True
-    model = PPO.load(str(checkpoint), env=env, device=device, force_reset=True)
+    custom_objects = None
+    if target_action_space is not None:
+        source = PPO.load(str(checkpoint), device=device)
+        if (
+            not isinstance(source.action_space, spaces.Box)
+            or source.action_space.shape != target_action_space.shape
+            or source.action_space.dtype != target_action_space.dtype
+        ):
+            raise ValueError("Explicit action-bound migration requires matching Box shape/dtype")
+        custom_objects = {"action_space": target_action_space}
+    model = PPO.load(
+        str(checkpoint), env=env, device=device, force_reset=True, custom_objects=custom_objects
+    )
     model.set_random_seed(init_seed)
     model.num_timesteps = 0
     model._n_updates = 0

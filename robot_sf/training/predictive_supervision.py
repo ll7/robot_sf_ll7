@@ -310,6 +310,7 @@ def sample_identity_arrays(
     seed: int,
     mask: Any,
     target_mask: Any,
+    scenario_definitions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Serialize the source/future actor IDs alongside the exact supervision rows.
 
@@ -338,7 +339,12 @@ def sample_identity_arrays(
         "sample_target_pedestrian_id": future,
         "sample_target_step": step[:, None] + np.arange(1, horizon + 1, dtype=np.int64),
     }
-    validate_sample_identities({**result, "mask": mask, "target_mask": target_mask})
+    validation = {**result, "mask": mask, "target_mask": target_mask}
+    if scenario_definitions is not None:
+        validation["scenario_definitions_json"] = np.asarray(
+            json.dumps(scenario_definitions, sort_keys=True)
+        )
+    validate_sample_identities(validation)
     return result
 
 

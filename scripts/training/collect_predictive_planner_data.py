@@ -493,6 +493,7 @@ def main() -> int:  # noqa: C901, PLR0915
                     scenario_id=scenario_id,
                     episode_id=episode_id,
                     seed=seed,
+                    scenario_definitions=scenario_definitions,
                     mask=masks,
                     target_mask=target_masks,
                 )

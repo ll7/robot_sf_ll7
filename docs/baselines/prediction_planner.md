@@ -36,6 +36,20 @@ Recommended default model id:
 
 If the checkpoint cannot be resolved/loaded and fallback is disabled, the planner fails fast.
 
+## Bound bicycle candidate motion
+
+After `bind_env`, single-action and sequence searches simulate bicycle candidates
+through `PlannerActionAdapter` and `BicycleDriveRobot` at the observation's control
+timestep. Acceleration, asymmetric braking, steering curvature and limited reverse
+therefore use the execution plant's settings. Static footprint scoring includes
+motion while a stop command brakes. Unbound calls retain the unicycle fallback.
+
+`tests/planner/test_prediction_bicycle_rollout.py` compares candidate positions and
+headings with executed commands and checks the braking-contact veto. This is
+implementation agreement evidence; the matched T-intersection diagnostic in
+issue #10109 and the hosted behaviour receipt remain required before behavioural
+or benchmark conclusions. Capsule geometry remains separate work in #10093.
+
 ## Citations and Provenance
 
 This implementation is inspired by:

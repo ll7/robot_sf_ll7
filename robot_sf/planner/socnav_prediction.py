@@ -12,6 +12,7 @@ from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import get_registry_entry
 from robot_sf.planner import socnav as _socnav
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
     pedestrian_clearance,
@@ -26,6 +27,7 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_observation,
     validate_predictive_runtime_feature_schema,
 )
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
@@ -65,7 +67,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
         self._static_obstacle_geometry: MultiLineString | None = None
-        self._prediction_drive_settings: DifferentialDriveSettings | None = None
+        self._prediction_drive_settings: DifferentialDriveSettings | BicycleDriveSettings | None = (
+            None
+        )
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
@@ -291,7 +295,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robots = getattr(simulator, "robots", None)
         settings = getattr(robots[0], "config", None) if robots else None
         self._prediction_drive_settings = (
-            settings if isinstance(settings, DifferentialDriveSettings) else None
+            settings
+            if isinstance(settings, (DifferentialDriveSettings, BicycleDriveSettings))
+            else None
         )
         map_def = getattr(env, "map_def", None)
         if map_def is None:
@@ -955,7 +961,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return sorted(set(candidates), key=lambda x: (round(x[0], 6), round(x[1], 6)))
 
     def _bound_drive_rollout(self, commands, dt, observation):
-        """Integrate bound wheel odometry at the observed control clock.
+        """Integrate the bound plant at the observed control clock.
 
         Returns:
             tuple: Local positions and headings at each prediction sample.
@@ -963,21 +969,32 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if observation is None and len(commands) > 0:
             raise ValueError("Bound prediction requires a measured-motion observation")
         state, _, _ = self._socnav_fields(observation or {})
-        drive = DifferentialDriveRobot(self._prediction_drive_settings)
-        drive.state.velocity = (
-            float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0]),
-            float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
-        )
-        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+        speed = float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0])
+        if isinstance(self._prediction_drive_settings, BicycleDriveSettings):
+            drive = BicycleDriveRobot(self._prediction_drive_settings)
+            drive.state.velocity = speed
+        else:
+            drive = DifferentialDriveRobot(self._prediction_drive_settings)
+            drive.state.velocity = (
+                speed,
+                float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
+            )
+            drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
         control_dt = self._simulation_timestep(observation) if observation is not None else dt
         positions, headings = [], []
         for command in commands:
             remaining = dt
             while remaining > 1e-12:
                 step_dt = min(control_dt, remaining)
-                drive.apply_action(
-                    tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
-                )
+                if isinstance(drive, BicycleDriveRobot):
+                    # Reuse execution's projection, achievable-speed steering and
+                    # asymmetric acceleration/braking limits, including reverse.
+                    adapter = PlannerActionAdapter(drive, drive.action_space, step_dt)
+                    drive.apply_action(tuple(adapter.from_velocity_command(command)), step_dt)
+                else:
+                    drive.apply_action(
+                        tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
+                    )
                 remaining -= step_dt
             positions.append(drive.pos)
             headings.append(drive.pose[1])
@@ -992,7 +1009,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps: int,
         observation: dict | None = None,
     ) -> np.ndarray:
-        """Forecast the bound differential drive, or an unbound unicycle command.
+        """Forecast the bound physical drive, or an unbound unicycle command.
 
         Returns:
             np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.

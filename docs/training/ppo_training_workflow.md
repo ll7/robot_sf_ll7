@@ -61,3 +61,29 @@ configs that rely on `frequency_episodes` alone.
 At startup, the canonical trainer logs the resolved run-critical settings needed for provenance:
 policy id, config path, scenario config, total timesteps, reward profile, requested and resolved
 `num_envs`, worker mode, seed randomization, resume source, and scenario-sampling keys.
+
+## Released-checkpoint warm start
+
+For the released issue-791 policy, prepare a new-run ZIP without training:
+
+```bash
+uv run python -m scripts.training.prepare_released_ppo_warm_start \
+  --model-id ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417 \
+  --init-seed 100001 --out output/ftplan/init100001/model.zip
+```
+
+Pass that ZIP as `--resume-from` to the canonical trainer and retain the adjacent
+provenance JSON with the run artifacts. Actor and value tensors are preserved;
+timestep/update/episode counters and optimizer moments start fresh. A different
+initialization seed changes later stochastic draws, not the released deterministic
+policy. A prepared ZIP is a derived artifact, not a replacement registry release.
+
+The released checkpoint has raw dict observations and no observation-normalization
+companion. For a different checkpoint using `VecNormalize`, use
+`robot_sf.training.released_warm_start.load_warm_start` with an environment and an
+explicit pinned `normalization_path`; train with the returned effective environment
+and save its normalization companion alongside every checkpoint. ZIP files do not
+embed those observation statistics. The preparation CLI is restricted to the
+known unnormalized release; it cannot be used to silently discard another source's
+normalization. Observation/action spaces must match; action-contract or observation
+schema migrations require a separately validated conversion.

@@ -16,6 +16,8 @@ entry points, contracts, and where to change behavior.
 - `scripts/training_ped_ppo.py` - legacy pedestrian PPO entry point.
 - `examples/advanced/16_imitation_learning_pipeline.py` - end-to-end pipeline walkthrough.
 
+- [Optional PPO training-family weights](training/ppo_family_weighting.md) - additive training entry point and config option.
+
 ## Benchmark Entry Points
 - `robot_sf/benchmark/cli.py` - benchmark CLI implementation (console entrypoint).
 - `scripts/run_social_navigation_benchmark.py` - run standard benchmark flows.

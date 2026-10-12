@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/admission_evidence.json",
-  "artifact_sha256": "d0c8d974d71b59e01902ad1d54a988655cd81d66f003147fd54d558334f4895b",
+  "artifact_sha256": "f3673cbc79801169aabc60088523909a4bc05a8e61400b07a88b5b95635ff121",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

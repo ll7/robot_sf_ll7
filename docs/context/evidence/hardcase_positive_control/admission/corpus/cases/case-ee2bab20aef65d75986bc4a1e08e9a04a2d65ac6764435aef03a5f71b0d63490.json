@@ -1,8 +1,8 @@
 {
-  "admission_code_commit": "4fe503aadbaed2bd48dc82c58509bde71b4af2d8",
+  "admission_code_commit": "bc0e6a9cd0081f065daab6b4f5b5eff46297cec9",
   "admission_status": "admitted",
   "benchmark_evidence": false,
-  "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
+  "case_id": "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490",
   "claim_boundary": "observed simulator regression case only",
   "discovery": {
     "budget": {
@@ -32,7 +32,7 @@
     "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
     "model_digest": "fe4e5b99c0a9f51ada80cfccbf1361bb4f1872c0c523e2b35ce89e94e7b32958",
     "planner": "social_force",
-    "scenario_sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e",
+    "scenario_sha256": "be7913af2d79c800bb682fb131fbb3ac20cac6f48333ddc92ddd3ca940d96b7c",
     "seed": 1001,
     "source_commit": "53721be3248600e08641a9816d094b605e3c93e4",
     "source_config_hash": "f330dd29077077ac",
@@ -80,15 +80,15 @@
     },
     "original_budget_steps": 600,
     "replay_episode_ids": [
-      "classic_cross_trap_high--1001--29ae7331749e5a6d",
-      "classic_cross_trap_high--1001--29ae7331749e5a6d"
+      "classic_cross_trap_high--1001--66fb8ede5b4d21c0",
+      "classic_cross_trap_high--1001--66fb8ede5b4d21c0"
     ],
     "replay_scope": {
       "kind": "source_bound_window",
-      "receipt_sha256": "83c8527d493161a7302b8a5b33780e59cc019020a6b9d933b5abc9bade225791",
+      "receipt_sha256": "7cc91172b1a2bf409bed811381308975698484e67ce08a9a206575428d333181",
       "replay_episode_ids": [
-        "classic_cross_trap_high--1001--29ae7331749e5a6d",
-        "classic_cross_trap_high--1001--29ae7331749e5a6d"
+        "classic_cross_trap_high--1001--66fb8ede5b4d21c0",
+        "classic_cross_trap_high--1001--66fb8ede5b4d21c0"
       ],
       "source_episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
       "window": {
@@ -113,7 +113,7 @@
       },
       "checkpoint": {
         "path": "docs/context/evidence/hardcase_positive_control/followup/packet/checkpoint.json",
-        "sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348"
+        "sha256": "afe069972d0d346bdbffcd1d2d564114b933374d69357a71cf90a642b9f8d41c"
       },
       "map": {
         "path": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
@@ -127,26 +127,26 @@
       "replay_manifests": [
         {
           "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl.provenance.json",
-          "sha256": "5f51e31a827c025b6bd19465504b3ce492d546044a97c1b42fa415b85b0ded5d"
+          "sha256": "fecd344b3e448b758bfc0b8d964ecd9892490e359cfe93c5dbfe9c6448e1d18d"
         },
         {
           "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl.provenance.json",
-          "sha256": "1b8d720cb6a0e9368f13b3035e12834abe764b3542b9f361b17d6fbfb64da53d"
+          "sha256": "0b82d8955b9fe21bf7d55dc407c5346acb809ecb986be08f5d63a1b0c8e443c9"
         }
       ],
       "replays": [
         {
           "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_1.jsonl.gz",
-          "sha256": "a2db55191def89e7b5a712b29b8654cfe738b1259ed9c480ae292b93a8e2ecaa"
+          "sha256": "88013b12ad0de59bc7b201d2701bc5336c3d1cb24d1a9953e7cb9fb443b03a56"
         },
         {
           "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window_replay_2.jsonl.gz",
-          "sha256": "2aab72c8a7108eb52be318b51e1cef1349e32af0650b8a6f298949880f2b747b"
+          "sha256": "15cdac07144128e05e50f98b9f0a529f5c51a3e913311689722d1b900d72b1c3"
         }
       ],
       "scenario": {
         "path": "docs/context/evidence/hardcase_positive_control/followup/packet/window.yaml",
-        "sha256": "fc09824436c60983d5e6aa1052c49a1b9e978f7c2c82bc9b9e3914c40b6f2e1e"
+        "sha256": "be7913af2d79c800bb682fb131fbb3ac20cac6f48333ddc92ddd3ca940d96b7c"
       },
       "source_episode": {
         "path": "docs/context/evidence/hardcase_positive_control/source.jsonl.gz",
@@ -156,8 +156,8 @@
     "parity_proof": {
       "position_tolerance_m": 1e-09,
       "replay_commits": [
-        "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
-        "1baaa3eb08cfbc1866f18702eb939c1f60b400fd"
+        "3551282a86cad12ea825a0f701b4a24406dde2d0",
+        "3551282a86cad12ea825a0f701b4a24406dde2d0"
       ],
       "source_full_trace_sha256": "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34",
       "source_window_trace_sha256": "37488c586d0a7fd203b9385377434516f108edb8bef011a6003a3236e135fed3",

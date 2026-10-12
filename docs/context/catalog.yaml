@@ -8341,7 +8341,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/hardcase_positive_control/admission/corpus/cases/case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524.json
+- path: docs/context/evidence/hardcase_positive_control/admission/corpus/cases/case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

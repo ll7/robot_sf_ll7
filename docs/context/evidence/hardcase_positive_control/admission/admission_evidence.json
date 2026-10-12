@@ -2,26 +2,14 @@
   "admission_policy": "9652 observed replay-verified critical case; independent perturbation persistence is a separate5600robust promotion gate",
   "base_replay_documentation_head": "d6a71d75fe6b35de3b7afe68d46c5be49e14c416",
   "base_replay_head_at_creation": "748830c03fee517701a4ec98b8173ee7a30e17ba",
-  "case_file_sha256": "04b12b881c2779172afe5744d25299df0e36fb77ad80a4109d4ca39f7ee58e1b",
-  "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
+  "case_file_sha256": "391433ef920210f3b49c28e4620488f099fa004afdfdf9d242c964dea43ff68a",
+  "case_id": "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490",
   "commands": {
     "admit": "scripts/tools/admit_counterexample_window.py --candidate docs/context/evidence/hardcase_positive_control/admission/candidate.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --corpus docs/context/evidence/hardcase_positive_control/admission/corpus",
-    "persistence": "scripts/tools/evaluate_pipeline_persistence_gate.py --candidate docs/context/evidence/hardcase_positive_control/entry.json --episodes ../admission_source.jsonl --config configs/analysis/issue_5600_persistence_gate.yaml --output docs/context/evidence/hardcase_positive_control/admission/persistence --replay-results ../admission_gate_replays.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --receipt-root ."
+    "persistence": "scripts/tools/evaluate_pipeline_persistence_gate.py --candidate docs/context/evidence/hardcase_positive_control/entry.json --episodes ../rereview_admission_source.jsonl --config configs/analysis/issue_5600_persistence_gate.yaml --output docs/context/evidence/hardcase_positive_control/admission/persistence --replay-results ../rereview_admission_gate_replays.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --receipt-root ."
   },
   "corpus_cases": 1,
   "critical_event_reproduced": "pass",
-  "custody_remediation": {
-    "annotation_authority": "maintainer/orchestrator delegated disposition in this task",
-    "case_identity_unchanged": true,
-    "discovery_unchanged": true,
-    "disposition": "REMEDIATE all ten; no additional debt",
-    "new_episodes": 0,
-    "new_resets": 0,
-    "previous_case_file_sha256": "adc9a15aa0a5bba1b48edc8038a2b38cccae9ef77ebe4a893d0f76b60e16f778",
-    "previous_receipt_sha256": "46899c3407cd0e56b3232e3741f06981aaaf3b5523b30db46a8201a6cb22cb1e",
-    "receipt_sha256": "83c8527d493161a7302b8a5b33780e59cc019020a6b9d933b5abc9bade225791",
-    "traces_unchanged": true
-  },
   "exact_replay": "pass",
   "feasibility": "unknown",
   "final_evidence_registry": {
@@ -41,7 +29,7 @@
     "typing_baseline_changed": false
   },
   "first_admission": "admitted",
-  "implementation_commit": "4fe503aadbaed2bd48dc82c58509bde71b4af2d8",
+  "implementation_commit": "bc0e6a9cd0081f065daab6b4f5b5eff46297cec9",
   "inherited_typing_ci": {
     "admission_delta_relative_to_replay_parent": 0,
     "baseline_not_raised": true,
@@ -66,14 +54,40 @@
   "new_simulator_episodes": 0,
   "new_simulator_resets": 0,
   "perturbation_cells": "nine unknown; none executed",
-  "raw_inputs": "original source.gz and both actual window/native-manifest records/checkpoint already retained by replay PR; duplicate decompressed gate inputs omitted",
+  "prior_custody_remediation": {
+    "annotation_authority": "maintainer/orchestrator delegated disposition in this task",
+    "case_identity_unchanged": true,
+    "discovery_unchanged": true,
+    "disposition": "REMEDIATE all ten; no additional debt",
+    "new_episodes": 0,
+    "new_resets": 0,
+    "previous_case_file_sha256": "adc9a15aa0a5bba1b48edc8038a2b38cccae9ef77ebe4a893d0f76b60e16f778",
+    "previous_receipt_sha256": "46899c3407cd0e56b3232e3741f06981aaaf3b5523b30db46a8201a6cb22cb1e",
+    "receipt_sha256": "83c8527d493161a7302b8a5b33780e59cc019020a6b9d933b5abc9bade225791",
+    "traces_unchanged": true
+  },
+  "raw_inputs": "Historical source unchanged; checkpoint and both actual windows/native manifests refreshed by parent runtime 3551282a86cad12ea825a0f701b4a24406dde2d0; raw outputs retained in the lane-host custody plane.",
   "robust_promotion": "reject",
   "schema_version": "hardcase-corpus-admission-evidence.v1",
   "second_admission": "already_admitted",
+  "security_followup": {
+    "green": "37 focused tests passed in 9.11 s; mutated density refused before corpus creation.",
+    "identity_changed_reason": "Byte-bound scenario references the newly captured checkpoint; old evidence fixture preserved in Git and the lane backup, not silently reused or accepted against changed runtime code.",
+    "new_parent_source_captures": 1,
+    "new_parent_window_replays": 2,
+    "pre_fix_case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
+    "red": "Actual admission accepted density 0.0 with rebound metadata; final negative failed DID NOT RAISE on old persistence_gate.py (1 failed in 1.86 s).",
+    "refreshed_case_id": "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490",
+    "replay_producer_commit": "3551282a86cad12ea825a0f701b4a24406dde2d0",
+    "source_and_window_traces_unchanged": true,
+    "window_receipt_path": "docs/context/evidence/hardcase_positive_control/admission/window_receipt.json",
+    "window_receipt_sha256": "7cc91172b1a2bf409bed811381308975698484e67ce08a9a206575428d333181"
+  },
   "validation": {
     "focused": "49 passed, 3 task-interlock skips in16.30s",
     "full_benchmark": "12122 passed,119 failed,340 skipped,13 errors; all132 IDs/kinds match main; zero introduced;25m21s",
     "remediation_focused": "156 passed,14 task-interlock skips in17.74s",
+    "security_followup_focused": "37 passed in 9.11s; includes actual admission, no-parity refusal, mutated-density refusal and idempotent re-admission.",
     "sidecar_red": "1 failed in2.09s: review sidecar mistaken for a case",
     "ty_pinned": "ty0.0.58/all-extras Python3.12 PASS; general6430<=6435; adjusted6427<=6432"
   }

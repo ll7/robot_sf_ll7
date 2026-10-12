@@ -370,3 +370,45 @@ All inherited six checkpoint-bound runtime files still match the actual
 replay-producing commit. Final heads and hosted results are in the lane report.
 
 TERMINAL=AUTHOR_DECISION_REQUIRED
+
+
+## Exact-head effective-input review follow-up (2026-10-12)
+
+PASS: a rehashed scenario and rebound native manifests cannot admit unchanged
+replay rows generated with different settings. The gate now loads the scenario
+through the production loader and compares both native records' inputs using
+`planner_independent_scenario_case_payload`, the existing map-runner projection.
+It includes seed-derived defaults and every scenario input after removing only
+the documented run envelope. No parallel admission framework was added.
+
+Negative command:
+`HARDCASE_NO_TEST_SIMULATION=1 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run pytest tests/adversarial/test_counterexample_corpus.py::test_refuse_density_change_even_with_rebound_scenario_and_manifests -q`.
+Before the fix: one failure in 1.86 s, DID NOT RAISE; the real admission API
+accepted pedestrian density 0.0 despite unchanged density-0.08 replay records.
+After the fix: refused with `window replay effective configuration mismatch`,
+before any corpus directory is written. Temporary scenario stays in the same
+packet directory; every other input and replay row is unchanged.
+
+PASS focused check:
+`HARDCASE_NO_TEST_SIMULATION=1 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run pytest tests/adversarial/test_counterexample_corpus.py tests/benchmark/test_source_bound_window_receipt.py tests/benchmark/test_scenario_persistence_gate.py tests/benchmark/test_pipeline_persistence_gate_wiring.py tests/tools/test_hardcase_window_custody.py -q`:
+37 passes in 9.11 s. This includes admission, refusal without parity, the density
+negative, idempotent admission, native persistence and custody checks.
+
+The parent security fix changed the checkpoint's code fingerprint. The source
+oracle remains fixed; fresh source capture and two exact replays at commit
+`3551282a86cad12ea825a0f701b4a24406dde2d0` supply the new receipt. No code gate,
+trace oracle, or case-identity calculation was weakened. The reviewed one-case
+corpus fixture was rebuilt through the real CLI and now contains
+`case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490`.
+The prior case/packet are preserved in Git and the complete lane backup. The
+new scenario SHA causes the new immutable identity; this supersedes prior
+paragraphs claiming the earlier evidence fixture's identity stayed unchanged.
+Existing production admission remains append-only.
+
+PASS: actual refreshed receipt verifies both full window traces, critical event
+and recorded inputs; admission succeeds. Exact replay and event reproduction
+pass in the existing persistence CLI; robust promotion correctly rejects all
+nine unknown perturbation cells. The original completed benchmark audit is
+retained; no full-directory audit was restarted for these focused repairs.
+The orchestrator-owned behaviour receipt remains outstanding. Neither PR body
+nor the behaviour gate was edited; both PRs remain unmerged.

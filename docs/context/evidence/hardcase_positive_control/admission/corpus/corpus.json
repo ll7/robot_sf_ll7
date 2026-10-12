@@ -1,9 +1,9 @@
 {
   "cases": [
     {
-      "canonical_record_sha256": "4bf7f7ad6bef2d29b99e68cee5b1f56d1ee43267094103bf359c6015215bed2a",
-      "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
-      "path": "cases/case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524.json"
+      "canonical_record_sha256": "a65034626055fbd4ecfd6e528dfac31bdfbc4e843fded08f2bfcb67f3d11e714",
+      "case_id": "case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490",
+      "path": "cases/case-ee2bab20aef65d75986bc4a1e08e9a04a2d65ac6764435aef03a5f71b0d63490.json"
     }
   ],
   "claim_boundary": "observed simulator regression cases only",

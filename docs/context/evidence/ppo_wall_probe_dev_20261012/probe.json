@@ -1,8 +1,9 @@
 {
   "schema": "ppo-wall-probe-dev.v1",
-  "source_head": "c5b697a6237d96a8e59dd8cefab556d3d36dceb0",
+  "review_status": "AI-GENERATED NEEDS-REVIEW",
+  "source_head": "ac1507bdad2d11b8c6002390ee9cf5e645d543b3",
   "producer_path": "scripts/analysis/ppo_wall_probe_dev.py",
-  "producer_sha256": "33626c45cc17a9655e3c4613543eee935cfbb250ad2469fb79af8e27183d423f",
+  "producer_sha256": "1f40eff38c06f1b3400699dc283591372751fba7872abbcee2cce23263155e73",
   "scenario_path": "configs/scenarios/single/francis2023_narrow_doorway.yaml",
   "scenario_sha256": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
   "artifacts": {

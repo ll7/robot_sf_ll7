@@ -1,5 +1,7 @@
 # Released PPO wall probe on five development seeds
 
+<!-- AI-GENERATED NEEDS-REVIEW -->
+
 Diagnostic only. Refs #9609, #9628 and #10071. CPU inference, no training or
 Slurm submission. Source main: `33a4735900`; checkpoint: job 11724 / W&B
 `ibo3aqus`. Artifact URLs, digests and sizes are recorded in [probe.json](probe.json).

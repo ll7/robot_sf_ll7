@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -277,3 +278,58 @@ def test_preserved_dev_collection_hashes_and_target_oracle():
         result = verify(root / f"{collector_id}.npz", frames)
         assert result["episodes"] == 3 and result["samples"] == 24
         assert result["checked_target_points"] > 0
+
+
+def test_production_mixer_preserves_committed_base_scenario_definitions(monkeypatch, tmp_path):
+    """Real collector NPZs exercise the hashed base scenario and in-memory JSON path."""
+    from robot_sf.training import predictive_supervision as supervision
+    from scripts.training import build_predictive_mixed_dataset as mixer
+
+    root = Path("tests/fixtures/predictive_sample_identity")
+    output = tmp_path / "mixed.npz"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_predictive_mixed_dataset.py",
+            "--base-dataset",
+            str(root / "base.npz"),
+            "--hardcase-dataset",
+            str(root / "hardcase.npz"),
+            "--hardcase-repeat",
+            "2",
+            "--shuffle-seed",
+            "1001",
+            "--output",
+            str(output),
+        ],
+    )
+    assert mixer.main() == 0
+    with np.load(root / "base.npz") as original, np.load(output) as mixed:
+        definitions = json.loads(original["scenario_definitions_json"].item())
+        assert definitions and all(key.startswith("base-config-") for key in definitions)
+        assert json.loads(mixed["scenario_definitions_json"].item()) == definitions
+        assert len(mixed["state"]) == 72
+        metadata = supervision.validate_supervision_metadata(mixed, path=output)
+        assert metadata["sample_identity_schema"] == "predictive_sample_identity_v1"
+        assert set(definitions) <= set(mixed["sample_scenario_id"])
+        lookup = {
+            (episode, int(step)): i
+            for i, (episode, step) in enumerate(
+                zip(original["sample_episode_id"], original["sample_step"], strict=True)
+            )
+        }
+        for i, (episode, step) in enumerate(
+            zip(mixed["sample_episode_id"], mixed["sample_step"], strict=True)
+        ):
+            if (episode, int(step)) in lookup:
+                for key in (
+                    "state",
+                    "target",
+                    "mask",
+                    "target_mask",
+                    *supervision.SAMPLE_IDENTITY_KEYS,
+                ):
+                    np.testing.assert_array_equal(
+                        mixed[key][i], original[key][lookup[(episode, int(step))]]
+                    )

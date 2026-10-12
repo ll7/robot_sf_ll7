@@ -439,7 +439,7 @@ def _validate_scenario_definitions(scenarios: Any, payload: Any) -> None:
         if str(scenario).startswith("base-config-"):
             if "scenario_definitions_json" not in payload:
                 raise ValueError("Missing predictive scenario identity definition")
-            definitions = json.loads(payload["scenario_definitions_json"].item())
+            definitions = json.loads(np.asarray(payload["scenario_definitions_json"]).item())
             definition = definitions.get(str(scenario))
             digest = hashlib.sha256(json.dumps(definition, sort_keys=True).encode()).hexdigest()
             if definition is None or str(scenario) != f"base-config-{digest}":

@@ -1595,12 +1595,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         base_ranked = sorted(
             (
                 (
-                    self._score_action_distribution(
+                    self._score_sequence_distribution(
                         observation=observation,
                         future_batch=future_batch,
                         mask=mask,
-                        v=v,
-                        w=w,
+                        sequence=[(v, w)],
                         steps=steps,
                     ),
                     (v, w),
@@ -1612,6 +1611,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         branch = max(1, int(self.config.predictive_sequence_branch_factor))
         beam_width = max(1, int(self.config.predictive_sequence_beam_width))
         segments = max(1, int(self.config.predictive_sequence_segments))
+        # Use the beam's objective for admission too. Single-action scoring has
+        # different speed margins and no phase cost; it can fill this shortlist
+        # with stationary turns and prune every progressing sequence.
         stage_candidates = [cand for _score, cand in base_ranked[:branch]]
 
         beam: list[tuple[float, list[tuple[float, float]]]] = []

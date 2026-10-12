@@ -1,10 +1,12 @@
 """Focused coverage for the extracted Prediction planner-family module."""
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_prediction as prediction
@@ -256,3 +258,44 @@ def test_flat_observation_pedestrian_velocity_stays_ego_native_in_model_input() 
     # ... and must not have been rotated into world frame.
     rotated = np.array([-ego_velocity[0, 1], ego_velocity[0, 0]])
     assert not np.allclose(state[0, 2:], rotated, atol=1e-6)
+
+
+@pytest.mark.parametrize("pedestrian_x,should_progress", [(2.27, True), (1.4, False)])
+def test_sequence_search_progresses_past_clear_pedestrian_without_contact(
+    pedestrian_x: float, should_progress: bool
+) -> None:
+    """A clear near-field forecast permits motion; a touching body still yields.
+
+    The clear case approximates the seed-1001 following-human audit at 10 s:
+    a pedestrian at (2.27, 0.42) relative to a stopped robot, forecast to move
+    0.12 m away and 0.06 m laterally over the horizon. Five stationary
+    actions rank ahead of all motion under the single-action speed margin,
+    although the sequence objective prefers safe forward progress.
+    """
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    adapter = prediction.PredictionPlannerAdapter(config)
+    observation = prediction_contracts._make_obs(goal=(30.0, 0.0))
+    lateral = 0.42 if should_progress else 0.0
+    future = np.tile([pedestrian_x, lateral], (1, 8, 1))
+    if should_progress:
+        future[0, :, 0] += np.linspace(0.0, 0.12, 8)
+        future[0, :, 1] += np.linspace(0.0, 0.06, 8)
+    v, w = adapter._plan_sequence_search(
+        observation=observation,
+        future_batch=future[None],
+        mask=np.ones(1),
+        steps=8,
+    )
+    if should_progress:
+        assert v >= 0.1, "Clear forward progress was pruned out of the sequence search"
+        # Independent unicycle geometry: even the full constant command stays
+        # outside the 1.0 + 0.4 m physical bodies over the supported 0.8 s.
+        angles = w * 0.1 * np.arange(1, 9)
+        robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
+        clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
+        assert np.min(clearance) > 0.0
+    else:
+        assert v == 0.0

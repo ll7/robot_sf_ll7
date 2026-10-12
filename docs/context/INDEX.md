@@ -879,4 +879,4 @@ it as a repeatable workflow.
 The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).
 
 - [Released PPO wall probe, five dev seeds](evidence/ppo_wall_probe_dev_20261012/README.md):
-  mixed replication of the sustained-high-speed signature; diagnostic only.
+  corrected absolute-target signature holds on 5/5 dev seeds (all 20 sampled targets at 2 m/s); diagnostic only.

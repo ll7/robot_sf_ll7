@@ -6,7 +6,7 @@ packet. No frozen artifact, reward implementation, alignment config, or seed-pol
 PR file is changed.
 
 The machine-readable [protocol](../../configs/training/ppo/ftplan/pilot_protocol_20261012.yaml)
-and [prepared training template](../../configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml.template)
+and [prepared training template](../../configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template)
 bind the released checkpoint (job 11724, W&B `ibo3aqus`), three initialization seeds
 100001/100002/100003, 3M steps per seed, and a factor-two training oversample of
 bottleneck, doorway, exiting elevator/room and frontal approach. Sampling factors
@@ -14,7 +14,7 @@ are a predeclared pilot choice, not optimized on released results. Training layo
 use the training-only range under each logged master. Initialization changes future
 optimizer/minibatch draws; the initial deterministic actor/value weights remain the
 same April policy in all three runs. The template is deliberately named
-`.yaml.template`: it is dependent preparation, not a canonical runnable `.yaml`
+`.template`: it is dependent preparation, not a canonical runnable `.yaml`
 leaf. The stock 149-leaf inventory and its load checks remain unchanged. The
 launcher materializes an isolated runtime YAML only after its dependency gates.
 

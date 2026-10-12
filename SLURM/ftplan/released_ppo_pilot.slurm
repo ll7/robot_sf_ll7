@@ -144,7 +144,7 @@ else:
     checkpoint = verified(receipt['checkpoint_artifact'])
     if receipt['checkpoint_sha256'] != receipt['checkpoint_artifact']['sha256']:
         raise ValueError('Selection checkpoint identity mismatch')
-base = Path('configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml.template').resolve()
+base = Path('configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template').resolve()
 runtime = Path(os.environ['ROBOT_SF_ARTIFACT_ROOT']) / 'runtime.yaml'
 runtime.write_text(yaml.safe_dump({
     'base_config': os.path.relpath(base, runtime.parent),

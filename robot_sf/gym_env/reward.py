@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from functools import partial
 
 import numpy as np
+from loguru import logger
 
 from robot_sf.gym_env.reward_alyassi import alyassi_reward
 
@@ -702,6 +703,9 @@ def build_reward_curriculum_function(
     raw_stages = curriculum.get("stages")
     if not isinstance(raw_stages, Sequence) or not raw_stages:
         raise ValueError("reward_curriculum.stages must be a non-empty sequence")
+    merge_mode = curriculum.get("stage_weight_merge", "merge")
+    if not isinstance(merge_mode, str) or merge_mode not in {"merge", "replace"}:
+        raise ValueError("reward_curriculum.stage_weight_merge must be merge or replace")
 
     stage_callables: list[Callable[[dict], float]] = []
     stage_boundaries: list[int | None] = []
@@ -721,13 +725,12 @@ def build_reward_curriculum_function(
                 )
             previous_boundary = until_episodes
         reward_name = str(raw_stage.get("reward_name", default_reward_name))
-        reward_kwargs = dict(default_reward_kwargs or {})
-        stage_kwargs = raw_stage.get("reward_kwargs")
-        if stage_kwargs is not None:
-            if not isinstance(stage_kwargs, Mapping):
-                raise ValueError("reward_curriculum stage reward_kwargs must be a mapping")
-            reward_kwargs.update(stage_kwargs)
-        stage_callables.append(build_reward_function(reward_name, reward_kwargs=reward_kwargs))
+        reward_kwargs = _merge_curriculum_stage_kwargs(
+            default_reward_kwargs, raw_stage.get("reward_kwargs"), merge_mode
+        )
+        stage_callable = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
+        stage_callables.append(stage_callable)
+        _log_curriculum_stage_weights(index, stage_callable, merge_mode)
         stage_boundaries.append(until_episodes)
         stage_labels.append(
             f"{reward_name}:{until_episodes if until_episodes is not None else 'final'}"
@@ -737,4 +740,48 @@ def build_reward_curriculum_function(
         stage_callables=tuple(stage_callables),
         stage_boundaries=tuple(stage_boundaries),
         stage_labels=tuple(stage_labels),
+    )
+
+
+def _merge_curriculum_stage_kwargs(
+    default_kwargs: Mapping[str, object] | None, stage_kwargs: object, merge_mode: str
+) -> dict[str, object]:
+    """Merge stage kwargs, handling nested weight inheritance explicitly.
+
+    Returns:
+        A fresh kwargs map; input dictionaries are never modified.
+    """
+    resolved = dict(default_kwargs or {})
+    if stage_kwargs is None:
+        return resolved
+    if not isinstance(stage_kwargs, Mapping):
+        raise ValueError("reward_curriculum stage reward_kwargs must be a mapping")
+    overrides = dict(stage_kwargs)
+    if merge_mode == "merge" and "weights" in overrides:
+        base_weights = resolved.get("weights") or {}
+        stage_weights = overrides["weights"]
+        if not isinstance(base_weights, Mapping) or not isinstance(stage_weights, Mapping):
+            raise ValueError("reward_curriculum weights must be mappings in merge mode")
+        overrides["weights"] = {**base_weights, **stage_weights}
+    resolved.update(overrides)
+    return resolved
+
+
+def _log_curriculum_stage_weights(
+    index: int, stage_callable: Callable[[dict], float], merge_mode: str
+) -> None:
+    """Log each built-in stage's fully resolved weight map at construction."""
+    if not isinstance(stage_callable, partial):
+        return
+    profile_defaults: dict[Callable[..., object], dict[str, float]] = {
+        route_completion_v2_reward: _ROUTE_COMPLETION_V2_WEIGHTS,
+        route_completion_v3_reward: _ROUTE_COMPLETION_V3_WEIGHTS,
+        social_quality_v1_reward: _SOCIAL_QUALITY_V1_WEIGHTS,
+    }
+    if stage_callable.func not in profile_defaults:
+        return
+    weights = dict(profile_defaults[stage_callable.func])
+    weights.update(stage_callable.keywords.get("weights") or {})
+    logger.info(
+        "Reward curriculum stage={} stage_weight_merge={} weights={}", index, merge_mode, weights
     )

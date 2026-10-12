@@ -1,6 +1,7 @@
 """Config and runtime evaluation admission for #9628; no PPO learning."""
 
 from copy import deepcopy
+from dataclasses import field, fields, make_dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -80,18 +81,34 @@ def test_launch_refuses_missing_sampler_before_training(monkeypatch):
 
 def test_launch_consumes_existing_sampler_loader(monkeypatch):
     """The hook delegates to the trainer API with the declared range, master and pools."""
-    expected = SimpleNamespace(
-        training_seed_range=(100000, 199999),
-        training_master_seed=20261012,
-        development_evaluation_seeds=tuple(range(1101, 1131)),
-        evaluation=SimpleNamespace(evaluation_seeds=tuple(range(1031, 1061))),
+    stock = train_ppo.load_expert_training_config(aligned.FAMILY)
+    # Model the typed interface added by #10324 while retaining the real stock
+    # loader's resolved environment/evaluation configuration.
+    extended_type = make_dataclass(
+        "ExtendedExpertConfig",
+        [
+            ("training_seed_range", tuple[int, int] | None, field(default=None)),
+            ("training_master_seed", int | None, field(default=None)),
+            ("development_evaluation_seeds", tuple[int, ...], field(default=())),
+        ],
+        bases=(train_ppo.ExpertTrainingConfig,),
     )
+    extended = extended_type(**{item.name: getattr(stock, item.name) for item in fields(stock)})
     monkeypatch.setattr(aligned, "sampler_interface_available", lambda: True)
-    monkeypatch.setattr(train_ppo, "load_expert_training_config", lambda _path: expected)
+    monkeypatch.setattr(train_ppo, "load_expert_training_config", lambda _path: extended)
     calls = []
     monkeypatch.setattr(train_ppo, "run_expert_training", lambda config, **kw: calls.append(config))
     assert aligned.main([]) == 0
-    assert calls == [expected]
+    assert len(calls) == 1
+    configured = calls[0]
+    assert configured.training_seed_range == (100000, 199999)
+    assert configured.training_master_seed == 20261012
+    assert configured.development_evaluation_seeds == tuple(range(1101, 1131))
+    assert configured.evaluation.evaluation_seeds == tuple(range(1031, 1061))
+    assert configured.randomize_seeds is True
+    assert configured.seeds == ()
+    assert configured.scenario_sampling["episode_seed_pool"] is None
+    assert stock.seeds == (100000,)  # Hook binding must not mutate the stock template.
 
 
 def test_runner_reuses_training_acceleration_conversion(monkeypatch):
@@ -229,6 +246,15 @@ def test_reject_family_condition_drift(monkeypatch, section, key, value, reason)
     """The launch boundary rejects changes that otherwise silently weaken selection or parity."""
     data = train_ppo._load_expert_training_config_mapping(aligned.FAMILY)
     data[section][key] = value
+    stock = train_ppo.load_expert_training_config(aligned.FAMILY)
+    monkeypatch.setattr(train_ppo, "load_expert_training_config", lambda _p: stock)
     monkeypatch.setattr(train_ppo, "_load_expert_training_config_mapping", lambda _p: data)
     with pytest.raises(ValueError, match=reason):
         aligned.validate_family()
+
+
+def test_stock_trainer_loads_family_without_sampler_fields():
+    """The canonical leaf must load on main without sanitising unsupported fields."""
+    config = train_ppo.load_expert_training_config(aligned.FAMILY)
+    assert config.evaluation.evaluation_seeds == tuple(range(1031, 1061))
+    assert config.env_overrides["ppo_action_semantics"] == "velocity_delta"

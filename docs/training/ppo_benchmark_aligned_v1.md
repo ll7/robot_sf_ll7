@@ -48,9 +48,17 @@ Preflight resolves both scenario roles, plant, goal, horizon and the actual
 selection manifest without constructing an environment. `sampler_available: false`
 means conditions are valid but training is unavailable. Execution through this
 entrypoint refuses until #10324's `training_seed_range`, `training_master_seed` and
-`development_evaluation_seeds` interface exists in the trainer. It then delegates
-to the existing loader and training API; no sampler or reset logic is implemented
-here. No files belonging to #10324 or #10343 are changed.
+`development_evaluation_seeds` interface exists in the trainer. The three fields
+live in `configs/training/ppo/benchmark_aligned_v1_seed_policy.yaml`, a marked
+sidecar, rather than the canonical leaf. The stock loader validates the leaf today;
+its fixed seed/pool `[100000]` is a parsing template, not an approved campaign.
+Always launch this family through the guarded entrypoint. Once #10324 is integrated,
+it replaces the template with the sidecar's range/master/reporting metadata through
+the supported dataclass interface, then delegates to the existing training API.
+No sampler or reset logic is implemented here. Sampler/telemetry runtime files from
+#10324/#10343 remain unchanged; review requested the canonical inventory assertion
+be updated for the newly loadable leaf, retaining all key validation. Archive both
+the leaf and its sidecar in future launch packets.
 
 Use the guarded launcher for this family. The guard requires the exact approved
 training interval and selection/reporting pools, strict integer/unique seeds and

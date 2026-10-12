@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -86,14 +87,57 @@ def _selection_seeds(source: Path, data: Mapping[str, Any]) -> tuple[int, ...]:
     return _integers(manifest.get("evaluation_seeds"), "selection")
 
 
+def seed_policy_path(config_path: Path) -> Path:
+    """Locate the marked sampler sidecar beside its stock-loader-compatible leaf.
+
+    Returns:
+        Family-specific sidecar path.
+    """
+    return config_path.with_name(f"{config_path.stem}_seed_policy.yaml")
+
+
+def load_seed_hook(config_path: Path) -> dict[str, Any]:
+    """Load only the externally owned sampler's declared interface fields.
+
+    Returns:
+        The three #10324 fields, separate from stock trainer configuration.
+    """
+    path = seed_policy_path(config_path)
+    if not path.is_file():
+        raise ValueError("missing #10324 training-seed hook sidecar")
+    raw = yaml.safe_load(path.read_text())
+    fields = {"training_seed_range", "training_master_seed", "development_evaluation_seeds"}
+    if not isinstance(raw, Mapping) or set(raw) != fields | {"schema_version"}:
+        raise ValueError("training-seed hook must contain exactly its declared interface fields")
+    if raw["schema_version"] != "robot-sf-training-seed-hook.v1":
+        raise ValueError("training-seed hook has an invalid schema")
+    return {key: raw[key] for key in fields}
+
+
 def validate_family(config_path: Path = FAMILY) -> dict[str, Any]:
     """Validate resolved training/selection conditions before any environment exists.
 
     Returns:
-        Fully inherited raw configuration, ready for #10324's loader.
+        Fully inherited launch configuration bound to the marked #10324 hook.
     """
     source = config_path.resolve()
-    data = train_ppo._load_expert_training_config_mapping(source)
+    stock = train_ppo._load_expert_training_config_mapping(source)
+    if (
+        stock.get("seeds") != [100000]
+        or stock.get("randomize_seeds") is not False
+        or stock["scenario_sampling"].get("episode_seed_pool") != [100000]
+    ):
+        raise ValueError("stock leaf must retain the declared loader-only training seed template")
+    # Keep the stock loader authoritative for every normal config key. Sampler
+    # fields exist only in the marked sidecar until its interface is integrated.
+    train_ppo.load_expert_training_config(source)
+    data = {
+        **stock,
+        **load_seed_hook(source),
+        "seeds": [],
+        "randomize_seeds": True,
+        "scenario_sampling": {**stock["scenario_sampling"], "episode_seed_pool": None},
+    }
     _, selected, _ = validate_seed_partitions(
         data.get("training_seed_range"),
         _selection_seeds(source, data),
@@ -200,12 +244,23 @@ def load_launch_config(config_path: Path = FAMILY):
     """Fail closed until the actual PPO loader can bind #10324's sampling interface.
 
     Returns:
-        ExpertTrainingConfig from the existing trainer's supported loader.
+        ExpertTrainingConfig with the supported #10324 dataclass fields bound.
     """
     data = validate_family(config_path)
     if not sampler_interface_available():
         raise RuntimeError("Training disabled: integrate PR #10324's training-seed interface first")
-    config = train_ppo.load_expert_training_config(config_path)
+    stock = train_ppo.load_expert_training_config(config_path)
+    # Bind #10324's supported dataclass interface without adding unsupported
+    # keys to the canonical leaf or implementing any episode sampling here.
+    config = replace(
+        stock,
+        training_seed_range=tuple(data["training_seed_range"]),
+        training_master_seed=data["training_master_seed"],
+        development_evaluation_seeds=tuple(data["development_evaluation_seeds"]),
+        seeds=(),
+        randomize_seeds=True,
+        scenario_sampling=dict(data["scenario_sampling"]),
+    )
     bounds, selected, reported = validate_seed_partitions(
         getattr(config, "training_seed_range", None),
         config.evaluation.evaluation_seeds,

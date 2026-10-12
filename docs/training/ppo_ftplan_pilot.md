@@ -16,7 +16,14 @@ optimizer/minibatch draws; the initial deterministic actor/value weights remain 
 same released policy in all three runs.
 
 Use the released observation/action contract. The canonical trainer must reject
-any space mismatch. This pilot does not silently remap the released policy to the
+any space mismatch. The initialization check found released linear action bounds
+±3 versus current native acceleration bounds ±1. An explicit bounds-only migration
+is available in the warm-start API, but its use requires a reviewed action-contract
+receipt bound to the exact source head and released checkpoint, with target bounds
+and `target_semantics: acceleration`, `mapping: bounds_only`, and a
+`review_artifact` carrying path/digest/hub/W&B readback references. Different
+action-semantic mappings remain with the alignment lane. No such approval receipt
+is asserted in this unsubmitted packet. This pilot does not silently remap the released policy to the
 alignment lane's new plant or action schema. If a migration is needed, stop and
 prepare a separately reviewed conversion before admission. The inherited recipe
 also retains its historical reward/curriculum settings: this pilot isolates warm
@@ -38,7 +45,7 @@ never invokes `sbatch`; those settings come from the private operations overlay.
 
 After prerequisites pass, the orchestrator binds `FTPLAN_SOURCE_HEAD` to the reviewed
 checkout and supplies `FTPLAN_REPLICATION_MANIFEST`, `FTPLAN_SELECTION_RECEIPT`,
-`FTPLAN_HUB_ROOT`, and `FTPLAN_SEGMENT` (1–3), using the repository max-time submission
+`FTPLAN_HUB_ROOT`, `FTPLAN_ACTION_CONTRACT_RECEIPT`, and `FTPLAN_SEGMENT` (1–3), using the repository max-time submission
 wrapper. Create `output/slurm` before scheduling. The script runs one array replica
 at a time (`0-2%1`) and never schedules a successor. Different segment roots prevent
 checkpoint/log collisions. Review live throughput and partition limits before any

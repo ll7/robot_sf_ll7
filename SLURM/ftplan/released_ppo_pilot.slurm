@@ -13,6 +13,7 @@ set -euo pipefail
 : "${FTPLAN_SOURCE_HEAD:?set exact reviewed commit}"
 : "${FTPLAN_REPLICATION_MANIFEST:?set durable replication-report manifest}"
 : "${FTPLAN_SELECTION_RECEIPT:?set previous CPU selection receipt}"
+: "${FTPLAN_ACTION_CONTRACT_RECEIPT:?set reviewed action-interface receipt}"
 : "${FTPLAN_HUB_ROOT:?set durable external hub root}"
 : "${FTPLAN_SEGMENT:?set 1, 2, or 3 after previous selection}"
 cd "$FTPLAN_REPO_ROOT"
@@ -30,6 +31,8 @@ scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- python - <<'PY'
 import hashlib, json, os
 from pathlib import Path
 import yaml
+import numpy as np
+from gymnasium import spaces
 from robot_sf.training.released_warm_start import load_warm_start, released_checkpoint
 from robot_sf.training.scenario_family_weights import with_family_weights
 from scripts.training.train_ppo import load_expert_training_config
@@ -47,7 +50,7 @@ def verified(record):
 manifest = json.loads(Path(os.environ['FTPLAN_REPLICATION_MANIFEST']).read_text())
 if manifest['status'] != 'reported' or manifest['worker_receipt_audit'] != 'passed':
     raise ValueError('Controlled seed replication has not reported with a passed receipt audit')
-if len(manifest['paired_master_reports']) != 3:
+if sorted(r['master_seed'] for r in manifest['paired_master_reports']) != [100000, 100001, 100002]:
     raise ValueError('All three paired-master reports are required')
 for r in manifest['paired_master_reports']:
     verified(r)
@@ -61,10 +64,17 @@ if receipt['fallback_used'] or receipt['execution_errors']:
 if receipt['completed_segment'] != segment - 1:
     raise ValueError('Selection receipt is from the wrong segment')
 source, provenance = released_checkpoint('ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417')
+action_contract = json.loads(Path(os.environ['FTPLAN_ACTION_CONTRACT_RECEIPT']).read_text())
+verified(action_contract['review_artifact'])
+if action_contract['source_head'] != os.environ['FTPLAN_SOURCE_HEAD'] or action_contract['source_checkpoint_sha256'] != provenance['sha256']:
+    raise ValueError('Action contract is not bound to this source/checkpoint')
+if action_contract['mapping'] != 'bounds_only' or action_contract['target_semantics'] != 'acceleration':
+    raise ValueError('Other action-semantic migrations require the alignment lane integration')
+target_space = spaces.Box(np.asarray(action_contract['target_action_low'], dtype=np.float32), np.asarray(action_contract['target_action_high'], dtype=np.float32))
 if segment == 1:
     if receipt['checkpoint_sha256'] != provenance['sha256']:
         raise ValueError('First segment requires the released baseline selection')
-    model, _ = load_warm_start(source, init_seed=seed)
+    model, _ = load_warm_start(source, init_seed=seed, target_action_space=target_space)
     checkpoint = Path(os.environ['ROBOT_SF_ARTIFACT_ROOT']) / 'warm.zip'
     model.save(checkpoint)
 else:

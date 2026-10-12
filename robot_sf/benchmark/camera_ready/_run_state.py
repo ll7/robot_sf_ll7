@@ -244,7 +244,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
             scoped = expected_arm_scenarios(
                 [dict(sc) for sc in scenarios],
                 cfg=cfg,
-                planner_key=str(planner["key"]),
+                planner=next(p for p in cfg.planners if p.key == str(planner["key"])),
                 kinematics=str(planner["kinematics"]),
             )
             arm_scenarios_by_id = {

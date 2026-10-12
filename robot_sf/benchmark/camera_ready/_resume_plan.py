@@ -343,7 +343,10 @@ def build_resume_plan(
                     episodes_path,
                     planner,
                     expected_arm_scenarios(
-                        scenarios, cfg=cfg, planner_key=planner_key, kinematics=kinematics
+                        scenarios,
+                        cfg=cfg,
+                        planner=next(p for p in cfg.planners if p.key == planner_key),
+                        kinematics=kinematics,
                     )
                     if cfg is not None
                     else scenarios,

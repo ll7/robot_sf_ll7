@@ -769,7 +769,7 @@ def _prepare_campaign_planner_variant_run(
         scoped_scenarios=expected_arm_scenarios(
             context.scenarios,
             cfg=cfg,
-            planner_key=planner.key,
+            planner=planner,
             kinematics=kinematics,
         ),
     )

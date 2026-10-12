@@ -12,7 +12,7 @@ from robot_sf.benchmark.camera_ready._config import (
 )
 
 if TYPE_CHECKING:
-    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _historical_authored_identity,
@@ -27,14 +27,13 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 
 def expected_arm_scenarios(
-    scenarios: list[dict[str, Any]], *, cfg: CampaignConfig, planner_key: str, kinematics: str
+    scenarios: list[dict[str, Any]], *, cfg: CampaignConfig, planner: PlannerSpec, kinematics: str
 ) -> list[dict[str, Any]]:
     """Build the same scenario inputs for dispatch, resume and final admission.
 
     Returns:
         Kinematics, telemetry and horizon-bound scenario inputs for this arm.
     """
-    planner = next(p for p in cfg.planners if p.key == planner_key)
     horizon = planner.horizon_override if planner.horizon_override is not None else cfg.horizon
     scoped = []
     for scenario in scenarios:

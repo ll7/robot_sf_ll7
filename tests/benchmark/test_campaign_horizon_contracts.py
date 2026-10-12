@@ -217,6 +217,33 @@ def test_scheduled_budget_survives_runner_timestep_override(dt):
     assert ctx.config.sim_config.sim_time_in_secs == pytest.approx(expected * dt)
 
 
+def test_unscheduled_arm_uses_supplied_planner_horizon(tmp_path):
+    """An accepted supplied override binds both the runner and prepared scenario budget."""
+    cfg = replace(
+        load_campaign_config(TEMPLATE),
+        scenario_horizons_path=None,
+        scenario_horizons_sha256=None,
+    )
+    scenarios = [
+        {
+            "name": "dev_fixed_arm",
+            "seeds": [1001],
+            "simulation_config": {"max_episode_steps": 1000},
+        }
+    ]
+    original = deepcopy(scenarios)
+    run = _prepare_campaign_planner_variant_run(
+        SimpleNamespace(cfg=cfg, runs_dir=tmp_path, scenarios=scenarios),
+        planner=replace(cfg.planners[0], horizon_override=700),
+        kinematics="differential_drive",
+        active_observation_mode="socnav_state",
+        log_run=False,
+    )
+    assert run.effective_horizon == 700
+    assert run.scoped_scenarios[0]["simulation_config"]["max_episode_steps"] == 700
+    assert scenarios == original
+
+
 def test_schedule_refuses_fixed_arm_override(tmp_path):
     """An explicit schedule cannot be silently replaced by an arm's fixed horizon."""
     cfg = load_campaign_config(TEMPLATE)

@@ -1,5 +1,7 @@
 # Safety revision after the independent FIX review
 
+**Historical sampled-position guard.** The [continuous-interval revision](../revision3/README.md) supersedes this implementation and retains these benchmark traces as its comparator.
+
 Development diagnostic only, seeds 1001–1003. This supersedes the original contributor-only evidence for the current implementation. It does not admit release evidence or provide a general collision-safety guarantee.
 
 ## Contract and implementation

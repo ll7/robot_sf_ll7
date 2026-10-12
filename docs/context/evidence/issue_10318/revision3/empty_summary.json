@@ -1,0 +1,22 @@
+[
+  {
+    "suite": "main",
+    "pairs": 144,
+    "before_successes": 141,
+    "after_successes": 141,
+    "contacts": 0,
+    "new_failures": 0,
+    "trace_changes": 0,
+    "trajectory_changes": 0
+  },
+  {
+    "suite": "width",
+    "pairs": 9,
+    "before_successes": 9,
+    "after_successes": 9,
+    "contacts": 0,
+    "new_failures": 0,
+    "trace_changes": 0,
+    "trajectory_changes": 0
+  }
+]

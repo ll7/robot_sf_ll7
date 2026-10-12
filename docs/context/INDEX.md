@@ -3,7 +3,7 @@
 Issue #10318 prediction planner freeze: confirmed beam admission objective mismatch,
 failing-old/passing-new behavior regression, all six affected development cells,
 and paired empty-world accounting with residual limits:
-[guarded safety revision](evidence/issue_10318/revision2/README.md).
+[continuous-interval safety revision](evidence/issue_10318/revision3/README.md).
 
 Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:

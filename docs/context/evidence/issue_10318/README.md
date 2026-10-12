@@ -1,6 +1,6 @@
 # Prediction beam-search freeze diagnostic (#10318)
 
-**Historical first revision.** The [guarded safety revision](revision2/README.md) supersedes this result for the current PR head.
+**Historical first revision.** The [continuous-interval safety revision](revision3/README.md) supersedes this result for the current PR head.
 
 Development diagnostic only. Three seeds do not establish a release result or a general safety claim. No fallback/degraded rows are admitted. Fifteen of the eighteen affected episodes still time out; their global feasibility has not been established.
 

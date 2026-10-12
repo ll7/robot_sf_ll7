@@ -348,6 +348,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario-matrix", type=Path, required=True)
     parser.add_argument("--seed-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--training-seeds-only",
+        action="store_true",
+        help="Refuse development seeds when collecting training supervision.",
+    )
     parser.add_argument("--max-steps", type=int, default=220)
     parser.add_argument("--max-agents", type=int, default=24)
     parser.add_argument("--horizon-steps", type=int, default=8)
@@ -390,6 +395,8 @@ def main() -> int:  # noqa: C901, PLR0915
                 stacklevel=1,
             )
         for seed in seed_manifest.get(scenario_id, []):
+            if getattr(args, "training_seeds_only", False) and not 100000 <= seed <= 199999:
+                raise ValueError("Predictive training collection requires training-role seeds")
             if not (1001 <= seed <= 1200 or 100000 <= seed <= 199999):
                 raise ValueError(
                     "Predictive collection requires development or training seed roles"

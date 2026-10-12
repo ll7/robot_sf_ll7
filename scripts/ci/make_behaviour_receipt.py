@@ -896,10 +896,13 @@ def _submit_sbatch_sweep(
     source_sha: str,
     seeds: list[int],
     *,
-    arms: list[str] | None,
-    scenarios: list[str] | None,
-    workers: int,
+    args: argparse.Namespace,
 ) -> SweepRun:
+    node = args.sbatch_node
+    if node is None:
+        raise ValueError("--mode sbatch requires --sbatch-node to pair numerical hardware")
+    if re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", node) is None:
+        raise ValueError("--sbatch-node must name a single literal node hostname")
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
     output_dir = work_dir / "sweeps" / label
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -907,9 +910,9 @@ def _submit_sbatch_sweep(
         source_sha,
         output_dir,
         seeds,
-        arms=arms,
-        scenarios=scenarios,
-        workers=workers,
+        arms=args.arms,
+        scenarios=args.scenarios,
+        workers=args.workers,
         check_only=False,
     )
     script = work_dir / f"behaviour_receipt_{label}.sbatch"
@@ -919,9 +922,14 @@ def _submit_sbatch_sweep(
                 "#!/usr/bin/env bash",
                 f"#SBATCH --job-name=behaviour-{label}",
                 f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
+                "#SBATCH --nodes=1",
+                f"#SBATCH --nodelist={node}",
+                f"#SBATCH --cpus-per-task={args.workers}",
                 "#SBATCH --time=24:00:00",
                 "set -euo pipefail",
-                f"cd {checkout}",
+                f"cd {shlex.quote(str(checkout))}",
+                f"hostname > {shlex.quote(str(output_dir / 'execution_node.txt'))}",
+                f"lscpu --json > {shlex.quote(str(output_dir / 'execution_cpu.json'))}",
                 shlex.join(cmd),
                 "",
             ]
@@ -936,6 +944,7 @@ def _submit_sbatch_sweep(
         "job_id": job_id,
         "command": cmd,
         "script": str(script),
+        "requested_node": node,
     }
     manifest = output_dir / "submission.json"
     manifest.write_bytes(_json_bytes(submission))
@@ -1653,6 +1662,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--repo", default="ll7/robot_sf_ll7")
     parser.add_argument("--receipt-id", required=True)
     parser.add_argument("--mode", choices=("existing", "local", "sbatch"), default="existing")
+    parser.add_argument(
+        "--sbatch-node",
+        help="Required for sbatch: one literal node shared by baseline and head jobs",
+    )
     parser.add_argument("--submit-only", action="store_true")
     parser.add_argument("--head-sweep-dir", type=Path)
     parser.add_argument("--baseline-sweep-dir", type=Path)
@@ -1751,9 +1764,7 @@ def _prepare_sweeps(
             "head",
             args.head_sha,
             seeds,
-            arms=args.arms,
-            scenarios=args.scenarios,
-            workers=args.workers,
+            args=args,
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1761,9 +1772,7 @@ def _prepare_sweeps(
             "baseline",
             baseline_source,
             seeds,
-            arms=args.arms,
-            scenarios=args.scenarios,
-            workers=args.workers,
+            args=args,
         ),
     )
 

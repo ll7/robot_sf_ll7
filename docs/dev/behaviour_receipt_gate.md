@@ -54,9 +54,20 @@ versions, an unversioned newest publication, duplicate highest-version records,
 or tied latest publications fail closed. Older unversioned dataset publications
 do not displace a uniquely identified newest release. For real evidence, run
 from the SLURM host and use
-`--mode sbatch --submit-only` to submit the head and baseline empty-world sweeps;
+`--mode sbatch --submit-only --sbatch-node <node>` to submit the head and baseline
+empty-world sweeps on the same single node;
 after both jobs finish, rerun with `--mode existing` and the two completed sweep
 directories to write `receipts/behaviour/<id>.json` and print the header.
+
+The node argument must be one literal hostname; node lists and range expressions
+are refused before submission. Each job preserves `execution_node.txt` and
+`execution_cpu.json` in its sweep directory. Include these files in artifact
+custody and check them before interpreting a learned-planner difference.
+CPU-dependent floating-point inference can change learned trajectories even
+with deterministic action selection and one numerical thread. A same-commit
+comparison on the same node measures repeatability; a cross-CPU comparison
+measures numerical sensitivity. Neither comparison admits a tolerance or
+waives any existing receipt classification or audit requirement.
 
 One-command collection flow after both sweeps complete (no `PYTHONPATH` needed):
 

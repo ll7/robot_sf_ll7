@@ -1445,6 +1445,104 @@ For details on verification, see [release_artifact_badging.md](docs/release_arti
     return computed_badging, achieved_level
 
 
+def _diagnostic_input_references(root: Path) -> dict[Path, str]:  # noqa: C901
+    """Collect every path/digest input pair in diagnostics, refusing ambiguous declarations.
+
+    Returns:
+        Repository-relative input paths and their declared SHA-256 digests.
+    """
+    references: dict[Path, str] = {}
+
+    def add(raw_path: Any, digest: Any) -> None:
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise ValueError("diagnostic input path must be a nonempty relative path")
+        path = Path(raw_path)
+        if path.is_absolute() or ".." in path.parts or "\\" in raw_path or path == Path("."):
+            raise ValueError("diagnostic input path must stay within the source root")
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None:
+            raise ValueError("diagnostic input requires a valid SHA-256 digest")
+        digest = digest.lower()
+        if path in references and references[path] != digest:
+            raise ValueError("diagnostic input has contradictory digests")
+        references[path] = digest
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "path" and "sha256" in value:
+                    add(item, value["sha256"])
+                elif key.endswith("_path"):
+                    add(item, value.get(key[:-5] + "_sha256"))
+                else:
+                    visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    for report in sorted((root / "reports").glob("*diagnostics.json")):
+        try:
+            document = _read_json_file(report)
+            if report.name == "snqi_v2_diagnostics.json":
+                provenance = document.get("provenance")
+                if not isinstance(provenance, dict) or any(
+                    f"snqi_v2_{name}_path" not in provenance
+                    for name in ("weights", "anchors", "family")
+                ):
+                    raise ValueError("v2 diagnostics require weights, anchors and family inputs")
+            visit(document)
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                f"diagnostic input declarations invalid in {report.name}: {exc}"
+            ) from exc
+    return references
+
+
+def _diagnostic_input_sources(run_root: Path) -> dict[Path, tuple[Path, str]]:
+    """Resolve diagnostic dependencies before writing a future publication bundle.
+
+    Returns:
+        Stable cold payload paths, source files and declared digests.
+    """
+    sources = {}
+    repo_root = get_repository_root().resolve()
+    for relative, digest in _diagnostic_input_references(run_root).items():
+        source = None
+        for root in (run_root, repo_root):
+            candidate = root / relative
+            if any(part.is_symlink() for part in (candidate, *candidate.parents)):
+                raise ValueError(f"diagnostic input refuses symlinks: {relative}")
+            if candidate.is_file() and _sha256_file(candidate) == digest:
+                source = candidate
+                break
+        if source is None:
+            raise ValueError(f"diagnostic input missing or digest mismatch: {relative}")
+        sources[Path("diagnostic_inputs") / relative] = (source, digest)
+    return sources
+
+
+def _preflight_check_diagnostic_inputs(
+    payload_dir: Path, checksums: dict[str, str], violations: list[str]
+) -> None:
+    """Verify diagnostic referential integrity from detached bytes, without source fallback."""
+    try:
+        references = _diagnostic_input_references(payload_dir)
+        for relative, digest in references.items():
+            signed_path = (Path("payload/diagnostic_inputs") / relative).as_posix()
+            if checksums.get(signed_path) != digest:
+                violations.append(
+                    f"diagnostic input is not signed with its declared digest: {relative}"
+                )
+            target = payload_dir / "diagnostic_inputs" / relative
+            if any(part.is_symlink() for part in (target, *target.parents)):
+                violations.append(f"diagnostic input refuses symlinks: {relative}")
+            elif not target.is_file():
+                violations.append(f"diagnostic input missing from publication: {relative}")
+            elif _sha256_file(target) != digest:
+                violations.append(f"diagnostic input digest mismatch: {relative}")
+    except (OSError, ValueError) as exc:
+        violations.append(f"diagnostic input verification failed: {exc}")
+
+
 def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
     run_dir: Path,
     out_dir: Path,
@@ -1476,6 +1574,7 @@ def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if not selected_files:
         raise ValueError(f"No eligible files found under {run_root}")
     _validate_publication_requirements(run_root, selected_files)
+    diagnostic_inputs = _diagnostic_input_sources(run_root)
     release_metadata = _resolve_release_publication_metadata(run_root)
     if release_metadata is not None:
         _reject_run_local_release_metadata_paths(selected_files)
@@ -1567,6 +1666,20 @@ def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "sha256": rights_entry.sha256,
             "source": release_metadata.source_paths["rights_provenance"],
         }
+
+    for relative, (source, digest) in diagnostic_inputs.items():
+        destination = payload_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        if _sha256_file(destination) != digest:
+            raise ValueError(f"diagnostic input changed during export: {relative}")
+        size_bytes = int(destination.stat().st_size)
+        total_bytes += size_bytes
+        entries.append(
+            PublicationFileEntry(
+                path=relative.as_posix(), size_bytes=size_bytes, sha256=digest, kind="provenance"
+            )
+        )
 
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
@@ -2925,6 +3038,7 @@ def verify_publication_bundle_preflight(
     _preflight_release_notes(payload_dir, violations)
     _preflight_check_development_marker(payload_dir, manifest, violations)
     _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
+    _preflight_check_diagnostic_inputs(payload_dir, checksums, violations)
     try:
         _preflight_check_release_reconciliation(
             payload_dir,

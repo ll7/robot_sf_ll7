@@ -1,0 +1,45 @@
+# Launch through scripts/training/train_ppo_benchmark_aligned.py.
+# Sampling consumes PR #10324; main may preflight but must refuse training without it.
+# Reward and optimisation are inherited; reward corrections belong to another lane.
+base_config: ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml
+policy_id: ppo_benchmark_aligned_v1
+scenario_config: benchmark_aligned_v1_scenarios.yaml
+seeds: []
+randomize_seeds: true
+training_seed_range: [100000, 199999]
+training_master_seed: 20261012
+development_evaluation_seeds: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110,
+  1111, 1112, 1113, 1114, 1115, 1116, 1117, 1118, 1119, 1120,
+  1121, 1122, 1123, 1124, 1125, 1126, 1127, 1128, 1129, 1130]
+env_overrides:
+  ppo_action_semantics: velocity_delta
+  predictive_foresight_device: cpu
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 2.0
+    max_angular_speed: 1.0
+    allow_backwards: false
+    max_linear_accel: 1.0
+    max_linear_decel: 1.0
+    max_angular_accel: 1.0
+  sim_config:
+    time_per_step_in_secs: 0.1
+    sim_time_in_secs: 60.0
+scenario_sampling:
+  episode_seed_pool: null
+convergence:
+  success_rate: 1.1
+  collision_rate: 0.0
+  plateau_window: 100000000
+evaluation:
+  scenario_config: benchmark_aligned_v1_scenarios.yaml
+  evaluation_seed_manifest: benchmark_aligned_v1_selection.yaml
+  evaluation_episodes: 1440
+  hold_out_scenarios: []
+  randomize_seeds: false
+  full_policy_analysis_on_new_best: false
+  full_policy_analysis_videos: false
+tracking:
+  wandb:
+    group: issue-9628-benchmark-aligned-v1
+    name: ppo-benchmark-aligned-v1

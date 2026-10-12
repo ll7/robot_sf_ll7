@@ -1,9 +1,9 @@
 """Real dev-seed regression for the #10330 extracted near-miss window."""
 
-from __future__ import annotations
-
 # evidence-writer-exempt: temporary pytest checkpoint and malformed-companion
 # fixtures are not durable generated evidence; exact native traces are preserved.
+
+from __future__ import annotations
 
 import gzip
 import hashlib

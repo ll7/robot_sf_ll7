@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/replay_slice.json",
+  "artifact_sha256": "c62df54ffab5dfb2b75c5ff8b1ca9fa2a5b0e65f84ecc2fdaf1f0e3522c33d18",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -1,5 +1,8 @@
 """Actual seed-1001 corpus admission, refusal and append-only duplicate tests."""
 
+# evidence-writer-exempt: pytest tmp_path fixtures intentionally corrupt parity
+# receipts; they are never committed or presented as durable generated evidence.
+
 from __future__ import annotations
 
 import hashlib
@@ -18,6 +21,7 @@ from robot_sf.adversarial.counterexample_corpus import (
 from robot_sf.benchmark.scenario_generation.persistence_gate import (
     ScenarioPersistenceValidationError,
 )
+from robot_sf.evidence.writers import write_review_sidecar
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "docs/context/evidence/hardcase_positive_control/admission"
@@ -88,6 +92,7 @@ def test_idempotent_readmission_keeps_original_evidence_and_recovers_index(tmp_p
     original = path.read_bytes()
     timestamp = path.stat().st_mtime_ns
     index = (corpus / "corpus.json").read_bytes()
+    write_review_sidecar(path, repo_root=tmp_path)
     second = admit_window(CANDIDATE, RECEIPT, corpus_dir=corpus, repo_root=ROOT)
     assert second["status"] == "already_admitted" and second["case_id"] == first["case_id"]
     assert path.read_bytes() == original and path.stat().st_mtime_ns == timestamp

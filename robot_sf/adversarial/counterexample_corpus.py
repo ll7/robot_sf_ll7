@@ -81,6 +81,8 @@ def read_corpus(corpus_dir: Path) -> list[dict[str, Any]]:
     if index.exists() and json.loads(index.read_text()).get("schema_version") != CORPUS_SCHEMA:
         raise ScenarioPersistenceValidationError("unsupported corpus index schema")
     for path in sorted((corpus_dir / "cases").glob("case-*.json")):
+        if path.name.endswith(".review.json"):
+            continue
         record = json.loads(path.read_text())
         validate_case(record)
         if path.stem != record["case_id"]:

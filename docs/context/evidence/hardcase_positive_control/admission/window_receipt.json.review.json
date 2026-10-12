@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/window_receipt.json",
+  "artifact_sha256": "df799619a194bf7a8cd6684735e4e9d586c30080068d5ba752328d90c8ae4e03",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

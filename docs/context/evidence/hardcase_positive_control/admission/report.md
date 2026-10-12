@@ -245,6 +245,10 @@ recorded in `admission_evidence.json`; prior committed versions remain in Git.
 The normal admission API still never replaces an existing case. Its idempotency
 regression passes after this explicitly authorized custody repair.
 
+The CI-equivalent registry uses full 40-hex committed head/base identities
+(`HARDCASE_HEAD` / `HARDCASE_BASE`), matching hosted frozen-base projection.
+Untracked runtime lock files are not evidence-tree entries.
+
 The prior debt baseline digest was
 `7ad52af3e4328abdefb37bc89471dec0c84c089184a8d79757db1e587901aa71`.
 The regenerated machine baseline has **exactly the same `findings_by_path` and
@@ -253,10 +257,13 @@ companion or waiver was added. Only inventory/generation metadata changed to
 include the committed evidence tree (including the offline restorer).
 
 ```bash
+HARDCASE_HEAD="$(git rev-parse HEAD)"
+HARDCASE_BASE="$(git rev-parse lane/hardcase-positive-control)"
 scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
-  scripts/dev/evidence_registry_ratchet.py --write-baseline
+  scripts/dev/evidence_registry_ratchet.py --write-baseline --candidate-head "$HARDCASE_HEAD" --frozen-base "$HARDCASE_BASE"
 scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
-  scripts/dev/evidence_registry_ratchet.py --check --report-output ../remediation_registry_final.json
+  scripts/dev/evidence_registry_ratchet.py --check --candidate-head "$HARDCASE_HEAD" --frozen-base "$HARDCASE_BASE" \
+  --report-output ../remediation_registry_final.json
 scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
   scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main
 scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run ruff check .
@@ -296,11 +303,21 @@ scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/rep
   tests/benchmark/test_generated_scenario_replay_adapter.py \
   tests/benchmark/test_data_driven_scenario_generation.py \
   tests/benchmark/test_map_runner_episode_typed.py \
-  tests/benchmark/test_map_runner_decomposition_helpers.py -q --tb=short
+  tests/benchmark/test_map_runner_decomposition_helpers.py \
+  tests/benchmark/test_generated_window_continuation.py -q --tb=short
 ```
 
-Result: **156 passed, 10 simulator-interlock skips**. The new custody test failed
+Result: **156 passed, 14 simulator-interlock skips**. The new custody test failed
 on all four real files before remediation (**4 failed in 0.35 s**), then passed.
+Canonical byte-bound `NEEDS-REVIEW` sidecars were added with the existing
+shared writer; no numeric artifact was edited to add a marker. Temporary corrupt
+pytest fixtures carry justified writer exemptions and remain outside durable
+evidence. The idempotency regression also reproduced the reader treating a
+`.review.json` sidecar as a case (**1 failed in 2.09 s**), then passed after
+skipping that known review suffix. This protects repeat admission/index recovery
+with repository-standard metadata; earlier coverage had no review sidecar; the
+production writer/reader are used without a test-only seam.
+
 It protects real hash/location resolution; dropping a locator recreates the actual
 registry failure; previous replay tests did not invoke the generic registry; it
 uses the existing production parser with no test-only seam. The added alias

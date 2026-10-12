@@ -1,5 +1,8 @@
 """Real retained seed-1001 native envelope and source-bound receipt checks."""
 
+# evidence-writer-exempt: pytest tmp_path fixtures intentionally corrupt proof and
+# native envelopes; durable results are produced through the actual gate/CLI.
+
 from __future__ import annotations
 
 import gzip

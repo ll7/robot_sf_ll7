@@ -1,6 +1,6 @@
 {
   "admission_policy": "9652 observed replay-verified critical case; independent perturbation persistence is a separate5600robust promotion gate",
-  "base_replay_documentation_head": "0fcc9d94f",
+  "base_replay_documentation_head": "d6a71d75fe6b35de3b7afe68d46c5be49e14c416",
   "base_replay_head_at_creation": "748830c03fee517701a4ec98b8173ee7a30e17ba",
   "case_file_sha256": "3183f07088104fc43f41d9cd90451e554571fcd9299442efdba370232dd19bd4",
   "case_id": "case-082cc08f6d75b6f7721974c7e52ef9cc8d4609e0754ca396e504dd4ebb14e524",
@@ -28,7 +28,7 @@
     "admission_pr_readiness": "ready only after all required checks pass",
     "baseline_findings": 492,
     "disposition": "REMEDIATE; no new finding baselined",
-    "evidence_files": 3116,
+    "evidence_files": 3166,
     "finding_map_unchanged": true,
     "findings": 492,
     "introduced_locator_findings": 0,
@@ -73,7 +73,8 @@
   "validation": {
     "focused": "49 passed, 3 task-interlock skips in16.30s",
     "full_benchmark": "12122 passed,119 failed,340 skipped,13 errors; all132 IDs/kinds match main; zero introduced;25m21s",
-    "remediation_focused": "156 passed,10 task-interlock skips in17.95s",
+    "remediation_focused": "156 passed,14 task-interlock skips in17.74s",
+    "sidecar_red": "1 failed in2.09s: review sidecar mistaken for a case",
     "ty_pinned": "ty0.0.58/all-extras Python3.12 PASS; general6430<=6435; adjusted6427<=6432"
   }
 }

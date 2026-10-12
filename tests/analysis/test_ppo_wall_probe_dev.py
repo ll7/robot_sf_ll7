@@ -43,6 +43,8 @@ def test_velocity_delta_is_not_the_absolute_target_speed():
     rows = [
         {
             "forward_wall_cell_m": d,
+            # Retain the pre-fix alias for the interpretation regression control.
+            "raw_actor_action": [0.2, 0.0],
             "raw_actor_velocity_delta_mean": [0.2, 0.0],
             "adapter_command": [2.0, 0.0],
         }

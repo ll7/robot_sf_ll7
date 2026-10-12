@@ -11,6 +11,7 @@ reward_kwargs:
     comfort: -0.4
     smoothness: -0.15
     terminal_bonus: 2.0
+    static_speed: 0.0
 notes:
   - Canonical route-completion-first reward profile.
   - Success is route completion only (no waypoint success).

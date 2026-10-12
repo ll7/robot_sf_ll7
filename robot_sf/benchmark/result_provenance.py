@@ -491,6 +491,10 @@ def build_result_provenance_manifest(  # noqa: PLR0913
     for row, evidence in zip(rows, numerical_evidence, strict=True):
         if evidence is not None:
             row["numerical_mode"] = evidence
+    for row, record in zip(rows, episode_records, strict=True):
+        continuation = record.get("algorithm_metadata", {}).get("generated_window_continuation", {})
+        if "effective_inputs" in continuation:
+            row["simulator_settings"]["window_effective_inputs"] = continuation["effective_inputs"]
 
     # Completeness.
     is_complete = written > 0 and written >= total_jobs

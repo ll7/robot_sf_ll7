@@ -36,6 +36,7 @@ from robot_sf.planner.socnav_social_force import SocialForcePlannerAdapter
 
 SCHEMA = "robot_sf.generated_continuation.v1"
 RUNTIME_SCHEMA = "robot_sf.generated_replay_runtime.v2"
+INPUT_SCHEMA = "robot_sf.generated_continuation.v2"
 _CLOCK_FIELDS = (
     "episode",
     "timestep",
@@ -54,6 +55,80 @@ _CLOCK_FIELDS = (
 
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def input_digest(value: Any) -> str:
+    """Hash the complete JSON input object, including unknown/additional keys.
+
+    Returns:
+        SHA-256 of the complete canonical object.
+    """
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def effective_configuration(config: Any, adapter: Any) -> dict[str, Any]:
+    """Serialize the complete immutable environment/planner configuration.
+
+    Returns:
+        JSON-safe immutable settings, with map/factories bound separately.
+    """
+    root = Path(__file__).resolve().parents[3]
+    settings = asdict(config)
+    for name in ("map_pool", "robot_factory", "ped_factory"):
+        settings.pop(name, None)
+    settings["planner"] = asdict(adapter.config)
+    settings["planner_drive_settings"] = asdict(adapter._sampling_drive_settings)
+    return json.loads(
+        json.dumps(settings, sort_keys=True, default=str).replace(str(root), "<repository_root>")
+    )
+
+
+def effective_window_inputs(
+    env: Any,
+    policy: Any,
+    loop_config: Any,
+    seed: int,
+    source_map: Path,
+    start_step: int,
+    window_steps: int,
+) -> dict[str, Any]:
+    """Capture actual effective inputs once, for checkpoint and all replay carriers.
+
+    Returns:
+        The versioned complete effective-input object.
+    """
+    from robot_sf.benchmark.observation_noise import observation_noise_hash  # noqa: PLC0415
+    from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance  # noqa: PLC0415
+    from robot_sf.benchmark.tracking_precision_contract import tracking_precision_hash  # noqa: PLC0415
+
+    level = loop_config.algo_meta["observation_level"]
+    run = {
+        "simulator_settings": build_simulator_settings_provenance(
+            horizon=env.state.max_sim_steps,
+            dt=env.state.d_t,
+            record_forces=loop_config.record_forces,
+            active_observation_mode=level["active_observation_mode"],
+            active_observation_level=level["key"],
+            noise_hash=observation_noise_hash(loop_config.noise_spec),
+            tracking_precision_hash=tracking_precision_hash(loop_config.tracking_precision_spec),
+        ),
+        "record_planner_decision_trace": loop_config.record_planner_decision_trace,
+        "record_simulation_step_trace": loop_config.record_simulation_step_trace,
+        "observation_noise": loop_config.noise_spec,
+        "tracking_precision": loop_config.tracking_precision_spec,
+    }
+    return {
+        "configuration": effective_configuration(env.config, _adapter(policy)),
+        "run": run,
+        "seed": seed,
+        "map": {
+            "path": source_map.resolve()
+            .relative_to(Path(__file__).resolve().parents[3])
+            .as_posix(),
+            "sha256": _sha(source_map),
+        },
+        "window": {"start_step": start_step, "steps": window_steps},
+    }
 
 
 def _sensor(env: Any) -> Any:
@@ -106,16 +181,13 @@ def _compatibility(env: Any, policy: Any, map_sha256: str) -> SnapshotCompatibil
         "robot_sf/planner/socnav.py",
         "robot_sf/gym_env/robot_env.py",
         "robot_sf/robot/robot_state.py",
+        "robot_sf/benchmark/result_provenance.py",
     ]
     code = {name: _sha(root / name) for name in code_files}
-    config = asdict(env.config)
+    config = effective_configuration(env.config, _adapter(policy))
     # Factories are checked by the explicit supported subset; map bytes are
     # independently bound. Neither Python object addresses nor mutable map
     # navigator objects belong in the immutable configuration digest.
-    for name in ("map_pool", "robot_factory", "ped_factory"):
-        config.pop(name, None)
-    config["planner"] = asdict(_adapter(policy).config)
-    config["planner_drive_settings"] = asdict(_adapter(policy)._sampling_drive_settings)
     settings = json.dumps(config, sort_keys=True, default=str).replace(
         str(root), "<repository_root>"
     )
@@ -128,7 +200,7 @@ def _compatibility(env: Any, policy: Any, map_sha256: str) -> SnapshotCompatibil
     )
 
 
-def capture_window_checkpoint(
+def capture_window_checkpoint(  # noqa: PLR0913 - explicit source-bound capture arguments
     path: Path,
     *,
     env: Any,
@@ -138,6 +210,7 @@ def capture_window_checkpoint(
     seed: int,
     source_map: Path,
     window_steps: int,
+    source_scenario: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a real pre-step boundary; no trace positions are used as state.
 
@@ -207,6 +280,13 @@ def capture_window_checkpoint(
         "aux_sha256": _sha(aux_file),
         "state": encoded,
     }
+    if source_scenario is not None:
+        record["schema_version"] = INPUT_SCHEMA
+        record["source_scenario"] = deepcopy(dict(source_scenario))
+        record["effective_inputs"] = effective_window_inputs(
+            env, policy, loop_config, seed, source_map, start_step, window_steps
+        )
+        record["effective_inputs_sha256"] = input_digest(record["effective_inputs"])
     # Metadata is the final commit marker. Interrupted companion writes cannot
     # become a usable checkpoint; readers bind every completed companion hash.
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
@@ -237,6 +317,8 @@ def _validate_checkpoint_boundary(record: dict[str, Any]) -> None:
         "aux_sha256",
         "state",
     }
+    if record.get("schema_version") == INPUT_SCHEMA:
+        required |= {"source_scenario", "effective_inputs", "effective_inputs_sha256"}
     if set(record) != required:
         raise ValueError("window checkpoint fields mismatch")
     for name, minimum in (
@@ -261,7 +343,7 @@ def read_window_checkpoint(path: Path, *, expected_sha256: str) -> dict[str, Any
     if _sha(path) != expected_sha256:
         raise ValueError("window checkpoint digest mismatch")
     record = json.loads(path.read_text())
-    if record.get("schema_version") != SCHEMA:
+    if record.get("schema_version") not in {SCHEMA, INPUT_SCHEMA}:
         raise ValueError("unsupported window checkpoint schema")
     _validate_checkpoint_boundary(record)
     for key in ("simulator_file", "aux_file"):
@@ -279,10 +361,16 @@ def read_window_checkpoint(path: Path, *, expected_sha256: str) -> dict[str, Any
         raise ValueError("simulator payload resolves outside checkpoint packet")
     if _sha(simulator_payload) != record["simulator_payload_sha256"]:
         raise ValueError("window simulator payload digest mismatch")
+    if record["schema_version"] == INPUT_SCHEMA and (
+        input_digest(record["effective_inputs"]) != record["effective_inputs_sha256"]
+        or input_digest(record["effective_inputs"]["configuration"])
+        != record["compatibility"]["config_sha256"]
+    ):
+        raise ValueError("checkpoint effective input digest mismatch")
     return record
 
 
-def restore_window_checkpoint(
+def restore_window_checkpoint(  # noqa: C901 - validate all companions before state mutation
     path: Path,
     *,
     expected_sha256: str,
@@ -306,6 +394,22 @@ def restore_window_checkpoint(
     # buffers before mutation. Resolve the actual map file from loaded custody.
     expected = _compatibility(env, policy, _sha(source_map))
     snapshot.compatibility.assert_compatible(expected)
+    if (
+        record["schema_version"] == INPUT_SCHEMA
+        and input_digest(
+            effective_window_inputs(
+                env,
+                policy,
+                loop_config,
+                seed,
+                source_map,
+                record["start_step"],
+                record["window_steps"],
+            )
+        )
+        != record["effective_inputs_sha256"]
+    ):
+        raise ValueError("checkpoint effective runtime inputs mismatch")
     if (
         snapshot.boundary.step_index != record["start_step"]
         or snapshot.boundary.remaining_budget_steps

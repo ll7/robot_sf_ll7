@@ -92,6 +92,7 @@ def main() -> int:  # noqa: PLR0915 - explicit one-case stage order
                 seed=1001,
                 source_map=root / MAP,
                 window_steps=20,
+                source_scenario=scenario,
             )
 
     source = run_map_episode(

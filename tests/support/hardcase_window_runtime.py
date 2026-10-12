@@ -50,6 +50,7 @@ def capture(output: Path) -> None:
                 source_map=ROOT
                 / "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
                 window_steps=20,
+                source_scenario=source,
             )
 
     row = run_map_episode(

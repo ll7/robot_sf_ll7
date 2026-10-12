@@ -6,7 +6,7 @@ route_clearance_certifications: configs/benchmarks/route_clearance_certification
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s10
+  seed_set: dev_eval_s10
   seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json

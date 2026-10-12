@@ -54,17 +54,17 @@ campaign_config:
     configs/benchmarks/snqi_weights_camera_ready_v3.json: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
     configs/benchmarks/snqi_baseline_camera_ready_v3.json: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
 
-# Seed set. paper_eval_s20 already exists (111-130); paper_eval_s30 (111-140) was added by
+# Seed set. dev_eval_s20 already exists (111-130); dev_eval_s30 (111-140) was added by
 # this issue and preserves the frozen S3 eval seeds (111-113) and S10/S20 ordering.
 seed_policy:
   mode: seed-set
   seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
-  primary_seed_set: paper_eval_s20
-  escalation_seed_set: paper_eval_s30
+  primary_seed_set: dev_eval_s20
+  escalation_seed_set: dev_eval_s30
   escalate_to_s30_when: >
     Run the bundle tool on the S20 result store; if seed_resampling_rank_flip reports
     rank_flip_observed for a primary metric, or a primary delta is below the issue #1545
-    effect-size threshold, escalate to paper_eval_s30.
+    effect-size threshold, escalate to dev_eval_s30.
   checksums:
     configs/benchmarks/dev_seed_sets.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
 
@@ -100,7 +100,7 @@ slurm_command_shape: >
   Submit a dedicated follow-up SLURM issue after this packet lands. The future command must
   run scripts/tools/run_camera_ready_benchmark.py against
   configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml with
-  seed_policy.seed_set overridden to paper_eval_s20 (then paper_eval_s30 on rank flip),
+  seed_policy.seed_set overridden to dev_eval_s20 (then dev_eval_s30 on rank flip),
   write a canonical campaign result store, and keep fail-closed row classification intact
   before any S20/S30 claim.
 

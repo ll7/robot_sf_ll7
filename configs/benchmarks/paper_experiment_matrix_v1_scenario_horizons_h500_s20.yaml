@@ -3,7 +3,7 @@
 #
 # This config preserves the baseline-ready paper matrix and h500 horizon
 # contract, changing only the seed schedule from the S3 `eval` set to the
-# predeclared `paper_eval_s20` schedule. Treat outputs as paper-facing only
+# predeclared `dev_eval_s20` schedule. Treat outputs as paper-facing only
 # after the seed-sufficiency/rank-stability analysis and fail-closed row audit.
 
 name: paper_experiment_matrix_v1_scenario_horizons_h500_s20
@@ -26,7 +26,7 @@ amv_profile:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s20
+  seed_set: dev_eval_s20
   seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json

@@ -511,10 +511,7 @@
     "sha256": "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a",
     "reason": "transitive frozen/versioned release dependency"
   },
-  "configs/benchmarks/seed_sets_0_0_8.yaml": {
-    "sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706",
-    "reason": "frozen/versioned release or sealed-job input"
-  },
+  "configs/benchmarks/seed_sets_0_0_8.yaml": {"sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706", "reason": "frozen/versioned release or sealed-job input", "annotation": "# seed-holdout: setup-only (immutable artifact hash identity; never dispatched)"},
   "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml": {
     "sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
     "reason": "transitive frozen/versioned release dependency"

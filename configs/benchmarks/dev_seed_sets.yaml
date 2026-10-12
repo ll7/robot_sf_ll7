@@ -1,4 +1,4 @@
-# Development-only transport. Legacy tier names are compatibility aliases, not paper schedules.
+# Development-only transport. Development tier names are distinct from protected paper schedules.
 dev:
 - 1031
 - 1032
@@ -7,13 +7,13 @@ eval:
 - 1101
 - 1102
 - 1103
-paper_eval_s5:
+dev_eval_s5:
 - 1101
 - 1102
 - 1103
 - 1104
 - 1105
-paper_eval_s10:
+dev_eval_s10:
 - 1101
 - 1102
 - 1103
@@ -24,7 +24,7 @@ paper_eval_s10:
 - 1108
 - 1109
 - 1110
-paper_eval_s20:
+dev_eval_s20:
 - 1101
 - 1102
 - 1103
@@ -45,7 +45,7 @@ paper_eval_s20:
 - 1118
 - 1119
 - 1120
-paper_eval_s30:
+dev_eval_s30:
 - 1101
 - 1102
 - 1103

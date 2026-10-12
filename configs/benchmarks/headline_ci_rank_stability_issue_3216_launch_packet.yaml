@@ -20,7 +20,7 @@ issue: 3216
 depends_on:
   # S20/S30 seed set + the per-planner-by-seed bundle is owned by #1554.
   - issue: 1554
-    why: "Provides the predeclared S20 seed schedule (paper_eval_s20) and the
+    why: "Provides the predeclared S20 seed schedule (dev_eval_s20) and the
       increased-seed-budget headline campaign; #3216 consumes its rows."
   - issue: 3078
     why: "Package A seed/planner-rank stability + held-out transfer campaign.
@@ -58,14 +58,14 @@ runnable_config:
 seed_budget:
   primary:
     tier: S20
-    seed_set: paper_eval_s20  # seeds 111..130, tracked in dev_seed_sets.yaml
+    seed_set: dev_eval_s20  # seeds 111..130, tracked in dev_seed_sets.yaml
     status: available
   optional:
     tier: S30
-    seed_set: paper_eval_s30
+    seed_set: dev_eval_s30
     status: available_for_launch
     note: >-
-      Issue #1554 added the predeclared paper_eval_s30 seed schedule. No S30
+      Issue #1554 added the predeclared dev_eval_s30 seed schedule. No S30
       campaign rows exist yet, so S30 remains launch-only until the SLURM run
       produces durable rows. Do NOT synthesize ad hoc seeds at submit time.
 
@@ -104,7 +104,7 @@ expected_artifacts:
 
 validation:
   - "Re-verify every config sha256 above before submit (drift guard)."
-  - "Confirm paper_eval_s20 resolves to 20 seeds in dev_seed_sets.yaml."
+  - "Confirm dev_eval_s20 resolves to 20 seeds in dev_seed_sets.yaml."
   - "Rows with fallback/degraded/failed/partial-failure/unavailable execution
     remain excluded from promoted claims and carry explicit row status."
   - "Run the report harness and confirm it does NOT self-certify paper_grade;

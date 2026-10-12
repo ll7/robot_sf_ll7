@@ -16,7 +16,7 @@ seed_set_refs:
   manifest: configs/benchmarks/dev_seed_sets.yaml
   validation: dev
   evaluation: eval
-  train_excludes: paper_eval_s20
+  train_excludes: dev_eval_s20
 seeds_by_split:
   train: [201, 202, 203, 204, 205, 206]
   validation: [101, 102, 103]
@@ -48,7 +48,7 @@ hard_slice_assignment:
     reason: "Recovery relabeling examples belong to train unless a holdout slice is predeclared."
 relabeling_policy: null
 exclusion_rules:
-  - "Exclude every validation/evaluation seed from train, including paper_eval_s20."
+  - "Exclude every validation/evaluation seed from train, including dev_eval_s20."
   - "Exclude hard-slice recovery examples from evaluation unless predeclared in this packet."
 provenance: >
   Pre-Slurm launch packet for #1397. The selected oracle source is the best current

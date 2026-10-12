@@ -7,9 +7,8 @@ checkpoint selections and outcome descriptions do not transfer to a replacement
 seed. No training or evaluation result is established by this maintenance change.
 
 `configs/benchmarks/dev_seed_sets.yaml` and `dev_seed_list.yaml` are development
-copies of the immutable legacy transports. Tier names such as `paper_eval_s30`
-remain compatibility aliases in the development copy; they confer no paper or
-release authority. Active consumers now reference these copies. Frozen consumers
+copies of the immutable legacy transports. Development tier names such as `dev_eval_s30` explicitly distinguish
+them from protected paper schedules; they confer no paper or release authority. Active consumers now reference these copies. Frozen consumers
 retain their original source bytes and transports.
 
 `tests/validation/test_active_config_seeds.py` scans every non-exempt YAML config

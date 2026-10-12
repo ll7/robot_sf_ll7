@@ -16,7 +16,7 @@ amv_profile:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s5
+  seed_set: dev_eval_s5
   seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json

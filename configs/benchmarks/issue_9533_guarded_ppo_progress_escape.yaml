@@ -1,6 +1,6 @@
 # Matched, diagnostic-only evaluation for issue #9533.
 # Three arms use the same BR-06 v3 checkpoint, classic/Francis suite, and
-# paper_eval_s30 seeds: raw PPO, canonical guard, and guard with progress escape.
+# dev_eval_s30 seeds: raw PPO, canonical guard, and guard with progress escape.
 # Both guarded arms retain per-step shield evaluations and simulation traces.
 name: issue_9533_guarded_ppo_progress_escape_v1
 paper_facing: false
@@ -11,7 +11,7 @@ route_clearance_certifications: configs/benchmarks/route_clearance_certification
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
+  seed_set: dev_eval_s30
   seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 workers: 20

@@ -103,7 +103,7 @@ planners:
 
 seed_policy:
   mode: fixed-list
-  seed_set: paper_eval_s30
+  seed_set: dev_eval_s30
   seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
   seeds:
     - 1101
@@ -406,7 +406,7 @@ launch_packet:
     required_overrides:
       horizon: 600
       scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
-      seed_set: paper_eval_s30
+      seed_set: dev_eval_s30
       stop_on_failure: false
       snqi_weights: output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_weights_h600.json
       snqi_baseline: output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_baseline_h600.json

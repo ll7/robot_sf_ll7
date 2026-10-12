@@ -65,6 +65,8 @@ def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pede
     """Base scoring ignores walls and weights pedestrian cells exactly once."""
     planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
     obs = observation()
+    # Isolate occupancy costs on a rollout admitted by the physical margin guard.
+    obs["pedestrians"]["positions"] = np.array([[4.0, 0.0]])
     obs.update(
         occupancy_grid=np.zeros((4, 20, 20)),
         occupancy_grid_meta_origin=np.array([-2.0, -2.0]),
@@ -89,6 +91,7 @@ def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pede
     occupied_channels = [1, 3] if pedestrian_only else [0, 3]
     obs["occupancy_grid"][occupied_channels, :, :] = 1.0
     occupied = score()
+    assert np.isfinite(free) and np.isfinite(occupied)
     expected = 0.25 if pedestrian_only else 0.0
     assert occupied - free == pytest.approx(expected)
 

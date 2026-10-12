@@ -57,7 +57,7 @@ and affected tests were rerun after remediation.
 ## Per-stage results and exact commands
 
 Commands below run from the admission worktree. The launcher uses the existing
-shared environment at `/home/luttkule/lanes/hardcase/repo/.venv`. Only prior real
+shared environment at `../repo/.venv`. Only prior real
 seed-1001 artifacts were read in this admission slice: **zero new episodes,
 zero resets, zero search evaluations**. No sealed-seed replay/reset or frozen
 artifact edits occurred.
@@ -79,7 +79,7 @@ The already-finished source/replay command is retained for reproducibility and
 was **not rerun** during this slice:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   docs/context/evidence/hardcase_positive_control/followup/reproduce.py \
   --output docs/context/evidence/hardcase_positive_control/followup/packet
 ```
@@ -89,7 +89,7 @@ the retained packet. The prior report explains source capture, lossless restore
 and the original one-step goal-completion failure. The offline verifier remains:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   docs/context/evidence/hardcase_positive_control/followup/verify.py
 ```
 
@@ -105,7 +105,7 @@ folder = Path('docs/context/evidence/hardcase_positive_control')
 Path('../admission_source.jsonl').write_bytes(gzip.decompress((folder / 'source.jsonl.gz').read_bytes()))
 Path('../admission_gate_replays.json').write_bytes(gzip.decompress((folder / 'followup/packet/gate_replay_results.json.gz').read_bytes()))
 PY
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   scripts/tools/evaluate_pipeline_persistence_gate.py \
   --candidate docs/context/evidence/hardcase_positive_control/entry.json \
   --episodes ../admission_source.jsonl \
@@ -113,7 +113,7 @@ scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/rep
   --output docs/context/evidence/hardcase_positive_control/admission/persistence \
   --replay-results ../admission_gate_replays.json \
   --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json \
-  --receipt-root /home/luttkule/lanes/hardcase/admission
+  --receipt-root .
 ```
 
 Observed persistence CLI exit 0 describes a successful evaluation, not robust
@@ -122,7 +122,7 @@ receipt support uses the existing persistence gate and its independent statuses;
 v1 whole-episode input semantics remain in place.
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   scripts/tools/admit_counterexample_window.py \
   --candidate docs/context/evidence/hardcase_positive_control/admission/candidate.json \
   --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json \
@@ -143,7 +143,7 @@ The manual negative probe removed only `parity_proof` from the valid window
 receipt, recalculated its candidate hash, and used an unused corpus destination:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   scripts/tools/admit_counterexample_window.py \
   --candidate ../admission_no_parity_candidate.json \
   --window-receipt ../admission_no_parity.json \
@@ -166,17 +166,17 @@ The already-executed real replay regressions belong to PR #10331.
 ```bash
 export HARDCASE_NO_TEST_SIMULATION=1
 export ROBOT_SF_PYTEST_SEED_GUARD=1
-export ROBOT_SF_PYTEST_SEED_AUDIT=/home/luttkule/lanes/hardcase/admission_focused_seed_audit.jsonl
-export PYTHONPATH=/home/luttkule/lanes/hardcase/test_guard:$PWD/tests/support:$PWD
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run pytest \
+export ROBOT_SF_PYTEST_SEED_AUDIT=._focused_seed_audit.jsonl
+export PYTHONPATH=../test_guard:$PWD/tests/support:$PWD
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run pytest \
   tests/adversarial/test_counterexample_corpus.py \
   tests/adversarial/test_adversarial_package_imports.py \
   tests/benchmark/test_source_bound_window_receipt.py \
   tests/benchmark/test_scenario_persistence_gate.py \
   tests/benchmark/test_pipeline_persistence_gate_wiring.py \
   tests/benchmark/test_map_runner_preflight_profiles.py -q --tb=short
-export ROBOT_SF_PYTEST_SEED_AUDIT=/home/luttkule/lanes/hardcase/admission_test_seed_audit.jsonl
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run pytest \
+export ROBOT_SF_PYTEST_SEED_AUDIT=._test_seed_audit.jsonl
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run pytest \
   tests/benchmark -q --tb=short --continue-on-collection-errors \
   --junitxml=../admission_benchmark.xml
 ```
@@ -221,14 +221,14 @@ not baseline any**. All ten were removed, not grandfathered:
   a disagreement between the two locators. Both native manifests resolve their
   schema/scenario/config inputs to committed paths, with sizes.
 - Both uncommitted raw rows have a durable lane-host location, SHA-256 and size:
-  `imech156-u:/home/luttkule/lanes/hardcase/custody_raw/window_replay_1.jsonl`
+  `imech156-u:lanes/hardcase/custody_raw/window_replay_1.jsonl`
   and `window_replay_2.jsonl`, **206,932 bytes each**. Native artifact status remains
   `available`. The original native provenance validator passes both manifests.
 - Exact offline regeneration is recorded in both manifests:
 
 ```bash
 python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py \
-  --output /home/luttkule/lanes/hardcase/custody_raw
+  --output ../custody_raw
 ```
 
 This reverses only the archived literal producer-prefix substitution and verifies
@@ -259,18 +259,18 @@ include the committed evidence tree (including the offline restorer).
 ```bash
 HARDCASE_HEAD="$(git rev-parse HEAD)"
 HARDCASE_BASE="$(git rev-parse lane/hardcase-positive-control)"
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   scripts/dev/evidence_registry_ratchet.py --write-baseline --candidate-head "$HARDCASE_HEAD" --frozen-base "$HARDCASE_BASE"
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   scripts/dev/evidence_registry_ratchet.py --check --candidate-head "$HARDCASE_HEAD" --frozen-base "$HARDCASE_BASE" \
   --report-output ../remediation_registry_final.json
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run python \
   scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run ruff check .
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run ruff format --check .
-uvx ty@0.0.58 check . --python /home/luttkule/lanes/hardcase/typing-venv \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run ruff check .
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run ruff format --check .
+uvx ty@0.0.58 check . --python ../typing-venv \
   --output-format gitlab --exit-zero > ../remediation_admission_pinned_ty.json
-UV_PROJECT_ENVIRONMENT=/home/luttkule/lanes/hardcase/typing-venv uv run --no-sync python \
+UV_PROJECT_ENVIRONMENT=../typing-venv uv run --no-sync python \
   scripts/dev/ty_advisory_ratchet.py --check --ty-output ../remediation_admission_pinned_ty.json
 ```
 
@@ -290,9 +290,9 @@ corrections, and four new custody regression cases:
 
 ```bash
 HARDCASE_NO_TEST_SIMULATION=1 ROBOT_SF_PYTEST_SEED_GUARD=1 \
-ROBOT_SF_PYTEST_SEED_AUDIT=/home/luttkule/lanes/hardcase/remediation_focused_seed_audit.jsonl \
-PYTHONPATH=/home/luttkule/lanes/hardcase/test_guard:$PWD/tests/support:$PWD \
-scripts/dev/run_worktree_shared_venv.sh --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run pytest \
+ROBOT_SF_PYTEST_SEED_AUDIT=../remediation_focused_seed_audit.jsonl \
+PYTHONPATH=../test_guard:$PWD/tests/support:$PWD \
+scripts/dev/run_worktree_shared_venv.sh --venv ../repo/.venv -- uv run pytest \
   tests/tools/test_hardcase_window_custody.py \
   tests/adversarial/test_counterexample_corpus.py \
   tests/adversarial/test_adversarial_package_imports.py \
@@ -331,7 +331,7 @@ Git-derived changed/added lists, without posting a CI comment:
 
 ```bash
 GH_TOKEN="$(gh auth token)" scripts/dev/run_worktree_shared_venv.sh \
-  --venv /home/luttkule/lanes/hardcase/repo/.venv -- uv run python \
+  --venv ../repo/.venv -- uv run python \
   scripts/ci/pr_contract_check.py --pr-body-file ../admission_pr_body.md \
   --pr-title 'feat(corpus): admit source-bound replay-verified critical windows' \
   --pr-number 10334 --repo ll7/robot_sf_ll7 \
@@ -354,5 +354,19 @@ The next action is review of the replay fix and then the separate admission
 slice. The registry disposition is fulfilled and the local required checks pass;
 review readiness does not claim domain approval or authorize a merge. No further campaign
 or robust promotion is authorized by this evidence.
+
+
+
+Review follow-up (2026-10-12): this branch was rebased onto replay review fix
+79981142be80cf99fcb86953b87319f59bc2ea20. The parent pins this source-bound
+regression's LLVM CPU target before importing Numba kernels; its retained
+source/trace/checkpoint bytes and strict oracle are unchanged. New intentional
+custody annotations change only native manifest bytes, so their hashes were
+rebound in the receipt, candidate, embedded case, scoped persistence record,
+index and checksum/review sidecars. Case identity, discovery and original
+admission code commit remain unchanged. Documentation commands now use lane
+relative paths. No new episode or reset was needed for corpus revalidation.
+All inherited six checkpoint-bound runtime files still match the actual
+replay-producing commit. Final heads and hosted results are in the lane report.
 
 TERMINAL=AUTHOR_DECISION_REQUIRED

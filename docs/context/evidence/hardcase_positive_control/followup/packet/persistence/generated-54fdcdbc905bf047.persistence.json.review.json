@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/packet/persistence/generated-54fdcdbc905bf047.persistence.json",
-  "artifact_sha256": "ae43008331227844de9933b331187cdc14f6e7f2acd3bb1e083015e74a1fd983",
+  "artifact_sha256": "6d949bb4c30c966dd2434d67ea0c909e7e53ed64f0ba822a299672aed7ee5f38",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

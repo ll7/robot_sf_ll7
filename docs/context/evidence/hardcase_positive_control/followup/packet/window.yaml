@@ -1,7 +1,7 @@
 scenarios:
 - generated_replay:
     checkpoint_file: checkpoint.json
-    checkpoint_sha256: 51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348
+    checkpoint_sha256: afe069972d0d346bdbffcd1d2d564114b933374d69357a71cf90a642b9f8d41c
     schema_version: robot_sf.generated_replay_runtime.v2
     start_step: 370
     window_steps: 20

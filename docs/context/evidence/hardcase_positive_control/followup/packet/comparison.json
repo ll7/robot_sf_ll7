@@ -1,5 +1,5 @@
 {
-  "fix_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
+  "fix_commit": "3551282a86cad12ea825a0f701b4a24406dde2d0",
   "original_budget_steps": 600,
   "replays": [
     {
@@ -11,7 +11,7 @@
         "readiness_status": "adapter"
       },
       "continuation": {
-        "checkpoint_sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348",
+        "checkpoint_sha256": "afe069972d0d346bdbffcd1d2d564114b933374d69357a71cf90a642b9f8d41c",
         "original_budget_steps": 600,
         "restore_status": "restored_supported_subset",
         "schema_version": "generated-window-continuation.v1",
@@ -47,7 +47,7 @@
         "readiness_status": "adapter"
       },
       "continuation": {
-        "checkpoint_sha256": "51591a25361849a163ffcaa284b6e0f35eca61df8199fdf476cc6e05c4467348",
+        "checkpoint_sha256": "afe069972d0d346bdbffcd1d2d564114b933374d69357a71cf90a642b9f8d41c",
         "original_budget_steps": 600,
         "restore_status": "restored_supported_subset",
         "schema_version": "generated-window-continuation.v1",

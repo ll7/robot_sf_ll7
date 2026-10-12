@@ -13,9 +13,9 @@
     "--replay-results",
     "<repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/gate_replay_results.json",
     "--commit-hash",
-    "1baaa3eb08cfbc1866f18702eb939c1f60b400fd"
+    "3551282a86cad12ea825a0f701b4a24406dde2d0"
   ],
   "returncode": 0,
   "stderr": "",
-  "stdout": "REJECT <repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/persistence/generated-54fdcdbc905bf047.persistence.json :: exact_replay:fail:replay digest mismatch: source=3d65f640214911d7f6ad8c02f0ffeb1d38bd4ac76f0310819f090641132b110a replay=81489b2b69f875573ff9cf5d726122d382f44e86d81781aecfc7ef3c89001931; critical_event_reproduced:fail:event_type=min_clearance; perturbation_cell:-0.25:-0.2:unknown; perturbation_cell:-0.25:0.0:unknown; perturbation_cell:-0.25:0.2:unknown; perturbation_cell:0.0:-0.2:unknown; perturbation_cell:0.0:0.0:unknown; perturbation_cell:0.0:0.2:unknown; perturbation_cell:0.25:-0.2:unknown; perturbation_cell:0.25:0.0:unknown; perturbation_cell:0.25:0.2:unknown\n\nSummary: 0 promoted, 1 rejected, 1 total\n"
+  "stdout": "REJECT <repository_root>/docs/context/evidence/hardcase_positive_control/followup/packet/persistence/generated-54fdcdbc905bf047.persistence.json :: exact_replay:fail:replay digest mismatch: source=3d65f640214911d7f6ad8c02f0ffeb1d38bd4ac76f0310819f090641132b110a replay=25a79f18b6f0b778f0216fae01063a8442e9b932da810c398d5558022b8cf3ec; critical_event_reproduced:fail:event_type=min_clearance; perturbation_cell:-0.25:-0.2:unknown; perturbation_cell:-0.25:0.0:unknown; perturbation_cell:-0.25:0.2:unknown; perturbation_cell:0.0:-0.2:unknown; perturbation_cell:0.0:0.0:unknown; perturbation_cell:0.0:0.2:unknown; perturbation_cell:0.25:-0.2:unknown; perturbation_cell:0.25:0.0:unknown; perturbation_cell:0.25:0.2:unknown\n\nSummary: 0 promoted, 1 rejected, 1 total\n"
 }

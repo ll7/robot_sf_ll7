@@ -41,14 +41,14 @@
   },
   "compatibility": {
     "checkpoint_sha256": null,
-    "code_revision": "125f0e5f20f41ef9bd99de1fdb504350b406b8eb8783efe7d13c59797188334e",
+    "code_revision": "c2694ad8cd44d0af72452836f4bb43e3203af269daf689f05c0ce79db54bb2c8",
     "config_sha256": "3e6a10bdcc89c477aa0cdfc1510564f6c0f04a7d2b6f1fd3a8b74dcbaeea5258",
     "dt_s": 0.1,
     "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
     "planner_id": "social_force",
     "platform_tag": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39"
   },
-  "metadata_sha256": "2bfe27e307f2e7731830d43758ca3275acad93e3e74abe1dc7c57cc2e444402b",
+  "metadata_sha256": "f94b727ff9b24daac314b34cce547970b2d0a8e4659ffb85503f78d19e3c8686",
   "payload_bytes": 4178,
   "payload_sha256": "21c40d4406eb534cb462deb9bcf70fb871c6dfef54c0872f28b6c5b338a49f88",
   "schema_version": "simulator_typed_snapshot.v2",

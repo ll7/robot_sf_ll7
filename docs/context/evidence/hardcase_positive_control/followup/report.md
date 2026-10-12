@@ -290,3 +290,40 @@ CPU pin is confined to this regression's subprocesses, leaving suite-wide and
 production compiler settings alone. Final exact heads and hosted check results
 are recorded in the lane report after push. The behaviour receipt remains with
 the orchestrator's receipt batch; corpus admission remains out of this PR.
+
+
+## Exact-head security review follow-up (2026-10-12)
+
+PASS: digest-valid symlinks escaping the packet are refused for the auxiliary,
+simulator descriptor and simulator NPZ payload. Before the fix, the three
+negative cases failed with DID NOT RAISE. The reader checks resolved containment
+before hashing each companion; basename and hash checks remain mandatory.
+
+PASS: the offline verifier selects the persistence receipt by the catalog's
+scenario ID. A regression forces the review sidecar to enumerate first; before
+the fix this raised KeyError `promotion`, after the fix it runs cleanly.
+
+Exact regression command (simulation disabled):
+`HARDCASE_NO_TEST_SIMULATION=1 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv .venv -- uv run pytest tests/benchmark/test_generated_window_continuation.py::test_checkpoint_refuses_digest_valid_external_symlink tests/tools/test_hardcase_offline_verifier.py -q`.
+Result: RED four failures in 1.76 s; GREEN four passes in 1.65 s.
+
+The security repair changes the six-file runtime fingerprint. Existing code
+bindings were not relaxed: this packet was regenerated from a real source
+capture and two fresh replays at runtime commit
+`3551282a86cad12ea825a0f701b4a24406dde2d0`. Historical source inputs and the
+independent source oracle are unchanged. Exact command:
+`NUMBA_CPU_NAME=znver2 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv .venv -- uv run python docs/context/evidence/hardcase_positive_control/followup/reproduce.py --runtime-revision 3551282a86cad12ea825a0f701b4a24406dde2d0 --output docs/context/evidence/hardcase_positive_control/followup/packet`.
+Preserve a previous packet outside the repository before running the recipe;
+its output must be empty. Raw regenerated artifacts have lane-host custody
+locations, SHA-256 and size in the packet provenance/native manifests.
+
+PASS: source capture reproduces all 600 reference frames; both window replays
+reproduce all 20 frames, 11 near-miss samples, first event at step 374 / 37.5 s,
+minimum clearance 0.47727323760374385 m, zero trajectory discrepancy at tolerance
+1e-9 m. Both retained digests remain unchanged. The actual focused command
+`NUMBA_CPU_NAME=znver2 ROBOT_SF_PYTEST_SEED_GUARD=1 PYTHONPATH=../test_guard:tests/support:. scripts/dev/run_worktree_shared_venv.sh --venv .venv -- uv run pytest tests/benchmark/test_generated_window_continuation.py tests/tools/test_hardcase_offline_verifier.py -q`
+passed all eight tests in 43.95 s. The offline verifier and byte-exact raw-row
+regeneration also pass. Corpus admission remains in #10334 / #9652; this PR's
+unchanged nine-cell robustness gate rejects unknown perturbation evidence.
+The orchestrator-owned behaviour receipt is still outstanding; the PR body
+and receipt gate were not edited.

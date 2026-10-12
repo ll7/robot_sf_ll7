@@ -57,7 +57,7 @@ def classify(rows: list[dict]) -> str:
     if len(rows) != len(OFFSETS) or any(r["forward_wall_cell_m"] is None for r in rows):
         return "not_identifiable"
     distances = [r["forward_wall_cell_m"] for r in rows]
-    if distances[-1] < distances[0] and all(r["raw_actor_action"][0] >= 1.85 for r in rows):
+    if distances[-1] < distances[0] and all(r["adapter_command"][0] >= 1.85 for r in rows):
         return "holds"
     return "does_not_hold"
 
@@ -104,11 +104,11 @@ def run_probe(out: Path, *, max_steps: int = 600) -> dict:
                     "step": step,
                     "forward_wall_cell_m": forward_wall_distance(model_obs),
                     "physical_wall_clearance_m": replay._min_obstacle_clearance(env),
-                    "raw_actor_action": action,
+                    "raw_actor_velocity_delta_mean": action,
                     "adapter_command": [command["v"], command["omega"]],
                     "native_action": replay._serialize_env_action(native),
                     "critic_value": value,
-                    "static_ablated_actor_action": ablation_action,
+                    "static_ablated_velocity_delta_mean": ablation_action,
                     "static_ablated_critic_value": ablation_value,
                 }
                 obs, _, terminated, truncated, info = env.step(np.asarray(native))
@@ -136,7 +136,7 @@ def run_probe(out: Path, *, max_steps: int = 600) -> dict:
         finally:
             env.close()
     report = {
-        "schema": "ppo-wall-probe-dev.v1",
+        "schema": "ppo-wall-probe-dev.v2",
         "review_status": "AI-GENERATED NEEDS-REVIEW",
         "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "producer_path": "scripts/analysis/ppo_wall_probe_dev.py",
@@ -147,7 +147,8 @@ def run_probe(out: Path, *, max_steps: int = 600) -> dict:
         "fallback_used": False,
         "observation_normalization": "none; released PPO uses raw dict observations",
         "scope": "diagnostic only; narrow doorway, five dev seeds; no causal or population claim",
-        "criterion": "all four pre-contact raw actor speeds >=1.85 m/s and final forward occupied cell nearer than first",
+        "action_semantics": "velocity_delta; Gaussian means are signed deltas, adapter_command is the absolute target (v, omega)",
+        "criterion": "all four pre-contact absolute adapter target speeds >=1.85 m/s and final forward occupied cell nearer than first",
         "results": results,
     }
     out.parent.mkdir(parents=True, exist_ok=True)

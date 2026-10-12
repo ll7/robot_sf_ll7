@@ -29,10 +29,25 @@ def test_cell_centers_channel_order_and_world_rotation():
 
 def test_probe_does_not_promote_missing_or_slow_states():
     """The all-offset signature rejects absent wall cells and one slowing action."""
-    rows = [{"forward_wall_cell_m": d, "raw_actor_action": [2.0, 0]} for d in (4, 3, 2, 1)]
+    rows = [{"forward_wall_cell_m": d, "adapter_command": [2.0, 0]} for d in (4, 3, 2, 1)]
     assert classify(rows) == "holds"
-    rows[-1]["raw_actor_action"][0] = 1.0
+    rows[-1]["adapter_command"][0] = 1.0
     assert classify(rows) == "does_not_hold"
     rows[-1]["forward_wall_cell_m"] = None
     assert classify(rows) == "not_identifiable"
     assert classify(rows[:2]) == "not_identifiable"
+
+
+def test_velocity_delta_is_not_the_absolute_target_speed():
+    """A small positive delta can maintain a 2 m/s target near an approaching wall."""
+    rows = [
+        {
+            "forward_wall_cell_m": d,
+            "raw_actor_velocity_delta_mean": [0.2, 0.0],
+            "adapter_command": [2.0, 0.0],
+        }
+        for d in (4.0, 3.0, 2.0, 1.0)
+    ]
+    assert classify(rows) == "holds"
+    rows[-1]["adapter_command"][0] = 1.0
+    assert classify(rows) == "does_not_hold"

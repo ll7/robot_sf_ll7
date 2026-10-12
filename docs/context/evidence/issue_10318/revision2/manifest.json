@@ -22,9 +22,9 @@
   "fallback_or_degraded_rows": 0,
   "evidence_tier": "diagnostic-only",
   "artifact_sha256": {
-    "reviewed_crowding_minima.csv": "a877fda2b17a10d03cf29e538bd75e2fc03c842ea6022546676c69f154aaaebe",
+    "reviewed_crowding_minima.csv": "23f7d4bb474e8aa5fd959e98842bba0d3dc06d7382cc27a1c9f3099a838c0aba",
     "empty_summary.json": "fe5d8ba19e75bb4478998d8b6b055f29b510ceec99e4b0fcb7adc4689f16c3f1",
-    "empty_world.csv": "42f27ed4cbf9f1c842fff15866b49c49f30039a6f1b5377b605fe605a4cc2a9f",
-    "affected.csv": "625d2cb020f33ea32db004a8249a8a74d94eaad4f496d6b3d6cc3aca2726db09"
+    "empty_world.csv": "1459227e042e7bfd87b88458444d16ef1eca85525afc579fe53b37cce7674b75",
+    "affected.csv": "ca9a47307e9bf83d8b7cbc9370d45f0aafe3bdecda58857d4d07d42f0a086b13"
   }
 }

@@ -685,7 +685,15 @@ def test_only_positive_historical_v1_proof_exempts_custody(  # noqa: C901
             meta["metric_list"] = ["snqi_v2"]
         elif proof == "v2_later_row":
             with (target / "runs/goal/episodes.jsonl").open("a") as stream:
-                stream.write(json.dumps({"metrics": {"snqi_v2_terms": {"S": 1}}}) + "\n")
+                stream.write(
+                    json.dumps(
+                        {
+                            "event_ledger": {"software_commit": "abc123"},
+                            "metrics": {"snqi_v2_terms": {"S": 1}},
+                        }
+                    )
+                    + "\n"
+                )
         elif proof == "v2_weights":
             (target / "reports/unversioned.json").write_text(_valid_asset_contents()["weights"])
         elif proof == "v2_pins":

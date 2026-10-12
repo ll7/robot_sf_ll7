@@ -1,0 +1,55 @@
+schema: ppo-ftplan-pilot.v1
+state: prepared_not_submitted
+author_approval_date: '2026-10-12'
+source:
+  model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  job: 11724
+  wandb_run: ll7/robot_sf/ibo3aqus
+  normalization: none
+training_config: configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.yaml
+initialization_seeds: [100001, 100002, 100003]
+training_master_seeds: [100001, 100002, 100003]
+training_episode_range: [100000, 199999]
+steps_per_seed: 3000000
+segment_steps: 1000000
+selection:
+  seed_range: [1031, 1060]
+  scenario_count: 48
+  runner: canonical_benchmark_runner_and_released_checkpoint_adapter
+  device: cpu
+  baseline: released_checkpoint_on_identical_selection_pairs
+  continue_rule: latest_selection_success_strictly_above_previous_selection_success
+  first_segment_rule: selection_success_strictly_above_released_baseline
+  stop_rule: stop_seed_on_no_improvement_or_any_nan_or_fallback
+  checkpoint_rule: best_selection_success_before_any_report_evaluation
+  ties: earliest_checkpoint
+  stopped_seeds: retained_no_replacement
+report:
+  seed_range: [1101, 1130]
+  scenario_count: 48
+  device: cpu
+  use: once_after_checkpoint_choice_never_for_selection
+preservation:
+  checkpoints: [released_source, warm_initialization, each_segment_final, selection_best, final]
+  destinations: [external_hub, wandb_artifact]
+  verify: sha256_and_independent_readback
+  include: [source_head, resolved_configs, worker_seed_receipts, model_normalization_companions_if_any, selection_rows, manifests, logs]
+prerequisites:
+  - controlled_seed_replication_reports_complete_with_worker_receipt_audit_and_durable_readback
+  - seed_policy_and_spawn_receipt_implementation_independently_reviewed_and_merged
+  - warm_start_and_family_weighting_implementation_independently_reviewed_and_merged
+  - checkpoint_environment_observation_and_action_spaces_match_without_silent_conversion
+  - predictive_model_loaded_without_fallback
+  - behaviour_receipt_and_hosted_required_checks
+cost:
+  reference: issue_9628_job11724_10m_steps_8h04m_one_l40s_22_workers
+  training_l40s_gpu_hours: 7.26
+  training_uncertainty_fraction: 0.5
+  rounded_training_budget_l40s_gpu_hours: 12
+  training_core_hours_nominal: 159.7
+  cpu_selection_episodes_max: 14400
+  cpu_report_episodes_max: 4320
+  evaluation_cpu_hours: unmeasured_measure_first_baseline
+  note: no_hardware_equivalence_claim_A30_or_other_devices_require_a_throughput_update
+claim_boundary: development_tuning_only_no_release_or_paper_admission
+obstacle_observation_feature: deferred_mixed_probe_1_of_5_strict_signatures

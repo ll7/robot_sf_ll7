@@ -20,7 +20,9 @@ and either sealed band, covering the complete sealed interval. An explicit legac
 reset pool also refuses selection leakage and sealed identities. Legacy scalar
 seed configs retain their static loading behavior and remain subject to existing
 runtime sealed-seed guards. A range requires fixed selection/comparison seeds,
-empty legacy seeds/pool, and randomization enabled. Resume is refused until episode
+empty legacy seeds/pool, and randomization enabled. Worker seed fields in
+`scenario_sampling` are reserved for runtime allocation and rejected in YAML,
+so they cannot bypass root-level range validation. Resume is refused until episode
 stream state can be restored, preventing silent layout reuse after restart.
 
 Train with `scripts/training/train_ppo.py --config

@@ -60,6 +60,21 @@ def test_resolution_refuses_sealed_interior_in_reset_pool(tmp_path: Path) -> Non
         train_ppo.load_expert_training_config(path)
 
 
+def test_resolution_refuses_runtime_seed_fields_in_user_sampling_config(tmp_path: Path) -> None:
+    """Open sampling metadata must not provide an unvalidated alternate range path."""
+    path = _config(tmp_path, [])
+    raw = yaml.safe_load(path.read_text())
+    raw["scenario_sampling"].update(
+        training_seed_range=[1031, 1032],
+        training_master_seed=20261012,
+        seed_worker_index=0,
+        seed_worker_count=1,
+    )
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match="runtime-owned"):
+        train_ppo.load_expert_training_config(path)
+
+
 def _range_config(tmp_path: Path, **changes) -> Path:
     """Bind a valid training-only policy with independent fixed held-out splits."""
     path = _config(tmp_path, [])

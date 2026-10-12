@@ -976,6 +976,19 @@ def _load_expert_training_config_mapping(
     return _deep_merge_config(base_data, data)
 
 
+def _validate_sampling_seed_namespace(sampling: Mapping[str, Any]) -> None:
+    """Refuse user-provided worker seed fields that would bypass root range validation."""
+    if {
+        "training_seed_range",
+        "training_master_seed",
+        "seed_worker_index",
+        "seed_worker_count",
+    }.intersection(sampling):
+        raise ValueError(
+            "seed range and worker partition fields in scenario_sampling are runtime-owned; configure the training range and master at the config root"
+        )
+
+
 def _resolve_training_seed_policy(
     data: Mapping[str, Any],
     evaluation_raw: Mapping[str, Any],
@@ -993,7 +1006,7 @@ def _resolve_training_seed_policy(
         raise ValueError("bind selection seeds inline or through a manifest, not both")
     evaluation_seeds = tuple(inline_selection or evaluation_seeds)
     development_evaluation_seeds = tuple(data.get("development_evaluation_seeds", ()))
-    pool = tuple(data.get("scenario_sampling", {}).get("episode_seed_pool") or ())
+    pool = tuple((data.get("scenario_sampling") or {}).get("episode_seed_pool") or ())
     validate_seed_splits(
         pool,
         evaluation_seeds,
@@ -1042,6 +1055,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         data,
         allowed_ppo_hyperparams=_PPO_PARAM_COERCIONS,
     )
+
+    _validate_sampling_seed_namespace(data.get("scenario_sampling") or {})
 
     scenario_raw = Path(data["scenario_config"])
     scenario_config = (

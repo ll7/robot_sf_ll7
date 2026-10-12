@@ -44,6 +44,7 @@ def reconstruct_configuration(
     from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
         _scenario_with_episode_seed_defaults,
     )
+    from robot_sf.benchmark.map_runner_policies.map_runner_actions import robot_kinematics_label  # noqa: PLC0415
     from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (  # noqa: PLC0415
         resolve_episode_policy_runtime,
     )
@@ -52,6 +53,9 @@ def reconstruct_configuration(
     selected["map_file"] = str(map_path)
     settings = inputs["run"]["simulator_settings"]
     config = build_env_config(selected, scenario_path=scenario_path)
+    # Match environment_factory.make_robot_env's seed binding, without calling
+    # the factory (which constructs/resets a simulator).
+    config.sim_config.pedestrian_seed = inputs["seed"]
     config.sim_config.time_per_step_in_secs = settings["dt"]
     algo, policy_config = resolve_episode_policy_runtime(
         default_algo="social_force",
@@ -65,7 +69,10 @@ def reconstruct_configuration(
     )
     apply_policy_env_observation_overrides(config, policy_config)
     policy, _ = build_map_policy(
-        algo, policy_config, robot_kinematics="differential_drive", robot_command_mode="vx_vy"
+        algo,
+        policy_config,
+        robot_kinematics=robot_kinematics_label(config),
+        robot_command_mode=str(getattr(config.robot_config, "command_mode", "vx_vy")),
     )
     adapter = cast("Any", policy)._planner_adapter
     adapter.bind_env(SimpleNamespace(config=config))
@@ -188,6 +195,7 @@ def verify_effective_inputs(
     import os  # noqa: PLC0415
 
     from robot_sf.benchmark.scenario_generation.replay_adapter import materialize_generated_scenario  # noqa: PLC0415
+    from robot_sf.benchmark.typed_snapshot import SnapshotCompatibility, read_typed_snapshot  # noqa: PLC0415
     from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
 
     scenario_path, checkpoint_path = paths["scenario"], paths["checkpoint"]
@@ -195,6 +203,10 @@ def verify_effective_inputs(
     if checkpoint["schema_version"] != INPUT_SCHEMA:
         raise ValueError("effective input contract requires configuration-owning checkpoint v2")
     inputs = checkpoint["effective_inputs"]
+    snapshot = read_typed_snapshot(checkpoint_path.parent / checkpoint["simulator_file"])
+    snapshot.compatibility.assert_compatible(
+        SnapshotCompatibility.from_dict(checkpoint["compatibility"])
+    )
     if input_digest(inputs["configuration"]) != checkpoint["compatibility"]["config_sha256"]:
         raise ValueError("effective configuration digest mismatch")
     config, policy = reconstruct_configuration(

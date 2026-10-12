@@ -7,6 +7,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -111,5 +112,75 @@ def test_refuse_four_round6_reviewer_forgeries(tmp_path: Path, probe: str) -> No
                     "enabled": True,
                     "action_latency_steps": 1,
                 }
+
+    _attack(tmp_path, mutate)
+
+
+def _leaves(value, path=()):
+    if isinstance(value, dict) and value:
+        for name, item in value.items():
+            yield from _leaves(item, (*path, name))
+    elif isinstance(value, list) and value:
+        for index, item in enumerate(value):
+            yield from _leaves(item, (*path, index))
+    else:
+        yield path
+
+
+def _changed(value):
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, float) and not math.isfinite(value):
+        return 0.0
+    if isinstance(value, int | float):
+        return value + 1
+    if isinstance(value, str):
+        return value + "-forged"
+    if isinstance(value, list):
+        return ["forged"]
+    return "forged"
+
+
+def _profile():
+    receipt = json.loads(RECEIPT.read_text())
+    checkpoint = json.loads((ROOT / receipt["bindings"]["checkpoint"]["path"]).read_text())
+    return checkpoint["effective_inputs"]
+
+
+@pytest.mark.parametrize("carrier", ["metadata", "simulator", "manifest", "trace"])
+@pytest.mark.parametrize("path", list(_leaves(_profile())), ids=lambda p: "/".join(map(str, p)))
+def test_refuse_mutation_of_any_one_effective_input(
+    tmp_path: Path, carrier: str, path: tuple
+) -> None:
+    """Every leaf of the whole captured object must agree in each independent carrier."""
+
+    def mutate(_scenario, rows, manifests):
+        row = rows[0]
+        if carrier == "metadata":
+            inputs = row["algorithm_metadata"]["generated_window_continuation"]["effective_inputs"]
+        elif carrier == "simulator":
+            inputs = row["result_provenance"]["simulator_settings"]["window_effective_inputs"]
+        elif carrier == "manifest":
+            inputs = manifests[0]["rows"][0]["simulator_settings"]["window_effective_inputs"]
+        else:
+            inputs = row["algorithm_metadata"]["simulation_step_trace"]["window_effective_inputs"]
+        parent = inputs
+        for key in path[:-1]:
+            parent = parent[key]
+        parent[path[-1]] = _changed(parent[path[-1]])
+
+    _attack(tmp_path, mutate)
+
+
+@pytest.mark.parametrize("mutation", ["add_unknown", "remove_required"])
+def test_whole_input_contract_refuses_added_or_removed_keys(tmp_path: Path, mutation: str) -> None:
+    """Whole-object comparison must stay fail-closed as input fields evolve."""
+
+    def mutate(_scenario, rows, _manifests):
+        inputs = rows[0]["algorithm_metadata"]["generated_window_continuation"]["effective_inputs"]
+        if mutation == "add_unknown":
+            inputs["new_effective_option"] = True
+        else:
+            del inputs["configuration"]
 
     _attack(tmp_path, mutate)

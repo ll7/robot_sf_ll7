@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cache
-from pathlib import Path  # noqa: TC003 - runtime type-hint consumers resolve Path
+from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -2247,6 +2247,8 @@ class _StepLoopSetupArgs:
     expected_population_size: int | None
     hybrid_source_field: str | None
     pair_reset_hook: _PairResetHook | None = None
+    before_step_hook: Callable[..., None] | None = None
+    scenario_path: Path | None = None
 
 
 @dataclass(slots=True)
@@ -3738,9 +3740,13 @@ def _execute_step_loop(
     planner_stats: Any,
     horizon_val: int,
     normalize_budget_timeout: bool = True,
+    start_step: int = 0,
+    before_step_hook: Callable[..., None] | None = None,
 ) -> None:
     """Run the per-step episode loop, mutating ``state`` in place."""
-    for step_idx in range(horizon_val):
+    for step_idx in range(start_step, start_step + horizon_val):
+        if before_step_hook is not None:
+            before_step_hook(step_idx=step_idx, env=env, state=state, loop_config=slc)
         if slc.active_harness is not None:
             slc.active_harness.start_cycle()
         step_goal_current, step_goal_next = (
@@ -3820,9 +3826,76 @@ def _execute_step_loop(
             slc,
             step_idx=step_idx,
             sim=sim,
-            reached_max_steps=normalize_budget_timeout and step_idx + 1 >= horizon_val,
+            reached_max_steps=normalize_budget_timeout and step_idx + 1 >= start_step + horizon_val,
         ):
             break
+
+
+def _restore_generated_window(
+    args: _StepLoopSetupArgs,
+    *,
+    env: Any,
+    policy_fn: Any,
+    slc: _StepLoopConfig,
+    state: _StepLoopState,
+) -> tuple[_StepLoopState, int, int]:
+    """Restore an opt-in generated window while leaving ordinary episodes untouched.
+
+    Returns:
+        Loop state, absolute first transition index, and execution length.
+    """
+    start_step = 0
+    execution_steps = args.horizon_val
+    runtime = (args.scenario or {}).get("generated_replay", {})
+    if (
+        isinstance(runtime, dict)
+        and runtime.get("schema_version") == "robot_sf.generated_replay_runtime.v2"
+    ):
+        from robot_sf.benchmark.scenario_generation.continuation import (  # noqa: PLC0415 - opt-in snapshot dependency
+            restore_window_checkpoint,
+        )
+
+        if args.scenario_path is None or not (args.scenario or {}).get("map_file"):
+            raise ValueError("window continuation requires an explicit source map/scenario path")
+        source_map = Path(str(args.scenario["map_file"]))
+        if not source_map.is_absolute():
+            source_map = (args.scenario_path.parent / source_map).resolve()
+        checkpoint_path = Path(str(runtime["checkpoint_file"]))
+        if not checkpoint_path.is_absolute():
+            checkpoint_path = args.scenario_path.parent / checkpoint_path
+        restored_obs, checkpoint = restore_window_checkpoint(
+            checkpoint_path,
+            expected_sha256=runtime["checkpoint_sha256"],
+            env=env,
+            policy=policy_fn,
+            loop_config=slc,
+            seed=args.seed,
+            source_map=source_map,
+        )
+        state = _init_step_loop_state(
+            obs=restored_obs,
+            env=env,
+            config=args.config,
+            hybrid_source_field=args.hybrid_source_field,
+        )
+        # Ordinary resets deliberately have no preceding pedestrian sample.
+        # A continuation boundary does: use its restored positions so the
+        # first resumed frame keeps the source finite-difference velocities.
+        state.previous_trace_ped_pos = state.initial_ped_positions.copy()
+        start_step = checkpoint["start_step"]
+        execution_steps = checkpoint["window_steps"]
+        if start_step != runtime["start_step"] or execution_steps != runtime["window_steps"]:
+            raise ValueError("window continuation descriptor/boundary mismatch")
+        args.algo_meta["generated_window_continuation"] = {
+            "schema_version": "generated-window-continuation.v1",
+            "start_step": start_step,
+            "window_steps": execution_steps,
+            "source_episode_id": checkpoint["source_episode_id"],
+            "checkpoint_sha256": runtime["checkpoint_sha256"],
+            "original_budget_steps": checkpoint["original_budget_steps"],
+            "restore_status": "restored_supported_subset",
+        }
+    return state, start_step, execution_steps
 
 
 def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult:
@@ -3885,12 +3958,21 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
                 args.config, state.map_def, args.scenario
             ),
         )
+        state, start_step, execution_steps = _restore_generated_window(
+            args,
+            env=env,
+            policy_fn=policy_fn,
+            slc=slc,
+            state=state,
+        )
         _execute_step_loop(
             state,
             slc,
             env=env,
             planner_stats=args.planner_runtime.planner_stats,
-            horizon_val=args.horizon_val,
+            horizon_val=execution_steps,
+            start_step=start_step,
+            before_step_hook=args.before_step_hook,
             normalize_budget_timeout=(
                 _has_authored_horizon_schedule(args.scenario or {})
                 or (args.scenario or {}).get("metadata", {}).get("campaign_horizon", {}).get("mode")
@@ -3945,6 +4027,8 @@ def _run_episode_step_loop(  # noqa: PLR0913
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
     pair_reset_hook: _PairResetHook | None = None,
+    before_step_hook: Callable[..., None] | None = None,
+    scenario_path: Path | None = None,
 ) -> _EpisodeStepLoopResult:
     """Run the env reset, the per-step episode loop, and planner/env teardown.
 
@@ -3984,6 +4068,8 @@ def _run_episode_step_loop(  # noqa: PLR0913
             expected_population_size=expected_population_size,
             hybrid_source_field=hybrid_source_field,
             pair_reset_hook=pair_reset_hook,
+            before_step_hook=before_step_hook,
+            scenario_path=scenario_path,
         )
     )
 
@@ -5651,6 +5737,7 @@ def run_map_episode(  # noqa: PLR0913
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
     pair_reset_hook: _PairResetHook | None = None,
+    before_step_hook: Callable[..., None] | None = None,
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
@@ -5782,6 +5869,8 @@ def run_map_episode(  # noqa: PLR0913
         pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
         expected_population_size=expected_population_size,
         pair_reset_hook=pair_reset_hook,
+        before_step_hook=before_step_hook,
+        scenario_path=scenario_path,
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,

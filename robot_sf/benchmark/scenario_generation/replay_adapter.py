@@ -7,16 +7,20 @@ when the production scenario contract cannot represent the trace shape.
 
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass
 from math import isfinite
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from robot_sf.benchmark.scenario_generation.catalog_schema import validate_catalog_entry
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _RUNTIME_SCHEMA_VERSION = "robot_sf.generated_replay_runtime.v1"
 
@@ -31,7 +35,11 @@ class GeneratedScenarioMaterialization:
 
 
 def materialize_generated_scenario(
-    entry: dict[str, Any], *, max_episode_steps: int = 100
+    entry: dict[str, Any],
+    *,
+    max_episode_steps: int = 100,
+    source_scenario: dict[str, Any] | None = None,
+    continuation_checkpoint: Path | None = None,
 ) -> GeneratedScenarioMaterialization:
     """Return a standalone scenario document or an entry-specific blocker.
 
@@ -42,10 +50,16 @@ def materialize_generated_scenario(
     """
 
     validate_catalog_entry(entry)
-    if isinstance(max_episode_steps, bool) or not isinstance(max_episode_steps, int):
-        raise ValueError("max_episode_steps must be an integer")
-    if max_episode_steps < 1:
-        raise ValueError("max_episode_steps must be >= 1")
+    _validate_episode_budget(max_episode_steps)
+
+    if continuation_checkpoint is not None:
+        if source_scenario is None:
+            raise ValueError("window continuation requires the original source scenario")
+        return _materialize_continuation(
+            entry, source_scenario, continuation_checkpoint, max_episode_steps
+        )
+    if source_scenario is not None:
+        raise ValueError("source_scenario requires a captured continuation checkpoint")
 
     frames = entry["segment"]["trace_frames"]
     if len(frames) < 2:
@@ -87,6 +101,7 @@ def materialize_generated_scenario(
                 "simulation_config": {
                     "max_episode_steps": max_episode_steps,
                     "ped_density": 0.0,
+                    "goal_completion_policy": "goal_zone_entry_v1",
                 },
                 "robot_config": {"type": "differential_drive"},
                 "generated_replay": {
@@ -112,6 +127,14 @@ def materialize_generated_scenario(
         ],
     }
     return GeneratedScenarioMaterialization("loads_only", (), scenario)
+
+
+def _validate_episode_budget(max_episode_steps: int) -> None:
+    """Validate the positive transition budget shared by both replay modes."""
+    if isinstance(max_episode_steps, bool) or not isinstance(max_episode_steps, int):
+        raise ValueError("max_episode_steps must be an integer")
+    if max_episode_steps < 1:
+        raise ValueError("max_episode_steps must be >= 1")
 
 
 def dump_generated_scenario_yaml(result: GeneratedScenarioMaterialization) -> str:
@@ -154,6 +177,11 @@ def apply_generated_replay_runtime(  # noqa: C901
 
     if not isinstance(runtime, dict):
         raise ValueError("generated_replay must be a mapping")
+    if runtime.get("schema_version") == "robot_sf.generated_replay_runtime.v2":
+        _validate_continuation_runtime(runtime)
+        # The checkpoint restores into the original source world. Replacing its
+        # goals/routes/actors here would invalidate every captured state binding.
+        return map_def
     expected = {"schema_version", "robot", "pedestrians"}
     unknown = sorted(set(runtime) - expected)
     if unknown:
@@ -207,7 +235,10 @@ def apply_generated_replay_runtime(  # noqa: C901
         )
 
     spawn_zone = _point_zone(start)
-    goal_zone = _point_zone(goal)
+    # A short extracted segment can fit entirely inside the default waypoint
+    # acceptance radius. A finite endpoint zone prevents success at reset or
+    # step zero solely because that radius covers the whole window (#10330).
+    goal_zone = _endpoint_zone(goal)
     robot_route = GlobalRoute(
         spawn_id=0,
         goal_id=0,
@@ -257,6 +288,96 @@ def _point_zone(point: tuple[float, float]) -> tuple[tuple[float, float], ...]:
     """Return a degenerate triangular zone so runtime placement is exactly pinned."""
 
     return (point, point, point)
+
+
+def _endpoint_zone(point: tuple[float, float]) -> tuple[tuple[float, float], ...]:
+    """Return a finite one-centimetre endpoint zone for directional load smoke."""
+    x, y = point
+    half_width = 0.005
+    return (
+        (x - half_width, y - half_width),
+        (x + half_width, y - half_width),
+        (x + half_width, y + half_width),
+    )
+
+
+def _validate_continuation_runtime(runtime: dict[str, Any]) -> None:
+    """Reject undeclared continuation semantics before environment creation."""
+    if set(runtime) != {
+        "schema_version",
+        "checkpoint_file",
+        "checkpoint_sha256",
+        "start_step",
+        "window_steps",
+    }:
+        raise ValueError("generated continuation runtime fields mismatch")
+    if not isinstance(runtime["checkpoint_file"], str) or not runtime["checkpoint_file"]:
+        raise ValueError("generated continuation requires a checkpoint file")
+    digest = runtime["checkpoint_sha256"]
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(c not in "0123456789abcdef" for c in digest)
+    ):
+        raise ValueError("generated continuation requires a complete checkpoint SHA-256")
+    for key, minimum in (("start_step", 0), ("window_steps", 1)):
+        value = runtime[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ValueError(f"generated continuation {key} is invalid")
+
+
+def _materialize_continuation(
+    entry: dict[str, Any],
+    source_scenario: dict[str, Any],
+    checkpoint_path: Path,
+    max_episode_steps: int,
+) -> GeneratedScenarioMaterialization:
+    """Retain original goals/budget and bind a captured pre-step continuation.
+
+    Returns:
+        A generated-only scenario with the original world and a checkpoint binding.
+    """
+
+    from robot_sf.benchmark.scenario_generation.continuation import read_window_checkpoint  # noqa: PLC0415 - checkpoint-only dependency
+
+    digest = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+    checkpoint = read_window_checkpoint(checkpoint_path, expected_sha256=digest)
+    if (
+        checkpoint["source_episode_id"] != entry["source_episode"]["episode_id"]
+        or checkpoint["source_seed"] != entry["source_episode"]["source_seed"]
+    ):
+        raise ValueError("continuation checkpoint source identity mismatch")
+    dt = checkpoint["compatibility"]["dt_s"]
+    if not isfinite(dt) or dt <= 0 or checkpoint["window_steps"] != max_episode_steps:
+        raise ValueError("continuation checkpoint timestep/window budget mismatch")
+    if (
+        not isfinite(entry["segment"]["window_start_s"])
+        or abs(checkpoint["start_step"] * dt - entry["segment"]["window_start_s"]) > 1e-9
+        or abs(
+            (checkpoint["start_step"] + max_episode_steps) * dt - entry["segment"]["window_end_s"]
+        )
+        > 1e-9
+    ):
+        raise ValueError("continuation checkpoint does not cover the extracted window")
+    scenario = deepcopy(dict(source_scenario))
+    scenario["seeds"] = [checkpoint["source_seed"]]
+    scenario["generated_replay"] = {
+        "schema_version": "robot_sf.generated_replay_runtime.v2",
+        "checkpoint_file": checkpoint_path.as_posix(),
+        "checkpoint_sha256": digest,
+        "start_step": checkpoint["start_step"],
+        "window_steps": max_episode_steps,
+    }
+    metadata = scenario.setdefault("metadata", {})
+    metadata.update(source="auto_generated", required_manual_review=True, benchmark_evidence=False)
+    metadata["generated_replay"] = {
+        "scenario_id": entry["scenario_id"],
+        "replay_status": "loads_only",
+        "claim_boundary": "generated scenario hypotheses only",
+    }
+    return GeneratedScenarioMaterialization(
+        "loads_only", (), {"schema_version": "robot_sf.scenario_matrix.v1", "scenarios": [scenario]}
+    )
 
 
 def _not_representable(detail: str) -> GeneratedScenarioMaterialization:

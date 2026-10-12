@@ -114,6 +114,8 @@ jobs:
           import os
           import subprocess
 
+          from scripts.dev.check_ci_needs import docs_only_changed_files
+
           event = os.environ["GITHUB_EVENT_NAME"]
           if event == "pull_request":
               base, head, separator = os.environ["PR_BASE_SHA"], os.environ["PR_HEAD_SHA"], "..."
@@ -130,11 +132,10 @@ jobs:
                   changed = subprocess.check_output([
                       "git", "diff", "--no-renames", "--name-only", "-z", f"{base}{separator}{head}", "--"
                   ]).split(b"\0")
-                  paths = [path for path in changed if path]
-                  # Disable rename detection so both endpoints must be docs.
-                  docs_only = bool(paths) and all(
-                      path.startswith(b"docs/") or path.endswith(b".md") for path in paths
-                  )
+                  paths = [os.fsdecode(path) for path in changed if path]
+                  # The shared manifest governs coverage exemptions too. Disable
+                  # rename detection so both endpoints must qualify as docs.
+                  docs_only = docs_only_changed_files(paths, complete=True)
               except subprocess.CalledProcessError:
                   print("::warning::Cannot classify changed paths; retaining full CI")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
@@ -1251,7 +1252,8 @@ jobs:
             -q
 
   ci:
-    name: ci
+    # Draft feedback must not impersonate a ready PR's full-CI identity.
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'ci-draft' || 'ci' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
@@ -1307,7 +1309,7 @@ jobs:
         if: >-
           ${{ always() && needs.dispatch-ownership.result == 'success' &&
           needs.dispatch-ownership.outputs.docs_only == 'true' }}
-        run: echo "Documentation-only changes; heavy CI jobs skipped and ci reports success."
+        run: echo "Documentation-only changes; heavy CI jobs skipped and the aggregate check reports success."
 
       - name: Record draft feedback result
         if: >-

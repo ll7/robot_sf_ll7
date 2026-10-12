@@ -64,11 +64,11 @@ policy id, config path, scenario config, total timesteps, reward profile, reques
 
 ## Released-checkpoint warm start
 
-For the released issue-791 policy, prepare a new-run ZIP without training:
+For the released plain PPO in 0.0.8 (October B1002), prepare a new-run ZIP without training:
 
 ```bash
 uv run python -m scripts.training.prepare_released_ppo_warm_start \
-  --model-id ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417 \
+  --model-id ppo_release_robot_b1002_last_20261001 \
   --init-seed 100001 --out output/ftplan/init100001/model.zip
 ```
 
@@ -88,13 +88,27 @@ known unnormalized release; it cannot be used to silently discard another source
 normalization. Observation/action spaces must match; action-contract or observation
 schema migrations require a separately validated conversion.
 
-An initialization-only check against current main found a concrete action-space
-barrier: the released checkpoint declares `[-3, -1]` to `[3, 1]`, while the current
-native acceleration environment declares `[-1, -1]` to `[1, 1]`. Default loading
-rejects that mismatch. `load_warm_start(..., target_action_space=<Box>)` permits an
-**explicit bounds-only migration** with identical shape/dtype, preserving every
-actor/value tensor and the raw Gaussian mean. Clipped `predict()` actions may then
-change. This option does not translate velocity commands to acceleration or velocity
-deltas; an action-semantic migration still needs the alignment lane's reviewed
-contract and behavior receipt. The fixed-observation checkpoint parity test uses the original
-bounds, and equality is claimed only for that unchanged policy interface.
+B1002 uses velocity-delta actions with bounds `[-2, -1]` to `[2, 1]`, a 2.0 m/s
+forward cap, no reverse, no curriculum, `route_completion_v3`, 18 workers and CNN
+channels 32/64/64. The pilot preserves this interface, rather than using the April
+issue-791 or March guarded-PPO source. Its benchmark action-contract receipt must
+confirm unchanged velocity-delta semantics and bounds. Environment binding still
+rejects any incompatible observation or action space.
+
+The opt-in generic `target_action_space` API can change clipping bounds with
+identical shape/dtype while preserving raw actor/value tensors. It does not convert
+action semantics and is not used by the B1002 pilot.
+
+To reproduce release parity without simulator stepping or GPU training, resolve
+the registry-pinned B1002 release into the model cache, then run:
+
+```bash
+ROBOT_SF_B1002_PARITY_CHECKPOINT=output/model_cache/ppo_release_robot_b1002_last_20261001/ppo_release_robot_b1002_last_20261001-model.zip \
+  scripts/dev/run_worktree_shared_venv.sh -- pytest -n0 -o addopts= \
+  tests/training/test_released_warm_start.py -q
+```
+
+The release test checks its digest and serialized recipe, exact fixed-observation
+actions, critic predictions and all actor/value tensors, and repeats parity after
+saving/reloading each of the three initialization seeds. Without the explicit
+checkpoint path this large-artifact test skips; the synthetic regressions still run.

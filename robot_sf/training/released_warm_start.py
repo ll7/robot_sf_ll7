@@ -52,7 +52,7 @@ def load_warm_start(
     Initialization resets counters and optimizer moments, keeping every policy tensor
     unchanged. Normalization statistics are external to SB3 ZIP checkpoints; callers
     must supply their pinned companion when the source used VecNormalize. The released
-    issue-791 checkpoint used raw dict observations and has no such companion.
+    B1002 checkpoint uses raw dict observations and has no such companion.
 
     Returns:
         The initialized PPO model and its effective (possibly normalized) environment.

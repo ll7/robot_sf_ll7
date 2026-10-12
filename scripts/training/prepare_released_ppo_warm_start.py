@@ -16,7 +16,7 @@ def main() -> None:
     parser.add_argument(
         "--model-id",
         required=True,
-        choices=["ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"],
+        choices=["ppo_release_robot_b1002_last_20261001"],
     )
     parser.add_argument("--init-seed", type=int, required=True)
     parser.add_argument("--out", type=Path, required=True)

@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/round7_report.md",
-  "artifact_sha256": "efebfeac12a848a08f879b8fbb2a1469d284fc1c969da4127bdb68ba2e63b236",
+  "artifact_sha256": "83f8c95e54db7024d840926b94c65c545a20245da0e92975b96fa38de5a763ab",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

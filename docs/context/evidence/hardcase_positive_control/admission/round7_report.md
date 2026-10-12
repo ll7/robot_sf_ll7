@@ -1,7 +1,7 @@
 <!-- AI-GENERATED (#9652) - NEEDS-REVIEW -->
 # Round-7 stop: incomplete admission authority
 
-**Admission FAIL. Recommend parking #10334 as a draft with `state:parked`.**
+**Admission FAIL. Parking recommended and applied: #10334 is a draft with `state:parked`.**
 The complete reconstruction design was not reached in this round. #10331's
 replay fix is independent and unchanged; neither PR is merged.
 
@@ -87,6 +87,12 @@ historical-export regression separately failed before its fix with
 `DID NOT RAISE` (**1 failed in 11.64s**). GREEN: **18 passed in 17.52s**.
 These passing tests prove class refusal only; they do not prove admission works.
 
+Actual admission CLI refusal (exit **2**, no corpus directory created):
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 scripts/dev/run_worktree_shared_venv.sh --venv ../typing-venv -- uv run python scripts/tools/admit_counterexample_window.py --candidate docs/context/evidence/hardcase_positive_control/admission/candidate.json --window-receipt docs/context/evidence/hardcase_positive_control/admission/window_receipt.json --corpus ../round7_refused_corpus --repo-root .
+```
+
 ## Corrected provenance-module claim
 
 The claim that twelve focused failures were pre-existing main defects is
@@ -113,11 +119,12 @@ failures are introduced by intentional class refusal, not attributed to main.
 | Corpus admission / re-admission / replay export | FAIL | The unmodified case refuses; historical exports refuse. Old positive tests are preserved. |
 | Reviewer regressions and unchanged refusal control | PASS | 18 tests; all 16 forgeries fail first on the reviewed head. |
 | Touched gate/API tests | FAIL | 29 passed, 4 failed (positive admission/receipt/re-admission expectations). No masking or ratchet change. |
-| Existing effective-input regressions | PENDING | Exact command above; final result in lane report. |
+| Existing effective-input regressions | PASS | 1,662 passed in 623.61s; existing field-specific rejection reasons still required. |
 | Provenance comparison | PASS | 59/59 on each checkout in all-extras environment. |
 | Lint / ruff | PASS | `UV_PROJECT_ENVIRONMENT=../typing-venv scripts/dev/ci_driver.sh lint`; focused ruff also passes. |
-| ty advisory ratchet | PASS, pending final rerun | No baseline increase; pinned ty 0.0.58. |
-| Registry / docs integrity / PR contract | PENDING | Final exact-head results are recorded in the lane report; behaviour receipt remains orchestrator-owned. |
+| ty advisory ratchet | PASS | Final run: exception-adjusted general 6,427 <= 6,432; benchmark 1,683 <= 1,688; pinned ty 0.0.58; no baseline increase. |
+| Registry debt | PASS | Candidate scan: 492 findings, unchanged. Generated inventory must account for the report/sidecar (3,200 files). Final registry inventory outcome is recorded in the lane report. |
+| Docs integrity / PR contract equivalents | PASS | Changed docs check and local PR-contract check passed. Final head readbacks are recorded in the lane report; hosted behaviour receipt remains orchestrator-owned. |
 
 The four preserved failing tests are
 `test_admit_real_seed1001_window_and_export_slice`,
@@ -125,6 +132,9 @@ The four preserved failing tests are
 `test_retained_seed1001_window_receipt_verifies_actual_replays`, and
 `test_native_window_gate_accepts_parity_without_promoting_unknown_persistence`.
 They are the evidence that the end-to-end success criterion remains unmet.
+
+Code/test containment commit: `eeb169256e9ccdb085c23e6b910af22aef7bb236`.
+The final documentation/inventory commits do not change the tested code.
 
 No frozen artifact, prohibited-seed simulation/reset, sealed replay, new
 adversarial campaign, debt finding baseline, attribution line or merge is

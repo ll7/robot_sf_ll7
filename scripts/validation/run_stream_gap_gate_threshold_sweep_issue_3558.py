@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     from dataclasses import replace
 
-    seeds = args.seeds if args.seeds is not None else list(range(101, 113))
+    seeds = args.seeds if args.seeds is not None else list(range(1101, 1113))
     params = EpisodeParams()
     if args.max_steps is not None:
         params = replace(params, max_steps=args.max_steps)

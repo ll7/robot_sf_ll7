@@ -4,7 +4,7 @@
 This runner captures a per-step Dynamic Window Approach (DWA) decision trace for the two
 fixed-seed episodes named by the #5262 configuration-sensitivity diagnostic:
 
-- ``classic_bottleneck_medium`` seed ``131`` (canonical config, ``max_steps`` timeout).
+- ``classic_bottleneck_medium`` development seed ``1121`` (replacement; historical outcome does not transfer).
 - ``classic_t_intersection_low`` seed ``161`` (canonical config, ``collision``).
 
 For each episode it records the selected command, the selected candidate score, the
@@ -62,12 +62,12 @@ DEFAULT_OUT_DIR = REPO_ROOT / "output/benchmarks/issue_5298"
 HORIZON = 100
 DT = 0.1
 
-# The two episodes named by the #5262 manifest's canonical config point. The seeds come
+# Development replacements for the two episodes named by the #5262 manifest's canonical config point. The seeds come
 # from the standard classic archetype matrix declaration used by both the #5020 and #5262
 # diagnostics; the canonical DWA config point applies no overrides, so tracing these rows
 # reproduces the #5262 canonical episode outcomes (timeout at 100 steps, collision).
 TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
-    ("classic_bottleneck_medium", 131, "bottleneck_timeout"),
+    ("classic_bottleneck_medium", 1121, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
 )
 FOLLOW_UP_ISSUE = 5319

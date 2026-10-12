@@ -183,8 +183,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--seed",
         type=int,
-        default=123,
-        help="Optuna sampler seed (default: 123).",
+        default=1043,
+        help="Optuna sampler seed (default: 1043).",
     )
     parser.add_argument(
         "--disable-wandb",

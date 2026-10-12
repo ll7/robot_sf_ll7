@@ -13,7 +13,7 @@ select_scenarios:
   - classic_bottleneck_low
 
 scenario_overrides:
-  seeds: [113]
+  seeds: [1103]
   metadata:
     mechanism_aware_suite_id: static_deadlock_recovery
     issue: 2592

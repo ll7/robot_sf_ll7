@@ -9,7 +9,7 @@ resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 num_envs: 8
 worker_mode: subproc
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

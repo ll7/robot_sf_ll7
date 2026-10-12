@@ -4,7 +4,7 @@ scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 seed_policy:
   mode: seed-set
   seed_set: eval
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v1.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v1.json
@@ -17,7 +17,7 @@ resume: true
 stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 export_publication_bundle: true
 include_videos_in_publication: false

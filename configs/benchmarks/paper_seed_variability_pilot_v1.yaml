@@ -6,7 +6,7 @@ comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
 
 seed_policy:
   mode: fixed-list
-  seeds: [111, 112, 113, 114, 115, 116, 117, 118]
+  seeds: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108]
 
 workers: 2
 horizon: 100
@@ -16,7 +16,7 @@ resume: true
 stop_on_failure: true
 bootstrap_samples: 1000
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 kinematics_matrix:
   - differential_drive

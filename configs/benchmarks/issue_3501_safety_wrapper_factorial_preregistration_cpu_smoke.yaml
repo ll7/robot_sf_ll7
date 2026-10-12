@@ -33,7 +33,7 @@ scenario_family:
   scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
   scenario_ids:
     - francis2023_blind_corner
-  seeds: [111]
+  seeds: [1101]
 policy:
   planner_key: orca
   planner_source: configs/benchmarks/paper_experiment_matrix_v1.yaml::planners[].key

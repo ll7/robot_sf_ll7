@@ -17,7 +17,7 @@ scenarios:
         verified_by: ll7
         method: null
         notes: null
-    seeds: [111]
+    seeds: [1101]
   - name: classic_head_on_corridor_low
     map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
     simulation_config:
@@ -36,7 +36,7 @@ scenarios:
         verified_by: ll7
         method: null
         notes: null
-    seeds: [111]
+    seeds: [1101]
   - name: classic_overtaking_low
     map_file: ../../../maps/svg_maps/classic_overtaking.svg
     simulation_config:
@@ -55,7 +55,7 @@ scenarios:
         verified_by: ll7
         method: null
         notes: null
-    seeds: [111]
+    seeds: [1101]
   - name: classic_t_intersection_low
     map_file: ../../../maps/svg_maps/classic_t_intersection.svg
     simulation_config:
@@ -74,4 +74,4 @@ scenarios:
         verified_by: ll7
         method: null
         notes: null
-    seeds: [111]
+    seeds: [1101]

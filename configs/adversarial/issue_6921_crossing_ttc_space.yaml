@@ -27,7 +27,7 @@ variables:
     min: 0.0
     max: 2.0
   scenario_seed:
-    min: 123
-    max: 123
+    min: 1113
+    max: 1113
 constraints:
   min_start_goal_distance_m: 2.0

@@ -4,7 +4,7 @@
 policy_id: ppo_expert_reference
 scenario_config: ../../scenarios/classic_interactions.yaml
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

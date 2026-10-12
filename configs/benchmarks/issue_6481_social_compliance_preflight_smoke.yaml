@@ -33,7 +33,7 @@ scenario_matrix: configs/scenarios/issue_6481_social_compliance_preflight.yaml
 
 seed_policy:
   mode: fixed-list
-  seeds: [111, 112, 113]
+  seeds: [1101, 1102, 1103]
 
 workers: 1
 horizon: 250
@@ -43,7 +43,7 @@ resume: false
 stop_on_failure: false
 bootstrap_samples: 100
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 kinematics_matrix:
   - differential_drive

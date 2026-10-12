@@ -12,7 +12,7 @@ route_clearance_certifications: configs/benchmarks/route_clearance_certification
 seed_policy:
   mode: seed-set
   seed_set: paper_eval_s30
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 workers: 20
 horizon: 600
@@ -25,7 +25,7 @@ resume: false
 stop_on_failure: false
 bootstrap_samples: 1000
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 kinematics_matrix:
   - differential_drive
 export_publication_bundle: false

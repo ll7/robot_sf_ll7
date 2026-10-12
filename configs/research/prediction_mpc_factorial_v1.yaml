@@ -120,7 +120,7 @@ inference_contract:
 seed_policy:
   mode: seed-set
   seed_set: paper_eval_s30
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 # Primary endpoints (typed ledger). These match the issue specification.
 primary_endpoints:

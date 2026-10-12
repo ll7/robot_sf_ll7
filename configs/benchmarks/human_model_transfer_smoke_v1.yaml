@@ -10,11 +10,11 @@ resume: true
 record_forces: false
 bootstrap_samples: 100
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 seed_policy:
   mode: fixed-list
-  seeds: [111]
+  seeds: [1101]
 
 kinematics_matrix:
   - differential_drive

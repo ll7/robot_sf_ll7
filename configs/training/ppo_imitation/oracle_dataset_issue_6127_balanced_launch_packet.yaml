@@ -13,7 +13,7 @@ scenario_ids:
   - classic_overtaking_low
   - francis2023_following_human
 seed_set_refs:
-  manifest: configs/benchmarks/seed_sets_v1.yaml
+  manifest: configs/benchmarks/dev_seed_sets.yaml
   validation: dev
   evaluation: eval
   train_excludes: paper_eval_s20

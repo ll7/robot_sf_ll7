@@ -2,7 +2,7 @@
 base_config: expert_ppo_issue_403_grid_base.yaml
 policy_id: ppo_expert_grid_socnav_403_r0_6
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

@@ -1298,7 +1298,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         action="append",
         default=None,
-        help="Base seed to run; repeat for repeated-seed budget matching. Defaults to 123.",
+        help="Base seed to run; repeat for repeated-seed budget matching. Defaults to 1113.",
     )
     parser.add_argument("--horizon", type=int, default=None)
     parser.add_argument("--dt", type=float, default=None)
@@ -1477,7 +1477,7 @@ def _comparison_inputs(
         objective=objectives[0],
         output_dir=args.output_dir,
         budget=(args.budget or [8])[0],
-        seed=(args.seed or [123])[0],
+        seed=(args.seed or [1113])[0],
         algo_config_path=args.algo_config,
         horizon=args.horizon,
         dt=args.dt,
@@ -1486,7 +1486,7 @@ def _comparison_inputs(
         warm_start=warm_starts,
     )
     budgets = (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
-    seeds = args.seed or [123]
+    seeds = args.seed or [1113]
     samplers = args.samplers or ("random", "coordinate", "optuna", "cmaes")
     return config, objectives, samplers, budgets, seeds, args.out_json
 

@@ -16,7 +16,7 @@ policy_id: ppo_expert_issue_739_12m_baseline_retrain
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
 num_envs: auto_throughput
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

@@ -631,7 +631,7 @@ def build_report(
         "rows": rows,
         "verdict": verdict,
         "caveats": [
-            "Single deterministic fixture (seed=111), single occluded-emergence scenario.",
+            "Single deterministic fixture (seed=1101), single occluded-emergence scenario.",
             "Closed-loop proxy: robot replays the fixture trajectory under a gate hold; "
             "no live planner or simulator is re-executed.",
             "interaction_risk degrades to plain CV mean (single observed pedestrian, no "

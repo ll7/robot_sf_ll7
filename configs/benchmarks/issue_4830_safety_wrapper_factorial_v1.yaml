@@ -46,8 +46,8 @@ amv_profile:
 # identically to both wrapper arms, so the only difference within a planner pair is the wrapper.
 seed_policy:
   mode: fixed-list
-  seeds: [111, 112, 113]
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seeds: [1101, 1102, 1103]
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
@@ -60,7 +60,7 @@ snqi_contract:
   outcome_separation_fail_threshold: 0.0
   max_component_dominance_warn_threshold: 0.24
   max_component_dominance_fail_threshold: 0.27
-  calibration_seed: 123
+  calibration_seed: 1113
   calibration_trials: 6000
 
 # Pinned by the #4826 isolation gate and the submit wrapper: each arm runs in its own subprocess
@@ -76,7 +76,7 @@ resume: true
 stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 kinematics_matrix:
   - differential_drive
 export_publication_bundle: false

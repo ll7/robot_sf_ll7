@@ -105,7 +105,7 @@ def _create_campaign_fixture(
                         "scenario_id": scenario_id,
                         "scenario_family": family,
                         "planner_key": planner_key,
-                        "seed": 111 + seed_index,
+                        "seed": 1101 + seed_index,
                         "success": "1" if seed_index < successes else "0",
                         "collision": "1" if seed_index < collisions else "0",
                         "snqi": f"{snqi:.4f}",
@@ -127,7 +127,7 @@ def _create_campaign_fixture(
 
     _write_seed_episode_rows(reports / "seed_episode_rows.csv", seed_rows)
     (reports / "statistical_sufficiency.json").write_text(
-        json.dumps({"bootstrap": {"seed": 123}}) + "\n",
+        json.dumps({"bootstrap": {"seed": 1113}}) + "\n",
         encoding="utf-8",
     )
     return root

@@ -51,38 +51,38 @@ seed_policy:
   frozen_before_execution: true
   pilot_set:
     name: S5
-    seeds: [111, 112, 113, 114, 115]
+    seeds: [1101, 1102, 1103, 1104, 1105]
     use: >
       First executable smoke or diagnostic pass. It may identify invalid rows, missing trace
       fields, or family-level contract gaps, but must not support planner ranking claims alone.
   escalation_sets:
     - name: S10
-      seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+      seeds: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110]
       gate: >
         Use only after S5 rows have native or explicitly eligible adapter execution, durable row
         status, and no post-hoc endpoint changes.
     - name: S20
       seeds:
-        - 111
-        - 112
-        - 113
-        - 114
-        - 115
-        - 116
-        - 117
-        - 118
-        - 119
-        - 120
-        - 121
-        - 122
-        - 123
-        - 124
-        - 125
-        - 126
-        - 127
-        - 128
-        - 129
-        - 130
+        - 1101
+        - 1102
+        - 1103
+        - 1104
+        - 1105
+        - 1106
+        - 1107
+        - 1108
+        - 1109
+        - 1110
+        - 1111
+        - 1112
+        - 1113
+        - 1114
+        - 1115
+        - 1116
+        - 1117
+        - 1118
+        - 1119
+        - 1120
       gate: >
         Use only when S10 uncertainty remains decision-relevant and the frozen report contract
         still needs additional seed evidence.

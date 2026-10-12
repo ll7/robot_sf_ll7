@@ -10,7 +10,7 @@ claim_boundary: >
 scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
 seed_policy:
   mode: fixed-list
-  seeds: [111, 112]
+  seeds: [1101, 1102]
 cpu_smoke_defaults:
   workers: 1
   horizon: 5

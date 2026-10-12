@@ -10,7 +10,7 @@
 base_config: asymmetric_critic_only_base.yaml
 policy_id: ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123
 seeds:
-- 123
+- 1043
 total_timesteps: 1000000
 evaluation:
   evaluation_episodes: 70

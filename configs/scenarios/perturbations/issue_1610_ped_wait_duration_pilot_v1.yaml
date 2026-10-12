@@ -11,7 +11,7 @@ description: >-
   fixed while adding single-pedestrian wait-duration offsets as the only new perturbation family.
 scenario_config: ../classic_interactions_francis2023.yaml
 seed_controls:
-  baseline_seeds: [112, 113, 115, 116, 240, 241, 242]
+  baseline_seeds: [1102, 1103, 1105, 1106, 240, 241, 242]
   replay_seed_policy: explicit
   source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
 validity:
@@ -45,7 +45,7 @@ variants:
   - variant_id: francis2023_join_group_wait_h3_p050
     scenario_id: francis2023_join_group
     family: single_pedestrian_wait_duration_offset
-    seeds: [112, 113, 115, 116]
+    seeds: [1102, 1103, 1105, 1106]
     rationale: >-
       Fail-closed probe proving that explicit single_pedestrians without wait_at entries are not
       silently treated as wait-duration targets.
@@ -57,7 +57,7 @@ variants:
   - variant_id: classic_head_on_corridor_low_wait_all_p050
     scenario_id: classic_head_on_corridor_low
     family: single_pedestrian_wait_duration_offset
-    seeds: [111, 112, 116, 117]
+    seeds: [1101, 1102, 1106, 1107]
     rationale: >-
       Fail-closed probe proving that route-only classic pedestrians are not silently treated as
       explicit single-pedestrian wait targets.

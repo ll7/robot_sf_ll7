@@ -10,7 +10,7 @@
 base_config: attention_only_base.yaml
 policy_id: ppo_expert_issue_852_attention_only_10m_env22_seed123
 seeds:
-- 123
+- 1043
 tracking:
   tensorboard: false
   wandb:

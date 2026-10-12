@@ -31,7 +31,7 @@ fixture:
   trace_path: >-
     tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json
   scenario_id: issue_2756_occluded_emergence
-  seed: 111
+  seed: 1101
   dt_s: 0.1
 
 # Bounded risk-gate planner proxy. When the per-step forecast risk exceeds the

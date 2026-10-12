@@ -41,8 +41,8 @@ matrix:
   planner_count: 12
   scenario_count: 48
   seed_set: eval
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
-  resolved_seeds: [111, 112, 113]
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
+  resolved_seeds: [1101, 1102, 1103]
   seed_count: 3
   rows_per_horizon: 1728
   rows_total: 3456

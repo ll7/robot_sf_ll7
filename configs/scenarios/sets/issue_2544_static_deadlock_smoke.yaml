@@ -23,7 +23,7 @@ select_scenarios:
   - narrow_passage
 
 scenario_overrides:
-  seeds: [111]
+  seeds: [1101]
   metadata:
     mechanism_aware_suite_id: static_deadlock_recovery
     issue: 2544

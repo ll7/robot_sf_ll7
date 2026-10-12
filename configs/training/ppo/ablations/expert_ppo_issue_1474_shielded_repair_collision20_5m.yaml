@@ -11,7 +11,7 @@ scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

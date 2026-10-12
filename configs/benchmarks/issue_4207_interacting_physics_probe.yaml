@@ -30,7 +30,7 @@ scenario_family: issue4207_interacting_smoke
 scenario_matrix: configs/scenarios/single/issue_4207_interacting_smoke.yaml
 seed_policy:
   mode: fixed-list
-  seeds: [111, 112, 113]
+  seeds: [1101, 1102, 1103]
 # Match the scenario descriptor's max_episode_steps so the robot can traverse the L-route and
 # reach the blind corner where the crossing pedestrian is; horizon 60 is too short for contact.
 horizon: 400

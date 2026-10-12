@@ -13,7 +13,7 @@ scenarios:
       target_failure_mode: static_corridor_deadlock
       purpose: Recheck documented #1022 low-density corridor-deadlock seeds for #1318.
       predecessor_note: docs/context/issue_1022_route_corridor_design_research.md
-    seeds: [111, 113]
+    seeds: [1101, 1103]
 
   - name: classic_merging_medium
     map_file: ../../../maps/svg_maps/classic_merging.svg
@@ -29,4 +29,4 @@ scenarios:
       target_failure_mode: static_corridor_deadlock
       purpose: Recheck documented #1022 medium-density corridor-deadlock seeds for #1318.
       predecessor_note: docs/context/issue_1022_route_corridor_design_research.md
-    seeds: [111, 112, 113]
+    seeds: [1101, 1102, 1103]

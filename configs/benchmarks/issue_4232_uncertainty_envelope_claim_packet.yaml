@@ -67,9 +67,9 @@ seed_policy:
   mode: fixed-list
   seed_set_name: issue_4232_eval_s3_diagnostic_seed_set
   seeds:
-    - 111
-    - 112
-    - 113
+    - 1101
+    - 1102
+    - 1103
   repeat_policy: every_planner_scenario_alpha_arm_pair
 planner_families:
   - planner_id: prediction_mpc

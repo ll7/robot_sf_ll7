@@ -63,7 +63,7 @@ def create_baseline_configs(
         scenario_matrix_path=scenario_matrix,
         output_root=f"{output_root}/{algo}",
         workers=2,
-        master_seed=123,
+        master_seed=1113,
         smoke=False,
         algo=algo,
         initial_episodes=3,  # Start with 3 episodes per scenario

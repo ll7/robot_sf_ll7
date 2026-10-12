@@ -6,7 +6,7 @@ policy_id: ppo_expert_br06_v2_15m_all_maps_randomized
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

@@ -9,7 +9,7 @@ resume: true
 record_forces: false
 bootstrap_samples: 100
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 kinematics_matrix:
   - holonomic

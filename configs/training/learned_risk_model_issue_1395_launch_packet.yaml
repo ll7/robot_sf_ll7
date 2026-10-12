@@ -46,7 +46,7 @@ baseline_comparison:
   scenario_slices:
     - stress_slice
     - full_matrix
-  seeds: [111, 112, 113]
+  seeds: [1031, 1032, 1033]
   summary_artifacts:
     - docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/baseline_summary_stub.json
     - wandb-artifact://robot-sf/policy-search/hybrid_rule_v3_static_margin0_waypoint2_baseline:pending

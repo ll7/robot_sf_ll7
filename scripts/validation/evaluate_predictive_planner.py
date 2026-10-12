@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
         help="Optional observation-noise YAML profile passed through to map-runner evaluation.",
     )
     parser.add_argument("--bootstrap-samples", type=int, default=1000)
-    parser.add_argument("--bootstrap-seed", type=int, default=123)
+    parser.add_argument("--bootstrap-seed", type=int, default=1113)
     parser.add_argument("--confidence", type=float, default=0.95)
     return parser.parse_args()
 

@@ -108,7 +108,7 @@ def _run_episode(*, trace_enabled: bool) -> dict[str, Any]:
 
     return run_episode(
         SCENARIO,
-        seed=123,
+        seed=1113,
         horizon=5,
         dt=0.1,
         record_forces=False,
@@ -407,7 +407,7 @@ def measure(
         },
         "fixture": {
             "scenario": SCENARIO,
-            "seed": 123,
+            "seed": 1113,
             "horizon": 5,
             "dt": 0.1,
             "record_forces": False,

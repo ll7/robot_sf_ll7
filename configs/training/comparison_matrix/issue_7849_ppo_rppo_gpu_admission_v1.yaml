@@ -62,7 +62,7 @@ frozen_contract:
   safety_wrapper: disabled
   scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
   scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
-  training_seeds: [123, 231, 777, 992, 1337]
+  training_seeds: [1043, 231, 777, 992, 1337]
   total_timesteps_per_arm_seed: 15000000
   independent_training_runs: 10
   total_planned_environment_steps: 150000000
@@ -125,13 +125,13 @@ full_budget:
       configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 231 --run-id
       issue7849-ppo-seed-231 --log-level INFO
     ppo_per_seed:
-      - seed: 123
+      - seed: 1043
         run_id: issue7849-ppo-seed-123
         artifact_root: output/training/issue_7849_full/ppo_seed_123
         command: >-
           ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_123
           .venv/bin/python scripts/training/train_ppo.py --config
-          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 123 --run-id
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 1043 --run-id
           issue7849-ppo-seed-123 --log-level INFO
       - seed: 231
         run_id: issue7849-ppo-seed-231

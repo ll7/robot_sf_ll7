@@ -8,7 +8,7 @@ claim_boundary: >-
 scenario_matrix: configs/scenarios/issue_6464_brne_corridor_diagnostic.yaml
 scenario_ids:
   - classic_head_on_corridor_low
-seeds: [111, 112, 113]
+seeds: [1101, 1102, 1103]
 horizon: 500
 dt: 0.1
 corridor:

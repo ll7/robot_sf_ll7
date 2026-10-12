@@ -20,4 +20,4 @@ scenarios:
       expected_behavior: Deterministic replay signatures for the same seed and planner mapping.
       expected_pass_criteria: Matching stable replay signatures across repeated runs.
       determinism: deterministic
-    seeds: [123]
+    seeds: [1113]

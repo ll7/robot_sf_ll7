@@ -9,7 +9,7 @@ pilot:
     - francis2023_intersection_wait
   seed_policy:
     mode: fixed-list
-    seeds: [111]
+    seeds: [1101]
   planners:
     - goal
     - social_force

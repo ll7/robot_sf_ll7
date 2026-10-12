@@ -16,7 +16,7 @@ candidates:
     policy_arch_size: medium
     policy_arch: [128, 128]
     dropout_rate: 0.05
-    seed: 123
+    seed: 1043
     extractor_kwargs:
       num_filters: [16, 8]
       kernel_sizes: [5, 3]
@@ -64,7 +64,7 @@ candidates:
     policy_arch_size: medium
     policy_arch: [128, 128]
     dropout_rate: 0.0
-    seed: 123
+    seed: 1043
     extractor_kwargs:
       num_filters: [128, 32, 32, 16]
       dropout_rates: [0.0, 0.0, 0.0, 0.0]
@@ -97,7 +97,7 @@ candidates:
     policy_arch_size: small
     policy_arch: [64, 64]
     dropout_rate: 0.0
-    seed: 123
+    seed: 1043
     extractor_kwargs: {}
 
   - id: dyn_default_s231

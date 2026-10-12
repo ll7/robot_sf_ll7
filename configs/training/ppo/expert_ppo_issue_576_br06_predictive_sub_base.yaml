@@ -28,7 +28,7 @@ ppo_hyperparams:
   clip_range: 0.1
   target_kl: 0.02
 seeds:
-  - 123
+  - 1043
   - 231
   - 777
   - 992

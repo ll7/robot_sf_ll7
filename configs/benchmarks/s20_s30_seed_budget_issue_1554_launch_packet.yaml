@@ -58,7 +58,7 @@ campaign_config:
 # this issue and preserves the frozen S3 eval seeds (111-113) and S10/S20 ordering.
 seed_policy:
   mode: seed-set
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
   primary_seed_set: paper_eval_s20
   escalation_seed_set: paper_eval_s30
   escalate_to_s30_when: >
@@ -66,7 +66,7 @@ seed_policy:
     rank_flip_observed for a primary metric, or a primary delta is below the issue #1545
     effect-size threshold, escalate to paper_eval_s30.
   checksums:
-    configs/benchmarks/seed_sets_v1.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    configs/benchmarks/dev_seed_sets.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
 
 planner_rows:
   - goal

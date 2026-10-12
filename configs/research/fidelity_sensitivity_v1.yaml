@@ -27,7 +27,7 @@ baseline:
 
 fixed_scope:
   scenario_set: configs/benchmarks/paper_experiment_matrix_v1.yaml
-  seeds: [111, 112, 113]
+  seeds: [1101, 1102, 1103]
   planner_groups:
     - orca
     - default_social_force

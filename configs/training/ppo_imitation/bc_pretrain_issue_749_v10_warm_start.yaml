@@ -11,7 +11,7 @@ scenario_config: ../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
 bc_epochs: 20
 batch_size: 64
 learning_rate: 0.0003
-random_seeds: [111, 112, 113]
+random_seeds: [1031, 1032, 1033]
 scenario_id: classic_bottleneck_low
 # Keep the imitation BC trainer on CPU for this run; the demonstrations are CPU tensors and
 # `device: auto` moved the supplied policy back to CUDA during the Auxme preflight.

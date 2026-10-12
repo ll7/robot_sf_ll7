@@ -48,7 +48,7 @@ runnable_config:
   scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
   horizon_schedule: configs/policy_search/scenario_horizons_h500.yaml
   horizon_schedule_sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
-  seed_sets: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets: configs/benchmarks/dev_seed_sets.yaml
   seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
   # 7-planner headline grid reference (planner rows for the 7x7 comparison).
   planner_matrix: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
@@ -58,7 +58,7 @@ runnable_config:
 seed_budget:
   primary:
     tier: S20
-    seed_set: paper_eval_s20  # seeds 111..130, tracked in seed_sets_v1.yaml
+    seed_set: paper_eval_s20  # seeds 111..130, tracked in dev_seed_sets.yaml
     status: available
   optional:
     tier: S30
@@ -104,7 +104,7 @@ expected_artifacts:
 
 validation:
   - "Re-verify every config sha256 above before submit (drift guard)."
-  - "Confirm paper_eval_s20 resolves to 20 seeds in seed_sets_v1.yaml."
+  - "Confirm paper_eval_s20 resolves to 20 seeds in dev_seed_sets.yaml."
   - "Rows with fallback/degraded/failed/partial-failure/unavailable execution
     remain excluded from promoted claims and carry explicit row status."
   - "Run the report harness and confirm it does NOT self-certify paper_grade;

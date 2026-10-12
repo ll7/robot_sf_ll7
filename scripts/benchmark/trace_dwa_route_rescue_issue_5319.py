@@ -5,7 +5,7 @@ This runner captures a per-step DWA decision trace with the route-rescue and
 feasibility-slowdown interventions enabled, using the same two fixed-seed
 episodes from the #5298 baseline trace:
 
-- ``classic_bottleneck_medium`` seed ``131`` (canonical config, ``max_steps`` timeout).
+- ``classic_bottleneck_medium`` development seed ``1121`` (replacement; historical outcome does not transfer).
 - ``classic_t_intersection_low`` seed ``161`` (canonical config, ``collision``).
 
 It runs each episode with the ``dwa_route_rescue.yaml`` config and records
@@ -67,7 +67,7 @@ HORIZON = 100
 DT = 0.1
 
 TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
-    ("classic_bottleneck_medium", 131, "bottleneck_timeout"),
+    ("classic_bottleneck_medium", 1121, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
 )
 BASELINE_ISSUE = 5298

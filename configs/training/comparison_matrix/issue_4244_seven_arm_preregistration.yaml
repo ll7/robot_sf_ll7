@@ -41,7 +41,7 @@ comparison:
     missing_required_gate_policy: exclude_arm_with_reason
   shared_budget:
     total_timesteps: 15000000
-    seeds: [123, 231, 777, 992, 1337]
+    seeds: [1043, 231, 777, 992, 1337]
     num_envs: auto
     device: cpu_or_gpu_by_private_queue
     evaluation_episodes: 100

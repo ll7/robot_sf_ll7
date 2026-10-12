@@ -35,10 +35,10 @@ scenario_family:
     - classic_bottleneck_low
     - classic_head_on_corridor_low
     - narrow_passage
-seeds: [111, 112, 113]
+seeds: [1101, 1102, 1103]
 cpu_smoke:
   matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
-  seeds: [111]
+  seeds: [1101]
   max_episodes_per_arm: 1
   evidence_boundary: >
     CPU smoke proves config and runtime-metadata plumbing only. It is not the

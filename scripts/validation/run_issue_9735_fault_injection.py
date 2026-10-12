@@ -130,7 +130,7 @@ def _row(planner: str, *, collision: bool, total: float) -> dict[str, Any]:
     return {
         "episode_id": f"fixture:111:{planner}",
         "scenario_id": "vv5-fixture",
-        "seed": 111,
+        "seed": 1101,
         "algo": planner,
         "steps": 100,
         "status": "collision" if collision else "success",

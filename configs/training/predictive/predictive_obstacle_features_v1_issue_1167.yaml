@@ -14,7 +14,7 @@ scenarios:
 base_collection:
   # Same matrix style as the registered predictive baseline, with real map-derived obstacle rows.
   seeds_per_scenario: 4
-  random_seed_base: 51000
+  random_seed_base: 1031
   max_steps: 200
   max_agents: 24
   horizon_steps: 8

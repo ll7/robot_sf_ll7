@@ -16,7 +16,7 @@ scenario_config: ../../scenarios/classic_interactions.yaml
 num_envs: auto
 worker_mode: auto
 seeds:
-  - 123
+  - 1043
   - 231
   - 1337
 randomize_seeds: true

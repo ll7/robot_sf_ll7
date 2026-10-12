@@ -49,7 +49,7 @@ EXPECTED_SCENARIOS = (
     "classic_head_on_corridor_low",
     "narrow_passage",
 )
-EXPECTED_SEEDS = (111, 112, 113)
+EXPECTED_SEEDS = (1101, 1102, 1103)
 EXPECTED_TRACE_FIELDS = {
     "low_progress_window",
     "recenter_activation_count",
@@ -230,8 +230,8 @@ def _validate_common(config: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     if not isinstance(smoke, dict):
         raise ContractError("cpu_smoke must be a mapping")
     _repo_path(smoke.get("matrix"))
-    if tuple(int(seed) for seed in smoke.get("seeds") or ()) != (111,):
-        raise ContractError("cpu_smoke.seeds must remain one-seed static-deadlock smoke [111]")
+    if tuple(int(seed) for seed in smoke.get("seeds") or ()) != (1101,):
+        raise ContractError("cpu_smoke.seeds must remain one-seed static-deadlock smoke [1101]")
 
     lineage = config.get("frozen_ppo_lineage")
     if not isinstance(lineage, dict):
@@ -522,8 +522,8 @@ def _validate_cpu_smoke_evidence(  # noqa: C901, PLR0912
         arm_key = row["arm_key"]
         if row.get("scenario_id") != EXPECTED_SCENARIOS[0]:
             raise ContractError(f"{arm_key}: cpu smoke scenario must be {EXPECTED_SCENARIOS[0]}")
-        if int(row.get("seed", -1)) != 111:
-            raise ContractError(f"{arm_key}: cpu smoke seed must be 111")
+        if int(row.get("seed", -1)) != 1101:
+            raise ContractError(f"{arm_key}: cpu smoke seed must be 1101")
         if row.get("cpu_only") is not True:
             raise ContractError(f"{arm_key}: cpu smoke must be marked cpu_only")
         if row.get("benchmark_evidence") is not False:
@@ -606,7 +606,7 @@ def _write_pre_run_evidence_packet(
             "campaign, Slurm/GPU submission, retraining, or paper/dissertation claim."
         ),
         "scenario_id": EXPECTED_SCENARIOS[0],
-        "seed": 111,
+        "seed": 1101,
         "arms": list(EXPECTED_ARM_KEYS),
         "config_sha256": report["config_sha256"],
         "residual_blocker": (

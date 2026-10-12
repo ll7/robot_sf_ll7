@@ -22,7 +22,7 @@ scenario_family: issue4207_interacting_smoke
 scenario_matrix: configs/scenarios/single/issue_4207_interacting_smoke.yaml
 seed_policy:
   mode: fixed-list
-  seeds: [111, 112, 113]
+  seeds: [1101, 1102, 1103]
 horizon: 60
 dt: 0.1
 workers: 1

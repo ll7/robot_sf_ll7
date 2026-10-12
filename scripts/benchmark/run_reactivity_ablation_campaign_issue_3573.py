@@ -62,7 +62,7 @@ ISSUE = 3573
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 DEFAULT_SCENARIO_SET = "configs/scenarios/sets/classic_crossing_subset.yaml"
-DEFAULT_SEEDS = list(range(101, 113))
+DEFAULT_SEEDS = list(range(1101, 1113))
 DEFAULT_PLANNERS = ("goal", "orca")
 
 #: The two pedestrian-reactivity conditions (scenario flag -> condition tag).

@@ -5,7 +5,7 @@ This runner captures a per-step Dynamic Window Approach (DWA) decision trace wit
 global-route integration probe enabled for the two fixed-seed episodes named by the #5262
 configuration-sensitivity diagnostic:
 
-- ``classic_bottleneck_medium`` seed ``131`` (canonical config, ``max_steps`` timeout).
+- ``classic_bottleneck_medium`` development seed ``1121`` (replacement; historical outcome does not transfer).
 - ``classic_t_intersection_low`` seed ``161`` (canonical config, ``collision``).
 
 The probe biases DWA toward the next global-route waypoint to test whether waypoint-following
@@ -62,11 +62,11 @@ DEFAULT_OUT_DIR = REPO_ROOT / "output/benchmarks/issue_5331"
 HORIZON = 100
 DT = 0.1
 
-# The two episodes named by the #5262 manifest's canonical config point. The seeds come
+# Development replacements for the two episodes named by the #5262 manifest's canonical config point. The seeds come
 # from the standard classic archetype matrix declaration used by both the #5020 and #5262
 # diagnostics; the global-route probe config applies waypoint-following bias.
 TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
-    ("classic_bottleneck_medium", 131, "bottleneck_timeout"),
+    ("classic_bottleneck_medium", 1121, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
 )
 FOLLOW_UP_ISSUE = 5331
@@ -205,7 +205,7 @@ def _write_evidence_readme(
     lines.append("## Episodes")
     lines.append("")
     if bottleneck:
-        lines.append("### Bottleneck timeout (seed 131)")
+        lines.append("### Bottleneck development probe (seed 1121)")
         lines.append("")
         lines.append(f"- Termination: {bottleneck['termination_reason']}")
         lines.append(f"- Steps: {bottleneck['steps']}")

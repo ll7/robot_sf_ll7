@@ -45,11 +45,11 @@ params:
       - francis2023_narrow_hallway
       - francis2023_perpendicular_traffic
     hard_seed_values:
-      - 116
-      - 117
-      - 111
-      - 115
-      - 112
+      - 1036
+      - 1037
+      - 1031
+      - 1035
+      - 1032
     dense_ped_count: 4
     near_field_distance_m: 2.3
     comfort_distance_m: 1.05

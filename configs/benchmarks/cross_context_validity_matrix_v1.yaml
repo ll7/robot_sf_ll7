@@ -687,7 +687,7 @@ canonical_configurations:
     display_name: Paper experiment matrix v1 (camera-ready baseline)
     config_path: configs/benchmarks/paper_experiment_matrix_v1.yaml
     scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
-    seed_policy: eval (seed_sets_v1.yaml)
+    seed_policy: eval (dev_seed_sets.yaml)
     kinematics: [differential_drive]
     observation_level: oracle_full_state
     social_model: social_force_default

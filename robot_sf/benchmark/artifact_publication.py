@@ -1445,67 +1445,180 @@ For details on verification, see [release_artifact_badging.md](docs/release_arti
     return computed_badging, achieved_level
 
 
-def _diagnostic_input_references(root: Path) -> dict[Path, str]:  # noqa: C901
-    """Collect every path/digest input pair in diagnostics, refusing ambiguous declarations.
+@dataclass(frozen=True)
+class _DiagnosticInputContract:
+    """File custody plus role bindings needed by the canonical v2 asset loader."""
+
+    references: dict[Path, str]
+    v2_assets: dict[str, Path]
+    horizon_path: Path | None
+    horizons: dict[str, int] | None
+    metric_schema_version: str | None
+
+
+def _add_diagnostic_input_reference(
+    references: dict[Path, str], raw_path: Any, digest: Any
+) -> Path:
+    """Validate and register one unambiguous input pin.
 
     Returns:
-        Repository-relative input paths and their declared SHA-256 digests.
+        The safe source-relative input path.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError("diagnostic input path must be a nonempty relative path")
+    path = Path(raw_path)
+    if path.is_absolute() or ".." in path.parts or "\\" in raw_path or path == Path("."):
+        raise ValueError("diagnostic input path must stay within the source root")
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None:
+        raise ValueError("diagnostic input requires a valid SHA-256 digest")
+    digest = digest.lower()
+    if path in references and references[path] != digest:
+        raise ValueError("diagnostic input has contradictory digests")
+    references[path] = digest
+    return path
+
+
+def _diagnostic_input_contract(root: Path) -> _DiagnosticInputContract:  # noqa: C901
+    """Join campaign and report declarations, refusing missing reports or conflicting roles.
+
+    Returns:
+        Every named input and the v2 scoring contract independent of report survival.
     """
     references: dict[Path, str] = {}
-
-    def add(raw_path: Any, digest: Any) -> None:
-        if not isinstance(raw_path, str) or not raw_path.strip():
-            raise ValueError("diagnostic input path must be a nonempty relative path")
-        path = Path(raw_path)
-        if path.is_absolute() or ".." in path.parts or "\\" in raw_path or path == Path("."):
-            raise ValueError("diagnostic input path must stay within the source root")
-        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None:
-            raise ValueError("diagnostic input requires a valid SHA-256 digest")
-        digest = digest.lower()
-        if path in references and references[path] != digest:
-            raise ValueError("diagnostic input has contradictory digests")
-        references[path] = digest
+    v2_pins: dict[str, tuple[Path, str]] = {}
+    metric_schema_version = None
 
     def visit(value: Any) -> None:
         if isinstance(value, dict):
             for key, item in value.items():
                 if key == "path" and "sha256" in value:
-                    add(item, value["sha256"])
+                    _add_diagnostic_input_reference(references, item, value["sha256"])
                 elif key.endswith("_path"):
-                    add(item, value.get(key[:-5] + "_sha256"))
+                    _add_diagnostic_input_reference(
+                        references, item, value.get(key[:-5] + "_sha256")
+                    )
                 else:
                     visit(item)
         elif isinstance(value, list):
             for item in value:
                 visit(item)
 
+    def bind_v2(provenance: Any) -> None:
+        nonlocal metric_schema_version
+        if not isinstance(provenance, dict):
+            raise ValueError("diagnostic input v2 declaration requires asset provenance")
+        for role in ("weights", "anchors", "family"):
+            raw_path = provenance.get(f"snqi_v2_{role}_path")
+            digest = provenance.get(f"snqi_v2_{role}_sha256")
+            previous = v2_pins.get(role)
+            if (
+                previous is not None
+                and isinstance(raw_path, str)
+                and isinstance(digest, str)
+                and (Path(raw_path), digest.lower()) != previous
+            ):
+                raise ValueError(f"diagnostic input has conflicting v2 {role} pins")
+            path = _add_diagnostic_input_reference(references, raw_path, digest)
+            v2_pins[role] = (path, references[path])
+        schema = provenance.get("metric_schema_version")
+        if schema is not None:
+            if not isinstance(schema, str) or (
+                metric_schema_version is not None and schema != metric_schema_version
+            ):
+                raise ValueError("diagnostic input has conflicting v2 metric schema declarations")
+            metric_schema_version = schema
+        visit(provenance)
+
+    horizon_path = None
+    horizons = None
+    campaign_path = root / "campaign_manifest.json"
+    if campaign_path.is_file():
+        campaign = _read_json_file(campaign_path)
+        metrics = campaign.get("metrics")
+        if isinstance(metrics, dict) and metrics.get("snqi_v2_version") == "SNQI-v2":
+            bind_v2(metrics)
+            if not (root / "reports/snqi_v2_diagnostics.json").is_file():
+                raise ValueError("diagnostic input v2 campaign requires diagnostics")
+            schedule = campaign.get("scenario_horizons")
+            if isinstance(schedule, dict) and "path" in schedule:
+                horizon_path = _add_diagnostic_input_reference(
+                    references, schedule["path"], schedule.get("sha256")
+                )
+            elif isinstance(schedule, dict) and schedule:
+                horizons = schedule
+            else:
+                raise ValueError("diagnostic input v2 campaign requires its evaluation schedule")
+
     for report in sorted((root / "reports").glob("*diagnostics.json")):
         try:
             document = _read_json_file(report)
             if report.name == "snqi_v2_diagnostics.json":
-                provenance = document.get("provenance")
-                if not isinstance(provenance, dict) or any(
-                    f"snqi_v2_{name}_path" not in provenance
-                    for name in ("weights", "anchors", "family")
-                ):
-                    raise ValueError("v2 diagnostics require weights, anchors and family inputs")
+                bind_v2(document.get("provenance"))
             visit(document)
         except (OSError, ValueError) as exc:
             raise ValueError(
                 f"diagnostic input declarations invalid in {report.name}: {exc}"
             ) from exc
-    return references
+    return _DiagnosticInputContract(
+        references,
+        {role: pin[0] for role, pin in v2_pins.items()},
+        horizon_path,
+        horizons,
+        metric_schema_version,
+    )
+
+
+def _validate_diagnostic_v2_assets(
+    contract: _DiagnosticInputContract, inputs: dict[Path, Path]
+) -> None:
+    """Reuse the scorer's frozen asset validity checks on the exact retained input bytes."""
+    if not contract.v2_assets:
+        return
+    from robot_sf.benchmark.snqi.v2_spec import (  # noqa: PLC0415
+        load_snqi_v2_spec,
+        parse_v2_json,
+        parse_v2_yaml,
+    )
+
+    try:
+        anchors_path = inputs[contract.v2_assets["anchors"]]
+        horizons = contract.horizons
+        if contract.horizon_path is not None:
+            schedule = parse_v2_yaml(inputs[contract.horizon_path].read_bytes())
+            horizons = {
+                name: entry["recommended_horizon_steps"]
+                for name, entry in schedule["scenarios"].items()
+            }
+        elif horizons is None:
+            # Standalone diagnostics have no evaluation campaign. Validate their
+            # internal calibration schedule; campaign bundles bind their own above.
+            horizons = (
+                parse_v2_json(anchors_path.read_bytes())
+                .get("calibration", {})
+                .get("scenario_horizons")
+            )
+        load_snqi_v2_spec(
+            inputs[contract.v2_assets["weights"]],
+            anchors_path,
+            inputs[contract.v2_assets["family"]],
+            expected_metric_schema_version=contract.metric_schema_version,
+            evaluation_scenario_horizons=horizons,
+        )
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(f"diagnostic input SNQI-v2 scoring assets invalid: {exc}") from exc
 
 
 def _diagnostic_input_sources(run_root: Path) -> dict[Path, tuple[Path, str]]:
-    """Resolve diagnostic dependencies before writing a future publication bundle.
+    """Resolve and validate publication inputs before writing a future bundle.
 
     Returns:
         Stable cold payload paths, source files and declared digests.
     """
+    contract = _diagnostic_input_contract(run_root)
     sources = {}
+    resolved = {}
     repo_root = get_repository_root().resolve()
-    for relative, digest in _diagnostic_input_references(run_root).items():
+    for relative, digest in contract.references.items():
         source = None
         for root in (run_root, repo_root):
             candidate = root / relative
@@ -1517,16 +1630,19 @@ def _diagnostic_input_sources(run_root: Path) -> dict[Path, tuple[Path, str]]:
         if source is None:
             raise ValueError(f"diagnostic input missing or digest mismatch: {relative}")
         sources[Path("diagnostic_inputs") / relative] = (source, digest)
+        resolved[relative] = source
+    _validate_diagnostic_v2_assets(contract, resolved)
     return sources
 
 
 def _preflight_check_diagnostic_inputs(
     payload_dir: Path, checksums: dict[str, str], violations: list[str]
 ) -> None:
-    """Verify diagnostic referential integrity from detached bytes, without source fallback."""
+    """Verify detached custody and canonical scorer validity without source fallback."""
     try:
-        references = _diagnostic_input_references(payload_dir)
-        for relative, digest in references.items():
+        contract = _diagnostic_input_contract(payload_dir)
+        resolved = {}
+        for relative, digest in contract.references.items():
             signed_path = (Path("payload/diagnostic_inputs") / relative).as_posix()
             if checksums.get(signed_path) != digest:
                 violations.append(
@@ -1539,6 +1655,10 @@ def _preflight_check_diagnostic_inputs(
                 violations.append(f"diagnostic input missing from publication: {relative}")
             elif _sha256_file(target) != digest:
                 violations.append(f"diagnostic input digest mismatch: {relative}")
+            else:
+                resolved[relative] = target
+        if len(resolved) == len(contract.references):
+            _validate_diagnostic_v2_assets(contract, resolved)
     except (OSError, ValueError) as exc:
         violations.append(f"diagnostic input verification failed: {exc}")
 

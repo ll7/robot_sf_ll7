@@ -91,6 +91,8 @@ runtime.write_text(yaml.safe_dump({
     'base_config': os.path.relpath(base, runtime.parent),
     'policy_id': f'ppo_ftplan_init{seed}_segment{segment}',
     'training_master_seed': seed, 'ppo_initialization_seed': seed,
+    'scenario_config': os.path.relpath(Path('configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml').resolve(), runtime.parent),
+    'evaluation': {'scenario_config': os.path.relpath(Path('configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml').resolve(), runtime.parent)},
     'total_timesteps': segment * 1000000,
     'resume_from': os.path.relpath(checkpoint.resolve(), runtime.parent),
 }))

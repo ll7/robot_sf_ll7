@@ -1454,6 +1454,8 @@ class _DiagnosticInputContract:
     horizon_path: Path | None
     horizons: dict[str, int] | None
     metric_schema_version: str | None
+    anchors_candidates: tuple[Path, ...] = ()
+    force_sources: tuple[str, ...] = ()
 
 
 def _add_diagnostic_input_reference(
@@ -1496,75 +1498,205 @@ def _contains_snqi_v2_signal(value: Any) -> bool:
     return False
 
 
-def _campaign_weights_are_v2(  # noqa: C901
-    campaign: dict[str, Any], root: Path, source_root: Path | None
-) -> bool:
-    """Recognize v2 weights without trusting their path's version spelling.
+def _publication_documents(root: Path):
+    """Read all structured payload content with duplicate-key rejection.
 
-    Returns:
-        Whether any retained or declared weights file has the v2 format.
+    Yields:
+        Paths and parsed documents, including every episode row.
     """
-    candidates = set(root.rglob("*weights*.json"))
+    from robot_sf.benchmark.snqi.v2_spec import parse_v2_json, parse_v2_yaml  # noqa: PLC0415
 
-    def visit(value: Any) -> None:
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if key in {
-                    "weights_path",
-                    "weights_file",
-                    "snqi_weights_path",
-                    "snqi_weights_file",
-                }:
-                    if not isinstance(item, str) or not item:
-                        raise ValueError("diagnostic input weights path must be a nonempty string")
-                    relative = Path(item)
-                    if relative.is_absolute() or ".." in relative.parts:
-                        raise ValueError("diagnostic input weights path must stay within the root")
-                    paths = [
-                        root / relative,
-                        root / "diagnostic_inputs" / relative,
-                        root / "release_metadata/snqi" / relative.name,
-                    ]
-                    if source_root is not None:
-                        paths.append(source_root / relative)
-                    existing = [path for path in paths if path.is_file()]
-                    if not existing:
-                        raise ValueError("diagnostic input declared weights file is missing")
-                    candidates.update(existing)
-                else:
-                    visit(item)
-        elif isinstance(value, list):
-            for item in value:
-                visit(item)
-
-    visit(campaign)
-    for path in sorted(candidates):
-        if any(part.is_symlink() for part in (path, *path.parents)):
-            raise ValueError("diagnostic input refuses symlink weights files")
-        document = _read_json_file(path)
-        weights = document.get("weights")
-        if _contains_snqi_v2_signal(document.get("version")) or (
-            isinstance(weights, dict) and {"w_S", "w_C"} <= set(weights)
+    paths = [root] if root.is_file() else sorted(root.rglob("*"))
+    for path in paths:
+        if not path.is_file():
+            continue
+        content = path.read_bytes()
+        suffix = path.suffix.lower()
+        json_content = content.lstrip().startswith((b"{", b"["))
+        if (
+            suffix not in {".json", ".jsonl", ".yaml", ".yml", ".csv"}
+            and not json_content
+            and b"pending_calibration" not in content
         ):
-            return True
-    return False
+            continue
+        if any(part.is_symlink() for part in (path, *path.parents)):
+            raise ValueError("diagnostic input refuses symlink metadata")
+        try:
+            if suffix == ".csv":
+                import csv  # noqa: PLC0415
+                import io  # noqa: PLC0415
+
+                yield from (
+                    (path, row) for row in csv.DictReader(io.StringIO(content.decode("utf-8")))
+                )
+            elif suffix == ".jsonl":
+                for line in content.splitlines():
+                    if line.strip():
+                        yield path, parse_v2_json(line)
+            else:
+                parser = parse_v2_json if suffix == ".json" or json_content else parse_v2_yaml
+                yield path, parser(content)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"diagnostic input invalid structured content: {path.name}: {exc}"
+            ) from exc
 
 
-def _campaign_v2_declarations(
-    campaign: dict[str, Any], root: Path, source_root: Path | None
-) -> list[dict[str, Any]]:
-    """Require complete, consistent v2 provenance whenever any independent signal is present.
+def _publication_values(value: Any):
+    """Yield every nested value, so arbitrary wrappers cannot hide declarations.
+
+    Yields:
+        Dictionaries and scalar values at every nesting depth.
+    """
+    yield value
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _publication_values(item)
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            yield from _publication_values(item)
+
+
+def _scoring_copies(
+    value: dict[str, Any], versions: set[str], sources: set[str], *, scoring_context: bool
+) -> bool:
+    """Collect scoring identities independently of their containing document.
 
     Returns:
-        Campaign provenance declarations to join with the diagnostic input pins.
+        Whether an explicit historical v1 scoring declaration is present.
     """
-    active = (
-        (root / "reports/snqi_v2_diagnostics.json").exists()
-        or _contains_snqi_v2_signal(campaign)
-        or _campaign_weights_are_v2(campaign, root, source_root)
-    )
-    if not active:
-        return []
+    historical = False
+    for key in ("snqi_v2_version", "snqi_version", "snqi_score_version", "version"):
+        if key not in value:
+            continue
+        version = value[key]
+        if (
+            key == "version"
+            and not scoring_context
+            and not (isinstance(version, str) and version.startswith("SNQI-"))
+        ):
+            continue
+        if not isinstance(version, str):
+            raise ValueError("diagnostic input has invalid scoring version")
+        versions.add("SNQI-v2" if version == "SNQI-v2.0" else version)
+        historical |= key != "snqi_v2_version" and version == "SNQI-v1"
+    for key in ("snqi_v2_force_source", "force_source"):
+        if key in value:
+            if not isinstance(value[key], str):
+                raise ValueError("diagnostic input has invalid force source")
+            sources.add(value[key])
+    decision = value.get("force_decision")
+    if isinstance(decision, dict) and "source" in decision:
+        if not isinstance(decision["source"], str):
+            raise ValueError("diagnostic input has invalid force source")
+        sources.add(decision["source"])
+    return historical
+
+
+def _publication_content_facts(documents):  # noqa: C901
+    """Refuse uncalibrated state and collect all scoring declarations by content.
+
+    Returns:
+        V2 presence, explicit historical v1 proof, anchor candidates and force copies.
+    """
+    versions: set[str] = set()
+    force_sources: set[str] = set()
+    anchors: set[Path] = set()
+    has_v2 = False
+    has_v1 = False
+    episode_count = 0
+    for path, document in documents:
+        if path.name.endswith("episodes.jsonl"):
+            if not isinstance(document, dict):
+                raise ValueError("diagnostic input episode row must be an object")
+            episode_count += 1
+        has_v2 |= _contains_snqi_v2_signal(path.name)
+        for value in _publication_values(document):
+            if isinstance(value, str):
+                has_v2 |= _contains_snqi_v2_signal(value)
+            if isinstance(value, str) and value == "pending_calibration":
+                raise ValueError(
+                    "diagnostic input pending_calibration refuses publication; calibration anchors are not frozen"
+                )
+            if not isinstance(value, dict):
+                continue
+            has_v1 |= _scoring_copies(
+                value,
+                versions,
+                force_sources,
+                scoring_context=(
+                    str(value.get("schema_version", "")).startswith("snqi-v2-diagnostics")
+                    or "anchors" in value
+                    or "force_decision" in value
+                    or any(key.startswith("snqi_v2_") for key in value)
+                ),
+            )
+            has_v2 |= any(_contains_snqi_v2_signal(key) for key in value) or {"w_S", "w_C"} <= set(
+                value
+            )
+            has_v2 |= any(
+                _contains_snqi_v2_signal(item) for item in value.values() if isinstance(item, str)
+            )
+            if "anchors" in value or "force_decision" in value:
+                anchors.add(path)
+                has_v2 = True
+            if (
+                str(value.get("schema_version", "")).startswith("snqi-v2-diagnostics")
+                and "version" in value
+            ):
+                if value["version"] not in {"SNQI-v2", "SNQI-v2.0"}:
+                    raise ValueError("diagnostic input has conflicting v2 version copies")
+    if len(versions) > 1 or (has_v2 and versions and versions != {"SNQI-v2"}):
+        raise ValueError("diagnostic input has conflicting v2 version copies")
+    if len(force_sources) > 1:
+        raise ValueError("diagnostic input has conflicting force source copies")
+    return has_v2, has_v1 and episode_count > 0 and not has_v2, anchors, force_sources
+
+
+def _declared_input_documents(value: Any, root: Path, source_root: Path):
+    """Inspect source asset content before a historical exemption can be considered.
+
+    Yields:
+        Parsed assets explicitly referenced outside the publication directory.
+    """
+    from robot_sf.benchmark.snqi.v2_spec import parse_v2_json, parse_v2_yaml  # noqa: PLC0415
+
+    for declaration in _publication_values(value):
+        if not isinstance(declaration, dict):
+            continue
+        for key, item in declaration.items():
+            if not key.endswith(("_path", "_file")) or not any(
+                role in key for role in ("weights", "anchors", "family")
+            ):
+                continue
+            if not isinstance(item, str) or Path(item).is_absolute() or ".." in Path(item).parts:
+                raise ValueError("diagnostic input path must stay within the source root")
+            paths = [
+                root / item,
+                root / "diagnostic_inputs" / item,
+                root / "release_metadata/snqi" / Path(item).name,
+                source_root / item,
+            ]
+            path = next((candidate for candidate in paths if candidate.is_file()), None)
+            if path is None:
+                # Required custody will diagnose absence. It can never prove v1.
+                yield root / item, {"snqi_v2_missing_input": True}
+                continue
+            if any(part.is_symlink() for part in (path, *path.parents)):
+                raise ValueError("diagnostic input refuses symlinks: " + item)
+            parser = parse_v2_json if path.suffix.lower() == ".json" else parse_v2_yaml
+            try:
+                yield path, parser(path.read_bytes())
+            except (ValueError, TypeError) as exc:
+                raise ValueError("diagnostic input invalid structured content: " + item) from exc
+
+
+def _campaign_v2_declarations(campaign: dict[str, Any]) -> list[dict[str, Any]]:
+    """Require complete campaign declarations; custody is already required by default.
+
+    Returns:
+        Campaign provenance declarations to join with every diagnostic candidate.
+    """
     metadata_keys = {"snqi_v2_version"} | {
         f"snqi_v2_{role}_{suffix}"
         for role in ("weights", "anchors", "family")
@@ -1602,7 +1734,7 @@ def _campaign_v2_declarations(
     return declarations
 
 
-def _diagnostic_input_contract(  # noqa: C901
+def _diagnostic_input_contract(  # noqa: C901, PLR0915
     root: Path, *, source_root: Path | None = None
 ) -> _DiagnosticInputContract:
     """Join campaign and report declarations, refusing missing reports or conflicting roles.
@@ -1610,24 +1742,41 @@ def _diagnostic_input_contract(  # noqa: C901
     Returns:
         Every named input and the v2 scoring contract independent of report survival.
     """
+    documents = []
+    extra_documents = []
+
+    def content():
+        # Episode rows participate in the historical proof without retaining a
+        # second in-memory copy of the complete campaign.
+        for path, document in _publication_documents(root):
+            yield path, document
+            if path.name.endswith("episodes.jsonl"):
+                continue
+            documents.append((path, document))
+            if source_root is not None:
+                for extra in _declared_input_documents(document, root, source_root):
+                    extra_documents.append(extra)
+                    yield extra
+
+    _, historical_v1, anchor_candidates, force_sources = _publication_content_facts(content())
     references: dict[Path, str] = {}
     v2_pins: dict[str, tuple[Path, str]] = {}
     metric_schema_version = None
 
-    def visit(value: Any) -> None:
+    def visit(value: Any, *, strict: bool = True) -> None:
         if isinstance(value, dict):
             for key, item in value.items():
                 if key == "path" and "sha256" in value:
                     _add_diagnostic_input_reference(references, item, value["sha256"])
-                elif key.endswith("_path"):
+                elif key.endswith("_path") and (strict or key[:-5] + "_sha256" in value):
                     _add_diagnostic_input_reference(
                         references, item, value.get(key[:-5] + "_sha256")
                     )
                 else:
-                    visit(item)
+                    visit(item, strict=strict)
         elif isinstance(value, list):
             for item in value:
-                visit(item)
+                visit(item, strict=strict)
 
     def bind_v2(provenance: Any) -> None:
         nonlocal metric_schema_version
@@ -1653,19 +1802,25 @@ def _diagnostic_input_contract(  # noqa: C901
             ):
                 raise ValueError("diagnostic input has conflicting v2 metric schema declarations")
             metric_schema_version = schema
-        visit(provenance)
+        visit(provenance, strict=False)
+
+    if historical_v1:
+        # Historical scoring exempts only canonical v2 custody, never declared
+        # diagnostic dependencies. Keep their ordinary path/digest checks.
+        for path, document in documents:
+            if "reports" in path.relative_to(root).parts:
+                visit(document, strict=False)
+        return _DiagnosticInputContract(references, {}, None, None, None)
 
     horizon_path = None
     horizons = None
     campaign_path = root / "campaign_manifest.json"
     if campaign_path.is_file():
         campaign = _read_json_file(campaign_path)
-        declarations = _campaign_v2_declarations(campaign, root, source_root)
+        declarations = _campaign_v2_declarations(campaign)
         if declarations:
             for declaration in declarations:
                 bind_v2(declaration)
-            if not (root / "reports/snqi_v2_diagnostics.json").is_file():
-                raise ValueError("diagnostic input v2 campaign requires diagnostics")
             schedule = campaign.get("scenario_horizons")
             if isinstance(schedule, dict) and "path" in schedule:
                 horizon_path = _add_diagnostic_input_reference(
@@ -1676,30 +1831,90 @@ def _diagnostic_input_contract(  # noqa: C901
             else:
                 raise ValueError("diagnostic input v2 campaign requires its evaluation schedule")
 
-    for report in sorted((root / "reports").glob("*diagnostics.json")):
-        try:
-            document = _read_json_file(report)
-            if report.name == "snqi_v2_diagnostics.json":
-                bind_v2(document.get("provenance"))
-            visit(document)
-        except (OSError, ValueError) as exc:
-            raise ValueError(
-                f"diagnostic input declarations invalid in {report.name}: {exc}"
-            ) from exc
+    diagnostic_count = 0
+
+    def bind_candidates(value):
+        nonlocal diagnostic_count
+        if isinstance(value, dict):
+            role_keys = {
+                f"snqi_v2_{role}_{suffix}"
+                for role in ("weights", "anchors", "family")
+                for suffix in ("path", "sha256")
+            }
+            if role_keys.intersection(value):
+                bind_v2(value)
+                diagnostic_count += 1
+            for item in value.values():
+                bind_candidates(item)
+        elif isinstance(value, list):
+            for item in value:
+                bind_candidates(item)
+
+    for path, document in documents + extra_documents:
+        if path == campaign_path:
+            continue
+        if (
+            isinstance(document, dict)
+            and (
+                str(document.get("schema_version", "")).startswith("snqi-v2-diagnostics")
+                or _contains_snqi_v2_signal(document)
+            )
+            and not path.name.endswith("episodes.jsonl")
+        ):
+            before = diagnostic_count
+            bind_candidates(document)
+            if (
+                str(document.get("schema_version", "")).startswith("snqi-v2-diagnostics")
+                and before == diagnostic_count
+            ):
+                raise ValueError("diagnostic input v2 diagnostics require asset provenance")
+            if str(document.get("schema_version", "")).startswith("snqi-v2-diagnostics"):
+                visit(document)
+    if not diagnostic_count or not v2_pins:
+        raise ValueError("diagnostic input v2 campaign requires diagnostics and complete custody")
     return _DiagnosticInputContract(
         references,
         {role: pin[0] for role, pin in v2_pins.items()},
         horizon_path,
         horizons,
         metric_schema_version,
+        tuple(sorted(anchor_candidates)),
+        tuple(sorted(force_sources)),
     )
+
+
+def _validate_retained_diagnostic_pins(documents, contract: _DiagnosticInputContract) -> None:
+    """Refuse role-copy disagreement even inside a retained diagnostic input."""
+    for _, document in documents:
+        for declaration in _publication_values(document):
+            if not isinstance(declaration, dict):
+                continue
+            roles = ("weights", "anchors", "family")
+            if not any(
+                f"snqi_v2_{role}_path" in declaration or f"snqi_v2_{role}_sha256" in declaration
+                for role in roles
+            ):
+                continue
+            for role in roles:
+                relative = contract.v2_assets[role]
+                if (
+                    declaration.get(f"snqi_v2_{role}_path") != relative.as_posix()
+                    or declaration.get(f"snqi_v2_{role}_sha256") != contract.references[relative]
+                ):
+                    raise ValueError(f"conflicting v2 {role} pins in retained diagnostic candidate")
 
 
 def _validate_diagnostic_v2_assets(
     contract: _DiagnosticInputContract, inputs: dict[Path, Path]
 ) -> None:
     """Reuse the scorer's frozen asset validity checks on the exact retained input bytes."""
+    documents = [
+        document for path in set(inputs.values()) for document in _publication_documents(path)
+    ]
+    has_v2, _, extra_anchors, extra_sources = _publication_content_facts(documents)
     if not contract.v2_assets:
+        if has_v2:
+            raise ValueError("diagnostic input historical SNQI-v1 exemption contains v2 inputs")
         return
     from robot_sf.benchmark.snqi.v2_spec import (  # noqa: PLC0415
         load_snqi_v2_spec,
@@ -1724,13 +1939,21 @@ def _validate_diagnostic_v2_assets(
                 .get("calibration", {})
                 .get("scenario_horizons")
             )
-        load_snqi_v2_spec(
-            inputs[contract.v2_assets["weights"]],
-            anchors_path,
-            inputs[contract.v2_assets["family"]],
-            expected_metric_schema_version=contract.metric_schema_version,
-            evaluation_scenario_horizons=horizons,
-        )
+        candidates = {anchors_path, *contract.anchors_candidates}
+        # Inputs are also inspected by content, independently of names or role pins.
+        _validate_retained_diagnostic_pins(documents, contract)
+        candidates.update(extra_anchors)
+        sources = set(contract.force_sources) | extra_sources
+        for candidate in sorted(candidates):
+            spec = load_snqi_v2_spec(
+                inputs[contract.v2_assets["weights"]],
+                candidate,
+                inputs[contract.v2_assets["family"]],
+                expected_metric_schema_version=contract.metric_schema_version,
+                evaluation_scenario_horizons=horizons,
+            )
+            if sources and sources != {spec.force_source}:
+                raise ValueError("conflicting force source copies disagree with canonical scorer")
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"diagnostic input SNQI-v2 scoring assets invalid: {exc}") from exc
 

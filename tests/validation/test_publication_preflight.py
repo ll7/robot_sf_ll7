@@ -31,7 +31,12 @@ def _make_valid_run(run_dir: Path) -> None:
     _write(run_dir / "manifest.json", json.dumps({"git_hash": "abc123"}))
     _write(
         run_dir / "run_meta.json",
-        json.dumps({"repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"}}),
+        json.dumps(
+            {
+                "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
+                "snqi_score_version": "SNQI-v1",
+            }
+        ),
     )
     _write(run_dir / "episodes" / "episodes.jsonl", '{"episode_id":"ep-1"}\n')
     _write(run_dir / "reports" / "report.md", "# Report\n")

@@ -49,7 +49,12 @@ def _make_run(run_dir: Path, *, with_video: bool = True) -> None:
     )
     _write(
         run_dir / "run_meta.json",
-        json.dumps({"repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"}}),
+        json.dumps(
+            {
+                "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
+                "snqi_score_version": "SNQI-v1",
+            }
+        ),
     )
     _write(run_dir / "episodes" / "episodes.jsonl", '{"episode_id":"ep-1"}\n')
     _write(run_dir / "aggregates" / "summary.json", '{"success_rate":1.0}\n')
@@ -339,6 +344,7 @@ def test_export_bundle_matrix_path_is_repo_relative_from_any_cwd(
             {
                 "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
                 "matrix_path": matrix_path,
+                "snqi_score_version": "SNQI-v1",
             }
         ),
     )
@@ -385,6 +391,7 @@ def test_export_camera_campaign_bundle_includes_preflight_seed_policy(tmp_path: 
             {
                 "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
                 "matrix_path": "configs/scenarios/classic_interactions.yaml",
+                "snqi_score_version": "SNQI-v1",
                 "seed_policy": {
                     "mode": "fixed-list",
                     "seeds": [1, 2],
@@ -668,7 +675,8 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
                 "repo": {
                     "remote": "git@github.com:ll7/robot_sf_ll7.git",
                     "commit": "a" * 40,
-                }
+                },
+                "snqi_score_version": "SNQI-v1",
             }
         ),
     )

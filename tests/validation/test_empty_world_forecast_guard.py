@@ -149,9 +149,17 @@ def test_supported_eight_and_nonpredictive_goal_need_no_extra_fields(campaign_fa
     sweep.assert_forecast_support(load_campaign_config(path))
 
 
-def test_missing_real_checkpoint_refuses_preflight(campaign_factory, monkeypatch, tmp_path):
-    """An unavailable model cannot pass based on a declared horizon alone."""
+@pytest.mark.parametrize("checkpoint_content", [None, b"", b"not a torch checkpoint"])
+def test_missing_real_checkpoint_refuses_preflight(
+    campaign_factory,
+    monkeypatch,
+    tmp_path,
+    checkpoint_content,
+):
+    """Absent and corrupt model bytes cannot pass a declared horizon alone."""
     derived = campaign_factory("missing_model", missing=True)
+    if checkpoint_content is not None:
+        (tmp_path / "missing.pt").write_bytes(checkpoint_content)
     monkeypatch.setattr(sweep, "verify_head", lambda _: "fixture-head")
     monkeypatch.setattr(sweep, "build_derived_inputs", lambda suite, **_: derived)
     with pytest.raises(RuntimeError, match=r"forecast guard.*missing_model.*checkpoint"):
@@ -202,3 +210,23 @@ def test_requested_adaptive_boost_is_checked(campaign_factory):
     settings_path.write_text(yaml.safe_dump(settings))
     with pytest.raises(ValueError, match=r"forecast guard.*boost_bad.*requested.*12.*supported.*8"):
         sweep.assert_forecast_support(load_campaign_config(path))
+
+
+def test_none_model_stops_before_preparing_inference_inputs(campaign_factory, monkeypatch):
+    """A missing loaded model must fail before preparing any inference input."""
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
+
+    prepared_inputs = []
+    original_build_input = PredictionPlannerAdapter._build_model_input
+
+    def observe_input_preparation(adapter, observation):
+        prepared_inputs.append(observation)
+        return original_build_input(adapter, observation)
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_ensure_model", lambda _: None)
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model_input", observe_input_preparation)
+    path, _ = campaign_factory("no_loaded_model")
+    with pytest.raises(RuntimeError, match=r"forecast guard.*no_loaded_model.*checkpoint"):
+        sweep.assert_forecast_support(load_campaign_config(path))
+    assert prepared_inputs == []

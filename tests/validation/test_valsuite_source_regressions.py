@@ -57,7 +57,7 @@ def _fake_trace(case):
         ("V2", "0.9", "speed_drop_m_s", 0.32),
         ("V4", "2.4", "all_data_specific_flow_persons_m_s", 350 / (349 * 0.02 * 2.4)),
         ("V5", "diagnostic", "lateral_cm_to_edge_m", 0.5),
-        ("V6", "1.15", "onset_m", 2.99),
+        ("V6", "1.15", "onset_m", 2.645),  # Sustained correction, not the 3 m boundary.,
     ],
 )
 def test_source_case_known_answer_replaces_wrong_or_missing_estimator(

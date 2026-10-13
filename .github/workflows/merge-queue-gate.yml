@@ -150,10 +150,32 @@ jobs:
         if: steps.gate-source.outputs.available == 'true'
         run: python -m pip install --quiet pyyaml==6.0.3 jsonschema==4.26.0 loguru==0.7.3 numpy==2.4.6 numba==0.67.0 shapely==2.1.2 matplotlib==3.11.1 python-motion-planning==2.0.1
 
+      - name: Verify trusted receipt import closure
+        if: steps.gate-source.outputs.available == 'true'
+        env:
+          PYTHONPATH: ${{ github.workspace }}/fast-pysf
+        run: |
+          set -euo pipefail
+          # Before installation, never substitute PR-head code for trusted code.
+          if [[ ! -f scripts/ci/receipt_provenance.py ]]; then
+            echo "Trusted receipt provenance is not installed; import smoke is out of scope."
+            exit 0
+          fi
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+          from scripts.ci import receipt_provenance
+          assert receipt_provenance.canonical_seed(1001) == 1001
+          scope = json.loads(Path("configs/benchmarks/releases/behaviour_gate_0_1_0.json").read_text())
+          assert len(receipt_provenance.reviewed_slots(scope, [1001, 1002, 1003])) == 2142
+          print("Trusted receipt import smoke: canonical seed and 2142 native slots passed")
+          PYTHON
+
       - name: Run merge-queue gate (merge_group)
         if: github.event_name == 'merge_group' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: ${{ github.workspace }}/fast-pysf
         run: |
           set -euo pipefail
           python scripts/dev/merge_queue_gate.py \
@@ -166,6 +188,7 @@ jobs:
         if: github.event_name == 'pull_request' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: ${{ github.workspace }}/fast-pysf
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
@@ -180,6 +203,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: ${{ github.workspace }}/fast-pysf
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           set -euo pipefail

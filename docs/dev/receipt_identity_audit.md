@@ -1,12 +1,12 @@
 # Receipt identity audit
 
-Audit updated after the sixth PR #10366 review at `1805b43a6e163340387b47e64e9fac11a671f23f`. Source anchors below refer to this revision; update the audit when these boundaries change. The native slot refactor is supplied by prerequisite [#10375](https://github.com/ll7/robot_sf_ll7/pull/10375); #10366 is stacked on that branch and does not change the sweep path relative to its base. The prerequisite retains its independent full-receipt gate.
+Audit updated after the seventh PR #10366 review. Source anchors below refer to this revision; update the audit when these boundaries change. #10366 targets main and does not change the native sweep. #10375 is parked and is not a prerequisite.
 
-The authoritative distinct slot is the runtime sweep's `EpisodeSlot`. Its current fields, obtained from `EpisodeSlot._fields`, are `(arm, kinematics, scenario, seed)`. `reconcile_execution` uses the shared `episode_slot(actual_row)` and `expected_episode_slots(config, scenarios)` functions for observed and expected identities. Receipt tooling imports those functions and the native type; it has no separate slot-axis inventory or Cartesian tuple definition.
+The authority is main's existing `reconcile_execution`: it emits complete native tuples in `unexpected_slots` for observed rows and `missing_slots` for expected scope. `receipt_native_slots` calls that same function with actual rows or the reviewed native configuration. Its `EpisodeSlot` is an immutable labelled view of the entire emitted tuple, with no receipt-owned axis inventory. `_layout` matches the reconciler's materialized missing-row values and `flatten` summary labels to tuple positions; ambiguous or incomplete mappings refuse. Current emitted labels are `(arm, kinematics, scenario, seed)`. Every emitted position survives keys, uniqueness, scope-set equality and compact transport.
 
 The actual sealed row is passed intact with loader-style observed source context only when `_source_file` is absent. `_sweep_arm`, `_sweep_kinematics`, existing `_source_file`, `scenario_params.robot_config.type`, `algo` and future extractor inputs remain available. Directory, every present raw declaration, summary and producer links must agree. No source bytes are stripped, rewritten or resealed by validation.
 
-`joined_sweep_episodes` keys raw and summary rows by the full native slot and checks uniqueness and exact coverage before exposing rows. `reviewed_slots` loads the same pinned release campaign templates as native acquisition, retaining their complete configuration, substitutes independently reviewed arm/map declarations and the required development slice, and calls `expected_episode_slots`. Source kinematics declarations never choose the expected matrix. Collection, full comparison, committed admission and both regular/LFS queue transports require observed native slot sets to equal this reviewed set: zero missing and zero unexpected slots.
+`joined_sweep_episodes` keys raw and summary rows by the full native slot and checks uniqueness and exact coverage before exposing rows. `reviewed_slots` loads the same pinned release campaign templates as native acquisition, retaining their complete configuration, substitutes independently reviewed arm/map declarations and the required development slice, and calls `receipt_native_slots.expected_episode_slots`. Source kinematics declarations never choose the expected matrix. Collection, full comparison, committed admission and both regular/LFS queue transports require observed native slot sets to equal this reviewed set: zero missing and zero unexpected slots.
 
 New compact rows record `native_slot = slot._asdict()`, so every runtime field survives transport automatically. Existing v1 presentation labels can still be decoded by the native extractor, but they are never retained as reduced identity keys. Legacy direct-call dictionaries are immediately rekeyed using actual row declarations before deduplication, counting or comparison; contradictory or duplicate declarations refuse. Compact native fields and presentation labels must agree, and admission checks compact coverage against the reviewed native set as well as the original sealed sources.
 
@@ -16,31 +16,48 @@ This inventory includes direct identity extraction/key/count sites and the sourc
 
 | Site | Identity use and guard |
 | --- | --- |
-| [scripts/ci/receipt_provenance.py:21](../../scripts/ci/receipt_provenance.py#L21) `_native_id_values` | Imported native projections for standalone declared labels, including reserved roster delimiters; not raw-row extraction. |
-| [scripts/ci/receipt_provenance.py:50](../../scripts/ci/receipt_provenance.py#L50) `canonical_id` | Require unchanged, nonempty native text IDs. |
-| [scripts/ci/receipt_provenance.py:61](../../scripts/ci/receipt_provenance.py#L61) `canonical_seed` | Native seed coercer fixed point plus exact integer type. |
-| [scripts/ci/receipt_provenance.py:74](../../scripts/ci/receipt_provenance.py#L74) `validate_seed_ids` | Canonical seeds and no normalized slice collisions. |
-| [scripts/ci/receipt_provenance.py:81](../../scripts/ci/receipt_provenance.py#L81) `canonical_scenario_seed` | Validate declared scenario/seed companion identities. |
-| [scripts/ci/receipt_provenance.py:96](../../scripts/ci/receipt_provenance.py#L96) `canonical_pair_key` | Decode legacy presentation labels with the native extractor into a complete slot. |
-| [scripts/ci/receipt_provenance.py:138](../../scripts/ci/receipt_provenance.py#L138) `validate_pair_keys` | Validate caller-supplied comparison/transport key axes. |
-| [scripts/ci/receipt_provenance.py:200](../../scripts/ci/receipt_provenance.py#L200) `validate_scope_ids` | Validate scope arm/map labels and every native projection collision. |
-| [scripts/ci/receipt_provenance.py:220](../../scripts/ci/receipt_provenance.py#L220) `directory_arm` | Independent observed-directory roster projection, using native _arm_key. |
-| [scripts/ci/receipt_provenance.py:227](../../scripts/ci/receipt_provenance.py#L227) `_row_source_matches_observed` | Require the retained raw source location to identify the observed file. |
-| [scripts/ci/receipt_provenance.py:241](../../scripts/ci/receipt_provenance.py#L241) `native_row_key` | Entire actual row to native episode_slot and native selector agreement; preserve precedence inputs; require directory/source and all present scenario declarations to agree. |
-| [scripts/ci/receipt_provenance.py:320](../../scripts/ci/receipt_provenance.py#L320) `_sweep_summaries` | Validate independent summary IDs, contained source paths and nested robot type against the extracted slot; summaries do not determine accepted native keys. |
-| [scripts/ci/receipt_provenance.py:362](../../scripts/ci/receipt_provenance.py#L362) `joined_sweep_episodes` | Native raw-key uniqueness, unique agreeing summaries, exact raw/summary/path coverage; return native keys only after all checks. |
-| [scripts/ci/receipt_provenance.py:515](../../scripts/ci/receipt_provenance.py#L515) `_producer_identity` | Actual native key must agree with original producer scenario/seed links before execution proof is minted. |
-| [scripts/ci/receipt_provenance.py:591](../../scripts/ci/receipt_provenance.py#L591) `verify_producer_seals` | Directory selects strict proof decoding only; logical row identity is checked by _producer_identity. |
-| [scripts/ci/receipt_provenance.py:671](../../scripts/ci/receipt_provenance.py#L671) `write_binding` | Fresh allocation binding requires verified producer/native identity first. |
-| [scripts/ci/receipt_provenance.py:694](../../scripts/ci/receipt_provenance.py#L694) `verify_binding` | Verify frozen bindings and producer/native identity before exposing sealed rows. |
-| [scripts/ci/receipt_provenance.py:734](../../scripts/ci/receipt_provenance.py#L734) `verify_optional_binding` | Collection custody entry to the same producer verifier. |
-| [scripts/ci/receipt_provenance.py:743](../../scripts/ci/receipt_provenance.py#L743) `verified_raw_rows` | Committed/collection raw-source frontier: shared native join on original sealed objects; preserve proof attributes and compare outcomes/status. |
-| [scripts/ci/receipt_provenance.py:86](../../scripts/ci/receipt_provenance.py#L86) `canonical_slot` | Enumerate the runtime type fields to validate every axis before key use. |
+| [scripts/ci/receipt_provenance.py:22](../../scripts/ci/receipt_provenance.py#L22) `_native_id_values` | Imported native projections for standalone declared labels, including reserved roster delimiters; not raw-row extraction. |
+| [scripts/ci/receipt_provenance.py:51](../../scripts/ci/receipt_provenance.py#L51) `canonical_id` | Require unchanged, nonempty native text IDs. |
+| [scripts/ci/receipt_provenance.py:62](../../scripts/ci/receipt_provenance.py#L62) `canonical_seed` | Native seed coercer fixed point plus exact integer type. |
+| [scripts/ci/receipt_provenance.py:75](../../scripts/ci/receipt_provenance.py#L75) `validate_seed_ids` | Canonical seeds and no normalized slice collisions. |
+| [scripts/ci/receipt_provenance.py:82](../../scripts/ci/receipt_provenance.py#L82) `canonical_scenario_seed` | Validate declared scenario/seed companion identities. |
+| [scripts/ci/receipt_provenance.py:97](../../scripts/ci/receipt_provenance.py#L97) `canonical_pair_key` | Decode legacy presentation labels with the native extractor into a complete slot. |
+| [scripts/ci/receipt_provenance.py:137](../../scripts/ci/receipt_provenance.py#L137) `validate_pair_keys` | Validate caller-supplied comparison/transport key axes. |
+| [scripts/ci/receipt_provenance.py:198](../../scripts/ci/receipt_provenance.py#L198) `validate_scope_ids` | Validate scope arm/map labels and every native projection collision. |
+| [scripts/ci/receipt_provenance.py:218](../../scripts/ci/receipt_provenance.py#L218) `directory_arm` | Independent observed-directory roster projection, using native _arm_key. |
+| [scripts/ci/receipt_provenance.py:225](../../scripts/ci/receipt_provenance.py#L225) `_row_source_matches_observed` | Require the retained raw source location to identify the observed file. |
+| [scripts/ci/receipt_provenance.py:239](../../scripts/ci/receipt_provenance.py#L239) `native_row_key` | Entire actual row to native episode_slot and native selector agreement; preserve precedence inputs; require directory/source and all present scenario declarations to agree. |
+| [scripts/ci/receipt_provenance.py:317](../../scripts/ci/receipt_provenance.py#L317) `_sweep_summaries` | Validate independent summary IDs, contained source paths and nested robot type against the extracted slot; summaries do not determine accepted native keys. |
+| [scripts/ci/receipt_provenance.py:361](../../scripts/ci/receipt_provenance.py#L361) `joined_sweep_episodes` | Native raw-key uniqueness, unique agreeing summaries, exact raw/summary/path coverage; return native keys only after all checks. |
+| [scripts/ci/receipt_provenance.py:514](../../scripts/ci/receipt_provenance.py#L514) `_producer_identity` | Actual native key must agree with original producer scenario/seed links before execution proof is minted. |
+| [scripts/ci/receipt_provenance.py:590](../../scripts/ci/receipt_provenance.py#L590) `verify_producer_seals` | Directory selects strict proof decoding only; logical row identity is checked by _producer_identity. |
+| [scripts/ci/receipt_provenance.py:670](../../scripts/ci/receipt_provenance.py#L670) `write_binding` | Fresh allocation binding requires verified producer/native identity first. |
+| [scripts/ci/receipt_provenance.py:693](../../scripts/ci/receipt_provenance.py#L693) `verify_binding` | Verify frozen bindings and producer/native identity before exposing sealed rows. |
+| [scripts/ci/receipt_provenance.py:733](../../scripts/ci/receipt_provenance.py#L733) `verify_optional_binding` | Collection custody entry to the same producer verifier. |
+| [scripts/ci/receipt_provenance.py:742](../../scripts/ci/receipt_provenance.py#L742) `verified_raw_rows` | Committed/collection raw-source frontier: shared native join on original sealed objects; preserve proof attributes and compare outcomes/status. |
+| [scripts/ci/receipt_provenance.py:87](../../scripts/ci/receipt_provenance.py#L87) `canonical_slot` | Enumerate the runtime type fields to validate every axis before key use. |
 | [scripts/ci/receipt_provenance.py:111](../../scripts/ci/receipt_provenance.py#L111) `compact_slot` | Decode the whole native_slot mapping; require presentation labels and native extraction to agree. |
-| [scripts/ci/receipt_provenance.py:149](../../scripts/ci/receipt_provenance.py#L149) `native_keyed_rows` | Immediately replace legacy direct-call declaration keys with actual-row native slots; no reduced key survives. |
-| [scripts/ci/receipt_provenance.py:178](../../scripts/ci/receipt_provenance.py#L178) `reviewed_slots` | Use native campaign loader and expected_episode_slots for the independently reviewed expected set, including all configuration axes. |
-| [scripts/ci/receipt_provenance.py:288](../../scripts/ci/receipt_provenance.py#L288) `_validate_slot_declarations` | Compare directory, every runtime row encoding field and explicit robot configuration with the extracted slot. |
-| [scripts/ci/receipt_provenance.py:303](../../scripts/ci/receipt_provenance.py#L303) `_validate_robot_kinematics` | Shared raw/summary check for scenario_params.robot_config.type against the verified native slot. |
+| [scripts/ci/receipt_provenance.py:148](../../scripts/ci/receipt_provenance.py#L148) `native_keyed_rows` | Immediately replace legacy direct-call declaration keys with actual-row native slots; no reduced key survives. |
+| [scripts/ci/receipt_provenance.py:176](../../scripts/ci/receipt_provenance.py#L176) `reviewed_slots` | Use native campaign loader and expected_episode_slots for the independently reviewed expected set, including all configuration axes. |
+| [scripts/ci/receipt_provenance.py:286](../../scripts/ci/receipt_provenance.py#L286) `_validate_slot_declarations` | Compare directory, every runtime row encoding field and explicit robot configuration with the extracted slot. |
+| [scripts/ci/receipt_provenance.py:300](../../scripts/ci/receipt_provenance.py#L300) `_validate_robot_kinematics` | Shared raw/summary check for scenario_params.robot_config.type against the verified native slot. |
+
+## scripts/ci/receipt_native_slots.py
+
+| Site | Native identity authority |
+| --- | --- |
+| [scripts/ci/receipt_native_slots.py:21](../../scripts/ci/receipt_native_slots.py#L21) `_reconcile` | Call the existing main reconciler without reading source archives or executing episodes. |
+| [scripts/ci/receipt_native_slots.py:26](../../scripts/ci/receipt_native_slots.py#L26) `_layout` | Derive all tuple positions, labels and declaration encoding from native missing rows and summary columns; refuse ambiguity. |
+| [scripts/ci/receipt_native_slots.py:58](../../scripts/ci/receipt_native_slots.py#L58) `EpisodeSlot` | Retain every native tuple position in an immutable key. |
+| [scripts/ci/receipt_native_slots.py:64](../../scripts/ci/receipt_native_slots.py#L64) `__new__` | Require exact complete tuple length or exact native declaration fields. |
+| [scripts/ci/receipt_native_slots.py:74](../../scripts/ci/receipt_native_slots.py#L74) `__getattr__` | Read public native labels from the complete tuple. |
+| [scripts/ci/receipt_native_slots.py:80](../../scripts/ci/receipt_native_slots.py#L80) `__getnewargs__` | Preserve every tuple field through copying and serialization. |
+| [scripts/ci/receipt_native_slots.py:84](../../scripts/ci/receipt_native_slots.py#L84) `_asdict` | Serialize every emitted position, never a subset. |
+| [scripts/ci/receipt_native_slots.py:87](../../scripts/ci/receipt_native_slots.py#L87) `_replace` | Test/transport utility retaining the full tuple and refusing unknown fields. |
+| [scripts/ci/receipt_native_slots.py:93](../../scripts/ci/receipt_native_slots.py#L93) `episode_slot` | Pass the entire actual row to native reconciliation and consume its complete unexpected tuple. |
+| [scripts/ci/receipt_native_slots.py:103](../../scripts/ci/receipt_native_slots.py#L103) `episode_slot_row` | Use the native missing-row encoding derived at the same positions. |
+| [scripts/ci/receipt_native_slots.py:108](../../scripts/ci/receipt_native_slots.py#L108) `expected_episode_slots` | Consume the full native missing-slot set for the independently reviewed configuration. |
+| [scripts/ci/receipt_native_slots.py:114](../../scripts/ci/receipt_native_slots.py#L114) `directory_episode_identity` | Call main native arm and kinematics extractors for independent directory declarations. |
 
 ## scripts/ci/receipt_arm_execution.py
 
@@ -121,7 +138,7 @@ This inventory includes direct identity extraction/key/count sites and the sourc
 | [scripts/validation/run_empty_world_sweep.py:335](../../scripts/validation/run_empty_world_sweep.py#L335) | `_arm_key`; runtime source unchanged |
 | [scripts/validation/run_empty_world_sweep.py:457](../../scripts/validation/run_empty_world_sweep.py#L457) | `_kinematics`; runtime source unchanged |
 | [scripts/validation/run_empty_world_sweep.py:380](../../scripts/validation/run_empty_world_sweep.py#L380) | `flatten`; runtime source unchanged |
-| [scripts/validation/run_empty_world_sweep.py:570](../../scripts/validation/run_empty_world_sweep.py#L570) | `reconcile_execution`; shared native slot refactor is supplied by the separate prerequisite PR; simulated execution unchanged |
+| [scripts/validation/run_empty_world_sweep.py:511](../../scripts/validation/run_empty_world_sweep.py#L511) | `reconcile_execution`; unchanged main runtime emits full expected and observed tuples |
 | [robot_sf/benchmark/camera_ready/_config.py:386](../../robot_sf/benchmark/camera_ready/_config.py#L386) | `_sanitize_name`; runtime source unchanged |
 | [robot_sf/benchmark/camera_ready/_config.py:732](../../robot_sf/benchmark/camera_ready/_config.py#L732) | `_scenario_name_key`; runtime source unchanged |
 | [robot_sf/benchmark/camera_ready/_run_state.py:81](../../robot_sf/benchmark/camera_ready/_run_state.py#L81) | `_coerce_identifier`; runtime source unchanged |
@@ -133,15 +150,11 @@ The native reconciler is also an independent test oracle: the original 2142-row 
 
 Validation includes individual directory/row/summary forgeries through every reader, a changed native-function priority input that proves the full actual dictionary is passed, canonical-ID and strict trace/action regressions, and the original sealed #10342 pilot. These checks launch no simulation or receipt batch and claim historical compatibility only.
 
-## Native slot definition and regression evidence
+## Main native tuple binding and regression evidence
 
-- [scripts/validation/run_empty_world_sweep.py:505](../../scripts/validation/run_empty_world_sweep.py#L505) `directory_episode_identity` owns independent native directory declarations, used both by runtime reconciliation and receipt readers.
-- [scripts/validation/run_empty_world_sweep.py:473](../../scripts/validation/run_empty_world_sweep.py#L473) `EpisodeSlot` owns the slot schema, extraction, encoding or runtime reconciliation.
-- [scripts/validation/run_empty_world_sweep.py:482](../../scripts/validation/run_empty_world_sweep.py#L482) `episode_slot` owns the slot schema, extraction, encoding or runtime reconciliation.
-- [scripts/validation/run_empty_world_sweep.py:491](../../scripts/validation/run_empty_world_sweep.py#L491) `episode_slot_row` owns the slot schema, extraction, encoding or runtime reconciliation.
-- [scripts/validation/run_empty_world_sweep.py:515](../../scripts/validation/run_empty_world_sweep.py#L515) `expected_episode_slots` owns the slot schema, extraction, encoding or runtime reconciliation.
-- [scripts/validation/run_empty_world_sweep.py:570](../../scripts/validation/run_empty_world_sweep.py#L570) `reconcile_execution` owns the slot schema, extraction, encoding or runtime reconciliation.
 
-`test_receipt_slot_identity.py` contains the full-matrix and PPO-only holonomic attacks at collection, committed admission and both queue transports. All eight controls failed at the reviewed head because equality/admission was incorrectly accepted. Its generic coherent-forgery test enumerates `EpisodeSlot._fields` and uses the runtime row encoder, so an added runtime field automatically receives a probe. The generic test was also run with the factored native definition and the reviewed receipt binding: the kinematics case still admitted the attack. Canonical pilot axes and the actual unchanged sealed #10342 corpus remain positive controls. The additional row/directory/summary kinematics and future native-priority controls failed before receipt changes (16 failures), then passed after the shared native binding (16 passes). Repeating the complete, coherently relabelled 28-case file against the factored runtime schema and reviewed receipt implementation produced 25 failures for admitted attacks and 3 refusals for the already guarded axes; the fixed implementation passes all 28. All attack probes use seeds 1001–1006; no receipt batch was run.
+`test_receipt_slot_identity.py` contains the full-matrix and PPO-only holonomic attacks at collection, committed admission and both queue transports. All eight controls failed at the reviewed head because equality/admission was incorrectly accepted. Its generic coherent-forgery test enumerates all emitted tuple labels through `EpisodeSlot._fields` and uses the encoding derived from native missing rows, so an added runtime field automatically receives a probe. The generic test was also run with the factored native definition and the reviewed receipt binding: the kinematics case still admitted the attack. Canonical pilot axes and the actual unchanged sealed #10342 corpus remain positive controls. The additional row/directory/summary kinematics and future native-priority controls failed before receipt changes (16 failures), then passed after the shared native binding (16 passes). Repeating the complete, coherently relabelled 28-case file against the factored runtime schema and reviewed receipt implementation produced 25 failures for admitted attacks and 3 refusals for the already guarded axes; the fixed implementation passes all 28. All attack probes use seeds 1001–1006; no receipt batch was run.
 
 The hosted main baseline at `c26838b140d4e4073f7414c33496d781f4eea4a0` passed the macOS/Python 3.11 native HTTP audit-workbench test in [job 115284937815](https://github.com/ll7/robot_sf_ll7/actions/runs/38394055489/job/115284937815) (3168 passed, 2 skipped). The sixth review confirms that PR head `1805b43a6e163340387b47e64e9fac11a671f23f` also passed that same test in [job 115534683187](https://github.com/ll7/robot_sf_ll7/actions/runs/38466456062/job/115534683187), with the same totals. The audit implementation, test, dependency lock and CI command remain unchanged. The earlier intermittent failure was not reproduced on either head; its cause remains unidentified. No audit-workbench code change is included.
+
+The queue workflow exposes only the trusted checkout’s `fast-pysf` directory on its import path. Its import smoke uses canonical seed 1001 and the full reviewed 2142-slot set under the eight exact Python 3.12 dependency pins, without Torch or Pygame.

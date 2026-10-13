@@ -7,6 +7,7 @@ import pytest
 
 from scripts.ci import behaviour_receipt as gate
 from scripts.ci import make_behaviour_receipt as producer
+from scripts.ci import receipt_native_slots as slots
 from scripts.dev.merge_queue_gate import metadata_digest, metadata_trailer
 from scripts.validation import run_empty_world_sweep as native
 from tests.dev.test_merge_queue_gate import queue_equivalence as _queue_equivalence
@@ -185,7 +186,7 @@ def test_queue_admission_refuses_resealed_holonomic_slots(
     assert '"admission_status": "accepted"' not in output
 
 
-@pytest.mark.parametrize("field", native.EpisodeSlot._fields)
+@pytest.mark.parametrize("field", slots.EpisodeSlot._fields)
 def test_every_runtime_slot_field_refuses_coherent_producer_forgery(
     exact_source_sweeps, capsys, field
 ):
@@ -200,11 +201,11 @@ def test_every_runtime_slot_field_refuses_coherent_producer_forgery(
                 continue
             rows = [json.loads(line) for line in path.read_text().splitlines()]
             for row in rows:
-                slot = native.episode_slot({**row, "_source_file": path.as_posix()})
+                slot = slots.episode_slot({**row, "_source_file": path.as_posix()})
                 value = getattr(slot, field)
                 replacement = value + 3 if type(value) is int else value + "_forged"
                 forged = slot._replace(**{field: replacement})
-                row.update(native.episode_slot_row(forged))
+                row.update(slots.episode_slot_row(forged))
                 replacements[slot] = forged
             target = path.parent.with_name(f"{forged.arm}__{forged.kinematics}")
             _write(path, rows)
@@ -215,7 +216,7 @@ def test_every_runtime_slot_field_refuses_coherent_producer_forgery(
             for row in rows:
                 if row["arm"] != "ppo":
                     continue
-                original = native.episode_slot(
+                original = slots.episode_slot(
                     {
                         **row,
                         "_sweep_arm": row["arm"],
@@ -224,7 +225,7 @@ def test_every_runtime_slot_field_refuses_coherent_producer_forgery(
                     }
                 )
                 forged = replacements[original]
-                row.update(native.episode_slot_row(forged))
+                row.update(slots.episode_slot_row(forged))
                 row.update(
                     arm=forged.arm,
                     scenario=forged.scenario,

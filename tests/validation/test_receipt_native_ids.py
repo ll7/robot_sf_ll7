@@ -12,6 +12,7 @@ from robot_sf.benchmark.camera_ready import _config, _run_state
 from robot_sf.training import scenario_loader
 from scripts.ci import default_path_equivalence as eq
 from scripts.ci import make_behaviour_receipt as producer
+from scripts.ci import receipt_native_slots as slots
 from scripts.ci import receipt_provenance as provenance
 from scripts.validation import run_empty_world_sweep as native_sweep
 from tests.validation.test_default_path_equivalence import (
@@ -252,7 +253,7 @@ def test_real_pilot10342_canonical_ids_pass_producer_and_readers(tmp_path):
     assert producer._load_scope(scope_file) == scope
     eq.validate_scope_entries(scope)
     expected = {
-        native_sweep.EpisodeSlot(arm, "differential_drive", scenario, seed)
+        slots.EpisodeSlot(arm, "differential_drive", scenario, seed)
         for arm, scenario, seed in itertools.product(pilot["arms"], pilot["maps"], pilot["seeds"])
     }
     assert len(expected) == pilot["episodes"] == 2142
@@ -266,7 +267,7 @@ def test_real_pilot10342_canonical_ids_pass_producer_and_readers(tmp_path):
         raw_path.parent.mkdir(parents=True)
         for scenario, seed in itertools.product(pilot["maps"], pilot["seeds"]):
             key = provenance.canonical_pair_key(arm, scenario, seed)
-            assert key == native_sweep.EpisodeSlot(arm, "differential_drive", scenario, seed)
+            assert key == slots.EpisodeSlot(arm, "differential_drive", scenario, seed)
             rows.append(
                 {
                     "scenario_id": scenario,

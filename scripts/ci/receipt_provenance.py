@@ -9,7 +9,8 @@ from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import NamedTuple
 
-from scripts.validation.run_empty_world_sweep import EpisodeSlot
+from scripts.ci import receipt_native_slots
+from scripts.ci.receipt_native_slots import EpisodeSlot
 
 BINDING_FILE = "execution_binding.json"
 
@@ -95,10 +96,9 @@ def canonical_slot(slot: EpisodeSlot) -> EpisodeSlot:
 
 def canonical_pair_key(arm: object, scenario: object, seed: object) -> EpisodeSlot:
     """Decode legacy compact declarations through the native slot extractor."""
-    from scripts.validation import run_empty_world_sweep as native
 
     return canonical_slot(
-        native.episode_slot(
+        receipt_native_slots.episode_slot(
             {
                 "_sweep_arm": canonical_id(arm, "arm"),
                 "scenario_id": canonical_id(scenario, "scenario"),
@@ -110,7 +110,6 @@ def canonical_pair_key(arm: object, scenario: object, seed: object) -> EpisodeSl
 
 def compact_slot(row: dict) -> EpisodeSlot:
     """Decode every recorded native field, checking legacy presentation labels."""
-    from scripts.validation import run_empty_world_sweep as native
 
     declared = row.get("native_slot")
     slot = None
@@ -123,13 +122,13 @@ def compact_slot(row: dict) -> EpisodeSlot:
             raise HardwareIdentityError(
                 "receipt identity refused: invalid compact native slot"
             ) from exc
-    context = native.episode_slot_row(slot) if slot is not None else {}
+    context = receipt_native_slots.episode_slot_row(slot) if slot is not None else {}
     context.update(
         _sweep_arm=canonical_id(row["arm"], "arm"),
         scenario_id=canonical_id(row["map"], "scenario"),
         seed=canonical_seed(row["seed"]),
     )
-    observed = canonical_slot(native.episode_slot(context))
+    observed = canonical_slot(receipt_native_slots.episode_slot(context))
     if slot is not None and observed != slot:
         raise HardwareIdentityError("receipt identity refused: compact native slot differs")
     return observed
@@ -152,21 +151,20 @@ def native_keyed_rows(rows: dict) -> dict:
     Sealed readers already return native slots. Never retain a reduced key for
     deduplication, coverage, counts, or subsequent comparisons.
     """
-    from scripts.validation import run_empty_world_sweep as native
 
     validate_pair_keys(rows)
     result = {}
     for declared, row in rows.items():
         context = dict(row)
         if isinstance(declared, EpisodeSlot):
-            context = {**native.episode_slot_row(declared), **context}
-            key = canonical_slot(native.episode_slot(context))
+            context = {**receipt_native_slots.episode_slot_row(declared), **context}
+            key = canonical_slot(receipt_native_slots.episode_slot(context))
             if key != declared:
                 raise HardwareIdentityError("receipt identity refused: native keyed row differs")
         else:
             claim = canonical_pair_key(*declared)
             context.setdefault("_sweep_arm", claim.arm)
-            key = canonical_slot(native.episode_slot(context))
+            key = canonical_slot(receipt_native_slots.episode_slot(context))
             if (key.arm, key.scenario, key.seed) != declared:
                 raise HardwareIdentityError("receipt identity refused: native keyed row differs")
         if key in result:
@@ -193,7 +191,7 @@ def reviewed_slots(scope: dict, seeds) -> set[EpisodeSlot]:
             **{**vars(cfg), "planners": [SimpleNamespace(key=arm) for arm in scope["arms"]]}
         )
         scenarios = [{"name": name, "seeds": list(seeds)} for name in scope["maps"]]
-        expected.update(native.expected_episode_slots(cfg, scenarios))
+        expected.update(receipt_native_slots.expected_episode_slots(cfg, scenarios))
     return {canonical_slot(slot) for slot in expected}
 
 
@@ -269,7 +267,7 @@ def native_row_key(row: dict, path: Path) -> EpisodeSlot:
         raise HardwareIdentityError("receipt identity refused: native row/directory arm differs")
     declared = canonical_scenario_seed(row.get("scenario_id"), row.get("seed"))
     scenario, _seed = _run_state._episode_identity(row)
-    key = canonical_slot(native.episode_slot(context))
+    key = canonical_slot(receipt_native_slots.episode_slot(context))
     if (
         (key.scenario, key.seed) != declared
         or _config._scenario_name_key(row) != scenario
@@ -287,12 +285,11 @@ def native_row_key(row: dict, path: Path) -> EpisodeSlot:
 
 def _validate_slot_declarations(row: dict, context: dict, path: Path, key: EpisodeSlot) -> None:
     """Require all native declaration sources to agree with the extracted slot."""
-    from scripts.validation import run_empty_world_sweep as native
 
-    directory = native.directory_episode_identity(path.as_posix())
+    directory = receipt_native_slots.directory_episode_identity(path.as_posix())
     if any(key._asdict()[field] != value for field, value in directory.items()):
         raise HardwareIdentityError("receipt identity refused: native directory slot differs")
-    for field, value in {**key._asdict(), **native.episode_slot_row(key)}.items():
+    for field, value in {**key._asdict(), **receipt_native_slots.episode_slot_row(key)}.items():
         if field in row and (type(row[field]) is not type(value) or row[field] != value):
             raise HardwareIdentityError(
                 "receipt identity refused: native row slot declaration differs"
@@ -338,7 +335,6 @@ def _sweep_summaries(root: Path) -> list[tuple[EpisodeSlot, dict, Path, Path]]:
                 raise HardwareIdentityError(
                     "receipt identity refused: raw controller trace path escapes the campaign"
                 )
-            from scripts.validation import run_empty_world_sweep as native
 
             context = {
                 **summary,
@@ -346,8 +342,11 @@ def _sweep_summaries(root: Path) -> list[tuple[EpisodeSlot, dict, Path, Path]]:
                 "scenario_id": declared.scenario,
                 "_source_file": source_path.as_posix(),
             }
-            declared = canonical_slot(native.episode_slot(context))
-            for field, value in {**declared._asdict(), **native.episode_slot_row(declared)}.items():
+            declared = canonical_slot(receipt_native_slots.episode_slot(context))
+            for field, value in {
+                **declared._asdict(),
+                **receipt_native_slots.episode_slot_row(declared),
+            }.items():
                 if field in summary and (
                     type(summary[field]) is not type(value) or summary[field] != value
                 ):

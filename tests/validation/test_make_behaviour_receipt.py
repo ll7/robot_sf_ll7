@@ -1536,6 +1536,7 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         "behaviour_receipt.schema.json",
         "behaviour_receipt_nodes.json",
         "receipt_provenance.py",
+        "receipt_native_slots.py",
         "receipt_outcomes.py",
         "receipt_arm_execution.py",
     ):

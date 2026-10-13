@@ -1,6 +1,6 @@
 # Receipt identity audit
 
-Audit updated after the sixth PR #10366 review at `1805b43a6e163340387b47e64e9fac11a671f23f`. Source anchors below refer to this revision; update the audit when these boundaries change.
+Audit updated after the sixth PR #10366 review at `1805b43a6e163340387b47e64e9fac11a671f23f`. Source anchors below refer to this revision; update the audit when these boundaries change. The native slot refactor is supplied by prerequisite [#10375](https://github.com/ll7/robot_sf_ll7/pull/10375); #10366 is stacked on that branch and does not change the sweep path relative to its base. The prerequisite retains its independent full-receipt gate.
 
 The authoritative distinct slot is the runtime sweep's `EpisodeSlot`. Its current fields, obtained from `EpisodeSlot._fields`, are `(arm, kinematics, scenario, seed)`. `reconcile_execution` uses the shared `episode_slot(actual_row)` and `expected_episode_slots(config, scenarios)` functions for observed and expected identities. Receipt tooling imports those functions and the native type; it has no separate slot-axis inventory or Cartesian tuple definition.
 

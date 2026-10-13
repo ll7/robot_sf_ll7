@@ -285,27 +285,75 @@ def records(root, campaign, cfg):
 
 
 def outcome(row):
-    """Retain explicit outcome semantics; metrics provide canonical indicators."""
+    """Retain native event outcomes separately from numeric collision counts."""
+    if not isinstance(row.get("outcome"), dict) or "termination_reason" not in row:
+        raise ValueError("explicit native outcome and termination are required")
     return {
         k: row[k] for k in ("outcome", "termination_reason", "termination", "status") if k in row
-    } | {
-        "indicators": {
-            k: v
-            for k, v in row["metrics"].items()
-            if k in {"success", "collisions", "collision", "timeout"}
-        }
     }
+
+
+def audit(loaded, destination):
+    """Validate native schemas and fail-closed execution/integrity semantics."""
+    import jsonschema
+
+    from robot_sf.benchmark.release_acceptance import _status_markers
+    from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
+
+    schema = json.loads((ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_text())
+    validator = jsonschema.Draft202012Validator(schema)
+    counts = {
+        "records": 0,
+        "schema_errors": 0,
+        "forbidden_status": 0,
+        "integrity_contradictions": 0,
+        "invalid_spawn": 0,
+    }
+    fields = set()
+    for indexed in loaded.values():
+        for (arm, _, _), row in indexed.items():
+            counts["records"] += 1
+            counts["schema_errors"] += not validator.is_valid(row)
+            counts["forbidden_status"] += bool(_status_markers(row, "row", expected_algorithm=arm))
+            counts["integrity_contradictions"] += bool(
+                row.get("integrity", {}).get("contradictions")
+            )
+            counts["invalid_spawn"] += record_has_invalid_spawn(row)
+            fields.update(row)
+    write_json(
+        destination / "row_audit.json",
+        {"counts": counts, "top_level_fields": sorted(fields), "scientific_fields": SCIENTIFIC},
+    )
+    if any(v for k, v in counts.items() if k != "records"):
+        raise ValueError("native evidence audit failed; inspect row_audit.json")
 
 
 def compare(first, second, destination):
     """Compare paired scientific rows and write a complete coordinate ledger."""
     cfg = contract()
     destination.mkdir(parents=True, exist_ok=True)
+    identities = [json.loads((r / "environment.json").read_text()) for r in (first, second)]
+    for field in (
+        "commit",
+        "lock_sha256",
+        "inventory_sha256",
+        "study_sha256",
+        "driver_sha256",
+        "hook_sha256",
+    ):
+        if not identities[0].get(field) or identities[0][field] != identities[1].get(field):
+            raise ValueError(f"cross-CPU environment identity mismatch: {field}")
+    for root in (first, second):
+        if json.loads((root / "COMPLETE.json").read_text()).get("campaigns") != cfg["campaigns"]:
+            raise ValueError("campaign completion receipt mismatch")
+        if any(r["exit_code"] for r in json.loads((root / "execution.json").read_text())):
+            raise ValueError("non-success campaign execution receipt")
     loaded = {
         (cpu, c): records(root, c, cfg)
         for cpu, root in (("a", first), ("b", second))
         for c in cfg["campaigns"]
     }
+    audit(loaded, destination)
     comparisons = [(f"cpu-{c}", ("a", c), ("b", c)) for c in cfg["campaigns"]]
     comparisons += [
         (f"noise-{cpu}", (cpu, "default-r1"), (cpu, "default-r2")) for cpu in ("a", "b")

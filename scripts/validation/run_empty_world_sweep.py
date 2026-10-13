@@ -32,6 +32,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from pickle import UnpicklingError
 from typing import Any
 
 import yaml
@@ -200,6 +201,8 @@ def _checkpoint_forecast_steps(arm_key: str, predictor_config: Any) -> int:
         import torch
 
         model = predictor._ensure_model()
+        if model is None:
+            raise RuntimeError("Predictive checkpoint did not load a model")
         state, mask, *_ = predictor._build_model_input({})
         with torch.no_grad():
             output = model(
@@ -208,7 +211,18 @@ def _checkpoint_forecast_steps(arm_key: str, predictor_config: Any) -> int:
             )
         future = output["future_positions"][0]
 
-    except Exception as error:
+    except (
+        ImportError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
+        EOFError,
+        UnpicklingError,
+    ) as error:
         raise RuntimeError(
             f"forecast guard: {arm_key}: checkpoint forecast load failed: {error}"
         ) from error

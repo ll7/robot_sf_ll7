@@ -63,6 +63,16 @@ bounds normal/cap reconciliation; basis exchanges are linear algebra within a
 projection, not physics substeps. A small wall-free cell retains the inexpensive
 bounded pair solve.
 
+The contact broad phase uses a spatial tree bounded by physical diameter plus
+one step of maximum relative capped motion. Its output is sorted into the same
+pair/wall row order before projection. Cached-basis Gram assembly is vectorized;
+the linear solve is unchanged. Static wall projection vectors are cached and
+invalidated on replacement or in-place coordinate edits. An empty supporting
+constraint set exits before the solver while retaining the old cap/cache effects.
+Dense V3/V4 have reachable pairs on every step, so that exit is not a common case
+in these workloads. Skipping on physical touching distance alone would miss
+impending collisions and is not safe.
+
 If normal/cap reconciliation cannot produce admissible motion, the emergency
 path projects individual walkers into their incident normal halfspaces and
 speed balls. It does not halt a whole reachable component. Its activation is
@@ -95,13 +105,41 @@ emergency fallback, cap violations and unresolved constraints. The analytic
 swept centre-distance minima are 0.5600000100 m (V3) and 0.560000009999 m (V4)
 against 0.56 m physical diameters; endpoint wall penetration is zero.
 
-**The 15% CPU budget is not met.** Paired timing uses the same admissible input
-state, goal and desired-speed vector for both arms, alternates arm order each
-step, excludes only the first ten warmup steps, and preserves all 1,590 samples
-per arm in twenty blocks. V3 overhead is 49.56% / 48.87% (3 / 10 passes); V4 is
-176.06% / 173.60%. The separate 30-person warm cell measures 122.87 / 141.32
-microseconds off/on, or 15.02%, with zero fallback. Neither a cheaper method that
-stalls V3 nor a safe method exceeding budget qualifies the fit.
+**The 15% CPU budget is not met.** The bounded cost repair at source `e6cdbc51d`
+retains all four complete state/trajectory arrays exactly, not merely the crossing
+counts. Every retained optimization stage also matches main's default replay on
+all 200 development seeds. Paired timing uses identical admissible input states,
+goals and desired speeds, alternates arm order each step, excludes only the first
+ten warmup steps, and preserves all 1,590 samples per arm in twenty blocks.
+
+| Case | Passes | Crossings on/off | Emergency fallback | Swept body centre minimum | CPU overhead |
+| --- | --- | --- | --- | --- | --- |
+| V3 | 3 | 58/60 | 0/1,600 | 0.560000010 m | 56.75% |
+| V3 | 10 | 58/60 | 0/1,600 | 0.560000010 m | 56.17% |
+| V4 | 3 | 350/350 | 0/1,600 | 0.560000010 m | 153.81% |
+| V4 | 10 | 350/350 | 0/1,600 | 0.560000010 m | 153.97% |
+
+Swept wall-centre minima remain 0.280000010 m; no penetration beyond 1e-10 m.
+The preceding repair measured V3 49.56% / 48.87% and V4 176.06% / 173.60%.
+The spatial/vectorized path improves V4 but adds overhead in V3. Its earlier
+30-person cell was 15.02%; that historical cell is not a measurement of this
+new head.
+
+Warm cProfile attribution identifies projection as the dominant V4 cost: about
+32.45 s versus 0.31 s for pair/wall search and 0.84 s for setup over 1,590 steps.
+V3 is about 0.30 / 0.03 / 0.12 s respectively. Named wrappers and a thin Python
+orchestrator expose otherwise opaque JIT kernels, so those times include
+instrumentation overhead and are not cost qualification. The configured 3/10
+pass similarity reflects an expensive first coupled solve, not cheap projection.
+A Cholesky-factor-reuse experiment was rejected because it changed trajectories.
+
+A private local-normal V4 alternative measured 7.87% at three passes, with all
+350 crossings and separation within tolerance, but local solver failures occurred
+on 71.38% of steps. At ten passes it measured 17.67% and 69.12% fallback. It fails
+the existing fallback requirement and is not installed in production. Further
+optimization stopped after this bounded sequence. Accepting the measured opt-in
+cost requires an author decision; otherwise the fit stays deferred. No budget
+waiver, cadence change or alternate rule was applied.
 
 Reproduce the workload diagnostic with
 `uv run python scripts/validation/contact_progress_10104.py --seed 1001 --output <run-directory>`.

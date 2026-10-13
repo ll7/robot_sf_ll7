@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 from numba import njit
-from scipy.spatial import cKDTree
+from scipy import spatial
+
+# The installed typing namespace omits this public compiled extension export.
+cKDTree = cast("Any", spatial).cKDTree
 
 RULE = "projection_v2"
 MARGIN_M = 1e-8

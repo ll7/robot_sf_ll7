@@ -20,6 +20,8 @@ BODY_EDGE_PROFILE = "body_edge_v3"
 class _ResolvedProfile(str):
     """Preserve explicit selection through dataclass replacement and copying."""
 
+    explicit: bool
+
     def __new__(cls, value: str, explicit: bool):
         instance = super().__new__(cls, value)
         instance.explicit = explicit

@@ -14,7 +14,7 @@ def test_known_trajectories_make_every_primary_estimator_observable():
     assert len(controls) == 8
     assert all(c["known_answer_pass"] for c in controls)
     assert [c["observed"] for c in controls] == pytest.approx(
-        [1.29, 0.54, 0.40, 1.90, 6 / 11, 0.50, 0.50, 3.00], abs=1e-8
+        [1.29, 0.54, 0.40, 1.90, 6 / 11, 0.50, 0.50, 2.60], abs=1e-8
     )
 
 

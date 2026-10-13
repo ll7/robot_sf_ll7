@@ -56,7 +56,7 @@ def estimator_controls() -> list[dict[str, object]]:
         np.column_stack([10 - t, np.zeros(len(t))]),
         t,
         [straight] * 5,
-    )  # Own PoMD x=5, first captured baseline-exceeding sample x=2.
+    )  # Own PoMD x=5; sustained 0.05 rad/s correction begins at x=2.4.
     specifications = [
         ("V1", acceleration, "fitted_desired_speed_m_s", 1.29),
         ("V1", acceleration, "fitted_tau_s", 0.54),
@@ -65,7 +65,7 @@ def estimator_controls() -> list[dict[str, object]]:
         ("V4", wide, "all_data_specific_flow_persons_m_s", 6 / 11),
         ("V4", wide, "steady_specific_flow_persons_m_s", 0.5),
         ("V5", clearance, "lateral_cm_to_edge_m", 0.5),
-        ("V6", turning, "onset_m", 3.0),
+        ("V6", turning, "onset_m", 2.6),
     ]
     return [
         {

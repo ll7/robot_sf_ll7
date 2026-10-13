@@ -4,6 +4,8 @@ The default deliberately leaves the released fast-pysf configuration untouched.
 Numerical calibration evidence is separate from the release's adoption decision.
 """
 
+from typing import SupportsIndex
+
 from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_V3,
     LEGACY_SHIFTED_GRADIENT_V1,
@@ -27,7 +29,7 @@ class _ResolvedProfile(str):
         instance.explicit = explicit
         return instance
 
-    def __reduce_ex__(self, protocol: int, /):
+    def __reduce_ex__(self, protocol: SupportsIndex, /):
         """Return the constructor arguments used by deepcopy and pickle."""
         del protocol
         return type(self), (str(self), self.explicit)

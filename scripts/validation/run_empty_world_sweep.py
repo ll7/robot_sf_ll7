@@ -595,7 +595,12 @@ def reconcile_execution(
         for failure in failures:
             failed[
                 episode_slot(
-                    {**failure, "_source_file": file.as_posix(), "_sweep_arm": directory["arm"]}
+                    {
+                        **failure,
+                        "scenario_id": failure["scenario_id"],
+                        "_source_file": file.as_posix(),
+                        "_sweep_arm": directory["arm"],
+                    }
                 )
             ] = failure.get("error", "runner failure")
     observed = {}

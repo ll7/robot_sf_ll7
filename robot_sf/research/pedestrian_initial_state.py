@@ -15,7 +15,7 @@ JITTER_M = 0.00025
 START_GAP_M = 0.02
 
 
-def initial_admissibility(state, segments, radius_m) -> dict[str, object]:
+def initial_admissibility(state, segments, radius_m: float) -> dict[str, object]:
     """Measure initial disc separation and wall clearance before any model step.
 
     Returns:

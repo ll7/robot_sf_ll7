@@ -14,6 +14,7 @@ import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pysocialforce
@@ -22,7 +23,7 @@ from robot_sf.evidence.writers import write_json, write_text
 from scripts.validation import pedestrian_validation_10074 as suite
 
 
-def candidate(family, factor, offset, radius, cap) -> dict[str, object]:
+def candidate(family, factor, offset, radius, cap) -> dict[str, Any]:
     """Return a deterministic candidate with actual law/parameter identity."""
     data = {
         "family": family,
@@ -37,7 +38,7 @@ def candidate(family, factor, offset, radius, cap) -> dict[str, object]:
     return data
 
 
-def coarse_grid() -> list[dict[str, object]]:
+def coarse_grid() -> list[dict[str, Any]]:
     """Return the 114-point grid recorded before the author ruling."""
     points = []
     for radius in [0.25, 0.28, 0.30]:
@@ -99,7 +100,7 @@ def _identity(point, seeds, config):
     }
 
 
-def run_candidate(point, seeds, out, workers=2, config_path=None) -> dict[str, object]:
+def run_candidate(point, seeds, out, workers=2, config_path=None) -> dict[str, Any]:
     """Acquire the complete V1-V6 bank and retain lossless raw measurements."""
     if (
         not os.environ.get("SLURM_JOB_ID")
@@ -211,7 +212,7 @@ def run_candidate(point, seeds, out, workers=2, config_path=None) -> dict[str, o
     return summary
 
 
-def verify_run(out) -> dict[str, object]:
+def verify_run(out) -> dict[str, Any]:
     """Verify raw members, source scope and complete bank before using a point."""
     out = Path(out)
     identity = read_json(out / "identity.json")
@@ -249,11 +250,11 @@ def verify_run(out) -> dict[str, object]:
     return identity
 
 
-def candidate_summary(point, rows, gate) -> dict[str, object]:
+def candidate_summary(point, rows, gate) -> dict[str, Any]:
     """Report narrow widths, censoring and dense-wall safety without fake zeros."""
     narrow = [r for r in rows if r["case"] == "V3"]
     wide = [r for r in rows if r["case"] == "V4"]
-    flows = {}
+    flows: dict[str, dict[str, Any]] = {}
     for width in [0.8, 0.9, 1.0, 1.1, 1.2]:
         bank = [r for r in narrow if float(r["variant"]) == width]
         observed = [
@@ -294,7 +295,7 @@ def candidate_summary(point, rows, gate) -> dict[str, object]:
     }
 
 
-def pareto_front(summaries) -> list[dict[str, object]]:
+def pareto_front(summaries) -> list[dict[str, Any]]:
     """Return nondominated points with complete finite-N evidence at every width."""
     eligible = [
         s for s in summaries if s["narrow_complete"] and s["dense_wall_penetration_m"] is not None
@@ -314,7 +315,7 @@ def pareto_front(summaries) -> list[dict[str, object]]:
     ]
 
 
-def aggregate(root) -> dict[str, object]:
+def aggregate(root) -> dict[str, Any]:
     """Read only completed, digest-verified candidate acquisitions."""
     summaries = []
     for path in sorted(Path(root).glob("*/completed.json")):
@@ -329,7 +330,7 @@ def aggregate(root) -> dict[str, object]:
     }
 
 
-def refinement(summaries) -> dict[str, object]:  # noqa: C901
+def refinement(summaries) -> dict[str, Any]:  # noqa: C901
     """Prepare one bounded factor/radius refinement, deduplicating coarse points."""
     frontier = pareto_front(summaries)
     ranked = sorted(

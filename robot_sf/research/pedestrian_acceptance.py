@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -216,7 +217,7 @@ def _original_shoulder_case(row):
     )
 
 
-def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, object]:
+def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, Any]:
     """Evaluate population means, preserving every physical/censoring failure.
 
     Full acquisition admission additionally requires the complete declared grid;

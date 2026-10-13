@@ -74,7 +74,8 @@ def estimator_controls() -> list[dict[str, object]]:
             "expected": expected,
             "observed": result[key],
             "known_answer_pass": bool(
-                result[key] is not None and np.isclose(result[key], expected, rtol=0, atol=1e-8)
+                result[key] is not None
+                and np.isclose(float(result[key]), expected, rtol=0, atol=1e-8)
             ),
         }
         for case, result, key, expected in specifications

@@ -16,16 +16,17 @@ MARGIN_M = 1e-8
 
 
 @njit(nogil=True)
-def _constraints(xy, caps, walls, radius, dt, buffers, pairs, wall_geometry):
+def _constraints(xy, caps, walls, radius, dt, buffers, broad_phase, wall_geometry):
     """Build reachable supporting halfspaces and refuse already overlapping starts.
 
     Returns:
         Number of reachable pair and wall constraints.
     """
     indices, normals, gap_rates = buffers
+    pairs, order = broad_phase
     count = 0
     cursor = 0
-    for i in range(len(xy)):
+    for i in order:
         while cursor < len(pairs) and pairs[cursor, 0] == i:
             j = pairs[cursor, 1]
             cursor += 1
@@ -179,7 +180,7 @@ def _unresolved(velocity, indices, normals, gap_rates, count, tolerance):
 
 
 @njit(nogil=True)
-def _solve(xy, velocity, caps, fixed, indices, normals, gap_rates, count, passes):  # noqa: PLR0913
+def _solve(xy, velocity, caps, fixed, indices, normals, gap_rates, count, passes, order):  # noqa: PLR0913
     """Resolve local normal budgets, then retain feasibility in bounded actor sweeps.
 
     The first pass shares a pair's available approach distance. Later passes let
@@ -215,15 +216,15 @@ def _solve(xy, velocity, caps, fixed, indices, normals, gap_rates, count, passes
             neighbors[cursor[j]] = k
             cursor[j] += 1
     flow_x, flow_y = 0.0, 0.0
-    for i in range(n):
+    for i in order:
         if not fixed[i]:
             flow_x += proposal[i, 0]
             flow_y += proposal[i, 1]
             velocity[i, 0], velocity[i, 1] = 0.0, 0.0
-    order = np.arange(n)
     if abs(flow_x) + abs(flow_y) > 1e-12:
-        forward = xy[:, 0] * flow_x + xy[:, 1] * flow_y
-        order = np.argsort(forward)[::-1]
+        forward = xy[order, 0] * flow_x + xy[order, 1] * flow_y
+        # Stable ties start from physical coordinate order, never state-row IDs.
+        order = order[np.argsort(forward, kind="mergesort")][::-1]
     fallback = False
     for iteration in range(passes):
         for i in order:
@@ -295,7 +296,11 @@ def _delete_factor(factor, selected, multipliers, m, deleted):
 def _cache_slot(k, indices, n):
     """Return a stable pair or wall key."""
     i, j = indices[k]
-    return i, j if j >= 0 else n - j - 1
+    # A pair's physical normal row is unchanged when both endpoints and the
+    # normal orientation swap. Keep its cache key independent of that swap.
+    if j >= 0:
+        return min(i, j), max(i, j)
+    return i, n - j - 1
 
 
 @njit(nogil=True)
@@ -506,7 +511,9 @@ def _pair_sweeps(velocity, caps, fixed, indices, normals, gap_rates, count, targ
 
 
 @njit(nogil=True)
-def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes, pairs, wall_geometry):  # noqa: PLR0912, PLR0913
+def _project(  # noqa: PLR0912, PLR0913
+    xy, velocity, caps, walls, radius, dt, fixed, buffers, passes, broad_phase, wall_geometry
+):
     """Bind broad phase and solve in one compiled call.
 
     Returns:
@@ -516,8 +523,9 @@ def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes, pair
         if not np.isfinite(velocity[i, 0]) or not np.isfinite(velocity[i, 1]):
             raise ValueError("contact requires finite capped velocities")
     indices, normals, gap_rates, warm = buffers
+    _, order = broad_phase
     count = _constraints(
-        xy, caps, walls, radius, dt, (indices, normals, gap_rates), pairs, wall_geometry
+        xy, caps, walls, radius, dt, (indices, normals, gap_rates), broad_phase, wall_geometry
     )
     for i in range(len(velocity)):
         if caps[i] == 0.0:
@@ -554,7 +562,7 @@ def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes, pair
     # A single local reciprocal safety pass, never component halting. This
     # emergency is reported separately from ordinary normal/cap resolution.
     velocity[:] = proposal
-    _, unresolved = _solve(xy, velocity, caps, fixed, indices, normals, gap_rates, count, 1)
+    _, unresolved = _solve(xy, velocity, caps, fixed, indices, normals, gap_rates, count, 1, order)
     return True, unresolved
 
 
@@ -618,13 +626,21 @@ class VelocityProjection:
             caps = caps.copy()
             caps[indices] = np.linalg.norm(projected[indices], axis=1)
         xy = peds.pos()
-        # Include every pair that could meet during this one capped displacement,
-        # not just bodies already touching. Preserve the original row order so
-        # cached active normals and floating-point accumulation stay unchanged.
+        # Valid nonoverlapping bodies have distinct positions: lexicographic
+        # geometry order gives every physical actor/pair the same priority after
+        # relabeling, including walls and the emergency solver. State rows stay
+        # untouched so controller indices and recorded actor identities remain valid.
+        order = np.lexsort((xy[:, 1], xy[:, 0]))
+        rank = np.empty(n, dtype=np.int64)
+        rank[order] = np.arange(n)
+        # Include pairs reachable during this one capped displacement, rather
+        # than only already touching bodies.
         reach = 2 * self.radius + 2 * peds.d_t * np.max(caps, initial=0.0) + MARGIN_M
         pairs = cKDTree(xy).query_pairs(np.nextafter(reach, np.inf), output_type="ndarray")
         if len(pairs):
-            pairs = pairs[np.lexsort((pairs[:, 1], pairs[:, 0]))]
+            reverse = rank[pairs[:, 0]] > rank[pairs[:, 1]]
+            pairs[reverse] = pairs[reverse, ::-1]
+            pairs = pairs[np.lexsort((rank[pairs[:, 1]], rank[pairs[:, 0]]))]
         fallback, unresolved = _project(
             xy,
             projected,
@@ -635,7 +651,7 @@ class VelocityProjection:
             fixed,
             (self.indices, self.normals, self.gap_rates, self.warm),
             self.passes,
-            pairs,
+            (pairs, order),
             self.wall_geometry,
         )
         sim.contact_projection_passes = self.passes

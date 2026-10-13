@@ -27,7 +27,7 @@ class _ResolvedProfile(str):
         instance.explicit = explicit
         return instance
 
-    def __reduce_ex__(self, protocol: int):
+    def __reduce_ex__(self, protocol: int, /):
         """Return the constructor arguments used by deepcopy and pickle."""
         del protocol
         return type(self), (str(self), self.explicit)

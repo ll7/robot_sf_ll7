@@ -150,6 +150,5 @@
     "warm cost is synthetic, not full production-matrix budget qualification",
     "fallbacks halt entire reachable components; not suitable for calibration qualification",
     "local replay logs do not establish independently retrieved external custody"
-  ],
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  ]
 }

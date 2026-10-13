@@ -8173,11 +8173,3 @@ entries:
   status: evidence
   freshness: evidence
   area: training_evidence
-- path: docs/context/evidence/pedestrian_contact_fix_20261013/diagnostics.json
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
-- path: docs/context/evidence/pedestrian_contact_fix_20261013/SHA256SUMS
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence

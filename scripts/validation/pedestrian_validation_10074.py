@@ -344,6 +344,29 @@ def _required_max_speeds(peds) -> np.ndarray:
     return speeds.copy()
 
 
+def _bind_contact_interferer(config, interferer):
+    """Preserve the source protocol's nonreactive walker under contact."""
+    if getattr(config, "pedestrian_contact_rule", None):
+        config.contact_prescribed_indices = (1,) if interferer else ()
+
+
+def _capture_contact_runtime(sim, config, speeds, speed_cap):
+    """Preserve real projection/fallback/cap counters for physical admission."""
+    if not getattr(config, "pedestrian_contact_rule", None):
+        return
+    caps = sim.peds.max_speeds if speed_cap is None else speed_cap
+    config._contact_step_receipts.append(
+        {
+            "steps": len(speeds),
+            "maximum_projection_passes": sim.contact_projection_passes,
+            "fallback_count": sim.contact_projection_fallback_count,
+            "unresolved_count": sim.contact_projection_unresolved_count,
+            "over_cap_samples": int(np.sum(np.asarray(speeds) > np.asarray(caps) + 1e-10)),
+        }
+    )
+
+
+
 def protocol_simulate(  # noqa: PLR0913
     state,
     segments,
@@ -368,6 +391,7 @@ def protocol_simulate(  # noqa: PLR0913
     """
     require_initial_admissibility(state, segments, config.scene_config.agent_radius)
     walls = [(a, c, b, d) for a, b, c, d in segments]
+    _bind_contact_interferer(config, interferer)
     sim = pysocialforce.Simulator(state=state.copy(), obstacles=walls, config=config)
     positions, speeds = [sim.peds.pos().copy()], []
     if desired_distribution is not None:
@@ -408,6 +432,7 @@ def protocol_simulate(  # noqa: PLR0913
         speeds.append(np.linalg.norm(sim.peds.vel(), axis=1))
         if stop_x is not None and sim.peds.pos()[0, 0] > stop_x:
             break
+    _capture_contact_runtime(sim, config, speeds, speed_cap_m_s)
     return np.asarray(positions), np.asarray(speeds), desired
 
 
@@ -438,6 +463,7 @@ def run_task(task):  # noqa: C901, PLR0915
     input_audits = []
     trace_segments = []
     holding_receipts = []
+    step_runtime = []
     original_force = reused.ObstacleForce.__call__
 
     def configured(candidate, speed):
@@ -453,7 +479,15 @@ def run_task(task):  # noqa: C901, PLR0915
             cfg.obstacle_force_config.threshold = wall_candidate["offset_m"]
             cfg.obstacle_force_config.sigma = 0.0
             if wall_candidate["family"] == "exponential_edge":
+<<<<<<< HEAD
                 reused.ObstacleForce.__call__ = cast("Any", calfit_exponential_force)
+=======
+                reused.ObstacleForce.__call__ = calfit_exponential_force
+        if options.get("pedestrian_contact_rule") is not None:
+            cfg.pedestrian_contact_rule = options["pedestrian_contact_rule"]
+            cfg.pedestrian_contact_passes = options.get("pedestrian_contact_passes", 3)
+            cfg._contact_step_receipts = step_runtime
+>>>>>>> 967a73cfd (feat: bound opt-in contact to capped velocity projection)
         if literature:
             cfg.scene_config.desired_speed_mean = 1.29 if options.get("calfit") else 1.3
             cfg.scene_config.desired_speed_std = 0.19 if options.get("calfit") else 0.2
@@ -638,6 +672,7 @@ def run_task(task):  # noqa: C901, PLR0915
         p, v, desired = traces[-1]
         attach_initial_receipts(row, input_audits, holding_receipts)
         row["pair_overlap"] = estimators.pair_overlap(p, radius, row["groups"])
+        row["step_runtime"] = step_runtime
         row["desired_speeds_m_s"] = desired.tolist()
         row["execution_cap_m_s"] = (
             options.get("execution_cap_m_s", 3.0)

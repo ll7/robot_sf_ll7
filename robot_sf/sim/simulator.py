@@ -560,6 +560,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config.social_force_config.kernel_version = getattr(
         config, "social_force_kernel_version", None
     )
+    if config.pedestrian_physics is not None:
+        pysf_config.pedestrian_contact_rule = config.pedestrian_physics["contact_rule"]
+        pysf_config.pedestrian_contact_passes = config.pedestrian_physics["passes"]
     _apply_ped_desired_speed_config(pysf_config, config)
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,

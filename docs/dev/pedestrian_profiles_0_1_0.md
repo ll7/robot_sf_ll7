@@ -43,3 +43,23 @@ its ideal records are structural tests, never accepted model evidence.
 `calfit_search_10074.py` preserves separate desired-speed draws and velocity caps.
 Acquisition still requires qualified contact/wall physics and a new explicitly
 pinned five-day plan; historical rejected grids do not qualify the model.
+
+Select contact with `pedestrian_physics: {contact_rule: projection_v2, passes: 3}`
+and the shared radius explicitly. It projects capped normal velocities before
+one semi-implicit Euler displacement, with 3–10 correction passes, no friction,
+no substeps and no position push-out. The robot is excluded. Tangential movement
+is retained. Initial body/wall overlap is refused; it is never hidden by repair.
+Controller holds and source-prescribed actors remain fixed to their commanded
+motion. Infeasible prescribed motion refuses the step before position changes.
+
+After the bounded solve, an unresolved reachable contact component is held for
+that step; unrelated walkers continue. This graph fallback is reported and the
+CALFIT physics gate rejects its use as qualified evidence. Post-step diagnostic
+velocity/displacement records describe the actual constrained motion. The
+preview remains the force/cap proposal before contact projection.
+
+The new rule is versioned separately from the historical `projection_v1` draft.
+Original draft commits/evidence remain recoverable. The synthetic cost probe
+is not the required release-matrix overhead measurement. Complete #10000
+receipts, independent final-head refute review, physical qualification and
+external custody remain prerequisites for admission and calibration acquisition.

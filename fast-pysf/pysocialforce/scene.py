@@ -1,7 +1,7 @@
 """This module tracks the state of scene and scene elements
 like pedestrians, groups and obstacles"""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import atan2, cos, pi, sin
 
 import numpy as np
@@ -155,6 +155,7 @@ class PedState:
             groups: Pedestrian grouping indices.
             config: Scene configuration with integration and speed settings.
         """
+        self.contact_held_indices: set[int] = set()
         self.default_tau = config.tau
         self.d_t = config.dt_secs
         self.integration_scheme = normalize_integration_scheme(config.integration_scheme)
@@ -391,6 +392,18 @@ class PedState:
             desired_velocity = diagnostics.applied_velocity
             position_velocity = diagnostics.position_velocity
             self.last_step_diagnostics = diagnostics
+        projector = getattr(self, "velocity_projector", None)
+        if projector is not None:
+            # Captured diagnostic arrays are immutable; keep their proposal intact.
+            proposal = desired_velocity.copy() if diagnostics is not None else desired_velocity
+            desired_velocity = projector(proposal)
+            position_velocity = desired_velocity
+            if diagnostics is not None:
+                self.last_step_diagnostics = replace(
+                    diagnostics,
+                    applied_velocity=desired_velocity,
+                    position_velocity=position_velocity,
+                )
         # stop when arrived
         # desired_velocity[stateutils.desired_directions(self.state)[1] < 0.5] = [0, 0]
 

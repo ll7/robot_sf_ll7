@@ -175,7 +175,7 @@ def make_grid_observation_spaces(
 def _dynamic_robot_capsules(sim: Simulator, robot_idx: int) -> list:
     """Return live capsule poses for other robots, excluding the queried robot."""
     return [
-        (robot.pose, robot.config.capsule)
+        (robot.pose, getattr(robot.config, "capsule", None))
         for idx, robot in enumerate(sim.robots)
         if idx != robot_idx and getattr(getattr(robot, "config", None), "capsule", None) is not None
     ]

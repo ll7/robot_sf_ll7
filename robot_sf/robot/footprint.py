@@ -10,9 +10,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from math import cos, dist, isfinite, sin
 from numbers import Real
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from robot_sf.common.types import Line2D, RobotPose, Vec2D
 
 
@@ -115,7 +117,8 @@ def resolve_capsule(value: object | None, covering_radius: float) -> CapsuleFoot
     if isinstance(value, Mapping):
         if set(value) != {"length", "width"}:
             raise ValueError("capsule requires exactly length and width")
-        value = CapsuleFootprint(length=value["length"], width=value["width"])
+        dimensions = cast("Mapping[str, Any]", value)
+        value = CapsuleFootprint(length=dimensions["length"], width=dimensions["width"])
     if not isinstance(value, CapsuleFootprint):
         raise ValueError("capsule must be a CapsuleFootprint or a length/width mapping")
     if (

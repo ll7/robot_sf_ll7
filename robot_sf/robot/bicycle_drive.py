@@ -10,7 +10,7 @@ from gymnasium import spaces
 from robot_sf.common.math_utils import clip_scalar, normalize_angle_atan2
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.common.types import BicycleAction, PolarVec2D, RobotPose, Vec2D
-from robot_sf.robot.footprint import resolve_capsule
+from robot_sf.robot.footprint import CapsuleFootprint, resolve_capsule
 from robot_sf.robot.reverse_drive import reverse_identity, validate_reverse_settings
 
 
@@ -107,7 +107,7 @@ class BicycleDriveSettings:
         overrides = reverse_identity(self)
         if self.creep_speed != 0.0:
             overrides["creep_speed"] = float(self.creep_speed)
-        if self.capsule is not None:
+        if isinstance(self.capsule, CapsuleFootprint):
             overrides["capsule"] = {
                 "length": float(self.capsule.length),
                 "width": float(self.capsule.width),

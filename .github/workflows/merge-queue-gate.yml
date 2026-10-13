@@ -148,7 +148,7 @@ jobs:
 
       - name: Install gate runtime dependencies
         if: steps.gate-source.outputs.available == 'true'
-        run: python -m pip install --quiet pyyaml==6.0.3
+        run: python -m pip install --quiet pyyaml==6.0.3 jsonschema==4.26.0 loguru==0.7.3 numpy==2.4.6 numba==0.67.0 shapely==2.1.2 matplotlib==3.11.1 python-motion-planning==2.0.1
 
       - name: Run merge-queue gate (merge_group)
         if: github.event_name == 'merge_group' && steps.gate-source.outputs.available == 'true'

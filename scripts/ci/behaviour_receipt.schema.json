@@ -169,6 +169,22 @@
           },
           "degraded": {
             "type": "boolean"
+          },
+          "scheduler_job_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scheduler_node": {
+            "type": "string",
+            "minLength": 1
+          },
+          "baseline_scheduler_job_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "baseline_scheduler_node": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
@@ -183,7 +199,11 @@
           "execution_mode",
           "algorithm",
           "controller_executed",
-          "degraded"
+          "degraded",
+          "scheduler_job_id",
+          "scheduler_node",
+          "baseline_scheduler_job_id",
+          "baseline_scheduler_node"
         ],
         "additionalProperties": false
       }
@@ -340,6 +360,9 @@
     "scope_sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "hardware": {
+      "$ref": "#/$defs/hardware"
     }
   },
   "required": [
@@ -355,7 +378,8 @@
     "totals",
     "interaction_audit",
     "refute_review",
-    "scope_sha256"
+    "scope_sha256",
+    "hardware"
   ],
   "additionalProperties": false,
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -693,6 +717,22 @@
               },
               "degraded": {
                 "type": "boolean"
+              },
+              "scheduler_job_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scheduler_node": {
+                "type": "string",
+                "minLength": 1
+              },
+              "baseline_scheduler_job_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "baseline_scheduler_node": {
+                "type": "string",
+                "minLength": 1
               }
             },
             "required": [
@@ -707,7 +747,11 @@
               "execution_mode",
               "algorithm",
               "controller_executed",
-              "degraded"
+              "degraded",
+              "scheduler_job_id",
+              "scheduler_node",
+              "baseline_scheduler_job_id",
+              "baseline_scheduler_node"
             ],
             "additionalProperties": false
           }
@@ -762,12 +806,639 @@
             ],
             "additionalProperties": false
           }
+        },
+        "hardware": {
+          "$ref": "#/$defs/hardware"
+        },
+        "source_artifacts": {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "const": "execution_binding.json"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "baseline": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "const": "execution_binding.json"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "head",
+            "baseline"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "schema_version",
         "rows",
-        "classifications"
+        "classifications",
+        "hardware",
+        "source_artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "hardware_file": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "content",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "hardware_files": {
+      "type": "object",
+      "properties": {
+        "execution_node.txt": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_cpu.json": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_node_class.txt": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_request.json": {
+          "$ref": "#/$defs/hardware_file"
+        },
+        "execution_scheduler.json": {
+          "$ref": "#/$defs/hardware_file"
+        }
+      },
+      "required": [
+        "execution_node.txt",
+        "execution_cpu.json",
+        "execution_node_class.txt",
+        "execution_request.json",
+        "execution_scheduler.json"
+      ],
+      "additionalProperties": false
+    },
+    "hardware": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "$ref": "#/$defs/hardware_files"
+        },
+        "baseline": {
+          "$ref": "#/$defs/hardware_files"
+        }
+      },
+      "required": [
+        "head",
+        "baseline"
+      ],
+      "additionalProperties": false
+    },
+    "equivalence_receipt": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "default-path-equivalence.v1"
+        },
+        "declaration": {
+          "const": "default_benchmark_behaviour_unchanged"
+        },
+        "baseline": {
+          "type": "object",
+          "properties": {
+            "source_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "artifact": {
+              "type": "object",
+              "properties": {
+                "uri": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "uri",
+                "sha256"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "source_sha",
+            "artifact"
+          ],
+          "additionalProperties": false
+        },
+        "scheduler": {
+          "type": "object",
+          "properties": {
+            "source_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "source_sha",
+            "job_id"
+          ],
+          "additionalProperties": false
+        },
+        "tooling_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "artifact": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "uri",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "scope_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "projection_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "scope_transitions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "seeds": {
+          "const": [
+            1001,
+            1002,
+            1003
+          ]
+        },
+        "hardware": {
+          "$ref": "#/$defs/hardware"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "arm": {
+                "type": "string",
+                "minLength": 1
+              },
+              "map": {
+                "type": "string",
+                "minLength": 1
+              },
+              "seed": {
+                "enum": [
+                  1001,
+                  1002,
+                  1003
+                ]
+              },
+              "baseline_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "head_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "head_path": {
+                "type": "string",
+                "pattern": "^(?:[1-9][0-9]*/)?campaigns/empty_world_[a-z]+/runs/[^/]+/episodes\\.jsonl$"
+              },
+              "baseline_path": {
+                "type": "string",
+                "pattern": "^(?:[1-9][0-9]*/)?campaigns/empty_world_[a-z]+/runs/[^/]+/episodes\\.jsonl$"
+              },
+              "head_execution": {
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "execution_mode": {
+                    "enum": [
+                      "native",
+                      "adapter"
+                    ]
+                  },
+                  "controller_executed": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "fallback": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "degraded": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "algorithm",
+                  "execution_mode",
+                  "controller_executed",
+                  "fallback",
+                  "degraded"
+                ],
+                "additionalProperties": false
+              },
+              "baseline_execution": {
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "execution_mode": {
+                    "enum": [
+                      "native",
+                      "adapter"
+                    ]
+                  },
+                  "controller_executed": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "fallback": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "degraded": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "algorithm",
+                  "execution_mode",
+                  "controller_executed",
+                  "fallback",
+                  "degraded"
+                ],
+                "additionalProperties": false
+              },
+              "scheduler_job_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "baseline_scheduler_job_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "scheduler_node": {
+                "type": "string",
+                "minLength": 1
+              },
+              "baseline_scheduler_node": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "arm",
+              "map",
+              "seed",
+              "baseline_sha256",
+              "head_sha256",
+              "head_path",
+              "baseline_path",
+              "head_execution",
+              "baseline_execution",
+              "scheduler_job_id",
+              "scheduler_node",
+              "baseline_scheduler_job_id",
+              "baseline_scheduler_node"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2142,
+          "maxItems": 2142
+        },
+        "totals": {
+          "type": "object",
+          "properties": {
+            "episodes": {
+              "const": 2142
+            },
+            "changed_episodes": {
+              "const": 0
+            }
+          },
+          "required": [
+            "episodes",
+            "changed_episodes"
+          ],
+          "additionalProperties": false
+        },
+        "head_source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "tooling_path": {
+          "const": "scripts/validation/run_empty_world_sweep.py"
+        },
+        "tooling_file_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "harness_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "harness_path": {
+          "const": "acquisition_harness.py"
+        },
+        "admission_context": {
+          "const": "pull_request"
+        },
+        "source_artifacts": {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "const": "execution_binding.json"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "baseline": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "const": "execution_binding.json"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "head",
+            "baseline"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "declaration",
+        "baseline",
+        "scheduler",
+        "tooling_sha",
+        "artifact",
+        "scope_sha256",
+        "projection_sha256",
+        "scope_transitions",
+        "seeds",
+        "hardware",
+        "rows",
+        "totals",
+        "head_source_sha",
+        "tooling_path",
+        "tooling_file_sha256",
+        "harness_sha256",
+        "harness_path",
+        "admission_context",
+        "source_artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "equivalence_header": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "default-path-equivalence-header.v1"
+        },
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "rows_artifact": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "refute_review": {
+          "type": "object",
+          "properties": {
+            "head_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "verdict": {
+              "enum": [
+                "pending_independent_review",
+                "accepted"
+              ]
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "comparison_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "head_sha",
+            "verdict",
+            "uri",
+            "comparison_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "admission_context": {
+          "const": "pull_request"
+        }
+      },
+      "required": [
+        "schema_version",
+        "head_sha",
+        "rows_artifact",
+        "refute_review",
+        "admission_context"
       ],
       "additionalProperties": false
     }

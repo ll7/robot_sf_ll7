@@ -6,6 +6,13 @@ import json
 import pytest
 
 from scripts.ci import pr_contract_check as checker
+from tests.validation.receipt_scheduler_fixture import install_scheduler
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 HEAD = "a" * 40
 
@@ -53,6 +60,56 @@ def test_behaviour_changes_without_receipt_are_blocked(monkeypatch, path):
     assert any("behaviour receipt" in blocker.lower() for blocker in blockers), blockers
 
 
+def _hardware(source, job="12345"):
+    """Observed scheduler identity bound to a synthetic execution."""
+    texts = {
+        "execution_node.txt": "auxme-imech142\n",
+        "execution_node_class.txt": "pro6000\n",
+        "execution_cpu.json": json.dumps(
+            {
+                "lscpu": [
+                    {"field": "Model name:", "data": "AMD EPYC 9115 16-Core Processor"},
+                    {"field": "Architecture:", "data": "x86_64"},
+                ]
+            }
+        ),
+        "execution_request.json": json.dumps(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": "auxme-imech142",
+                "source_sha": source,
+                "job_id": job,
+            }
+        ),
+    }
+    from pathlib import Path
+
+    inventory = Path(__file__).resolve().parents[2] / "scripts/ci/behaviour_receipt_nodes.json"
+    texts["execution_scheduler.json"] = json.dumps(
+        {
+            "schema_version": "behaviour-scheduler-verification.v1",
+            "inventory": {
+                "path": "scripts/ci/behaviour_receipt_nodes.json",
+                "sha256": hashlib.sha256(inventory.read_bytes()).hexdigest(),
+            },
+            "records": [
+                {
+                    "job_id": identity,
+                    "state": "COMPLETED",
+                    "exit_code": "0:0",
+                    "node": "auxme-imech142",
+                    "partition": "pro6000",
+                }
+                for identity in job.split(",")
+            ],
+        }
+    )
+    return {
+        name: {"content": text, "sha256": hashlib.sha256(text.encode()).hexdigest()}
+        for name, text in texts.items()
+    }
+
+
 def _receipt():
     rows = [
         {
@@ -66,6 +123,10 @@ def _receipt():
             "algorithm": arm,
             "controller_executed": True,
             "degraded": False,
+            "scheduler_job_id": "12345",
+            "scheduler_node": "auxme-imech142",
+            "baseline_scheduler_job_id": "12345",
+            "baseline_scheduler_node": "auxme-imech142",
             "baseline_success": True,
             "baseline_collisions": 0,
         }
@@ -88,6 +149,7 @@ def _receipt():
             ).encode()
         ).hexdigest(),
         "head_sha": HEAD,
+        "hardware": {"head": _hardware(HEAD), "baseline": _hardware("c" * 40)},
         "scheduler": {"kind": "slurm", "job_id": "12345", "source_sha": HEAD},
         "artifact": {"uri": "https://example.org/sweep.json", "sha256": "b" * 64},
         "baseline": {
@@ -121,7 +183,9 @@ def _receipt():
 def _header(receipt, raw, path="receipts/behaviour/sweep.json"):
     """Build the independently specified compact body around payload bytes."""
     header = {
-        key: value for key, value in receipt.items() if key not in {"rows", "classifications"}
+        key: value
+        for key, value in receipt.items()
+        if key not in {"rows", "classifications", "hardware"}
     }
     header["schema_version"] = "behaviour-change-receipt-header.v2"
     header["rows_artifact"] = {"path": path, "sha256": hashlib.sha256(raw).hexdigest()}
@@ -151,15 +215,21 @@ def _commit_receipt(monkeypatch, tmp_path, receipt):
     path = "receipts/behaviour/sweep.json"
     file = tmp_path / path
     file.parent.mkdir(parents=True)
+    receipt["hardware"]["head"] = _hardware(run_source)
+    from tests.validation.test_behaviour_receipt_provenance import source_artifacts_for_receipt
+
+    sources = source_artifacts_for_receipt(tmp_path, receipt)
     raw = json.dumps(
         {
             "schema_version": "behaviour-change-rows.v1",
+            "hardware": receipt["hardware"],
+            "source_artifacts": sources,
             "rows": receipt["rows"],
             "classifications": receipt["classifications"],
         }
     ).encode()
     file.write_bytes(raw)
-    git("add", path)
+    git("add", "receipts/behaviour")
     git("commit", "-m", "receipt payload")
     head = git("rev-parse", "HEAD")
     if receipt["head_sha"] == HEAD:
@@ -367,6 +437,7 @@ def test_contract_checkout_uses_source_identity_and_hydrates_release_tags(monkey
     receipt["head_sha"] = receipt["scheduler"]["source_sha"] = head
     receipt["interaction_audit"]["source_sha"] = receipt["refute_review"]["head_sha"] = head
     receipt["baseline"]["source_sha"] = baseline
+    receipt["hardware"] = {"head": _hardware(head), "baseline": _hardware(baseline)}
     scope = {
         "arms": ["goal", "orca"],
         "maps": ["open", "door"],

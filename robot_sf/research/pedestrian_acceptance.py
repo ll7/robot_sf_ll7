@@ -240,7 +240,7 @@ def _valid_counter(value):
     return _finite_nonnegative(value) and value == int(value)
 
 
-def _recorded_physics(row):
+def _recorded_physics(row: dict[str, Any]):
     """Read independent physical failures and malformed runtime receipts.
 
     Returns:
@@ -290,6 +290,7 @@ def _recorded_physics(row):
 
 
 def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, Any]:
+
 
     """Evaluate population means, preserving every physical/censoring failure.
 

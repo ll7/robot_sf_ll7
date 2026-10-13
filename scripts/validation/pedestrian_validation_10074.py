@@ -479,15 +479,12 @@ def run_task(task):  # noqa: C901, PLR0915
             cfg.obstacle_force_config.threshold = wall_candidate["offset_m"]
             cfg.obstacle_force_config.sigma = 0.0
             if wall_candidate["family"] == "exponential_edge":
-<<<<<<< HEAD
                 reused.ObstacleForce.__call__ = cast("Any", calfit_exponential_force)
-=======
-                reused.ObstacleForce.__call__ = calfit_exponential_force
         if options.get("pedestrian_contact_rule") is not None:
             cfg.pedestrian_contact_rule = options["pedestrian_contact_rule"]
             cfg.pedestrian_contact_passes = options.get("pedestrian_contact_passes", 3)
             cfg._contact_step_receipts = step_runtime
->>>>>>> 967a73cfd (feat: bound opt-in contact to capped velocity projection)
+
         if literature:
             cfg.scene_config.desired_speed_mean = 1.29 if options.get("calfit") else 1.3
             cfg.scene_config.desired_speed_std = 0.19 if options.get("calfit") else 0.2

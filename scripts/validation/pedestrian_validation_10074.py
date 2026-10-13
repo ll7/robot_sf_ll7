@@ -366,7 +366,6 @@ def _capture_contact_runtime(sim, config, speeds, speed_cap):
     )
 
 
-
 def protocol_simulate(  # noqa: PLR0913
     state,
     segments,

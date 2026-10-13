@@ -290,8 +290,6 @@ def _recorded_physics(row: dict[str, Any]):
 
 
 def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, Any]:
-
-
     """Evaluate population means, preserving every physical/censoring failure.
 
     Full acquisition admission additionally requires the complete declared grid;

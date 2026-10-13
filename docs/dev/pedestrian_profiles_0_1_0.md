@@ -45,7 +45,10 @@ Acquisition still requires qualified contact/wall physics and a new explicitly
 pinned five-day plan; historical rejected grids do not qualify the model.
 
 Select contact with `pedestrian_physics: {contact_rule: projection_v2, passes: 3}`
-and the shared radius explicitly. It projects capped normal velocities before
+with an optional shared radius. Without a radius override, contact uses physical
+0.40 m discs while the force radius remains 0.35 m. HSFM variants use separate
+integrators and are rejected with contact at production construction.
+It projects capped normal velocities before
 one semi-implicit Euler displacement, with 3–10 correction passes, no friction,
 no substeps and no position push-out. The robot is excluded. Tangential movement
 is retained. Initial body/wall overlap is refused; it is never hidden by repair.
@@ -56,10 +59,35 @@ After the bounded solve, an unresolved reachable contact component is held for
 that step; unrelated walkers continue. This graph fallback is reported and the
 CALFIT physics gate rejects its use as qualified evidence. Post-step diagnostic
 velocity/displacement records describe the actual constrained motion. The
-preview remains the force/cap proposal before contact projection.
+preview remains the force/cap proposal before contact projection. Oracle steps
+whose capped velocities are changed by contact are excluded from exact force
+inversion with `force_stage_uninstrumented`: the recorded force sum omits the
+contact impulse. Uncorrected contact steps retain normal eligibility.
 
 The new rule is versioned separately from the historical `projection_v1` draft.
 Original draft commits/evidence remain recoverable. The synthetic cost probe
 is not the required release-matrix overhead measurement. Complete #10000
 receipts, independent final-head refute review, physical qualification and
 external custody remain prerequisites for admission and calibration acquisition.
+
+Fix-round warm CPU diagnostic (30 pedestrians, dev1001, 20 alternating
+250-step blocks, admissible states restored outside timing): 129.50 µs/step
+contact off and 148.04 µs/step on, **14.32% overhead**, versus 17.18% on the
+reviewed source. Clearance rates are precomputed, already resolved constraints
+avoid a second scan, and zero-valued counters avoid redundant writes. An earlier
+intermediate repeat measured 15.002%; the budget margin is small and a complete
+release-matrix timing qualification remains outstanding. This synthetic
+diagnostic does not establish the <=15% budget for every production workload.
+
+The 3,000-step dev1001–1030 randomized diagnostic retained zero swept
+penetrations (minimum surface clearance 9.693e-9 m), no held-body displacement,
+and **2,249 fallback steps**. Aggressive independent force proposals create
+competing normal constraints; a capped sequential solve with only 3 or 10 passes
+often leaves one unresolved. Its fail-safe then stops the entire reachable
+component, including following neighbors, to preserve swept separation. This is
+acceptable as an explicitly reported safety diagnostic, not calibrated crowd
+progress or qualified fit evidence. The existing physics gate rejects any
+fallback. Qualification requires a bounded solver improvement and progress
+measurements on the validation workloads; neither increasing the pass budget
+beyond 10 nor hiding fallback is permitted. Release integration owns the missing
+behaviour receipt and complete workload/custody qualification.

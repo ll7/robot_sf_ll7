@@ -1280,7 +1280,7 @@ class Simulator:
         )
         return force_components, speed_cap, dynamics
 
-    def _record_oracle_transition(  # noqa: C901
+    def _record_oracle_transition(  # noqa: C901, PLR0912
         self, post_behavior_state: np.ndarray
     ) -> None:
         """Finalize one opt-in canonical oracle trace after pedestrian integration."""

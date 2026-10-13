@@ -117,21 +117,20 @@ def _solve(velocity, caps, fixed, indices, normals, gap_rates, count, dt, passes
     fallback = np.any(failed)
     if not fallback:
         return False, 0
-    if fallback:
-        # Stopping a body can create contact with a following neighbor. Stop the
-        # whole reachable component in one graph pass; isolated walkers keep moving.
-        parent = np.arange(len(velocity))
-        for k in range(count):
-            i, j = indices[k]
-            if j >= 0:
-                parent[_root(parent, i)] = _root(parent, j)
-        halted = np.zeros(len(velocity), dtype=np.bool_)
-        for k in range(count):
-            if failed[k]:
-                halted[_root(parent, indices[k, 0])] = True
-        for i in range(len(velocity)):
-            if halted[_root(parent, i)] and not fixed[i]:
-                velocity[i, 0], velocity[i, 1] = 0.0, 0.0
+    # Stopping a body can create contact with a following neighbor. Stop the
+    # whole reachable component in one graph pass; isolated walkers keep moving.
+    parent = np.arange(len(velocity))
+    for k in range(count):
+        i, j = indices[k]
+        if j >= 0:
+            parent[_root(parent, i)] = _root(parent, j)
+    halted = np.zeros(len(velocity), dtype=np.bool_)
+    for k in range(count):
+        if failed[k]:
+            halted[_root(parent, indices[k, 0])] = True
+    for i in range(len(velocity)):
+        if halted[_root(parent, i)] and not fixed[i]:
+            velocity[i, 0], velocity[i, 1] = 0.0, 0.0
     unresolved = 0
     for k in range(count):
         unresolved += _gap_rate(k, velocity, indices, normals, gap_rates) < -1e-10
@@ -212,9 +211,10 @@ class VelocityProjection:
             self.passes,
         )
         sim.contact_projection_passes = self.passes
-        sim.contact_projection_fallback_count += int(fallback)
-        sim.contact_projection_unresolved_count += int(unresolved)
+        if fallback:
+            sim.contact_projection_fallback_count += 1
         if unresolved:
+            sim.contact_projection_unresolved_count += int(unresolved)
             raise ValueError("contact prescribed motion is infeasible; step refused")
         return projected
 

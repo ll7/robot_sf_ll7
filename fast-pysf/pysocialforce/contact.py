@@ -4,23 +4,26 @@ from __future__ import annotations
 
 import numpy as np
 from numba import njit
-
-from pysocialforce.forces import closest_point_on_segment
+from scipy.spatial import cKDTree
 
 RULE = "projection_v2"
 MARGIN_M = 1e-8
 
 
 @njit(nogil=True)
-def _constraints(xy, caps, walls, radius, dt, indices, normals, gap_rates):
+def _constraints(xy, caps, walls, radius, dt, buffers, pairs, wall_geometry):
     """Build reachable supporting halfspaces and refuse already overlapping starts.
 
     Returns:
         Number of reachable pair and wall constraints.
     """
+    indices, normals, gap_rates = buffers
     count = 0
+    cursor = 0
     for i in range(len(xy)):
-        for j in range(i + 1, len(xy)):
+        while cursor < len(pairs) and pairs[cursor, 0] == i:
+            j = pairs[cursor, 1]
+            cursor += 1
             dx, dy = xy[i, 0] - xy[j, 0], xy[i, 1] - xy[j, 1]
             distance2 = dx * dx + dy * dy
             if distance2 < (2 * radius - 1e-10) ** 2:
@@ -34,7 +37,12 @@ def _constraints(xy, caps, walls, radius, dt, indices, normals, gap_rates):
             gap_rates[count] = (distance - 2 * radius) / dt
             count += 1
         for wall_index, wall in enumerate(walls):
-            x, y = closest_point_on_segment(wall[:4], xy[i])
+            wx, wy, denominator = wall_geometry[wall_index]
+            t = 0.0
+            if denominator != 0.0:
+                t = ((xy[i, 0] - wall[0]) * wx + (xy[i, 1] - wall[1]) * wy) / denominator
+                t = max(0.0, min(1.0, t))
+            x, y = wall[0] + t * wx, wall[1] + t * wy
             dx, dy = xy[i, 0] - x, xy[i, 1] - y
             distance2 = dx * dx + dy * dy
             if distance2 < (radius - 1e-10) ** 2:
@@ -314,12 +322,24 @@ def _seed_basis(  # noqa: PLR0913
     for _ in range(6):
         if m == 0:
             return 0
-        matrix = np.empty((m, m))
+        rows = selected[:m]
+        first, second = indices[rows, 0], indices[rows, 1]
+        movable_first = ~fixed[first]
+        movable_second = (second >= 0) & ~fixed[np.maximum(second, 0)]
+        # Vectorized free-actor incidence Gram matrix, with the same scalar
+        # products and row order as _row_dot (no change to the contact QP).
+        weights = (
+            (first[:, None] == first[None, :]).astype(np.float64)
+            - (first[:, None] == second[None, :])
+        ) * movable_first[:, None] + (
+            (second[:, None] == second[None, :]).astype(np.float64)
+            - (second[:, None] == first[None, :])
+        ) * movable_second[:, None]
+        nx, ny = normals[rows, 0], normals[rows, 1]
+        matrix = weights * (nx[:, None] * nx[None, :] + ny[:, None] * ny[None, :])
         rhs = np.empty(m)
         for a in range(m):
             rhs[a] = -_gap_rate(selected[a], velocity, indices, normals, gap_rates)
-            for b in range(m):
-                matrix[a, b] = _row_dot(selected[a], selected[b], fixed, indices, normals)
         try:
             lower = np.linalg.cholesky(matrix)
             lam = np.linalg.solve(matrix, rhs)
@@ -481,7 +501,7 @@ def _pair_sweeps(velocity, caps, fixed, indices, normals, gap_rates, count, targ
 
 
 @njit(nogil=True)
-def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes):  # noqa: PLR0913
+def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes, pairs, wall_geometry):  # noqa: PLR0912, PLR0913
     """Bind broad phase and solve in one compiled call.
 
     Returns:
@@ -491,10 +511,21 @@ def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes):  # 
         if not np.isfinite(velocity[i, 0]) or not np.isfinite(velocity[i, 1]):
             raise ValueError("contact requires finite capped velocities")
     indices, normals, gap_rates, warm = buffers
-    count = _constraints(xy, caps, walls, radius, dt, indices, normals, gap_rates)
+    count = _constraints(
+        xy, caps, walls, radius, dt, (indices, normals, gap_rates), pairs, wall_geometry
+    )
     for i in range(len(velocity)):
         if caps[i] == 0.0:
             fixed[i] = True
+    if count == 0:
+        # No supporting pair or wall can be reached in this capped displacement.
+        # Match the old no-constraint cache/cap effects without entering a solver.
+        if not 4 < len(velocity) <= 30:
+            warm[:] = 0.0
+            for i in range(len(velocity)):
+                if not fixed[i]:
+                    _cap(velocity, i, caps)
+        return False, 0
     proposal = velocity.copy()
     wall_free = True
     for k in range(count):
@@ -532,6 +563,7 @@ class VelocityProjection:
         self.capacity = -1
         self.population = -1
         self.radius = getattr(sim.config, "pedestrian_contact_radius_m", sim.peds.agent_radius)
+        self.wall_source = None
 
     def __call__(self, velocity):
         """Return capped contact velocities, refusing infeasible prescribed motion.
@@ -543,8 +575,18 @@ class VelocityProjection:
         peds = sim.peds
         n = peds.size()
         walls = sim.get_raw_obstacles()
+        source = walls
         if walls.ndim != 2:
             walls = walls.reshape(-1, 6)
+        # EnvState already caches raw segments. Cache their static projection
+        # vectors too, invalidating on the supported setter or in-place edits.
+        if source is not self.wall_source or not np.array_equal(
+            walls[:, :4], self.wall_coordinates
+        ):
+            self.wall_source = source
+            self.wall_coordinates = walls[:, :4].copy()
+            dx, dy = walls[:, 2] - walls[:, 0], walls[:, 3] - walls[:, 1]
+            self.wall_geometry = np.column_stack((dx, dy, dx * dx + dy * dy))
         capacity = n * (n - 1) // 2 + n * len(walls)
         if capacity != self.capacity or n != self.population:
             self.indices = np.empty((capacity, 2), dtype=np.int64)
@@ -570,8 +612,16 @@ class VelocityProjection:
             projected[indices] = peds.vel()[indices]
             caps = caps.copy()
             caps[indices] = np.linalg.norm(projected[indices], axis=1)
+        xy = peds.pos()
+        # Include every pair that could meet during this one capped displacement,
+        # not just bodies already touching. Preserve the original row order so
+        # cached active normals and floating-point accumulation stay unchanged.
+        reach = 2 * self.radius + 2 * peds.d_t * np.max(caps, initial=0.0) + MARGIN_M
+        pairs = cKDTree(xy).query_pairs(np.nextafter(reach, np.inf), output_type="ndarray")
+        if len(pairs):
+            pairs = pairs[np.lexsort((pairs[:, 1], pairs[:, 0]))]
         fallback, unresolved = _project(
-            peds.pos(),
+            xy,
             projected,
             caps,
             walls,
@@ -580,6 +630,8 @@ class VelocityProjection:
             fixed,
             (self.indices, self.normals, self.gap_rates, self.warm),
             self.passes,
+            pairs,
+            self.wall_geometry,
         )
         sim.contact_projection_passes = self.passes
         if fallback:

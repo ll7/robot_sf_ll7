@@ -55,14 +55,25 @@ is retained. Initial body/wall overlap is refused; it is never hidden by repair.
 Controller holds and source-prescribed actors remain fixed to their commanded
 motion. Infeasible prescribed motion refuses the step before position changes.
 
-After the bounded solve, an unresolved reachable contact component is held for
-that step; unrelated walkers continue. This graph fallback is reported and the
-CALFIT physics gate rejects its use as qualified evidence. Post-step diagnostic
-velocity/displacement records describe the actual constrained motion. The
-preview remains the force/cap proposal before contact projection. Oracle steps
-whose capped velocities are changed by contact are excluded from exact force
-inversion with `force_stage_uninstrumented`: the recorded force sum omits the
-contact impulse. Uncorrected contact steps retain normal eligibility.
+Contact normals sharing a movable actor are resolved jointly. Corrections are
+normal impulses, including unilateral static-wall reactions; there is no
+component-wide velocity reset. A cached active basis accelerates the same normal
+solve and is discarded if its Gram algebra fails. The configured 3–10 budget
+bounds normal/cap reconciliation; basis exchanges are linear algebra within a
+projection, not physics substeps. A small wall-free cell retains the inexpensive
+bounded pair solve.
+
+If normal/cap reconciliation cannot produce admissible motion, the emergency
+path projects individual walkers into their incident normal halfspaces and
+speed balls. It does not halt a whole reachable component. Its activation is
+reported. Infeasible prescribed motion is refused. The unchanged CALFIT physics
+gate rejects emergency fallback as qualified evidence. Runtime diagnostics now
+report both fallback count and rate.
+
+Post-step velocity/displacement records describe actual constrained motion.
+The preview remains the force/cap proposal. Contact-corrected oracle steps remain
+ineligible for exact inversion (`force_stage_uninstrumented`); uncorrected steps
+retain normal eligibility.
 
 The new rule is versioned separately from the historical `projection_v1` draft.
 Original draft commits/evidence remain recoverable. The synthetic cost probe
@@ -70,30 +81,33 @@ is not the required release-matrix overhead measurement. Complete #10000
 receipts, independent final-head refute review, physical qualification and
 external custody remain prerequisites for admission and calibration acquisition.
 
-Fix-round warm CPU diagnostic (30 pedestrians, dev1001, 20 alternating
-250-step blocks, admissible states restored outside timing): 129.50 µs/step
-contact off and 148.04 µs/step on, **14.32% overhead**, versus 17.18% on the
-reviewed source. Clearance rates are precomputed, already resolved constraints
-avoid a second scan, and zero-valued counters avoid redundant writes. An earlier
-intermediate repeat measured 15.002%; the budget margin is small and a complete
-release-matrix timing qualification remains outstanding. This synthetic
-diagnostic does not establish the <=15% budget for every production workload.
+The round-1 diagnostic at source `3297dc41` measured 14.32% warm-cell overhead
+and 2,249 fallback steps in its 3,000-step randomized test. Those observations
+and source checksums remain in the immutable
+[diagnostic archive](https://github.com/ll7/robot_sf_ll7/blob/8695768397134a36cadd94702f31f020a0f5c772/docs/context/evidence/pedestrian_contact_fix_20261013/diagnostics.json)
+and [SHA256 manifest](https://github.com/ll7/robot_sf_ll7/blob/8695768397134a36cadd94702f31f020a0f5c772/docs/context/evidence/pedestrian_contact_fix_20261013/SHA256SUMS).
+They describe the superseded component-halting implementation, not this repair.
 
-The 3,000-step dev1001–1030 randomized diagnostic retained zero swept
-penetrations (minimum surface clearance 9.693e-9 m), no held-body displacement,
-and **2,249 fallback steps**. Aggressive independent force proposals create
-competing normal constraints; a capped sequential solve with only 3 or 10 passes
-often leaves one unresolved. Its fail-safe then stops the entire reachable
-component, including following neighbors, to preserve swept separation. This is
-acceptable as an explicitly reported safety diagnostic, not calibrated crowd
-progress or qualified fit evidence. The existing physics gate rejects any
-fallback. Qualification requires a bounded solver improvement and progress
-measurements on the validation workloads; neither increasing the pass budget
-beyond 10 nor hiding fallback is permitted. Release integration owns the missing
-behaviour receipt and complete workload/custody qualification.
+Round-2 repair diagnostics at source `cecd05824` restore V3 progress to 58/60
+crossings and V4 to 350/350 on dev1001 after 160 s, at both 3 and 10 passes.
+Contact-off controls cross 60/60 and 350/350. Every contact workload has zero
+emergency fallback, cap violations and unresolved constraints. The analytic
+swept centre-distance minima are 0.5600000100 m (V3) and 0.560000009999 m (V4)
+against 0.56 m physical diameters; endpoint wall penetration is zero.
 
-The [raw diagnostic record](https://github.com/ll7/robot_sf_ll7/blob/8695768397134a36cadd94702f31f020a0f5c772/docs/context/evidence/pedestrian_contact_fix_20261013/diagnostics.json)
-and [SHA256 manifest](https://github.com/ll7/robot_sf_ll7/blob/8695768397134a36cadd94702f31f020a0f5c772/docs/context/evidence/pedestrian_contact_fix_20261013/SHA256SUMS)
-remain at the immutable diagnostic archive commit. Its runtime source checksums
-match this fix. Keeping that archive outside the active diff preserves the
-global evidence baseline; these observations still await independent review.
+**The 15% CPU budget is not met.** Paired timing uses the same admissible input
+state, goal and desired-speed vector for both arms, alternates arm order each
+step, excludes only the first ten warmup steps, and preserves all 1,590 samples
+per arm in twenty blocks. V3 overhead is 49.56% / 48.87% (3 / 10 passes); V4 is
+176.06% / 173.60%. The separate 30-person warm cell measures 122.87 / 141.32
+microseconds off/on, or 15.02%, with zero fallback. Neither a cheaper method that
+stalls V3 nor a safe method exceeding budget qualifies the fit.
+
+Reproduce the workload diagnostic with
+`uv run python scripts/validation/contact_progress_10104.py --seed 1001 --output <run-directory>`.
+It preserves trajectories, input states, raw timing samples, source identity and
+SHA256 manifests, and exits 3 if any target fails. It is synthetic implementation
+evidence, not empirical or release admission. Calibration remains blocked on a
+solver meeting the cost budget, independent review and release integration's
+receipt/custody requirements. No calibration job was submitted. Frozen 0.0.8
+inputs, global baselines and production defaults remain untouched.

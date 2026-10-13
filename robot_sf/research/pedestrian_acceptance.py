@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -249,11 +249,11 @@ def _recorded_physics(row: dict[str, Any]):
     invalid = False
     violated = False
     fallback = False
-    records = [row, row.get("pair_overlap", {}).get("all", {})]
+    records: list[dict[str, Any]] = [row, row.get("pair_overlap", {}).get("all", {})]
     runtime = row.get("step_runtime", [])
     if not isinstance(runtime, list) or any(not isinstance(r, dict) for r in runtime):
         return True, False, False
-    records.extend(runtime)
+    records.extend(cast("list[dict[str, Any]]", runtime))
     for record in records:
         for key in (
             "unresolved_count",

@@ -10,7 +10,11 @@ from robot_sf.benchmark.camera_ready._resume_plan import ResumeMismatchError, bu
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
 from robot_sf.benchmark.utils import _config_hash
-from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
+from tests.benchmark.campaign_identity_support import (
+    fixture_campaign,
+    producer_params,
+    producer_record_identity,
+)
 
 
 def _row(scenario, seed, *, algo="social_force", config=None):
@@ -20,7 +24,7 @@ def _row(scenario, seed, *, algo="social_force", config=None):
     )[0]
     params = producer_params(scoped, seed, algo=algo, algo_config=config or {}, horizon=600, dt=0.1)
     digest = _config_hash(params)
-    return {
+    row = {
         "scenario_id": scenario["name"],
         "seed": seed,
         "algo": algo,
@@ -35,6 +39,8 @@ def _row(scenario, seed, *, algo="social_force", config=None):
             "repo_commit": "commit-a",
         },
     }
+
+    return producer_record_identity(row)
 
 
 def _integrity(tmp_path, rows, scenarios, planner=None):

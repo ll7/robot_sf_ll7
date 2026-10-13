@@ -87,7 +87,11 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
-from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
+from tests.benchmark.campaign_identity_support import (
+    fixture_campaign,
+    producer_params,
+    producer_record_identity,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -433,6 +437,7 @@ def test_campaign_integrity_accepts_exact_unique_coverage(tmp_path: Path) -> Non
         row["scenario_params"] = producer_params(scoped, row["seed"], algo="goal")
         row["config_hash"] = _config_hash(row["scenario_params"])
         row["result_provenance"]["config_hash"] = row["config_hash"]
+        producer_record_identity(row)
     episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     verdict = camera_ready_run_state_module.validate_campaign_integrity(
         [
@@ -486,6 +491,7 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
         row["scenario_params"] = producer_params(scoped, row["seed"], algo="goal")
         row["config_hash"] = _config_hash(row["scenario_params"])
         row["result_provenance"]["config_hash"] = row["config_hash"]
+        producer_record_identity(row)
     episodes_path.write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
 
     # The summary has a path that points to a non-existent absolute path,
@@ -5454,31 +5460,33 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(
             json.dumps(
-                {
-                    "episode_id": "e-goal-0",
-                    "scenario_id": "smoke",
-                    "algo": "goal",
-                    "seed": 1001,
-                    "config_hash": _config_hash(params),
-                    "git_hash": _git_hash_fallback(),
-                    "scenario_params": params,
-                    "result_provenance": {
+                producer_record_identity(
+                    {
+                        "episode_id": "e-goal-0",
                         "scenario_id": "smoke",
+                        "algo": "goal",
                         "seed": 1001,
                         "config_hash": _config_hash(params),
-                        "repo_commit": _git_hash_fallback(),
-                    },
-                    "metrics": {
-                        "success": 0.0,
-                        "collisions": 1.0,
-                        "near_misses": 2.0,
-                        "time_to_goal_norm": 1.0,
-                        "comfort_exposure": 0.8,
-                        "force_exceed_events": 3.0,
-                        "jerk_mean": 0.9,
-                    },
-                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
-                }
+                        "git_hash": _git_hash_fallback(),
+                        "scenario_params": params,
+                        "result_provenance": {
+                            "scenario_id": "smoke",
+                            "seed": 1001,
+                            "config_hash": _config_hash(params),
+                            "repo_commit": _git_hash_fallback(),
+                        },
+                        "metrics": {
+                            "success": 0.0,
+                            "collisions": 1.0,
+                            "near_misses": 2.0,
+                            "time_to_goal_norm": 1.0,
+                            "comfort_exposure": 0.8,
+                            "force_exceed_events": 3.0,
+                            "jerk_mean": 0.9,
+                        },
+                        "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                    }
+                )
             )
             + "\n",
             encoding="utf-8",

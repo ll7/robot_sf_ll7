@@ -72,3 +72,50 @@ def producer_params(scenario, seed, *, algo, algo_config=None, **options: Any):
         record_planner_decision_trace=options.get("record_planner_decision_trace", False),
         record_simulation_step_trace=options.get("record_simulation_step_trace", False),
     )
+
+
+def producer_record_identity(record, *, telemetry_profile=None, observation_noise=None):
+    """Complete a fresh fixture with the real producer's declared identity copies.
+
+    Returns:
+        Producer-shaped row, before the test introduces any defect.
+    """
+    from robot_sf.benchmark.map_runner.map_runner_identity import _compute_map_episode_id
+    from robot_sf.benchmark.observation_noise import (
+        normalize_observation_noise_spec,
+        observation_noise_hash,
+    )
+    from robot_sf.benchmark.provenance_identity import publish_episode_identity
+    from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
+    from robot_sf.benchmark.tracking_precision_contract import (
+        normalize_tracking_precision_spec,
+        tracking_precision_hash,
+    )
+    from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
+
+    params = record["scenario_params"]
+    record["algo"] = params["algo"]
+    record["config_hash"] = _config_hash(params)
+    record["episode_id"] = _compute_map_episode_id(params, record["seed"])
+    record.setdefault("git_hash", _git_hash_fallback())
+    record.setdefault("observation_noise", normalize_observation_noise_spec(observation_noise))
+    record["observation_noise_hash"] = observation_noise_hash(record["observation_noise"])
+    record.setdefault("tracking_precision", normalize_tracking_precision_spec(None))
+    record["tracking_precision_hash"] = tracking_precision_hash(record["tracking_precision"])
+    if telemetry_profile is not None:
+        record.setdefault("algorithm_metadata", {})["telemetry"] = telemetry_profile
+    settings = build_simulator_settings_provenance(
+        horizon=params.get("run_horizon")
+        or params.get("simulation_config", {}).get("max_episode_steps")
+        or 200,
+        dt=params.get("run_dt")
+        or params.get("simulation_config", {}).get("time_per_step_in_secs")
+        or 0.1,
+        record_forces=params.get("record_forces", False),
+        active_observation_mode=params["observation_mode"],
+        active_observation_level=params["observation_level"],
+        noise_hash=record["observation_noise_hash"],
+        tracking_precision_hash=record["tracking_precision_hash"],
+    )
+    publish_episode_identity(record, simulator_settings=settings)
+    return record

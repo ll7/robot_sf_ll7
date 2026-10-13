@@ -32,7 +32,7 @@ from robot_sf.benchmark.runtime_smoke_admission import (
 )
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.evidence.writers import review_marker_comment, write_json
-from tests.benchmark.campaign_identity_support import producer_params
+from tests.benchmark.campaign_identity_support import producer_params, producer_record_identity
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -178,6 +178,7 @@ def _fixture(
                 "status": "ok",
             },
         }
+        producer_record_identity(episode_row)
         _write_json(episodes, episode_row)
         sidecar = build_result_provenance_manifest(
             out_path=episodes,
@@ -1444,6 +1445,7 @@ def test_runtime_smoke_binds_guarded_native_summary_to_declared_identity(
     row["config_hash"] = _config_hash(row["scenario_params"])
     row["result_provenance"]["config_hash"] = row["config_hash"]
     row["algorithm_metadata"] = metadata
+    producer_record_identity(row)
     _write_json(episode_path, row)
     sidecar_path = episode_path.with_name(episode_path.name + ".provenance.json")
     sidecar = json.loads(sidecar_path.read_bytes())
@@ -1466,6 +1468,7 @@ def test_runtime_smoke_binds_guarded_native_summary_to_declared_identity(
         suite_key="francis2023",
     )
     sidecar["rows"][0]["config_hash"] = row["config_hash"]
+    sidecar["rows"][0]["episode_id"] = row["episode_id"]
     sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
     _write_json(sidecar_path, sidecar)
     if mutation != "none":

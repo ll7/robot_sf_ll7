@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
-from robot_sf.benchmark.utils import _config_hash
-from tests.benchmark.campaign_identity_support import producer_params
+from robot_sf.benchmark.map_runner.map_runner_identity import _compute_map_episode_id
+from tests.benchmark.campaign_identity_support import producer_params, producer_record_identity
 
 
 def _fake_aggregates(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -109,7 +109,8 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
         for scenario in scenarios_or_path:
             scenario_id = str(scenario.get("id") or scenario.get("name"))
             seed = int((scenario.get("seeds") or [1001])[0])
-            episode_id = f"{scenario_id}:{seed}"
+            params = producer_params(scenario, seed, algo=algo, **kwargs)
+            episode_id = _compute_map_episode_id(params, seed)
             if episode_id in prior_ids:
                 continue
             executed_units.append((arm_key, episode_id))
@@ -119,7 +120,7 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
                     "scenario_id": scenario_id,
                     "seed": seed,
                     "algo": algo,
-                    "scenario_params": producer_params(scenario, seed, algo=algo, **kwargs),
+                    "scenario_params": params,
                     "metrics": {
                         "success": 1.0,
                         "collisions": 0.0,
@@ -130,7 +131,7 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
             )
 
         for row in missing_rows:
-            row["config_hash"] = _config_hash(row["scenario_params"])
+            producer_record_identity(row)
         with output_path.open("a", encoding="utf-8") as handle:
             for row in missing_rows:
                 handle.write(json.dumps(row) + "\n")

@@ -28,13 +28,14 @@ if TYPE_CHECKING:
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._runtime_identity import (
     ExpectedEpisodeIdentity,
+    campaign_commit_from_manifest,
     expected_arm_scenarios,
     expected_episode_identity,
     row_runtime_identity_errors,
     selected_campaign_planner,
 )
 from robot_sf.benchmark.camera_ready._util import _utc_now
-from robot_sf.benchmark.utils import load_optional_json
+from robot_sf.benchmark.utils import _git_hash_fallback, load_optional_json
 
 
 @dataclass(frozen=True)
@@ -259,6 +260,7 @@ def _validate_resume_runtime_identities(
     scenarios: list[dict[str, Any]],
     *,
     cfg: CampaignConfig | None = None,
+    campaign_commit: str | None = None,
 ) -> None:
     """Refuse contaminated complete or partial arms before any rows are reused."""
     scenarios_by_id = {
@@ -274,9 +276,16 @@ def _validate_resume_runtime_identities(
             try:
                 key = (str(record["scenario_id"]), _resume_job_identity_seed(record["seed"]))
                 scenario = scenarios_by_id[key[0]]
+                if campaign_commit is None:
+                    saved_commit = campaign_commit_from_manifest(
+                        _load_resume_manifest(episodes_path.parents[2])
+                    )
+                    campaign_commit = _git_hash_fallback()
+                    if saved_commit != campaign_commit:
+                        raise ValueError("campaign commit differs from executing source commit")
                 if key not in expected_identities:
                     expected_identities[key] = expected_episode_identity(
-                        planner, scenario, key[1], cfg=cfg
+                        planner, scenario, key[1], cfg=cfg, campaign_commit=campaign_commit
                     )
                 errors = row_runtime_identity_errors(record, expected_identities[key])
             except (KeyError, TypeError, ValueError, OSError) as exc:
@@ -314,6 +323,28 @@ def _selected_resume_scenarios(
         ) from exc
 
 
+def _resume_campaign_commit(campaign_root: Path, *, source_commit: str | None) -> str:
+    """Require saved campaign provenance to match the executing or explicitly pinned source.
+
+    Returns:
+        The independently selected source commit, never a row-derived fallback.
+    """
+    expected = _git_hash_fallback() if source_commit is None else source_commit
+    if not isinstance(expected, str) or not expected.strip():
+        raise ResumeMismatchError("resume runtime identity mismatch: source commit unavailable")
+    try:
+        saved = campaign_commit_from_manifest(_load_resume_manifest(campaign_root))
+    except (ValueError, FileNotFoundError) as exc:
+        raise ResumeMismatchError(
+            "resume runtime identity mismatch: campaign commit unavailable"
+        ) from exc
+    if saved != expected:
+        raise ResumeMismatchError(
+            "resume runtime identity mismatch: campaign commit differs from executing source"
+        )
+    return expected
+
+
 def build_resume_plan(
     runs_dir: Path,
     *,
@@ -323,6 +354,7 @@ def build_resume_plan(
     expected_jobs: int | None = None,
     scenario_path: Path | None = None,
     cfg: CampaignConfig | None = None,
+    campaign_commit: str | None = None,
 ) -> list[ArmResumeVerdict]:
     """Build a resume plan by inspecting existing arm directories.
 
@@ -336,6 +368,7 @@ def build_resume_plan(
             computed from the actual batch job identities.
         scenario_path: Campaign matrix path used for map-runner seed-suite fallbacks.
         cfg: Optional campaign contract for arm-specific runtime scenario transforms.
+        campaign_commit: Explicitly pinned executing source commit, otherwise the current checkout commit.
 
     Returns:
         List of ``ArmResumeVerdict`` objects describing the plan for each arm.
@@ -372,11 +405,17 @@ def build_resume_plan(
 
             if episodes_path is not None and episodes_path.is_file():
                 _validate_resume_job_identities(episodes_path, identities)
+                expected_commit = (
+                    _resume_campaign_commit(runs_dir.parent, source_commit=campaign_commit)
+                    if episodes_found
+                    else campaign_commit
+                )
                 _validate_resume_runtime_identities(
                     episodes_path,
                     {**planner, "kinematics": kinematics},
                     _selected_resume_scenarios(scenarios, planner, cfg=cfg, kinematics=kinematics),
                     cfg=cfg,
+                    campaign_commit=expected_commit,
                 )
 
             episodes_remaining = max(0, expected_jobs - episodes_found)

@@ -19,6 +19,7 @@ from urllib.parse import urlsplit, urlunsplit
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._runtime_identity import (
     ExpectedEpisodeIdentity,
+    campaign_commit_from_manifest,
     expected_arm_scenarios,
     expected_episode_identity,
     row_runtime_identity_errors,
@@ -340,6 +341,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
                         runtime_key[1],
                         config_root=config_root,
                         cfg=cfg,
+                        campaign_commit=campaign_commit_from_manifest(campaign_manifest),
                     )
                 errors = row_runtime_identity_errors(record, runtime_identities[runtime_key])
             except (KeyError, TypeError, ValueError, OSError) as exc:

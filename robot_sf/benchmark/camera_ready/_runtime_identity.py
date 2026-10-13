@@ -19,6 +19,7 @@ from robot_sf.benchmark.camera_ready._config import (
 )
 from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 from robot_sf.benchmark.map_runner.map_runner_identity import (
+    _compute_map_episode_id,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
 )
@@ -28,6 +29,11 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
+)
+from robot_sf.benchmark.provenance_identity import (
+    IDENTITY_FIELDS,
+    PROVENANCE_ENVELOPE_FIELDS,
+    RUNTIME_IDENTITY_FIELDS,
 )
 from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
 from robot_sf.benchmark.tracking_precision_contract import (
@@ -105,51 +111,11 @@ def _resolved_policy(
 # Closed runner-envelope inventory. Authored scenario keys (including all nested
 # robot, pedestrian, goal and simulator settings) are allowed only when present
 # in the selected producer payload, and are compared without a projection.
-RUNTIME_IDENTITY_FIELDS = frozenset(
-    {
-        "algo",
-        "algo_config_hash",
-        "run_horizon",
-        "run_dt",
-        "record_forces",
-        "observation_mode",
-        "observation_level",
-        "benchmark_track",
-        "track_schema_version",
-        "observation_noise_profile",
-        "observation_noise_hash",
-        "tracking_precision",
-        "tracking_precision_hash",
-        "synthetic_actuation_profile",
-        "latency_stress_profile",
-        "safety_wrapper",
-        "cbf_safety_filter",
-        "record_planner_decision_trace",
-        "record_simulation_step_trace",
-    }
-)
-RUNTIME_MIRROR_FIELDS = RUNTIME_IDENTITY_FIELDS | {
-    "horizon",
-    "dt",
-    "observation_noise",
-    "telemetry_profile",
-}
-ROW_PROVENANCE_LINEAGE_FIELDS = frozenset(
-    {
-        "artifact_uri",
-        "artifact_sha256",
-        "map_digest",
-        "scenario_digest",
-        "git_hash",
-        "planner_commit",
-    }
-)
 IDENTITY_EXCLUSIONS = {
     "scenario.seed/seeds": "Producer removes inventories; exact integer row seed is checked separately.",
     "algorithm_metadata": "Adapter diagnostics may expand defaults or describe a child planner; signed algo_config_hash binds the selected policy.",
-    "git_hash/result_provenance.repo_commit": "Software provenance is checked separately against the campaign manifest by final integrity.",
     "result_provenance.schema_version/episode_id/raw_artifact/jsonl_line/postprocessing": "Envelope and artifact lineage, not runtime settings; provenance validation checks artifact evidence separately.",
-    "provenance.artifact_uri/artifact_sha256/map_digest/scenario_digest/git_hash/planner_commit": "Artifact/trace lineage and software revision annotations, not additional runtime selections; complete signed scenario/policy identity and execution receipts bind inputs.",
+    "provenance.artifact_uri/artifact_sha256/map_digest/scenario_digest/planner_commit": "Artifact/trace lineage and software revision annotations, not additional runtime selections; complete signed scenario/policy identity and execution receipts bind inputs.",
     "metrics/outcome/trajectories/timing": "Measured outputs, not runtime configuration; behaviour receipts provide execution evidence.",
 }
 
@@ -163,7 +129,8 @@ class ExpectedEpisodeIdentity:
     params: dict[str, Any]
     optional_copies: dict[str, Any]
     simulator_settings: dict[str, Any]
-    provenance_config_hashes: frozenset[str]
+    campaign_commit: str
+    source_config_hash: str
 
 
 def expected_runtime_identity(
@@ -203,6 +170,7 @@ def expected_episode_identity(
     *,
     cfg: CampaignConfig | None,
     config_root: Path | None = None,
+    campaign_commit: str | None = None,
 ) -> ExpectedEpisodeIdentity:
     """Build every signed runtime field from the selected campaign and planner.
 
@@ -214,6 +182,8 @@ def expected_episode_identity(
     """
     spec = selected_campaign_planner(cfg, planner)
     assert cfg is not None
+    if not isinstance(campaign_commit, str) or not campaign_commit.strip():
+        raise ValueError("trusted campaign commit is required for runtime identity")
     selected = _scenario_with_episode_seed_defaults(dict(scenario), seed=seed)
     algo, config = _resolved_policy(
         {"algo": spec.algo, "algo_config_path": spec.algo_config_path},
@@ -272,16 +242,6 @@ def expected_episode_identity(
     )
     noise_hash = observation_noise_hash(normalize_observation_noise_spec(cfg.observation_noise))
     precision_hash = tracking_precision_hash(normalize_tracking_precision_spec(None))
-    provenance_hashes = {_config_hash(params)}
-    if telemetry.analysis_enabled:
-        # The producer's analysis trace hashes the prepared scenario, while a
-        # trace-unavailable episode falls back to the signed runtime payload.
-        # Both candidates come exclusively from trusted campaign inputs.
-        provenance_hashes.add(
-            _config_hash(
-                {key: value for key, value in selected.items() if key not in {"seed", "repeats"}}
-            )
-        )
     return ExpectedEpisodeIdentity(
         str(selected.get("name") or selected.get("scenario_id") or selected.get("id") or "unknown"),
         seed,
@@ -305,7 +265,10 @@ def expected_episode_identity(
             noise_hash=noise_hash,
             tracking_precision_hash=precision_hash,
         ),
-        frozenset(provenance_hashes),
+        campaign_commit,
+        _config_hash(
+            {key: value for key, value in selected.items() if key not in {"seed", "repeats"}}
+        ),
     )
 
 
@@ -330,122 +293,95 @@ def _payload_errors(
     return errors
 
 
-def _runtime_copy_errors(record: Mapping[str, Any], expected: Mapping[str, Any]) -> dict[str, Any]:
-    """Check optional schema mirrors against the authoritative signed configuration.
+def campaign_commit_from_manifest(manifest: Mapping[str, Any]) -> str:
+    """Resolve the required trusted commit without coercing malformed provenance.
 
     Returns:
-        Conflicting runtime-label fields, including unsigned row-level copies.
+        Nonempty campaign commit, never derived from an episode row.
     """
-    errors: dict[str, Any] = {}
-    for field in RUNTIME_MIRROR_FIELDS:
-        if field in record and json.dumps(record[field], sort_keys=True) != json.dumps(
-            expected.get(field), sort_keys=True
-        ):
-            errors[field] = "different from selected runtime copy"
-    return errors
+    git = manifest.get("git")
+    commit = git.get("commit") if isinstance(git, Mapping) else None
+    if not isinstance(commit, str) or not commit.strip():
+        raise ValueError("trusted campaign commit is missing or malformed")
+    return commit
+
+
+def _identity_copy(record: Mapping[str, Any], path: tuple[str, ...]) -> tuple[bool, Any]:
+    """Read a declared copy without filling missing blocks or values.
+
+    Returns:
+        Presence plus the saved value.
+    """
+    value: Any = record
+    for part in path:
+        if not isinstance(value, Mapping) or part not in value:
+            return False, None
+        value = value[part]
+    return True, value
 
 
 def row_runtime_identity_errors(
-    record: Mapping[str, Any],
-    expected: ExpectedEpisodeIdentity,
+    record: Mapping[str, Any], expected: ExpectedEpisodeIdentity
 ) -> dict[str, Any]:
-    """Compare the closed complete identity, including missing and extra fields.
-
-    No signed scenario field is excluded. Unknown runner-envelope additions are
-    refused just like unknown authored keys. Saved metadata is never normalized.
+    """Require every schema-declared copy to equal its trusted identity value.
 
     Returns:
-        Structured field mismatches; an empty mapping means the identity matches.
+        All missing, contradictory, malformed or undeclared identity copies.
     """
-    params = record.get("scenario_params")
-    if not isinstance(params, Mapping):
-        return {"scenario_params": "missing"}
-    errors: dict[str, Any] = {}
-    if "metadata" in params and not isinstance(params["metadata"], Mapping):
-        errors["scenario_params.metadata"] = "must be a mapping"
-    errors.update(_payload_errors(params, expected.params))
-    if type(record.get("seed")) is not int or record["seed"] != expected.seed:
-        errors["seed"] = "different from selected integer seed"
-    for field, value in (
-        ("scenario_id", expected.scenario_id),
-        ("algo", expected.params["algo"]),
-        ("config_hash", _config_hash(expected.params)),
-    ):
-        if record.get(field) != value:
-            errors[field] = "missing or different from selected campaign"
-    errors.update(_runtime_copy_errors(record, expected.optional_copies))
-    if "provenance" in record:
-        errors.update(_record_provenance_identity_errors(record["provenance"], expected))
-    if "result_provenance" in record:
-        errors.update(_provenance_runtime_identity_errors(record["result_provenance"], expected))
-    return errors
-
-
-def _provenance_runtime_identity_errors(
-    provenance: Any, expected: ExpectedEpisodeIdentity
-) -> dict[str, Any]:
-    """Refuse any conflicting saved provenance copy of the trusted runtime identity.
-
-    Returns:
-        Exact copy mismatches, or a malformed-block error.
-    """
-    if not isinstance(provenance, Mapping):
-        return {"result_provenance": "must be a mapping"}
-    errors: dict[str, Any] = {}
-    # Provenance is another saved copy, never an authority for resolving runtime.
-    errors.update(
-        {
-            f"result_provenance.{field}": error
-            for field, error in _runtime_copy_errors(provenance, expected.optional_copies).items()
-        }
-    )
-    if "simulator_settings" in provenance:
-        settings = provenance["simulator_settings"]
-        if not isinstance(settings, Mapping):
-            errors["result_provenance.simulator_settings"] = "must be a mapping"
-        else:
-            errors.update(
-                _payload_errors(
-                    settings,
-                    expected.simulator_settings,
-                    prefix="result_provenance.simulator_settings",
-                )
-            )
-    for field, value in (
-        ("scenario_id", expected.scenario_id),
-        ("seed", expected.seed),
-        ("config_hash", _config_hash(expected.params)),
-    ):
-        if (
-            field not in provenance
-            or type(provenance[field]) is not type(value)
-            or provenance[field] != value
-        ):
-            errors[f"result_provenance.{field}"] = "missing or different from selected campaign"
-    return errors
-
-
-def _record_provenance_identity_errors(
-    provenance: Any, expected: ExpectedEpisodeIdentity
-) -> dict[str, Any]:
-    """Check the producer's separate provenance block without trusting its claims.
-
-    Returns:
-        Configuration hash/profile mismatches and contradictory runtime mirrors.
-    """
-    if not isinstance(provenance, Mapping):
-        return {"provenance": "must be a mapping"}
-    errors = {
-        f"provenance.{field}": error
-        for field, error in _runtime_copy_errors(provenance, expected.optional_copies).items()
+    values = {
+        **expected.optional_copies,
+        "git_hash": expected.campaign_commit,
+        "config_hash": _config_hash(expected.params),
+        "scenario_id": expected.scenario_id,
+        "seed": expected.seed,
+        "episode_id": _compute_map_episode_id(expected.params, expected.seed),
+        "simulator_settings": expected.simulator_settings,
+        "trace_config_hash": expected.source_config_hash,
     }
-    allowed = ROW_PROVENANCE_LINEAGE_FIELDS | RUNTIME_MIRROR_FIELDS | {"config_hash"}
-    for field in provenance:
-        if field not in allowed:
-            errors[f"provenance.{field}"] = "unexpected field"
-    config_hash = provenance.get("config_hash")
-    if not isinstance(config_hash, str) or config_hash not in expected.provenance_config_hashes:
-        errors["provenance.config_hash"] = "missing or different from selected campaign"
-    if "telemetry_profile" not in provenance:
-        errors["provenance.telemetry_profile"] = "missing field"
+    params = record.get("scenario_params")
+    errors = (
+        _payload_errors(params, expected.params)
+        if isinstance(params, Mapping)
+        else {"scenario_params": "missing or malformed"}
+    )
+    for field in IDENTITY_FIELDS:
+        paths = field.copies + tuple(
+            path for path in field.conditional_copies if _identity_copy(record, path[:-1])[0]
+        )
+        for path in paths:
+            present, value = _identity_copy(record, path)
+            if not present:
+                errors[".".join(path)] = "missing identity copy"
+            elif json.dumps(value, sort_keys=True) != json.dumps(
+                values.get(field.name), sort_keys=True
+            ):
+                errors[".".join(path)] = "different from trusted runtime identity"
+    errors.update(_undeclared_identity_copy_errors(record))
+    return errors
+
+
+def _undeclared_identity_copy_errors(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep new provenance fields from silently escaping the schema inventory.
+
+    Returns:
+        Undeclared copies or unknown provenance fields.
+    """
+    declared = {"root": set(), "provenance": set(), "result_provenance": set()}
+    for field in IDENTITY_FIELDS:
+        for path in field.copies:
+            if len(path) == 1:
+                declared["root"].add(path[0])
+            else:
+                declared[path[0]].add(path[1])
+    identity_names = set().union(*declared.values(), *PROVENANCE_ENVELOPE_FIELDS.values())
+    errors: dict[str, Any] = {}
+    for block in declared:
+        payload = record if block == "root" else record.get(block)
+        if not isinstance(payload, Mapping):
+            errors[block] = "missing or malformed provenance block"
+            continue
+        allowed = declared[block] | PROVENANCE_ENVELOPE_FIELDS.get(block, frozenset())
+        for name in payload:
+            if name not in allowed and (block != "root" or name in identity_names):
+                errors[name if block == "root" else f"{block}.{name}"] = "undeclared identity copy"
     return errors

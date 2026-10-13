@@ -10,6 +10,7 @@ Verifies that the resume plan:
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +32,12 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
     build_resume_plan as _build_resume_plan,
 )
 from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
-from robot_sf.benchmark.utils import _config_hash
-from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
+from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
+from tests.benchmark.campaign_identity_support import (
+    fixture_campaign,
+    producer_params,
+    producer_record_identity,
+)
 
 
 def build_resume_plan(runs_dir, *, planners, kinematics_matrix, scenarios, **kwargs):
@@ -41,6 +46,8 @@ def build_resume_plan(runs_dir, *, planners, kinematics_matrix, scenarios, **kwa
     Returns:
         Real resume verdicts.
     """
+    if not (runs_dir.parent / "campaign_manifest.json").exists():
+        _write_manifest(runs_dir.parent, source_commit=kwargs.get("campaign_commit"))
     return _build_resume_plan(
         runs_dir,
         planners=planners,
@@ -56,12 +63,14 @@ def _write_manifest(
     *,
     campaign_id: str = "test-campaign",
     config_hash: str = "abc123",
+    source_commit: str | None = None,
 ) -> None:
     """Write a minimal campaign manifest for context checks."""
     campaign_root.mkdir(parents=True, exist_ok=True)
     manifest = {
         "campaign_id": campaign_id,
         "config_hash": config_hash,
+        "git": {"commit": _git_hash_fallback() if source_commit is None else source_commit},
     }
     (campaign_root / "campaign_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -91,7 +100,7 @@ def _write_episodes_jsonl(path: Path, count: int, *, scenario=None) -> None:
                     algo="goal",
                 ),
             }
-            record["config_hash"] = _config_hash(record["scenario_params"])
+            producer_record_identity(record)
             f.write(json.dumps(record) + "\n")
 
 
@@ -602,11 +611,11 @@ class TestFullResumePlanFlow:
 
 
 @pytest.mark.parametrize("case", ["valid", "duplicate", "unexpected", "malformed"])
-def test_map_resume_matches_saved_rows_to_declared_jobs(case):
+def test_map_resume_matches_saved_rows_to_declared_jobs(case, tmp_path):
     """Resume uses three distinct declared map jobs and fails closed on corrupt identities."""
-    runs = (
-        Path(__file__).resolve().parents[1] / "fixtures" / "train_resume_identities" / case / "runs"
-    )
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "train_resume_identities" / case
+    shutil.copytree(fixture, tmp_path / "campaign")
+    runs = tmp_path / "campaign/runs"
     scenarios = [
         {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4},
         {"scenario_id": "b", "simulation_config": {}, "seeds": [1003]},
@@ -615,6 +624,8 @@ def test_map_resume_matches_saved_rows_to_declared_jobs(case):
         "planners": [{"key": "sf", "algo": "goal"}],
         "kinematics_matrix": ["differential_drive"],
         "scenarios": scenarios,
+        # Independent version pin for this persisted producer fixture.
+        "campaign_commit": "92b3ba5afcb181abfacde71b47da2116453170ba",
     }
     if case != "valid":
         with pytest.raises(ResumeMismatchError, match=case + " resume job identity"):
@@ -675,7 +686,7 @@ _VALID_ROW: dict[str, Any] = {
         algo="goal",
     ),
 }
-_VALID_ROW["config_hash"] = _config_hash(_VALID_ROW["scenario_params"])
+producer_record_identity(_VALID_ROW)
 _RUNTIME_PLANNER: dict[str, Any] = {"key": "sf", "algo": "goal"}
 _RUNTIME_SCENARIOS: list[dict[str, Any]] = [
     {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4}
@@ -696,6 +707,7 @@ def test_valid_integer_seed_row_is_accepted_by_both_identity_checks(tmp_path):
             kinematics="differential_drive",
         ),
         cfg=cfg,
+        campaign_commit=_git_hash_fallback(),
     )
 
 

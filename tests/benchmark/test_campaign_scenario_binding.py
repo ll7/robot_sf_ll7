@@ -16,8 +16,13 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
 )
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
+from robot_sf.benchmark.provenance_identity import IDENTITY_FIELDS
 from robot_sf.benchmark.utils import _config_hash
-from tests.benchmark.campaign_identity_support import fixture_campaign, producer_params
+from tests.benchmark.campaign_identity_support import (
+    fixture_campaign,
+    producer_params,
+    producer_record_identity,
+)
 
 SCENARIO = {
     "name": "scenario-binding",
@@ -34,7 +39,7 @@ def _row(scenario, *, horizon=600):
         [scenario], cfg=cfg, planner=cfg.planners[0], kinematics="differential_drive"
     )[0]
     params = producer_params(scoped, 1001, algo="social_force", horizon=horizon, dt=0.1)
-    return {
+    row = {
         "scenario_id": SCENARIO["name"],
         "seed": 1001,
         "algo": "social_force",
@@ -48,6 +53,8 @@ def _row(scenario, *, horizon=600):
             "repo_commit": "commit-a",
         },
     }
+
+    return producer_record_identity(row)
 
 
 def _write(tmp_path, row):
@@ -92,6 +99,7 @@ def test_signed_scenario_substitution_blocks_integrity_and_resume(tmp_path, fiel
             kinematics="differential_drive",
         ),
         cfg=cfg,
+        campaign_commit="commit-a",
     )
     altered = deepcopy(SCENARIO)
     if field == "map_file":
@@ -114,9 +122,10 @@ def test_missing_saved_seed_default_blocks_integrity(tmp_path):
     """Validation must not manufacture an omitted saved stochastic input."""
     row = _row(SCENARIO)
     del row["scenario_params"]["simulation_config"]["route_spawn_seed"]
-    row["config_hash"] = row["result_provenance"]["config_hash"] = _config_hash(
-        row["scenario_params"]
-    )
+    value = _config_hash(row["scenario_params"])
+    row["config_hash"] = row["result_provenance"]["config_hash"] = value
+    if isinstance(row.get("provenance"), dict):
+        row["provenance"]["config_hash"] = value
     assert _integrity(tmp_path, row)["benchmark_success_allowed"] is False
 
 
@@ -143,6 +152,7 @@ def test_trusted_legacy_scenario_preserves_authored_row_identity(tmp_path):
 
 
 def _resume(tmp_path, row, scenario, *, cfg=None):
+    (tmp_path / "campaign_manifest.json").write_text(json.dumps({"git": {"commit": "commit-a"}}))
     runs_dir = tmp_path / "runs"
     arm_dir = runs_dir / "social_force__differential_drive"
     arm_dir.mkdir(parents=True, exist_ok=True)
@@ -153,6 +163,7 @@ def _resume(tmp_path, row, scenario, *, cfg=None):
         kinematics_matrix=["differential_drive"],
         scenarios=[scenario],
         cfg=cfg or fixture_campaign([PLANNER], horizon=600, dt=0.1),
+        campaign_commit="commit-a",
     )
 
 
@@ -228,16 +239,18 @@ def _runtime_case(tmp_path):
     row["scenario_params"]["observation_mode"] = "socnav_state"
     row["scenario_params"]["observation_level"] = "tracked_agents_no_noise"
     _resign(row)
+    producer_record_identity(row)
     return cfg, scenario, row
 
 
 def _resign(row):
-    row["config_hash"] = row["result_provenance"]["config_hash"] = _config_hash(
-        row["scenario_params"]
-    )
+    value = _config_hash(row["scenario_params"])
+    row["config_hash"] = row["result_provenance"]["config_hash"] = value
+    if isinstance(row.get("provenance"), dict):
+        row["provenance"]["config_hash"] = value
 
 
-def _configured_check(tmp_path, cfg, scenario, row, boundary):
+def _configured_check(tmp_path, cfg, scenario, row, boundary, *, campaign_commit="commit-a"):
     planner = {**PLANNER, "kinematics": "differential_drive"}
     if boundary == "admission":
         return validate_campaign_integrity(
@@ -252,9 +265,12 @@ def _configured_check(tmp_path, cfg, scenario, row, boundary):
             scenarios=[scenario],
             resolved_seeds=[1001],
             campaign_root=tmp_path,
-            campaign_manifest={"git": {"commit": "commit-a"}},
+            campaign_manifest={"git": {"commit": campaign_commit}},
             cfg=cfg,
         )
+    (tmp_path / "campaign_manifest.json").write_text(
+        json.dumps({"git": {"commit": campaign_commit}})
+    )
     runs_dir = tmp_path / "runs"
     arm_dir = runs_dir / "social_force__differential_drive"
     arm_dir.mkdir(parents=True, exist_ok=True)
@@ -265,6 +281,7 @@ def _configured_check(tmp_path, cfg, scenario, row, boundary):
         kinematics_matrix=["differential_drive"],
         scenarios=[scenario],
         cfg=cfg,
+        campaign_commit=campaign_commit,
     )
 
 
@@ -459,6 +476,7 @@ def test_declared_arm_overrides_remain_admissible(tmp_path, boundary):
         scoped, 1001, algo="social_force", horizon=60, dt=0.05, observation_mode="socnav_state"
     )
     _resign(row)
+    producer_record_identity(row)
     result = _configured_check(tmp_path, cfg, scenario, row, boundary)
     if boundary == "admission":
         assert result["benchmark_success_allowed"] is True
@@ -618,6 +636,7 @@ def test_provenance_uses_resolved_scenario_budget_and_timestep(tmp_path, boundar
     )
     _attach_producer_provenance_settings(row, horizon=600, dt=0.2)
     _resign(row)
+    producer_record_identity(row)
     result = _configured_check(tmp_path, cfg, scenario, row, boundary)
     if boundary == "admission":
         assert result["benchmark_success_allowed"] is True
@@ -643,14 +662,13 @@ def test_provenance_uses_resolved_scenario_budget_and_timestep(tmp_path, boundar
 def test_separate_provenance_copy_cannot_contradict_campaign(tmp_path, field, value, boundary):
     """Neither provenance format can silently mislabel an admitted or reused row."""
     cfg, scenario, row = _runtime_case(tmp_path)
-    row["provenance"] = {"config_hash": row["config_hash"], "telemetry_profile": None}
+    row["provenance"].update({"config_hash": row["config_hash"], "telemetry_profile": None})
     clean = _configured_check(tmp_path, cfg, scenario, row, boundary)
     if boundary == "admission":
         assert clean["benchmark_success_allowed"] is True
     else:
         assert clean[0].verdict == "skip-complete"
     row["provenance"][field] = value
-    _resign(row)
     _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
 
 
@@ -701,9 +719,10 @@ def test_separate_provenance_accepts_actual_producer_hash_and_profile(
     if trace_available:
         prepared = _scenario_with_episode_seed_defaults(scoped, seed=1001)
         algo_meta["analysis_trace"] = {
+            "git_hash": "commit-a",
             "config_hash": _config_hash(
                 {key: value for key, value in prepared.items() if key not in {"seed", "repeats"}}
-            )
+            ),
         }
     produced = _build_episode_record_dict(
         scenario_id=row["scenario_id"],
@@ -731,6 +750,8 @@ def test_separate_provenance_accepts_actual_producer_hash_and_profile(
         view_integrity=None,
     )
     row["provenance"] = produced["provenance"]
+    row["algorithm_metadata"] = produced["algorithm_metadata"]
+    producer_record_identity(row, telemetry_profile=algo_meta.get("telemetry"))
     result = _configured_check(tmp_path, cfg, scenario, row, boundary)
     if boundary == "admission":
         assert result["benchmark_success_allowed"] is True, result["blockers"]
@@ -743,7 +764,7 @@ def test_separate_provenance_accepts_actual_producer_hash_and_profile(
 def test_separate_provenance_requires_runtime_identity_fields(tmp_path, field, boundary):
     """A present producer block cannot omit either of its runtime identity labels."""
     cfg, scenario, row = _runtime_case(tmp_path)
-    row["provenance"] = {"config_hash": row["config_hash"], "telemetry_profile": None}
+    row["provenance"].update({"config_hash": row["config_hash"], "telemetry_profile": None})
     del row["provenance"][field]
     _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
 
@@ -762,5 +783,159 @@ def test_separate_provenance_refuses_malformed_blocks(tmp_path, provenance, boun
 def test_separate_provenance_refuses_extra_runtime_claims(tmp_path, field, value, boundary):
     """Known mirrors must match, and new provenance fields need an explicit identity decision."""
     cfg, scenario, row = _runtime_case(tmp_path)
-    row["provenance"] = {"config_hash": row["config_hash"], "telemetry_profile": None, field: value}
+    row["provenance"][field] = value
     _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_separate_provenance_git_commit_cannot_disagree(tmp_path, boundary):
+    """A divergent separate provenance commit cannot authorize admission or reuse."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    row["provenance"].update(
+        {"git_hash": "commit-a", "config_hash": row["config_hash"], "telemetry_profile": None}
+    )
+    clean = _configured_check(tmp_path, cfg, scenario, row, boundary)
+    if boundary == "admission":
+        assert clean["benchmark_success_allowed"] is True
+    else:
+        assert clean[0].verdict == "skip-complete"
+    row["provenance"]["git_hash"] = "different-commit"
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+_IDENTITY_COPIES = [
+    (field.name, path)
+    for field in IDENTITY_FIELDS
+    for path in field.copies + field.conditional_copies
+]
+
+
+@pytest.mark.parametrize(
+    "field,path",
+    _IDENTITY_COPIES,
+    ids=[name + ":" + ".".join(path) for name, path in _IDENTITY_COPIES],
+)
+@pytest.mark.parametrize("mistake", ["mutate", "omit"])
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_every_declared_identity_copy_is_required_and_bound(
+    tmp_path, field, path, mistake, boundary
+):
+    """Each schema field at every producer copy refuses a planted disagreement or omission."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    if path[0] == "algorithm_metadata":
+        from robot_sf.benchmark.map_runner.map_runner_identity import (
+            _scenario_with_episode_seed_defaults,
+        )
+
+        telemetry = {"analysis_trace": "all", "planner_debug_trace": "none"}
+        cfg = replace(cfg, telemetry=telemetry)
+        scoped = expected_arm_scenarios(
+            [scenario], cfg=cfg, planner=cfg.planners[0], kinematics="differential_drive"
+        )[0]
+        row["scenario_params"] = producer_params(
+            scoped,
+            1001,
+            algo="social_force",
+            horizon=600,
+            dt=0.1,
+            observation_mode="socnav_state",
+            record_simulation_step_trace=True,
+        )
+        prepared = _scenario_with_episode_seed_defaults(scoped, seed=1001)
+        row["algorithm_metadata"] = {
+            "telemetry": {"schema_version": "analysis-telemetry-profile.v1", **telemetry},
+            "analysis_trace": {
+                "git_hash": "commit-a",
+                "config_hash": _config_hash(
+                    {
+                        key: value
+                        for key, value in prepared.items()
+                        if key not in {"seed", "repeats"}
+                    }
+                ),
+            },
+        }
+        producer_record_identity(row)
+    clean = _configured_check(tmp_path, cfg, scenario, row, boundary)
+    if boundary == "admission":
+        assert clean["benchmark_success_allowed"] is True
+    else:
+        assert clean[0].verdict == "skip-complete"
+    target = row
+    for part in path[:-1]:
+        target = target[part]
+    value = target[path[-1]]
+    if mistake == "omit":
+        del target[path[-1]]
+    elif field == "seed":
+        target[path[-1]] = 1002
+    elif isinstance(value, dict):
+        target[path[-1]] = {**value, "contradictory_identity": True}
+    elif isinstance(value, bool):
+        target[path[-1]] = not value
+    elif isinstance(value, (int, float)):
+        target[path[-1]] = value + 1
+    else:
+        target[path[-1]] = "contradictory-identity"
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+@pytest.mark.parametrize("commit", [None, "different-campaign-commit"])
+def test_campaign_commit_is_required_and_authoritative(tmp_path, boundary, commit):
+    """Missing or divergent trusted campaign provenance cannot authorize saved rows."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    if boundary == "admission":
+        report = _configured_check(tmp_path, cfg, scenario, row, boundary, campaign_commit=commit)
+        assert report["benchmark_success_allowed"] is False
+    else:
+        with pytest.raises(ResumeMismatchError, match="resume.*identity"):
+            _configured_check(tmp_path, cfg, scenario, row, boundary, campaign_commit=commit)
+
+
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_agreeing_commit_copies_cannot_override_trusted_campaign(tmp_path, boundary):
+    """Even agreement among every saved Git copy cannot replace the selected source version."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    field = next(field for field in IDENTITY_FIELDS if field.name == "git_hash")
+    for path in field.copies:
+        target = row
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = "different-commit"
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+def test_forged_saved_manifest_and_commit_copies_do_not_select_resume_source(tmp_path):
+    """Resume compares the saved campaign to the actual execution source, not saved claims."""
+    from robot_sf.benchmark.utils import _git_hash_fallback
+
+    cfg, scenario, row = _runtime_case(tmp_path)
+    paths = next(field.copies for field in IDENTITY_FIELDS if field.name == "git_hash")
+    source = _git_hash_fallback()
+    for path in paths:
+        target = row
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = source
+    arm = tmp_path / "runs/social_force__differential_drive"
+    arm.mkdir(parents=True)
+    _write(arm, row)
+    manifest = tmp_path / "campaign_manifest.json"
+    manifest.write_text(json.dumps({"git": {"commit": source}}))
+    kwargs = {
+        "planners": [PLANNER],
+        "kinematics_matrix": ["differential_drive"],
+        "scenarios": [scenario],
+        "cfg": cfg,
+    }
+    assert build_resume_plan(tmp_path / "runs", **kwargs)[0].verdict == "skip-complete"
+    for path in paths:
+        target = row
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = "forged-source"
+    _write(arm, row)
+    manifest.write_text(json.dumps({"git": {"commit": "forged-source"}}))
+    with pytest.raises(ResumeMismatchError, match="commit differs from executing source"):
+        build_resume_plan(tmp_path / "runs", **kwargs)

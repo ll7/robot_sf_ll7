@@ -12,7 +12,7 @@ MARGIN_M = 1e-9
 
 
 @njit(nogil=True)
-def _constraints(xy, caps, walls, radius, dt, indices, normals, gaps):
+def _constraints(xy, caps, walls, radius, dt, indices, normals, gap_rates):
     """Build reachable supporting halfspaces and refuse already overlapping starts.
 
     Returns:
@@ -31,7 +31,7 @@ def _constraints(xy, caps, walls, radius, dt, indices, normals, gaps):
             distance = np.sqrt(distance2)
             indices[count] = i, j
             normals[count, 0], normals[count, 1] = dx / distance, dy / distance
-            gaps[count] = distance - 2 * radius
+            gap_rates[count] = (distance - 2 * radius) / dt
             count += 1
         for wall in walls:
             x, y = closest_point_on_segment(wall[:4], xy[i])
@@ -44,7 +44,7 @@ def _constraints(xy, caps, walls, radius, dt, indices, normals, gaps):
             distance = np.sqrt(distance2)
             indices[count] = i, -1
             normals[count, 0], normals[count, 1] = dx / distance, dy / distance
-            gaps[count] = distance - radius
+            gap_rates[count] = (distance - radius) / dt
             count += 1
     return count
 
@@ -60,14 +60,14 @@ def _cap(velocity, i, caps):
 
 
 @njit(nogil=True, inline="always")
-def _gap_rate(k, velocity, indices, normals, gaps, dt):
+def _gap_rate(k, velocity, indices, normals, gap_rates):
     """Return predicted normal clearance per second for one constraint."""
     i, j = indices[k]
     dx, dy = velocity[i, 0], velocity[i, 1]
     if j >= 0:
         dx -= velocity[j, 0]
         dy -= velocity[j, 1]
-    return gaps[k] / dt + dx * normals[k, 0] + dy * normals[k, 1]
+    return gap_rates[k] + dx * normals[k, 0] + dy * normals[k, 1]
 
 
 @njit(nogil=True, inline="always")
@@ -83,7 +83,7 @@ def _root(parent, i):
 
 
 @njit(nogil=True)
-def _solve(velocity, caps, fixed, indices, normals, gaps, count, dt, passes):  # noqa: PLR0913
+def _solve(velocity, caps, fixed, indices, normals, gap_rates, count, dt, passes):  # noqa: PLR0913
     """Run exactly the bounded passes; halt only unresolved reachable components.
 
     Returns:
@@ -92,7 +92,7 @@ def _solve(velocity, caps, fixed, indices, normals, gaps, count, dt, passes):  #
     target = MARGIN_M / dt
     for _ in range(passes):
         for k in range(count):
-            deficit = target - _gap_rate(k, velocity, indices, normals, gaps, dt)
+            deficit = target - _gap_rate(k, velocity, indices, normals, gap_rates)
             if deficit <= 0:
                 continue
             i, j = indices[k]
@@ -113,8 +113,10 @@ def _solve(velocity, caps, fixed, indices, normals, gaps, count, dt, passes):  #
                 _cap(velocity, j, caps)
     failed = np.zeros(count, dtype=np.bool_)
     for k in range(count):
-        failed[k] = _gap_rate(k, velocity, indices, normals, gaps, dt) < -1e-10
+        failed[k] = _gap_rate(k, velocity, indices, normals, gap_rates) < -1e-10
     fallback = np.any(failed)
+    if not fallback:
+        return False, 0
     if fallback:
         # Stopping a body can create contact with a following neighbor. Stop the
         # whole reachable component in one graph pass; isolated walkers keep moving.
@@ -132,7 +134,7 @@ def _solve(velocity, caps, fixed, indices, normals, gaps, count, dt, passes):  #
                 velocity[i, 0], velocity[i, 1] = 0.0, 0.0
     unresolved = 0
     for k in range(count):
-        unresolved += _gap_rate(k, velocity, indices, normals, gaps, dt) < -1e-10
+        unresolved += _gap_rate(k, velocity, indices, normals, gap_rates) < -1e-10
     return fallback, unresolved
 
 
@@ -146,9 +148,9 @@ def _project(xy, velocity, caps, walls, radius, dt, fixed, buffers, passes):  # 
     for i in range(len(velocity)):
         if not np.isfinite(velocity[i, 0]) or not np.isfinite(velocity[i, 1]):
             raise ValueError("contact requires finite capped velocities")
-    indices, normals, gaps = buffers
-    count = _constraints(xy, caps, walls, radius, dt, indices, normals, gaps)
-    return _solve(velocity, caps, fixed, indices, normals, gaps, count, dt, passes)
+    indices, normals, gap_rates = buffers
+    count = _constraints(xy, caps, walls, radius, dt, indices, normals, gap_rates)
+    return _solve(velocity, caps, fixed, indices, normals, gap_rates, count, dt, passes)
 
 
 class VelocityProjection:
@@ -160,6 +162,7 @@ class VelocityProjection:
         self.passes = passes
         self.capacity = -1
         self.population = -1
+        self.radius = getattr(sim.config, "pedestrian_contact_radius_m", sim.peds.agent_radius)
 
     def __call__(self, velocity):
         """Return capped contact velocities, refusing infeasible prescribed motion.
@@ -170,12 +173,14 @@ class VelocityProjection:
         sim = self.sim
         peds = sim.peds
         n = peds.size()
-        walls = np.asarray(sim.get_raw_obstacles(), dtype=float).reshape(-1, 6)
+        walls = sim.get_raw_obstacles()
+        if walls.ndim != 2:
+            walls = walls.reshape(-1, 6)
         capacity = n * (n - 1) // 2 + n * len(walls)
         if capacity != self.capacity or n != self.population:
             self.indices = np.empty((capacity, 2), dtype=np.int64)
             self.normals = np.empty((capacity, 2))
-            self.gaps = np.empty(capacity)
+            self.gap_rates = np.empty(capacity)
             self.capacity = capacity
             self.population = n
             self.fixed = np.zeros(n, dtype=np.bool_)
@@ -200,10 +205,10 @@ class VelocityProjection:
             projected,
             caps,
             walls,
-            peds.agent_radius,
+            self.radius,
             peds.d_t,
             fixed,
-            (self.indices, self.normals, self.gaps),
+            (self.indices, self.normals, self.gap_rates),
             self.passes,
         )
         sim.contact_projection_passes = self.passes
@@ -226,7 +231,8 @@ def install_projection(sim):
         raise ValueError("contact passes must be an integer in 3..10")
     if sim.peds.integration_scheme != "semi_implicit_euler":
         raise ValueError("projection_v2 requires semi_implicit_euler")
-    if not np.isfinite(sim.peds.agent_radius) or sim.peds.agent_radius <= 0:
+    radius = getattr(sim.config, "pedestrian_contact_radius_m", sim.peds.agent_radius)
+    if not np.isfinite(radius) or radius <= 0:
         raise ValueError("contact requires a positive finite body radius")
     sim.contact_projection_passes = 0
     sim.contact_projection_fallback_count = 0

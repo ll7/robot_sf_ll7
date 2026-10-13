@@ -8161,3 +8161,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/ppo_wall_probe_dev_20261012
+  status: evidence
+  freshness: evidence
+  area: training_evidence

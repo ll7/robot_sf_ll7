@@ -65,7 +65,7 @@ canonical byte comparison. The existing raw legacy NaN/Infinity token policy
 for other metrics, strict duplicate/overflow checks, full receipt requirements
 for releases, and hardware/source/execution/coverage guards remain in force.
 
-The equivalence classifier separately owns a seven-entry literal map of
+The equivalence classifier separately owns a twelve-entry literal map of
 reviewed preparation and diagnostic blobs in `REVIEWED_BASE_ONLY_BLOBS`.
 Each exception requires the current-main committed file to be a regular Git
 blob with exactly the reviewed SHA-256. The candidate's merge-base diff must
@@ -73,6 +73,17 @@ not include that path, even if its final bytes equal main. Edits, deletions,
 renames and type changes refuse. Protected paths are checked before exceptions,
 and a separate reviewed neutral transition is still required. These entries do
 not exempt directories, releases, runtime fields or downstream admission checks.
+
+A separate `REVIEWED_CLOSED_TREE` pins the current-main
+`docs/context/robsweep` snapshot: exactly 731 recursive `100644 blob` members,
+its Git tree object ID and the SHA-256 of the raw tree object. Only members of
+that verified committed snapshot receive the exception. Any candidate history
+change at the root or below it refuses before `.md`, test or receipt skips,
+including a change whose final bytes equal main. Git diff and tree paths are
+read as binary NUL-delimited records, preserving newline and tab filenames.
+Different current-main tree bytes, added members, root/file types or modes
+refuse. The catalog has one current-main byte pin; an older catalog is not an
+alternative. These checks never grant a directory or documentation-prefix waiver.
 
 ## Producer flow
 

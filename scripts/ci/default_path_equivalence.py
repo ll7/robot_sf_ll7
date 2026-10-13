@@ -13,6 +13,7 @@ import hashlib
 import itertools
 import json
 import math
+import os
 import subprocess
 from typing import TYPE_CHECKING, Any
 
@@ -288,10 +289,23 @@ REVIEWED_BASE_ONLY_BLOBS = {
     "SLURM/ftplan/released_ppo_pilot.slurm": "e0e9dbb2127a1e6b491bedb4f2668eacbeee39924de39cf76aede783d678ad8c",
     "configs/training/ppo/ftplan/pilot_protocol_20261012.yaml": "50e891bfe72189dcbc667f8301f4b6357a0846575bd4c5c08c1d32e6cd976548",
     "configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template": "39b28f6451a64ce99067809e81fd1c875e36fc2735f729fb709fdabe4810d4ee",
-    "docs/context/catalog.yaml": "fd7bf84b860af031003632a368bf480b5e4a16e129f3dca87e6b182d8602a4cb",
+    "docs/context/catalog.yaml": "45328def9fbe8deb4e083bccbfb2d0abcf2cd51fbf40a1db23d78f6afab2b0c9",
     "docs/context/evidence/ppo_wall_probe_dev_20261012/probe.json": "d12bb0c7b4c23cd429f840c1d23a50cba597f1f79bad0a9dbbcb3321c7bea6b3",
     "scripts/analysis/ppo_wall_probe_dev.py": "2b41527c564ab48fa6a1694e5875f8c28be67f7246e6c381a7e7b343feaca457",
     "scripts/validation/evidence_registry_baseline.json": "a31b2bffa4585496600b3bd2dcf71e2319049e3934ac7698e2d682458ebd7fd7",
+    "scripts/validation/analyze_examiner_robustness_20261012.py": "e372f62c538cc4fed6efd8350a58d4c316633e5f068beea6fcab750b4baab357",
+    "scripts/validation/examiner_crowd_probes_20261012.py": "72b15e48bf73f2a6a9c974d0021dc5ce4d4bf285e6ce8ad2b257f288165d64b3",
+    "scripts/validation/examiner_robustness_20261012.py": "9d14e552087f98b5a23e1f4bfe7a0656b6f8ef840b6322a1e5b0488f9b6ea02a",
+    "scripts/validation/render_examiner_robustness_20261012.py": "e2fd98b977be44b69d2e195d93fc1c9727745c51c5a4814cf220a66993f7cb3e",
+    "scripts/validation/resume_examiner_mppi_20261012.py": "e381fc2baf56ce1c64f8686a93796225bd35d22b732fc9df3b5f65eff0f35d3c",
+}
+
+
+REVIEWED_CLOSED_TREE = {
+    "root": "docs/context/robsweep",
+    "oid": "12b1aa61ddce08ed4449795897f4648322a59ea6",
+    "sha256": "8bbe72424bda55a0ae94ac3a824e4157bddd32f6e24b74d462b5da771eb72ab1",
+    "entries": 731,
 }
 
 
@@ -370,12 +384,80 @@ def _verify_base_policy_drift(path: str, base_source: str, head_source: str) -> 
         _verify_base_git_attributes(base_source, head_source)
 
 
-def _verify_reviewed_base_blob(path: str, base_source: str) -> None:
-    entry = _git("ls-tree", base_source, "--", path).split("\t")
+def _git_path_bytes(base: str, head: str) -> set[bytes]:
+    """Read literal paths; quoted text and newline splitting are never identities."""
+    raw = subprocess.check_output(
+        ["git", "diff", "--name-only", "-z", "--no-renames", base, head], cwd=gate.ROOT
+    )
+    return set(raw.split(b"\0")) - {b""}
+
+
+def _closed_tree_paths(base: str, actual: set[bytes], introduced: set[bytes]) -> set[str]:
+    """Admit only members of the exact reviewed tree after checking candidate history.
+
+    Returns:
+        Literal paths in the verified current-main snapshot, or none if absent.
+    """
+    root = REVIEWED_CLOSED_TREE["root"].encode()
+
+    def inside(path: bytes) -> bool:
+        return path == root or path.startswith(root + b"/")
+
     gate._require(
-        len(entry) == 2
-        and entry[1] == path
-        and entry[0].split()[:2] in (["100644", "blob"], ["100755", "blob"]),
+        not any(inside(path) for path in introduced),
+        "scope refused: candidate changed reviewed closed tree",
+    )
+    entries = subprocess.check_output(
+        ["git", "ls-tree", "-z", base, "--", os.fsdecode(root)], cwd=gate.ROOT
+    ).split(b"\0")
+    entries = [entry for entry in entries if entry]
+    requested = {path for path in actual if inside(path)}
+    if not entries and not requested:
+        return set()
+    header, _, name = entries[0].partition(b"\t") if entries else (b"", b"", b"")
+    gate._require(
+        len(entries) == 1
+        and name == root
+        and header.split() == [b"040000", b"tree", REVIEWED_CLOSED_TREE["oid"].encode()],
+        "scope refused: reviewed closed tree object/type differs",
+    )
+    raw = subprocess.check_output(
+        ["git", "cat-file", "tree", REVIEWED_CLOSED_TREE["oid"]], cwd=gate.ROOT
+    )
+    gate._require(
+        hashlib.sha256(raw).hexdigest() == REVIEWED_CLOSED_TREE["sha256"],
+        "scope refused: reviewed closed tree raw hash differs",
+    )
+    recursive = subprocess.check_output(
+        ["git", "ls-tree", "-r", "-z", base, "--", os.fsdecode(root)], cwd=gate.ROOT
+    ).split(b"\0")
+    members = set()
+    for entry in (entry for entry in recursive if entry):
+        header, separator, path = entry.partition(b"\t")
+        gate._require(
+            separator == b"\t"
+            and header.split()[:2] == [b"100644", b"blob"]
+            and path.startswith(root + b"/"),
+            "scope refused: reviewed closed tree contains nonregular entries",
+        )
+        members.add(path)
+    gate._require(
+        len(members) == REVIEWED_CLOSED_TREE["entries"] and requested <= members,
+        "scope refused: reviewed closed tree member inventory differs",
+    )
+    return {os.fsdecode(path) for path in members}
+
+
+def _verify_reviewed_base_blob(path: str, base_source: str) -> None:
+    entries = subprocess.check_output(
+        ["git", "ls-tree", "-z", base_source, "--", path], cwd=gate.ROOT
+    ).split(b"\0")
+    entries = [entry for entry in entries if entry]
+    header, _, name = entries[0].partition(b"\t") if entries else (b"", b"", b"")
+    gate._require(
+        len(entries) == 1
+        and name == os.fsencode(path)
+        and header.split()[:2] == [b"100644", b"blob"],
         f"scope refused: reviewed base-only path is not a regular blob {path}",
     )
     raw = subprocess.check_output(
@@ -409,12 +491,14 @@ def classify_scope(changed_files: list[str], base_source: str, head_source: str)
     head_source = _git("rev-parse", f"{head_source}^{{commit}}")
     # The PR merge-base diff is insufficient for a stale branch: execution runs
     # its exact source, including default changes absent from current main.
-    actual = _git("diff", "--name-only", "--no-renames", base_source, head_source).splitlines()
-    paths = sorted(set(changed_files) | set(actual))
+    actual = _git_path_bytes(base_source, head_source) | {
+        os.fsencode(path) for path in changed_files
+    }
     merge_base = _git("merge-base", base_source, head_source)
-    introduced = set(
-        _git("diff", "--name-only", "--no-renames", merge_base, head_source).splitlines()
-    )
+    introduced_bytes = _git_path_bytes(merge_base, head_source)
+    closed_paths = _closed_tree_paths(base_source, actual, introduced_bytes)
+    paths = sorted(os.fsdecode(path) for path in actual)
+    introduced = {os.fsdecode(path) for path in introduced_bytes}
     # A candidate change ending at the same bytes as main is absent from the
     # two-tree diff. It must still refuse reviewed-blob and authority exceptions.
     paths = sorted(
@@ -433,8 +517,10 @@ def classify_scope(changed_files: list[str], base_source: str, head_source: str)
         )
     admitted = []
     for path in paths:
-        if _reviewed_base_drift(path, base_source, introduced) or (
-            path in BASE_ONLY_TOOLING_FILES and path not in introduced
+        if (
+            path in closed_paths
+            or _reviewed_base_drift(path, base_source, introduced)
+            or (path in BASE_ONLY_TOOLING_FILES and path not in introduced)
         ):
             _verify_base_policy_drift(path, base_source, head_source)
             continue

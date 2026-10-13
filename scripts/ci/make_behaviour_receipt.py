@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.ci import (  # noqa: E402
     behaviour_receipt,
+    receipt_outcomes,
     receipt_provenance,
 )
 
@@ -1220,9 +1221,7 @@ def _load_sweep_rows(
                 raise ValueError(f"raw episode identity differs for {key}")
             raw = matches[0]
             _validate_row_allocation(row, raw, scheduler_job_id, scheduler_node)
-            if _row_success(raw) != _row_success(row) or _row_collisions(raw) != _row_collisions(
-                row
-            ):
+            if receipt_outcomes.raw_outcomes(raw) != receipt_outcomes.summary_outcomes(row):
                 raise ValueError(f"raw episode outcome differs from summary for {key}")
             if key in rows:
                 raise ValueError(f"duplicate sweep row {key}")
@@ -1262,18 +1261,11 @@ def _load_run_rows(
 
 
 def _row_success(row: dict[str, Any]) -> bool:
-    if "success" in row:
-        return bool(row["success"])
-    metrics = row.get("metrics") or {}
-    outcome = row.get("outcome") or {}
-    return bool(metrics.get("success") or outcome.get("route_complete"))
+    return receipt_outcomes.raw_outcomes(row)["success"]
 
 
 def _row_collisions(row: dict[str, Any]) -> int:
-    if row.get("collisions") is not None:
-        return int(row["collisions"])
-    metrics = row.get("metrics") or {}
-    return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
+    return receipt_outcomes.raw_outcomes(row)["collisions"]
 
 
 def _runtime_objects(

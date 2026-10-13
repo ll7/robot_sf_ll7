@@ -142,6 +142,7 @@ def source_artifacts_for_receipt(repo, receipt):
                     )
                     raw["metrics"].update(
                         success=row[prefix + "success"],
+                        collisions=row[prefix + "collisions"],
                         total_collision_count=row[prefix + "collisions"],
                     )
                     raw["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = row[
@@ -155,6 +156,7 @@ def source_artifacts_for_receipt(repo, receipt):
                             "seed": row["seed"],
                             "success": row[prefix + "success"],
                             "collisions": row[prefix + "collisions"],
+                            "steps": raw["steps"],
                             "execution_status": "written",
                             "trace_complete": True,
                             "source_file": f"runs/{row['arm']}__differential_drive/episodes.jsonl",

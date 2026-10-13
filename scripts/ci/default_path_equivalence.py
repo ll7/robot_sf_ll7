@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.ci import behaviour_receipt as gate
+from scripts.ci import receipt_outcomes
 
 VERSION = "default-path-equivalence.v1"
 SEEDS = (1001, 1002, 1003)
@@ -270,6 +271,7 @@ BASE_ONLY_TOOLING_FILES = {
     "scripts/ci/default_path_equivalence.py",
     "scripts/ci/behaviour_receipt_nodes.json",
     "scripts/ci/receipt_provenance.py",
+    "scripts/ci/receipt_outcomes.py",
     ".gitattributes",
     "scripts/dev/merge_queue_gate.py",
     "scripts/validation/profile_receipt_loading.py",
@@ -277,6 +279,19 @@ BASE_ONLY_TOOLING_FILES = {
     ".github/workflows/scripts-catalog.yml",
     "docs/dev/ci_job_value_audit_2026_10_12/observations.csv",
     "docs/dev/ci_job_value_audit_2026_10_12/summary.json",
+}
+
+
+# Reviewed preparation/diagnostic blobs on current main, never a prefix waiver.
+# Candidate changes refuse; base content and regular-file type must match exactly.
+REVIEWED_BASE_ONLY_BLOBS = {
+    "SLURM/ftplan/released_ppo_pilot.slurm": "e0e9dbb2127a1e6b491bedb4f2668eacbeee39924de39cf76aede783d678ad8c",
+    "configs/training/ppo/ftplan/pilot_protocol_20261012.yaml": "50e891bfe72189dcbc667f8301f4b6357a0846575bd4c5c08c1d32e6cd976548",
+    "configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template": "39b28f6451a64ce99067809e81fd1c875e36fc2735f729fb709fdabe4810d4ee",
+    "docs/context/catalog.yaml": "fd7bf84b860af031003632a368bf480b5e4a16e129f3dca87e6b182d8602a4cb",
+    "docs/context/evidence/ppo_wall_probe_dev_20261012/probe.json": "d12bb0c7b4c23cd429f840c1d23a50cba597f1f79bad0a9dbbcb3321c7bea6b3",
+    "scripts/analysis/ppo_wall_probe_dev.py": "2b41527c564ab48fa6a1694e5875f8c28be67f7246e6c381a7e7b343feaca457",
+    "scripts/validation/evidence_registry_baseline.json": "a31b2bffa4585496600b3bd2dcf71e2319049e3934ac7698e2d682458ebd7fd7",
 }
 
 
@@ -355,8 +370,43 @@ def _verify_base_policy_drift(path: str, base_source: str, head_source: str) -> 
         _verify_base_git_attributes(base_source, head_source)
 
 
+def _verify_reviewed_base_blob(path: str, base_source: str) -> None:
+    entry = _git("ls-tree", base_source, "--", path).split("\t")
+    gate._require(
+        len(entry) == 2
+        and entry[1] == path
+        and entry[0].split()[:2] in (["100644", "blob"], ["100755", "blob"]),
+        f"scope refused: reviewed base-only path is not a regular blob {path}",
+    )
+    raw = subprocess.check_output(
+        ["git", "cat-file", "blob", f"{base_source}:{path}"], cwd=gate.ROOT
+    )
+    gate._require(
+        hashlib.sha256(raw).hexdigest() == REVIEWED_BASE_ONLY_BLOBS[path],
+        f"scope refused: reviewed base-only blob changed {path}",
+    )
+
+
+def _reviewed_base_drift(path: str, base_source: str, introduced: set[str]) -> bool:
+    """Check the finite reviewed map after protected paths have been refused.
+
+    Returns:
+        Whether an unchanged candidate path has the approved regular base blob.
+    """
+    if path not in REVIEWED_BASE_ONLY_BLOBS:
+        return False
+    gate._require(
+        path not in introduced,
+        f"scope refused: candidate changed reviewed base-only path {path}",
+    )
+    _verify_reviewed_base_blob(path, base_source)
+    return True
+
+
 def classify_scope(changed_files: list[str], base_source: str, head_source: str) -> list[str]:
     """Verify current Git bytes; unknown and default-path surfaces require full receipt."""
+    base_source = _git("rev-parse", f"{base_source}^{{commit}}")
+    head_source = _git("rev-parse", f"{head_source}^{{commit}}")
     # The PR merge-base diff is insufficient for a stale branch: execution runs
     # its exact source, including default changes absent from current main.
     actual = _git("diff", "--name-only", "--no-renames", base_source, head_source).splitlines()
@@ -365,6 +415,9 @@ def classify_scope(changed_files: list[str], base_source: str, head_source: str)
     introduced = set(
         _git("diff", "--name-only", "--no-renames", merge_base, head_source).splitlines()
     )
+    # A candidate change ending at the same bytes as main is absent from the
+    # two-tree diff. It must still refuse the finite reviewed-blob exception.
+    paths = sorted(set(paths) | (introduced & REVIEWED_BASE_ONLY_BLOBS.keys()))
     for path in paths:
         if (
             path.startswith("receipts/behaviour/")
@@ -378,7 +431,9 @@ def classify_scope(changed_files: list[str], base_source: str, head_source: str)
         )
     admitted = []
     for path in paths:
-        if path in BASE_ONLY_TOOLING_FILES and path not in introduced:
+        if _reviewed_base_drift(path, base_source, introduced) or (
+            path in BASE_ONLY_TOOLING_FILES and path not in introduced
+        ):
             _verify_base_policy_drift(path, base_source, head_source)
             continue
         if (
@@ -569,6 +624,7 @@ def validate_runtime_source(row: dict, source: str) -> None:
 
 def episode_bytes(row: dict[str, Any]) -> bytes:
     """Compare all episode fields except the exact documented transport leaves."""
+    receipt_outcomes.raw_outcomes(row)
     validate_transport_numbers(row)
     projected = copy.deepcopy(row)
     trace = projected.get("algorithm_metadata", {}).get("simulation_step_trace")
@@ -633,6 +689,7 @@ def comparison_rows(
     for key in sorted(expected):
         execution_evidence = {}
         for side, row in (("head", head_rows[key]), ("baseline", baseline_rows[key])):
+            receipt_outcomes.raw_outcomes(row)
             if allocation_identities is not None:
                 allocation = allocation_identities[side]
                 gate._hardware_require(

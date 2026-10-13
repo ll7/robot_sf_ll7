@@ -303,6 +303,7 @@ def verified_raw_rows(
 ) -> dict[tuple[str, str, int], dict]:
     """Decode sealed admission sources once, then apply allocation context in memory."""
     from scripts.ci import make_behaviour_receipt as producer
+    from scripts.ci import receipt_outcomes
     from scripts.ci.behaviour_receipt import validate_source_row_context
 
     verify_binding(root, job, node, source_sha=source_sha, arm_role=arm_role)
@@ -345,8 +346,7 @@ def verified_raw_rows(
             summary.setdefault("scheduler_node", node)
             validate_source_row_context(summary, job, node)
             _require(
-                producer._row_success(summary) == producer._row_success(raw)
-                and producer._row_collisions(summary) == producer._row_collisions(raw),
+                receipt_outcomes.raw_outcomes(raw) == receipt_outcomes.summary_outcomes(summary),
                 "producer summary/raw outcomes differ",
             )
             _producer_claim(summary, source_sha, arm_role, job, node)

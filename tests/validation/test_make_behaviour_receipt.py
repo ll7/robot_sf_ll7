@@ -92,7 +92,11 @@ def _raw_row(seed, *, failing=False):
         "scenario_id": "open",
         "seed": seed,
         "steps": 1,
-        "metrics": {"success": not (failing and seed == 1001), "total_collision_count": 0},
+        "metrics": {
+            "success": not (failing and seed == 1001),
+            "collisions": 0,
+            "total_collision_count": 0,
+        },
         "algorithm_metadata": {
             "status": "ok",
             "planner_kinematics": {"execution_mode": "native"},
@@ -133,6 +137,7 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
             "seed": row["seed"],
             "success": row["metrics"]["success"],
             "collisions": 0,
+            "steps": row["steps"],
             "execution_status": "written",
             "trace_complete": True,
             "source_file": "runs/goal__differential_drive/episodes.jsonl",
@@ -1526,6 +1531,7 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         "behaviour_receipt.schema.json",
         "behaviour_receipt_nodes.json",
         "receipt_provenance.py",
+        "receipt_outcomes.py",
     ):
         destination = tmp_path / "scripts/ci" / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1711,6 +1717,7 @@ def test_raw_index_preserves_planted_regression_detection(tmp_path, fault, reaso
     elif fault == "success":
         raw[-1]["metrics"]["success"] = False
     elif fault == "collision":
+        raw[-1]["metrics"]["collisions"] = 1
         raw[-1]["metrics"]["total_collision_count"] = 1
     elif fault == "duplicate_summary":
         summary.append(copy.deepcopy(summary[-1]))

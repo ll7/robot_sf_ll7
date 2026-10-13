@@ -44,6 +44,36 @@ missing objects fail closed. The 32 MiB limit applies to decoded payloads,
 including LFS objects; use only receipt data rather than raw traces in these
 files, and keep traces at the external artifact URI.
 
+## Required outcome evidence
+
+The base-owned `scripts/ci/receipt_outcomes.py` is the single outcome contract
+used by collection, classification, raw comparison and committed admission.
+Every written raw episode requires `metrics.success` (a JSON boolean),
+`metrics.collisions` and `metrics.total_collision_count` (equal nonnegative
+integers), and top-level `steps` (a positive integer). Every summary requires top-level `success`, `collisions` and `steps`
+with the same types and values as its raw episode. No missing value becomes
+false or zero; missing fields refuse even when both arms omit them and their
+producer seals and compact hashes are coherently regenerated.
+
+Explicit success/collision aliases must be correctly typed and agree with the
+canonical value. They never replace a missing canonical field. The benchmark
+producer emits both mandatory raw collision counts from the same aggregate;
+a missing or contradictory count refuses.
+Outcome reads do not alter original sealed rows. All behavioral fields,
+including outcomes, unknown fields and presence changes, remain in the exact
+canonical byte comparison. The existing raw legacy NaN/Infinity token policy
+for other metrics, strict duplicate/overflow checks, full receipt requirements
+for releases, and hardware/source/execution/coverage guards remain in force.
+
+The equivalence classifier separately owns a seven-entry literal map of
+reviewed preparation and diagnostic blobs in `REVIEWED_BASE_ONLY_BLOBS`.
+Each exception requires the current-main committed file to be a regular Git
+blob with exactly the reviewed SHA-256. The candidate's merge-base diff must
+not include that path, even if its final bytes equal main. Edits, deletions,
+renames and type changes refuse. Protected paths are checked before exceptions,
+and a separate reviewed neutral transition is still required. These entries do
+not exempt directories, releases, runtime fields or downstream admission checks.
+
 ## Producer flow
 
 Use `scripts/ci/make_behaviour_receipt.py` to build the committed payload and

@@ -374,11 +374,14 @@ def _episode():
                     {
                         "robot": {"position": [0.1, 0.0]},
                         "pedestrians": [],
-                        "collision": {},
-                        "rl": {"reward": 0.0},
+                        "collision": {"pedestrian": False, "obstacle": False, "robot": False},
+                        "rl": {"reward": 0.0, "terminated": False, "truncated": False},
                         "planner": {
-                            "selected_action": {"linear_velocity": 1.0},
-                            "applied_environment_action": {"linear_velocity": 1.0},
+                            "selected_action": {"linear_velocity": 1.0, "angular_velocity": 0.0},
+                            "applied_environment_action": {
+                                "linear_velocity": 1.0,
+                                "angular_velocity": 0.0,
+                            },
                         },
                     }
                 ],

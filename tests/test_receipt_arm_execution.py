@@ -83,7 +83,10 @@ def sealed_override(tmp_path, source_repo):
                 algo="orca"
             )["planner_kinematics"]
             step = row["algorithm_metadata"]["simulation_step_trace"]["steps"][0]
-            step.update(collision={"obstacle": False}, rl={"reward": 0.0})
+            step.update(
+                collision={"pedestrian": False, "obstacle": False, "robot": False},
+                rl={"reward": 0.0, "terminated": False, "truncated": False},
+            )
             step["planner"]["applied_environment_action"] = {
                 "linear_velocity": 1.0,
                 "angular_velocity": 0.0,

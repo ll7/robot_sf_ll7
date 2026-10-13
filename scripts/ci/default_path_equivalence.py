@@ -736,6 +736,16 @@ def validate_runtime_source(row: dict, source: str) -> None:
             )
 
 
+def _finite_trace_number(value: Any) -> bool:
+    """Recorded scalars must be finite numbers, never booleans or coercible values."""
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def episode_bytes(row: dict[str, Any]) -> bytes:
     """Compare all episode fields except the exact documented transport leaves."""
     receipt_outcomes.raw_outcomes(row)
@@ -750,18 +760,53 @@ def episode_bytes(row: dict[str, Any]) -> bytes:
     gate._require(
         isinstance(steps, list) and bool(steps), "equivalence refused: missing step trace"
     )
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+
+    algorithm = row.get("algo") or row.get("algorithm")
+    if not isinstance(algorithm, str) or not algorithm.strip():
+        raise ValueError(
+            "equivalence refused: invalid requested/applied action schema: missing algorithm"
+        )
+    profile = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+    # The reviewed matrix uses differential_drive_r1m. The source writer exports
+    # both native and adapted actions as this two-component unicycle payload,
+    # including PPO's native branch and guarded PPO's mixed dispatch.
+    gate._require(
+        profile["planner_command_space"]
+        in {"unicycle_vw", "mixed_vw_or_vxy", "mixed_vw_or_unicycle"}
+        and profile.get("benchmark_command_space", "unicycle_vw") == "unicycle_vw",
+        "equivalence refused: invalid requested/applied action schema: unsupported arm command space",
+    )
     for step in steps:
         gate._require(
             isinstance(step, dict)
-            and all(key in step for key in ("robot", "pedestrians", "planner", "collision", "rl")),
+            and isinstance(step.get("robot"), dict)
+            and bool(step["robot"])
+            and isinstance(step.get("pedestrians"), list)
+            and isinstance(step.get("rl"), dict)
+            and _finite_trace_number(step["rl"].get("reward"))
+            and all(type(step["rl"].get(key)) is bool for key in ("terminated", "truncated"))
+            and isinstance(step.get("collision"), dict)
+            and all(
+                type(step["collision"].get(key)) is bool
+                for key in ("pedestrian", "obstacle", "robot")
+            ),
             "equivalence refused: incomplete action/pose/event/reward trace",
         )
-        planner = step["planner"]
+        planner = step.get("planner")
         gate._require(
             isinstance(planner, dict)
             and all(key in planner for key in ("selected_action", "applied_environment_action")),
             "equivalence refused: missing requested/applied action trace",
         )
+        for name in ("selected_action", "applied_environment_action"):
+            action = planner[name]
+            gate._require(
+                isinstance(action, dict)
+                and set(action) == {"linear_velocity", "angular_velocity"}
+                and all(_finite_trace_number(value) for value in action.values()),
+                f"equivalence refused: invalid requested/applied action schema: {name}",
+            )
     for path in EXCLUDED_LEAVES:
         parent = projected
         for part in path[:-1]:
@@ -771,6 +816,19 @@ def episode_bytes(row: dict[str, Any]) -> bytes:
         if isinstance(parent, dict):
             parent.pop(path[-1], None)
     return raw_token_bytes(projected)
+
+
+def validate_scope_entries(scope: dict) -> None:
+    """A Cartesian matrix cannot silently collapse duplicate scope entries."""
+    for field in ("arms", "maps"):
+        entries = scope.get(field)
+        if not isinstance(entries, list) or not all(
+            isinstance(entry, str) and bool(entry.strip()) for entry in entries
+        ):
+            raise ValueError(f"equivalence refused: invalid scope {field}")
+        gate._require(
+            len(entries) == len(set(entries)), f"equivalence refused: duplicate scope {field}"
+        )
 
 
 def comparison_rows(
@@ -783,6 +841,7 @@ def comparison_rows(
     allocation_identities: dict | None = None,
 ) -> list[dict]:
     """Produce complete paired digests for diagnostics, never admission by itself."""
+    validate_scope_entries(scope)
     expected = set(itertools.product(scope["arms"], scope["maps"], SEEDS))
     gate._require(
         set(head_rows) == expected == set(baseline_rows),

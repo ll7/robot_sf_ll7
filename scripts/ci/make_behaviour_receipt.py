@@ -2600,6 +2600,7 @@ def _make_equivalence_receipt(args: argparse.Namespace, repo_root: Path) -> int:
         (scheduler, baseline), args.tooling_sha, args.seeds, repo_root
     )
     scope = _load_scope(args.scope_path)
+    equivalence.validate_scope_entries(scope)
     if len(scope["arms"]) != 14 or len(scope["maps"]) != 51:
         raise ValueError("equivalence requires the full reviewed 14-arm/51-slot matrix")
     source_context = {
@@ -2620,6 +2621,9 @@ def _make_equivalence_receipt(args: argparse.Namespace, repo_root: Path) -> int:
         head_execution_statuses=head_statuses,
         baseline_execution_statuses=baseline_statuses,
         allocation_identities=identities,
+    )
+    behaviour_receipt._require(
+        len(rows) == 2142, "equivalence refused: expected 2142 paired episodes"
     )
     behaviour_receipt.validate_scheduler_rows(rows, identities)
     for row in rows:

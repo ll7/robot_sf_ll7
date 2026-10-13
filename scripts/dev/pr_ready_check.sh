@@ -997,22 +997,6 @@ while IFS= read -r changed_file; do
   else
     core_changed_files+=("$changed_file")
   fi
-  # A change to shipped behavior (robot_sf/, configs/, maps/) or to a test root
-  # that no lane covers can break the uncovered roots, so they must run.
-  case "$changed_file" in
-    robot_sf/*|configs/*|maps/*)
-      pr_ready_extended_required=1
-      pr_ready_extended_trigger_files+=("$changed_file")
-      ;;
-  esac
-  for pr_ready_uncovered_root in "${pr_ready_uncovered_test_roots[@]}"; do
-    case "$changed_file" in
-      "${pr_ready_uncovered_root}"/*)
-        pr_ready_extended_required=1
-        pr_ready_extended_trigger_files+=("$changed_file")
-        ;;
-    esac
-  done
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
 # Issue #9851: impact routing has a wider contract than the surviving-file

@@ -198,46 +198,72 @@ def test_fast_pysf_non_runtime_subtrees_stay_on_existing_lanes(
     assert impact == []
 
 
-def _run_receipt_block(tmp_path: Path, *, required: bool, trigger_files: tuple[str, ...]) -> str:
-    """Execute the shipped lane receipt block with a controlled lane stub."""
+def _run_classification_and_receipt(tmp_path: Path, *, change: str) -> tuple[str, str]:
+    """Run production classification into the receipt block with only lane stubs."""
     tmp_path.mkdir(parents=True, exist_ok=True)
+    repo = _fixture_repo(tmp_path)
+    if change == "delete":
+        removed = repo / "robot_sf/removed.py"
+        removed.write_text("removed\n", encoding="utf-8")
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-qm", "add deleted impact fixture")
+        _git(repo, "branch", "-f", "base")
+        removed.unlink()
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "delete impact fixture")
+    elif change == "docs":
+        (repo / "docs/keep.txt").write_text("docs update\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "docs-only fixture")
+    else:
+        raise ValueError(f"unsupported fixture change: {change}")
+
     source = READY_SCRIPT.read_text(encoding="utf-8")
-    receipt_block = source.split("pr_ready_extended_ran=0\n", 1)[1].split(
-        'mark_pr_ready_progress "post_lane_checks"', 1
-    )[0]
-    trigger_array = " ".join(shlex.quote(path) for path in trigger_files)
+    classification_block = _classification_block()
+    receipt_block = (
+        "pr_ready_extended_ran=0\n"
+        + source.split("pr_ready_extended_ran=0\n", 1)[1].split(
+            'mark_pr_ready_progress "post_lane_checks"', 1
+        )[0]
+    )
     shell = "\n".join(
         (
             "set -euo pipefail",
-            f"REPO_ROOT={shlex.quote(str(tmp_path))}",
+            "BASE_REF=base",
+            "is_optional_readiness_path() { return 1; }",
+            classification_block,
+            "printf 'REQUIRED:%s\\n' \"$pr_ready_extended_required\"",
+            "printf 'REASON:%s\\n' \"$pr_ready_extended_reason\"",
+            'for path in "${pr_ready_extended_trigger_files[@]}"; do printf \'IMPACT:%s\\n\' "$path"; done',
+            f"REPO_ROOT={shlex.quote(str(repo))}",
             "SCRIPT_DIR=/unused",
-            "pr_ready_uncovered_test_roots=(tests/validation tests/maps)",
-            "optional_changed_files=()",
-            f"pr_ready_extended_required={'1' if required else '0'}",
-            f"pr_ready_extended_trigger_files=({trigger_array})",
-            f"pr_ready_extended_reason={shlex.quote('changed impact paths: ' + ' '.join(trigger_files) if trigger_files else 'no changed paths matched the extended-lane impact roots')}",
-            "pr_ready_extended_ran=0",
             "run_pr_ready_lane() { printf 'STUB_RUN:%s\\n' \"$1\"; }",
             "mark_pr_ready_progress() { :; }",
             receipt_block,
         )
     )
     result = subprocess.run(
-        ["bash", "-c", shell], cwd=tmp_path, check=False, capture_output=True, text=True
+        ["bash", "-c", shell], cwd=repo, check=False, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
-    return (tmp_path / "output/validation/pr_ready/lane_coverage.txt").read_text(encoding="utf-8")
+    receipt = (repo / "output/validation/pr_ready/lane_coverage.txt").read_text(encoding="utf-8")
+    return result.stdout + result.stderr, receipt
 
 
 def test_lane_coverage_receipt_records_extended_reason_for_run_and_skip(tmp_path: Path) -> None:
-    """The production receipt states the extended lane decision and its reason."""
-    run_receipt = _run_receipt_block(
-        tmp_path / "run", required=True, trigger_files=("robot_sf/removed.py",)
-    )
+    """Production classification feeds the lane decision and reason into its receipt."""
+    run_output, run_receipt = _run_classification_and_receipt(tmp_path / "run", change="delete")
+    assert "REQUIRED:1" in run_output
+    assert "REASON:changed impact paths: robot_sf/removed.py" in run_output
+    assert "IMPACT:robot_sf/removed.py" in run_output
+    assert "STUB_RUN:extended" in run_output
     assert "extended lane:  ran (tests/validation tests/maps)" in run_receipt
     assert "extended lane reason: changed impact paths: robot_sf/removed.py" in run_receipt
 
-    skip_receipt = _run_receipt_block(tmp_path / "skip", required=False, trigger_files=())
+    skip_output, skip_receipt = _run_classification_and_receipt(tmp_path / "skip", change="docs")
+    assert "REQUIRED:0" in skip_output
+    assert "REASON:no changed paths matched the extended-lane impact roots" in skip_output
+    assert "STUB_RUN:extended" not in skip_output
     assert "extended lane:  NOT RUN" in skip_receipt
     assert "extended lane reason: no changed paths matched the extended-lane impact roots" in (
         skip_receipt

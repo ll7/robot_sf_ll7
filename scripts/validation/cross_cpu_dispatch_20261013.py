@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 STUDY = ROOT / "scripts/validation/cross_cpu_20261013/study.json"
@@ -99,6 +100,14 @@ def prepare(destination, smoke=False):
         payload = dict(base)
         if mode == "float64":
             payload["numerical_mode"] = "pinned_float64_v1"
+            payload["planners"] = [dict(p) for p in base["planners"]]
+            for planner in payload["planners"]:
+                if planner["key"] in {"ppo", "guarded_ppo"}:
+                    actor = yaml.safe_load((ROOT / planner["algo_config"]).read_text())
+                    actor["numerical_mode"] = "pinned_float64_v1"
+                    actor_path = destination / f"float64-{planner['key']}.yaml"
+                    actor_path.write_text(yaml.safe_dump(actor, sort_keys=False))
+                    planner["algo_config"] = str(actor_path)
         else:
             payload.pop("numerical_mode", None)
         (destination / f"{mode}.yaml").write_text(yaml.safe_dump(payload, sort_keys=False))
@@ -174,6 +183,35 @@ def identity():
     }
 
 
+def validate_input(path, cfg, smoke=False):
+    """Refuse altered coordinates or non-CPU learned arms before any episode."""
+    import yaml
+
+    payload = yaml.safe_load(path.read_text())
+    stop = cfg["seed_start"] if smoke else cfg["seed_stop"]
+    expected = list(range(cfg["seed_start"], stop + 1))
+    policy = payload.get("seed_policy", {})
+    if policy.get("mode") != "fixed-list" or policy.get("seeds") != expected:
+        raise ValueError("input seed policy differs from authorized development inventory")
+    if payload.get("scenario_candidates") != cfg["scenarios"]:
+        raise ValueError("input scenario inventory differs from frozen study")
+    if [p["key"] for p in payload.get("planners", [])] != cfg["arms"] or payload.get(
+        "workers"
+    ) != cfg["workers"]:
+        raise ValueError("input arm/worker inventory differs from frozen study")
+    for planner in payload["planners"]:
+        if planner["key"] in {"ppo", "guarded_ppo"}:
+            actor_path = Path(planner["algo_config"])
+            if not actor_path.is_absolute():
+                actor_path = ROOT / actor_path
+            actor = yaml.safe_load(actor_path.read_text())
+            if (
+                actor.get("device") != "cpu"
+                or actor.get("model_id") not in cfg["checkpoint_sha256"]
+            ):
+                raise ValueError("learned arm differs from CPU-only checkpoint contract")
+
+
 def run(destination, config_root, smoke=False, preflight=False, selected_campaign=None):
     """Run each frozen campaign with bounded process-tree time and durable logs."""
     cfg = contract()
@@ -197,6 +235,7 @@ def run(destination, config_root, smoke=False, preflight=False, selected_campaig
     receipts = []
     for campaign in campaigns:
         mode = campaign.split("-", 1)[0]
+        validate_input(config_root / f"{mode}.yaml", cfg, smoke)
         env = environment(cfg, mode, destination / "contexts" / campaign)
         command = [
             sys.executable,
@@ -475,7 +514,7 @@ def compare(first, second, destination):
             ]
         )
         for name, left, right in comparisons:
-            counts = {
+            counts: dict[str, Any] = {
                 "total": 0,
                 "scientific_identical": 0,
                 "learned_identical": 0,

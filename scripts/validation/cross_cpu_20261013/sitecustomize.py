@@ -8,6 +8,7 @@ import atexit
 import json
 import os
 from pathlib import Path
+from typing import Any, cast
 
 
 def initialize():
@@ -24,7 +25,8 @@ def initialize():
         from threadpoolctl import threadpool_info
 
         if mode != "default":
-            torch.backends.mkldnn.enabled = False
+            # Torch exposes this module attribute through a ContextProp descriptor.
+            cast(Any, torch.backends.mkldnn).enabled = False
             if not _set_torch_deterministic_algorithms(torch, True):
                 raise RuntimeError("deterministic algorithms setter unavailable")
             torch.set_num_threads(1)

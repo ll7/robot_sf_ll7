@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+import yaml
 
 from scripts.validation import cross_cpu_dispatch_20261013 as study
 
@@ -68,3 +69,37 @@ def test_bad_coordinate_inventory_is_rejected(tmp_path, fault):
     destination.write_text("\n".join(lines))
     with pytest.raises(ValueError, match="duplicate|missing|outside"):
         study.records(tmp_path, "default-r1", cfg)
+
+
+def test_float64_config_binds_both_actors_without_changing_kernel_only_arm(tmp_path):
+    """Float64 opt-in must agree at campaign and each learned-arm boundary."""
+    study.prepare(tmp_path)
+    pinned = yaml.safe_load((tmp_path / "pinned.yaml").read_text())
+    numeric = yaml.safe_load((tmp_path / "float64.yaml").read_text())
+    assert "numerical_mode" not in pinned
+    assert numeric["numerical_mode"] == "pinned_float64_v1"
+    assert pinned["seed_policy"]["seeds"] == list(range(1001, 1031))
+    for arm in (p for p in numeric["planners"] if p["key"] in {"ppo", "guarded_ppo"}):
+        generated = yaml.safe_load(open(arm["algo_config"], encoding="utf-8"))
+        assert generated.pop("numerical_mode") == "pinned_float64_v1"
+        original = next(p for p in pinned["planners"] if p["key"] == arm["key"])
+        assert generated == yaml.safe_load((study.ROOT / original["algo_config"]).read_text())
+
+
+def test_altered_seed_input_is_refused_before_launch(tmp_path, monkeypatch):
+    """Do not let edited generated inputs bypass the study's dev seed contract."""
+    study.prepare(tmp_path)
+    path = tmp_path / "default.yaml"
+    payload = yaml.safe_load(path.read_text())
+    payload["seed_policy"]["seeds"][0] = 1000
+    path.write_text(yaml.safe_dump(payload))
+
+    def refused_launch(*args, **kwargs):
+        raise AssertionError("episode launch reached before input guard")
+
+    monkeypatch.setenv("SLURM_JOB_ID", "unit-test")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "4")
+    monkeypatch.setattr(study, "identity", lambda: {})
+    monkeypatch.setattr(study.subprocess, "Popen", refused_launch)
+    with pytest.raises(ValueError, match="authorized development inventory"):
+        study.run(tmp_path / "acquisition", tmp_path, selected_campaign="default-r1")

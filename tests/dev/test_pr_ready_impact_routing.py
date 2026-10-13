@@ -84,7 +84,7 @@ def _classify(repo: Path) -> tuple[list[str], list[str]]:
             "is_optional_readiness_path() { return 1; }",
             _classification_block(),
             'for path in "${changed_files[@]}"; do printf "CHANGED:%s\\n" "$path"; done',
-            'for path in "${pr_ready_extended_trigger_files[@]}"; do printf "IMPACT:%s\\n" "$path"; done',
+            'for path in "${pr_ready_extended_trigger_files[@]}"; do printf "IMPACT:%q\\n" "$path"; done',
         )
     )
     result = subprocess.run(
@@ -316,6 +316,15 @@ def _run_classification_and_receipt(tmp_path: Path, *, change: str) -> tuple[str
         maps_source.parent.rmdir()
         _git(repo, "add", "-A")
         _git(repo, "commit", "-qm", "rename final extended roots out")
+    elif change == "newline_path":
+        changed_path = repo / "robot_sf/line\nname.py"
+        changed_path.write_text("original newline path\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "add newline impact fixture")
+        _git(repo, "branch", "-f", "base")
+        changed_path.write_text("changed newline path\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "modify newline impact fixture")
     else:
         raise ValueError(f"unsupported fixture change: {change}")
 
@@ -335,7 +344,7 @@ def _run_classification_and_receipt(tmp_path: Path, *, change: str) -> tuple[str
             classification_block,
             "printf 'REQUIRED:%s\\n' \"$pr_ready_extended_required\"",
             "printf 'REASON:%s\\n' \"$pr_ready_extended_reason\"",
-            'for path in "${pr_ready_extended_trigger_files[@]}"; do printf \'IMPACT:%s\\n\' "$path"; done',
+            'for path in "${pr_ready_extended_trigger_files[@]}"; do printf \'IMPACT:%q\\n\' "$path"; done',
             f"REPO_ROOT={shlex.quote(str(repo))}",
             "SCRIPT_DIR=/unused",
             "run_pr_ready_lane() { printf 'STUB_RUN:%s\\n' \"$1\"; }",
@@ -369,6 +378,22 @@ def test_lane_coverage_receipt_records_extended_reason_for_run_and_skip(tmp_path
     assert "extended lane reason: no changed paths matched the extended-lane impact roots" in (
         skip_receipt
     )
+
+
+def test_lane_coverage_receipt_quotes_newline_impact_path(tmp_path: Path) -> None:
+    """Production receipt rendering keeps a newline-bearing impact path on one line."""
+    run_output, run_receipt = _run_classification_and_receipt(tmp_path, change="newline_path")
+    quoted_path = "$'robot_sf/line\\nname.py'"
+    expected_reason = f"changed impact paths: {quoted_path}"
+
+    assert f"REASON:{expected_reason}\n" in run_output
+    assert f"IMPACT:{quoted_path}\n" in run_output
+    assert "STUB_RUN:extended" in run_output
+    reason_lines = [
+        line for line in run_receipt.splitlines() if line.startswith("  extended lane reason:")
+    ]
+    assert reason_lines == [f"  extended lane reason: {expected_reason}"]
+    assert "robot_sf/line\nname.py" not in run_receipt
 
 
 @pytest.mark.parametrize(

@@ -1100,7 +1100,8 @@ done
 if [[ ${#pr_ready_extended_trigger_files[@]} -gt 0 ]]; then
   pr_ready_extended_reason="changed impact paths:"
   for impact_file in "${pr_ready_extended_trigger_files[@]}"; do
-    pr_ready_extended_reason+=" $impact_file"
+    printf -v pr_ready_quoted_impact_file '%q' "$impact_file"
+    pr_ready_extended_reason+=" $pr_ready_quoted_impact_file"
   done
 else
   pr_ready_extended_reason="no changed paths matched the extended-lane impact roots"

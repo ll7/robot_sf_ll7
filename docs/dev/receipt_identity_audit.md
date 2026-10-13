@@ -1,6 +1,6 @@
 # Receipt identity audit
 
-Audit for the correction after PR #10366 review at `7e98201cc221d058403dd2071de4b37470343852`. Source anchors below refer to this revision; update the audit when these boundaries change.
+Audit updated after the sixth PR #10366 review at `1805b43a6e163340387b47e64e9fac11a671f23f`. Source anchors below refer to this revision; update the audit when these boundaries change.
 
 The authoritative distinct slot is the runtime sweep's `EpisodeSlot`. Its current fields, obtained from `EpisodeSlot._fields`, are `(arm, kinematics, scenario, seed)`. `reconcile_execution` uses the shared `episode_slot(actual_row)` and `expected_episode_slots(config, scenarios)` functions for observed and expected identities. Receipt tooling imports those functions and the native type; it has no separate slot-axis inventory or Cartesian tuple definition.
 
@@ -27,19 +27,21 @@ This inventory includes direct identity extraction/key/count sites and the sourc
 | [scripts/ci/receipt_provenance.py:220](../../scripts/ci/receipt_provenance.py#L220) `directory_arm` | Independent observed-directory roster projection, using native _arm_key. |
 | [scripts/ci/receipt_provenance.py:227](../../scripts/ci/receipt_provenance.py#L227) `_row_source_matches_observed` | Require the retained raw source location to identify the observed file. |
 | [scripts/ci/receipt_provenance.py:241](../../scripts/ci/receipt_provenance.py#L241) `native_row_key` | Entire actual row to native episode_slot and native selector agreement; preserve precedence inputs; require directory/source and all present scenario declarations to agree. |
-| [scripts/ci/receipt_provenance.py:315](../../scripts/ci/receipt_provenance.py#L315) `_sweep_summaries` | Validate independent summary IDs and contained source paths; summaries do not determine accepted native keys. |
-| [scripts/ci/receipt_provenance.py:356](../../scripts/ci/receipt_provenance.py#L356) `joined_sweep_episodes` | Native raw-key uniqueness, unique agreeing summaries, exact raw/summary/path coverage; return native keys only after all checks. |
-| [scripts/ci/receipt_provenance.py:509](../../scripts/ci/receipt_provenance.py#L509) `_producer_identity` | Actual native key must agree with original producer scenario/seed links before execution proof is minted. |
-| [scripts/ci/receipt_provenance.py:585](../../scripts/ci/receipt_provenance.py#L585) `verify_producer_seals` | Directory selects strict proof decoding only; logical row identity is checked by _producer_identity. |
-| [scripts/ci/receipt_provenance.py:665](../../scripts/ci/receipt_provenance.py#L665) `write_binding` | Fresh allocation binding requires verified producer/native identity first. |
-| [scripts/ci/receipt_provenance.py:688](../../scripts/ci/receipt_provenance.py#L688) `verify_binding` | Verify frozen bindings and producer/native identity before exposing sealed rows. |
-| [scripts/ci/receipt_provenance.py:728](../../scripts/ci/receipt_provenance.py#L728) `verify_optional_binding` | Collection custody entry to the same producer verifier. |
-| [scripts/ci/receipt_provenance.py:737](../../scripts/ci/receipt_provenance.py#L737) `verified_raw_rows` | Committed/collection raw-source frontier: shared native join on original sealed objects; preserve proof attributes and compare outcomes/status. |
+| [scripts/ci/receipt_provenance.py:320](../../scripts/ci/receipt_provenance.py#L320) `_sweep_summaries` | Validate independent summary IDs, contained source paths and nested robot type against the extracted slot; summaries do not determine accepted native keys. |
+| [scripts/ci/receipt_provenance.py:362](../../scripts/ci/receipt_provenance.py#L362) `joined_sweep_episodes` | Native raw-key uniqueness, unique agreeing summaries, exact raw/summary/path coverage; return native keys only after all checks. |
+| [scripts/ci/receipt_provenance.py:515](../../scripts/ci/receipt_provenance.py#L515) `_producer_identity` | Actual native key must agree with original producer scenario/seed links before execution proof is minted. |
+| [scripts/ci/receipt_provenance.py:591](../../scripts/ci/receipt_provenance.py#L591) `verify_producer_seals` | Directory selects strict proof decoding only; logical row identity is checked by _producer_identity. |
+| [scripts/ci/receipt_provenance.py:671](../../scripts/ci/receipt_provenance.py#L671) `write_binding` | Fresh allocation binding requires verified producer/native identity first. |
+| [scripts/ci/receipt_provenance.py:694](../../scripts/ci/receipt_provenance.py#L694) `verify_binding` | Verify frozen bindings and producer/native identity before exposing sealed rows. |
+| [scripts/ci/receipt_provenance.py:734](../../scripts/ci/receipt_provenance.py#L734) `verify_optional_binding` | Collection custody entry to the same producer verifier. |
+| [scripts/ci/receipt_provenance.py:743](../../scripts/ci/receipt_provenance.py#L743) `verified_raw_rows` | Committed/collection raw-source frontier: shared native join on original sealed objects; preserve proof attributes and compare outcomes/status. |
 | [scripts/ci/receipt_provenance.py:86](../../scripts/ci/receipt_provenance.py#L86) `canonical_slot` | Enumerate the runtime type fields to validate every axis before key use. |
 | [scripts/ci/receipt_provenance.py:111](../../scripts/ci/receipt_provenance.py#L111) `compact_slot` | Decode the whole native_slot mapping; require presentation labels and native extraction to agree. |
 | [scripts/ci/receipt_provenance.py:149](../../scripts/ci/receipt_provenance.py#L149) `native_keyed_rows` | Immediately replace legacy direct-call declaration keys with actual-row native slots; no reduced key survives. |
 | [scripts/ci/receipt_provenance.py:178](../../scripts/ci/receipt_provenance.py#L178) `reviewed_slots` | Use native campaign loader and expected_episode_slots for the independently reviewed expected set, including all configuration axes. |
 | [scripts/ci/receipt_provenance.py:288](../../scripts/ci/receipt_provenance.py#L288) `_validate_slot_declarations` | Compare directory, every runtime row encoding field and explicit robot configuration with the extracted slot. |
+
+| [scripts/ci/receipt_provenance.py:303](../../scripts/ci/receipt_provenance.py#L303) `_validate_robot_kinematics` | Shared raw/summary check for scenario_params.robot_config.type against the verified native slot. |
 
 ## scripts/ci/receipt_arm_execution.py
 
@@ -120,7 +122,7 @@ This inventory includes direct identity extraction/key/count sites and the sourc
 | [scripts/validation/run_empty_world_sweep.py:335](../../scripts/validation/run_empty_world_sweep.py#L335) | `_arm_key`; runtime source unchanged |
 | [scripts/validation/run_empty_world_sweep.py:457](../../scripts/validation/run_empty_world_sweep.py#L457) | `_kinematics`; runtime source unchanged |
 | [scripts/validation/run_empty_world_sweep.py:380](../../scripts/validation/run_empty_world_sweep.py#L380) | `flatten`; runtime source unchanged |
-| [scripts/validation/run_empty_world_sweep.py:511](../../scripts/validation/run_empty_world_sweep.py#L511) | `reconcile_execution`; runtime source unchanged |
+| [scripts/validation/run_empty_world_sweep.py:570](../../scripts/validation/run_empty_world_sweep.py#L570) | `reconcile_execution`; shared native slot refactor is supplied by the separate prerequisite PR; simulated execution unchanged |
 | [robot_sf/benchmark/camera_ready/_config.py:386](../../robot_sf/benchmark/camera_ready/_config.py#L386) | `_sanitize_name`; runtime source unchanged |
 | [robot_sf/benchmark/camera_ready/_config.py:732](../../robot_sf/benchmark/camera_ready/_config.py#L732) | `_scenario_name_key`; runtime source unchanged |
 | [robot_sf/benchmark/camera_ready/_run_state.py:81](../../robot_sf/benchmark/camera_ready/_run_state.py#L81) | `_coerce_identifier`; runtime source unchanged |

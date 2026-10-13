@@ -297,6 +297,11 @@ def _validate_slot_declarations(row: dict, context: dict, path: Path, key: Episo
             raise HardwareIdentityError(
                 "receipt identity refused: native row slot declaration differs"
             )
+    _validate_robot_kinematics(row, key)
+
+
+def _validate_robot_kinematics(row: dict, key: EpisodeSlot) -> None:
+    """Check the native nested robot declaration even behind directory priority."""
     params = row.get("scenario_params") or {}
     robot = params.get("robot_config") or {}
     if "type" in robot and robot["type"] != key.kinematics:
@@ -349,6 +354,7 @@ def _sweep_summaries(root: Path) -> list[tuple[EpisodeSlot, dict, Path, Path]]:
                     raise HardwareIdentityError(
                         "receipt identity refused: native summary slot differs"
                     )
+            _validate_robot_kinematics(summary, declared)
             summaries.append((declared, summary, source_path, path))
     return summaries
 

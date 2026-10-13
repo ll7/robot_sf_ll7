@@ -15,6 +15,7 @@ import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pysocialforce
@@ -142,7 +143,7 @@ def legacy_run_task(task):
             config.scene_config.agent_radius = radius
         return config
 
-    reused.candidate_config = configured
+    reused.candidate_config = cast("Any", configured)
     reused.RADIUS = radius
     row = {"case": case, "seed": seed, "variant": variant, "radius_m": radius, "mode": mode}
     if case in {"V1", "V5", "V6"}:
@@ -417,7 +418,7 @@ def run_task(task):  # noqa: C901, PLR0915
         traces.append((p, v, desired))
         return p, v
 
-    reused.candidate_config = configured
+    reused.candidate_config = cast("Any", configured)
     reused.harness.simulate = captured
     reused.RADIUS = radius
     row = {

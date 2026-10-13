@@ -9,7 +9,7 @@ import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from numba import njit
@@ -296,7 +296,7 @@ def lanes(candidate):
     def configured(factor, offset):
         return candidate_config(candidate, 0.65)
 
-    harness.config = configured
+    harness.config = cast("Any", configured)
     try:
         return {"candidate": candidate, "result": harness.lanes(candidate[1:])}
     finally:

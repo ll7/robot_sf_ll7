@@ -12,7 +12,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pysocialforce as pysf
@@ -237,7 +237,7 @@ def lanes(pair):
         state, walls, dirs = orig(c, cal)
         return state, [(a, c_, b, d) for a, b, c_, d in walls], dirs
 
-    ep._BUILDERS["bidirectional_corridor"] = corrected
+    ep._BUILDERS["bidirectional_corridor"] = cast("Any", corrected)
     f, b = pair
     rows = []
     for s in SEEDS:

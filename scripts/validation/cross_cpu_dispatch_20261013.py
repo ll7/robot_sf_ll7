@@ -15,6 +15,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import shlex
 import signal
 import subprocess
 import sys
@@ -173,7 +174,7 @@ def identity():
     }
 
 
-def run(destination, config_root, smoke=False, preflight=False):
+def run(destination, config_root, smoke=False, preflight=False, selected_campaign=None):
     """Run each frozen campaign with bounded process-tree time and durable logs."""
     cfg = contract()
     if not os.environ.get("SLURM_JOB_ID"):
@@ -184,7 +185,15 @@ def run(destination, config_root, smoke=False, preflight=False):
         raise FileExistsError("fresh acquisition directory required; preserve failed attempts")
     destination.mkdir(parents=True)
     write_json(destination / "environment.json", identity())
-    campaigns = ["default-canary"] if smoke or preflight else cfg["campaigns"]
+    if selected_campaign is not None and (
+        selected_campaign not in cfg["campaigns"] or smoke or preflight
+    ):
+        raise ValueError("single campaign selection requires a full-study campaign")
+    campaigns = (
+        ["default-canary"]
+        if smoke or preflight
+        else ([selected_campaign] if selected_campaign else cfg["campaigns"])
+    )
     receipts = []
     for campaign in campaigns:
         mode = campaign.split("-", 1)[0]
@@ -248,13 +257,16 @@ def canonical(value):
 def records(root, campaign, cfg):
     """Index every native row by explicit arm/scenario/seed, rejecting omissions."""
     indexed = {}
+    campaign_root = root / "campaigns" / campaign
+    if not campaign_root.exists():
+        campaign_root = root / "jobs" / campaign / "campaigns" / campaign
     for arm in cfg["arms"]:
-        paths = list((root / "campaigns" / campaign).glob(f"**/{arm}/**/episodes.jsonl"))
+        paths = list(campaign_root.glob(f"**/{arm}/**/episodes.jsonl"))
         if len(paths) != 1:
             # Canonical campaign directories include arm plus kinematics.
             paths = [
                 p
-                for p in (root / "campaigns" / campaign).rglob("episodes.jsonl")
+                for p in campaign_root.rglob("episodes.jsonl")
                 if p.parent.name == f"{arm}__differential_drive"
             ]
         if len(paths) != 1:
@@ -328,19 +340,103 @@ def audit(loaded, destination):
         raise ValueError("native evidence audit failed; inspect row_audit.json")
 
 
+IDENTITY_FIELDS = (
+    "commit",
+    "lock_sha256",
+    "inventory_sha256",
+    "study_sha256",
+    "driver_sha256",
+    "hook_sha256",
+)
+
+
+def collect(root):
+    """Reconcile single-campaign jobs only after every producer has stopped."""
+    cfg = contract()
+    identities, receipts = [], []
+    for campaign in cfg["campaigns"]:
+        job = root / "jobs" / campaign
+        if json.loads((job / "COMPLETE.json").read_text()).get("campaigns") != [campaign]:
+            raise ValueError("incomplete or mismatched single-campaign receipt")
+        execution = json.loads((job / "execution.json").read_text())
+        if len(execution) != 1 or execution[0]["campaign"] != campaign or execution[0]["exit_code"]:
+            raise ValueError("non-success single-campaign receipt")
+        identities.append(json.loads((job / "environment.json").read_text()))
+        receipts.extend(execution)
+        records(root, campaign, cfg)
+    for field in (*IDENTITY_FIELDS, "hostname", "kernel", "glibc"):
+        if any(i.get(field) != identities[0].get(field) for i in identities):
+            raise ValueError(f"within-CPU identity mismatch: {field}")
+    write_json(root / "environment.json", identities[0])
+    write_json(root / "job_environments.json", identities)
+    write_json(root / "execution.json", receipts)
+    write_json(root / "COMPLETE.json", {"campaigns": cfg["campaigns"], "completed": True})
+
+
+def submit(root, config_root, nodes, partitions, qos):
+    """Submit exactly eight bounded CPU-only jobs and preserve scheduler receipts."""
+    cfg = contract()
+    if (root / "submission.json").exists():
+        raise FileExistsError("existing submission receipt; no duplicate dispatch")
+    if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT):
+        raise RuntimeError("freeze and commit the producer before dispatch")
+    (root / "slurm").mkdir(parents=True, exist_ok=True)
+    receipts = []
+    for cpu, node, partition, queue_qos in zip(
+        ("amd", "intel"), nodes, partitions, qos, strict=True
+    ):
+        for campaign in cfg["campaigns"]:
+            command = [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "run",
+                "--campaign",
+                campaign,
+                "--destination",
+                str(root / cpu / "jobs" / campaign),
+                "--config-root",
+                str(config_root),
+            ]
+            scheduler = [
+                "sbatch",
+                "--parsable",
+                f"--partition={partition}",
+                f"--qos={queue_qos}",
+                f"--nodelist={node}",
+                "--cpus-per-task=4",
+                "--mem=16G",
+                "--time=04:00:00",
+                f"--chdir={ROOT}",
+                f"--output={root / 'slurm'}/%j-{cpu}-{campaign}.out",
+                "--wrap",
+                shlex.join(command),
+            ]
+            job_id = subprocess.check_output(scheduler, text=True).strip().split(";", 1)[0]
+            receipt = {
+                "cpu": cpu,
+                "campaign": campaign,
+                "node": node,
+                "job_id": job_id,
+                "sbatch": scheduler,
+                "config_sha256": digest(config_root / f"{campaign.split('-', 1)[0]}.yaml"),
+            }
+            receipts.append(receipt)
+            write_json(root / "submission.json", receipts)
+            detail = subprocess.check_output(["scontrol", "show", "job", job_id, "-o"], text=True)
+            (root / "slurm" / f"{job_id}-submission.txt").write_text(detail)
+    print(
+        json.dumps(
+            {"job_ids": [r["job_id"] for r in receipts], "maximum_acquisition_cpu_hours": 128}
+        )
+    )
+
+
 def compare(first, second, destination):
     """Compare paired scientific rows and write a complete coordinate ledger."""
     cfg = contract()
     destination.mkdir(parents=True, exist_ok=True)
     identities = [json.loads((r / "environment.json").read_text()) for r in (first, second)]
-    for field in (
-        "commit",
-        "lock_sha256",
-        "inventory_sha256",
-        "study_sha256",
-        "driver_sha256",
-        "hook_sha256",
-    ):
+    for field in IDENTITY_FIELDS:
         if not identities[0].get(field) or identities[0][field] != identities[1].get(field):
             raise ValueError(f"cross-CPU environment identity mismatch: {field}")
     for root in (first, second):
@@ -435,20 +531,44 @@ def manifest(root):
 def main():
     """Parse a bounded acquisition or offline analysis command."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "run", "compare", "manifest"))
+    parser.add_argument(
+        "command", choices=("prepare", "submit", "run", "collect", "compare", "manifest")
+    )
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--config-root", type=Path)
     parser.add_argument("--first", type=Path)
     parser.add_argument("--second", type=Path)
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--campaign", choices=contract()["campaigns"])
+    parser.add_argument("--nodes", nargs=2)
+    parser.add_argument("--partitions", nargs=2)
+    parser.add_argument("--qos", nargs=2)
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args.destination.resolve(), args.smoke)
+    elif args.command == "submit":
+        if any(x is None for x in (args.config_root, args.nodes, args.partitions, args.qos)):
+            parser.error("submit requires --config-root and two --nodes/--partitions/--qos")
+        submit(
+            args.destination.resolve(),
+            args.config_root.resolve(),
+            args.nodes,
+            args.partitions,
+            args.qos,
+        )
     elif args.command == "run":
         if args.config_root is None:
             parser.error("run requires --config-root")
-        run(args.destination.resolve(), args.config_root.resolve(), args.smoke, args.preflight)
+        run(
+            args.destination.resolve(),
+            args.config_root.resolve(),
+            args.smoke,
+            args.preflight,
+            args.campaign,
+        )
+    elif args.command == "collect":
+        collect(args.destination.resolve())
     elif args.command == "compare":
         if args.first is None or args.second is None:
             parser.error("compare requires --first and --second")

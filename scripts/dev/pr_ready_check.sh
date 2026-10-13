@@ -1015,6 +1015,52 @@ while IFS= read -r changed_file; do
   done
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
+# Issue #9851: impact routing has a wider contract than the surviving-file
+# inputs above.  Read name-status records separately so deletion-only changes
+# and both endpoints of a rename can select the extended lane without handing
+# removed paths to formatting or pytest.  ``scripts/validation`` is imported
+# by the uncovered validation/map tests.  The tests also import the
+# fast-pysf runtime package, and its package/lock manifests can change that
+# API; fast-pysf tests already belong to the fixed core lane, while its
+# docs/examples/benchmarks/maps remain on their existing lanes.
+pr_ready_impact_files=()
+while IFS= read -r -d '' change_status; do
+  IFS= read -r -d '' change_path || break
+  pr_ready_impact_files+=("$change_path")
+  case "$change_status" in
+    R*|C*)
+      IFS= read -r -d '' change_path || break
+      pr_ready_impact_files+=("$change_path")
+      ;;
+  esac
+done < <(git diff --name-status -z --find-renames --diff-filter=ACDMRT "$BASE_REF...HEAD")
+for impact_file in "${pr_ready_impact_files[@]}"; do
+  case "$impact_file" in
+    robot_sf/*|configs/*|maps/*|scripts/validation/*|\
+      fast-pysf/pysocialforce/*|fast-pysf/pyproject.toml|fast-pysf/uv.lock|\
+      pyproject.toml|uv.lock)
+      pr_ready_extended_required=1
+      pr_ready_extended_trigger_files+=("$impact_file")
+      ;;
+  esac
+  for pr_ready_uncovered_root in "${pr_ready_uncovered_test_roots[@]}"; do
+    case "$impact_file" in
+      "${pr_ready_uncovered_root}"/*)
+        pr_ready_extended_required=1
+        pr_ready_extended_trigger_files+=("$impact_file")
+        ;;
+    esac
+  done
+done
+if [[ ${#pr_ready_extended_trigger_files[@]} -gt 0 ]]; then
+  pr_ready_extended_reason="changed impact paths:"
+  for impact_file in "${pr_ready_extended_trigger_files[@]}"; do
+    pr_ready_extended_reason+=" $impact_file"
+  done
+else
+  pr_ready_extended_reason="no changed paths matched the extended-lane impact roots"
+fi
+
 # Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
 # and covered by the optional test allowlist if classified as optional.
 for changed_file in "${changed_files[@]}"; do
@@ -1292,9 +1338,11 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
       printf '  uncovered roots: none\n'
     elif [[ "$pr_ready_extended_ran" -eq 1 ]]; then
       printf '  extended lane:  ran (%s)\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  extended lane reason: %s\n' "$pr_ready_extended_reason"
       printf '  uncovered roots: none remaining\n'
     else
       printf '  extended lane:  NOT RUN\n'
+      printf '  extended lane reason: %s\n' "$pr_ready_extended_reason"
       printf '  NOT COVERED by this readiness run: %s\n' "${pr_ready_uncovered_test_roots[*]}"
       printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
     fi

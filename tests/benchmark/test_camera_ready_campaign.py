@@ -2243,7 +2243,7 @@ def test_load_campaign_config_parses_snqi_contract_block(tmp_path: Path) -> None
                 "  rank_alignment_fail_threshold: 0.4",
                 "  outcome_separation_warn_threshold: 0.1",
                 "  outcome_separation_fail_threshold: 0.0",
-                "  calibration_seed: 77",
+                "  calibration_seed: 1001",
                 "  calibration_trials: 1234",
                 "planners:",
                 "  - key: goal",
@@ -2263,7 +2263,7 @@ def test_load_campaign_config_parses_snqi_contract_block(tmp_path: Path) -> None
     assert cfg.snqi_contract.outcome_separation_fail_threshold == pytest.approx(0.0)
     assert cfg.snqi_contract.max_component_dominance_warn_threshold == pytest.approx(0.24)
     assert cfg.snqi_contract.max_component_dominance_fail_threshold == pytest.approx(0.27)
-    assert cfg.snqi_contract.calibration_seed == 77
+    assert cfg.snqi_contract.calibration_seed == 1001
     assert cfg.snqi_contract.calibration_trials == 1234
 
 
@@ -5313,7 +5313,7 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
                 "  rank_alignment_fail_threshold: 1.1",
                 "  outcome_separation_warn_threshold: 1.2",
                 "  outcome_separation_fail_threshold: 1.1",
-                "  calibration_seed: 123",
+                "  calibration_seed: 1001",
                 "  calibration_trials: 10",
                 "planners:",
                 "  - key: goal",
@@ -5425,7 +5425,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                 "  rank_alignment_fail_threshold: 1.1",
                 "  outcome_separation_warn_threshold: 1.2",
                 "  outcome_separation_fail_threshold: 1.1",
-                "  calibration_seed: 123",
+                "  calibration_seed: 1001",
                 "  calibration_trials: 10",
                 "planners:",
                 "  - key: goal",
@@ -6889,7 +6889,7 @@ def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
                 "  rank_alignment_fail_threshold: 1.1",
                 "  outcome_separation_warn_threshold: 1.2",
                 "  outcome_separation_fail_threshold: 1.1",
-                "  calibration_seed: 123",
+                "  calibration_seed: 1001",
                 "  calibration_trials: 10",
                 "planners:",
                 "  - key: goal",

@@ -623,3 +623,144 @@ def test_provenance_uses_resolved_scenario_budget_and_timestep(tmp_path, boundar
         assert result["benchmark_success_allowed"] is True
     else:
         assert result[0].verdict == "skip-complete"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("config_hash", "contradictory-config"),
+        (
+            "telemetry_profile",
+            {
+                "schema_version": "analysis-telemetry-profile.v1",
+                "analysis_trace": "all",
+                "planner_debug_trace": "none",
+            },
+        ),
+    ],
+)
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_separate_provenance_copy_cannot_contradict_campaign(tmp_path, field, value, boundary):
+    """Neither provenance format can silently mislabel an admitted or reused row."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    row["provenance"] = {"config_hash": row["config_hash"], "telemetry_profile": None}
+    clean = _configured_check(tmp_path, cfg, scenario, row, boundary)
+    if boundary == "admission":
+        assert clean["benchmark_success_allowed"] is True
+    else:
+        assert clean[0].verdict == "skip-complete"
+    row["provenance"][field] = value
+    _resign(row)
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize(
+    "profile,trace_available",
+    [
+        ("off", False),
+        ("debug-only", False),
+        ("all", False),
+        ("all", True),
+    ],
+)
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_separate_provenance_accepts_actual_producer_hash_and_profile(
+    tmp_path, profile, trace_available, boundary
+):
+    """Both trace hashes and trace-unavailable fallback hashes bind trusted inputs."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import _build_episode_record_dict
+    from robot_sf.benchmark.map_runner.map_runner_identity import (
+        _scenario_with_episode_seed_defaults,
+    )
+    from robot_sf.benchmark.observation_noise import normalize_observation_noise_spec
+    from robot_sf.benchmark.tracking_precision_contract import normalize_tracking_precision_spec
+
+    cfg, scenario, row = _runtime_case(tmp_path)
+    enabled = profile == "all"
+    telemetry = {
+        "analysis_trace": "all" if enabled else "off",
+        "planner_debug_trace": "all" if profile != "off" else "none",
+    }
+    cfg = replace(cfg, telemetry=telemetry)
+    scoped = expected_arm_scenarios(
+        [scenario], cfg=cfg, planner=cfg.planners[0], kinematics="differential_drive"
+    )[0]
+    row["scenario_params"] = producer_params(
+        scoped,
+        1001,
+        algo="social_force",
+        horizon=600,
+        dt=0.1,
+        observation_mode="socnav_state",
+        record_simulation_step_trace=enabled,
+    )
+    _resign(row)
+    algo_meta = {}
+    if enabled:
+        algo_meta["telemetry"] = {"schema_version": "analysis-telemetry-profile.v1", **telemetry}
+    if trace_available:
+        prepared = _scenario_with_episode_seed_defaults(scoped, seed=1001)
+        algo_meta["analysis_trace"] = {
+            "config_hash": _config_hash(
+                {key: value for key, value in prepared.items() if key not in {"seed", "repeats"}}
+            )
+        }
+    produced = _build_episode_record_dict(
+        scenario_id=row["scenario_id"],
+        seed=1001,
+        scenario_params=row["scenario_params"],
+        metrics={},
+        safety_predicates={},
+        public_requirement_events={},
+        algo_meta=algo_meta,
+        noise_spec=normalize_observation_noise_spec(None),
+        noise_stats={},
+        tracking_precision_spec=normalize_tracking_precision_spec(None),
+        algo="social_force",
+        active_observation_mode="socnav_state",
+        active_observation_level="tracked_agents_no_noise",
+        ts_start="",
+        ts_end="",
+        status="success",
+        steps_taken=1,
+        horizon_val=600,
+        wall_time=1.0,
+        termination_reason="success",
+        outcome={},
+        contradictions=[],
+        view_integrity=None,
+    )
+    row["provenance"] = produced["provenance"]
+    result = _configured_check(tmp_path, cfg, scenario, row, boundary)
+    if boundary == "admission":
+        assert result["benchmark_success_allowed"] is True, result["blockers"]
+    else:
+        assert result[0].verdict == "skip-complete"
+
+
+@pytest.mark.parametrize("field", ["config_hash", "telemetry_profile"])
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_separate_provenance_requires_runtime_identity_fields(tmp_path, field, boundary):
+    """A present producer block cannot omit either of its runtime identity labels."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    row["provenance"] = {"config_hash": row["config_hash"], "telemetry_profile": None}
+    del row["provenance"][field]
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize("provenance", [None, [], "invalid"])
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_separate_provenance_refuses_malformed_blocks(tmp_path, provenance, boundary):
+    """Malformed separate provenance is a blocker, not a bypass or exception."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    row["provenance"] = provenance
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)
+
+
+@pytest.mark.parametrize("field,value", [("run_horizon", 60), ("future_runtime_setting", True)])
+@pytest.mark.parametrize("boundary", ["admission", "resume"])
+def test_separate_provenance_refuses_extra_runtime_claims(tmp_path, field, value, boundary):
+    """Known mirrors must match, and new provenance fields need an explicit identity decision."""
+    cfg, scenario, row = _runtime_case(tmp_path)
+    row["provenance"] = {"config_hash": row["config_hash"], "telemetry_profile": None, field: value}
+    _assert_configured_rejection(tmp_path, cfg, scenario, row, boundary)

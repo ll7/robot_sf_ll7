@@ -12,7 +12,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     resolve_learned_checkpoint_observation_contract,
 )
-from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile, telemetry_from_scenario
 from robot_sf.benchmark.camera_ready._config import (
     _apply_fixed_campaign_horizon,
     _scenario_with_kinematics,
@@ -128,11 +128,28 @@ RUNTIME_IDENTITY_FIELDS = frozenset(
         "record_simulation_step_trace",
     }
 )
+RUNTIME_MIRROR_FIELDS = RUNTIME_IDENTITY_FIELDS | {
+    "horizon",
+    "dt",
+    "observation_noise",
+    "telemetry_profile",
+}
+ROW_PROVENANCE_LINEAGE_FIELDS = frozenset(
+    {
+        "artifact_uri",
+        "artifact_sha256",
+        "map_digest",
+        "scenario_digest",
+        "git_hash",
+        "planner_commit",
+    }
+)
 IDENTITY_EXCLUSIONS = {
     "scenario.seed/seeds": "Producer removes inventories; exact integer row seed is checked separately.",
     "algorithm_metadata": "Adapter diagnostics may expand defaults or describe a child planner; signed algo_config_hash binds the selected policy.",
     "git_hash/result_provenance.repo_commit": "Software provenance is checked separately against the campaign manifest by final integrity.",
     "result_provenance.schema_version/episode_id/raw_artifact/jsonl_line/postprocessing": "Envelope and artifact lineage, not runtime settings; provenance validation checks artifact evidence separately.",
+    "provenance.artifact_uri/artifact_sha256/map_digest/scenario_digest/git_hash/planner_commit": "Artifact/trace lineage and software revision annotations, not additional runtime selections; complete signed scenario/policy identity and execution receipts bind inputs.",
     "metrics/outcome/trajectories/timing": "Measured outputs, not runtime configuration; behaviour receipts provide execution evidence.",
 }
 
@@ -146,6 +163,7 @@ class ExpectedEpisodeIdentity:
     params: dict[str, Any]
     optional_copies: dict[str, Any]
     simulator_settings: dict[str, Any]
+    provenance_config_hashes: frozenset[str]
 
 
 def expected_runtime_identity(
@@ -223,6 +241,7 @@ def expected_episode_identity(
         else selected.get("simulation_config", {}).get("time_per_step_in_secs", 0.1)
     )
     wrapper = spec.safety_wrapper if spec.safety_wrapper is not None else cfg.safety_wrapper
+    telemetry = telemetry_from_scenario(selected)
     params = _scenario_identity_payload(
         selected,
         algo=algo,
@@ -241,7 +260,7 @@ def expected_episode_identity(
         else None,
         safety_wrapper=wrapper,
         record_planner_decision_trace=cfg.record_planner_decision_trace,
-        record_simulation_step_trace=cfg.record_simulation_step_trace,
+        record_simulation_step_trace=cfg.record_simulation_step_trace or telemetry.analysis_enabled,
     )
     unknown = set(params) - (set(selected) | {"id"} | RUNTIME_IDENTITY_FIELDS)
     if unknown:
@@ -253,6 +272,16 @@ def expected_episode_identity(
     )
     noise_hash = observation_noise_hash(normalize_observation_noise_spec(cfg.observation_noise))
     precision_hash = tracking_precision_hash(normalize_tracking_precision_spec(None))
+    provenance_hashes = {_config_hash(params)}
+    if telemetry.analysis_enabled:
+        # The producer's analysis trace hashes the prepared scenario, while a
+        # trace-unavailable episode falls back to the signed runtime payload.
+        # Both candidates come exclusively from trusted campaign inputs.
+        provenance_hashes.add(
+            _config_hash(
+                {key: value for key, value in selected.items() if key not in {"seed", "repeats"}}
+            )
+        )
     return ExpectedEpisodeIdentity(
         str(selected.get("name") or selected.get("scenario_id") or selected.get("id") or "unknown"),
         seed,
@@ -261,6 +290,7 @@ def expected_episode_identity(
             **params,
             "horizon": effective_horizon,
             "dt": float(effective_dt),
+            "telemetry_profile": telemetry.to_mapping() if telemetry.analysis_enabled else None,
             "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
             "observation_noise_hash": noise_hash,
             "tracking_precision": normalize_tracking_precision_spec(None),
@@ -275,6 +305,7 @@ def expected_episode_identity(
             noise_hash=noise_hash,
             tracking_precision_hash=precision_hash,
         ),
+        frozenset(provenance_hashes),
     )
 
 
@@ -306,7 +337,7 @@ def _runtime_copy_errors(record: Mapping[str, Any], expected: Mapping[str, Any])
         Conflicting runtime-label fields, including unsigned row-level copies.
     """
     errors: dict[str, Any] = {}
-    for field in RUNTIME_IDENTITY_FIELDS | {"horizon", "dt", "observation_noise"}:
+    for field in RUNTIME_MIRROR_FIELDS:
         if field in record and json.dumps(record[field], sort_keys=True) != json.dumps(
             expected.get(field), sort_keys=True
         ):
@@ -343,6 +374,8 @@ def row_runtime_identity_errors(
         if record.get(field) != value:
             errors[field] = "missing or different from selected campaign"
     errors.update(_runtime_copy_errors(record, expected.optional_copies))
+    if "provenance" in record:
+        errors.update(_record_provenance_identity_errors(record["provenance"], expected))
     if "result_provenance" in record:
         errors.update(_provenance_runtime_identity_errors(record["result_provenance"], expected))
     return errors
@@ -389,4 +422,30 @@ def _provenance_runtime_identity_errors(
             or provenance[field] != value
         ):
             errors[f"result_provenance.{field}"] = "missing or different from selected campaign"
+    return errors
+
+
+def _record_provenance_identity_errors(
+    provenance: Any, expected: ExpectedEpisodeIdentity
+) -> dict[str, Any]:
+    """Check the producer's separate provenance block without trusting its claims.
+
+    Returns:
+        Configuration hash/profile mismatches and contradictory runtime mirrors.
+    """
+    if not isinstance(provenance, Mapping):
+        return {"provenance": "must be a mapping"}
+    errors = {
+        f"provenance.{field}": error
+        for field, error in _runtime_copy_errors(provenance, expected.optional_copies).items()
+    }
+    allowed = ROW_PROVENANCE_LINEAGE_FIELDS | RUNTIME_MIRROR_FIELDS | {"config_hash"}
+    for field in provenance:
+        if field not in allowed:
+            errors[f"provenance.{field}"] = "unexpected field"
+    config_hash = provenance.get("config_hash")
+    if not isinstance(config_hash, str) or config_hash not in expected.provenance_config_hashes:
+        errors["provenance.config_hash"] = "missing or different from selected campaign"
+    if "telemetry_profile" not in provenance:
+        errors["provenance.telemetry_profile"] = "missing field"
     return errors

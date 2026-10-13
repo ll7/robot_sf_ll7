@@ -14,24 +14,62 @@ class HardwareIdentityError(ValueError):
     """Hardware or provenance evidence cannot support an outcome comparison."""
 
 
-def canonical_id(value: object, field: str) -> str:
-    """Refuse selector aliases; return original identity bytes without normalizing.
+def _native_id_values(value: str, field: str) -> tuple[str | None, ...]:
+    """Use the actual native directory, roster and scenario identity functions.
 
-    Planner keys strip padding and preserve case. Scenario lookup additionally
-    compares lowercase names (scenario_loader.select_scenario).
+    Receipt labels must be portable native directory IDs as well as unchanged
+    logical scenario IDs. Keep all native projections to detect collisions in
+    either namespace; do not reproduce their normalization algorithms here.
     """
-    if not isinstance(value, str) or not value or value != value.strip():
-        raise HardwareIdentityError(f"receipt identity refused: noncanonical {field}")
-    if field in {"map", "scenario"} and value != value.lower():
+    from robot_sf.benchmark.camera_ready import _config
+    from robot_sf.training import scenario_loader
+    from scripts.validation import run_empty_world_sweep
+
+    directory = _config._sanitize_name(value)
+    if field == "arm":
+        roster = run_empty_world_sweep._arm_key(
+            {"_source_file": f"runs/{directory}__differential_drive/episodes.jsonl"}
+        )
+        return directory, roster
+    if field in {"map", "scenario"}:
+        scenario = {"name": value}
+        return (
+            directory,
+            _config._scenario_name_key(scenario),
+            scenario_loader._scenario_runtime_identity(scenario),
+        )
+    raise HardwareIdentityError("receipt identity refused: unknown ID axis")
+
+
+def canonical_id(value: object, field: str) -> str:
+    """Refuse changes under any native normalizer; never rewrite evidence bytes."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or any(normalized != value for normalized in _native_id_values(value, field))
+    ):
         raise HardwareIdentityError(f"receipt identity refused: noncanonical {field}")
     return value
 
 
 def canonical_seed(value: object) -> int:
-    """JSON seed IDs must be exact integers, never coerced strings/floats/bools."""
-    if not isinstance(value, int) or type(value) is not int:
+    """Require an exact integer fixed point of the native seed normalizer."""
+    from robot_sf.benchmark.camera_ready import _run_state
+
+    try:
+        normalized = _run_state._coerce_identifier(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise HardwareIdentityError("receipt identity refused: noncanonical seed") from exc
+    if not isinstance(value, int) or type(value) is not int or normalized != value:
         raise HardwareIdentityError("receipt identity refused: noncanonical seed")
     return value
+
+
+def validate_seed_ids(seeds: list[int]) -> None:
+    """Refuse changed native seed IDs and collisions before counting a slice."""
+    checked = [canonical_seed(seed) for seed in seeds]
+    if len(set(checked)) != len(checked):
+        raise HardwareIdentityError("receipt identity refused: normalized seed collision")
 
 
 def canonical_scenario_seed(scenario: object, seed: object) -> tuple[str, int]:
@@ -53,11 +91,21 @@ def validate_pair_keys(rows: dict) -> None:
 
 
 def validate_scope_ids(scope: dict) -> None:
-    """Require canonical scope labels before counting a Cartesian product."""
+    """Refuse native projection collisions and noncanonical labels before counts."""
     for field, label in (("arms", "arm"), ("maps", "map")):
         entries = scope.get(field)
         if not isinstance(entries, list):
             raise HardwareIdentityError(f"receipt identity refused: noncanonical scope {field}")
+        if not all(isinstance(entry, str) for entry in entries):
+            raise HardwareIdentityError(f"receipt identity refused: noncanonical {label}")
+        projections = [_native_id_values(entry, label) for entry in entries]
+        for normalized in zip(*projections, strict=True):
+            if len(set(normalized)) != len(normalized):
+                if len(set(entries)) != len(entries):
+                    raise HardwareIdentityError(f"equivalence refused: duplicate scope {field}")
+                raise HardwareIdentityError(
+                    f"receipt identity refused: noncanonical {label}: normalized scope collision"
+                )
         for entry in entries:
             canonical_id(entry, label)
 

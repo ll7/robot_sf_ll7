@@ -896,8 +896,7 @@ def _full_sha(repo_root: Path, ref: str) -> str:
 def _check_seed_range(seeds: list[int]) -> list[int]:
     if not seeds:
         raise ValueError("at least one development seed is required")
-    for seed in seeds:
-        receipt_provenance.canonical_seed(seed)
+    receipt_provenance.validate_seed_ids(seeds)
     bad = [seed for seed in seeds if seed < DEV_SEED_MIN or seed > DEV_SEED_MAX]
     if bad:
         raise ValueError(f"seeds outside development range {DEV_SEED_MIN}-{DEV_SEED_MAX}: {bad}")

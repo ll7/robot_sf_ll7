@@ -212,14 +212,18 @@ def test_sealed_sources_refuse_noncanonical_ids(exact_source_sweeps, fault):
     assert _sealed_bytes((head,)) == before
 
 
-def test_selectors_preserve_arm_case_but_fold_scenario_case(tmp_path):
-    from robot_sf.benchmark.camera_ready._config import _parse_planner_specs
+def test_campaign_directory_and_scenario_identity_are_normalized(tmp_path):
+    from robot_sf.benchmark.camera_ready._config import _parse_planner_specs, _sanitize_name
     from robot_sf.training.scenario_loader import select_scenario
+    from scripts.ci import receipt_provenance
 
     planners = _parse_planner_specs(
         [{"key": " Goal ", "algo": "goal"}, {"key": "goal", "algo": "goal"}], base_dir=tmp_path
     )
     assert [planner.key for planner in planners] == ["Goal", "goal"]
+    assert [_sanitize_name(planner.key) for planner in planners] == ["goal", "goal"]
+    with pytest.raises(ValueError, match="receipt identity refused: noncanonical arm"):
+        receipt_provenance.canonical_id(planners[0].key, "arm")
     scenarios = [{"name": "open"}, {"name": "OPEN"}]
     assert select_scenario(scenarios, "open") is scenarios[0]
     assert select_scenario(scenarios, "OPEN") is scenarios[0]

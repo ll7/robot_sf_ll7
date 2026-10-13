@@ -999,8 +999,7 @@ def validate_receipt(
         len(scope["arms"]) == 14 and len(scope["maps"]) == 51,
         "equivalence requires the full 14-arm/51-slot scope",
     )
-    for seed in receipt["seeds"]:
-        receipt_provenance.canonical_seed(seed)
+    receipt_provenance.validate_seed_ids(receipt["seeds"])
     gate._require(receipt["seeds"] == list(SEEDS), "equivalence requires dev seeds 1001-1003")
     gate._require(
         receipt["projection_sha256"] == digest(EXCLUDED_LEAVES),

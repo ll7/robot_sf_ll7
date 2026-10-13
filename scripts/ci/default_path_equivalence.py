@@ -797,7 +797,11 @@ def comparison_rows(
         enrich_algorithm_metadata,
     )
     from scripts.ci import receipt_arm_execution
-    from scripts.ci.make_behaviour_receipt import _execution_evidence, require_valid_execution
+    from scripts.ci.make_behaviour_receipt import (
+        _execution_evidence,
+        require_valid_execution,
+        required_execution_mode,
+    )
 
     rows = []
     for key in sorted(expected):
@@ -832,7 +836,7 @@ def comparison_rows(
                 repo_root=gate.ROOT,
             )
             profile = enrich_algorithm_metadata(algo=expected_algorithm)["planner_kinematics"]
-            required_mode = "native" if profile["supports_native_commands"] else "adapter"
+            required_mode = required_execution_mode(expected_algorithm, profile)
             gate._require(
                 evidence["algorithm"] == expected_algorithm
                 and evidence["execution_mode"] == required_mode
@@ -987,6 +991,8 @@ def validate_receipt(
     from scripts.ci import receipt_arm_execution
 
     for row in rows:
+        from scripts.ci.make_behaviour_receipt import required_execution_mode
+
         for side in ("head", "baseline"):
             evidence = row[f"{side}_execution"]
             algorithm = receipt_arm_execution.expected_algorithm(
@@ -998,7 +1004,7 @@ def validate_receipt(
                 repo_root=gate.ROOT,
             )
             profile = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
-            mode = "native" if profile["supports_native_commands"] else "adapter"
+            mode = required_execution_mode(algorithm, profile)
             gate._require(
                 evidence["algorithm"] == algorithm
                 and evidence["execution_mode"] == mode

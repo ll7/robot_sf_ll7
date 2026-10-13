@@ -1581,6 +1581,7 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
         runtime_objects,
         counter_objects,
     ) = _runtime_policy_index()
+    guarded_diagnostics = _GUARDED_DIAGNOSTIC_PATHS if _guarded_mixed_context(row) else frozenset()
 
     def classified(path: tuple[str | None, ...], key: str) -> bool:
         return (
@@ -1588,6 +1589,7 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
             or (path in counter_objects and key in counter_fields)
             or (*path, key) in required
             or (*path, key) in optional
+            or (*path, key) in guarded_diagnostics
         )
 
     def walk(value: Any, path: tuple[str | None, ...] = ()) -> tuple[str, str] | None:
@@ -1612,6 +1614,190 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     return walk(row)
 
 
+# These leaves are source-emitted declarations, not runtime fault reports.
+# guarded_ppo.py:1243 and safety_shield.py:117 emit exactly not_calibrated;
+# map_runner.py:1637-1641 binds the RiskDWA shield configuration. No subtree
+# or arbitrary status/value is excluded from the recursive runtime checker.
+_GUARDED_DIAGNOSTIC_PATHS = frozenset(
+    {
+        ("algorithm_metadata", "safety_shield_contract", "calibration_status"),
+        ("algorithm_metadata", "safety_shield_contract", "fallback_policy"),
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "last_decision",
+            "prediction",
+            "calibration",
+            "status",
+        ),
+        (
+            "algorithm_metadata",
+            "shield_stats",
+            "last_decision",
+            "prediction",
+            "calibration",
+            "status",
+        ),
+    }
+)
+
+_GUARDED_NATIVE_IDENTITIES = {
+    ("algorithm_metadata", "planner_runtime", "planner_type"): "GuardedPPOAdapter",
+    ("algorithm_metadata", "policy_semantics"): "guarded_policy_network_inference",
+    ("event_ledger", "planner"): "guarded_ppo",
+    ("scenario_params", "algo"): "guarded_ppo",
+    (
+        "algorithm_metadata",
+        "paired_effect_metric_producer",
+        "pairing",
+        "key",
+        "planner",
+    ): "guarded_ppo",
+    (
+        "algorithm_metadata",
+        "planner_runtime",
+        "fallback_diagnostics",
+        "planner_type",
+    ): "RiskDWAPlannerAdapter",
+}
+
+# guarded_ppo.py:820/981/991/1062/1098/1158/1166. The reviewed matrix
+# has no optional prior or uncertainty branch; unknown decisions refuse.
+_GUARDED_DECISION_POLICIES = {
+    "goal_reached": "RiskDWAPlannerAdapter",
+    "ppo_clear": "RiskDWAPlannerAdapter",
+    "ppo_safe": "RiskDWAPlannerAdapter",
+    "fallback_safe": "RiskDWAPlannerAdapter",
+    "fallback_best_effort": "RiskDWAPlannerAdapter",
+    "stop_safe": "stop",
+    "stop_best_effort": "stop",
+}
+
+
+def required_execution_mode(algorithm: str, capabilities: dict) -> str:
+    """Preserve the registry's explicit guarded composite; other rules stay fixed."""
+    if (
+        algorithm == "guarded_ppo"
+        and capabilities.get("execution_mode") == "mixed"
+        and capabilities.get("supports_native_commands") is True
+        and capabilities.get("supports_adapter_commands") is True
+        and capabilities.get("adapter_name") == "guarded_ppo_action_to_unicycle"
+    ):
+        return "mixed"
+    return "native" if capabilities["supports_native_commands"] else "adapter"
+
+
+def _guarded_mixed_context(row: dict[str, Any]) -> bool:
+    """Authenticate the source-defined guarded profile and its exact declarations."""
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+    from robot_sf.benchmark.fallback_policy import is_verified_guarded_ppo
+
+    metadata = row.get("algorithm_metadata")
+    if (
+        not isinstance(metadata, dict)
+        or row.get("algo", row.get("algorithm")) != "guarded_ppo"
+        or ("algorithm" in row and row["algorithm"] != "guarded_ppo")
+        or not is_verified_guarded_ppo(metadata, expected_algorithm="guarded_ppo")
+        or required_execution_mode(
+            "guarded_ppo", enrich_algorithm_metadata(algo="guarded_ppo")["planner_kinematics"]
+        )
+        != "mixed"
+    ):
+        return False
+    if any(
+        list(_runtime_objects(row, path)) != [(".".join(path), expected)]
+        for path, expected in _GUARDED_NATIVE_IDENTITIES.items()
+    ):
+        return False
+    planner_contract = metadata.get("planner_contract")
+    if (
+        metadata.get("algorithm") != "ppo"
+        or metadata.get("canonical_algorithm") != "guarded_ppo"
+        or not isinstance(planner_contract, dict)
+        or planner_contract.get("planner_id") != "guarded_ppo"
+    ):
+        return False
+    profile = metadata.get("planner_kinematics")
+    if not isinstance(profile, dict) or any(
+        profile.get(key) != value or type(profile.get(key)) is not type(value)
+        for key, value in {
+            "execution_mode": "mixed",
+            "supports_native_commands": True,
+            "supports_adapter_commands": True,
+            "adapter_active": True,
+            "adapter_name": "guarded_ppo_action_to_unicycle",
+        }.items()
+    ):
+        return False
+    contract = metadata.get("safety_shield_contract")
+    if not isinstance(contract, dict) or any(
+        contract.get(key) != value
+        for key, value in {
+            "schema_version": "safety-shield-contract.v1",
+            "shield_name": "GuardedPPOAdapter",
+            "prediction_source": "short_horizon_rollout",
+            "fallback_policy": "RiskDWAPlannerAdapter",
+            "calibration_status": "not_calibrated",
+        }.items()
+    ):
+        return False
+    decision_identities = []
+    for container in ("planner_runtime", "shield_stats"):
+        owner = metadata.get(container)
+        decision = owner.get("last_decision") if isinstance(owner, dict) else None
+        prediction = decision.get("prediction") if isinstance(decision, dict) else None
+        if (
+            not isinstance(decision, dict)
+            or decision.get("schema_version") != "shield-decision.v1"
+            or not isinstance(prediction, dict)
+            or prediction.get("source") != "short_horizon_rollout"
+            or prediction.get("calibration") != {"status": "not_calibrated"}
+        ):
+            return False
+        label = decision.get("decision_label")
+        expected_policy = _GUARDED_DECISION_POLICIES.get(label) if isinstance(label, str) else None
+        state = decision.get("fallback_controller_state")
+        if (
+            expected_policy is None
+            or not isinstance(state, dict)
+            or state.get("policy") != expected_policy
+            or state.get("prior_available") is not False
+        ):
+            return False
+        decision_identities.append((label, expected_policy))
+    return decision_identities[0] == decision_identities[1]
+
+
+def _guarded_commands_complete(row: dict[str, Any]) -> bool:
+    """Require both finite command axes and the source conversion at every step."""
+    try:
+        trace = row["algorithm_metadata"]["simulation_step_trace"]
+        for step in trace["steps"]:
+            planner = step["planner"]
+            for name in ("selected_action", "applied_environment_action"):
+                command = planner[name]
+                if not isinstance(command, dict) or set(command) != {
+                    "linear_velocity",
+                    "angular_velocity",
+                }:
+                    return False
+                if not all(
+                    type(value) in (int, float) and math.isfinite(value)
+                    for value in command.values()
+                ):
+                    return False
+            conversion = planner["action_conversion"]
+            if (
+                not isinstance(conversion, dict)
+                or conversion.get("schema_version") != "policy-action-conversion.v1"
+                or conversion.get("kind") != "unicycle_velocity_to_acceleration"
+            ):
+                return False
+        return True
+    except (KeyError, TypeError, AttributeError, OverflowError, ValueError):
+        return False
+
+
 def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     from robot_sf.benchmark.fallback_policy import resolve_execution_mode
     from scripts.validation.run_empty_world_sweep import _trace_complete
@@ -1625,13 +1811,16 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
         for path in EXECUTION_EVIDENCE_LOCATIONS["mode_locations"]
         for _, value in _runtime_objects(row, path)
     ]
-    if mode not in {"native", "adapter"} or any(value != mode for value in modes):
+    guarded_mixed = mode == "mixed" and _guarded_mixed_context(row)
+    if (mode not in {"native", "adapter"} and not guarded_mixed) or any(
+        value != mode for value in modes
+    ):
         mode = "unknown"
     profile = metadata.get("planner_kinematics") or {}
     if isinstance(profile, dict) and any(
         path[-1] in profile for path in EXECUTION_EVIDENCE_LOCATIONS["mode_capabilities"]
     ):
-        if profile.get(f"supports_{mode}_commands") is not True:
+        if not guarded_mixed and profile.get(f"supports_{mode}_commands") is not True:
             mode = "unknown"
     marker = (
         _controller_runtime_marker(row, metadata, algorithm)
@@ -1649,6 +1838,7 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
             type(row.get("steps")) is int
             and row["steps"] > 0
             and _trace_complete(row)
+            and (not guarded_mixed or _guarded_commands_complete(row))
             and all(
                 isinstance((step.get("planner") or {}).get("selected_action"), dict)
                 and step["planner"]["selected_action"]
@@ -1814,7 +2004,7 @@ def derive_valid_comparison(
 def require_valid_execution(evidence: dict, algorithm: str, capabilities: dict) -> None:
     """One execution rule for raw derivation and projected receipt validation."""
     reason = None
-    mode = "native" if capabilities["supports_native_commands"] else "adapter"
+    mode = required_execution_mode(algorithm, capabilities)
     if evidence.get("algorithm") != algorithm:
         reason = "row algorithm differs from reviewed arm"
     elif evidence.get("execution_mode") != mode or not (
@@ -1832,7 +2022,10 @@ def require_valid_execution(evidence: dict, algorithm: str, capabilities: dict) 
 def _audit_status(rows: list[dict[str, Any]]) -> str:
     if not rows or any(
         row.get("controller_executed") is not True
-        or row.get("execution_mode") not in {"native", "adapter"}
+        or (
+            row.get("execution_mode") not in {"native", "adapter"}
+            and not (row.get("execution_mode") == "mixed" and row.get("algorithm") == "guarded_ppo")
+        )
         or not row.get("algorithm")
         or row.get("algorithm") == "unknown"
         or type(row.get("fallback")) is not bool

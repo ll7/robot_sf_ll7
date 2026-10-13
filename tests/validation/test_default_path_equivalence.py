@@ -90,6 +90,8 @@ def _fixture_execution_mode(scope, arm, scenario):
     profile = enrich_algorithm_metadata(algo=_fixture_execution_algorithm(scope, arm, scenario))[
         "planner_kinematics"
     ]
+    if _fixture_execution_algorithm(scope, arm, scenario) == "guarded_ppo":
+        return "mixed"
     return "native" if profile["supports_native_commands"] else "adapter"
 
 
@@ -501,6 +503,10 @@ def _write_equivalence_sweep(output, source, job, tooling_sha, tooling_digest, s
                 git_hash=source,
                 algo=scope.get("arm_algorithms", {}).get(arm, "goal"),
             )
+            if raw["algo"] == "guarded_ppo":
+                from tests.validation.receipt_guarded_fixture import guarded_episode
+
+                raw = guarded_episode(raw)
             raw_rows.append(raw)
             summaries.append(
                 {

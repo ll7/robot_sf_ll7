@@ -1124,7 +1124,8 @@
                   "execution_mode": {
                     "enum": [
                       "native",
-                      "adapter"
+                      "adapter",
+                      "mixed"
                     ]
                   },
                   "controller_executed": {
@@ -1147,7 +1148,21 @@
                   "fallback",
                   "degraded"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "if": {
+                  "properties": {
+                    "execution_mode": {
+                      "const": "mixed"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "algorithm": {
+                      "const": "guarded_ppo"
+                    }
+                  }
+                }
               },
               "baseline_execution": {
                 "type": "object",
@@ -1159,7 +1174,8 @@
                   "execution_mode": {
                     "enum": [
                       "native",
-                      "adapter"
+                      "adapter",
+                      "mixed"
                     ]
                   },
                   "controller_executed": {
@@ -1182,7 +1198,21 @@
                   "fallback",
                   "degraded"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "if": {
+                  "properties": {
+                    "execution_mode": {
+                      "const": "mixed"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "algorithm": {
+                      "const": "guarded_ppo"
+                    }
+                  }
+                }
               },
               "scheduler_job_id": {
                 "type": "string",

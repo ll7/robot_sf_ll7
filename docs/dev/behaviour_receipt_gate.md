@@ -474,6 +474,32 @@ rewards, metrics, configuration identities and every unknown field. Missing trac
 fallback/degraded execution, incomplete coverage, node/CPU differences, or one
 changed behavioral byte refuse the route.
 
+Guarded PPO retains its source-defined `mixed` command mode; the receipt never
+relabels it as native. This case requires the guarded algorithm and planner
+identity, both registry and emitted command capabilities, the named guarded
+adapter, a complete trace, finite selected and applied unicycle command axes,
+and the source-defined action conversion at every step. Other mixed algorithms
+remain refused. The two shield-decision calibration leaves and the shield
+contract's calibration/fallback declarations are recognized only with their
+exact source schemas, prediction source and values (`not_calibrated` and
+`RiskDWAPlannerAdapter`). Arbitrary statuses or neighboring fault fields still
+refuse. These declarations remain in the canonical comparison bytes.
+The guarded runtime's planner type, policy semantics, event-ledger planner,
+scenario algorithm and paired-effect planner identity must all be present and
+agree with the native guarded controller. Its fallback diagnostic identifies the
+configured `RiskDWAPlannerAdapter`. Both last-decision copies must agree on a
+source-defined standard label and its policy: `stop_safe`/`stop_best_effort` use
+`stop`; the five standard goal/PPO/fallback labels use the configured RiskDWA
+adapter. The reviewed matrix has no optional prior; prior availability, prior
+labels, uncertainty branches and unknown labels refuse rather than acquiring a
+generic mixed-mode allowance.
+
+Existing authenticated guarded-native decision semantics remain unchanged.
+Best-effort, no-admissible-command and hard-constraint outcomes remain present
+and byte-compared; a byte-equality receipt is not a safety certification or a
+claim that each episode succeeded. Actual controller substitution, load failure
+and runtime degradation still refuse.
+
 Only these exact transport/provenance leaves are excluded:
 
 - `git_hash`

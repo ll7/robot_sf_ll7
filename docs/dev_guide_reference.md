@@ -110,6 +110,9 @@ and `tests/maps/`. The uncovered validation and map tests also depend on
 lane. `fast-pysf/tests/`, documentation, examples, benchmarks, and maps stay on their existing
 lanes. Each readiness run records the extended-lane decision and its impact-path reason in
 `output/validation/pr_ready/lane_coverage.txt`.
+The validation and map roots remain declared impact roots even when a change removes their last
+tracked file. In that case readiness records the required impact and a no-surviving-tests
+disposition without passing nonexistent roots to pytest.
 
 ### Claim-map validation
 

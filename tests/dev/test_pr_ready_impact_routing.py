@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -102,6 +103,35 @@ def _classify(repo: Path) -> tuple[list[str], list[str]]:
     return changed, impact
 
 
+def _run_classification_with_stubbed_impact_producer(
+    repo: Path, *, mode: str
+) -> subprocess.CompletedProcess[str]:
+    """Run production classification while stubbing only its Git impact producer."""
+    shell = "\n".join(
+        (
+            "set -euo pipefail",
+            "BASE_REF=base",
+            "is_optional_readiness_path() { return 1; }",
+            f"IMPACT_PRODUCER_MODE={shlex.quote(mode)}",
+            "git() {",
+            '  if [[ "$1" == diff && "$2" == --name-status && "$3" == -z &&',
+            '    "$4" == --find-renames && "$5" == --diff-filter=ACDMRT ]]; then',
+            '    case "$IMPACT_PRODUCER_MODE" in',
+            "      producer_failure) printf 'D\\0robot_sf/removed.py\\0'; return 7 ;;",
+            "      truncated_record) printf 'R100\\0tests/validation/old.txt\\0tests/validation/new.txt'; return 0 ;;",
+            "      truncated_status) printf 'D'; return 0 ;;",
+            "    esac",
+            "  fi",
+            '  command git "$@"',
+            "}",
+            _classification_block(),
+        )
+    )
+    return subprocess.run(
+        ["bash", "-c", shell], cwd=repo, check=False, capture_output=True, text=True
+    )
+
+
 @pytest.mark.parametrize("root", IMPACT_ROOTS)
 @pytest.mark.parametrize(
     "operation", ("add", "modify", "delete", "rename_out", "rename_in", "rename_within")
@@ -169,6 +199,63 @@ def test_docs_only_change_does_not_route_extended_lane(tmp_path: Path) -> None:
     assert impact == []
 
 
+@pytest.mark.parametrize("root", ("tests/validation", "tests/maps"))
+def test_disappeared_extended_root_still_routes_deleted_path(tmp_path: Path, root: str) -> None:
+    """A deleted last file still affects routing after its root vanishes."""
+    repo = _fixture_repo(tmp_path)
+    shutil.rmtree(repo / root)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "delete final extended root")
+
+    changed, impact = _classify(repo)
+    assert changed == []
+    assert impact == [f"{root}/keep.txt"]
+
+
+@pytest.mark.parametrize("root", ("tests/validation", "tests/maps"))
+def test_rename_out_last_extended_root_still_routes_source_path(tmp_path: Path, root: str) -> None:
+    """A rename out that removes the root still routes the old endpoint."""
+    repo = _fixture_repo(tmp_path)
+    source = repo / root / "keep.txt"
+    source.rename(repo / "docs/renamed-from-extended-root.txt")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "rename final extended root out")
+
+    changed, impact = _classify(repo)
+    assert f"{root}/keep.txt" not in changed
+    assert impact == [f"{root}/keep.txt"]
+
+
+@pytest.mark.parametrize(
+    "mode, expected_exit, expected_message",
+    (
+        (
+            "producer_failure",
+            7,
+            "Cannot resolve readiness impact scope from Git diff; refusing to classify the extended lane.",
+        ),
+        (
+            "truncated_record",
+            2,
+            "Malformed Git impact record: missing rename destination for status R100.",
+        ),
+        ("truncated_status", 2, "Malformed Git impact record: truncated NUL framing."),
+    ),
+)
+def test_impact_producer_failures_do_not_become_no_impact(
+    tmp_path: Path, mode: str, expected_exit: int, expected_message: str
+) -> None:
+    """Git producer and NUL framing failures fail before lane classification."""
+    repo = _fixture_repo(tmp_path)
+    result = _run_classification_with_stubbed_impact_producer(repo, mode=mode)
+
+    assert result.returncode == expected_exit
+    assert expected_message in result.stderr
+    assert "REASON:" not in result.stdout
+    assert "no changed paths matched" not in result.stdout
+    assert not (repo / "output/validation/pr_ready/lane_coverage.txt").exists()
+
+
 @pytest.mark.parametrize("path", FAST_PYSF_RUNTIME_PATHS)
 def test_fast_pysf_runtime_and_manifests_route_extended_lane(tmp_path: Path, path: str) -> None:
     """Runtime package and dependency manifests can affect uncovered adapter tests."""
@@ -215,6 +302,20 @@ def _run_classification_and_receipt(tmp_path: Path, *, change: str) -> tuple[str
         (repo / "docs/keep.txt").write_text("docs update\n", encoding="utf-8")
         _git(repo, "add", "-A")
         _git(repo, "commit", "-qm", "docs-only fixture")
+    elif change == "delete_root":
+        shutil.rmtree(repo / "tests/validation")
+        shutil.rmtree(repo / "tests/maps")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "delete final extended roots")
+    elif change == "rename_root_out":
+        validation_source = repo / "tests/validation/keep.txt"
+        maps_source = repo / "tests/maps/keep.txt"
+        validation_source.rename(repo / "docs/renamed-from-root.txt")
+        maps_source.rename(repo / "docs/renamed-from-maps-root.txt")
+        validation_source.parent.rmdir()
+        maps_source.parent.rmdir()
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "rename final extended roots out")
     else:
         raise ValueError(f"unsupported fixture change: {change}")
 
@@ -268,3 +369,33 @@ def test_lane_coverage_receipt_records_extended_reason_for_run_and_skip(tmp_path
     assert "extended lane reason: no changed paths matched the extended-lane impact roots" in (
         skip_receipt
     )
+
+
+@pytest.mark.parametrize(
+    "change, expected_paths",
+    (
+        (
+            "delete_root",
+            ("tests/maps/keep.txt", "tests/validation/keep.txt"),
+        ),
+        (
+            "rename_root_out",
+            ("tests/maps/keep.txt", "tests/validation/keep.txt"),
+        ),
+    ),
+)
+def test_lane_coverage_receipt_records_required_impact_without_surviving_roots(
+    tmp_path: Path, change: str, expected_paths: tuple[str, ...]
+) -> None:
+    """A required impact with no executable roots is recorded without a false run."""
+    run_output, run_receipt = _run_classification_and_receipt(tmp_path, change=change)
+
+    assert "REQUIRED:1" in run_output
+    for expected_path in expected_paths:
+        assert f"IMPACT:{expected_path}" in run_output
+    assert "STUB_RUN:extended" not in run_output
+    assert "extended lane:  NOT RUN (no surviving test roots)" in run_receipt
+    assert "extended lane reason: changed impact paths:" in run_receipt
+    for expected_path in expected_paths:
+        assert expected_path in run_receipt
+    assert "extended lane disposition: required impact; no surviving tests" in run_receipt

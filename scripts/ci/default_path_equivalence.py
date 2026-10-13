@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.ci import behaviour_receipt as gate
-from scripts.ci import receipt_outcomes
+from scripts.ci import receipt_outcomes, receipt_provenance
 
 VERSION = "default-path-equivalence.v1"
 SEEDS = (1001, 1002, 1003)
@@ -820,6 +820,7 @@ def episode_bytes(row: dict[str, Any]) -> bytes:
 
 def validate_scope_entries(scope: dict) -> None:
     """A Cartesian matrix cannot silently collapse duplicate scope entries."""
+    receipt_provenance.validate_scope_ids(scope)
     for field in ("arms", "maps"):
         entries = scope.get(field)
         if not isinstance(entries, list) or not all(
@@ -842,6 +843,9 @@ def comparison_rows(
 ) -> list[dict]:
     """Produce complete paired digests for diagnostics, never admission by itself."""
     validate_scope_entries(scope)
+    for sources in (head_rows, baseline_rows, head_execution_statuses, baseline_execution_statuses):
+        if sources is not None:
+            receipt_provenance.validate_pair_keys(sources)
     expected = set(itertools.product(scope["arms"], scope["maps"], SEEDS))
     gate._require(
         set(head_rows) == expected == set(baseline_rows),
@@ -989,11 +993,14 @@ def validate_receipt(
         receipt["baseline"]["source_sha"] == base_source,
         "equivalence baseline differs from current main",
     )
+    validate_scope_entries(scope)
     gate._require(receipt["scope_sha256"] == digest(scope), "equivalence scope inventory is stale")
     gate._require(
         len(scope["arms"]) == 14 and len(scope["maps"]) == 51,
         "equivalence requires the full 14-arm/51-slot scope",
     )
+    for seed in receipt["seeds"]:
+        receipt_provenance.canonical_seed(seed)
     gate._require(receipt["seeds"] == list(SEEDS), "equivalence requires dev seeds 1001-1003")
     gate._require(
         receipt["projection_sha256"] == digest(EXCLUDED_LEAVES),

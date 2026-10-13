@@ -22,7 +22,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
 
-from scripts.ci.receipt_provenance import HardwareIdentityError
+from scripts.ci.receipt_provenance import (
+    HardwareIdentityError,
+    canonical_pair_key,
+    validate_scope_ids,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SCOPE_FILE = "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
@@ -468,7 +472,7 @@ def _uri(value: object) -> bool:
 
 
 def _key(row: dict) -> tuple:
-    return row["arm"], row["map"], row["seed"]
+    return canonical_pair_key(row["arm"], row["map"], row["seed"])
 
 
 def require_receipt_only_ancestor(source: str, head: str, label: str) -> None:
@@ -551,6 +555,7 @@ def validate_receipt(
     _require(
         receipt["vehicle"]["id"] == scope["vehicle_id"], "vehicle does not match the reviewed scope"
     )
+    validate_scope_ids(scope)
     for field in ("arms", "maps"):
         _require(
             isinstance(scope[field], list)

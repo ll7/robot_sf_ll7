@@ -896,6 +896,8 @@ def _full_sha(repo_root: Path, ref: str) -> str:
 def _check_seed_range(seeds: list[int]) -> list[int]:
     if not seeds:
         raise ValueError("at least one development seed is required")
+    for seed in seeds:
+        receipt_provenance.canonical_seed(seed)
     bad = [seed for seed in seeds if seed < DEV_SEED_MIN or seed > DEV_SEED_MAX]
     if bad:
         raise ValueError(f"seeds outside development range {DEV_SEED_MIN}-{DEV_SEED_MAX}: {bad}")
@@ -1138,12 +1140,16 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
         if not complete:
             raise ValueError(f"{suite} sweep execution is incomplete")
         records = [json.loads(line) for line in summary.read_text().splitlines() if line.strip()]
+        keys = [
+            receipt_provenance.canonical_pair_key(row["arm"], row["scenario"], row["seed"])
+            for row in records
+        ]
         counts = [meta.get(key) for key in ("expected_slots", "written_rows", "total_episodes")]
         if not records or any(count != len(records) for count in counts):
             raise ValueError(f"{suite} execution row counts differ")
         seeds = meta.get("seeds")
         if not isinstance(seeds, list) or sorted(_check_seed_range(seeds)) != sorted(
-            {row["seed"] for row in records}
+            {key[2] for key in keys}
         ):
             raise ValueError(f"{suite} execution seed identity differs")
         if any(row.get("execution_status") != "written" for row in records):
@@ -1161,13 +1167,10 @@ def _index_raw_episodes(
         if not line.strip():
             continue
         raw = json.loads(line)
-        identity = (raw.get("scenario_id"), raw.get("seed"))
-        try:
-            index.setdefault(identity, []).append(raw)
-        except TypeError:
-            # JSON arrays/objects cannot match a summary's (str, int) identity.
-            # The former linear scan ignored these nonmatching identities too.
-            continue
+        identity = receipt_provenance.canonical_scenario_seed(
+            raw.get("scenario_id"), raw.get("seed")
+        )
+        index.setdefault(identity, []).append(raw)
     cache[path] = index
     return index
 
@@ -1208,7 +1211,7 @@ def _load_sweep_rows(
             if not line.strip():
                 continue
             row = json.loads(line)
-            key = (str(row["arm"]), str(row["scenario"]), int(row["seed"]))
+            key = receipt_provenance.canonical_pair_key(row["arm"], row["scenario"], row["seed"])
             suite = path.stem.removeprefix("episodes_")
             campaign = sweep_dir / "campaigns" / f"empty_world_{suite}"
             source = row.get("source_file")
@@ -1950,6 +1953,10 @@ def build_rows_and_classifications(
     execution_evidence: dict | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Join head/baseline sweep rows into gate payload rows and classifications."""
+    receipt_provenance.validate_scope_ids(scope)
+    for sources in (head_rows, baseline_rows, execution_evidence):
+        if sources is not None:
+            receipt_provenance.validate_pair_keys(sources)
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
     for arm in scope["arms"]:
@@ -2037,6 +2044,9 @@ def derive_valid_comparison(
         enrich_algorithm_metadata,
     )
 
+    receipt_provenance.validate_scope_ids(scope)
+    for sources in (head_rows, baseline_rows):
+        receipt_provenance.validate_pair_keys(sources)
     expected = {
         (arm, map_id, seed)
         for arm in scope["arms"]
@@ -2325,7 +2335,9 @@ def write_receipt_and_header(  # noqa: PLR0913
 
 
 def _load_scope(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    scope = json.loads(path.read_text(encoding="utf-8"))
+    receipt_provenance.validate_scope_ids(scope)
+    return scope
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -2465,9 +2477,10 @@ def _sweep_episode_paths(sweep_dir: Path) -> dict[tuple[str, str, int], str]:
         for line in summary.read_text().splitlines():
             if line.strip():
                 row = json.loads(line)
-                paths[(row["arm"], row["scenario"], row["seed"])] = (
-                    f"campaigns/empty_world_{suite}/{row['source_file']}"
+                key = receipt_provenance.canonical_pair_key(
+                    row["arm"], row["scenario"], row["seed"]
                 )
+                paths[key] = f"campaigns/empty_world_{suite}/{row['source_file']}"
     return paths
 
 
@@ -2478,7 +2491,10 @@ def _sweep_execution_statuses(sweep_dir: Path) -> dict[tuple[str, str, int], str
         for line in summary.read_text().splitlines():
             if line.strip():
                 row = json.loads(line)
-                statuses[(row["arm"], row["scenario"], row["seed"])] = row["execution_status"]
+                key = receipt_provenance.canonical_pair_key(
+                    row["arm"], row["scenario"], row["seed"]
+                )
+                statuses[key] = row["execution_status"]
     return statuses
 
 
@@ -2574,6 +2590,7 @@ def _make_equivalence_receipt(args: argparse.Namespace, repo_root: Path) -> int:
         raise ValueError("equivalence refused: releases require full behaviour receipt")
     if args.mode != "existing" or args.submit_only:
         raise ValueError("equivalence requires existing exact-source, pinned-harness sweeps")
+    _check_seed_range(args.seeds)
     if args.seeds != list(equivalence.SEEDS):
         raise ValueError("equivalence requires --seeds 1001 1002 1003")
     if not behaviour_receipt._digest(args.tooling_sha, 40):

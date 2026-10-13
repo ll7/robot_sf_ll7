@@ -14,6 +14,54 @@ class HardwareIdentityError(ValueError):
     """Hardware or provenance evidence cannot support an outcome comparison."""
 
 
+def canonical_id(value: object, field: str) -> str:
+    """Refuse selector aliases; return original identity bytes without normalizing.
+
+    Planner keys strip padding and preserve case. Scenario lookup additionally
+    compares lowercase names (scenario_loader.select_scenario).
+    """
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise HardwareIdentityError(f"receipt identity refused: noncanonical {field}")
+    if field in {"map", "scenario"} and value != value.lower():
+        raise HardwareIdentityError(f"receipt identity refused: noncanonical {field}")
+    return value
+
+
+def canonical_seed(value: object) -> int:
+    """JSON seed IDs must be exact integers, never coerced strings/floats/bools."""
+    if not isinstance(value, int) or type(value) is not int:
+        raise HardwareIdentityError("receipt identity refused: noncanonical seed")
+    return value
+
+
+def canonical_scenario_seed(scenario: object, seed: object) -> tuple[str, int]:
+    """Validate raw and sidecar identities before indexing or comparing links."""
+    return canonical_id(scenario, "scenario"), canonical_seed(seed)
+
+
+def canonical_pair_key(arm: object, scenario: object, seed: object) -> tuple[str, str, int]:
+    """Validate all pair axes before dictionary/set equality can collapse aliases."""
+    return canonical_id(arm, "arm"), *canonical_scenario_seed(scenario, seed)
+
+
+def validate_pair_keys(rows: dict) -> None:
+    """Check supplied keyed comparisons before Python's permissive key equality."""
+    for key in rows:
+        if not isinstance(key, tuple) or len(key) != 3:
+            raise HardwareIdentityError("receipt identity refused: noncanonical pair key")
+        canonical_pair_key(*key)
+
+
+def validate_scope_ids(scope: dict) -> None:
+    """Require canonical scope labels before counting a Cartesian product."""
+    for field, label in (("arms", "arm"), ("maps", "map")):
+        entries = scope.get(field)
+        if not isinstance(entries, list):
+            raise HardwareIdentityError(f"receipt identity refused: noncanonical scope {field}")
+        for entry in entries:
+            canonical_id(entry, label)
+
+
 def _require(condition: bool, reason: str) -> None:
     if not condition:
         raise HardwareIdentityError(f"hardware comparison invalid: provenance digest {reason}")
@@ -164,8 +212,8 @@ def _producer_identity(
         _require(
             type(link.get("jsonl_line")) is int
             and link["jsonl_line"] == index
-            and (link.get("scenario_id"), link.get("seed"))
-            == (raw.get("scenario_id"), raw.get("seed"))
+            and canonical_scenario_seed(link.get("scenario_id"), link.get("seed"))
+            == canonical_scenario_seed(raw.get("scenario_id"), raw.get("seed"))
             and link.get("repo_commit") == source,
             "producer row source or link differs",
         )
@@ -183,7 +231,7 @@ def _producer_identity(
         ):
             expected = receipt_arm_execution.expected_algorithm(
                 arm,
-                str(raw.get("scenario_id")),
+                canonical_id(raw.get("scenario_id"), "scenario"),
                 expected,
                 row=raw,
                 source_sha=source,
@@ -368,7 +416,7 @@ def verified_raw_rows(
     for path in sorted(root.glob("campaigns/**/episodes.jsonl")):
         arm = path.parent.name.split("__")[0]
         for row in sealed[path.resolve()]:
-            key = (arm, str(row["scenario_id"]), int(row["seed"]))
+            key = canonical_pair_key(arm, row["scenario_id"], row["seed"])
             _require(key not in rows, "duplicate source row")
             row.setdefault("scheduler_job_id", job)
             row.setdefault("scheduler_node", node)
@@ -384,7 +432,7 @@ def verified_raw_rows(
             if not line.strip():
                 continue
             summary = json.loads(line)
-            key = (str(summary["arm"]), str(summary["scenario"]), int(summary["seed"]))
+            key = canonical_pair_key(summary["arm"], summary["scenario"], summary["seed"])
             source_path = (campaign / summary["source_file"]).resolve()
             _require(
                 source_path.is_relative_to(campaign.resolve())

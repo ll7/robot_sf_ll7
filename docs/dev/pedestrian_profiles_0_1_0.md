@@ -91,3 +91,9 @@ fallback. Qualification requires a bounded solver improvement and progress
 measurements on the validation workloads; neither increasing the pass budget
 beyond 10 nor hiding fallback is permitted. Release integration owns the missing
 behaviour receipt and complete workload/custody qualification.
+
+The [raw diagnostic record](https://github.com/ll7/robot_sf_ll7/blob/8695768397134a36cadd94702f31f020a0f5c772/docs/context/evidence/pedestrian_contact_fix_20261013/diagnostics.json)
+and [SHA256 manifest](https://github.com/ll7/robot_sf_ll7/blob/8695768397134a36cadd94702f31f020a0f5c772/docs/context/evidence/pedestrian_contact_fix_20261013/SHA256SUMS)
+remain at the immutable diagnostic archive commit. Its runtime source checksums
+match this fix. Keeping that archive outside the active diff preserves the
+global evidence baseline; these observations still await independent review.

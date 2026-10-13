@@ -497,7 +497,9 @@ class SimulationSettings:
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "pedestrian_radius_m":
-            object.__setattr__(self, "_pedestrian_radius_m", _normalize_shared_pedestrian_radius(value))
+            object.__setattr__(
+                self, "_pedestrian_radius_m", _normalize_shared_pedestrian_radius(value)
+            )
             return
         if name == "obstacle_force_profile":
             resolved = resolve_obstacle_force_profile(value)

@@ -15,7 +15,9 @@ from tests.sim.test_pedestrian_desired_speed import _build_simulator
 
 def test_explicit_radius_reaches_force_physical_placement_and_metric_consumers():
     np.random.seed(1001)
-    settings = SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.04], population_size=8, pedestrian_seed=1001)
+    settings = SimulationSettings(
+        difficulty=0, ped_density_by_difficulty=[0.04], population_size=8, pedestrian_seed=1001
+    )
     settings.pedestrian_radius_m = 0.28  # Old class accepts but silently ignores assignment.
     sim = _build_simulator(settings)
     assert settings.ped_radius == 0.28, "physical radius ignores explicit parameter"

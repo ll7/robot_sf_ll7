@@ -1,0 +1,154 @@
+{
+  "evidence_tier": "synthetic implementation diagnostic; not release qualification or calibrated model evidence",
+  "source_sha256": {
+    "fast-pysf/pysocialforce/contact.py": "6f60b46034c4d69cbe292db810c5c20eaf20a7f5ede8032b78560bb6ca80e804",
+    "fast-pysf/pysocialforce/scene.py": "727cde30e1de0cda2e01be1499ffc1dfbd3254be4e5c246683895e20a1d77437",
+    "fast-pysf/pysocialforce/forces.py": "8fa3c0700922d72936b119f20aa527fbeabf206ae963821e5c0877f99c5540bc",
+    "robot_sf/sim/simulator.py": "e47fbf962fc7f1480ef0c45bf9f78c401b9b9880739d027219b9a392a5928287"
+  },
+  "cost_protocol": {
+    "dev_seed": 1001,
+    "pedestrians": 30,
+    "samples_per_arm": 20,
+    "steps_per_sample": 250,
+    "order": "alternating off/on then on/off",
+    "resets": "identical admissible inputs outside each timed step",
+    "warmup_steps_per_arm": 10,
+    "radius_m": 0.28,
+    "passes": 3,
+    "group_forces": false,
+    "law_profile": "body_edge_v3",
+    "clock": "perf_counter_ns"
+  },
+  "reviewed_source_cost": [
+    {
+      "n": 30,
+      "off_s": [
+        0.000120390708,
+        0.000120026572,
+        0.00011965738400000001,
+        0.00011986296799999999,
+        0.000120084284,
+        0.00012032544800000001,
+        0.000119568072,
+        0.000119913292,
+        0.000120051208,
+        0.00011981153999999999,
+        0.000120103928,
+        0.000120261188,
+        0.000120146536,
+        0.000120134444,
+        0.000120214668,
+        0.000123274544,
+        0.000120865896,
+        0.000120007408,
+        0.00011992497199999999,
+        0.000120192564
+      ],
+      "on_s": [
+        0.000141403236,
+        0.000140901172,
+        0.000140738408,
+        0.000140435432,
+        0.000141417756,
+        0.00014081072399999998,
+        0.00014090382,
+        0.000141263808,
+        0.00014094347200000002,
+        0.00014068334400000002,
+        0.000140928288,
+        0.00014071054,
+        0.000140636368,
+        0.000141001584,
+        0.000141122036,
+        0.000140870068,
+        0.000140672348,
+        0.00014068639600000002,
+        0.000140933024,
+        0.00014083782399999998
+      ],
+      "ratio": 1.171772703209364,
+      "fallbacks": 0
+    }
+  ],
+  "fixed_source_cost": [
+    {
+      "n": 30,
+      "off_s": [
+        0.000132058348,
+        0.000129486096,
+        0.000129271216,
+        0.00012933954,
+        0.00012916219199999999,
+        0.000129780088,
+        0.00012924224800000002,
+        0.00012940945200000002,
+        0.00012936610000000001,
+        0.000129192944,
+        0.00012905572,
+        0.000129208428,
+        0.000129493288,
+        0.0001294535,
+        0.000129270684,
+        0.000129920368,
+        0.000129471412,
+        0.000129275796,
+        0.00012905830400000002,
+        0.000129461396
+      ],
+      "on_s": [
+        0.000148670068,
+        0.000147966788,
+        0.000148912252,
+        0.00014775754,
+        0.000147668996,
+        0.000147919792,
+        0.000147984492,
+        0.000147851832,
+        0.000147939916,
+        0.000147922932,
+        0.000147981424,
+        0.000147676428,
+        0.00014763804000000001,
+        0.000148403796,
+        0.000147761604,
+        0.000149076664,
+        0.000147928744,
+        0.00014791794,
+        0.000147896568,
+        0.000147926908
+      ],
+      "ratio": 1.1431771737041445,
+      "fallbacks": 0
+    }
+  ],
+  "fuzz": {
+    "steps": 3000,
+    "minimum_swept_clearance_m": 9.693194913396042e-09,
+    "maximum_speed": 1.3000000000000005,
+    "fallbacks": 2249,
+    "refused": 0
+  },
+  "fuzz_protocol": {
+    "dev_seeds": [
+      1001,
+      1030
+    ],
+    "passes": [
+      3,
+      10
+    ],
+    "steps_per_seed_and_budget": 50,
+    "actors": 16,
+    "held_indices": [
+      0,
+      15
+    ],
+    "forcing": "independent normal force proposals, standard deviation 20 m/s^2"
+  },
+  "limitations": [
+    "warm cost is synthetic, not full production-matrix budget qualification",
+    "fallbacks halt entire reachable components; not suitable for calibration qualification",
+    "local replay logs do not establish independently retrieved external custody"
+  ]
+}

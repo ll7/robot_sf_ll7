@@ -113,3 +113,88 @@ def test_captured_step_diagnostics_match_executed_contact_motion():
     receipt = sim.peds.last_step_diagnostics
     np.testing.assert_array_equal(receipt.applied_velocity, sim.peds.vel())
     np.testing.assert_allclose(sim.peds.pos() - before, 0.1 * receipt.position_velocity, atol=1e-15)
+
+
+def test_touching_convoy_keeps_collective_and_tangential_motion():
+    """Coupled normal resolution advances a convoy instead of halting its component."""
+    sim = simulator(
+        [
+            [0, 0, 1.3, 0.2, 10, 0, 0.5],
+            [0.560000001, 0, 0.8, 0.2, 10, 0, 0.5],
+            [1.120000002, 0, 0.3, 0.2, 10, 0, 0.5],
+        ]
+    )
+    sim.peds.max_speeds = np.full(3, 3.0)
+    sim.peds.step(np.zeros((3, 2)))
+    # Isotonic normal projection: all three x velocities share their mean .8.
+    np.testing.assert_allclose(sim.peds.vel()[:, 0], 0.8, atol=2e-7)
+    np.testing.assert_allclose(sim.peds.vel()[:, 1], 0.2, atol=1e-12)
+    assert sim.contact_projection_fallback_count == 0
+
+
+def test_coupled_resolution_does_not_apply_tangential_friction():
+    """Coupled normal exclusion cannot erase different tangential velocities."""
+    sim = simulator(
+        [
+            [0, 0, 1.3, 0.2, 10, 0, 0.5],
+            [0.560000001, 0, 0.8, -0.3, 10, 0, 0.5],
+            [1.120000002, 0, 0.3, 0.1, 10, 0, 0.5],
+        ]
+    )
+    sim.peds.max_speeds = np.full(3, 3.0)
+    sim.peds.step(np.zeros((3, 2)))
+    np.testing.assert_allclose(sim.peds.vel()[:, 0], 0.8, atol=2e-7)
+    np.testing.assert_array_equal(sim.peds.vel()[:, 1], [0.2, -0.3, 0.1])
+    assert sim.contact_projection_fallback_count == 0
+
+
+def test_coupled_normal_projection_matches_independent_convex_oracle():
+    """Basis changes must keep the nearest feasible velocity, not merely a safe halt."""
+    from scipy.optimize import LinearConstraint, minimize
+
+    xy = np.array([[0, 0], [0.58, 0], [0.29, 0.58 * np.sqrt(3) / 2], [0.87, 0.58 * np.sqrt(3) / 2]])
+    first, second = np.triu_indices(4, 1)
+    delta = xy[first] - xy[second]
+    distance = np.linalg.norm(delta, axis=1)
+    normals = delta / distance[:, None]
+    constraints = np.zeros((len(first), 8))
+    for k, (i, j) in enumerate(zip(first, second, strict=True)):
+        constraints[k, 2 * i : 2 * i + 2] = normals[k]
+        constraints[k, 2 * j : 2 * j + 2] = -normals[k]
+    lower = -(distance - 0.56 - 1e-8) / 0.1
+    rng = np.random.default_rng(1001)
+    for _ in range(20):
+        velocity = rng.normal(size=(4, 2))
+        velocity *= 1.3 / np.linalg.norm(velocity, axis=1)[:, None]
+        target = velocity.ravel()
+        # All four preferred speeds are 1.3: the global projection's norm is
+        # <=2.6, so the independent 3 m/s individual caps cannot bind here.
+        result = minimize(
+            lambda v: 0.5 * np.dot(v - target, v - target),
+            np.zeros(8),
+            jac=lambda v: v - target,
+            constraints=[LinearConstraint(constraints, lower, np.inf)],
+            method="SLSQP",
+            options={"ftol": 1e-12, "maxiter": 100},
+        )
+        assert result.success
+        state = np.column_stack([xy, velocity, xy + 10, np.full(4, 0.5)])
+        sim = simulator(state)
+        sim.peds.max_speeds = np.full(4, 3.0)
+        sim.peds.step(np.zeros((4, 2)))
+        np.testing.assert_allclose(sim.peds.vel().ravel(), result.x, atol=1e-7)
+        assert sim.contact_projection_fallback_count == 0
+
+
+def test_wall_contact_transmits_pressure_into_free_tangential_motion():
+    """A stationary wall cannot halt an approaching pair's sliding motion."""
+    state = [[-0.28, 0, 1, 0.2, 10, 0, 0.5], [-0.8, -0.25, 1.3, 0.2, 10, 0, 0.5]]
+    state.extend([[-10 - 1.5 * i, 10, 1.3, 0, 0, 10, 0.5] for i in range(6)])
+    sim = simulator(state, walls=[(0, 0, -20, 20)])
+    sim.peds.max_speeds = np.full(8, 3.0)
+    sim.peds.step(np.zeros((8, 2)))
+    assert sim.peds.vel()[0, 1] > 0.5, "wall reaction erased free sliding motion"
+    assert sim.peds.vel()[1, 0] > 0.4
+    assert sim.peds.pos()[0, 0] <= -0.28 + 1e-10
+    assert np.linalg.norm(sim.peds.pos()[0] - sim.peds.pos()[1]) >= 0.56 - 1e-10
+    assert sim.contact_projection_fallback_count == 0

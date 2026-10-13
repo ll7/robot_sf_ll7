@@ -360,6 +360,9 @@ def _capture_contact_runtime(sim, config, speeds, speed_cap):
             "steps": len(speeds),
             "maximum_projection_passes": sim.contact_projection_passes,
             "fallback_count": sim.contact_projection_fallback_count,
+            "fallback_rate": sim.contact_projection_fallback_count / len(speeds)
+            if len(speeds)
+            else 0.0,
             "unresolved_count": sim.contact_projection_unresolved_count,
             "over_cap_samples": int(np.sum(np.asarray(speeds) > np.asarray(caps) + 1e-10)),
         }

@@ -186,7 +186,7 @@ def run_arm(job: tuple[str, dict, int]) -> dict:
             workers=1,
             resume=False,
         )
-    except Exception as exc:  # noqa: BLE001 - retain arbitrary canonical runner failures as failed evidence.
+    except (OSError, RuntimeError, ValueError, TypeError, ImportError) as exc:
         logger.exception("Canonical diagnostic batch failed")
         result = {"error_type": type(exc).__name__, "error": str(exc)}
     result = {
@@ -287,7 +287,7 @@ def canary() -> None:
                     adapter_impact_eval=planner.get("adapter_impact_eval", False),
                     record_simulation_step_trace=True,
                 )
-            except Exception as exc:  # noqa: BLE001 - diagnostic failure ledger must retain every exception.
+            except (OSError, RuntimeError, ValueError, TypeError, ImportError) as exc:
                 logger.exception("Diagnostic binding canary failed")
                 row = {
                     "error_type": type(exc).__name__,

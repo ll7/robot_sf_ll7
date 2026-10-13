@@ -4588,5 +4588,89 @@
     "artifact_path": "docs/context/robsweep/evidence/resume/canary/swap_w2.jsonl.provenance.json",
     "json_pointer": "/raw_artifacts/0/sha256",
     "occurrences": 1
+  },
+  {
+    "sha256": "e8dfdc4dc29f62bcb7db3d30fd6b16e820fb53c115a233d96e2fb3f360c65794",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/0/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "0f66d78edb4e12372f53d788e9ec8d43233177eff9212633fc9522e30ca909e3",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/1/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "f66ebcf563a9fc0921b291e72cc3116d2958fecfeb4f42313eadabe186066803",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/2/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "cd7c663b4cfaafdfd68e38849e5dcb55ec84d5898b6482c01d64ac69a4a33706",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/3/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "a1ac2d9eea1d89940460c7005ec9dfbeb9898c20c60c8fd9cd12437535cc049b",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/4/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "8631caec6bcb9af4b1cee58381ea0571229f23430ec9891363fdb19df2cb2e8b",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/5/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "8c628566fc0cc356f0442babd44ae849750b163b60b34c178e13a5ccb4d076ee",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/6/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "88ab3ed1054d75c15eda669cd84ed21c02f14ce75c1972ce5fd855508f1a39a4",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/7/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "9eceb7ba17cb4d89bbe6869b608b6eb81c9f6dfc6378af5d7a166dd2479499cb",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/8/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "79e3a4d1c3dfb62eabd1ee6f59a5f0692369f3b21ed80f6b5ba307aa94e0f922",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/9/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "422e06f850aaa2aa4232750e3cd868714122663ebae22167c2eb30e359291882",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/10/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "22afcdcebfe40555065ecbddedad6784c8ce96acc7bca1857024fd716aa68671",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/11/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "6d556cdef6c17bb3ca3b87f12345ea4c50a6dd98ccb5c0677467d61f6c65650e",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/12/sha256",
+    "occurrences": 1
+  },
+  {
+    "sha256": "4940a4706e57a4205acc568cc5fb57d0f71fe39e230ffb3e944defbdf3625dc2",
+    "artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "json_pointer": "/objects/13/sha256",
+    "occurrences": 1
   }
 ]

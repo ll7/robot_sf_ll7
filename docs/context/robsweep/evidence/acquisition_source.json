@@ -414,5 +414,16 @@
   "seed_first": 1061,
   "seed_last": 1090,
   "runtime_source_unchanged_from_base": true,
-  "administrative_git_epoch_note": "A local commit was made after launch; episode git_hash records two administrative epochs. Runtime/planner source and all acquisition input bytes remained identical; frozen driver bytes are archived separately from later tooling cleanup."
+  "administrative_git_epoch_note": "Recovered local commit is preserved through archived commit/tree objects and an auditable diff against the public base. All tracked base paths are unchanged; additions are limited to diagnostic inputs, evidence and the acquisition driver. All 42 archived source files match the recovered commit blobs. Later tooling cleanup is separate from the exact acquisition driver. See runtime_custody for independent verification.",
+  "runtime_custody": {
+    "method": "archived_git_commit_and_tree_objects_with_public_base_diff",
+    "recovered_episode_commit": "22172f6cacc8b3e63825793db604c820ff21080a",
+    "episodes_recording_recovered_commit": 21840,
+    "identity_artifact_path": "docs/context/robsweep/evidence/runtime_custody/identity.json",
+    "verification_artifact_path": "docs/context/robsweep/evidence/runtime_custody/verify.py",
+    "public_base_commit": "33a4735900153e742828227cc2171436ea09cd90",
+    "public_base_url": "https://github.com/ll7/robot_sf_ll7/commit/33a4735900153e742828227cc2171436ea09cd90",
+    "commit_pushed_to_preserved_branch": false,
+    "archive_boundary": "Commit and all tree objects absent from the public base are archived. Unchanged blobs and subtrees are supplied by the public base. Partial diagnostic output blobs are deliberately not republished; portable completed outcomes are already archived. Every tracked base path is byte-identical. All 42 archived acquisition-source files bind directly to recovered commit blobs, including the dirty-at-launch driver and new input namespace."
+  }
 }

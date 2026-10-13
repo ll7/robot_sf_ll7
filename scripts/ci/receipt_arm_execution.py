@@ -176,8 +176,10 @@ def _from_sealed_producer(
     row: dict, sidecar: dict, raw_path: Path, source: str, repo_root: Path
 ) -> dict:
     """Mint only inside the producer verifier after both raw seals were checked."""
-    arm = raw_path.parent.name.split("__", 1)[0]
-    if arm not in PROFILES or row.get("scenario_id") != SCENARIO:
+    from scripts.ci.receipt_provenance import native_row_key
+
+    arm, scenario, _seed = native_row_key(row, raw_path)
+    if arm not in PROFILES or scenario != SCENARIO:
         return row
     _require(
         raw_path.name == "episodes.jsonl"

@@ -6,6 +6,7 @@ import hashlib
 import json
 import tempfile
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 BINDING_FILE = "execution_binding.json"
 
@@ -108,6 +109,154 @@ def validate_scope_ids(scope: dict) -> None:
                 )
         for entry in entries:
             canonical_id(entry, label)
+
+
+def directory_arm(path: Path) -> str:
+    """Independently extract the observed directory's native roster identity."""
+    from scripts.validation import run_empty_world_sweep as native
+
+    return canonical_id(native._arm_key({"_source_file": path.as_posix()}), "arm")
+
+
+def _row_source_matches_observed(source: object, path: Path) -> bool:
+    """A retained native source claim must name the observed file, not just its arm."""
+    if not isinstance(source, str) or not source:
+        return False
+    declared = PurePosixPath(source)
+    if declared.as_posix() != source or ".." in declared.parts:
+        return False
+    if declared.is_absolute():
+        return Path(source).resolve() == path.resolve()
+    # Native load_rows uses a campaign-relative path. Archives can preserve a
+    # longer relative prefix; require every declared component to agree.
+    return bool(declared.parts) and path.parts[-len(declared.parts) :] == declared.parts
+
+
+def native_row_key(row: dict, path: Path) -> tuple[str, str, int]:
+    """Extract from the entire actual row; refuse contradictory identity sources.
+
+    Match native load_rows: retain an existing _source_file and supply the
+    observed path only when absent. This is an in-memory context, not a rewrite
+    of sealed evidence. In particular, never hide _sweep_arm or future native
+    priority fields by projecting a synthetic dictionary in place of the row.
+    """
+    from robot_sf.benchmark.camera_ready import _config, _run_state
+    from robot_sf.training import scenario_loader
+    from scripts.validation import run_empty_world_sweep as native
+
+    observed_arm = directory_arm(path)
+    context = dict(row)
+    context.setdefault("_source_file", path.as_posix())
+    if not _row_source_matches_observed(context["_source_file"], path):
+        raise HardwareIdentityError("receipt identity refused: native row source path differs")
+    arm = canonical_id(native._arm_key(context), "arm")
+    if "_sweep_arm" in row:
+        claimed_arm = canonical_id(row["_sweep_arm"], "arm")
+        if claimed_arm != arm:
+            raise HardwareIdentityError("receipt identity refused: native row arm differs")
+    source_arm = (
+        directory_arm(Path(context["_source_file"]))
+        if isinstance(context["_source_file"], str)
+        else None
+    )
+    if arm != observed_arm or source_arm != observed_arm:
+        raise HardwareIdentityError("receipt identity refused: native row/directory arm differs")
+    declared = canonical_scenario_seed(row.get("scenario_id"), row.get("seed"))
+    scenario, seed = _run_state._episode_identity(row)
+    key = canonical_pair_key(arm, scenario, seed)
+    if (
+        key[1:] != declared
+        or _config._scenario_name_key(row) != scenario
+        or scenario_loader._scenario_runtime_identity(row) != scenario
+    ):
+        raise HardwareIdentityError("receipt identity refused: native row scenario/seed differs")
+    # These are the scenario selectors' alternate identity declarations. Even a
+    # lower-priority declaration must agree, rather than hiding behind another.
+    for field in ("name", "id"):
+        if field in row and canonical_id(row[field], "scenario") != scenario:
+            raise HardwareIdentityError("receipt identity refused: native scenario alias differs")
+    return key
+
+
+class SweepEpisode(NamedTuple):
+    """One raw/native identity and its agreeing summary and observed file paths."""
+
+    raw: dict
+    summary: dict
+    source_path: Path
+    summary_path: Path
+
+
+def _sweep_summaries(root: Path) -> list[tuple[tuple[str, str, int], dict, Path, Path]]:
+    """Validate every independent summary declaration before native indexing."""
+    summaries = []
+    for path in sorted(root.glob("episodes_*.jsonl")):
+        suite = path.stem.removeprefix("episodes_")
+        campaign = root / "campaigns" / f"empty_world_{suite}"
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            summary = json.loads(line)
+            declared = canonical_pair_key(summary["arm"], summary["scenario"], summary["seed"])
+            source = summary.get("source_file")
+            if not isinstance(source, str):
+                raise HardwareIdentityError(
+                    "receipt identity refused: missing raw controller trace source"
+                )
+            source_path = (campaign / source).resolve()
+            if not source_path.is_relative_to(campaign.resolve()):
+                raise HardwareIdentityError(
+                    "receipt identity refused: raw controller trace path escapes the campaign"
+                )
+            summaries.append((declared, summary, source_path, path))
+    return summaries
+
+
+def joined_sweep_episodes(
+    root: Path, *, sealed: dict[Path, list[dict]] | None = None
+) -> dict[tuple[str, str, int], SweepEpisode]:
+    """Return native keys only after raw/summary uniqueness and coverage agree.
+
+    All collection, transport and admission readers use this frontier. Decode
+    each raw file once per invocation, or consume the already verified sealed
+    row objects without losing their execution-proof attributes.
+    """
+    summaries = _sweep_summaries(root)
+    raw_rows = {}
+    for path in sorted(root.glob("campaigns/**/episodes.jsonl")):
+        records = (
+            sealed[path.resolve()]
+            if sealed is not None
+            else [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        )
+        for row in records:
+            key = native_row_key(row, path)
+            if key in raw_rows:
+                raise HardwareIdentityError(
+                    "receipt identity refused: raw episode identity differs: duplicate native pair"
+                )
+            raw_rows[key] = (key, row, path)
+    episodes = {}
+    for declared, summary, source_path, summary_path in summaries:
+        match = raw_rows.get(declared)
+        if match is None or match[2].resolve() != source_path:
+            raise HardwareIdentityError(
+                "receipt identity refused: producer summary/raw coverage or source differs; "
+                "raw episode identity differs from summary/source"
+            )
+        key, raw, observed_path = match
+        if key in episodes:
+            raise HardwareIdentityError(
+                "receipt identity refused: producer summary/raw coverage or source differs; "
+                "duplicate sweep row: native pair"
+            )
+        episodes[key] = SweepEpisode(raw, summary, observed_path, summary_path)
+    if not episodes or episodes.keys() != raw_rows.keys():
+        raise HardwareIdentityError(
+            "receipt identity refused: producer summary/raw coverage or source differs; "
+            "raw/summary native coverage differs"
+        )
+    return episodes
 
 
 def _require(condition: bool, reason: str) -> None:
@@ -223,7 +372,7 @@ def _producer_identity(
     role: str,
     job: str,
     node: str,
-    raw_path: Path | None = None,
+    raw_path: Path,
 ) -> list[dict]:
     run = sidecar["run"]
     _require(
@@ -257,29 +406,23 @@ def _producer_identity(
     from scripts.ci import receipt_arm_execution
 
     for index, (link, raw) in enumerate(zip(links, raw_rows, strict=True)):
+        arm, scenario, seed = native_row_key(raw, raw_path)
         _require(
             type(link.get("jsonl_line")) is int
             and link["jsonl_line"] == index
             and canonical_scenario_seed(link.get("scenario_id"), link.get("seed"))
-            == canonical_scenario_seed(raw.get("scenario_id"), raw.get("seed"))
+            == (scenario, seed)
             and link.get("repo_commit") == source,
             "producer row source or link differs",
         )
         _producer_claim(link, source, role, job, node)
         _require(raw.get("git_hash") == source, "producer raw source contradicts claimed commit")
-        if raw_path is not None:
-            raw = receipt_arm_execution._from_sealed_producer(
-                raw, sidecar, raw_path, source, gate.ROOT
-            )
+        raw = receipt_arm_execution._from_sealed_producer(raw, sidecar, raw_path, source, gate.ROOT)
         expected = sidecar["campaign_identity"].get("algorithm")
-        arm = raw_path.parent.name.split("__", 1)[0] if raw_path is not None else ""
-        if (
-            arm in receipt_arm_execution.PROFILES
-            and raw.get("scenario_id") == receipt_arm_execution.SCENARIO
-        ):
+        if arm in receipt_arm_execution.PROFILES and scenario == receipt_arm_execution.SCENARIO:
             expected = receipt_arm_execution.expected_algorithm(
                 arm,
-                canonical_id(raw.get("scenario_id"), "scenario"),
+                scenario,
                 expected,
                 row=raw,
                 source_sha=source,
@@ -350,7 +493,7 @@ def verify_producer_seals(
                 if arm_role is not None and job is not None and node is not None:
                     from scripts.ci import receipt_arm_execution
 
-                    arm = raw.parent.name.split("__", 1)[0]
+                    arm = directory_arm(raw)
                     if arm in receipt_arm_execution.PROFILES and any(
                         row.get("scenario_id") == receipt_arm_execution.SCENARIO for row in rows
                     ):
@@ -459,51 +602,23 @@ def verified_raw_rows(
 
     sealed = verify_binding(root, job, node, source_sha=source_sha, arm_role=arm_role)
     producer._verify_sweep_metadata(root, source_sha)
+    episodes = joined_sweep_episodes(root, sealed=sealed)
     rows = {}
-    locations = {}
-    for path in sorted(root.glob("campaigns/**/episodes.jsonl")):
-        arm = path.parent.name.split("__")[0]
-        for row in sealed[path.resolve()]:
-            key = canonical_pair_key(arm, row["scenario_id"], row["seed"])
-            _require(key not in rows, "duplicate source row")
-            row.setdefault("scheduler_job_id", job)
-            row.setdefault("scheduler_node", node)
-            validate_source_row_context(row, job, node)
-            rows[key] = row
-            locations[key] = path.resolve()
-    _require(bool(rows), "source rows missing")
-    seen = set()
-    for path in sorted(root.glob("episodes_*.jsonl")):
-        suite = path.stem.removeprefix("episodes_")
-        campaign = root / "campaigns" / f"empty_world_{suite}"
-        for line in path.read_text().splitlines():
-            if not line.strip():
-                continue
-            summary = json.loads(line)
-            key = canonical_pair_key(summary["arm"], summary["scenario"], summary["seed"])
-            source_path = (campaign / summary["source_file"]).resolve()
-            _require(
-                source_path.is_relative_to(campaign.resolve())
-                and key in rows
-                and locations[key] == source_path
-                and key not in seen,
-                "producer summary/raw coverage or source differs",
-            )
-            raw = rows[key]
-            summary.setdefault("scheduler_job_id", job)
-            summary.setdefault("scheduler_node", node)
-            validate_source_row_context(summary, job, node)
-            _require(
-                receipt_outcomes.raw_outcomes(raw) == receipt_outcomes.summary_outcomes(summary),
-                "producer summary/raw outcomes differ",
-            )
-            _producer_claim(summary, source_sha, arm_role, job, node)
-            _require(
-                "execution_status" not in raw
-                or raw["execution_status"] == summary["execution_status"],
-                "producer raw execution status contradicts summary",
-            )
-            raw["execution_status"] = summary["execution_status"]
-            seen.add(key)
-    _require(seen == set(rows), "producer summary/raw coverage differs")
+    for key, episode in episodes.items():
+        raw, summary = episode.raw, episode.summary
+        for record in (raw, summary):
+            record.setdefault("scheduler_job_id", job)
+            record.setdefault("scheduler_node", node)
+            validate_source_row_context(record, job, node)
+        _require(
+            receipt_outcomes.raw_outcomes(raw) == receipt_outcomes.summary_outcomes(summary),
+            "producer summary/raw outcomes differ",
+        )
+        _producer_claim(summary, source_sha, arm_role, job, node)
+        _require(
+            "execution_status" not in raw or raw["execution_status"] == summary["execution_status"],
+            "producer raw execution status contradicts summary",
+        )
+        raw["execution_status"] = summary["execution_status"]
+        rows[key] = raw
     return rows

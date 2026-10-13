@@ -1109,6 +1109,7 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
     summaries = sorted(output_dir.glob("episodes_*.jsonl"))
     if not summaries:
         raise ValueError("sweep has no episode suites")
+    episodes = receipt_provenance.joined_sweep_episodes(output_dir)
     for summary in summaries:
         suite = summary.stem.removeprefix("episodes_")
         metadata_path = output_dir / f"execution_{suite}.json"
@@ -1138,11 +1139,10 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
         )
         if not complete:
             raise ValueError(f"{suite} sweep execution is incomplete")
-        records = [json.loads(line) for line in summary.read_text().splitlines() if line.strip()]
-        keys = [
-            receipt_provenance.canonical_pair_key(row["arm"], row["scenario"], row["seed"])
-            for row in records
+        records = [
+            episode.summary for episode in episodes.values() if episode.summary_path == summary
         ]
+        keys = [key for key, episode in episodes.items() if episode.summary_path == summary]
         counts = [meta.get(key) for key in ("expected_slots", "written_rows", "total_episodes")]
         if not records or any(count != len(records) for count in counts):
             raise ValueError(f"{suite} execution row counts differ")
@@ -1153,25 +1153,6 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
             raise ValueError(f"{suite} execution seed identity differs")
         if any(row.get("execution_status") != "written" for row in records):
             raise ValueError(f"{suite} has unsuccessful row execution")
-
-
-def _index_raw_episodes(
-    path: Path, cache: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]]
-) -> dict[tuple[Any, Any], list[dict[str, Any]]]:
-    """Decode a raw file once, retaining duplicate identities for the existing check."""
-    if path in cache:
-        return cache[path]
-    index: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        raw = json.loads(line)
-        identity = receipt_provenance.canonical_scenario_seed(
-            raw.get("scenario_id"), raw.get("seed")
-        )
-        index.setdefault(identity, []).append(raw)
-    cache[path] = index
-    return index
 
 
 def _validate_row_allocation(summary: dict, raw: dict, job: str | None, node: str | None) -> None:
@@ -1203,36 +1184,14 @@ def _load_sweep_rows(
     """
     receipt_provenance.verify_optional_binding(sweep_dir, scheduler_job_id, scheduler_node)
 
+    episodes = receipt_provenance.joined_sweep_episodes(sweep_dir)
     rows: dict[tuple[str, str, int], dict[str, Any]] = {}
-    raw_indexes: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]] = {}
-    for path in sorted(sweep_dir.glob("episodes_*.jsonl")):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            key = receipt_provenance.canonical_pair_key(row["arm"], row["scenario"], row["seed"])
-            suite = path.stem.removeprefix("episodes_")
-            campaign = sweep_dir / "campaigns" / f"empty_world_{suite}"
-            source = row.get("source_file")
-            if not isinstance(source, str):
-                raise ValueError(f"missing raw controller trace source for {key}")
-            source_path = (campaign / source).resolve()
-            if not source_path.is_relative_to(campaign.resolve()):
-                raise ValueError("raw controller trace path escapes the campaign")
-            matches = _index_raw_episodes(source_path, raw_indexes).get(key[1:], [])
-            if len(matches) != 1 or source_path.parent.name.split("__")[0] != key[0]:
-                raise ValueError(f"raw episode identity differs for {key}")
-            raw = matches[0]
-            _validate_row_allocation(row, raw, scheduler_job_id, scheduler_node)
-            if receipt_outcomes.raw_outcomes(raw) != receipt_outcomes.summary_outcomes(row):
-                raise ValueError(f"raw episode outcome differs from summary for {key}")
-            if key in rows:
-                raise ValueError(f"duplicate sweep row {key}")
-            rows[key] = (
-                raw if preserve_raw else {**raw, "execution_status": row["execution_status"]}
-            )
-    if not rows:
-        raise ValueError(f"no sweep rows found in {sweep_dir}")
+    for key, episode in episodes.items():
+        raw, row = episode.raw, episode.summary
+        _validate_row_allocation(row, raw, scheduler_job_id, scheduler_node)
+        if receipt_outcomes.raw_outcomes(raw) != receipt_outcomes.summary_outcomes(row):
+            raise ValueError(f"raw episode outcome differs from summary for {key}")
+        rows[key] = raw if preserve_raw else {**raw, "execution_status": row["execution_status"]}
     return rows
 
 
@@ -2470,31 +2429,18 @@ def _prepare_sweeps(
 
 def _sweep_episode_paths(sweep_dir: Path) -> dict[tuple[str, str, int], str]:
     """Locate every projected digest's raw episode in its hashed sweep archive."""
-    paths = {}
-    for summary in sorted(sweep_dir.glob("episodes_*.jsonl")):
-        suite = summary.stem.removeprefix("episodes_")
-        for line in summary.read_text().splitlines():
-            if line.strip():
-                row = json.loads(line)
-                key = receipt_provenance.canonical_pair_key(
-                    row["arm"], row["scenario"], row["seed"]
-                )
-                paths[key] = f"campaigns/empty_world_{suite}/{row['source_file']}"
-    return paths
+    return {
+        key: episode.source_path.relative_to(sweep_dir).as_posix()
+        for key, episode in receipt_provenance.joined_sweep_episodes(sweep_dir).items()
+    }
 
 
 def _sweep_execution_statuses(sweep_dir: Path) -> dict[tuple[str, str, int], str]:
     """Keep verified summary transport status separate from untouched raw episode bytes."""
-    statuses = {}
-    for summary in sorted(sweep_dir.glob("episodes_*.jsonl")):
-        for line in summary.read_text().splitlines():
-            if line.strip():
-                row = json.loads(line)
-                key = receipt_provenance.canonical_pair_key(
-                    row["arm"], row["scenario"], row["seed"]
-                )
-                statuses[key] = row["execution_status"]
-    return statuses
+    return {
+        key: episode.summary["execution_status"]
+        for key, episode in receipt_provenance.joined_sweep_episodes(sweep_dir).items()
+    }
 
 
 def _run_episode_transport(run: SweepRun) -> tuple[dict, dict]:

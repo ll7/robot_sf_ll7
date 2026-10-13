@@ -252,7 +252,10 @@ def huber_filtered(positions, times) -> np.ndarray:
 
 
 def turning_onset(positions, interferer, times, baselines) -> dict[str, Any]:
-    """Mean-max baseline turning threshold; own X distance to synchronized PoMD.
+    """Sustained turning correction; own X distance to synchronized PoMD.
+
+    The 0.05 rad/s floor and 0.3 s duration are an engineering criterion,
+    not a published Huber threshold. Baseline maxima remain diagnostics.
 
     Returns:
         Measurement values with explicit missingness and units.
@@ -276,20 +279,31 @@ def turning_onset(positions, interferer, times, baselines) -> dict[str, Any]:
         maxima.append(float(angular(bp)[mask].max()))
     if len(maxima) != 5:
         raise ValueError("Huber onset requires five no-interferer baseline trials")
-    threshold = float(np.mean(maxima))
+    baseline_threshold = float(np.mean(maxima))
+    threshold = max(0.05, baseline_threshold)
     omega = angular(p)
     valid = (p[:, 0] >= p[closest, 0] - 3 - 1e-9) & (np.arange(len(t)) < closest)
-    excess = np.flatnonzero(valid & (omega > threshold + 1e-12))
-    onset = int(excess[0]) if len(excess) else None
+    above = valid & (omega > threshold + 1e-12)
+    onset = None
+    # Require a contiguous run spanning at least 0.3 s, rather than one sample
+    # or the infinitesimal tails of the positional Gaussian filter.
+    starts = np.flatnonzero(above & ~np.r_[False, above[:-1]])
+    ends = np.flatnonzero(above & ~np.r_[above[1:], False])
+    for start, end in zip(starts, ends, strict=True):
+        if t[end] - t[start] >= 0.3 - 1e-9:
+            onset = int(start)
+            break
     return {
         "onset_m": None if onset is None else float(abs(p[closest, 0] - p[onset, 0])),
         "onset_time_s": None if onset is None else float(t[onset]),
-        "baseline_turning_rad_s": threshold,
+        "baseline_turning_rad_s": baseline_threshold,
+        "turning_threshold_rad_s": threshold,
+        "sustained_duration_s": 0.3,
         "baseline_maxima_rad_s": maxima,
         "pomd_time_s": float(t[closest]),
         "pomd_own_x_m": float(p[closest, 0]),
         "wrong_side": bool(p[closest, 1] < p[0, 1]),
-        "reason": None if onset is not None else "no baseline-exceeding turning before PoMD",
+        "reason": None if onset is not None else "no sustained above-threshold turning before PoMD",
     }
 
 

@@ -58,9 +58,9 @@ def test_huber_filtered_straight_line_and_known_onset_coordinate():
     straight = np.column_stack([t, np.zeros(len(t))])
     np.testing.assert_allclose(m.huber_filtered(straight, t), straight, atol=1e-12)
     out = m.turning_onset(p, q, t, [straight] * 5)
-    # PoMD x=5. Gaussian tails exceed zero baseline at first captured x=2.
+    # The sustained 0.05 rad/s correction starts inside the window, not at its boundary.
     assert out["pomd_own_x_m"] == pytest.approx(5)
-    assert out["onset_m"] == pytest.approx(3)
+    assert 1.0 < out["onset_m"] < 3.0
     assert len(out["baseline_maxima_rad_s"]) == 5
     assert m.turning_onset(straight, q, t, [straight] * 5)["onset_m"] is None
 
@@ -81,3 +81,30 @@ def test_pair_steps_strict_thresholds_group_split_and_empty_bank():
     assert m.pair_overlap(p[:, :1], 0.28)["all"]["share_below_2r"] is None
     with pytest.raises(ValueError, match="group membership"):
         m.pair_overlap(p, 0.28, [[0, 1], [1, 2]])
+
+
+@pytest.mark.parametrize("amplitude", [0.0, 1e-6, 1e-4])
+def test_huber_onset_rejects_subthreshold_lateral_motion(amplitude):
+    """Tiny Gaussian-filtered yaw is not evidence of avoidance."""
+    t = np.arange(201) * 0.1
+    straight = np.column_stack([t, np.zeros_like(t)])
+    p = np.column_stack([t, amplitude * np.clip(t - 8, 0, 1)])
+    q = np.column_stack([20 - t, np.zeros_like(t)])
+    out = m.turning_onset(p, q, t, [straight] * 5)
+    assert out["onset_m"] is None
+    assert out["reason"] is not None
+
+
+def test_huber_onset_changes_with_manoeuvre_location():
+    """Equal-sized turns one metre apart cannot both saturate at three metres."""
+    t = np.arange(201) * 0.1
+    straight = np.column_stack([t, np.zeros_like(t)])
+    q = np.column_stack([20 - t, np.zeros_like(t)])
+    onsets = [
+        m.turning_onset(
+            np.column_stack([t, 0.4 * np.clip(t - start, 0, 1)]), q, t, [straight] * 5
+        )["onset_m"]
+        for start in (8, 9)
+    ]
+    assert all(0 < onset < 3 for onset in onsets)
+    assert onsets[0] - onsets[1] == pytest.approx(1.0, abs=0.11)

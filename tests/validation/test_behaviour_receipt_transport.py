@@ -454,8 +454,18 @@ def test_base_gate_bootstrap_never_executes_head_policy(tmp_path):
 def test_full_roster_plain_header_cannot_attest_frozen_dispatch():
     """A full set of registry-shaped rows alone cannot authenticate published dispatch."""
     scope = json.loads((ROOT / adapter.SCOPE_FILE).read_text())
-    receipt = _inventory_receipt(scope)
+    receipt = _native_inventory_receipt(scope)
     assert len(receipt["rows"]) == 21420
+    dispatched = [
+        row
+        for row in receipt["rows"]
+        if row["arm"] in receipt_arm_execution.PROFILES
+        and row["map"] == receipt_arm_execution.SCENARIO
+    ]
+    assert len(dispatched) == 60
+    assert all(
+        row["algorithm"] == "orca" and row["execution_mode"] == "adapter" for row in dispatched
+    )
     with pytest.raises(adapter.HardwareIdentityError, match="JSON claims cannot attest dispatch"):
         adapter.validate_receipt(receipt, scope, receipt["head_sha"], "0.0.7", "c" * 40)
 

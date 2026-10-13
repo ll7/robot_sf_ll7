@@ -676,7 +676,16 @@ def _inventory_receipt(scope):
     for arm in scope["arms"]:
         algo = canonical_algorithm_name(scope["arm_algorithms"][arm])
         profile = enrich_algorithm_metadata(algo=algo)["planner_kinematics"]
-        mode = "native" if profile["supports_native_commands"] else "adapter"
+        # These two source-defined defaults are intentional despite native
+        # capability. Keep the fixture independent of the validator's helper.
+        if algo == "guarded_ppo":
+            assert profile["execution_mode"] == "mixed"
+            mode = "mixed"
+        elif algo == "hybrid_rule_local_planner":
+            assert profile["execution_mode"] == "adapter"
+            mode = "adapter"
+        else:
+            mode = "native" if profile["supports_native_commands"] else "adapter"
         for map_id in scope["maps"]:
             for seed in range(1001, 1031):
                 receipt["rows"].append(

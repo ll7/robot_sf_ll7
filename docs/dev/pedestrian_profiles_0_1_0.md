@@ -73,6 +73,23 @@ Dense V3/V4 have reachable pairs on every step, so that exit is not a common cas
 in these workloads. Skipping on physical touching distance alone would miss
 impending collisions and is not safe.
 
+Contact priority is derived from current physical coordinates (x, then y),
+including pair orientation and per-actor wall rows. It does not depend on
+state-row labels. The emergency mean flow is accumulated in that same order;
+front-to-back ties use stable geometry order. Pair warm-cache keys are undirected
+so crossing the coordinate order does not discard a physical pair's cache.
+State rows and controller indices are not reordered.
+
+Permutation tests cover every population from 2 through 40, with and without
+walls, at 3/10 passes, four label permutations, varying caps and a mapped held
+actor over three steps. The independent review's exact five- and eight-body
+witnesses are retained. A sixteen-body witness exercises actual emergency
+resolution in both labelings. Canonical pair sweeps are used in the small wall-free
+cell: a paired native-integrator probe measured 68/84 microseconds for 30 bodies
+versus 165/164 microseconds for QP at every population. Both candidates pass the
+permutation tests. The synthetic probe includes adverse states with fallback;
+it chooses implementation cost and is not qualified fitting evidence.
+
 If normal/cap reconciliation cannot produce admissible motion, the emergency
 path projects individual walkers into their incident normal halfspaces and
 speed balls. It does not halt a whole reachable component. Its activation is
@@ -137,15 +154,38 @@ A private local-normal V4 alternative measured 7.87% at three passes, with all
 350 crossings and separation within tolerance, but local solver failures occurred
 on 71.38% of steps. At ten passes it measured 17.67% and 69.12% fallback. It fails
 the existing fallback requirement and is not installed in production. Further
-optimization stopped after this bounded sequence. Accepting the measured opt-in
-cost requires an author decision; otherwise the fit stays deferred. No budget
-waiver, cadence change or alternate rule was applied.
+optimization stopped after this bounded sequence. The opt-in cost exception was subsequently
+accepted in [the recorded cost ruling](https://github.com/ll7/robot_sf_ll7/issues/10101#issuecomment-6154186659).
+The 200 CPU-hour/five-day limits, acquisition contract, independent review and
+external receipt/custody requirements remain. No cadence change or alternate
+rule was applied.
+
+
+Order-invariance repair at source `41b1fb742` requalifies dev1001 on the same
+1,600-step initial states/configuration and timing protocol:
+
+| Case | Passes | Crossings on/off | Emergency fallback | Swept body centre minimum | CPU overhead |
+| --- | --- | --- | --- | --- | --- |
+| V3 | 3 | 60/60 | 0/1,600 | 0.560000010 m | 61.29% |
+| V3 | 10 | 60/60 | 0/1,600 | 0.560000010 m | 59.39% |
+| V4 | 3 | 350/350 | 0/1,600 | 0.560000010 m | 144.65% |
+| V4 | 10 | 350/350 | 0/1,600 | 0.560000010 m | 135.58% |
+
+Swept wall-centre minima remain 0.280000010 m. There is no penetration beyond
+1e-10 m, unresolved contact or cap violation. V3 cost increased by 4.54/3.22
+percentage points from the previously accepted measurements; V4 decreased by
+9.16/18.39 points. These are new trajectories under the corrected opt-in rule,
+not a claim of equivalence to the biased implementation. The default path still
+matches main byte-for-byte on all 200 development seeds. The cost exception
+covers this opt-in rule; the unchanged diagnostic exits 3 on its retained 15%
+check. No empirical qualification or calibration launch follows from that exit
+or the exception. Independent re-review and the external receipt remain required.
 
 Reproduce the workload diagnostic with
 `uv run python scripts/validation/contact_progress_10104.py --seed 1001 --output <run-directory>`.
 It preserves trajectories, input states, raw timing samples, source identity and
 SHA256 manifests, and exits 3 if any target fails. It is synthetic implementation
 evidence, not empirical or release admission. Calibration remains blocked on a
-solver meeting the cost budget, independent review and release integration's
+the accepted cost disposition, independent review and release integration's
 receipt/custody requirements. No calibration job was submitted. Frozen 0.0.8
 inputs, global baselines and production defaults remain untouched.

@@ -26,3 +26,11 @@ measurement runner is `scripts/validation/pedestrian_validation_10074.py` with
 source estimators, censoring and raw trajectory checksums. V7/V8/V9 remain
 explicit diagnostics or contextual cases where the source target is unresolved;
 a numerical suite score does not turn them into empirical validation.
+
+V6 uses turning above the greater of the five-baseline mean maximum and
+0.05 rad/s, sustained for 0.3 s before PoMD in the existing 3 m window.
+The floor and duration are an explicit engineering correction, not a Huber
+published threshold. Baseline maxima remain diagnostics. Tiny yaw returns
+missing onset; a window-boundary result cannot establish an onset outside the
+captured window. Synthetic manoeuvre-location controls prevent zero-baseline
+Gaussian tails from saturating the estimator.

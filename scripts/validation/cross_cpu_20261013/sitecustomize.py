@@ -26,7 +26,7 @@ def initialize():
 
         if mode != "default":
             # Torch exposes this module attribute through a ContextProp descriptor.
-            cast(Any, torch.backends.mkldnn).enabled = False
+            cast("Any", torch.backends.mkldnn).enabled = False
             if not _set_torch_deterministic_algorithms(torch, True):
                 raise RuntimeError("deterministic algorithms setter unavailable")
             torch.set_num_threads(1)

@@ -45,7 +45,7 @@ def _snapshot(work: Path, hub: Path, tag: str) -> tuple[Path, list[dict[str, Any
         The snapshot directory and its verified file inventory."""
     snapshot = hub / tag
     snapshot.mkdir(parents=True, exist_ok=False)
-    files = []
+    files: list[dict[str, Any]] = []
     for p in sorted(work.rglob("*")):
         rel = p.relative_to(work)
         if not p.is_file() or p.is_symlink() or "wandb" in rel.parts:

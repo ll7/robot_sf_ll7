@@ -21,6 +21,7 @@ from loguru import logger
 
 from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import Circle2D, Line2D, RobotPose, Vec2D
+from robot_sf.robot.footprint import CapsuleFootprint
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
@@ -29,6 +30,10 @@ if TYPE_CHECKING:
 # Reaching the quadratic step with a == 0 would make the discriminant check trivially
 # true (0 <= 0 <= 0), so degenerate segments must be rejected explicitly.
 _DEGENERATE_SEGMENT_EPS = 1e-12
+
+# Only the opt-in capsule path uses this metre-scale roundoff allowance.
+# Analytic tangency can acquire a few ulps when translated away from the origin.
+_CAPSULE_CONTACT_EPS = 1e-12
 
 
 @numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
@@ -261,6 +266,22 @@ class ContinuousOccupancy:
     agent_radius: float = 1.0
     ped_radius: float = 0.4
     goal_radius: float = 1.0
+    capsule: CapsuleFootprint | None = field(default=None, kw_only=True)
+    get_dynamic_capsules: Callable[[], list[tuple[RobotPose, CapsuleFootprint]]] | None = field(
+        default=None, kw_only=True
+    )
+
+    def __post_init__(self) -> None:
+        """Require live heading when capsule collision geometry is selected."""
+        if self.capsule is not None and self.get_agent_pose is None:
+            raise ValueError("capsule collision checking requires get_agent_pose")
+
+    @property
+    def capsule_pose(self) -> RobotPose:
+        """Return live pose, failing closed if the heading callback was removed."""
+        if self.get_agent_pose is None:
+            raise ValueError("capsule collision checking requires get_agent_pose")
+        return self.get_agent_pose()
 
     @property
     def agent_heading(self) -> float | None:
@@ -311,6 +332,16 @@ class ContinuousOccupancy:
         if not self.is_in_bounds(agent_x, agent_y):
             return True
 
+        if self.capsule is not None:
+            pose = self.capsule_pose
+            for segment in self.obstacle_coords:
+                if len(segment) == 4:
+                    x1, y1, x2, y2 = segment
+                    segment = ((x1, y1), (x2, y2))
+                if self.capsule.segment_gap(pose, segment) <= _CAPSULE_CONTACT_EPS:
+                    return True
+            return False
+
         collision_distance = self.agent_radius
         circle_agent = ((agent_x, agent_y), collision_distance)
         return circle_collides_any_lines(circle_agent, self.obstacle_coords)
@@ -329,6 +360,12 @@ class ContinuousOccupancy:
         ped_radius = self.ped_radius
         agent_x, agent_y = self.get_agent_coords()
         pedestrian_coords = self.pedestrian_coords
+        if self.capsule is not None:
+            pose = self.capsule_pose
+            return any(
+                self.capsule.circle_gap(pose, (x, y), ped_radius) <= _CAPSULE_CONTACT_EPS
+                for x, y in pedestrian_coords
+            )
         if isinstance(pedestrian_coords, np.ndarray):
             return bool(
                 _circle_collides_any_points(
@@ -350,8 +387,22 @@ class ContinuousOccupancy:
         Returns:
             bool: True if the agent intersects any dynamic object.
         """
+        if self.get_dynamic_capsules is not None:
+            for pose, capsule in self.get_dynamic_capsules():
+                if self.capsule is not None:
+                    gap = self.capsule.capsule_gap(self.capsule_pose, capsule, pose)
+                else:
+                    gap = capsule.circle_gap(pose, self.get_agent_coords(), self.agent_radius)
+                if gap <= _CAPSULE_CONTACT_EPS:
+                    return True
         if self.get_dynamic_objects is None:
             return False
+        if self.capsule is not None:
+            pose = self.capsule_pose
+            return any(
+                self.capsule.circle_gap(pose, centre, radius) <= _CAPSULE_CONTACT_EPS
+                for centre, radius in self.get_dynamic_objects()
+            )
         circle_agent = (self.get_agent_coords(), self.agent_radius)
         return circle_collides_any(circle_agent, self.get_dynamic_objects())
 
@@ -384,6 +435,14 @@ class ContinuousOccupancy:
         bool
             True if the point is within the bounds of the occupancy, False otherwise.
         """
+        if self.capsule is not None:
+            axis = self.capsule.axis(((world_x, world_y), self.capsule_pose[1]))
+            radius = self.capsule.radius
+            return all(
+                radius + _CAPSULE_CONTACT_EPS < x < self.width - radius - _CAPSULE_CONTACT_EPS
+                and radius + _CAPSULE_CONTACT_EPS < y < self.height - radius - _CAPSULE_CONTACT_EPS
+                for x, y in axis
+            )
         return 0 <= world_x <= self.width and 0 <= world_y <= self.height
 
 
@@ -420,6 +479,14 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
 
     get_enemy_coords: Callable[[], Vec2D] | None = None
     enemy_radius: float = 1.0
+    enemy_capsule: CapsuleFootprint | None = field(default=None, kw_only=True)
+    get_enemy_pose: Callable[[], RobotPose] | None = field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        """Require the robot heading for symmetric ego-pedestrian contact checks."""
+        super().__post_init__()
+        if self.enemy_capsule is not None and self.get_enemy_pose is None:
+            raise ValueError("enemy_capsule collision checking requires get_enemy_pose")
 
     @property
     def enemy_coords(self) -> np.ndarray:
@@ -455,6 +522,15 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
         bool
             True if the agent collided with another agent, False otherwise.
         """
+        if self.enemy_capsule is not None:
+            if self.get_enemy_pose is None:
+                raise ValueError("enemy_capsule collision checking requires get_enemy_pose")
+            return (
+                self.enemy_capsule.circle_gap(
+                    self.get_enemy_pose(), self.get_agent_coords(), self.agent_radius
+                )
+                <= 0.0
+            )
         if self.get_enemy_coords is None:
             return False
 

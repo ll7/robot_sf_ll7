@@ -2078,6 +2078,8 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
     from robot_sf.robot.bicycle_drive import BicycleDriveSettings  # noqa: PLC0415
 
     kwargs: dict[str, Any] = {}
+    if "capsule" in overrides:
+        kwargs["capsule"] = overrides["capsule"]
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
     if "wheelbase" in overrides:
@@ -2144,6 +2146,8 @@ def _apply_robot_overrides(
         config.sim_config._validate_action_latency_config()
     raw_type = str(overrides.get("type", overrides.get("model", "differential_drive"))).strip()
     robot_type = _robot_type_alias(raw_type)
+    if "capsule" in overrides and robot_type != "bicycle_drive":
+        raise ValueError("robot_config.capsule currently requires type bicycle_drive")
     if robot_type == "differential_drive":
         config.robot_config = _differential_robot_settings(overrides)
         return

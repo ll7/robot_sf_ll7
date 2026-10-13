@@ -172,6 +172,28 @@ def make_grid_observation_spaces(
     return grid_box, meta_spaces
 
 
+def _dynamic_robot_capsules(sim: Simulator, robot_idx: int) -> list:
+    """Return live capsule poses for other robots, excluding the queried robot."""
+    return [
+        (robot.pose, robot.config.capsule)
+        for idx, robot in enumerate(sim.robots)
+        if idx != robot_idx and getattr(getattr(robot, "config", None), "capsule", None) is not None
+    ]
+
+
+def _dynamic_capsule_provider(sim: Simulator, robot_idx: int):
+    """Supply capsule callbacks only when a robot explicitly selects this geometry.
+
+    Returns:
+        Live body provider, or None for the historical disc-only simulator.
+    """
+    if any(
+        getattr(getattr(robot, "config", None), "capsule", None) is not None for robot in sim.robots
+    ):
+        return lambda: _dynamic_robot_capsules(sim, robot_idx)
+    return None
+
+
 def init_collision_and_sensors(
     sim: Simulator,
     env_config: EnvSettings | RobotSimulationConfig,
@@ -200,7 +222,10 @@ def init_collision_and_sensors(
         """Return circles for all robots except the requested index."""
         circles: list[tuple[tuple[float, float], float]] = []
         for idx, pos in enumerate(sim.robot_pos):
-            if idx == robot_idx:
+            if (
+                idx == robot_idx
+                or getattr(getattr(sim.robots[idx], "config", None), "capsule", None) is not None
+            ):
                 continue
             circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
         return circles
@@ -216,6 +241,8 @@ def init_collision_and_sensors(
             get_obstacle_coords=sim.get_obstacle_lines,
             get_pedestrian_coords=lambda: sim.ped_pos,
             get_dynamic_objects=(lambda idx=i: dynamic_robot_circles(idx)),
+            get_dynamic_capsules=_dynamic_capsule_provider(sim, i),
+            capsule=getattr(robot_config, "capsule", None),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
             goal_radius=sim_config.goal_radius,
@@ -517,6 +544,7 @@ def init_ped_collision_and_sensors(
             get_goal_coords=lambda: sim.goal_pos[0],
             get_obstacle_coords=sim.get_obstacle_lines,
             get_pedestrian_coords=lambda: _pedestrian_coords_with_ego(sim),
+            capsule=getattr(robot_config, "capsule", None),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
             goal_radius=sim_config.goal_radius,
@@ -582,6 +610,8 @@ def init_ped_collision_and_sensors(
             goal_radius=sim_config.goal_radius,
             get_enemy_coords=lambda: sim.robot_pos[0],
             enemy_radius=robot_config.radius,
+            enemy_capsule=getattr(robot_config, "capsule", None),
+            get_enemy_pose=lambda: sim.robot_poses[0],
         ),
     )
 
@@ -746,7 +776,10 @@ def init_collision_and_sensors_with_image(
         """Return circles for all robots except the requested index."""
         circles: list[tuple[tuple[float, float], float]] = []
         for idx, pos in enumerate(sim.robot_pos):
-            if idx == robot_idx:
+            if (
+                idx == robot_idx
+                or getattr(getattr(sim.robots[idx], "config", None), "capsule", None) is not None
+            ):
                 continue
             circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
         return circles
@@ -765,6 +798,8 @@ def init_collision_and_sensors_with_image(
             get_obstacle_coords=sim.get_obstacle_lines,
             get_pedestrian_coords=lambda: sim.ped_pos,
             get_dynamic_objects=(lambda i=i: dynamic_robot_circles(i)),
+            get_dynamic_capsules=_dynamic_capsule_provider(sim, i),
+            capsule=getattr(robot_config, "capsule", None),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
             goal_radius=sim_config.goal_radius,

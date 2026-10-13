@@ -10,6 +10,7 @@ from gymnasium import spaces
 from robot_sf.common.math_utils import clip_scalar, normalize_angle_atan2
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.common.types import BicycleAction, PolarVec2D, RobotPose, Vec2D
+from robot_sf.robot.footprint import resolve_capsule
 from robot_sf.robot.reverse_drive import reverse_identity, validate_reverse_settings
 
 
@@ -45,9 +46,14 @@ class BicycleDriveSettings:
     # legacy allow_backwards flag (which retains full-speed reverse semantics).
     limited_reverse: InitVar[bool] = False
     max_reverse_speed: InitVar[float] = 0.5
+    capsule: InitVar[object | None] = field(default=None, kw_only=True)
 
     def __post_init__(
-        self, creep_speed: float, limited_reverse: bool, max_reverse_speed: float
+        self,
+        creep_speed: float,
+        limited_reverse: bool,
+        max_reverse_speed: float,
+        capsule: object | None = None,  # noqa: RUF033 - retain explicit three-argument revalidation API.
     ) -> None:
         """Resolve the braking-authority default for backward compatibility.
 
@@ -59,6 +65,9 @@ class BicycleDriveSettings:
         self.creep_speed = creep_speed
         self.limited_reverse = limited_reverse
         self.max_reverse_speed = float(max_reverse_speed)
+        self.capsule = resolve_capsule(
+            capsule if capsule is not None else getattr(self, "capsule", None), self.radius
+        )
 
         if self.max_decel is None:
             self.max_decel = self.max_accel
@@ -98,6 +107,11 @@ class BicycleDriveSettings:
         overrides = reverse_identity(self)
         if self.creep_speed != 0.0:
             overrides["creep_speed"] = float(self.creep_speed)
+        if self.capsule is not None:
+            overrides["capsule"] = {
+                "length": float(self.capsule.length),
+                "width": float(self.capsule.width),
+            }
         return overrides
 
 

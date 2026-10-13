@@ -417,7 +417,9 @@ def run_task(task):  # noqa: C901, PLR0915
         traces.append((p, v, desired))
         return p, v
 
-    reused.candidate_config, reused.harness.simulate, reused.RADIUS = configured, captured, radius
+    reused.candidate_config = configured
+    reused.harness.simulate = captured
+    reused.RADIUS = radius
     row = {
         "case": case,
         "seed": seed,

@@ -1,5 +1,7 @@
 """Frozen diagnostic grid, issue 10061; dev seeds 1001..1010 only."""
 
+from __future__ import annotations
+
 import os
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -10,6 +12,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pysocialforce as pysf
@@ -22,6 +25,10 @@ from robot_sf.research.emergent_phenomena import (
     ScenarioConfig,
     run_scenario,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 SEEDS = list(range(1001, 1011))
 DOORS = [1.2, 2.0, 2.2, 2.8, 3.6]
@@ -268,7 +275,7 @@ def main():
         raise ValueError("grid factors must be positive and all parameters finite")
     print("RESOLVED SEEDS", SEEDS, "PAIR KERNEL", SOCIAL_FORCE_KERNEL, "PAIRS", pairs, flush=True)
     a.out.mkdir(parents=True, exist_ok=True)
-    task = {"screen": screen, "flow": flow_task, "lanes": lanes}[a.stage]
+    task: Callable[[Any], Any] = {"screen": screen, "flow": flow_task, "lanes": lanes}[a.stage]
     with concurrent.futures.ProcessPoolExecutor(a.workers) as pool:
         tasks = [(f, b, s) for f, b in pairs for s in SEEDS] if a.stage == "flow" else pairs
         futures = {pool.submit(task, p): p for p in tasks}

@@ -7,6 +7,7 @@ are metres, time is seconds. Missing/censored measurements remain None.
 from __future__ import annotations
 
 import itertools
+from typing import Any
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d, median_filter
@@ -22,7 +23,7 @@ def _trace(positions, times):
     return p, t
 
 
-def acceleration_fit(speeds, times, *, reaction_s=0.35, fit_duration_s=3.0) -> dict[str, object]:
+def acceleration_fit(speeds, times, *, reaction_s=0.35, fit_duration_s=3.0) -> dict[str, Any]:
     """Fit v0 and tau from early acceleration, using equation 4.1 of Moussaid.
 
     Clock starts at the cue. Fit only post-reaction acceleration, not the final
@@ -88,7 +89,7 @@ def crossing_times(positions, times, plane_m) -> list[float | None]:
     return result
 
 
-def aperture_drop(positions, times, *, plane_m, capture_upstream_m=4.0) -> dict[str, object]:
+def aperture_drop(positions, times, *, plane_m, capture_upstream_m=4.0) -> dict[str, Any]:
     """Wilmut temporal phases and 3-SD event; explicit cubic LS trend equivalent.
 
     CM substitutes for C7, cubic LS polynomial for unspecified Higuchi trend and
@@ -133,7 +134,7 @@ def aperture_drop(positions, times, *, plane_m, capture_upstream_m=4.0) -> dict[
 
 def bottleneck_flow(
     positions, times, *, width_m, plane_m, expected_n, steady_min_s=5.0
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Finite-N flow plus density/velocity-stable window: documented Liao equivalent.
 
     Exit plane explicit. One-second bins inside (plane-1, plane), five-bin density
@@ -198,7 +199,7 @@ def bottleneck_flow(
     }
 
 
-def circumvention_clearance(positions, times, *, centre_xy, obstacle_radius_m) -> dict[str, object]:
+def circumvention_clearance(positions, times, *, centre_xy, obstacle_radius_m) -> dict[str, Any]:
     """CM-to-cylinder edge and abeam clearance equivalent for lateral PS extent.
 
     Does not estimate a fitted ellipse or longitudinal 2 m radius. No abeam
@@ -250,7 +251,7 @@ def huber_filtered(positions, times) -> np.ndarray:
     return median_filter(filtered, size=(5, 1), mode="nearest")[pad:-pad]
 
 
-def turning_onset(positions, interferer, times, baselines) -> dict[str, object]:
+def turning_onset(positions, interferer, times, baselines) -> dict[str, Any]:
     """Mean-max baseline turning threshold; own X distance to synchronized PoMD.
 
     Returns:
@@ -292,7 +293,7 @@ def turning_onset(positions, interferer, times, baselines) -> dict[str, object]:
     }
 
 
-def pair_overlap(positions, radius_m, groups=()) -> dict[str, object]:
+def pair_overlap(positions, radius_m, groups=()) -> dict[str, Any]:
     """Unordered post-step pairs split by actual groups; starts reported separately.
 
     Strict thresholds. Zero denominator has null fractions and minimum.

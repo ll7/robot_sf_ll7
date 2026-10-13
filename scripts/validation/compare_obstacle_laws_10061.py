@@ -9,6 +9,7 @@ import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numba import njit
@@ -17,6 +18,10 @@ from pysocialforce.forces import ObstacleForce
 
 from robot_sf.evidence.writers import write_json
 from scripts.validation import calibrate_obstacle_force_10061 as harness
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 SEEDS = tuple(range(1001, 1011))
 RADIUS = harness.FOOTPRINT_RADIUS
@@ -321,7 +326,7 @@ def main():
             for w in widths
         ]
     )
-    worker = {"screen": screen, "flow": flow_task, "lanes": lanes}[args.stage]
+    worker: Callable[[Any], Any] = {"screen": screen, "flow": flow_task, "lanes": lanes}[args.stage]
     print("RESOLVED SEEDS", SEEDS, "GRID", grid, flush=True)
     records = []
     with ProcessPoolExecutor(args.workers) as pool:

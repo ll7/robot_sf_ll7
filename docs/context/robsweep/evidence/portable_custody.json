@@ -1,0 +1,619 @@
+{
+  "schema": "examiner_portable_custody.v1",
+  "operations": [
+    "Strip acquisition checkout prefix from text references.",
+    "Bind producer raw-artifact path and sha256 to portable compressed rows.",
+    "Bind input paths to byte-identical archived configs.",
+    "Retain exact study metadata in study.source.txt; relocate retrieval pointers in study.json. Original config layout is retained as path components."
+  ],
+  "scientific_values_changed": false,
+  "source_receipts_checked": 73,
+  "transformed_artifacts": [
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary.log",
+      "sha256": "a7df6612c3a836779e5773d37cb313df460195135e5fc569b8d774422df36af4"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_goal.jsonl.provenance.json",
+      "sha256": "73bc81c4827d9d6ac5ce5846f48dfc7240b9cd44cfb5c27eca65a00935fe809f"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_goal_execution.json",
+      "sha256": "11adf5c9123c94a525e5c4ed34b85ed68bad7485b3e6696196ee32e589a4c0b8"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_guarded_ppo.jsonl.provenance.json",
+      "sha256": "eda61ee32bbe8c03f44415bdab91432d63ed98aff9c160c1a1669ea273d451e3"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_guarded_ppo_execution.json",
+      "sha256": "cedebfd046efd4f3a7611699451c0c18dbe10ee6b1474abdb88209ba49967726"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "8bc8b8ed1679b7c4c1021175c9a146ba1cb49a52b68062a358ae40d0d39a069e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_hybrid_rule_v4_fast_progress_static_escape_continuous.jsonl.provenance.json",
+      "sha256": "3e2a6d0373cac2ed2cc38761bff9c4da1984cb7a15bee071ba74ee57cc23cf0e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_hybrid_rule_v4_fast_progress_static_escape_continuous_execution.json",
+      "sha256": "33a8d632b2151339862daf73cf9d1516a4320dac0618f30dc72e86a0b47910e7"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "c12bfc7e3b6063aa6db9f4402655fe71effe6a2c854adc8069a50f2499ce065a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_orca.jsonl.provenance.json",
+      "sha256": "7ef24fe1976df321ac787b4c929dc515f8707c64fc5c45852bc09a8173b98bfd"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_orca_execution.json",
+      "sha256": "62a6cac9178fac10dbccc86e8570f950e6b495137ac7a79b64a7609800920892"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_ppo.jsonl.provenance.json",
+      "sha256": "82ccd419f84890eb2bcc99a39f806e3638cb57e3824eda8e86ccf36d3d302ead"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_ppo_execution.json",
+      "sha256": "432e4cc0c5ff018b21d9de128f91d28725232a037193a1881c4059eeca6d2b8e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_prediction_planner.jsonl.provenance.json",
+      "sha256": "379905e3dc2061a57af11350674d31bdb0ee2d740894c7d154019f04780231cf"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_prediction_planner_execution.json",
+      "sha256": "eaf6fc7ea1bfaa633a88d65cf67bf0af8917c156745d7618a0edbfd88db72eae"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_predictive_mppi.jsonl.provenance.json",
+      "sha256": "c87bd560802bab4c66d744358de43e8daa02d92d6b32272dacf8f17e64c6ed94"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_predictive_mppi_execution.json",
+      "sha256": "9c5b3d3438bf583caf4a28610345ad1d0a32d7e3853393eef51c2de0cd2ea56a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_risk_dwa.jsonl.provenance.json",
+      "sha256": "5c564d3a00be4b960c1d1ff2273c1412ee98cfe59c9bb05c2b8df396bec0cd26"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_risk_dwa_execution.json",
+      "sha256": "1dea402ce1bba82433d0c12cdcaf6877785a670e07ab14a837e020baeac8917f"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_sacadrl.jsonl.provenance.json",
+      "sha256": "697b08a92e77fb3e2a6bd17f50e8a674fb598aa02b1619d1e49134641ba6e278"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_sacadrl_execution.json",
+      "sha256": "58795a339f905d4bfcde892d94534f3de8461da1e88d2db5eec577e3b20f4b19"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.jsonl.provenance.json",
+      "sha256": "ec1e408787219a36f2705b78614b0510a17cf6d23ad458add7946c389cb35f5b"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_execution.json",
+      "sha256": "470257328523580419aee4e8b7bea119ab9bc9d28590494da297a6ce8c4c002c"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_scenario_adaptive_hybrid_orca_v2_collision_guard_v4.jsonl.provenance.json",
+      "sha256": "327b38a2055fd36e6698bdb82d7af7dbe230b6cb5398a05f379e6da4d191b6fc"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_scenario_adaptive_hybrid_orca_v2_collision_guard_v4_execution.json",
+      "sha256": "ef8bbb676faa7e419a65de26054e7e4f02f492afd622032d0735255afa2ef63a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_social_force.jsonl.provenance.json",
+      "sha256": "0d4239c306333e5d9af4987e605dc30f285359c28945b46e0cc445699cc22e6a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_social_force_execution.json",
+      "sha256": "4dcb529348179ad0bf1a4634623ff8dd02933608f4e7ac39927e04f6c1022c32"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_socnav_sampling.jsonl.provenance.json",
+      "sha256": "be4df0a41be012167461b091b48957134d486123fe34a5548aa4e51b3f2ac8bb"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_socnav_sampling_execution.json",
+      "sha256": "6ef3cfdabbe82b6726b756d015728a01f762468cc101b40cb53a5b77008f5e53"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_goal.jsonl.provenance.json",
+      "sha256": "8905f2095cb6947ca30c2679b8549b2bf99fd7840578998d83d6a7a5c8b0598c"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_goal_execution.json",
+      "sha256": "c9684c61d640a18a31f870b6e04b7ba507f030eb326f8115d53925c86f7904a4"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "01b7b282e076c053f81ef742dd076e339a6f3d7c56d5c804fdf97f7cc707b665"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "7e26bc03044197be7e706798f8f4f15e3f4439108d324c4e1b1e35426503b609"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_orca.jsonl.provenance.json",
+      "sha256": "9c51b8c2fcfe81c759563f7ea4e52f659ce826fcf5dcb9cc9834597546191b1f"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_orca_execution.json",
+      "sha256": "8f810ca551388c2844da6be2e0f45de581189a64eb4ed245ee7c28c5bb5d1c50"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_ppo.jsonl.provenance.json",
+      "sha256": "d462d11838ab8651e377eb0a10e960af2f557ff92bd62c0757decb89df9b6263"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_ppo_execution.json",
+      "sha256": "5466889b0b00cda9d2b345ecd4cf10d9dc35fcac630c934b3dcbf533c9e4eaca"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_social_force.jsonl.provenance.json",
+      "sha256": "92dbb78976b7ef1eb667265b6eeb7e04a11d959822b583c9aa85b38bbc7797f4"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_social_force_execution.json",
+      "sha256": "08b077131fa6ccd35affd65dc4830588c2ce2342b687bff5d24628697a14d132"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_goal.jsonl.provenance.json",
+      "sha256": "6ec1e2992fc0c9ff1c33d4fe10ba75f83b4d8b85365c4c202b25ad6f04874255"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_goal_execution.json",
+      "sha256": "f94feecd3d8d8928d1629a893cbb9b4b02854a95c0cae1dbde877ee781be567c"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "0b1422dc1a368f149d575c8d735bc1a3b5cd15a6f51f849dd6cd3e4c7887f9b7"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "729f1656b257d3f784e4820c14a56656a92cde4584a03cf39499a6712dff6cab"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_orca.jsonl.provenance.json",
+      "sha256": "25b9dae817dbe70b511def4cdbca070d87b072d6f8b27d4ff0a53bbc62f79f23"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_orca_execution.json",
+      "sha256": "148503e9b4f006e733af1e499b46e66f3079bf4f26746f97a88354e9cc78e297"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_ppo.jsonl.provenance.json",
+      "sha256": "8f39a2578ef0b2cafac829833bc64836f580d4b17e027381d7f8e55d9d8198e8"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_ppo_execution.json",
+      "sha256": "b27b4905804beb8232beb6b7c1fdef5be19f847ca41e891f17cf22b45b36a208"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_social_force.jsonl.provenance.json",
+      "sha256": "d6d8eb346eb569681df1d9fe02ee162bb824f883d0d832dad7a6d4322e38d31b"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1.3_social_force_execution.json",
+      "sha256": "c0b8127437ce5154034b93c5c3335fd435f54ef0f5c3b215671170b660f20b1a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_goal.jsonl.provenance.json",
+      "sha256": "deb45040409cd5eaa8ac3849b3ffa7d9a12c752c4459ecba730e5d318df1217a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_goal_execution.json",
+      "sha256": "7a6edf29377a783cbfa511270420ff581c7af3c7f56fda8b392a602201c62bab"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "45673ef2a8ca81b52a340f39793403b3efc63e746573b1935e8ee030c10968e7"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "f0577ffbdf85e916d2a1f0ce4bdd7e5ea8312e98fe8ce55c90f688942c3095de"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_orca.jsonl.provenance.json",
+      "sha256": "b4f521d38f1f7eac864a63d931f9891c1a41dc48ff4cfa20f705e9610fb38e31"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_orca_execution.json",
+      "sha256": "4071e050c99e42cee6ffb7b1274db26ff32bb770344ad73cea5ecce900d91078"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_ppo.jsonl.provenance.json",
+      "sha256": "cb93a8d73b74bb384ad6531b73c168a05c113d9a11f4bf17dc53af1f60c64334"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_ppo_execution.json",
+      "sha256": "888fb9deffe2420a524c8361b3bd71248d3e4439338d6b75b6b2790cf3a23c49"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_social_force.jsonl.provenance.json",
+      "sha256": "b989f960f40093e10f7680acbc2ee68e798ea5ff152b0fb65eecabc8ab67340e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.3_v1_social_force_execution.json",
+      "sha256": "605791e62ab03bd2f81163ce53811afe6eb50e895fcfd8c3a6c190dbe27a4225"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_goal.jsonl.provenance.json",
+      "sha256": "c28ab2f39b9eb1294e4db513b4f6ea634ef2728c83944999a55104954035b102"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_goal_execution.json",
+      "sha256": "7a4304401399eec22b849f7454f5022afe5af0d03a237ae483e0dc32a3c9eed8"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "93bd9c3f21039ccc57b2a62029d663b00ba32b529bc2dd40a6c4799768631cfe"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "6aaddd20d6d4bf3397fa84b0d41504fa55a2a3d6477009e8d0f347830184d206"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_orca.jsonl.provenance.json",
+      "sha256": "7f359011dad2fe964adafad744e8e157cecb5dd0e188c4f3796ade4fa802c740"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_orca_execution.json",
+      "sha256": "27fc054b4ad4cfda1e1141360b7262e9530a971d1adf22f3ea1b0fa45be18f51"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_ppo.jsonl.provenance.json",
+      "sha256": "a167b746600d30c8107366c57f586cdc2a5ddab5625a22a33fbe52e180c8f486"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_ppo_execution.json",
+      "sha256": "f2c5a6d37be55a552603060e56ea2e74376c678dcc5bb6f7e510981e8aa3bd70"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_social_force.jsonl.provenance.json",
+      "sha256": "6c423a51c70d4241e57067b42f99026857012a87160f91294d203436793ba3d2"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v0.65_social_force_execution.json",
+      "sha256": "58e1c2cfd31f7d67f92a62dcf330d37d340664f90cee7ec9e0b1443da3f31c16"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_goal.jsonl.provenance.json",
+      "sha256": "d5b32a6521316615471722e6c8e406a396c569318c6c6f5f5cc19a24a5cb5d42"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_goal_execution.json",
+      "sha256": "5b2c9b1459ac8bc4313ca479b26e35f290e184d8036353e54ec3fb732d54a6b2"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "12eabf443189169f0a6d48e57070a136e83be2bd0b65a638330194438a4018f2"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "1173a33636397e3b2c96fb5035bcec522cede37748fcef500a59b0714e6c970a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_orca.jsonl.provenance.json",
+      "sha256": "e41a2278caf82ac6ff542974674ad9f88b9ab7f453fb74a65b4df00f867cac78"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_orca_execution.json",
+      "sha256": "2f5d3686a03eaa15a7d015bbbb1ef6ac3c398d5dbe7c455d0139c47f6cdbbbde"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_ppo.jsonl.provenance.json",
+      "sha256": "c8d87f70013aedf47a7f8501accc3d62553e66e7f9483d1737c4b720d678a6a4"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_ppo_execution.json",
+      "sha256": "d364cdc092a101272a77ba3da1fb7b083fb995fdc3ee91062ab35dee86324065"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_social_force.jsonl.provenance.json",
+      "sha256": "12c2ea7804a43583a650d41764cdba28ee56a1adae0235b6391d15985dfa33b6"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1.3_social_force_execution.json",
+      "sha256": "f5efc4703b3be4114df5d2b58ad43e25630ab1f1f3ab059d452ba621b676373b"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_goal.jsonl.provenance.json",
+      "sha256": "272141b74182beaa28af79e9ab4c187109b7c9f10dbd4e70ef4685507dce4644"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_goal_execution.json",
+      "sha256": "e7d5ad80ae6624f5956719d49a76a52c4c437d0f7cc656034e71caa144cb4d4e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "9a23a7ea4dffd3b50e724d8544989a4ea34ee6c6190d4be54c906494bd5e7754"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "a6a9d672ecfe65e3691ba6c2dbd4b7cd048104823db71790cde11fe3f3f36b99"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_orca.jsonl.provenance.json",
+      "sha256": "2148a7a174c0d3b068c9284a9a56f16d749af2c998f1e320c163af4f42c3c523"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_orca_execution.json",
+      "sha256": "f7bf34e6a9d11ccbabf5504abbf0c6df2f133be6f0925b14156cb39c2763a0c4"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_ppo.jsonl.provenance.json",
+      "sha256": "a19a797be9fe784e5afffd34b26f904640a4caed27911587187198abd160607a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_ppo_execution.json",
+      "sha256": "cd134ab047daf940e9d23148679c3d0a0978e5fed4c1298e13c325b7c083d936"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_social_force.jsonl.provenance.json",
+      "sha256": "e66ab0a431ae867734ae71c415adb00d2f71fd4fd426bd7e39c964a30fc49965"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r0.5_v1_social_force_execution.json",
+      "sha256": "48852c940319a0a1c5fcca50cd4febb84425f5fc5e879b316976bf621c741d57"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_goal.jsonl.provenance.json",
+      "sha256": "681839daec11d9439f8a693d7add029e76778f3d9ddd25344adefd2b169ceb35"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_goal_execution.json",
+      "sha256": "d565212537bbe05756647e4caf0eb64ee8049f867d7be5a9a56a2ad534d9e30f"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "da1bb49dff2aa84b7f0be8f8ead7dcc03918b1ddd006281bab3fc4ce1aa515f9"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "50f1faebe6151eed354318c10a378d551b9104ac9b4c75b41b032f19d6ccc7e0"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_orca.jsonl.provenance.json",
+      "sha256": "69c7bf999eca543a77ddcd382f33c901fde8d17ee02373bd0394184fa46221de"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_orca_execution.json",
+      "sha256": "6f0c19d144fdbbc1112002fdd302a4080da8fdd1958c0f1906e66fbc1d95298b"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_ppo.jsonl.provenance.json",
+      "sha256": "50bc40638345f5c97c628e93ac35b797b35f47a7424b073867424a4729e8c643"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_ppo_execution.json",
+      "sha256": "3077c6e2bb7352ff8288ee218830fed0b4a63d4dfc0f7065357f8ee4ff5a2484"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_social_force.jsonl.provenance.json",
+      "sha256": "f388fa0ff08944edb127e8b241fef8fc930a9ac46ad70ba493b016041ed8f826"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_social_force_execution.json",
+      "sha256": "af926a4d7fd24d82a1119dcc70d3e90c8728d42df69c25b9e40a524f604c2607"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_goal.jsonl.provenance.json",
+      "sha256": "0ff527e67c4b95cb4bb8210022dff0248eaddc1ab959f334f1687b51dbbd7d47"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_goal_execution.json",
+      "sha256": "60559b0357b8f249db8884d1f9337179c17a9f48e2a894450a5b5a8b2827b0a2"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "7735c2dcf5f8398cf307687eba790b600999597cba2bdab5e0e7f80bb9e2fa28"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "40a000b6455cf88bb345681f0178fc243d246b1af3a41770ef2b2a987dc9cf39"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_orca.jsonl.provenance.json",
+      "sha256": "c35a93134af6c9373e97e1bf03e94fd9dc801c1c8520edecd361b918975332b8"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_orca_execution.json",
+      "sha256": "efc9e00a14419bb0c04a92c99c9aef21df25dfac87508130bfd58575580e32ef"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_ppo.jsonl.provenance.json",
+      "sha256": "a682aa839a6221c2c5ad9c3fe837685d9485406c89b017a7a4f297c3acc52e11"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_ppo_execution.json",
+      "sha256": "480125d3555fbef09008921cbde28523042115f028472c888bcf5215428c5889"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_social_force.jsonl.provenance.json",
+      "sha256": "c67bb9e126ba07ce973024cfd1e32eb46554ca36a907d89bf2e289c05515fd27"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_social_force_execution.json",
+      "sha256": "5437541026e1be7b9e524ac4b18323432f8acca8145dff76755aa2404368d647"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_goal.jsonl.provenance.json",
+      "sha256": "de3d96a48b820a486b09b1e2b06336f61a837b381d90d370e01966a5921b2459"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_goal_execution.json",
+      "sha256": "89a62a0f014f921e4e6c0b7ae48452010eef2020a94e464faaf1feffb8af40e9"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "b463f96ef8ccf85784d88dd622e986d7392eeee919cae40bfb5a8e5d60cd3ecb"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "852e88d35d7bad567f19cab8818d9d2289d658ae78bafae3e26962350c41cbf7"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_orca.jsonl.provenance.json",
+      "sha256": "dcee34bc0e52967642f30b94376b3ad30b860869e6cd6f19ad022fa8a41ad481"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_orca_execution.json",
+      "sha256": "9c9d5159472bbeedfeb4f0c6111a9202da814cfb9da88312dcd756f9152dfe8e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_ppo.jsonl.provenance.json",
+      "sha256": "5ed0cce89f0d994b8a191c417192a7cfd451e243e87c7a3cda4cc6a627ee171a"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_ppo_execution.json",
+      "sha256": "a4bc6d3c742b61a9ac9d8ca6fb46c1429322887170021b904291d9347f6da1fc"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_social_force.jsonl.provenance.json",
+      "sha256": "02c75575cca11526968c0ca312b69171c4ddfb6b1c9778d4db8ad4714ff8b473"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v1_social_force_execution.json",
+      "sha256": "676e28e9ca59bea2cd2cfbc4e5b0e3fef3b601114acf50d83d56f1b19115c61b"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_goal.jsonl.provenance.json",
+      "sha256": "920de010d27022ba188a3ae8b4892a8422c4048703a9cef7b299810ca8a3233d"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_goal_execution.json",
+      "sha256": "e664ff290ca6e2a8efb6cbfc397595a9531c1c3e1f208e1e27eeb24eb7d2a7a9"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_guarded_ppo.jsonl.provenance.json",
+      "sha256": "eda8985294f8d33999286921b1f5cc1fa60bd011ef1e1821e756fc916e719e66"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_guarded_ppo_execution.json",
+      "sha256": "7a55fc02f3c4d5f690004f8e442256a6a8fb35e41d15492ee1cb51bc9b44d06e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "sha256": "2be4b79e89bceebd93c4007ed86f07a472f7e6f1418147a4a64a792993867594"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_hybrid_rule_v4_fast_progress_static_escape_continuous.jsonl.provenance.json",
+      "sha256": "b81f83c3637eb60bcdc933764e5cfa05bef0a70dfb030b2f90e56363397d59cb"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_hybrid_rule_v4_fast_progress_static_escape_continuous_execution.json",
+      "sha256": "f902c6ef1f7f7bc7e86cb74e0d136faa7db4cf43a5339318f13e1b8c5569531c"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_hybrid_rule_v4_fast_progress_static_escape_execution.json",
+      "sha256": "82e6f38fdbb49d5b961ae52949c6c115944166e611e97fab55e3f0fcb9705016"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_orca.jsonl.provenance.json",
+      "sha256": "49d8fa57002845e896c3d7b298280e22c5ad2b896ce8f0b33cd482a1ea29c296"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_orca_execution.json",
+      "sha256": "1ea3d9fe7bea376f0f9b24335f950971533344aa3b7fc64040a29311427ffc11"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_ppo.jsonl.provenance.json",
+      "sha256": "8dbb2593687c51dbc4c870794e57ca4fb4bc96eee55813a1c8842acb862ff5c2"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_ppo_execution.json",
+      "sha256": "4a4a960c23958813e9009ad884f3bdf7a3e38aa543d2babc3aec7c1eab726f1c"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_prediction_planner.jsonl.provenance.json",
+      "sha256": "d43acf1f7088e0ddb94dfc7728288c7f39ce29e7a46eb1b8e5f32fd04cafc4be"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_prediction_planner_execution.json",
+      "sha256": "b9c8b801c08fe6090964ba2af38517d0ac0376e9b0d0789040b9a4aaa365d29f"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_predictive_mppi.jsonl.provenance.json",
+      "sha256": "3e05629b376f0079be3be5de404d84ccb1f5b8ab67b2425465be2e527fba0c48"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_predictive_mppi_execution.json",
+      "sha256": "e426123a61755a1a00d5ddd5a74df62397cc813a9a32d67bfceedec0fd308c96"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_risk_dwa.jsonl.provenance.json",
+      "sha256": "6678680ef54ea3927df258959e947fd5cdd80c5c8abc9ef94e3c25cf6d95d681"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_risk_dwa_execution.json",
+      "sha256": "70b9a1400c985f6a11de81410bbf7402d390e8211010bc3a0a582034a518a685"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_sacadrl.jsonl.provenance.json",
+      "sha256": "8e2849ec54efde9c8396e47bdbba10ed769d8f2450e0796fde11103288235e45"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_sacadrl_execution.json",
+      "sha256": "23f412a20e9d054e07378692ed7e27b6c448527f1c2a4daa1cc87615f8f31940"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.jsonl.provenance.json",
+      "sha256": "130ad224415ae5551d6487de8db0e500c49c00730f4343113b57d71b34d5c6bb"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_execution.json",
+      "sha256": "67bd2c943518237b145171015fcc649d712ac6880fbfb25654a27b8d39652429"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_scenario_adaptive_hybrid_orca_v2_collision_guard_v4.jsonl.provenance.json",
+      "sha256": "d18e1aae255106c0b1a41fc4cea1de4df55a4e40ed3aa10614b522b7ae1188b8"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_scenario_adaptive_hybrid_orca_v2_collision_guard_v4_execution.json",
+      "sha256": "8f7d404893584367865616a0adb2ba19afe85f8ff6ab42860089078ccbfa6d4e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_social_force.jsonl.provenance.json",
+      "sha256": "1be307a98c2c7ecc790743cd6c850c1ddf45d196414b2ff92a27bd5c6d93264e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_social_force_execution.json",
+      "sha256": "19b667c77f68ada0822505b38d7af8d0bf19c44e02504a2661eb48087f9081f3"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_socnav_sampling.jsonl.provenance.json",
+      "sha256": "f7ebca8209779045fe07d4d5f630b50b3b402e1889e4eb50f0706c5c639b018e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/swap_socnav_sampling_execution.json",
+      "sha256": "74302c14412ba7ebf2c148f71764a5f1e8845329fb05b531c0a80bfd38fcc844"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/legacy_w1.jsonl.provenance.json",
+      "sha256": "bccf9fc141d7e394a662edac16f530cf50ecb2be17c307c680ccb66e08554713"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/legacy_w2.jsonl.provenance.json",
+      "sha256": "70f70eb695bce4508678c75738ad301453b9bd8a57e1924ec13d35a58fddca05"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/swap_w1.jsonl.provenance.json",
+      "sha256": "5f3f4bf13f8e820bb6fc587c0ba03f0bb5a3baafa508b2bb846474cda90a45da"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/swap_w2.jsonl.provenance.json",
+      "sha256": "ea81420bc666c7da9160193108c30a5c5eb8c1f06509aa78f1bbc30dd334e925"
+    }
+  ],
+  "original_byte_checksums": "Superseded raw JSONL checksums are replaced by actual portable gzip checksums; no original-byte parity certificate is claimed.",
+  "logical_hashes": "Embedded campaign/config/context hashes identify structured producer inputs, not whole-file byte checksums. hash_locations.json identifies the containing artifact and JSON pointer."
+}

@@ -1,0 +1,395 @@
+{
+  "files": [
+    {
+      "artifact_path": "docs/context/robsweep/inputs/goal_legacy.yaml",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "goal_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/goal_swap.yaml",
+      "sha256": "dd8812bd6932bdc2731ad928373b4d8d06d0ae72eccbe5cf3853b2c643f2a7a5",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "goal_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/guarded_ppo_legacy.yaml",
+      "sha256": "d9ead74d3aa89335506438cb4b09eeb1626ae31b9ec6537e6d04afcf3f744f97",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "guarded_ppo_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/guarded_ppo_swap.yaml",
+      "sha256": "c7dc0b3fab7ae5cd9f1197f355a176d05c6027a11223b40e1b4e822d9ab2116c",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "guarded_ppo_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_continuous_legacy.yaml",
+      "sha256": "cdc6cfa301c9726c273743c3d2a71dacf0c11374c61910f7626bed815e2a2203",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_continuous_swap.yaml",
+      "sha256": "7b12ab261d9f48244af3dd8cd532eedab65e63b6115f7d9cef7598852202c478",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_legacy.yaml",
+      "sha256": "45d0eb9e78cadc170209d7716d3fa0614049964f3af68edf75d155a97ae80e15",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "hybrid_rule_v4_fast_progress_static_escape_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_swap.yaml",
+      "sha256": "c0fc78b548cf5867a70830b7434a6b5c817806a398774dfd56c6ce9616dcdc9f",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "hybrid_rule_v4_fast_progress_static_escape_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/legacy.yaml",
+      "sha256": "a27b50ae04e482b7ff6663045cdd981e2d21e3c5e03ad6486bcf2d6af2a88396",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/orca_legacy.yaml",
+      "sha256": "a125fdce11039ace1d506cffd1e87729eecf6830cafab0054e373af566df2a28",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "orca_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/orca_swap.yaml",
+      "sha256": "7cbf75030681f1feb4a559fa986e636b7a51e731dcd5dde63be5a3102fa961a2",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "orca_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/ppo_legacy.yaml",
+      "sha256": "e67b0cf006d8f02bc54c705ecc8e995dc7460b2f8c221bb3d87aba2ff90f3720",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "ppo_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/ppo_swap.yaml",
+      "sha256": "3ad7bd26951c1bf92fcabd4f25e4998ccde394c756b6ebc4de4886524f49bd49",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "ppo_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/prediction_planner_legacy.yaml",
+      "sha256": "18d6675ffcce665e381ce25e010955ec2d441c8776ba42a92108141ef2672d24",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "prediction_planner_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/prediction_planner_swap.yaml",
+      "sha256": "269033856c749a24884c1103822444c93e4dbf698fca4236697f4809b08b9325",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "prediction_planner_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/predictive_mppi_legacy.yaml",
+      "sha256": "5c9fef531d4f27b5c11ba2c5eb24fec0c0042acbe6daaa081f3d4c504ca14a82",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "predictive_mppi_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/predictive_mppi_swap.yaml",
+      "sha256": "6c1187ef658b3b5764707db1c315fe7b3d995c3dce725638fc71a9ddd30baf4a",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "predictive_mppi_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r0.3_v0.65.yaml",
+      "sha256": "dea46499e31e98d7e91128f84c09a4c9dbfebb07bb4bd00200ef51d06bdabdaa",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r0.3_v0.65.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r0.3_v1.3.yaml",
+      "sha256": "c240bd8b33e97a48942173aa71d0b6dace16fa7d1ffec7a0ba03e08e400686ef",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r0.3_v1.3.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r0.3_v1.yaml",
+      "sha256": "2ab45862d6510781860c709ded05ea6e5fd006020819203ebf3b697d38c302f3",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r0.3_v1.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r0.5_v0.65.yaml",
+      "sha256": "20976c341f91724aef94a5c40563ecaab78612ae4016d38dfb45b15229ae5288",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r0.5_v0.65.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r0.5_v1.3.yaml",
+      "sha256": "5da933de880260eeadb433b46c0ee7f9c6c33fe6f9274c5e89e925bdacc3849e",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r0.5_v1.3.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r0.5_v1.yaml",
+      "sha256": "68c2f0c19127d24264a0c87b6a7df9b3969f2cda6d973c746071675db47a55ae",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r0.5_v1.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r1_v0.65.yaml",
+      "sha256": "5778c6358fb2644832d432140508dca0943ae5f9b436a191f21c3de07ade3f87",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r1_v0.65.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r1_v1.3.yaml",
+      "sha256": "05c064edd635fcc0a3fa4947eface25e4440026c72d7e35bd59b05a972341f45",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r1_v1.3.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/r1_v1.yaml",
+      "sha256": "1c13563f73a92debf0a15198243c4bd3f36474a560b9344fdcd0e41a93b79cd3",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "r1_v1.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/risk_dwa_legacy.yaml",
+      "sha256": "1c760bb8449a449549a86c38d626e1a14e9e69b2712b37da243576464a4d41b8",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "risk_dwa_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/risk_dwa_swap.yaml",
+      "sha256": "2c053155661ee514bff4e7e857d3ddbfe1f9e1fdb1f2052c710d42f53b9fb9e9",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "risk_dwa_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/sacadrl_legacy.yaml",
+      "sha256": "859fd98a82009863b3fd31bf009252bb1810fdf578e641284e6eb849f6898585",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "sacadrl_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/sacadrl_swap.yaml",
+      "sha256": "2755d32751c03f7f56f6ba3c194e3096866a7c862a5a0571093fd5c706218b6e",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "sacadrl_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_legacy.yaml",
+      "sha256": "625d56aecbe178610eb68e37609b2f853765050164e3b8d685b491759dc39f61",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_swap.yaml",
+      "sha256": "b84d3b5c859767e95e6b7ef3be976084d0da57ae917f7140c0d554bccb90a754",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_legacy.yaml",
+      "sha256": "92c7e1918754f08526b9074f03e22c0b919e139d906a6e09841c6d85f2c040e8",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_swap.yaml",
+      "sha256": "3cc54a515daa8b9eb55d1db333229ed43c52b46381ddc2dbfebf8cee46ab2e2d",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/social_force_legacy.yaml",
+      "sha256": "baa9e0e9515d0184093806f77c6211c22ef0433212db9887efd454dac5e3ca5a",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "social_force_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/social_force_swap.yaml",
+      "sha256": "7b550f2b6b51d4f31002e30708a38b8fbcd742c6384b5baa9ce5b04b43ee776a",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "social_force_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/socnav_sampling_legacy.yaml",
+      "sha256": "e606e68a10314f31d2fdd45294e341c966f87db150df654938bb014bf601d618",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "socnav_sampling_legacy.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/socnav_sampling_swap.yaml",
+      "sha256": "2229d4259377280f8b869a45c7e03dd5eaf59aabbd91ca599afc1b44206b3db2",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "socnav_sampling_swap.yaml"
+      ]
+    },
+    {
+      "artifact_path": "docs/context/robsweep/inputs/study.source.txt",
+      "sha256": "cd7d149e4e20044f9b842e2c008d3a23af9f865b3d3bd272a395179a957f2438",
+      "acquisition_path_parts": [
+        "configs",
+        "benchmarks",
+        "robsweep",
+        "study.json"
+      ]
+    }
+  ],
+  "disposition": "Exact acquisition input bytes, archived independently of the experimental config PR."
+}

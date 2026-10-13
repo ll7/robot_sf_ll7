@@ -91,7 +91,3 @@ fallback. Qualification requires a bounded solver improvement and progress
 measurements on the validation workloads; neither increasing the pass budget
 beyond 10 nor hiding fallback is permitted. Release integration owns the missing
 behaviour receipt and complete workload/custody qualification.
-
-[Raw diagnostic timing samples and source checksums](../context/evidence/pedestrian_contact_fix_20261013/diagnostics.json)
-and the [SHA256 manifest](../context/evidence/pedestrian_contact_fix_20261013/SHA256SUMS)
-preserve the bounded observations above for independent inspection.

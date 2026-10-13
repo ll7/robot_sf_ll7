@@ -206,3 +206,29 @@ def test_real_environment_uses_selected_body_and_executed_pose():
         assert env.state.occupancy.capsule_pose == env.simulator.robots[0].pose
     finally:
         env.close()
+
+
+@pytest.mark.parametrize("image", [False, True])
+def test_capsule_collision_provider_does_not_hide_robots_from_lidar(image):
+    """Until sensor migration, other capsules remain visible as explicit covering discs."""
+    from robot_sf.sensor.range_sensor import LidarScannerSettings, lidar_ray_scan_ranges_only
+
+    occs, robots = occupancy(other_pose=((5.0, 5.8), 0.0), image=image)
+    assert not occs[0].is_dynamic_collision
+    settings = LidarScannerSettings(num_rays=4, scan_noise=[0.0, 0.0])
+    ranges = lidar_ray_scan_ranges_only(robots[0].pose, occs[0], settings)
+    # The ray at pi/2 meets the retained 0.64 m covering disc at 0.8 - 0.64 m.
+    assert ranges[3] == pytest.approx(0.16)
+
+
+def test_dynamic_disc_peer_uses_its_own_contact_radius():
+    """A disc peer must not inherit the capsule's conservative sensor proxy."""
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+
+    occs, robots = occupancy()
+    neighbor = BicycleDriveRobot(BicycleDriveSettings(radius=0.2))
+    neighbor.reset_state(((5.0, 5.7), 0.0))
+    robots.append(neighbor)
+    assert not occs[0].is_dynamic_collision  # 0.7 - 0.239 - 0.2 > 0
+    neighbor.reset_state(((5.0, 5.4), 0.0))
+    assert occs[0].is_dynamic_collision

@@ -55,6 +55,8 @@ remains [#10109](https://github.com/ll7/robot_sf_ll7/issues/10109). Projection o
 command alone does not prove that the planner scored the executed trajectory.
 Full capsule planner support requires explicit admission checks and geometry/
 kinematics migration. Learned disc checkpoints require retraining and validation.
+Contact callbacks are separate from sensor callbacks: other capsule robots remain
+visible to lidar through the explicit covering-disc approximation.
 
 Run the focused physical witnesses with:
 

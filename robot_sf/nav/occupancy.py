@@ -271,6 +271,12 @@ class ContinuousOccupancy:
         default=None, kw_only=True
     )
 
+    # Sensor-facing get_dynamic_objects retains all covering discs. Exact contact
+    # providers exclude those proxies when a capsule body provider is present.
+    get_dynamic_collision_circles: Callable[[], list[Circle2D]] | None = field(
+        default=None, kw_only=True
+    )
+
     def __post_init__(self) -> None:
         """Require live heading when capsule collision geometry is selected."""
         if self.capsule is not None and self.get_agent_pose is None:
@@ -395,16 +401,17 @@ class ContinuousOccupancy:
                     gap = capsule.circle_gap(pose, self.get_agent_coords(), self.agent_radius)
                 if gap <= _CAPSULE_CONTACT_EPS:
                     return True
-        if self.get_dynamic_objects is None:
+        get_circles = self.get_dynamic_collision_circles or self.get_dynamic_objects
+        if get_circles is None:
             return False
         if self.capsule is not None:
             pose = self.capsule_pose
             return any(
                 self.capsule.circle_gap(pose, centre, radius) <= _CAPSULE_CONTACT_EPS
-                for centre, radius in self.get_dynamic_objects()
+                for centre, radius in get_circles()
             )
         circle_agent = (self.get_agent_coords(), self.agent_radius)
-        return circle_collides_any(circle_agent, self.get_dynamic_objects())
+        return circle_collides_any(circle_agent, get_circles())
 
     @property
     def is_robot_at_goal(self) -> bool:

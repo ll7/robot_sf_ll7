@@ -194,6 +194,21 @@ def _dynamic_capsule_provider(sim: Simulator, robot_idx: int):
     return None
 
 
+def _dynamic_collision_circle_provider(sim: Simulator, robot_idx: int, radius: float):
+    """Separate exact contact bodies from the sensor's conservative circle proxies.
+
+    Returns:
+        Disc-only contact provider, or None for the historical disc path.
+    """
+    if _dynamic_capsule_provider(sim, robot_idx) is None:
+        return None
+    return lambda: [
+        (robot.pos, float(getattr(robot.config, "radius", radius)))
+        for idx, robot in enumerate(sim.robots)
+        if idx != robot_idx and getattr(getattr(robot, "config", None), "capsule", None) is None
+    ]
+
+
 def init_collision_and_sensors(
     sim: Simulator,
     env_config: EnvSettings | RobotSimulationConfig,
@@ -222,10 +237,7 @@ def init_collision_and_sensors(
         """Return circles for all robots except the requested index."""
         circles: list[tuple[tuple[float, float], float]] = []
         for idx, pos in enumerate(sim.robot_pos):
-            if (
-                idx == robot_idx
-                or getattr(getattr(sim.robots[idx], "config", None), "capsule", None) is not None
-            ):
+            if idx == robot_idx:
                 continue
             circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
         return circles
@@ -242,6 +254,9 @@ def init_collision_and_sensors(
             get_pedestrian_coords=lambda: sim.ped_pos,
             get_dynamic_objects=(lambda idx=i: dynamic_robot_circles(idx)),
             get_dynamic_capsules=_dynamic_capsule_provider(sim, i),
+            get_dynamic_collision_circles=_dynamic_collision_circle_provider(
+                sim, i, robot_config.radius
+            ),
             capsule=getattr(robot_config, "capsule", None),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
@@ -776,10 +791,7 @@ def init_collision_and_sensors_with_image(
         """Return circles for all robots except the requested index."""
         circles: list[tuple[tuple[float, float], float]] = []
         for idx, pos in enumerate(sim.robot_pos):
-            if (
-                idx == robot_idx
-                or getattr(getattr(sim.robots[idx], "config", None), "capsule", None) is not None
-            ):
+            if idx == robot_idx:
                 continue
             circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
         return circles
@@ -799,6 +811,9 @@ def init_collision_and_sensors_with_image(
             get_pedestrian_coords=lambda: sim.ped_pos,
             get_dynamic_objects=(lambda i=i: dynamic_robot_circles(i)),
             get_dynamic_capsules=_dynamic_capsule_provider(sim, i),
+            get_dynamic_collision_circles=_dynamic_collision_circle_provider(
+                sim, i, robot_config.radius
+            ),
             capsule=getattr(robot_config, "capsule", None),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,

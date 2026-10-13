@@ -755,7 +755,9 @@ def source_main(argv=None):  # noqa: C901, PLR0915, PLR0912
     parser.add_argument("--radius", type=float, default=0.4)
     parser.add_argument("--speed-tier", choices=["native", "literature"], default="native")
     parser.add_argument(
-        "--wall-profile", choices=["legacy_v1", "calibrated_v2", "gradient_v3", "body_edge_v3"], default="legacy_v1"
+        "--wall-profile",
+        choices=["legacy_v1", "calibrated_v2", "gradient_v3", "body_edge_v3"],
+        default="legacy_v1",
     )
     parser.add_argument("--protocol", choices=["source", "legacy"], default="source")
     parser.add_argument("--workers", type=int, default=2)

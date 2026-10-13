@@ -92,6 +92,8 @@ def _fixture_execution_mode(scope, arm, scenario):
     ]
     if _fixture_execution_algorithm(scope, arm, scenario) == "guarded_ppo":
         return "mixed"
+    if _fixture_execution_algorithm(scope, arm, scenario) == "hybrid_rule_local_planner":
+        return "adapter"
     return "native" if profile["supports_native_commands"] else "adapter"
 
 
@@ -507,6 +509,10 @@ def _write_equivalence_sweep(output, source, job, tooling_sha, tooling_digest, s
                 from tests.validation.receipt_guarded_fixture import guarded_episode
 
                 raw = guarded_episode(raw)
+            if raw["algo"] == "hybrid_rule_local_planner":
+                from tests.validation.receipt_hybrid_fixture import hybrid_episode
+
+                raw = hybrid_episode(raw)
             raw_rows.append(raw)
             summaries.append(
                 {

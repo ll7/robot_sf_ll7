@@ -248,10 +248,47 @@ def _native_inventory_receipt(scope):
             and row["map"] == receipt_arm_execution.SCENARIO
         ):
             row.update(algorithm="orca", execution_mode="adapter")
+        if row["algorithm"] == "guarded_ppo":
+            row["execution_mode"] = "mixed"
+        if row["algorithm"] == "hybrid_rule_local_planner":
+            row["execution_mode"] = "adapter"
     return receipt
 
 
-def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
+def _source_shaped_artifacts(root, receipt, scope, monkeypatch):
+    """Generate complete composite/adapter raw before the existing producer seals."""
+    from tests.validation import test_behaviour_receipt_provenance as provenance_fixture
+    from tests.validation.receipt_guarded_fixture import guarded_episode
+    from tests.validation.receipt_hybrid_fixture import hybrid_episode
+
+    original_trace = provenance_fixture._fixture_execution_trace
+
+    def source_shaped_trace(raw, row, algo_configs):
+        original_trace(raw, row, algo_configs)
+        if raw["algo"] == "guarded_ppo":
+            # Complete the synthetic producer row before either normal seal is
+            # written; the gate receives the actual guarded writer's metadata.
+            completed = guarded_episode(raw)
+            raw.clear()
+            raw.update(completed)
+        if raw["algo"] == "hybrid_rule_local_planner":
+            completed = hybrid_episode(raw)
+            raw.clear()
+            raw.update(completed)
+
+    monkeypatch.setattr(provenance_fixture, "_fixture_execution_trace", source_shaped_trace)
+
+    return provenance_fixture.source_artifacts_for_receipt(
+        root,
+        receipt,
+        algo_configs={
+            arm: root / profile[0] for arm, profile in receipt_arm_execution.PROFILES.items()
+        },
+        arm_algorithms=scope["arm_algorithms"],
+    )
+
+
+def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path, monkeypatch):
     """The deployed shell accepts compact source data and rejects head-policy bypasses."""
     root = tmp_path / "repo"
     git, base = _trusted_fixture(root)
@@ -278,16 +315,7 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     from tests.validation.test_behaviour_receipt_gate import _hardware
 
     receipt["hardware"] = {"head": _hardware(run_source), "baseline": _hardware(base)}
-    from tests.validation.test_behaviour_receipt_provenance import source_artifacts_for_receipt
-
-    sources = source_artifacts_for_receipt(
-        root,
-        receipt,
-        algo_configs={
-            arm: root / profile[0] for arm, profile in receipt_arm_execution.PROFILES.items()
-        },
-        arm_algorithms=scope["arm_algorithms"],
-    )
+    sources = _source_shaped_artifacts(root, receipt, scope, monkeypatch)
     raw = json.dumps(
         {
             "schema_version": "behaviour-change-rows.v1",

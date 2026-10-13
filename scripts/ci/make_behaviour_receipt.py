@@ -1675,7 +1675,7 @@ _GUARDED_DECISION_POLICIES = {
 
 
 def required_execution_mode(algorithm: str, capabilities: dict) -> str:
-    """Preserve the registry's explicit guarded composite; other rules stay fixed."""
+    """Honor the two reviewed registry defaults; retain other command-mode rules."""
     if (
         algorithm == "guarded_ppo"
         and capabilities.get("execution_mode") == "mixed"
@@ -1684,7 +1684,73 @@ def required_execution_mode(algorithm: str, capabilities: dict) -> str:
         and capabilities.get("adapter_name") == "guarded_ppo_action_to_unicycle"
     ):
         return "mixed"
+    if (
+        algorithm == "hybrid_rule_local_planner"
+        and capabilities.get("execution_mode") == "adapter"
+        and capabilities.get("supports_native_commands") is True
+        and capabilities.get("supports_adapter_commands") is True
+        and capabilities.get("adapter_name") == "HybridRuleLocalPlannerAdapter"
+    ):
+        return "adapter"
     return "native" if capabilities["supports_native_commands"] else "adapter"
+
+
+_HYBRID_NATIVE_IDENTITIES = {
+    ("algo",): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "algorithm"): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "canonical_algorithm"): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "planner_contract", "planner_id"): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "policy_semantics"): "hybrid_rule_deterministic_local_planner",
+    ("event_ledger", "planner"): "hybrid_rule_local_planner",
+    ("scenario_params", "algo"): "hybrid_rule_local_planner",
+    (
+        "algorithm_metadata",
+        "paired_effect_metric_producer",
+        "pairing",
+        "key",
+        "planner",
+    ): "hybrid_rule_local_planner",
+}
+
+
+def _hybrid_adapter_context(row: dict[str, Any]) -> bool:
+    """Bind the registered hybrid adapter to its complete native row identity."""
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+
+    algorithm = "hybrid_rule_local_planner"
+    if (
+        any(
+            list(_runtime_objects(row, path)) != [(".".join(path), expected)]
+            for path, expected in _HYBRID_NATIVE_IDENTITIES.items()
+        )
+        or ("algorithm" in row and row["algorithm"] != algorithm)
+        or required_execution_mode(
+            algorithm, enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+        )
+        != "adapter"
+    ):
+        return False
+    metadata = row["algorithm_metadata"]
+    profile = metadata.get("planner_kinematics")
+    if not isinstance(profile, dict) or any(
+        profile.get(key) != value or type(profile.get(key)) is not type(value)
+        for key, value in {
+            "execution_mode": "adapter",
+            "supports_native_commands": True,
+            "supports_adapter_commands": True,
+            "adapter_active": True,
+            "adapter_name": "HybridRuleLocalPlannerAdapter",
+        }.items()
+    ):
+        return False
+    # Native hybrid diagnostics do not emit planner_type. A supplied assertion
+    # must agree; absence is not filled with a manufactured adapter identity.
+    runtime_identity = list(
+        _runtime_objects(row, ("algorithm_metadata", "planner_runtime", "planner_type"))
+    )
+    return not runtime_identity or runtime_identity == [
+        ("algorithm_metadata.planner_runtime.planner_type", "HybridRuleLocalPlannerAdapter")
+    ]
 
 
 def _guarded_mixed_context(row: dict[str, Any]) -> bool:
@@ -1812,6 +1878,13 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
         for _, value in _runtime_objects(row, path)
     ]
     guarded_mixed = mode == "mixed" and _guarded_mixed_context(row)
+    hybrid_adapter = (
+        algorithm == "hybrid_rule_local_planner"
+        and mode == "adapter"
+        and _hybrid_adapter_context(row)
+    )
+    if algorithm == "hybrid_rule_local_planner" and not hybrid_adapter:
+        mode = "unknown"
     if (mode not in {"native", "adapter"} and not guarded_mixed) or any(
         value != mode for value in modes
     ):
@@ -1838,7 +1911,7 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
             type(row.get("steps")) is int
             and row["steps"] > 0
             and _trace_complete(row)
-            and (not guarded_mixed or _guarded_commands_complete(row))
+            and (not (guarded_mixed or hybrid_adapter) or _guarded_commands_complete(row))
             and all(
                 isinstance((step.get("planner") or {}).get("selected_action"), dict)
                 and step["planner"]["selected_action"]

@@ -479,7 +479,10 @@ def _seal_full_dispatch(root, repo, scope):
         for row in rows:
             algo = fixture._fixture_execution_algorithm(scope, arm, row["scenario_id"])
             row["algo"] = algo
-            row["algorithm_metadata"]["algorithm"] = algo
+            # Guarded PPO's source-emitted controller identity is PPO inside
+            # the declared guarded composite; retain the complete fixture.
+            if algo != "guarded_ppo":
+                row["algorithm_metadata"]["algorithm"] = algo
             if algo == "orca":
                 native_orca_identity(row)
             if arm in ARMS:

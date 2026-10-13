@@ -494,6 +494,16 @@ adapter. The reviewed matrix has no optional prior; prior availability, prior
 labels, uncertainty branches and unknown labels refuse rather than acquiring a
 generic mixed-mode allowance.
 
+The hybrid rule planner uses its registered `adapter` default despite also
+supporting native commands. This rule applies only to
+`hybrid_rule_local_planner` with the named `HybridRuleLocalPlannerAdapter` and
+matching dual capabilities. Raw algorithm, metadata, planner contract, policy
+semantics, event-ledger, scenario and paired-effect identities must all agree;
+finite selected/applied commands and the source conversion remain mandatory.
+The native hybrid writer omits a runtime `planner_type`; a supplied value must
+match the adapter and is never filled in. Other algorithm mode rules, runtime
+fault checks and the finite source-attested ORCA scenario override are unchanged.
+
 Existing authenticated guarded-native decision semantics remain unchanged.
 Best-effort, no-admissible-command and hard-constraint outcomes remain present
 and byte-compared; a byte-equality receipt is not a safety certification or a

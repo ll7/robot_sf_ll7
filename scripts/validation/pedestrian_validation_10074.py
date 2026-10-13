@@ -493,7 +493,7 @@ def run_task(task):  # noqa: C901, PLR0915
         return p, v
 
     reused.candidate_config = cast("Any", configured)
-    reused.harness.simulate = captured
+    reused.harness.simulate = cast("Any", captured)
     reused.RADIUS = radius
     row = {
         "case": case,

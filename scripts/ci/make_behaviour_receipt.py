@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.ci import (  # noqa: E402
     behaviour_receipt,
+    receipt_arm_execution,
     receipt_outcomes,
     receipt_provenance,
 )
@@ -1248,12 +1249,28 @@ def _load_run_rows(
             shard, shard.name, identity["node"], source_sha=run.source_sha, arm_role=arm_role
         )
         if preserve_raw:
-            part = _load_sweep_rows(
+            original = _load_sweep_rows(
                 shard,
                 scheduler_job_id=shard.name,
                 scheduler_node=identity["node"],
                 preserve_raw=True,
             )
+            if set(original) != set(part):
+                raise behaviour_receipt.HardwareIdentityError(
+                    "raw execution invalid: reread scope differs"
+                )
+            preserved = {}
+            for key, raw in original.items():
+                audit = dict(raw)
+                for field in ("execution_status", "scheduler_job_id", "scheduler_node"):
+                    if field not in audit and field in part[key]:
+                        audit[field] = part[key][field]
+                if audit != dict(part[key]):
+                    raise behaviour_receipt.HardwareIdentityError(
+                        "raw execution invalid: reread source differs"
+                    )
+                preserved[key] = receipt_arm_execution.carry_execution_proof(part[key], raw)
+            part = preserved
         if set(part) & set(rows):
             raise ValueError("duplicate rows across scheduler shards")
         rows.update(part)
@@ -1647,14 +1664,17 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
         and bool(algorithm.strip())
         and row.get("controller_executed", True) is True
     )
-    return {
-        "algorithm": algorithm or "unknown",
-        "execution_mode": mode,
-        "controller_executed": bool(executed),
-        "fallback": row.get("fallback") is True
-        or (marker is not None and "fallback" in str(marker)),
-        "degraded": row.get("degraded") is True or marker is not None,
-    }
+    return receipt_arm_execution.carry_execution_proof(
+        row,
+        {
+            "algorithm": algorithm or "unknown",
+            "execution_mode": mode,
+            "controller_executed": bool(executed),
+            "fallback": row.get("fallback") is True
+            or (marker is not None and "fallback" in str(marker)),
+            "degraded": row.get("degraded") is True or marker is not None,
+        },
+    )
 
 
 def build_rows_and_classifications(
@@ -1703,6 +1723,9 @@ def build_rows_and_classifications(
                         ),
                     }
                 )
+                rows[-1] = receipt_arm_execution.carry_execution_proof(
+                    head if execution_evidence is None else execution_evidence[key], rows[-1]
+                )
                 evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
                 if baseline_success and not success:
                     classifications.append(
@@ -1748,7 +1771,6 @@ def derive_valid_comparison(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Shared collection/admission trust decision, derived entirely from raw rows."""
     from robot_sf.benchmark.algorithm_metadata import (
-        canonical_algorithm_name,
         enrich_algorithm_metadata,
     )
 
@@ -1758,11 +1780,6 @@ def derive_valid_comparison(
         for map_id in scope["maps"]
         for seed in DEFAULT_SEEDS
     }
-    profiles = {}
-    for arm in scope["arms"]:
-        algorithm = canonical_algorithm_name(scope.get("arm_algorithms", {}).get(arm, arm))
-        capabilities = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
-        profiles[arm] = (algorithm, capabilities)
     head_evidence = {}
     for sources in (head_rows, baseline_rows):
         if set(sources) != expected:
@@ -1771,8 +1788,16 @@ def derive_valid_comparison(
             )
         for key, raw in sources.items():
             evidence = _execution_evidence(raw)
-            arm = key[0]
-            algorithm, capabilities = profiles[arm]
+            arm, scenario, _seed = key
+            algorithm = receipt_arm_execution.expected_algorithm(
+                arm,
+                scenario,
+                scope.get("arm_algorithms", {}).get(arm, arm),
+                row=raw,
+                source_sha=raw.get("git_hash"),
+                repo_root=behaviour_receipt.ROOT,
+            )
+            capabilities = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
             require_valid_execution(evidence, algorithm, capabilities)
             if sources is head_rows:
                 head_evidence[key] = evidence

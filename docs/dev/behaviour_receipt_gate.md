@@ -508,6 +508,34 @@ subtree is removed: unknown descendants remain compared. JSON object order and
 whitespace are canonical transport representation; numbers are never rounded and
 all projected values retain their JSON types.
 
+Fresh MapRunner acquisition must install `receipt_producer_capture.install_capture`
+before collection, using the shared strict outcome reader. MapRunner natively emits
+the provenance seal; the capture hook validates that successful, complete original
+seal and every canonical outcome before asking the runtime manifest writer to emit
+the second checksum seal. Original raw and provenance bytes remain unchanged.
+Existing secondary files, partial rows, writer errors and conflicting digests refuse.
+The hook never repairs or re-seals a historical failed allocation.
+
+Execution validation follows the published per-scenario dispatch only when its
+exact source/profile digest and selected arm are proved. The finite inventory in
+`receipt_arm_execution.py` covers the two adaptive hybrid profiles that explicitly
+select ORCA for `francis2023_leave_group`. This is not a general algorithm alias or
+fallback exception. Both normal producer seals and raw execution traces must agree
+with the proved dispatch; unexpected scenarios, arms, profiles and algorithms refuse.
+For this finite proof, raw `algo` and nine native identity leaves are mandatory:
+`algorithm_metadata.algorithm`, `algorithm_metadata.canonical_algorithm`,
+`algorithm_metadata.planner_contract.planner_id`,
+`algorithm_metadata.planner_kinematics.adapter_name`,
+`algorithm_metadata.planner_runtime.planner_type`, `algorithm_metadata.policy_semantics`,
+`algorithm_metadata.paired_effect_metric_producer.pairing.key.planner`,
+`event_ledger.planner`, and `scenario_params.algo`. Each must identify the actual
+ORCA execution (including its adapter and policy semantics). An optional top-level
+`algorithm` must agree if present. Missing or contradictory identity leaves and
+ambiguous duplicate JSON keys refuse proof, including coherently re-sealed inputs.
+Archive admission reconstructs this proof from the sealed sources before restoring
+its in-memory attributes; JSON headers and projections cannot manufacture it.
+All fourteen arm slots and every canonical behavioral byte remain compared.
+
 The producer verifies complete sweep execution metadata, raw-row/summary identity,
 full arm/slot/seed coverage, and the acquisition tooling's file SHA against the
 pinned Git blob. Every suite must record `tooling_sha`, `tooling_path`,

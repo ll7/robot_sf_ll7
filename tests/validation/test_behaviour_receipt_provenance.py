@@ -29,9 +29,24 @@ def _scheduler_authority(tmp_path, monkeypatch):
     install_scheduler(tmp_path, monkeypatch)
 
 
-def seal_sweep(root):
+def native_orca_identity(row):
+    """Fixture shape copied from the normal native31624 ORCA producer's explicit fields."""
+    metadata = row["algorithm_metadata"]
+    metadata.update(algorithm="orca", canonical_algorithm="orca", policy_semantics="orca_adapter")
+    metadata.setdefault("planner_contract", {})["planner_id"] = "orca"
+    metadata["planner_kinematics"]["adapter_name"] = "ORCAPlannerAdapter"
+    metadata.setdefault("planner_runtime", {})["planner_type"] = "ORCAPlannerAdapter"
+    metadata.setdefault("paired_effect_metric_producer", {}).setdefault("pairing", {}).setdefault(
+        "key", {}
+    )["planner"] = "orca"
+    row.setdefault("event_ledger", {})["planner"] = "orca"
+    row.setdefault("scenario_params", {})["algo"] = "orca"
+
+
+def seal_sweep(root, *, algo_configs=None, arm_algorithms=None):
     """Seal synthetic completed rows using the normal producer's two sidecars."""
     for raw in root.glob("campaigns/**/episodes.jsonl"):
+        arm = raw.parent.name.split("__")[0]
         rows = [json.loads(line) for line in raw.read_text().splitlines()]
         schema = root / "fixture_schema.json"
         schema.write_text('{"type": "object"}\n')
@@ -70,8 +85,8 @@ def seal_sweep(root):
                 schema_path=schema,
                 scenario_path=scenario,
                 scenarios=[{"name": "open"}],
-                algo=rows[0]["algo"],
-                algo_config_path=None,
+                algo=(arm_algorithms or {}).get(arm, rows[0]["algo"]),
+                algo_config_path=(algo_configs or {}).get(arm),
                 benchmark_profile="baseline-safe",
                 suite_key="main",
                 total_jobs=len(rows),
@@ -86,12 +101,12 @@ def seal_sweep(root):
         save_manifest(raw, [rec["episode_id"] for rec in records])
 
 
-def refresh_sweep_binding(root, *, validate_identity=True):
+def refresh_sweep_binding(root, *, validate_identity=True, algo_configs=None, arm_algorithms=None):
     """Reproduce a fresh fixture execution after a deliberate fixture edit."""
     binding_path = root / receipt_provenance.BINDING_FILE
     previous = json.loads(binding_path.read_text()) if binding_path.exists() else None
     binding_path.unlink(missing_ok=True)
-    seal_sweep(root)
+    seal_sweep(root, algo_configs=algo_configs, arm_algorithms=arm_algorithms)
     if validate_identity:
         receipt_provenance.write_binding(root, root.name, "auxme-imech142")
     else:
@@ -105,7 +120,17 @@ def refresh_sweep_binding(root, *, validate_identity=True):
         binding_path.write_text(json.dumps(previous))
 
 
-def source_artifacts_for_receipt(repo, receipt):
+def _fixture_execution_trace(raw, row, algo_configs):
+    if row["arm"] in (algo_configs or {}):
+        raw["algorithm_metadata"]["algorithm"] = raw["algo"]
+        if raw["algo"] == "orca":
+            native_orca_identity(raw)
+    if row["execution_mode"] == "adapter":
+        for step in raw["algorithm_metadata"]["simulation_step_trace"]["steps"]:
+            step["planner"]["applied_environment_action"] = dict(step["planner"]["selected_action"])
+
+
+def source_artifacts_for_receipt(repo, receipt, *, algo_configs=None, arm_algorithms=None):
     """Provide actual sealed sources for hand-built admission fixtures."""
     from tests.validation.test_make_behaviour_receipt import _raw_row
 
@@ -148,6 +173,7 @@ def source_artifacts_for_receipt(repo, receipt):
                     raw["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = row[
                         "execution_mode"
                     ]
+                    _fixture_execution_trace(raw, row, algo_configs)
                     by_arm.setdefault(row["arm"], []).append(raw)
                     summaries.append(
                         {
@@ -199,7 +225,10 @@ def source_artifacts_for_receipt(repo, receipt):
                         }
                     )
                 )
-                refresh_sweep_binding(root)
+                with patch.object(gate, "ROOT", repo):
+                    refresh_sweep_binding(
+                        root, algo_configs=algo_configs, arm_algorithms=arm_algorithms
+                    )
                 bundle = repo / f"receipts/behaviour/fixture-sources/{side}/{job}.tar.gz"
                 bundle.parent.mkdir(parents=True, exist_ok=True)
                 with tarfile.open(bundle, "w:gz") as archive:

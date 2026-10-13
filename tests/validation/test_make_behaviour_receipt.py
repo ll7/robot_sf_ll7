@@ -1532,6 +1532,7 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         "behaviour_receipt_nodes.json",
         "receipt_provenance.py",
         "receipt_outcomes.py",
+        "receipt_arm_execution.py",
     ):
         destination = tmp_path / "scripts/ci" / filename
         destination.parent.mkdir(parents=True, exist_ok=True)

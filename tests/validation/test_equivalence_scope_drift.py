@@ -154,6 +154,8 @@ def test_reviewed_base_blobs_require_a_separate_neutral_transition(scope_repo):
     "policy_path",
     [
         "scripts/ci/receipt_outcomes.py",
+        "scripts/ci/receipt_arm_execution.py",
+        "scripts/ci/receipt_producer_capture.py",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/receipt_provenance.py",
         "scripts/ci/default_path_equivalence.py",
@@ -198,13 +200,22 @@ def test_candidate_authority_edit_refuses_when_final_bytes_equal_main(
     git("add", ".")
     git("commit", "-m", "neutral change without authority edit")
     neutral = git("rev-parse", "HEAD")
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    assert eq.classify_scope([], fork, neutral) == [PATH + ":_episode_identity"]
     git("checkout", "main")
     policy.write_text(promoted)
     git("add", ".")
     git("commit", "-m", "independent main authority promotion")
     main = git("rev-parse", "HEAD")
     monkeypatch.setattr(gate, "ROOT", tmp_path)
-    assert eq.classify_scope([], main, neutral) == [PATH + ":_episode_identity"]
+    if policy_path in {
+        "scripts/ci/receipt_arm_execution.py",
+        "scripts/ci/receipt_producer_capture.py",
+    }:
+        with pytest.raises(ValueError, match="unreviewed executable path " + policy_path):
+            eq.classify_scope([], main, neutral)
+    else:
+        assert eq.classify_scope([], main, neutral) == [PATH + ":_episode_identity"]
     git("checkout", "candidate")
     policy.write_text(promoted)
     git("add", ".")

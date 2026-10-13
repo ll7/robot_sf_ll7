@@ -654,7 +654,8 @@ def test_installed_owner_inventory_matches_sweep_inputs():
         ("francis2023_narrow_doorway", "differential_drive_r1m", "infeasible_by_design")
     ]
     # Exercise the actual validator with the installed roster, not only a template check.
-    adapter.validate_receipt(_inventory_receipt(scope), scope, HEAD, "0.0.7", "c" * 40)
+    with pytest.raises(adapter.HardwareIdentityError, match="JSON claims cannot attest dispatch"):
+        adapter.validate_receipt(_inventory_receipt(scope), scope, HEAD, "0.0.7", "c" * 40)
 
 
 def _inventory_receipt(scope):

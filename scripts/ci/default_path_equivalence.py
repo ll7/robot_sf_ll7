@@ -283,6 +283,13 @@ BASE_ONLY_TOOLING_FILES = {
 }
 
 
+# Candidate-history closure does not grant either helper a base-only drift waiver.
+AUTHORITY_FILES = BASE_ONLY_TOOLING_FILES | {
+    "scripts/ci/receipt_arm_execution.py",
+    "scripts/ci/receipt_producer_capture.py",
+}
+
+
 # Reviewed preparation/diagnostic blobs on current main, never a prefix waiver.
 # Candidate changes refuse; base content and regular-file type must match exactly.
 REVIEWED_BASE_ONLY_BLOBS = {
@@ -522,9 +529,7 @@ def classify_scope(changed_files: list[str], base_source: str, head_source: str)
     introduced = {os.fsdecode(path) for path in introduced_bytes}
     # A candidate change ending at the same bytes as main is absent from the
     # two-tree diff. It must still refuse reviewed-blob and authority exceptions.
-    paths = sorted(
-        set(paths) | (introduced & (REVIEWED_BASE_ONLY_BLOBS.keys() | BASE_ONLY_TOOLING_FILES))
-    )
+    paths = sorted(set(paths) | (introduced & (REVIEWED_BASE_ONLY_BLOBS.keys() | AUTHORITY_FILES)))
     for path in paths:
         if (
             path.startswith("receipts/behaviour/")
@@ -789,9 +794,9 @@ def comparison_rows(
             "equivalence refused: missing paired summary execution audit",
         )
     from robot_sf.benchmark.algorithm_metadata import (
-        canonical_algorithm_name,
         enrich_algorithm_metadata,
     )
+    from scripts.ci import receipt_arm_execution
     from scripts.ci.make_behaviour_receipt import _execution_evidence, require_valid_execution
 
     rows = []
@@ -809,11 +814,22 @@ def comparison_rows(
             statuses = head_execution_statuses if side == "head" else baseline_execution_statuses
             # This separate audit view may bind the authoritative summary status.
             # The row passed to episode_bytes below remains completely untouched.
-            audit_view = row if statuses is None else {**row, "execution_status": statuses[key]}
+            audit_view = (
+                row
+                if statuses is None
+                else receipt_arm_execution.carry_execution_proof(
+                    row, {**row, "execution_status": statuses[key]}
+                )
+            )
             evidence = _execution_evidence(audit_view)
             execution_evidence[side] = evidence
-            expected_algorithm = canonical_algorithm_name(
-                scope.get("arm_algorithms", {}).get(key[0], key[0])
+            expected_algorithm = receipt_arm_execution.expected_algorithm(
+                key[0],
+                key[1],
+                scope.get("arm_algorithms", {}).get(key[0], key[0]),
+                row=evidence,
+                source_sha=row.get("git_hash"),
+                repo_root=gate.ROOT,
             )
             profile = enrich_algorithm_metadata(algo=expected_algorithm)["planner_kinematics"]
             required_mode = "native" if profile["supports_native_commands"] else "adapter"
@@ -966,18 +982,23 @@ def validate_receipt(
         "equivalence refused: incomplete/duplicate paired episode coverage",
     )
     from robot_sf.benchmark.algorithm_metadata import (
-        canonical_algorithm_name,
         enrich_algorithm_metadata,
     )
+    from scripts.ci import receipt_arm_execution
 
     for row in rows:
-        algorithm = canonical_algorithm_name(
-            scope.get("arm_algorithms", {}).get(row["arm"], row["arm"])
-        )
-        profile = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
-        mode = "native" if profile["supports_native_commands"] else "adapter"
         for side in ("head", "baseline"):
             evidence = row[f"{side}_execution"]
+            algorithm = receipt_arm_execution.expected_algorithm(
+                row["arm"],
+                row["map"],
+                scope.get("arm_algorithms", {}).get(row["arm"], row["arm"]),
+                row=evidence,
+                source_sha=identities[side]["source_sha"],
+                repo_root=gate.ROOT,
+            )
+            profile = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+            mode = "native" if profile["supports_native_commands"] else "adapter"
             gate._require(
                 evidence["algorithm"] == algorithm
                 and evidence["execution_mode"] == mode

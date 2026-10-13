@@ -121,8 +121,14 @@ def _producer_claim(claim: dict, source: str, role: str, job: str, node: str) ->
 
 
 def _producer_identity(
-    sidecar: dict, raw_rows: list[dict], source: str, role: str, job: str, node: str
-) -> None:
+    sidecar: dict,
+    raw_rows: list[dict],
+    source: str,
+    role: str,
+    job: str,
+    node: str,
+    raw_path: Path | None = None,
+) -> list[dict]:
     run = sidecar["run"]
     _require(
         run.get("runner") == "map_runner.run_map_batch"
@@ -150,6 +156,10 @@ def _producer_identity(
     _require("execution_context_sha256" in context, "producer execution context digest missing")
     links = sidecar["rows"]
     _require(len(links) == len(raw_rows), "producer row link coverage differs")
+    sealed_rows = []
+    from scripts.ci import behaviour_receipt as gate
+    from scripts.ci import receipt_arm_execution
+
     for index, (link, raw) in enumerate(zip(links, raw_rows, strict=True)):
         _require(
             type(link.get("jsonl_line")) is int
@@ -161,14 +171,34 @@ def _producer_identity(
         )
         _producer_claim(link, source, role, job, node)
         _require(raw.get("git_hash") == source, "producer raw source contradicts claimed commit")
+        if raw_path is not None:
+            raw = receipt_arm_execution._from_sealed_producer(
+                raw, sidecar, raw_path, source, gate.ROOT
+            )
+        expected = sidecar["campaign_identity"].get("algorithm")
+        arm = raw_path.parent.name.split("__", 1)[0] if raw_path is not None else ""
+        if (
+            arm in receipt_arm_execution.PROFILES
+            and raw.get("scenario_id") == receipt_arm_execution.SCENARIO
+        ):
+            expected = receipt_arm_execution.expected_algorithm(
+                arm,
+                str(raw.get("scenario_id")),
+                expected,
+                row=raw,
+                source_sha=source,
+                repo_root=gate.ROOT,
+            )
         _require(
-            raw.get("algo") == sidecar["campaign_identity"].get("algorithm"),
+            raw.get("algo") == expected,
             "producer raw execution algorithm contradicts sealed campaign",
         )
         _producer_claim(raw, source, role, job, node)
         provenance = raw.get("result_provenance")
         if isinstance(provenance, dict):
             _producer_claim(provenance, source, role, job, node)
+        sealed_rows.append(raw)
+    return sealed_rows
 
 
 def verify_producer_seals(
@@ -178,11 +208,12 @@ def verify_producer_seals(
     arm_role: str | None = None,
     job: str | None = None,
     node: str | None = None,
-) -> None:
-    """Require the raw digest in both normal producer sidecars to verify."""
+) -> dict[Path, list[dict]]:
+    """Require both producer seals before returning source-attested decoded rows."""
     from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 
     expected = {}
+    sealed_rows = {}
     try:
         for raw in sorted(root.glob("campaigns/**/episodes.jsonl")):
             sidecar = json.loads(raw.with_suffix(".jsonl.provenance.json").read_text())
@@ -221,11 +252,33 @@ def verify_producer_seals(
                 sidecar = json.loads(raw.with_suffix(".jsonl.provenance.json").read_text())
                 rows = [json.loads(line) for line in raw.read_text().splitlines() if line.strip()]
                 if arm_role is not None and job is not None and node is not None:
-                    _producer_identity(sidecar, rows, source_sha, arm_role, job, node)
+                    from scripts.ci import receipt_arm_execution
+
+                    arm = raw.parent.name.split("__", 1)[0]
+                    if arm in receipt_arm_execution.PROFILES and any(
+                        row.get("scenario_id") == receipt_arm_execution.SCENARIO for row in rows
+                    ):
+                        sidecar = receipt_arm_execution._proof_json_loads(
+                            raw.with_suffix(".jsonl.provenance.json").read_text()
+                        )
+                        receipt_arm_execution._proof_json_loads(
+                            raw.with_suffix(".jsonl.manifest.json").read_text()
+                        )
+                        rows = [
+                            receipt_arm_execution._proof_json_loads(line)
+                            for line in raw.read_text().splitlines()
+                            if line.strip()
+                        ]
+                    sealed_rows[raw.resolve()] = _producer_identity(
+                        sidecar, rows, source_sha, arm_role, job, node, raw
+                    )
     except HardwareIdentityError:
         raise
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        _require(False, f"verification failed ({type(exc).__name__})")
+        raise HardwareIdentityError(
+            f"hardware comparison invalid: provenance digest verification failed ({type(exc).__name__})"
+        ) from exc
+    return sealed_rows
 
 
 def write_binding(root: Path, job: str, node: str) -> None:
@@ -253,8 +306,8 @@ def write_binding(root: Path, job: str, node: str) -> None:
 
 def verify_binding(
     root: Path, job: str, node: str, *, source_sha: str | None = None, arm_role: str | None = None
-) -> None:
-    """Verify allocation binding coverage and both original producer digest seals."""
+) -> dict[Path, list[dict]]:
+    """Verify custody before returning rows attested by both producer seals."""
     try:
         _require(not (root / BINDING_FILE).is_symlink(), "binding is not regular")
         binding = json.loads((root / BINDING_FILE).read_text())
@@ -282,11 +335,13 @@ def verify_binding(
             "binding omits comparison inputs",
         )
         verify_digests(root, expected)
-        verify_producer_seals(root, source_sha=source, arm_role=role, job=job, node=node)
+        return verify_producer_seals(root, source_sha=source, arm_role=role, job=job, node=node)
     except HardwareIdentityError:
         raise
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        _require(False, f"verification failed ({type(exc).__name__})")
+        raise HardwareIdentityError(
+            f"hardware comparison invalid: provenance digest verification failed ({type(exc).__name__})"
+        ) from exc
 
 
 def verify_optional_binding(root: Path, job: str | None, node: str | None) -> None:
@@ -306,16 +361,13 @@ def verified_raw_rows(
     from scripts.ci import receipt_outcomes
     from scripts.ci.behaviour_receipt import validate_source_row_context
 
-    verify_binding(root, job, node, source_sha=source_sha, arm_role=arm_role)
+    sealed = verify_binding(root, job, node, source_sha=source_sha, arm_role=arm_role)
     producer._verify_sweep_metadata(root, source_sha)
     rows = {}
     locations = {}
     for path in sorted(root.glob("campaigns/**/episodes.jsonl")):
         arm = path.parent.name.split("__")[0]
-        for line in path.read_text().splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
+        for row in sealed[path.resolve()]:
             key = (arm, str(row["scenario_id"]), int(row["seed"]))
             _require(key not in rows, "duplicate source row")
             row.setdefault("scheduler_job_id", job)

@@ -12,10 +12,10 @@ import yaml
 
 from scripts.ci import behaviour_receipt as adapter
 from scripts.ci import pr_contract_check as checker
+from scripts.ci import receipt_arm_execution
 from scripts.validation import check_seed_holdout_diff as seed_checker
 from tests.validation.receipt_scheduler_fixture import install_scheduler
 from tests.validation.test_behaviour_receipt_gate import (
-    _commit_receipt,
     _header,
     _inventory_receipt,
 )
@@ -213,11 +213,14 @@ def _trusted_fixture(root):
         "scripts/ci/make_behaviour_receipt.py",
         "scripts/ci/receipt_provenance.py",
         "scripts/ci/receipt_outcomes.py",
+        "scripts/ci/receipt_arm_execution.py",
         "scripts/validation/run_empty_world_sweep.py",
         "scripts/dev/check_dependabot_update_policy.py",
         "scripts/dev/check_dependency_coherence.py",
         "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
         "model/registry.yaml",
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
     ]
     for path in files:
         target = root / path
@@ -237,12 +240,23 @@ def _tamper_candidate_policies(root):
     (root / adapter.SCOPE_FILE).write_text('{"arms": []}\n')
 
 
+def _native_inventory_receipt(scope):
+    receipt = _inventory_receipt(scope)
+    for row in receipt["rows"]:
+        if (
+            row["arm"] in receipt_arm_execution.PROFILES
+            and row["map"] == receipt_arm_execution.SCENARIO
+        ):
+            row.update(algorithm="orca", execution_mode="adapter")
+    return receipt
+
+
 def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     """The deployed shell accepts compact source data and rejects head-policy bypasses."""
     root = tmp_path / "repo"
     git, base = _trusted_fixture(root)
     scope = json.loads((ROOT / adapter.SCOPE_FILE).read_text())
-    receipt = _inventory_receipt(scope)
+    receipt = _native_inventory_receipt(scope)
     path = "receipts/behaviour/sweep.json"
     target = root / path
     target.parent.mkdir(parents=True)
@@ -266,7 +280,14 @@ def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
     receipt["hardware"] = {"head": _hardware(run_source), "baseline": _hardware(base)}
     from tests.validation.test_behaviour_receipt_provenance import source_artifacts_for_receipt
 
-    sources = source_artifacts_for_receipt(root, receipt)
+    sources = source_artifacts_for_receipt(
+        root,
+        receipt,
+        algo_configs={
+            arm: root / profile[0] for arm, profile in receipt_arm_execution.PROFILES.items()
+        },
+        arm_algorithms=scope["arm_algorithms"],
+    )
     raw = json.dumps(
         {
             "schema_version": "behaviour-change-rows.v1",
@@ -402,18 +423,13 @@ def test_base_gate_bootstrap_never_executes_head_policy(tmp_path):
     assert "not installed on the event base" in result.stdout
 
 
-def test_full_roster_compact_body_and_committed_rows(monkeypatch, tmp_path):
-    """All 21,420 rows pass admission via a GitHub-sized body and committed file."""
+def test_full_roster_plain_header_cannot_attest_frozen_dispatch():
+    """A full set of registry-shaped rows alone cannot authenticate published dispatch."""
     scope = json.loads((ROOT / adapter.SCOPE_FILE).read_text())
     receipt = _inventory_receipt(scope)
-    body = _commit_receipt(monkeypatch, tmp_path, receipt)
-    monkeypatch.setattr(adapter, "latest_release", lambda repo: "0.0.7")
-    monkeypatch.setattr(adapter, "release_source", lambda release: "c" * 40)
-    assert len(body) < 65536
-    assert len((tmp_path / "receipts/behaviour/sweep.json").read_bytes()) > 65536
-    assert (
-        adapter.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7") == []
-    )
+    assert len(receipt["rows"]) == 21420
+    with pytest.raises(adapter.HardwareIdentityError, match="JSON claims cannot attest dispatch"):
+        adapter.validate_receipt(receipt, scope, receipt["head_sha"], "0.0.7", "c" * 40)
 
 
 def test_event_head_overrides_merge_identity(monkeypatch, tmp_path):

@@ -76,7 +76,24 @@ def _hardware(source, job, *, node=NODE, cpu=CPU, node_class="pro6000", role=Non
     }
 
 
-def _build_admitted(tmp_path, monkeypatch):
+def _fixture_execution_algorithm(scope, arm, scenario):
+    from scripts.ci import receipt_arm_execution
+
+    if arm in receipt_arm_execution.PROFILES and scenario == receipt_arm_execution.SCENARIO:
+        return "orca"
+    return scope["arm_algorithms"][arm]
+
+
+def _fixture_execution_mode(scope, arm, scenario):
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+
+    profile = enrich_algorithm_metadata(algo=_fixture_execution_algorithm(scope, arm, scenario))[
+        "planner_kinematics"
+    ]
+    return "native" if profile["supports_native_commands"] else "adapter"
+
+
+def _build_admitted(tmp_path, monkeypatch, *, scope_override=None):
     # This synthetic historical base declares no reviewed evidence trees.
     monkeypatch.setattr(eq, "REVIEWED_CLOSED_TREES", {})
 
@@ -108,6 +125,8 @@ def _build_admitted(tmp_path, monkeypatch):
     scope["arm_algorithms"] = {
         arm: arm if arm in {"ppo", "guarded_ppo"} else "goal" for arm in scope["arms"]
     }
+    if scope_override is not None:
+        scope = scope_override
     rows = [
         {
             "arm": arm,
@@ -120,15 +139,15 @@ def _build_admitted(tmp_path, monkeypatch):
             "baseline_sha256": "0" * 64,
             "head_sha256": "0" * 64,
             "head_execution": {
-                "algorithm": scope["arm_algorithms"][arm],
-                "execution_mode": "native",
+                "algorithm": _fixture_execution_algorithm(scope, arm, scenario),
+                "execution_mode": _fixture_execution_mode(scope, arm, scenario),
                 "controller_executed": True,
                 "fallback": False,
                 "degraded": False,
             },
             "baseline_execution": {
-                "algorithm": scope["arm_algorithms"][arm],
-                "execution_mode": "native",
+                "algorithm": _fixture_execution_algorithm(scope, arm, scenario),
+                "execution_mode": _fixture_execution_mode(scope, arm, scenario),
                 "controller_executed": True,
                 "fallback": False,
                 "degraded": False,

@@ -566,15 +566,20 @@ def validate_receipt(
         "omitted or duplicate arm/map/development-seed coverage",
     )
     from robot_sf.benchmark.algorithm_metadata import (
-        canonical_algorithm_name,
         enrich_algorithm_metadata,
     )
+    from scripts.ci import receipt_arm_execution
     from scripts.ci.make_behaviour_receipt import require_valid_execution
 
     new = {}
     for row in rows:
-        expected_algo = canonical_algorithm_name(
-            scope.get("arm_algorithms", {}).get(row["arm"], row["arm"])
+        expected_algo = receipt_arm_execution.expected_algorithm(
+            row["arm"],
+            row["map"],
+            scope.get("arm_algorithms", {}).get(row["arm"], row["arm"]),
+            row=row,
+            source_sha=receipt["scheduler"]["source_sha"],
+            repo_root=ROOT,
         )
         profile = enrich_algorithm_metadata(algo=expected_algo)["planner_kinematics"]
         require_valid_execution(row, expected_algo, profile)
@@ -1053,12 +1058,18 @@ def _equivalence_source_projection(
     _hardware_require(
         set(raw_rows) == set(statuses) == set(paths), "provenance digest summary coverage differs"
     )
+    from scripts.ci import receipt_arm_execution
+
     result = {}
     for key, row in joined_rows.items():
         equivalence.validate_runtime_source(row, identity["source_sha"])
         result[key] = {
             "sha256": hashlib.sha256(equivalence.episode_bytes(row)).hexdigest(),
-            "execution": producer._execution_evidence({**row, "execution_status": statuses[key]}),
+            "execution": producer._execution_evidence(
+                receipt_arm_execution.carry_execution_proof(
+                    raw_rows[key], {**row, "execution_status": statuses[key]}
+                )
+            ),
             "path": paths[key],
         }
     return result
@@ -1071,8 +1082,9 @@ def _verify_equivalence_projection(
     source_rows: dict,
     source_projections: dict,
     jobs: set[str],
-) -> None:
+) -> dict:
     """Compact rows must reproduce the complete source-bound behavioral and execution proof."""
+    verified = {}
     for row in payload["rows"]:
         source = source_rows[_key(row)]
         allocation_matches = (
@@ -1090,6 +1102,9 @@ def _verify_equivalence_projection(
             and (path == f"{job}/{expected_path}" or (len(jobs) == 1 and path == expected_path)),
             "provenance digest behavioral/execution source projection differs",
         )
+
+        verified[_key(row)] = proof["execution"]
+    return verified
 
 
 def verify_source_artifacts(
@@ -1123,6 +1138,8 @@ def verify_source_artifacts(
         "producer source invalid: arm claims differ or share a producer commit",
     )
     comparison_sources = {}
+    projected_proofs = {}
+    derived = []
     for side, prefix in (("head", ""), ("baseline", "baseline_")):
         jobs = set(scheduler_job_ids(identities[side]["job_id"]))
         _hardware_require(
@@ -1196,7 +1213,7 @@ def verify_source_artifacts(
             "provenance digest source row coverage differs",
         )
         if payload.get("schema_version") == "default-path-equivalence.v1":
-            _verify_equivalence_projection(
+            projected_proofs[side] = _verify_equivalence_projection(
                 payload, prefix, side, source_rows, source_projections, jobs
             )
         comparison_sources[side] = source_rows
@@ -1214,6 +1231,28 @@ def verify_source_artifacts(
             and header["totals"] == totals,
             "raw execution invalid: receipt projection or totals differ from sealed sources",
         )
+
+    _restore_execution_proofs(payload, projected_proofs, derived)
+
+
+def _restore_execution_proofs(payload: dict, projected_proofs: dict, derived: list) -> None:
+    """Restore verifier attributes only after all source projections compare exactly."""
+    # Only after both sealed source archives and all exact projections verify may
+    # the plain JSON payload receive in-memory verifier attributes.
+    from scripts.ci import receipt_arm_execution
+
+    if payload.get("schema_version") == "default-path-equivalence.v1":
+        for row in payload["rows"]:
+            for side in ("head", "baseline"):
+                row[f"{side}_execution"] = receipt_arm_execution.carry_execution_proof(
+                    projected_proofs[side][_key(row)], row[f"{side}_execution"]
+                )
+    else:
+        indexed = {_key(row): row for row in derived}
+        payload["rows"] = [
+            receipt_arm_execution.carry_execution_proof(indexed[_key(row)], row)
+            for row in payload["rows"]
+        ]
 
 
 def check_receipt(

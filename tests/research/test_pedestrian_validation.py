@@ -101,9 +101,9 @@ def test_huber_onset_changes_with_manoeuvre_location():
     straight = np.column_stack([t, np.zeros_like(t)])
     q = np.column_stack([20 - t, np.zeros_like(t)])
     onsets = [
-        m.turning_onset(
-            np.column_stack([t, 0.4 * np.clip(t - start, 0, 1)]), q, t, [straight] * 5
-        )["onset_m"]
+        m.turning_onset(np.column_stack([t, 0.4 * np.clip(t - start, 0, 1)]), q, t, [straight] * 5)[
+            "onset_m"
+        ]
         for start in (8, 9)
     ]
     assert all(0 < onset < 3 for onset in onsets)

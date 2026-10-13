@@ -96,7 +96,7 @@ def test_full_classification_requires_each_raw_outcome(field, side):
 def test_comparison_requires_typed_finite_outcomes(field, value):
     row = _episode()
     (row if field == "steps" else row["metrics"])[field] = value
-    rows = {("goal", "open", seed): row for seed in (1001, 1002, 1003)}
+    rows = {("goal", "open", seed): {**row, "seed": seed} for seed in (1001, 1002, 1003)}
     with pytest.raises(ValueError, match=rf"outcome schema refused: invalid raw .*{field}"):
         eq.compare_rows(rows, rows, {"arms": ["goal"], "maps": ["open"]})
 
@@ -112,7 +112,7 @@ def test_comparison_refuses_contradictory_outcome_alias(alias):
         row["metrics"][alias] = 1
     else:
         row[alias] = False if alias == "success" else 1
-    rows = {("goal", "open", seed): row for seed in (1001, 1002, 1003)}
+    rows = {("goal", "open", seed): {**row, "seed": seed} for seed in (1001, 1002, 1003)}
     with pytest.raises(ValueError, match="outcome schema refused: contradictory"):
         eq.compare_rows(rows, rows, {"arms": ["goal"], "maps": ["open"]})
 

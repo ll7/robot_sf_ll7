@@ -56,7 +56,9 @@ def _sides(side):
 def _synchronize_claims(root, payload, side):
     """Reseal independently, without asking production admission to validate the mutation."""
     job = root.name
-    compact_rows = {gate._key(row): row for row in payload["rows"]}
+    # Forge claims independently of admission; retain reviewed native-slot claims
+    # when relabeling sources to an unreviewed kinematics type.
+    compact_rows = {(row["arm"], row["map"], row["seed"]): row for row in payload["rows"]}
     for path in root.glob("campaigns/**/episodes.jsonl"):
         arm = path.parent.name.split("__")[0]
         for line in path.read_text().splitlines():

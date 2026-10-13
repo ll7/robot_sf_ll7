@@ -62,7 +62,10 @@ def test_native_guarded_exact_calibration_contract_is_not_degraded():
 
 def test_guarded_mixed_comparison_keeps_all_native_outcome_bytes():
     scope = {"arms": ["guarded_ppo"], "maps": ["open"]}
-    rows = {("guarded_ppo", "open", seed): _row() for seed in eq.SEEDS}
+    rows = {
+        ("guarded_ppo", "open", seed): {**_row(), "scenario_id": "open", "seed": seed}
+        for seed in eq.SEEDS
+    }
     before = copy.deepcopy(rows)
     compared = eq.compare_rows(rows, copy.deepcopy(rows), scope)
     assert all(row["head_execution"]["execution_mode"] == "mixed" for row in compared)

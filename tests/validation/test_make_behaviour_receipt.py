@@ -1399,7 +1399,7 @@ def test_real_row_unclassified_fault_fields_fail_closed_even_in_optional_objects
     assert row == original
 
 
-def _payload_fixture(tmp_path, monkeypatch):
+def _payload_fixture(tmp_path, monkeypatch, *, legacy_projection=False):
     git = _git_repo(tmp_path)
     _fake_release_api(tmp_path, monkeypatch)
     scope_path = tmp_path / "scope.json"
@@ -1422,6 +1422,11 @@ def _payload_fixture(tmp_path, monkeypatch):
         classification_class="known_limitation",
         evidence_base_uri="https://example.org/e",
     )
+    if legacy_projection:
+        # Historical policy controls retain their historical wire schema; the
+        # optional native-slot presentation field is unrelated to those defects.
+        for row in [*rows, *classes]:
+            row.pop("native_slot", None)
     kwargs = {
         "repo_root": tmp_path,
         "receipt_id": "synthetic",
@@ -1506,7 +1511,7 @@ def test_p1_regression_controls_fail_on_reviewed_head(monkeypatch, tmp_path, fin
         elif finding == "review":
             old_gate = _revision_module(tmp_path, REVIEWED_HEAD, "behaviour_receipt.py")
             monkeypatch.setattr(sys.modules[__name__], "gate", old_gate)
-            header = _payload_fixture(fixture_dir, monkeypatch)
+            header = _payload_fixture(fixture_dir, monkeypatch, legacy_projection=True)
             body = "<!-- behaviour-change-receipt:v2\n" + json.dumps(header) + "\n-->"
             assert (
                 gate.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7")
@@ -1544,10 +1549,18 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         producer.ROOT / "scripts/validation/run_empty_world_sweep.py",
         validation / "run_empty_world_sweep.py",
     )
+    from scripts.validation import run_empty_world_sweep as native
+
+    # The isolated CLI must carry the same reviewed configuration authority as
+    # acquisition, rather than inventing a test-only kinematics default.
+    for template in native.SUITES.values():
+        destination = tmp_path / template
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(producer.ROOT / template, destination)
     scope_path = tmp_path / gate.SCOPE_FILE
-    scope_path.parent.mkdir(parents=True)
+    scope_path.parent.mkdir(parents=True, exist_ok=True)
     scope_path.write_text(json.dumps(_scope()))
-    git("add", "scripts", gate.SCOPE_FILE)
+    git("add", "scripts", "configs", gate.SCOPE_FILE)
     git("commit", "-m", "baseline launcher")
     baseline_source = git("rev-parse", "HEAD")
     git("tag", RELEASE_TAG)
@@ -1633,6 +1646,8 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     legacy_payload = json.loads((tmp_path / header["rows_artifact"]["path"]).read_text())
     legacy_payload.pop("hardware")
     legacy_payload.pop("source_artifacts")
+    for row in [*legacy_payload["rows"], *legacy_payload["classifications"]]:
+        row.pop("native_slot", None)
     for row in legacy_payload["rows"]:
         for key in (
             "scheduler_job_id",
@@ -1648,6 +1663,14 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     legacy_head = git("rev-parse", "HEAD")
     legacy_header = copy.deepcopy(header)
     legacy_header["rows_artifact"]["sha256"] = hashlib.sha256(legacy_raw).hexdigest()
+    legacy_header["classifications"] = {
+        "count": len(legacy_payload["classifications"]),
+        "sha256": hashlib.sha256(
+            json.dumps(
+                legacy_payload["classifications"], sort_keys=True, separators=(",", ":")
+            ).encode()
+        ).hexdigest(),
+    }
     legacy_header["head_sha"] = legacy_head
     legacy_header["refute_review"]["head_sha"] = legacy_head
     receipt = original.load_receipt(legacy_header, legacy_head)
@@ -1680,7 +1703,7 @@ def test_raw_trace_file_is_decoded_once_per_invocation(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "read_text", track_reads)
     rows = producer._load_sweep_rows(out)
     assert len(rows) == 30
-    assert rows[("goal", "open", 1001)]["metrics"]["success"] is True
+    assert rows[("goal", "differential_drive", "open", 1001)]["metrics"]["success"] is True
     assert len(reads) == 1
 
 

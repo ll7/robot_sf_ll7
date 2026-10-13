@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
-import itertools
 import json
 import os
 import re
@@ -23,8 +22,10 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from scripts.ci.receipt_provenance import (
+    EpisodeSlot,
     HardwareIdentityError,
-    canonical_pair_key,
+    compact_slot,
+    reviewed_slots,
     validate_scope_ids,
 )
 
@@ -471,8 +472,8 @@ def _uri(value: object) -> bool:
     )
 
 
-def _key(row: dict) -> tuple:
-    return canonical_pair_key(row["arm"], row["map"], row["seed"])
+def _key(row: dict) -> EpisodeSlot:
+    return compact_slot(row)
 
 
 def require_receipt_only_ancestor(source: str, head: str, label: str) -> None:
@@ -563,7 +564,7 @@ def validate_receipt(
             and len(set(scope[field])) == len(scope[field]),
             "required scope inventory is empty or duplicated",
         )
-    expected = set(itertools.product(scope["arms"], scope["maps"], range(1001, 1031)))
+    expected = reviewed_slots(scope, range(1001, 1031))
     rows = receipt["rows"]
     keys = [_key(row) for row in rows]
     _require(
@@ -1232,7 +1233,8 @@ def verify_source_artifacts(
             evidence_base_uri="verified-source",
         )
         _hardware_require(
-            {_key(row): row for row in derived} == {_key(row): row for row in payload["rows"]}
+            {_key(row): {**row, "native_slot": _key(row)._asdict()} for row in derived}
+            == {_key(row): {**row, "native_slot": _key(row)._asdict()} for row in payload["rows"]}
             and header["totals"] == totals,
             "raw execution invalid: receipt projection or totals differ from sealed sources",
         )

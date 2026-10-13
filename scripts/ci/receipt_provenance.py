@@ -6,7 +6,10 @@ import hashlib
 import json
 import tempfile
 from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from typing import NamedTuple
+
+from scripts.validation.run_empty_world_sweep import EpisodeSlot
 
 BINDING_FILE = "execution_binding.json"
 
@@ -32,6 +35,8 @@ def _native_id_values(value: str, field: str) -> tuple[str | None, ...]:
             {"_source_file": f"runs/{directory}__differential_drive/episodes.jsonl"}
         )
         return directory, roster
+    if field == "kinematics":
+        return (directory,)
     if field in {"map", "scenario"}:
         scenario = {"name": value}
         return (
@@ -39,7 +44,7 @@ def _native_id_values(value: str, field: str) -> tuple[str | None, ...]:
             _config._scenario_name_key(scenario),
             scenario_loader._scenario_runtime_identity(scenario),
         )
-    raise HardwareIdentityError("receipt identity refused: unknown ID axis")
+    return (directory,)
 
 
 def canonical_id(value: object, field: str) -> str:
@@ -78,17 +83,118 @@ def canonical_scenario_seed(scenario: object, seed: object) -> tuple[str, int]:
     return canonical_id(scenario, "scenario"), canonical_seed(seed)
 
 
-def canonical_pair_key(arm: object, scenario: object, seed: object) -> tuple[str, str, int]:
-    """Validate all pair axes before dictionary/set equality can collapse aliases."""
-    return canonical_id(arm, "arm"), *canonical_scenario_seed(scenario, seed)
+def canonical_slot(slot: EpisodeSlot) -> EpisodeSlot:
+    """Validate every field of the runtime definition, with no receipt axis list."""
+    for field, value in slot._asdict().items():
+        if isinstance(value, int):
+            canonical_seed(value)
+        else:
+            canonical_id(value, field)
+    return slot
+
+
+def canonical_pair_key(arm: object, scenario: object, seed: object) -> EpisodeSlot:
+    """Decode legacy compact declarations through the native slot extractor."""
+    from scripts.validation import run_empty_world_sweep as native
+
+    return canonical_slot(
+        native.episode_slot(
+            {
+                "_sweep_arm": canonical_id(arm, "arm"),
+                "scenario_id": canonical_id(scenario, "scenario"),
+                "seed": canonical_seed(seed),
+            }
+        )
+    )
+
+
+def compact_slot(row: dict) -> EpisodeSlot:
+    """Decode every recorded native field, checking legacy presentation labels."""
+    from scripts.validation import run_empty_world_sweep as native
+
+    declared = row.get("native_slot")
+    slot = None
+    if "native_slot" in row:
+        if not isinstance(declared, dict):
+            raise HardwareIdentityError("receipt identity refused: invalid compact native slot")
+        try:
+            slot = canonical_slot(EpisodeSlot(**declared))
+        except (TypeError, ValueError) as exc:
+            raise HardwareIdentityError(
+                "receipt identity refused: invalid compact native slot"
+            ) from exc
+    context = native.episode_slot_row(slot) if slot is not None else {}
+    context.update(
+        _sweep_arm=canonical_id(row["arm"], "arm"),
+        scenario_id=canonical_id(row["map"], "scenario"),
+        seed=canonical_seed(row["seed"]),
+    )
+    observed = canonical_slot(native.episode_slot(context))
+    if slot is not None and observed != slot:
+        raise HardwareIdentityError("receipt identity refused: compact native slot differs")
+    return observed
 
 
 def validate_pair_keys(rows: dict) -> None:
-    """Check supplied keyed comparisons before Python's permissive key equality."""
+    """Validate complete native keys or legacy incoming declarations before use."""
     for key in rows:
-        if not isinstance(key, tuple) or len(key) != 3:
+        if isinstance(key, EpisodeSlot):
+            canonical_slot(key)
+        elif isinstance(key, tuple) and len(key) == 3:
+            canonical_pair_key(*key)
+        else:
             raise HardwareIdentityError("receipt identity refused: noncanonical pair key")
-        canonical_pair_key(*key)
+
+
+def native_keyed_rows(rows: dict) -> dict:
+    """Convert legacy in-memory caller declarations to actual-row native slots.
+
+    Sealed readers already return native slots. Never retain a reduced key for
+    deduplication, coverage, counts, or subsequent comparisons.
+    """
+    from scripts.validation import run_empty_world_sweep as native
+
+    validate_pair_keys(rows)
+    result = {}
+    for declared, row in rows.items():
+        context = dict(row)
+        if isinstance(declared, EpisodeSlot):
+            context = {**native.episode_slot_row(declared), **context}
+            key = canonical_slot(native.episode_slot(context))
+            if key != declared:
+                raise HardwareIdentityError("receipt identity refused: native keyed row differs")
+        else:
+            claim = canonical_pair_key(*declared)
+            context.setdefault("_sweep_arm", claim.arm)
+            key = canonical_slot(native.episode_slot(context))
+            if (key.arm, key.scenario, key.seed) != declared:
+                raise HardwareIdentityError("receipt identity refused: native keyed row differs")
+        if key in result:
+            raise HardwareIdentityError("receipt identity refused: duplicate native slot")
+        result[key] = row
+    return result
+
+
+def reviewed_slots(scope: dict, seeds) -> set[EpisodeSlot]:
+    """Expand reviewed scope using the runtime definition and pinned campaign config.
+
+    Kinematics and any future configuration axes come from the same native
+    campaign loader as acquisition, never from untrusted source metadata.
+    """
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from scripts.validation import run_empty_world_sweep as native
+
+    validate_scope_ids(scope)
+    validate_seed_ids(list(seeds))
+    expected = set()
+    for template in native.SUITES.values():
+        cfg = load_campaign_config(native.REPO_ROOT / template)
+        cfg = SimpleNamespace(
+            **{**vars(cfg), "planners": [SimpleNamespace(key=arm) for arm in scope["arms"]]}
+        )
+        scenarios = [{"name": name, "seeds": list(seeds)} for name in scope["maps"]]
+        expected.update(native.expected_episode_slots(cfg, scenarios))
+    return {canonical_slot(slot) for slot in expected}
 
 
 def validate_scope_ids(scope: dict) -> None:
@@ -132,7 +238,7 @@ def _row_source_matches_observed(source: object, path: Path) -> bool:
     return bool(declared.parts) and path.parts[-len(declared.parts) :] == declared.parts
 
 
-def native_row_key(row: dict, path: Path) -> tuple[str, str, int]:
+def native_row_key(row: dict, path: Path) -> EpisodeSlot:
     """Extract from the entire actual row; refuse contradictory identity sources.
 
     Match native load_rows: retain an existing _source_file and supply the
@@ -162,10 +268,10 @@ def native_row_key(row: dict, path: Path) -> tuple[str, str, int]:
     if arm != observed_arm or source_arm != observed_arm:
         raise HardwareIdentityError("receipt identity refused: native row/directory arm differs")
     declared = canonical_scenario_seed(row.get("scenario_id"), row.get("seed"))
-    scenario, seed = _run_state._episode_identity(row)
-    key = canonical_pair_key(arm, scenario, seed)
+    scenario, _seed = _run_state._episode_identity(row)
+    key = canonical_slot(native.episode_slot(context))
     if (
-        key[1:] != declared
+        (key.scenario, key.seed) != declared
         or _config._scenario_name_key(row) != scenario
         or scenario_loader._scenario_runtime_identity(row) != scenario
     ):
@@ -175,7 +281,26 @@ def native_row_key(row: dict, path: Path) -> tuple[str, str, int]:
     for field in ("name", "id"):
         if field in row and canonical_id(row[field], "scenario") != scenario:
             raise HardwareIdentityError("receipt identity refused: native scenario alias differs")
+    _validate_slot_declarations(row, context, path, key)
     return key
+
+
+def _validate_slot_declarations(row: dict, context: dict, path: Path, key: EpisodeSlot) -> None:
+    """Require all native declaration sources to agree with the extracted slot."""
+    from scripts.validation import run_empty_world_sweep as native
+
+    directory = native.directory_episode_identity(path.as_posix())
+    if any(key._asdict()[field] != value for field, value in directory.items()):
+        raise HardwareIdentityError("receipt identity refused: native directory slot differs")
+    for field, value in {**key._asdict(), **native.episode_slot_row(key)}.items():
+        if field in row and (type(row[field]) is not type(value) or row[field] != value):
+            raise HardwareIdentityError(
+                "receipt identity refused: native row slot declaration differs"
+            )
+    params = row.get("scenario_params") or {}
+    robot = params.get("robot_config") or {}
+    if "type" in robot and robot["type"] != key.kinematics:
+        raise HardwareIdentityError("receipt identity refused: native robot kinematics differs")
 
 
 class SweepEpisode(NamedTuple):
@@ -187,7 +312,7 @@ class SweepEpisode(NamedTuple):
     summary_path: Path
 
 
-def _sweep_summaries(root: Path) -> list[tuple[tuple[str, str, int], dict, Path, Path]]:
+def _sweep_summaries(root: Path) -> list[tuple[EpisodeSlot, dict, Path, Path]]:
     """Validate every independent summary declaration before native indexing."""
     summaries = []
     for path in sorted(root.glob("episodes_*.jsonl")):
@@ -208,13 +333,29 @@ def _sweep_summaries(root: Path) -> list[tuple[tuple[str, str, int], dict, Path,
                 raise HardwareIdentityError(
                     "receipt identity refused: raw controller trace path escapes the campaign"
                 )
+            from scripts.validation import run_empty_world_sweep as native
+
+            context = {
+                **summary,
+                "_sweep_arm": declared.arm,
+                "scenario_id": declared.scenario,
+                "_source_file": source_path.as_posix(),
+            }
+            declared = canonical_slot(native.episode_slot(context))
+            for field, value in {**declared._asdict(), **native.episode_slot_row(declared)}.items():
+                if field in summary and (
+                    type(summary[field]) is not type(value) or summary[field] != value
+                ):
+                    raise HardwareIdentityError(
+                        "receipt identity refused: native summary slot differs"
+                    )
             summaries.append((declared, summary, source_path, path))
     return summaries
 
 
 def joined_sweep_episodes(
     root: Path, *, sealed: dict[Path, list[dict]] | None = None
-) -> dict[tuple[str, str, int], SweepEpisode]:
+) -> dict[EpisodeSlot, SweepEpisode]:
     """Return native keys only after raw/summary uniqueness and coverage agree.
 
     All collection, transport and admission readers use this frontier. Decode
@@ -406,7 +547,8 @@ def _producer_identity(
     from scripts.ci import receipt_arm_execution
 
     for index, (link, raw) in enumerate(zip(links, raw_rows, strict=True)):
-        arm, scenario, seed = native_row_key(raw, raw_path)
+        slot = native_row_key(raw, raw_path)
+        arm, scenario, seed = slot.arm, slot.scenario, slot.seed
         _require(
             type(link.get("jsonl_line")) is int
             and link["jsonl_line"] == index
@@ -594,7 +736,7 @@ def verify_optional_binding(root: Path, job: str | None, node: str | None) -> No
 
 def verified_raw_rows(
     root: Path, job: str, node: str, *, source_sha: str, arm_role: str
-) -> dict[tuple[str, str, int], dict]:
+) -> dict[EpisodeSlot, dict]:
     """Decode sealed admission sources once, then apply allocation context in memory."""
     from scripts.ci import make_behaviour_receipt as producer
     from scripts.ci import receipt_outcomes

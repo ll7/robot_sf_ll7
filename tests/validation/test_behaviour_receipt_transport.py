@@ -204,6 +204,9 @@ def _trusted_fixture(root):
     shutil.copytree(
         ROOT / "robot_sf", root / "robot_sf", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
+    # The trusted detached checkout carries native scope configuration and its
+    # dependencies, matching the acquisition and admission configuration owner.
+    shutil.copytree(ROOT / "configs", root / "configs")
     files = [
         ".gitattributes",
         "scripts/__init__.py",
@@ -227,7 +230,7 @@ def _trusted_fixture(root):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / path, target)
     (root / ".gitignore").write_text("__pycache__/\n")
-    git("add", "robot_sf", ".gitignore", *files)
+    git("add", "robot_sf", "configs", ".gitignore", *files)
     git("commit", "-m", "trusted gate base")
     git("tag", "0.0.7")
     return git, git("rev-parse", "HEAD")

@@ -163,7 +163,7 @@ def test_producer_readers_refuse_noncanonical_pair_ids(identity_sweep, reader, f
 )
 def test_shared_receipt_keys_refuse_noncanonical_ids(field, value):
     row = {"arm": "goal", "map": "open", "seed": 1001}
-    assert gate._key(row) == ("goal", "open", 1001)
+    assert gate._key(row) == ("goal", "differential_drive", "open", 1001)
     row[field] = value
     before = copy.deepcopy(row)
     with pytest.raises(ValueError, match="receipt identity refused: noncanonical"):
@@ -173,7 +173,7 @@ def test_shared_receipt_keys_refuse_noncanonical_ids(field, value):
 
 def test_comparison_refuses_float_seed_keys_before_set_coverage():
     scope = {"arms": ["goal"], "maps": ["open"]}
-    valid = {("goal", "open", seed): _episode() for seed in eq.SEEDS}
+    valid = {("goal", "open", seed): {**_episode(), "seed": seed} for seed in eq.SEEDS}
     assert len(eq.compare_rows(valid, valid, scope)) == 3
     aliases = {(arm, scenario, float(seed)): row for (arm, scenario, seed), row in valid.items()}
     with pytest.raises(ValueError, match="receipt identity refused: noncanonical seed"):

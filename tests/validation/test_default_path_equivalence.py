@@ -359,6 +359,8 @@ def test_named_admission_guards_refuse(admitted, kind, scheduler_endpoint):
 
 def _episode():
     return {
+        "scenario_id": "open",
+        "seed": 1001,
         "algo": "goal",
         "execution_status": "written",
         "steps": 1,
@@ -418,7 +420,7 @@ def test_producer_compares_each_behavioral_byte(mutation, algorithm):
     else:
         changed["provenance"] = {"unknown_behavior": "changed"}
     scope = {"arms": [algorithm], "maps": ["open"]}
-    base = {(algorithm, "open", seed): row for seed in (1001, 1002, 1003)}
+    base = {(algorithm, "open", seed): {**row, "seed": seed} for seed in (1001, 1002, 1003)}
     head = {**base, (algorithm, "open", 1001): changed}
     assert len(eq.compare_rows(base, base, scope)) == 3
     with pytest.raises(ValueError, match="changed behavioral byte"):
@@ -1090,9 +1092,9 @@ def test_raw_episode_source_is_parsed_once_and_duplicate_identity_still_refuses(
 
     monkeypatch.setattr(Path, "open", counted_open)
     assert set(producer._load_sweep_rows(output)) == {
-        ("goal", "open", 1001),
-        ("goal", "open", 1002),
-        ("goal", "open", 1003),
+        ("goal", "differential_drive", "open", 1001),
+        ("goal", "differential_drive", "open", 1002),
+        ("goal", "differential_drive", "open", 1003),
     }
     assert reads == [raw]
     duplicate = raw.read_text().splitlines()[0]
@@ -1161,7 +1163,7 @@ def test_identical_wrong_adapter_mode_cannot_admit_native_controller():
     """Equality cannot substitute for the trusted algorithm's command-space contract."""
     row = _episode()
     scope = {"arms": ["goal"], "maps": ["open"]}
-    rows = {("goal", "open", seed): row for seed in (1001, 1002, 1003)}
+    rows = {("goal", "open", seed): {**row, "seed": seed} for seed in (1001, 1002, 1003)}
     assert len(eq.compare_rows(rows, rows, scope)) == 3
     row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "adapter"
     with pytest.raises(ValueError, match="wrong arm/command execution"):

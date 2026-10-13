@@ -251,7 +251,10 @@ def test_real_pilot10342_canonical_ids_pass_producer_and_readers(tmp_path):
     scope_file.write_text(json.dumps(scope))
     assert producer._load_scope(scope_file) == scope
     eq.validate_scope_entries(scope)
-    expected = set(itertools.product(pilot["arms"], pilot["maps"], pilot["seeds"]))
+    expected = {
+        native_sweep.EpisodeSlot(arm, "differential_drive", scenario, seed)
+        for arm, scenario, seed in itertools.product(pilot["arms"], pilot["maps"], pilot["seeds"])
+    }
     assert len(expected) == pilot["episodes"] == 2142
     root = tmp_path / "pilot-identities"
     root.mkdir()
@@ -263,7 +266,7 @@ def test_real_pilot10342_canonical_ids_pass_producer_and_readers(tmp_path):
         raw_path.parent.mkdir(parents=True)
         for scenario, seed in itertools.product(pilot["maps"], pilot["seeds"]):
             key = provenance.canonical_pair_key(arm, scenario, seed)
-            assert key == (arm, scenario, seed)
+            assert key == native_sweep.EpisodeSlot(arm, "differential_drive", scenario, seed)
             rows.append(
                 {
                     "scenario_id": scenario,

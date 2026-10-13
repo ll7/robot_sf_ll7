@@ -80,7 +80,10 @@ def test_native_hybrid_factory_satisfies_registered_adapter_without_mutation():
 
 
 def test_equivalence_compares_source_hybrid_adapter_and_all_behavioral_bytes():
-    rows = {(ALGORITHM, "open", seed): _row() for seed in eq.SEEDS}
+    rows = {
+        (ALGORITHM, "open", seed): {**_row(), "scenario_id": "open", "seed": seed}
+        for seed in eq.SEEDS
+    }
     scope = {"arms": [ALGORITHM], "maps": ["open"]}
     assert len(eq.compare_rows(rows, copy.deepcopy(rows), scope)) == 3
     changed = copy.deepcopy(rows)

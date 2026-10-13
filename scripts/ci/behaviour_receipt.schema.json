@@ -185,6 +185,16 @@
           "baseline_scheduler_node": {
             "type": "string",
             "minLength": 1
+          },
+          "native_slot": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            }
           }
         },
         "required": [
@@ -245,6 +255,16 @@
           "count": {
             "type": "integer",
             "minimum": 1
+          },
+          "native_slot": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            }
           }
         },
         "required": [
@@ -733,6 +753,16 @@
               "baseline_scheduler_node": {
                 "type": "string",
                 "minLength": 1
+              },
+              "native_slot": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                }
               }
             },
             "required": [
@@ -793,6 +823,16 @@
               "count": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "native_slot": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                }
               }
             },
             "required": [
@@ -1229,6 +1269,16 @@
               "baseline_scheduler_node": {
                 "type": "string",
                 "minLength": 1
+              },
+              "native_slot": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                }
               }
             },
             "required": [

@@ -71,7 +71,7 @@ def _steps(row):
 def test_comparison_requires_each_trace_observation(side, path, fault):
     """A valid false/zero control does not authorize equally unavailable observations."""
     scope = {"arms": ["goal"], "maps": ["open"]}
-    rows = {("goal", "open", seed): _episode() for seed in eq.SEEDS}
+    rows = {("goal", "open", seed): {**_episode(), "seed": seed} for seed in eq.SEEDS}
     assert len(eq.compare_rows(rows, rows, scope)) == 3
     head, baseline = copy.deepcopy(rows), copy.deepcopy(rows)
     for selected in [head, baseline] if side == "both" else [head if side == "head" else baseline]:

@@ -341,14 +341,14 @@ def test_compact_projection_must_match_before_proof_restoration(
     repo, _git, _ = source_repo
     root, path, _sidecar, source = sealed_override(ARMS[0])
     raw = _sealed_rows(root, source)[path.resolve()][0]
-    key = (ARMS[0], MAP, raw["seed"])
+    key = (ARMS[0], "differential_drive", MAP, raw["seed"])
     audited = execution.carry_execution_proof(raw, {**raw, "execution_status": "written"})
     evidence = producer._execution_evidence(audited)
     digest = hashlib.sha256(equivalence.episode_bytes(raw)).hexdigest()
     row = {
         "arm": key[0],
-        "map": key[1],
-        "seed": key[2],
+        "map": key[2],
+        "seed": key[3],
         "head_execution": json.loads(json.dumps(evidence)),
         "head_path": "campaigns/raw.jsonl",
         "head_sha256": digest,
@@ -371,7 +371,7 @@ def test_compact_projection_must_match_before_proof_restoration(
     with pytest.raises(gate.HardwareIdentityError, match="JSON claims cannot attest dispatch"):
         execution.expected_algorithm(
             key[0],
-            key[1],
+            key[2],
             "hybrid_rule_local_planner",
             row=row["head_execution"],
             source_sha=source,

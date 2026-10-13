@@ -1148,7 +1148,7 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
             raise ValueError(f"{suite} execution row counts differ")
         seeds = meta.get("seeds")
         if not isinstance(seeds, list) or sorted(_check_seed_range(seeds)) != sorted(
-            {key[2] for key in keys}
+            {key.seed for key in keys}
         ):
             raise ValueError(f"{suite} execution seed identity differs")
         if any(row.get("execution_status") != "written" for row in records):
@@ -1176,7 +1176,7 @@ def _load_sweep_rows(
     scheduler_job_id: str | None = None,
     scheduler_node: str | None = None,
     preserve_raw: bool = False,
-) -> dict[tuple[str, str, int], dict[str, Any]]:
+) -> dict[receipt_provenance.EpisodeSlot, dict[str, Any]]:
     """Join summaries to raw traces with an invocation-local index of each file.
 
     There is no persistent cache: subsequent calls reread the current bytes.
@@ -1185,7 +1185,7 @@ def _load_sweep_rows(
     receipt_provenance.verify_optional_binding(sweep_dir, scheduler_job_id, scheduler_node)
 
     episodes = receipt_provenance.joined_sweep_episodes(sweep_dir)
-    rows: dict[tuple[str, str, int], dict[str, Any]] = {}
+    rows: dict[receipt_provenance.EpisodeSlot, dict[str, Any]] = {}
     for key, episode in episodes.items():
         raw, row = episode.raw, episode.summary
         _validate_row_allocation(row, raw, scheduler_job_id, scheduler_node)
@@ -1197,7 +1197,7 @@ def _load_sweep_rows(
 
 def _load_run_rows(
     run: SweepRun, arm_role: str, *, preserve_raw: bool = False
-) -> dict[tuple[str, str, int], dict[str, Any]]:
+) -> dict[receipt_provenance.EpisodeSlot, dict[str, Any]]:
 
     if run.hardware is None:
         raise behaviour_receipt.HardwareIdentityError(
@@ -1902,8 +1902,8 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_rows_and_classifications(
-    head_rows: dict[tuple[str, str, int], dict[str, Any]],
-    baseline_rows: dict[tuple[str, str, int], dict[str, Any]],
+    head_rows: dict[receipt_provenance.EpisodeSlot, dict[str, Any]],
+    baseline_rows: dict[receipt_provenance.EpisodeSlot, dict[str, Any]],
     scope: dict[str, Any],
     *,
     classification_class: str,
@@ -1917,68 +1917,81 @@ def build_rows_and_classifications(
             receipt_provenance.validate_pair_keys(sources)
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
-    for arm in scope["arms"]:
-        for map_id in scope["maps"]:
-            for seed in DEFAULT_SEEDS:
-                key = (arm, map_id, seed)
-                if key not in head_rows:
-                    raise ValueError(f"head sweep omitted {key}")
-                if key not in baseline_rows:
-                    raise ValueError(f"baseline sweep omitted {key}")
-                head = head_rows[key]
-                baseline = baseline_rows[key]
-                success = _row_success(head)
-                collisions = _row_collisions(head)
-                baseline_success = _row_success(baseline)
-                baseline_collisions = _row_collisions(baseline)
-                rows.append(
-                    {
-                        "arm": arm,
-                        "map": map_id,
-                        "seed": seed,
-                        "success": success,
-                        "collisions": collisions,
-                        "baseline_success": baseline_success,
-                        "baseline_collisions": baseline_collisions,
-                        "scheduler_job_id": head.get("scheduler_job_id"),
-                        "scheduler_node": head.get("scheduler_node"),
-                        "baseline_scheduler_job_id": baseline.get("scheduler_job_id"),
-                        "baseline_scheduler_node": baseline.get("scheduler_node"),
-                        **(
-                            _execution_evidence(head)
-                            if execution_evidence is None
-                            else execution_evidence[key]
-                        ),
-                    }
-                )
-                rows[-1] = receipt_arm_execution.carry_execution_proof(
-                    head if execution_evidence is None else execution_evidence[key], rows[-1]
-                )
-                evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
-                if baseline_success and not success:
-                    classifications.append(
-                        {
-                            "arm": arm,
-                            "map": map_id,
-                            "seed": seed,
-                            "kind": "success_to_failure",
-                            "class": classification_class,
-                            "evidence": evidence,
-                            "count": 1,
-                        }
-                    )
-                if collisions > baseline_collisions:
-                    classifications.append(
-                        {
-                            "arm": arm,
-                            "map": map_id,
-                            "seed": seed,
-                            "kind": "new_collision",
-                            "class": classification_class,
-                            "evidence": evidence,
-                            "count": collisions - baseline_collisions,
-                        }
-                    )
+    head_rows = receipt_provenance.native_keyed_rows(head_rows)
+    baseline_rows = receipt_provenance.native_keyed_rows(baseline_rows)
+    if execution_evidence is not None:
+        execution_evidence = {
+            key
+            if isinstance(key, receipt_provenance.EpisodeSlot)
+            else receipt_provenance.canonical_pair_key(*key): value
+            for key, value in execution_evidence.items()
+        }
+    expected = receipt_provenance.reviewed_slots(scope, DEFAULT_SEEDS)
+    if set(head_rows) != expected or set(baseline_rows) != expected:
+        raise ValueError("raw execution invalid: scope coverage differs")
+    for key in sorted(expected):
+        arm, map_id, seed = key.arm, key.scenario, key.seed
+        if key not in head_rows:
+            raise ValueError(f"head sweep omitted {key}")
+        if key not in baseline_rows:
+            raise ValueError(f"baseline sweep omitted {key}")
+        head = head_rows[key]
+        baseline = baseline_rows[key]
+        success = _row_success(head)
+        collisions = _row_collisions(head)
+        baseline_success = _row_success(baseline)
+        baseline_collisions = _row_collisions(baseline)
+        rows.append(
+            {
+                "native_slot": key._asdict(),
+                "arm": arm,
+                "map": map_id,
+                "seed": seed,
+                "success": success,
+                "collisions": collisions,
+                "baseline_success": baseline_success,
+                "baseline_collisions": baseline_collisions,
+                "scheduler_job_id": head.get("scheduler_job_id"),
+                "scheduler_node": head.get("scheduler_node"),
+                "baseline_scheduler_job_id": baseline.get("scheduler_job_id"),
+                "baseline_scheduler_node": baseline.get("scheduler_node"),
+                **(
+                    _execution_evidence(head)
+                    if execution_evidence is None
+                    else execution_evidence[key]
+                ),
+            }
+        )
+        rows[-1] = receipt_arm_execution.carry_execution_proof(
+            head if execution_evidence is None else execution_evidence[key], rows[-1]
+        )
+        evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
+        if baseline_success and not success:
+            classifications.append(
+                {
+                    "native_slot": key._asdict(),
+                    "arm": arm,
+                    "map": map_id,
+                    "seed": seed,
+                    "kind": "success_to_failure",
+                    "class": classification_class,
+                    "evidence": evidence,
+                    "count": 1,
+                }
+            )
+        if collisions > baseline_collisions:
+            classifications.append(
+                {
+                    "native_slot": key._asdict(),
+                    "arm": arm,
+                    "map": map_id,
+                    "seed": seed,
+                    "kind": "new_collision",
+                    "class": classification_class,
+                    "evidence": evidence,
+                    "count": collisions - baseline_collisions,
+                }
+            )
     totals = {
         "episodes": len(rows),
         "new_failures": sum(row["kind"] == "success_to_failure" for row in classifications),
@@ -2005,12 +2018,9 @@ def derive_valid_comparison(
     receipt_provenance.validate_scope_ids(scope)
     for sources in (head_rows, baseline_rows):
         receipt_provenance.validate_pair_keys(sources)
-    expected = {
-        (arm, map_id, seed)
-        for arm in scope["arms"]
-        for map_id in scope["maps"]
-        for seed in DEFAULT_SEEDS
-    }
+    head_rows = receipt_provenance.native_keyed_rows(head_rows)
+    baseline_rows = receipt_provenance.native_keyed_rows(baseline_rows)
+    expected = receipt_provenance.reviewed_slots(scope, DEFAULT_SEEDS)
     head_evidence = {}
     for sources in (head_rows, baseline_rows):
         if set(sources) != expected:
@@ -2019,7 +2029,7 @@ def derive_valid_comparison(
             )
         for key, raw in sources.items():
             evidence = _execution_evidence(raw)
-            arm, scenario, _seed = key
+            arm, scenario = key.arm, key.scenario
             algorithm = receipt_arm_execution.expected_algorithm(
                 arm,
                 scenario,
@@ -2427,7 +2437,7 @@ def _prepare_sweeps(
     )
 
 
-def _sweep_episode_paths(sweep_dir: Path) -> dict[tuple[str, str, int], str]:
+def _sweep_episode_paths(sweep_dir: Path) -> dict[receipt_provenance.EpisodeSlot, str]:
     """Locate every projected digest's raw episode in its hashed sweep archive."""
     return {
         key: episode.source_path.relative_to(sweep_dir).as_posix()
@@ -2435,7 +2445,7 @@ def _sweep_episode_paths(sweep_dir: Path) -> dict[tuple[str, str, int], str]:
     }
 
 
-def _sweep_execution_statuses(sweep_dir: Path) -> dict[tuple[str, str, int], str]:
+def _sweep_execution_statuses(sweep_dir: Path) -> dict[receipt_provenance.EpisodeSlot, str]:
     """Keep verified summary transport status separate from untouched raw episode bytes."""
     return {
         key: episode.summary["execution_status"]

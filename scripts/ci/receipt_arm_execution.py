@@ -178,7 +178,8 @@ def _from_sealed_producer(
     """Mint only inside the producer verifier after both raw seals were checked."""
     from scripts.ci.receipt_provenance import native_row_key
 
-    arm, scenario, _seed = native_row_key(row, raw_path)
+    slot = native_row_key(row, raw_path)
+    arm, scenario = slot.arm, slot.scenario
     if arm not in PROFILES or scenario != SCENARIO:
         return row
     _require(

@@ -10,7 +10,6 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
-import itertools
 import json
 import math
 import os
@@ -846,7 +845,22 @@ def comparison_rows(
     for sources in (head_rows, baseline_rows, head_execution_statuses, baseline_execution_statuses):
         if sources is not None:
             receipt_provenance.validate_pair_keys(sources)
-    expected = set(itertools.product(scope["arms"], scope["maps"], SEEDS))
+    head_rows = receipt_provenance.native_keyed_rows(head_rows)
+    baseline_rows = receipt_provenance.native_keyed_rows(baseline_rows)
+
+    def native_statuses(statuses):
+        if statuses is None:
+            return None
+        return {
+            key
+            if isinstance(key, receipt_provenance.EpisodeSlot)
+            else receipt_provenance.canonical_pair_key(*key): value
+            for key, value in statuses.items()
+        }
+
+    head_execution_statuses = native_statuses(head_execution_statuses)
+    baseline_execution_statuses = native_statuses(baseline_execution_statuses)
+    expected = receipt_provenance.reviewed_slots(scope, SEEDS)
     gate._require(
         set(head_rows) == expected == set(baseline_rows),
         "equivalence refused: incomplete 14-arm/51-slot/three-seed matrix",
@@ -891,9 +905,9 @@ def comparison_rows(
             evidence = _execution_evidence(audit_view)
             execution_evidence[side] = evidence
             expected_algorithm = receipt_arm_execution.expected_algorithm(
-                key[0],
-                key[1],
-                scope.get("arm_algorithms", {}).get(key[0], key[0]),
+                receipt_provenance.canonical_id(key.arm, "arm"),
+                key.scenario,
+                scope.get("arm_algorithms", {}).get(key.arm, key.arm),
                 row=evidence,
                 source_sha=row.get("git_hash"),
                 repo_root=gate.ROOT,
@@ -925,9 +939,10 @@ def comparison_rows(
         rows.append(
             {
                 **source_allocations,
-                "arm": key[0],
-                "map": key[1],
-                "seed": key[2],
+                "native_slot": key._asdict(),
+                "arm": key.arm,
+                "map": key.scenario,
+                "seed": key.seed,
                 "baseline_sha256": hashlib.sha256(base_bytes).hexdigest(),
                 "head_sha256": hashlib.sha256(head_bytes).hexdigest(),
                 "head_execution": execution_evidence["head"],
@@ -1043,7 +1058,7 @@ def validate_receipt(
         == (jobs[0] if jobs[0] == jobs[1] else "_".join(jobs)).replace(",", "_"),
         "equivalence scheduler identity differs from hardware jobs",
     )
-    expected = set(itertools.product(scope["arms"], scope["maps"], SEEDS))
+    expected = receipt_provenance.reviewed_slots(scope, SEEDS)
     rows = receipt["rows"]
     keys = [gate._key(row) for row in rows]
     gate._require(

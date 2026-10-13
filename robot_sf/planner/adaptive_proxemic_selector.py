@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     HybridRuleLocalPlannerConfig,
@@ -256,6 +257,7 @@ class AdaptiveProxemicSelectorAdapter:
 
     def bind_env(self, env: Any) -> None:
         """Bind environment geometry to all wrapped profile planners."""
+        require_supported_env_footprint(type(self).__name__, env)
         for planner in self._planners.values():
             bind_env = getattr(planner, "bind_env", None)
             if callable(bind_env):

@@ -21,6 +21,7 @@ from robot_sf.planner import (
     PlannerConfig,
     attach_classic_global_planner,
 )
+from robot_sf.planner.footprint_contract import require_supported_robot_footprint
 from robot_sf.render.lazy_sim_view import LazySimulationView
 from robot_sf.render.sim_state import VisualizableSimState
 from robot_sf.sim.registry import get_backend
@@ -359,6 +360,10 @@ class BaseEnv(SimulationUICloseMixin, Env):
 
 def attach_planner_to_map(map_def, env_config) -> None:
     """Attach a planner instance to the map when enabled in config."""
+    if getattr(env_config, "use_planner", False) or getattr(map_def, "_use_planner", False):
+        require_supported_robot_footprint(
+            "global route planner", getattr(env_config, "robot_config", None)
+        )
     map_def._sample_positions_globally = bool(
         getattr(env_config, "sample_positions_globally", False),
     )

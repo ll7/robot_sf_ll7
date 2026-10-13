@@ -16,6 +16,7 @@ import numpy as np
 
 from robot_sf.baselines.ppo import PPOPlanner
 from robot_sf.baselines.sac import SACPlanner
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.risk_dwa import _wrap_angle
 
@@ -153,6 +154,7 @@ class HybridGlobalRLLocalAdapter:
 
     def bind_env(self, env: Any) -> None:
         """Bind benchmark environment to the wrapped policy when supported."""
+        require_supported_env_footprint(type(self).__name__, env)
 
         bind_env = getattr(self.local_policy, "bind_env", None)
         if callable(bind_env):

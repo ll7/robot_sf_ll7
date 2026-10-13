@@ -24,6 +24,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_surface_clearance_radii,
 )
 from robot_sf.planner.drive_rollout import native_drive_rollout
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.goal_target import (
     LEGACY_NEXT_GOAL_V1,
     select_goal_target,
@@ -128,6 +129,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
     def bind_env(self, env: Any) -> None:
         """Bind the episode's original static grid geometry."""
+        require_supported_env_footprint(type(self).__name__, env)
         self._bind_static_obstacles(env)
         self._drive_settings = DifferentialDriveSettings()
         robots = getattr(getattr(env, "simulator", None), "robots", None)

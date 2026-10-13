@@ -44,6 +44,7 @@ from robot_sf.nav.proxemic_costmap import (
 )
 from robot_sf.planner import hybrid_route_corridor
 from robot_sf.planner.clearance_geometry import StaticObstacleClearance
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
@@ -575,6 +576,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Hybrid v4 additionally reads the robot drive's acceleration, braking and
         speed limits here, so rollouts and braking checks use the real drive.
         """
+        require_supported_env_footprint(type(self).__name__, env)
         if self.config.v4_predictive_braking_enabled and not isinstance(
             _bound_robot_config(env), DifferentialDriveSettings
         ):

@@ -27,6 +27,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_clearance_model,
     validate_surface_clearance_radii,
 )
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
@@ -1337,6 +1338,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         Only stores values; the ``legacy_v1`` path never reads them, so binding does
         not change historical commands.
         """
+        require_supported_env_footprint(type(self).__name__, env)
         config = getattr(env, "env_config", None) or getattr(env, "config", None)
         robot_config = getattr(config, "robot_config", None)
         if robot_config is None:

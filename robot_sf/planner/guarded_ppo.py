@@ -24,6 +24,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_surface_clearance_radii,
 )
 from robot_sf.planner.drive_rollout import native_drive_rollout
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
 from robot_sf.planner.safety_shield import ShieldDecision
 from robot_sf.planner.socnav import (
@@ -219,6 +220,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
     def bind_env(self, env: Any) -> None:
         """Propagate environment binding to child planners that need map context."""
+        require_supported_env_footprint(type(self).__name__, env)
         self._bind_static_obstacles(env)
         self._drive_settings = DifferentialDriveSettings()
         robots = getattr(getattr(env, "simulator", None), "robots", None)

@@ -28,6 +28,7 @@ from robot_sf.baselines.ppo import _configure_torch_213_runtime
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.optional_import import try_import
 from robot_sf.models import resolve_model_path
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.learned_policy_adapter import (
     LearnedPolicyAdapterContractError,
     LearnedPolicyStepResult,
@@ -409,6 +410,7 @@ class RecurrentPPOLearnedLocalPolicyAdapter:
 
     def bind_env(self, env: Any) -> None:
         """Bind a runtime observation space and validate the default_gym keys."""
+        require_supported_env_footprint(type(self).__name__, env)
         del env  # observation contract is validated per step; no env binding needed
 
     def diagnostics(self, *, observation: Mapping[str, Any] | None = None) -> dict[str, Any]:

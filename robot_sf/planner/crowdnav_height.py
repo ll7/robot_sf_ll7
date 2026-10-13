@@ -17,6 +17,8 @@ import gymnasium
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -637,6 +639,7 @@ class CrowdNavHeightAdapter:
 
     def bind_env(self, env: Any) -> None:
         """Cache static obstacle line segments from the live Robot SF environment."""
+        require_supported_env_footprint(type(self).__name__, env)
         simulator = getattr(env, "simulator", None)
         if simulator is None or not hasattr(simulator, "get_obstacle_lines"):
             raise RuntimeError(

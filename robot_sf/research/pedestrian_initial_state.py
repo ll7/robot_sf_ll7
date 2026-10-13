@@ -21,14 +21,17 @@ def initial_admissibility(state, segments, radius_m: float) -> dict[str, object]
     Returns:
         Input verdict and independently readable distances and violation counts.
     """
+    if isinstance(radius_m, (bool, np.bool_)) or not isinstance(
+        radius_m, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError("invalid initial state/radius")
+    radius_m = float(radius_m)
     values = np.asarray(state, dtype=float)
     if (
         values.ndim != 2
         or values.shape[0] == 0
         or values.shape[1] not in (6, 7)
         or not np.isfinite(values).all()
-        or isinstance(radius_m, (bool, np.bool_))
-        or not np.isscalar(radius_m)
         or not np.isfinite(radius_m)
         or radius_m <= 0
     ):

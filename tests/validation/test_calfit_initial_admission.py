@@ -94,3 +94,10 @@ def test_initial_admission_refuses_invalid_state_shape(state):
 
     with pytest.raises(ValueError, match="initial state"):
         initial_admissibility(state, [], 0.28)
+
+
+@pytest.mark.parametrize("radius", ["0.28", 0.28 + 0.1j])
+def test_nonreal_radius_has_an_admission_error(radius):
+    """Reject invalid source radii before NumPy geometry arithmetic."""
+    with pytest.raises(ValueError, match="invalid initial state/radius"):
+        suite.initial_admissibility(np.array([[0.0, 0.0, 1.0, 0.0, 10.0, 0.0, 0.5]]), [], radius)

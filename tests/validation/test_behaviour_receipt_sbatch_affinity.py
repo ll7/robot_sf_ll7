@@ -99,6 +99,7 @@ def _write_hardware(root, source, job):
                 "requested_node": "auxme-imech142",
                 "source_sha": source,
                 "job_id": job,
+                "arm_role": "baseline" if root.parent.name == "baseline" else "head",
             }
         )
     )

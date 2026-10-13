@@ -540,25 +540,15 @@ def validate_receipt(
         canonical_algorithm_name,
         enrich_algorithm_metadata,
     )
+    from scripts.ci.make_behaviour_receipt import require_valid_execution
 
     new = {}
     for row in rows:
         expected_algo = canonical_algorithm_name(
             scope.get("arm_algorithms", {}).get(row["arm"], row["arm"])
         )
-        _require(row["algorithm"] == expected_algo, "row algorithm differs from reviewed arm")
         profile = enrich_algorithm_metadata(algo=expected_algo)["planner_kinematics"]
-        required_mode = "native" if profile["supports_native_commands"] else "adapter"
-        _require(
-            row["execution_mode"] == required_mode
-            and (profile["supports_native_commands"] or profile["supports_adapter_commands"]),
-            "command execution mode does not satisfy the algorithm registry",
-        )
-        _require(row["controller_executed"], "intended solver/controller did not execute")
-        _require(
-            not row["fallback"] and not row["degraded"],
-            "fallback or degraded execution cannot satisfy the receipt",
-        )
+        require_valid_execution(row, expected_algo, profile)
         key = _key(row)
         if row["baseline_success"] and not row["success"]:
             new[(*key, "success_to_failure")] = 1
@@ -744,7 +734,7 @@ def load_receipt(header: dict, head: str) -> dict:
     _hardware_require(isinstance(payload, dict), "invalid receipt hardware payload")
     identities = validate_hardware_pair(payload.get("hardware"))
     validate_scheduler_rows(payload.get("rows", []), identities)
-    verify_source_artifacts(payload, identities, head)
+    verify_source_artifacts(payload, identities, head, header)
     jsonschema.Draft202012Validator(schema).evolve(
         schema=schema["$defs"]["rows_artifact"]
     ).validate(payload)
@@ -823,7 +813,7 @@ def _source_artifact_bytes(reference: dict, head: str) -> bytes:
     return raw
 
 
-def verify_source_artifacts(payload: dict, identities: dict, head: str) -> None:
+def verify_source_artifacts(payload: dict, identities: dict, head: str, header: dict) -> None:
     """Independently verify sealed source bytes and their allocation/row projection."""
     from scripts.ci import make_behaviour_receipt as producer
     from scripts.ci.receipt_provenance import BINDING_FILE, verified_raw_rows
@@ -837,6 +827,13 @@ def verify_source_artifacts(payload: dict, identities: dict, head: str) -> None:
         set(references) == {"head", "baseline"},
         "provenance digest evidence missing",
     )
+    _hardware_require(
+        identities["head"]["source_sha"] == header["scheduler"]["source_sha"]
+        and identities["baseline"]["source_sha"] == header["baseline"]["source_sha"]
+        and identities["head"]["source_sha"] != identities["baseline"]["source_sha"],
+        "producer source invalid: arm claims differ or share a producer commit",
+    )
+    comparison_sources = {}
     for side, prefix in (("head", ""), ("baseline", "baseline_")):
         jobs = set(scheduler_job_ids(identities[side]["job_id"]))
         _hardware_require(
@@ -884,7 +881,13 @@ def verify_source_artifacts(payload: dict, identities: dict, head: str) -> None:
                     == hashlib.sha256((root / BINDING_FILE).read_bytes()).hexdigest(),
                     "provenance digest allocation binding mismatch",
                 )
-                rows = verified_raw_rows(root, job, identities[side]["node"])
+                rows = verified_raw_rows(
+                    root,
+                    job,
+                    identities[side]["node"],
+                    source_sha=identities[side]["source_sha"],
+                    arm_role=side,
+                )
                 _hardware_require(
                     not (set(rows) & set(source_rows)), "provenance digest duplicate source rows"
                 )
@@ -893,15 +896,20 @@ def verify_source_artifacts(payload: dict, identities: dict, head: str) -> None:
             set(source_rows) == {_key(row) for row in payload["rows"]},
             "provenance digest source row coverage differs",
         )
-        for row in payload["rows"]:
-            source = source_rows[_key(row)]
-            _hardware_require(
-                source["scheduler_job_id"] == row[prefix + "scheduler_job_id"]
-                and source["scheduler_node"] == row[prefix + "scheduler_node"]
-                and producer._row_success(source) == row[prefix + "success"]
-                and producer._row_collisions(source) == row[prefix + "collisions"],
-                "provenance digest source projection differs",
-            )
+        comparison_sources[side] = source_rows
+    scope = json.loads(SCOPE_PATH.read_text())
+    derived, _, totals = producer.derive_valid_comparison(
+        comparison_sources["head"],
+        comparison_sources["baseline"],
+        scope,
+        classification_class="known_limitation",
+        evidence_base_uri="verified-source",
+    )
+    _hardware_require(
+        {_key(row): row for row in derived} == {_key(row): row for row in payload["rows"]}
+        and header["totals"] == totals,
+        "raw execution invalid: receipt projection or totals differ from sealed sources",
+    )
 
 
 def check_receipt(
@@ -943,7 +951,7 @@ def check_receipt(
         jsonschema.ValidationError,
     ) as exc:
         if isinstance(exc, HardwareIdentityError):
-            return [f"BLOCKER: {exc}"]
+            return [f"BLOCKER: behaviour receipt invalid: {exc}"]
         return [
             f"BLOCKER: behaviour receipt rejected ({type(exc).__name__}); verify scope, exact head, baseline, job, payload digest and classification inventory"
         ]

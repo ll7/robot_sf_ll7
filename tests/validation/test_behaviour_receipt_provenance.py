@@ -6,6 +6,7 @@ import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -40,33 +41,68 @@ def seal_sweep(root):
             {**row, "episode_id": f"fixture-{row['seed']}", "config_hash": "fixture"}
             for row in rows
         ]
-        manifest = build_result_provenance_manifest(
-            out_path=raw,
-            episode_records=records,
-            schema_path=schema,
-            scenario_path=scenario,
-            scenarios=[{"name": "open"}],
-            algo=rows[0]["algo"],
-            algo_config_path=None,
-            benchmark_profile="baseline-safe",
-            suite_key="main",
-            total_jobs=len(rows),
-            written=len(rows),
-            horizon=1,
-            dt=0.1,
-            record_forces=False,
-            active_observation_mode=None,
-            active_observation_level=None,
-        )
+        request = json.loads((root / "execution_request.json").read_text())
+        source = request["source_sha"]
+        from robot_sf._execution_context import execution_context_digest
+
+        context = {
+            "schema_version": "benchmark_execution_context.v1",
+            "cpu_model": "AMD EPYC 9115 16-Core Processor",
+            "platform": "fixture",
+            "python_version": "fixture",
+            "thread_env": {},
+        }
+        context = {
+            "hostname": "auxme-imech142",
+            **context,
+            "execution_context_sha256": execution_context_digest(context),
+        }
+        with (
+            patch("robot_sf.benchmark.result_provenance._git_hash_fallback", return_value=source),
+            patch(
+                "robot_sf.benchmark.result_provenance.build_execution_context_provenance",
+                return_value=context,
+            ),
+        ):
+            manifest = build_result_provenance_manifest(
+                out_path=raw,
+                episode_records=records,
+                schema_path=schema,
+                scenario_path=scenario,
+                scenarios=[{"name": "open"}],
+                algo=rows[0]["algo"],
+                algo_config_path=None,
+                benchmark_profile="baseline-safe",
+                suite_key="main",
+                total_jobs=len(rows),
+                written=len(rows),
+                horizon=1,
+                dt=0.1,
+                record_forces=False,
+                active_observation_mode=None,
+                active_observation_level=None,
+            )
         write_result_provenance_manifest(manifest_path_for_result_jsonl(raw), manifest)
         save_manifest(raw, [rec["episode_id"] for rec in records])
 
 
-def refresh_sweep_binding(root):
+def refresh_sweep_binding(root, *, validate_identity=True):
     """Reproduce a fresh fixture execution after a deliberate fixture edit."""
-    (root / receipt_provenance.BINDING_FILE).unlink(missing_ok=True)
+    binding_path = root / receipt_provenance.BINDING_FILE
+    previous = json.loads(binding_path.read_text()) if binding_path.exists() else None
+    binding_path.unlink(missing_ok=True)
     seal_sweep(root)
-    receipt_provenance.write_binding(root, root.name, "auxme-imech142")
+    if validate_identity:
+        receipt_provenance.write_binding(root, root.name, "auxme-imech142")
+    else:
+        # The negative controls emulate an attacker refreshing unsigned hashes,
+        # without going through the producer's identity admission.
+        assert previous is not None
+        previous["files"] = {
+            path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in receipt_provenance.source_files(root)
+        }
+        binding_path.write_text(json.dumps(previous))
 
 
 def source_artifacts_for_receipt(repo, receipt):
@@ -81,13 +117,29 @@ def source_artifacts_for_receipt(repo, receipt):
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary) / job
                 root.mkdir()
+                from tests.validation.test_behaviour_receipt_gate import _hardware
+
+                source = json.loads(receipt["hardware"][side]["execution_request.json"]["content"])[
+                    "source_sha"
+                ]
+                for name, entry in _hardware(source, job).items():
+                    (root / name).write_text(entry["content"])
+                request_path = root / "execution_request.json"
+                request = json.loads(request_path.read_text())
+                request["arm_role"] = side
+                request_path.write_text(json.dumps(request))
                 by_arm = {}
                 summaries = []
                 for row in receipt["rows"]:
                     if row[prefix + "scheduler_job_id"] != job:
                         continue
                     raw = _raw_row(row["seed"])
-                    raw.update(algo=row["algorithm"], scenario_id=row["map"], scheduler_job_id=job)
+                    raw.update(
+                        algo=row["algorithm"],
+                        scenario_id=row["map"],
+                        scheduler_job_id=job,
+                        git_hash=source,
+                    )
                     raw["metrics"].update(
                         success=row[prefix + "success"],
                         total_collision_count=row[prefix + "collisions"],
@@ -117,6 +169,33 @@ def source_artifacts_for_receipt(repo, receipt):
                     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
                 (root / "episodes_main.jsonl").write_text(
                     "".join(json.dumps(row) + "\n" for row in summaries)
+                )
+                (root / "execution_main.json").write_text(
+                    json.dumps(
+                        {
+                            "suite": "main",
+                            "head_sha": source,
+                            "seeds": sorted({row["seed"] for row in summaries}),
+                            "complete": True,
+                            "trace_requested": True,
+                            "campaign_execution_status": "completed",
+                            "exit_code": 0,
+                            "unexpected_failed_runs": 0,
+                            "expected_slots": len(summaries),
+                            "written_rows": len(summaries),
+                            "total_episodes": len(summaries),
+                            **{
+                                field: []
+                                for field in (
+                                    "failed_slots",
+                                    "missing_slots",
+                                    "duplicate_slots",
+                                    "unexpected_slots",
+                                    "incomplete_trace_slots",
+                                )
+                            },
+                        }
+                    )
                 )
                 refresh_sweep_binding(root)
                 bundle = repo / f"receipts/behaviour/fixture-sources/{side}/{job}.tar.gz"

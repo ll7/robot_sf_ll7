@@ -55,7 +55,7 @@ def _row_fault(root, fault):
         path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
 
-    refresh_sweep_binding(root)
+    refresh_sweep_binding(root, validate_identity=False)
 
 
 def _invent_cpu(root):
@@ -222,7 +222,7 @@ def test_collection_rejects_unverified_allocations_and_contexts(tmp_path, monkey
     if fault in {"wrong_row_job", "nested_cpu"}:
         from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
 
-        refresh_sweep_binding(head)
+        refresh_sweep_binding(head, validate_identity=False)
     records.write_text(json.dumps(data))
     result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode != 0 and "hardware comparison invalid" in result.stderr.lower(), (

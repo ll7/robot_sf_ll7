@@ -149,6 +149,23 @@ The compact payload retains its 32 MiB limit; each source bundle is limited to
 512 MiB compressed and 2 GiB expanded. Existing identical bundles are preserved;
 conflicting bytes at an existing evidence path are refused.
 
+Allocation binding v2 also records `source_sha` and `arm_role` (`head` or
+`baseline`). The producer's run and per-row source commits, raw `git_hash`,
+explicit arm-role claims and recorded execution context must agree with that
+binding and with the receipt's independently selected source/node. The producer
+hostname and CPU model must match the scheduler and trusted inventory; its
+canonical context digest must verify. Head and baseline must use different
+producer commits. Consistent hashes alone cannot relabel baseline bytes as head
+evidence. Older bindings cannot be backfilled into frozen artifacts.
+
+Collection and admission share `verified_raw_rows`, `derive_valid_comparison`
+and `require_valid_execution`. They verify metadata and summary/raw coverage,
+reconstruct allocation context in memory, and apply the same registry algorithm,
+command mode, controller, trace and fallback/degradation checks to both sides.
+Admission re-derives the full joined-row projection and totals from verified
+raw evidence, then compares every projected field with the receipt. A healthy
+payload cannot override invalid execution in a validly re-sealed source.
+
 Production receipt generation uses the full gate seed set (`1001..1030`) because
 that is what the validator admits today; the producer rejects seeds outside the
 wider development range (`1001..1200`) and also rejects currently unsupported

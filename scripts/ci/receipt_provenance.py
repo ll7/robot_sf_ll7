@@ -73,7 +73,112 @@ def verify_digests(root: Path, expected: dict[str, str]) -> None:
         _require(not violations, "mismatch in sealed artifacts")
 
 
-def verify_producer_seals(root: Path) -> None:
+def _producer_claim(claim: dict, source: str, role: str, job: str, node: str) -> None:
+    """Check selected producer claims, without confusing checkpoint/input origins."""
+    from robot_sf._execution_context import execution_context_digest
+    from scripts.ci.behaviour_receipt import validate_source_row_context
+
+    contexts = [claim]
+    for parent in (claim, claim.get("algorithm_metadata", {}), claim.get("result_provenance", {})):
+        if isinstance(parent, dict) and isinstance(parent.get("execution_context"), dict):
+            contexts.append(parent["execution_context"])
+    for context in contexts:
+        for field in ("repo_commit", "git_hash", "source_sha", "source_commit"):
+            _require(
+                field not in context or context[field] == source,
+                "producer source contradicts claimed commit",
+            )
+        for field in ("receipt_arm", "arm_role"):
+            _require(
+                field not in context or context[field] == role,
+                "producer arm role contradicts binding",
+            )
+        for field in ("job_id", "slurm_job_id"):
+            _require(
+                field not in context or context[field] == job,
+                "producer job contradicts scheduler binding",
+            )
+        if "execution_context_sha256" in context:
+            _require(
+                context["execution_context_sha256"]
+                == execution_context_digest(
+                    {
+                        k: v
+                        for k, v in context.items()
+                        if k not in {"hostname", "execution_context_sha256"}
+                    }
+                ),
+                "producer execution context digest differs",
+            )
+    try:
+        validate_source_row_context(
+            {"scheduler_job_id": job, "scheduler_node": node, **claim}, job, node
+        )
+    except HardwareIdentityError as exc:
+        raise HardwareIdentityError(
+            "hardware comparison invalid: producer execution context disagrees with scheduler"
+        ) from exc
+
+
+def _producer_identity(
+    sidecar: dict, raw_rows: list[dict], source: str, role: str, job: str, node: str
+) -> None:
+    run = sidecar["run"]
+    _require(
+        run.get("runner") == "map_runner.run_map_batch"
+        and sidecar["completeness"].get("status") == "complete"
+        and all(
+            sidecar["campaign_identity"].get(field) == len(raw_rows)
+            for field in ("written", "total_jobs")
+        ),
+        "producer execution is incomplete or has inconsistent counts",
+    )
+    _require(run.get("repo_commit") == source, "producer source contradicts claimed commit")
+    _producer_claim(run, source, role, job, node)
+    context = run.get("execution_context")
+    _require(
+        isinstance(context, dict)
+        and context.get("hostname") == node
+        and bool(context.get("cpu_model")),
+        "producer execution context differs from scheduler",
+    )
+    if not isinstance(context, dict):
+        raise HardwareIdentityError(
+            "hardware comparison invalid: producer execution context missing"
+        )
+    _producer_claim(context, source, role, job, node)
+    _require("execution_context_sha256" in context, "producer execution context digest missing")
+    links = sidecar["rows"]
+    _require(len(links) == len(raw_rows), "producer row link coverage differs")
+    for index, (link, raw) in enumerate(zip(links, raw_rows, strict=True)):
+        _require(
+            type(link.get("jsonl_line")) is int
+            and link["jsonl_line"] == index
+            and (link.get("scenario_id"), link.get("seed"))
+            == (raw.get("scenario_id"), raw.get("seed"))
+            and link.get("repo_commit") == source,
+            "producer row source or link differs",
+        )
+        _producer_claim(link, source, role, job, node)
+        _require(raw.get("git_hash") == source, "producer raw source contradicts claimed commit")
+        _require(
+            raw.get("algo") == sidecar["campaign_identity"].get("algorithm"),
+            "producer raw execution algorithm contradicts sealed campaign",
+        )
+        _producer_claim(raw, source, role, job, node)
+        provenance = raw.get("result_provenance")
+        if isinstance(provenance, dict):
+            _producer_claim(provenance, source, role, job, node)
+
+
+def verify_producer_seals(
+    root: Path,
+    *,
+    source_sha: str | None = None,
+    arm_role: str | None = None,
+    job: str | None = None,
+    node: str | None = None,
+) -> None:
     """Require the raw digest in both normal producer sidecars to verify."""
     from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 
@@ -107,6 +212,16 @@ def verify_producer_seals(root: Path) -> None:
                 expected[relative] = digest
         if expected:
             verify_digests(root, expected)
+        if source_sha is not None:
+            _require(
+                arm_role in {"head", "baseline"} and job is not None and node is not None,
+                "producer identity claim missing",
+            )
+            for raw in sorted(root.glob("campaigns/**/episodes.jsonl")):
+                sidecar = json.loads(raw.with_suffix(".jsonl.provenance.json").read_text())
+                rows = [json.loads(line) for line in raw.read_text().splitlines() if line.strip()]
+                if arm_role is not None and job is not None and node is not None:
+                    _producer_identity(sidecar, rows, source_sha, arm_role, job, node)
     except HardwareIdentityError:
         raise
     except (OSError, ValueError, TypeError, KeyError) as exc:
@@ -115,10 +230,15 @@ def verify_producer_seals(root: Path) -> None:
 
 def write_binding(root: Path, job: str, node: str) -> None:
     """Seal a new, separate allocation binding after successful execution."""
-    verify_producer_seals(root)
+    request = json.loads((root / "execution_request.json").read_text())
+    source, role = request["source_sha"], request["arm_role"]
+    _require(role in {"head", "baseline"}, "producer arm role missing")
+    verify_producer_seals(root, source_sha=source, arm_role=role, job=job, node=node)
     files = source_files(root)
     binding = {
-        "schema_version": "behaviour-allocation-binding.v1",
+        "schema_version": "behaviour-allocation-binding.v2",
+        "source_sha": source,
+        "arm_role": role,
         "job_id": job,
         "node": node,
         "files": {
@@ -131,16 +251,29 @@ def write_binding(root: Path, job: str, node: str) -> None:
         handle.write("\n")
 
 
-def verify_binding(root: Path, job: str, node: str) -> None:
+def verify_binding(
+    root: Path, job: str, node: str, *, source_sha: str | None = None, arm_role: str | None = None
+) -> None:
     """Verify allocation binding coverage and both original producer digest seals."""
     try:
         _require(not (root / BINDING_FILE).is_symlink(), "binding is not regular")
         binding = json.loads((root / BINDING_FILE).read_text())
         _require(
-            binding.get("schema_version") == "behaviour-allocation-binding.v1"
+            binding.get("schema_version") == "behaviour-allocation-binding.v2"
             and binding.get("job_id") == job
             and binding.get("node") == node,
             "allocation binding differs from scheduler",
+        )
+        source = binding.get("source_sha") if source_sha is None else source_sha
+        role = binding.get("arm_role") if arm_role is None else arm_role
+        _require(
+            isinstance(source, str)
+            and len(source) == 40
+            and all(c in "0123456789abcdef" for c in source)
+            and role in {"head", "baseline"}
+            and binding.get("source_sha") == source
+            and binding.get("arm_role") == role,
+            "producer source or arm role differs from receipt claim",
         )
         expected = binding["files"]
         _require(isinstance(expected, dict) and bool(expected), "binding has no artifacts")
@@ -149,7 +282,7 @@ def verify_binding(root: Path, job: str, node: str) -> None:
             "binding omits comparison inputs",
         )
         verify_digests(root, expected)
-        verify_producer_seals(root)
+        verify_producer_seals(root, source_sha=source, arm_role=role, job=job, node=node)
     except HardwareIdentityError:
         raise
     except (OSError, ValueError, TypeError, KeyError) as exc:
@@ -165,12 +298,17 @@ def verify_optional_binding(root: Path, job: str | None, node: str | None) -> No
         verify_binding(root, job, node)
 
 
-def verified_raw_rows(root: Path, job: str, node: str) -> dict[tuple[str, str, int], dict]:
+def verified_raw_rows(
+    root: Path, job: str, node: str, *, source_sha: str, arm_role: str
+) -> dict[tuple[str, str, int], dict]:
     """Decode sealed admission sources once, then apply allocation context in memory."""
+    from scripts.ci import make_behaviour_receipt as producer
     from scripts.ci.behaviour_receipt import validate_source_row_context
 
-    verify_binding(root, job, node)
+    verify_binding(root, job, node, source_sha=source_sha, arm_role=arm_role)
+    producer._verify_sweep_metadata(root, source_sha)
     rows = {}
+    locations = {}
     for path in sorted(root.glob("campaigns/**/episodes.jsonl")):
         arm = path.parent.name.split("__")[0]
         for line in path.read_text().splitlines():
@@ -183,5 +321,41 @@ def verified_raw_rows(root: Path, job: str, node: str) -> dict[tuple[str, str, i
             row.setdefault("scheduler_node", node)
             validate_source_row_context(row, job, node)
             rows[key] = row
+            locations[key] = path.resolve()
     _require(bool(rows), "source rows missing")
+    seen = set()
+    for path in sorted(root.glob("episodes_*.jsonl")):
+        suite = path.stem.removeprefix("episodes_")
+        campaign = root / "campaigns" / f"empty_world_{suite}"
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            summary = json.loads(line)
+            key = (str(summary["arm"]), str(summary["scenario"]), int(summary["seed"]))
+            source_path = (campaign / summary["source_file"]).resolve()
+            _require(
+                source_path.is_relative_to(campaign.resolve())
+                and key in rows
+                and locations[key] == source_path
+                and key not in seen,
+                "producer summary/raw coverage or source differs",
+            )
+            raw = rows[key]
+            summary.setdefault("scheduler_job_id", job)
+            summary.setdefault("scheduler_node", node)
+            validate_source_row_context(summary, job, node)
+            _require(
+                producer._row_success(summary) == producer._row_success(raw)
+                and producer._row_collisions(summary) == producer._row_collisions(raw),
+                "producer summary/raw outcomes differ",
+            )
+            _producer_claim(summary, source_sha, arm_role, job, node)
+            _require(
+                "execution_status" not in raw
+                or raw["execution_status"] == summary["execution_status"],
+                "producer raw execution status contradicts summary",
+            )
+            raw["execution_status"] = summary["execution_status"]
+            seen.add(key)
+    _require(seen == set(rows), "producer summary/raw coverage differs")
     return rows

@@ -15,6 +15,7 @@ import sys
 import tarfile
 import tempfile
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -765,13 +766,16 @@ class SweepRun:
     shard_dirs: tuple[Path, ...] = ()
 
 
-def _record_request(output_dir: Path, source_sha: str, job_id: str, node: str) -> None:
+def _record_request(
+    output_dir: Path, source_sha: str, job_id: str, node: str, arm_role: str
+) -> None:
     (output_dir / "execution_request.json").write_bytes(
         _json_bytes(
             {
                 "schema_version": "behaviour-hardware-request.v1",
                 "requested_node": node,
                 "source_sha": source_sha,
+                "arm_role": arm_role,
                 "job_id": job_id,
             }
         )
@@ -1002,6 +1006,7 @@ def _submit_sbatch_sweep(
                 "schema_version": "behaviour-hardware-request.v1",
                 "requested_node": node,
                 "source_sha": source_sha,
+                "arm_role": label,
             }
         )
     )
@@ -1199,7 +1204,7 @@ def _load_sweep_rows(
     return rows
 
 
-def _load_run_rows(run: SweepRun) -> dict[tuple[str, str, int], dict[str, Any]]:
+def _load_run_rows(run: SweepRun, arm_role: str) -> dict[tuple[str, str, int], dict[str, Any]]:
     if run.hardware is None:
         raise behaviour_receipt.HardwareIdentityError(
             "hardware comparison invalid: unverified sweep cannot provide rows"
@@ -1207,7 +1212,9 @@ def _load_run_rows(run: SweepRun) -> dict[tuple[str, str, int], dict[str, Any]]:
     identity = behaviour_receipt.hardware_identity(run.hardware)
     rows = {}
     for shard in run.shard_dirs:
-        part = _load_sweep_rows(shard, scheduler_job_id=shard.name, scheduler_node=identity["node"])
+        part = receipt_provenance.verified_raw_rows(
+            shard, shard.name, identity["node"], source_sha=run.source_sha, arm_role=arm_role
+        )
         if set(part) & set(rows):
             raise ValueError("duplicate rows across scheduler shards")
         rows.update(part)
@@ -1475,15 +1482,37 @@ def _controller_runtime_marker(
 def _non_runtime_location(name: str, key: str) -> bool:
     path = re.sub(r"\[\d+\]", ".*", name)
     full = (*path.split("."), key) if path else (key,)
-    return full in {
+    return full in _non_runtime_paths()
+
+
+@cache
+def _non_runtime_paths() -> frozenset[tuple[str, ...]]:
+    """Compile the immutable, source-owned policy once per validator process."""
+    return frozenset(
         tuple(location.split("."))
         for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
-    }
+    )
 
 
 def _transport_path(path: tuple[str, ...]) -> tuple[str | None, ...]:
     """Normalize declared array indices without conflating literal dictionary keys."""
     return tuple(None if part == "*" else part for part in path)
+
+
+@cache
+def _runtime_policy_index() -> tuple[Any, ...]:
+    """Index the fixed runtime vocabulary; never cache decisions about evidence."""
+    return (
+        re.compile(EXECUTION_EVIDENCE_LOCATIONS["fault_key_pattern"], re.IGNORECASE),
+        set(EXECUTION_EVIDENCE_LOCATIONS["runtime_fields"])
+        | set(EXECUTION_EVIDENCE_LOCATIONS["runtime_aliases"]),
+        set(EXECUTION_EVIDENCE_LOCATIONS["counter_fields"]),
+        set(EXECUTION_EVIDENCE_LOCATIONS["mode_locations"])
+        | set(EXECUTION_EVIDENCE_LOCATIONS["required_values"]),
+        {_transport_path(path) for path in _non_runtime_paths()},
+        {_transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]},
+        {_transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["counter_objects"]},
+    )
 
 
 def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
@@ -1492,27 +1521,17 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     Source-key catalog membership is deliberately insufficient. Dict keys stay
     exact; only array indices normalize to '*'. No subtree is exempted.
     """
-    vocabulary = re.compile(EXECUTION_EVIDENCE_LOCATIONS["fault_key_pattern"], re.IGNORECASE)
-    runtime_fields = set(EXECUTION_EVIDENCE_LOCATIONS["runtime_fields"]) | set(
-        EXECUTION_EVIDENCE_LOCATIONS["runtime_aliases"]
-    )
-    counter_fields = set(EXECUTION_EVIDENCE_LOCATIONS["counter_fields"])
-    required = set(EXECUTION_EVIDENCE_LOCATIONS["mode_locations"]) | set(
-        EXECUTION_EVIDENCE_LOCATIONS["required_values"]
-    )
-
     # None represents an actual array index; a literal '*' dictionary key must
     # not acquire the array-only exemption. Keep dotted dictionary keys intact.
-    optional = {
-        _transport_path(tuple(location.split(".")))
-        for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
-    }
-    runtime_objects = {
-        _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]
-    }
-    counter_objects = {
-        _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["counter_objects"]
-    }
+    (
+        vocabulary,
+        runtime_fields,
+        counter_fields,
+        required,
+        optional,
+        runtime_objects,
+        counter_objects,
+    ) = _runtime_policy_index()
 
     def classified(path: tuple[str | None, ...], key: str) -> bool:
         return (
@@ -1613,6 +1632,7 @@ def build_rows_and_classifications(
     *,
     classification_class: str,
     evidence_base_uri: str,
+    execution_evidence: dict | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Join head/baseline sweep rows into gate payload rows and classifications."""
     rows: list[dict[str, Any]] = []
@@ -1644,7 +1664,11 @@ def build_rows_and_classifications(
                         "scheduler_node": head.get("scheduler_node"),
                         "baseline_scheduler_job_id": baseline.get("scheduler_job_id"),
                         "baseline_scheduler_node": baseline.get("scheduler_node"),
-                        **_execution_evidence(head),
+                        **(
+                            _execution_evidence(head)
+                            if execution_evidence is None
+                            else execution_evidence[key]
+                        ),
                     }
                 )
                 evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
@@ -1680,6 +1704,72 @@ def build_rows_and_classifications(
         ),
     }
     return rows, classifications, totals
+
+
+def derive_valid_comparison(
+    head_rows: dict,
+    baseline_rows: dict,
+    scope: dict,
+    *,
+    classification_class: str,
+    evidence_base_uri: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    """Shared collection/admission trust decision, derived entirely from raw rows."""
+    from robot_sf.benchmark.algorithm_metadata import (
+        canonical_algorithm_name,
+        enrich_algorithm_metadata,
+    )
+
+    expected = {
+        (arm, map_id, seed)
+        for arm in scope["arms"]
+        for map_id in scope["maps"]
+        for seed in DEFAULT_SEEDS
+    }
+    profiles = {}
+    for arm in scope["arms"]:
+        algorithm = canonical_algorithm_name(scope.get("arm_algorithms", {}).get(arm, arm))
+        capabilities = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+        profiles[arm] = (algorithm, capabilities)
+    head_evidence = {}
+    for sources in (head_rows, baseline_rows):
+        if set(sources) != expected:
+            raise behaviour_receipt.HardwareIdentityError(
+                "raw execution invalid: scope coverage differs"
+            )
+        for key, raw in sources.items():
+            evidence = _execution_evidence(raw)
+            arm = key[0]
+            algorithm, capabilities = profiles[arm]
+            require_valid_execution(evidence, algorithm, capabilities)
+            if sources is head_rows:
+                head_evidence[key] = evidence
+    return build_rows_and_classifications(
+        head_rows,
+        baseline_rows,
+        scope,
+        classification_class=classification_class,
+        evidence_base_uri=evidence_base_uri,
+        execution_evidence=head_evidence,
+    )
+
+
+def require_valid_execution(evidence: dict, algorithm: str, capabilities: dict) -> None:
+    """One execution rule for raw derivation and projected receipt validation."""
+    reason = None
+    mode = "native" if capabilities["supports_native_commands"] else "adapter"
+    if evidence.get("algorithm") != algorithm:
+        reason = "row algorithm differs from reviewed arm"
+    elif evidence.get("execution_mode") != mode or not (
+        capabilities["supports_native_commands"] or capabilities["supports_adapter_commands"]
+    ):
+        reason = "command execution mode does not satisfy the algorithm registry"
+    elif _audit_status([evidence]) == "fail":
+        reason = "intended solver/controller did not execute or trace is incomplete"
+    elif _audit_status([evidence]) != "pass":
+        reason = "fallback or degraded execution cannot satisfy the receipt"
+    if reason is not None:
+        raise behaviour_receipt.HardwareIdentityError(f"raw execution invalid: {reason}")
 
 
 def _audit_status(rows: list[dict[str, Any]]) -> str:
@@ -1768,12 +1858,33 @@ def write_receipt_and_header(  # noqa: PLR0913
     """Write the committed rows payload and return the compact PR header."""
     hardware = {"head": scheduler.hardware, "baseline": baseline.hardware}
     identities = behaviour_receipt.validate_hardware_pair(hardware)
+    if scheduler.source_sha == baseline.source_sha:
+        raise behaviour_receipt.HardwareIdentityError(
+            "producer source invalid: head and baseline share a producer commit"
+        )
+    derived, _, derived_totals = derive_valid_comparison(
+        _load_run_rows(scheduler, "head"),
+        _load_run_rows(baseline, "baseline"),
+        scope,
+        classification_class="known_limitation",
+        evidence_base_uri="verified-source",
+    )
+    if rows != derived or totals != derived_totals:
+        raise behaviour_receipt.HardwareIdentityError(
+            "raw execution invalid: supplied receipt projection differs from sealed sources"
+        )
     behaviour_receipt.validate_scheduler_rows(rows, identities)
     source_artifacts = {}
     for side, run in (("head", scheduler), ("baseline", baseline)):
         references = {}
         for shard in run.shard_dirs:
-            receipt_provenance.verify_binding(shard, shard.name, identities[side]["node"])
+            receipt_provenance.verify_binding(
+                shard,
+                shard.name,
+                identities[side]["node"],
+                source_sha=run.source_sha,
+                arm_role=side,
+            )
             bundle = output_dir / f"{receipt_id}-sources" / side / f"{shard.name}.tar.gz"
             _archive_source_bundle(shard, bundle)
             references[shard.name] = {
@@ -1979,7 +2090,11 @@ def main(argv: list[str] | None = None) -> int:
         directory = Path(special[1])
         request = json.loads((directory / "request_template.json").read_text())
         _record_request(
-            directory, request["source_sha"], os.environ["SLURM_JOB_ID"], request["requested_node"]
+            directory,
+            request["source_sha"],
+            os.environ["SLURM_JOB_ID"],
+            request["requested_node"],
+            request["arm_role"],
         )
         return 0
     args = _parse_args(argv)
@@ -2001,9 +2116,13 @@ def main(argv: list[str] | None = None) -> int:
         {"head": scheduler.hardware, "baseline": baseline.hardware}
     )
     scope = _load_scope(args.scope_path)
-    head_rows = _load_run_rows(scheduler)
-    baseline_rows = _load_run_rows(baseline)
-    rows, classifications, totals = build_rows_and_classifications(
+    if scheduler.source_sha == baseline.source_sha:
+        raise behaviour_receipt.HardwareIdentityError(
+            "producer source invalid: head and baseline share a producer commit"
+        )
+    head_rows = _load_run_rows(scheduler, "head")
+    baseline_rows = _load_run_rows(baseline, "baseline")
+    rows, classifications, totals = derive_valid_comparison(
         head_rows,
         baseline_rows,
         scope,

@@ -122,6 +122,7 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
     raw_rows = [_raw_row(seed, failing=failing) for seed in range(1001, 1031)]
     for row in raw_rows:
         row["scheduler_job_id"] = job
+        row["git_hash"] = source_sha
     raw_path.write_text("".join(json.dumps(row) + "\n" for row in raw_rows))
     rows = [
         {
@@ -162,6 +163,10 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
 
     for name, entry in _hardware(source_sha, job).items():
         (out / name).write_text(entry["content"])
+    request_path = out / "execution_request.json"
+    request = json.loads(request_path.read_text())
+    request["arm_role"] = "baseline" if label == "baseline" else "head"
+    request_path.write_text(json.dumps(request))
     (out / "README.md").write_text(label + "\n")
     from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
 

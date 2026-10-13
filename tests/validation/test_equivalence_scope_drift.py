@@ -34,6 +34,9 @@ REVIEWED = {
 
 @pytest.fixture
 def scope_repo(tmp_path, monkeypatch):
+    # Model a trusted base policy predating the closed evidence-tree inventory.
+    monkeypatch.setattr(eq, "REVIEWED_CLOSED_TREES", {})
+
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
 
@@ -163,6 +166,8 @@ def test_reviewed_base_blobs_require_a_separate_neutral_transition(scope_repo):
 def test_candidate_authority_edit_refuses_when_final_bytes_equal_main(
     tmp_path, monkeypatch, policy_path
 ):
+    monkeypatch.setattr(eq, "REVIEWED_CLOSED_TREES", {})
+
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
 
@@ -250,13 +255,8 @@ def closed_tree_repo(tmp_path, monkeypatch):
         ).count(b"\0")
         monkeypatch.setattr(
             eq,
-            "REVIEWED_CLOSED_TREE",
-            {
-                "root": root,
-                "oid": oid,
-                "sha256": hashlib.sha256(raw).hexdigest(),
-                "entries": entries,
-            },
+            "REVIEWED_CLOSED_TREES",
+            {root: {"oid": oid, "sha256": hashlib.sha256(raw).hexdigest(), "entries": entries}},
             raising=False,
         )
         return main
@@ -324,7 +324,7 @@ def test_closed_tree_refuses_changed_current_main(closed_tree_repo, fault):
     git, folder, main, candidate, _ = closed_tree_repo
     target = folder / "approved.md"
     if fault == "raw_hash":
-        eq.REVIEWED_CLOSED_TREE["sha256"] = "0" * 64
+        eq.REVIEWED_CLOSED_TREES["docs/context/robsweep"]["sha256"] = "0" * 64
     else:
         if fault == "edit_md":
             target.write_text("unreviewed new main bytes\n")
@@ -345,3 +345,47 @@ def test_closed_tree_refuses_changed_current_main(closed_tree_repo, fault):
         main = git("rev-parse", "HEAD")
     with pytest.raises(ValueError, match="reviewed closed tree"):
         eq.classify_scope([], main, candidate)
+
+
+def test_closed_tree_must_exist_when_main_and_candidate_both_lack_it(tmp_path, monkeypatch):
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+
+    git("init", "-b", "main")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Test")
+    module = tmp_path / PATH
+    module.parent.mkdir(parents=True)
+    module.write_text(BEFORE)
+    git("add", ".")
+    git("commit", "-m", "ancestor without tree")
+    git("checkout", "-b", "candidate")
+    module.write_text(AFTER)
+    git("add", ".")
+    git("commit", "-m", "neutral candidate without tree")
+    candidate = git("rev-parse", "HEAD")
+    git("checkout", "main")
+    root = "docs/context/robsweep"
+    folder = tmp_path / root
+    folder.mkdir(parents=True)
+    leaf = folder / "approved.md"
+    leaf.write_text("approved snapshot\n")
+    git("add", ".")
+    git("commit", "-m", "approved main tree")
+    oid = git("rev-parse", f"HEAD:{root}")
+    raw = subprocess.check_output(["git", "cat-file", "tree", oid], cwd=tmp_path)
+    monkeypatch.setattr(
+        eq,
+        "REVIEWED_CLOSED_TREES",
+        {root: {"oid": oid, "sha256": hashlib.sha256(raw).hexdigest(), "entries": 1}},
+    )
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    assert eq.classify_scope([], git("rev-parse", "HEAD"), candidate) == [
+        PATH + ":_episode_identity"
+    ]
+    leaf.unlink()
+    folder.rmdir()
+    git("add", ".")
+    git("commit", "-m", "future main deletes whole approved tree")
+    with pytest.raises(ValueError, match="reviewed closed tree object/type differs"):
+        eq.classify_scope([], git("rev-parse", "HEAD"), candidate)

@@ -77,6 +77,9 @@ def _hardware(source, job, *, node=NODE, cpu=CPU, node_class="pro6000", role=Non
 
 
 def _build_admitted(tmp_path, monkeypatch):
+    # This synthetic historical base declares no reviewed evidence trees.
+    monkeypatch.setattr(eq, "REVIEWED_CLOSED_TREES", {})
+
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
 

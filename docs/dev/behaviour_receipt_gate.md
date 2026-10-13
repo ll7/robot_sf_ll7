@@ -74,7 +74,9 @@ renames and type changes refuse. Protected paths are checked before exceptions,
 and a separate reviewed neutral transition is still required. These entries do
 not exempt directories, releases, runtime fields or downstream admission checks.
 
-A separate `REVIEWED_CLOSED_TREE` pins the current-main
+The finite `REVIEWED_CLOSED_TREES` inventory unconditionally requires each
+declared current-main tree, even when both compared trees omit it. Its one
+production entry pins the current-main
 `docs/context/robsweep` snapshot: exactly 731 recursive `100644 blob` members,
 its Git tree object ID and the SHA-256 of the raw tree object. Only members of
 that verified committed snapshot receive the exception. Any candidate history

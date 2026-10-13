@@ -15,7 +15,7 @@ import json
 import math
 import os
 import subprocess
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -301,11 +301,18 @@ REVIEWED_BASE_ONLY_BLOBS = {
 }
 
 
-REVIEWED_CLOSED_TREE = {
-    "root": "docs/context/robsweep",
-    "oid": "12b1aa61ddce08ed4449795897f4648322a59ea6",
-    "sha256": "8bbe72424bda55a0ae94ac3a824e4157bddd32f6e24b74d462b5da771eb72ab1",
-    "entries": 731,
+class _ReviewedTreeSnapshot(TypedDict):
+    oid: str
+    sha256: str
+    entries: int
+
+
+REVIEWED_CLOSED_TREES: dict[str, _ReviewedTreeSnapshot] = {
+    "docs/context/robsweep": {
+        "oid": "12b1aa61ddce08ed4449795897f4648322a59ea6",
+        "sha256": "8bbe72424bda55a0ae94ac3a824e4157bddd32f6e24b74d462b5da771eb72ab1",
+        "entries": 731,
+    },
 }
 
 
@@ -393,12 +400,30 @@ def _git_path_bytes(base: str, head: str) -> set[bytes]:
 
 
 def _closed_tree_paths(base: str, actual: set[bytes], introduced: set[bytes]) -> set[str]:
-    """Admit only members of the exact reviewed tree after checking candidate history.
+    """Require every declared current-main tree before admitting any of its paths.
 
     Returns:
-        Literal paths in the verified current-main snapshot, or none if absent.
+        Members of the finite reviewed tree inventory, verified unconditionally.
     """
-    root = REVIEWED_CLOSED_TREE["root"].encode()
+    paths: set[str] = set()
+    for root, snapshot in REVIEWED_CLOSED_TREES.items():
+        paths.update(_verify_closed_tree(base, actual, introduced, root, snapshot))
+    return paths
+
+
+def _verify_closed_tree(
+    base: str,
+    actual: set[bytes],
+    introduced: set[bytes],
+    root_path: str,
+    snapshot: _ReviewedTreeSnapshot,
+) -> set[str]:
+    """Verify one mandatory committed tree and its unchanged candidate history.
+
+    Returns:
+        Literal paths in the exact reviewed current-main snapshot.
+    """
+    root = os.fsencode(root_path)
 
     def inside(path: bytes) -> bool:
         return path == root or path.startswith(root + b"/")
@@ -412,20 +437,16 @@ def _closed_tree_paths(base: str, actual: set[bytes], introduced: set[bytes]) ->
     ).split(b"\0")
     entries = [entry for entry in entries if entry]
     requested = {path for path in actual if inside(path)}
-    if not entries and not requested:
-        return set()
     header, _, name = entries[0].partition(b"\t") if entries else (b"", b"", b"")
     gate._require(
         len(entries) == 1
         and name == root
-        and header.split() == [b"040000", b"tree", REVIEWED_CLOSED_TREE["oid"].encode()],
+        and header.split() == [b"040000", b"tree", snapshot["oid"].encode()],
         "scope refused: reviewed closed tree object/type differs",
     )
-    raw = subprocess.check_output(
-        ["git", "cat-file", "tree", REVIEWED_CLOSED_TREE["oid"]], cwd=gate.ROOT
-    )
+    raw = subprocess.check_output(["git", "cat-file", "tree", snapshot["oid"]], cwd=gate.ROOT)
     gate._require(
-        hashlib.sha256(raw).hexdigest() == REVIEWED_CLOSED_TREE["sha256"],
+        hashlib.sha256(raw).hexdigest() == snapshot["sha256"],
         "scope refused: reviewed closed tree raw hash differs",
     )
     recursive = subprocess.check_output(
@@ -442,7 +463,7 @@ def _closed_tree_paths(base: str, actual: set[bytes], introduced: set[bytes]) ->
         )
         members.add(path)
     gate._require(
-        len(members) == REVIEWED_CLOSED_TREE["entries"] and requested <= members,
+        len(members) == snapshot["entries"] and requested <= members,
         "scope refused: reviewed closed tree member inventory differs",
     )
     return {os.fsdecode(path) for path in members}

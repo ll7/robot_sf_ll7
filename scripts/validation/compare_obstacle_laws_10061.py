@@ -326,7 +326,9 @@ def main():
             for w in widths
         ]
     )
-    worker: Callable[[Any], Any] = {"screen": screen, "flow": flow_task, "lanes": lanes}[args.stage]
+    worker = cast(
+        "Callable[[Any], Any]", {"screen": screen, "flow": flow_task, "lanes": lanes}[args.stage]
+    )
     print("RESOLVED SEEDS", SEEDS, "GRID", grid, flush=True)
     records = []
     with ProcessPoolExecutor(args.workers) as pool:

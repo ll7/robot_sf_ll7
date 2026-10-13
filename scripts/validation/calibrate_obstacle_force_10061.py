@@ -275,7 +275,9 @@ def main():
         raise ValueError("grid factors must be positive and all parameters finite")
     print("RESOLVED SEEDS", SEEDS, "PAIR KERNEL", SOCIAL_FORCE_KERNEL, "PAIRS", pairs, flush=True)
     a.out.mkdir(parents=True, exist_ok=True)
-    task: Callable[[Any], Any] = {"screen": screen, "flow": flow_task, "lanes": lanes}[a.stage]
+    task = cast(
+        "Callable[[Any], Any]", {"screen": screen, "flow": flow_task, "lanes": lanes}[a.stage]
+    )
     with concurrent.futures.ProcessPoolExecutor(a.workers) as pool:
         tasks = [(f, b, s) for f, b in pairs for s in SEEDS] if a.stage == "flow" else pairs
         futures = {pool.submit(task, p): p for p in tasks}

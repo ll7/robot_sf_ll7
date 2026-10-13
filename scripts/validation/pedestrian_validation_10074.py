@@ -325,6 +325,18 @@ def markdown(table):
 # Source protocol runner. Historical helpers above remain callable for default-byte proof.
 
 
+def _required_max_speeds(peds) -> np.ndarray:
+    """Copy initialized goal-driving speeds for temporary integration caps.
+
+    Returns:
+        Per-pedestrian goal-driving speeds.
+    """
+    speeds = peds.max_speeds
+    if speeds is None:
+        raise ValueError("pedestrian max speeds must be initialized before integration")
+    return speeds.copy()
+
+
 def protocol_simulate(
     state,
     segments,
@@ -348,20 +360,20 @@ def protocol_simulate(
     walls = [(a, c, b, d) for a, b, c, d in segments]
     sim = pysocialforce.Simulator(state=state.copy(), obstacles=walls, config=config)
     positions, speeds = [sim.peds.pos().copy()], []
-    desired = sim.peds.max_speeds.copy()
+    desired = _required_max_speeds(sim.peds)
     if speed_cap_m_s is not None:
         integrate = sim.peds.step
 
         def capped_integration(force, *args, **kwargs):
             # Forces see desired speeds; only velocity integration sees the cap.
-            desired_speeds = sim.peds.max_speeds.copy()
+            desired_speeds = _required_max_speeds(sim.peds)
             sim.peds.max_speeds = np.full(sim.peds.size(), speed_cap_m_s)
             try:
                 return integrate(force, *args, **kwargs)
             finally:
                 sim.peds.max_speeds = desired_speeds
 
-        sim.peds.step = capped_integration
+        sim.peds.step = cast("Any", capped_integration)
     for k in range(steps):
         if goal_update is not None:
             goal_update(sim)
@@ -419,7 +431,7 @@ def run_task(task):  # noqa: C901, PLR0915
         return p, v
 
     reused.candidate_config = cast("Any", configured)
-    reused.harness.simulate = captured
+    reused.harness.simulate = cast("Any", captured)
     reused.RADIUS = radius
     row = {
         "case": case,

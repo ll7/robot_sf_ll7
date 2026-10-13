@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Examiner radius/preferred-speed and command-cap sensitivity study: thirty development
+seeds, ten Figure 7.3 representative cells, five sweep planners, fourteen cap arms,
+release-kernel crowd sanity, and checksum-covered diagnostic records:
+[robsweep/README.md](robsweep/README.md).
+
 Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
 [issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).

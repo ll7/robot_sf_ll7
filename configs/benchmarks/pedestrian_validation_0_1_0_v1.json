@@ -176,7 +176,14 @@
       2.7
     ],
     "onset_definition": "first absolute angular speed above subject/speed mean maximum from five no-interferer trials; own X displacement to PoMD after marker filtering",
-    "setup_status": "Nonreactive matching-speed interferer, filtered own-X onset and five no-interferer trials; deterministic CM samples substitute for trunk markers.",
+    "engineering_onset_criterion": {
+      "minimum_turning_rad_s": 0.05,
+      "sustained_duration_s": 0.3,
+      "analysis_window_m": 3.0,
+      "threshold_rule": "max(mean of five baseline maxima, minimum_turning_rad_s)",
+      "status": "engineering correction for deterministic CM traces; not a published Huber threshold"
+    },
+    "setup_status": "Nonreactive matching-speed interferer, filtered own-X onset and five no-interferer trials; deterministic CM samples substitute for trunk markers. Reported onset uses the explicit sustained engineering correction.",
     "equivalence": "documented_equivalent",
     "protocol_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway."
   },

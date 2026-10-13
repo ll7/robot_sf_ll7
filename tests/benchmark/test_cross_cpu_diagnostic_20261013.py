@@ -3,11 +3,52 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 import yaml
 
 from scripts.validation import cross_cpu_dispatch_20261013 as study
+
+
+@pytest.mark.parametrize("mode", ["default", "pinned"])
+def test_startup_hook_exits_before_user_code_on_unexpected_library_error(tmp_path, mode):
+    """Python must not ignore a dependency's unknown sitecustomize exception."""
+    package = tmp_path / "robot_sf/common"
+    package.mkdir(parents=True)
+    (package.parent / "__init__.py").write_text("")
+    (package / "__init__.py").write_text("")
+    (package / "seed.py").write_text(
+        "def _set_torch_deterministic_algorithms(torch, enabled): return True\n"
+    )
+    (tmp_path / "torch.py").write_text(
+        "class StartupContractError(Exception): pass\n"
+        "raise StartupContractError('injected dependency startup failure')\n"
+    )
+    env = dict(os.environ)
+    env.pop("PYTHONHOME", None)
+    env.update(
+        {
+            "PYTHONPATH": os.pathsep.join((str(tmp_path), str(study.STUDY.parent))),
+            "PYTHONNOUSERSITE": "1",
+            "XCPU_MODE": mode,
+            "XCPU_CONTEXT_ROOT": str(tmp_path / "contexts"),
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", "print('entered user code')"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 70
+    assert "StartupContractError: injected dependency startup failure" in result.stderr
+    assert "entered user code" not in result.stdout
 
 
 def episode():

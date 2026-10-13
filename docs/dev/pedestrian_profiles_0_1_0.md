@@ -18,3 +18,11 @@ Validation: `pytest -p tests.support.heldout_seed_guard
  tests/sim/test_obstacle_force_profile.py -q` (single command). Force/config
 witnesses establish implementation integrity. The #10000 complete sweep,
 independent refute review and model qualification remain separate requirements.
+
+The opt-in `pedestrian_radius_m` overrides placement, collision/metric and force
+geometry together; missing preserves physical 0.40 / force 0.35 m. The source
+measurement runner is `scripts/validation/pedestrian_validation_10074.py` with
+`configs/benchmarks/pedestrian_validation_0_1_0_v1.json`. It preserves named
+source estimators, censoring and raw trajectory checksums. V7/V8/V9 remain
+explicit diagnostics or contextual cases where the source target is unresolved;
+a numerical suite score does not turn them into empirical validation.

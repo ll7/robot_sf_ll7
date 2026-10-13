@@ -212,6 +212,7 @@ def _trusted_fixture(root):
         "scripts/ci/behaviour_receipt_nodes.json",
         "scripts/ci/make_behaviour_receipt.py",
         "scripts/ci/receipt_provenance.py",
+        "scripts/ci/receipt_outcomes.py",
         "scripts/validation/run_empty_world_sweep.py",
         "scripts/dev/check_dependabot_update_policy.py",
         "scripts/dev/check_dependency_coherence.py",

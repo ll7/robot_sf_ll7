@@ -416,8 +416,10 @@ def classify_scope(changed_files: list[str], base_source: str, head_source: str)
         _git("diff", "--name-only", "--no-renames", merge_base, head_source).splitlines()
     )
     # A candidate change ending at the same bytes as main is absent from the
-    # two-tree diff. It must still refuse the finite reviewed-blob exception.
-    paths = sorted(set(paths) | (introduced & REVIEWED_BASE_ONLY_BLOBS.keys()))
+    # two-tree diff. It must still refuse reviewed-blob and authority exceptions.
+    paths = sorted(
+        set(paths) | (introduced & (REVIEWED_BASE_ONLY_BLOBS.keys() | BASE_ONLY_TOOLING_FILES))
+    )
     for path in paths:
         if (
             path.startswith("receipts/behaviour/")

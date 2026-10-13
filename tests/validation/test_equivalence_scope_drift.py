@@ -1,5 +1,9 @@
 """Exact reviewed base blobs cannot waive candidate or protected scope changes."""
 
+# evidence-writer-exempt: all writes create throwaway pytest tmp_path Git trees,
+# including synthetic catalog/evidence paths used to test exact committed bytes;
+# these fixtures never publish durable evidence, and shared writers alter the bytes.
+
 import hashlib
 import subprocess
 from pathlib import Path
@@ -136,3 +140,67 @@ def test_reviewed_base_blobs_require_a_separate_neutral_transition(scope_repo):
     _, fork, main, _ = scope_repo
     with pytest.raises(ValueError, match="no reviewed.*neutral transition"):
         eq.classify_scope([], main, fork)
+
+
+@pytest.mark.parametrize(
+    "policy_path",
+    [
+        "scripts/ci/receipt_outcomes.py",
+        "scripts/ci/behaviour_receipt.py",
+        "scripts/ci/receipt_provenance.py",
+        "scripts/ci/default_path_equivalence.py",
+        "scripts/ci/make_behaviour_receipt.py",
+        "scripts/dev/merge_queue_gate.py",
+        ".github/workflows/merge-queue-gate.yml",
+        ".gitattributes",
+    ],
+)
+def test_candidate_authority_edit_refuses_when_final_bytes_equal_main(
+    tmp_path, monkeypatch, policy_path
+):
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+
+    git("init", "-b", "main")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Test")
+    module = tmp_path / PATH
+    module.parent.mkdir(parents=True)
+    module.write_text(BEFORE)
+    policy = tmp_path / policy_path
+    policy.parent.mkdir(parents=True, exist_ok=True)
+    old = (
+        "receipts/behaviour/*.json filter=lfs diff=lfs merge=lfs -text\n"
+        if policy_path == ".gitattributes"
+        else "old common ancestor policy\n"
+    )
+    promoted = (
+        old + "receipts/behaviour/*-sources/**/*.tar.gz filter=lfs diff=lfs merge=lfs -text\n"
+        if policy_path == ".gitattributes"
+        else "same independently promoted main policy\n"
+    )
+    policy.write_text(old)
+    git("add", ".")
+    git("commit", "-m", "common ancestor")
+    fork = git("rev-parse", "HEAD")
+    git("checkout", "-b", "candidate")
+    module.write_text(AFTER)
+    git("add", ".")
+    git("commit", "-m", "neutral change without authority edit")
+    neutral = git("rev-parse", "HEAD")
+    git("checkout", "main")
+    policy.write_text(promoted)
+    git("add", ".")
+    git("commit", "-m", "independent main authority promotion")
+    main = git("rev-parse", "HEAD")
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    assert eq.classify_scope([], main, neutral) == [PATH + ":_episode_identity"]
+    git("checkout", "candidate")
+    policy.write_text(promoted)
+    git("add", ".")
+    git("commit", "-m", "candidate edits authority to same final main bytes")
+    candidate = git("rev-parse", "HEAD")
+    assert policy_path not in git("diff", "--name-only", main, candidate).splitlines()
+    assert policy_path in git("diff", "--name-only", fork, candidate).splitlines()
+    with pytest.raises(ValueError, match="unreviewed executable path " + policy_path):
+        eq.classify_scope([], main, candidate)

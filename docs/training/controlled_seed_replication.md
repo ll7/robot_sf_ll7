@@ -58,3 +58,20 @@ The earlier random-policy safety run consumed about 4.0 hours of training and
 exceed one allocated GPU-day. A six-run projection is roughly 39–48 A30
 GPU-hours; reopen the budget decision before submission. Do not start the fixed
 arm unless safety is complete and residual budget is authorised.
+
+Pilot recovery preserves an immutable hub snapshot and verifies its hashes before
+checking W&B storage capacity. A known `upload_breaches_min_headroom` refusal
+returns `DEFERRED_QUOTA`; it must not terminate the training owner. Such a receipt
+is hub-only preservation and cannot be reported as committed W&B custody. The
+10 GB preflight floor remains in force, and pending artifacts can be uploaded
+only after that preflight passes.
+
+Recovery admits completed rollout-rounded checkpoints and restores the saved
+policy and Adam state. It verifies receipts from every worker, skips every
+consumed physical seed (including resets after the saved model), and appends a
+new worker lifetime with contiguous episode ordinals. Model budget targets use
+actual checkpoints rather than nominal step labels to prevent rounding drift.
+Fresh simulator states and optimiser RNG resets make this an explicitly labelled
+continuation, not bit-identical replay. Selection may run in separate CPU
+allocations on the unchanged held-out selection pool; the final comparator stays
+the full-budget export. No preserved checkpoint is overwritten or deleted.

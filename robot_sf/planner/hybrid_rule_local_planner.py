@@ -493,6 +493,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._v4_clearance_braking = (
             self.config.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
         )
+        if self.config.ablation_disable_hard_guard and not self._v4_clearance_braking:
+            raise ValueError("Hard-guard ablation is restricted to the v4 diagnostic controller.")
         # v4 only: drive limits start from the DifferentialDriveSettings defaults
         # and are replaced by the bound environment's robot config in bind_env.
         self._drive_limits: dict[str, Any] | None = (

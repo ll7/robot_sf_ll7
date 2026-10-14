@@ -52,11 +52,15 @@ def test_new_scenario_defaults_to_physical_margin_x10():
 
 
 def test_released_and_frozen_config_bytes_unchanged():
-    """Every archived config stays byte-identical to the pre-decision main snapshot."""
+    """Archive inputs stay byte-identical to the pre-decision main snapshot.
+
+    Seed-set files cannot change with the wall-force law and are excluded;
+    their own frozen-release checks protect them.
+    """
     snapshot = json.loads(
         (ROOT / "tests/fixtures/wall_law_released_config_sha256.json").read_text()
     )
-    assert len(snapshot) > 10
+    assert len(snapshot) == 76
     for relative, expected in snapshot.items():
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected, relative
 

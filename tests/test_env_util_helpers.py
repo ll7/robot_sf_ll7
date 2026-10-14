@@ -191,10 +191,16 @@ def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
     assert _stable_config_hash(cfg) == implicit_legacy_hash
 
 
-def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte() -> None:
-    """Missing and explicit legacy wall selectors retain the same pinned identity."""
+def test_robot_env_default_wall_law_breaks_legacy_identity() -> None:
+    """The new default has the explicit x10 identity and differs from released legacy."""
     cfg = EnvSettings(
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
+    )
+    explicit_new = EnvSettings(
+        sim_config=SimulationSettings(
+            obstacle_force_law="body_edge_exponential_v3_physical_margin10x"
+        ),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
     explicit_legacy = EnvSettings(
         sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
@@ -202,12 +208,12 @@ def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte()
     )
     # ab3c014bd (merged by 408ffb1ba, #10278) renamed serialized rollover fields;
     # dae7470d0 (#10295) integrated that identity change with the wall-law pins.
-    assert _stable_config_hash(cfg).encode("ascii") == b"c8ac3dfe358aac1e"
-    assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
-        "ascii"
-    )
-    assert cfg.sim_config.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    # Keep main's corrected legacy pin; the 0.1.0 default changes only the wall law.
+    assert _stable_config_hash(explicit_legacy).encode("ascii") == b"c8ac3dfe358aac1e"
+    assert cfg.sim_config.obstacle_force_law == "body_edge_exponential_v3_physical_margin10x"
     assert cfg.sim_config.obstacle_force_law_resolution_mode == "defaulted_missing"
+    assert _stable_config_hash(cfg) == _stable_config_hash(explicit_new)
+    assert _stable_config_hash(cfg) != _stable_config_hash(explicit_legacy)
 
 
 def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:

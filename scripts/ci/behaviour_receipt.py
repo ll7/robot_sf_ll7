@@ -388,7 +388,8 @@ def dependency_change_requires_receipt(changed_files: list[str], base_ref: str) 
             for group in _dependency_groups_from_text(text):
                 for requirement in _dependency_group_requirements_from_text(text, group) or []:
                     name = requirement_package_name(requirement)
-                    rows[name] = (*rows.get(name, ()), f"{group}:{requirement}")
+                    # Unnamed requirements are discarded by the sensitive-name projection below.
+                    rows[name] = (*rows.get(name, ()), f"{group}:{requirement}")  # ty: ignore[invalid-assignment]
             return {name: tuple(sorted(rows.get(name, ()))) for name in SENSITIVE_DEPENDENCIES}
 
         before = sensitive_rows(git_file_at_ref(ROOT, merge_base, file) or "")
@@ -430,7 +431,8 @@ def load_receipt(header: dict, head: str) -> dict:
             raw,
         )
         _require(pointer is not None, "invalid receipt LFS pointer")
-        oid, object_size = pointer.groups()
+        # _require raises on None; ty cannot narrow through this validation helper.
+        oid, object_size = pointer.groups()  # ty: ignore[unresolved-attribute]
         _require(int(object_size) <= MAX_ROWS_BYTES, "receipt LFS payload exceeds the 32 MiB limit")
         _require(
             oid.decode() == header["rows_artifact"]["sha256"], "receipt LFS pointer digest mismatch"

@@ -24,6 +24,14 @@ entries:
   status: proposal
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/robsweep/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/robsweep/evidence/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_10089_metric_oracle_audit.md
   status: evidence
   freshness: evidence
@@ -5740,6 +5748,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/raycast_numba_toggle_2026-08-14
   status: evidence
   freshness: evidence
@@ -8161,3 +8173,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/ppo_wall_probe_dev_20261012
+  status: evidence
+  freshness: evidence
+  area: training_evidence

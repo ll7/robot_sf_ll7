@@ -6,10 +6,20 @@ import json
 import os
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 import numpy as np
-from pysocialforce.forces import ObstacleForce, closest_point_on_segment, obstacle_force_for_law
+from pysocialforce.forces import (
+    GroupCoherenceForceAlt,
+    GroupGazeForceAlt,
+    GroupRepulsiveForce,
+    ObstacleForce,
+    SocialForce,
+    closest_point_on_segment,
+    obstacle_force_for_law,
+)
 from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 
@@ -20,6 +30,19 @@ from robot_sf.nav.obstacle import Obstacle
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import Simulator, init_simulators
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+
+
+class _TimedBehavior(Protocol):
+    """Writable timestep supplied by the time-based pedestrian behaviours."""
+
+    time_step_s: float
+
+
+class _ForceComputer(Protocol):
+    """Per-instance force callback replaced by the diagnostic trace closure."""
+
+    compute_forces: Callable[[], np.ndarray]
+
 
 faulthandler.register(signal.SIGUSR1)
 root = Path(os.environ["WALL_CONTACT_ARTIFACT_ROOT"])
@@ -112,15 +135,18 @@ else:
 assert sim.config.obstacle_force_law == law
 for behavior in sim.peds_behaviors:
     if hasattr(behavior, "time_step_s"):
-        behavior.time_step_s = dt
+        cast("_TimedBehavior", behavior).time_step_s = dt
 sim.config.time_per_step_in_secs = dt
 sim.pysf_sim.peds.d_t = dt
 sim.pysf_sim.config.obstacle_force_config.factor *= float(controls.get("wall_scale", 1.0))
 for component in sim.pysf_sim.forces:
     if type(component).__name__ == "SocialForce" and controls.get("disable_social"):
-        component.config.factor = 0.0
+        cast("SocialForce", component).config.factor = 0.0
     if type(component).__name__.startswith("Group") and controls.get("disable_groups"):
-        component.config.factor = 0.0
+        # The simulator registers these three group forces; keep the diagnostic's name guard.
+        cast(
+            "GroupCoherenceForceAlt | GroupRepulsiveForce | GroupGazeForceAlt", component
+        ).config.factor = 0.0
 state = np.asarray(sim.pysf_state.pysf_states(), dtype=float).copy()
 assert len(state) > 0, "MISSING-PEDESTRIANS"
 radius = float(settings.ped_radius)
@@ -204,7 +230,8 @@ if trace_enabled:
         )
         return total
 
-    sim.pysf_sim.compute_forces = traced_compute
+    # A per-instance closure is intentionally installed without binding a self argument.
+    cast("_ForceComputer", sim.pysf_sim).compute_forces = traced_compute
 
 steps = round(70 / dt)
 for tick in range(steps + 1):

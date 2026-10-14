@@ -104,10 +104,12 @@ def _parse_seed_spec(seed_spec: str) -> list[int]:
 
 
 def _select_scenario() -> dict[str, Any]:
-    return next(
-        scenario
-        for scenario in load_scenarios(SCENARIO_MATRIX)
-        if scenario["name"] == SCENARIO_NAME
+    return dict(
+        next(
+            scenario
+            for scenario in load_scenarios(SCENARIO_MATRIX)
+            if scenario["name"] == SCENARIO_NAME
+        )
     )
 
 

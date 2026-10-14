@@ -1,0 +1,108 @@
+[
+  {
+    "variant": "legacy",
+    "clearance": {
+      "pedestrian_steps": 840048,
+      "median_clearance_m": 3.7968696293444375,
+      "p10_clearance_m": 1.2505705506206375,
+      "steps_below_10cm": 0,
+      "share_below_10cm": 0.0,
+      "minimum_clearance_m": 0.515077134588844
+    },
+    "quantile_witnesses": [
+      {
+        "q": 0.1,
+        "rank_zero_based": 84004.70000000001,
+        "lower": 1.2505619878196002,
+        "upper": 1.2505742203925103
+      },
+      {
+        "q": 0.5,
+        "rank_zero_based": 420023.5,
+        "lower": 3.79686565617796,
+        "upper": 3.796873602510915
+      }
+    ],
+    "flow": [
+      {
+        "width_m": 4.0,
+        "plane_x_m": 20.0,
+        "crossing_count": 1600,
+        "sum_first_to_last_s": 4863.306824433039,
+        "pooled_specific_flow_paper_table2": 0.0822485634651751,
+        "p10_per_seed_paper_table2": 0.08205626999275871,
+        "p90_per_seed_paper_table2": 0.08279460037672376,
+        "pooled_specific_flow_headway_eq3": 0.07196749303202822
+      },
+      {
+        "width_m": 5.0,
+        "plane_x_m": 40.0,
+        "crossing_count": 1600,
+        "sum_first_to_last_s": 6901.3310937625965,
+        "pooled_specific_flow_paper_table2": 0.04636786666983926,
+        "p10_per_seed_paper_table2": 0.044011228917040034,
+        "p90_per_seed_paper_table2": 0.05743100972473251,
+        "pooled_specific_flow_headway_eq3": 0.04057188333610935
+      }
+    ],
+    "supplementary_bottleneck_only_clearance": {
+      "steps": 116658,
+      "median_m": 1.5518720793199523,
+      "p10_m": 1.250879710382851,
+      "share_below_10cm": 0.0
+    }
+  },
+  {
+    "variant": "physical_margin10x",
+    "clearance": {
+      "pedestrian_steps": 634736,
+      "median_clearance_m": 3.527739346738527,
+      "p10_clearance_m": 0.9002507388755182,
+      "steps_below_10cm": 540,
+      "share_below_10cm": 0.0008507473973431474,
+      "minimum_clearance_m": 0.04597918163015058
+    },
+    "quantile_witnesses": [
+      {
+        "q": 0.1,
+        "rank_zero_based": 63473.5,
+        "lower": 0.9002383136714766,
+        "upper": 0.9002631640795599
+      },
+      {
+        "q": 0.5,
+        "rank_zero_based": 317367.5,
+        "lower": 3.5277379813420144,
+        "upper": 3.5277407121350395
+      }
+    ],
+    "flow": [
+      {
+        "width_m": 4.0,
+        "plane_x_m": 20.0,
+        "crossing_count": 1600,
+        "sum_first_to_last_s": 4147.952079794597,
+        "pooled_specific_flow_paper_table2": 0.09643312948297311,
+        "p10_per_seed_paper_table2": 0.09638005611311991,
+        "p90_per_seed_paper_table2": 0.09655791593504517,
+        "pooled_specific_flow_headway_eq3": 0.08437898829760147
+      },
+      {
+        "width_m": 5.0,
+        "plane_x_m": 40.0,
+        "crossing_count": 1600,
+        "sum_first_to_last_s": 3944.923320501705,
+        "pooled_specific_flow_paper_table2": 0.08111691254858237,
+        "p10_per_seed_paper_table2": 0.07873719040378581,
+        "p90_per_seed_paper_table2": 0.08235040189801887,
+        "pooled_specific_flow_headway_eq3": 0.07097729848000958
+      }
+    ],
+    "supplementary_bottleneck_only_clearance": {
+      "steps": 111975,
+      "median_m": 1.0565157776265868,
+      "p10_m": 0.3038807179959753,
+      "share_below_10cm": 0.0
+    }
+  }
+]

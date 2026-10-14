@@ -38,6 +38,7 @@ def test_selected_width_mppi_runs_real_forecast_without_fallback(tmp_path: Path)
     campaign = load_campaign_config(_derive(tmp_path))
     profile = campaign.planners[0].algo_config_path
     settings = yaml.safe_load(Path(profile).read_text())
+    settings["random_seed"] = 1001
     planner = PredictiveMPPIAdapter(build_predictive_mppi_config(settings), allow_fallback=False)
     future, mask, steps = planner._predict_future(OBSERVATION)
     assert planner._predictor._model is not None

@@ -212,6 +212,9 @@ def test_robot_env_default_wall_law_breaks_legacy_identity() -> None:
     assert _stable_config_hash(explicit_legacy).encode("ascii") == b"c8ac3dfe358aac1e"
     assert cfg.sim_config.obstacle_force_law == "body_edge_exponential_v3_physical_margin10x"
     assert cfg.sim_config.obstacle_force_law_resolution_mode == "defaulted_missing"
+    # Recomputed after the approved physical_margin x10 default: the wall-law
+    # selector changes this identity; main's explicit legacy/body-edge pins stay fixed.
+    assert _stable_config_hash(cfg) == "e43b37f885a4c8a8"
     assert _stable_config_hash(cfg) == _stable_config_hash(explicit_new)
     assert _stable_config_hash(cfg) != _stable_config_hash(explicit_legacy)
 

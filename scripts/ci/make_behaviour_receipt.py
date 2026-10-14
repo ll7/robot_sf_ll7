@@ -1026,11 +1026,17 @@ def _existing_sweep(
     return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id)
 
 
-def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
+def _sweep_harness_manifest(output_dir: Path, source_sha: str) -> dict[str, Any] | None:
+    """Read optional acquisition provenance and bind it to the runtime source."""
     harness_path = output_dir / "harness.json"
     harness = json.loads(harness_path.read_text()) if harness_path.is_file() else None
     if harness is not None and harness.get("runtime_source_sha") != source_sha:
         raise ValueError("sweep harness runtime source differs")
+    return harness
+
+
+def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
+    harness = _sweep_harness_manifest(output_dir, source_sha)
     summaries = sorted(output_dir.glob("episodes_*.jsonl"))
     if not summaries:
         raise ValueError("sweep has no episode suites")

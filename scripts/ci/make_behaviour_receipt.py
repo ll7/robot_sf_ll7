@@ -1803,6 +1803,8 @@ def _prepare_sweeps(
     if args.mode == "existing":
         if args.head_sweep_dir is None or args.baseline_sweep_dir is None:
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
+        if args.sweep_harness_source_sha:
+            _verify_requested_harness(args, repo_root, baseline_source)
         return (
             _existing_sweep(
                 args.head_source_sha or args.head_sha,
@@ -1870,6 +1872,28 @@ def _prepare_sweeps(
             sweep_harness_source_sha=args.sweep_harness_source_sha,
         ),
     )
+
+
+def _verify_requested_harness(
+    args: argparse.Namespace, repo_root: Path, baseline_source: str
+) -> None:
+    """Collection must honor an explicitly requested paired acquisition revision."""
+    source = _full_sha(repo_root, args.sweep_harness_source_sha)
+    script = subprocess.check_output(
+        ["git", "show", f"{source}:scripts/validation/run_empty_world_sweep.py"], cwd=repo_root
+    )
+    expected_digest = hashlib.sha256(script).hexdigest()
+    for output_dir, runtime in (
+        (args.head_sweep_dir, args.head_source_sha or args.head_sha),
+        (args.baseline_sweep_dir, baseline_source),
+    ):
+        manifest = _sweep_harness_manifest(output_dir.resolve(), runtime)
+        if (
+            manifest is None
+            or manifest.get("harness_source_sha") != source
+            or manifest.get("harness_sha256") != expected_digest
+        ):
+            raise ValueError("existing sweep does not use the requested committed harness")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1800,3 +1800,55 @@ def test_sbatch_sweep_pins_harness_before_submission(tmp_path, monkeypatch):
         json.loads((result.output_dir / "harness.json").read_text())["harness_source_sha"]
         == harness
     )
+
+
+@pytest.mark.parametrize("bad_manifest", [None, "source", "digest"])
+def test_existing_mode_honors_explicit_paired_harness(tmp_path, bad_manifest):
+    """Collection cannot ignore a requested harness or reuse older width rows."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# repaired acquisition\n")
+    git("add", ".")
+    git("commit", "-m", "harness")
+    source = git("rev-parse", "HEAD")
+    head = _sweep_rows(tmp_path, "head", source_sha=source)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha=source)
+    for output in (head, baseline):
+        manifest = {
+            "runtime_source_sha": source,
+            "harness_source_sha": source,
+            "harness_sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+        }
+        (output / "harness.json").write_text(json.dumps(manifest))
+        meta_path = output / "execution_main.json"
+        meta = json.loads(meta_path.read_text())
+        meta["sweep_harness_sha256"] = manifest["harness_sha256"]
+        meta_path.write_text(json.dumps(meta))
+    args = producer._parse_args(
+        [
+            "--head-sha",
+            source,
+            "--receipt-id",
+            "fixture",
+            "--mode",
+            "existing",
+            "--head-sweep-dir",
+            str(head),
+            "--baseline-sweep-dir",
+            str(baseline),
+            "--sweep-harness-source-sha",
+            source,
+        ]
+    )
+    producer._prepare_sweeps(args, repo, source)
+    path = baseline / "harness.json"
+    if bad_manifest is None:
+        path.unlink()
+    else:
+        manifest = json.loads(path.read_text())
+        manifest["harness_source_sha" if bad_manifest == "source" else "harness_sha256"] = "0" * 40
+        path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="requested committed harness"):
+        producer._prepare_sweeps(args, repo, source)

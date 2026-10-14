@@ -23,6 +23,7 @@ from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
     BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
     BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
     OBSTACLE_FORCE_DISTANCE_FLOOR,
     resolve_obstacle_force_law,
 )
@@ -112,8 +113,12 @@ class FastPysfWrapper:
                     "range_m": pf_forces.BODY_EDGE_EXPONENTIAL_RANGE_M,
                 }
             )
+            if law_version == BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X:
+                parameters["amplitude_unscaled"] *= 10.0
+                parameters["amplitude_m_s2"] *= 10.0
             if law_version in (
                 BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+                BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
                 BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
             ):
                 parameters["contact_radius_margin_m"] = (

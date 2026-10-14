@@ -453,7 +453,7 @@ class SimulationSettings:
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
     obstacle_force_law: Any = None
-    """Versioned pedestrian obstacle-force law; 0.1.0 retains the legacy default."""
+    """Versioned pedestrian obstacle-force law; 0.1.0 defaults to radius-aligned physical_margin x10."""
 
     social_force_kernel_version: InitVar[Any] = None
     """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""

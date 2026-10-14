@@ -191,7 +191,7 @@ def test_line_segment_batch_dispatch_matches_scalar_geometry(law_version):
 def test_obstacle_force_law_resolution_and_metadata_are_explicit():
     """Law resolution defaults old metadata to legacy and records site conventions."""
     assert resolve_obstacle_force_law() == DEFAULT_OBSTACLE_FORCE_LAW
-    assert DEFAULT_OBSTACLE_FORCE_LAW == LEGACY_SHIFTED_GRADIENT_V1
+    assert DEFAULT_OBSTACLE_FORCE_LAW == "body_edge_exponential_v3_physical_margin10x"
     assert resolve_obstacle_force_law_with_mode() == (
         DEFAULT_OBSTACLE_FORCE_LAW,
         "defaulted_missing",
@@ -218,7 +218,7 @@ def test_obstacle_force_law_resolution_and_metadata_are_explicit():
         )
         == SURFACE_DISTANCE_UNIT_NORMAL_V2
     )
-    assert ObstacleForceConfig().law_version == LEGACY_SHIFTED_GRADIENT_V1
+    assert ObstacleForceConfig().law_version == DEFAULT_OBSTACLE_FORCE_LAW
     assert ObstacleForceConfig().obstacle_force_law_resolution_mode == "defaulted_missing"
 
     metadata = obstacle_force_law_metadata(
@@ -318,7 +318,9 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     legacy_component = ObstacleForce(legacy_config, _Simulation())
     legacy_expected = obstacle_force((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), -0.57)
     np.testing.assert_array_equal(legacy_component()[0], np.asarray(legacy_expected) * 10.0)
-    default_component = ObstacleForce(ObstacleForceConfig(threshold=-0.57), _Simulation())
+    default_component = ObstacleForce(
+        ObstacleForceConfig(threshold=-0.57, law_version=LEGACY_SHIFTED_GRADIENT_V1), _Simulation()
+    )
     np.testing.assert_array_equal(default_component()[0], legacy_component()[0])
     legacy_metadata = legacy_component.law_metadata()
     assert legacy_metadata["law_version"] == LEGACY_SHIFTED_GRADIENT_V1

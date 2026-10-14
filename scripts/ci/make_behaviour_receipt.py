@@ -1046,10 +1046,7 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
         if not metadata_path.is_file():
             raise ValueError(f"missing authoritative execution metadata for {suite}")
         meta = json.loads(metadata_path.read_text(encoding="utf-8"))
-        if harness is not None and meta.get("sweep_harness_sha256") != harness.get(
-            "harness_sha256"
-        ):
-            raise ValueError(f"{suite} executed sweep harness differs from pinned provenance")
+        _verify_executed_harness(harness, meta, suite)
         if meta.get("head_sha") != source_sha:
             raise ValueError(f"{suite} recorded SHA differs from claimed source SHA")
         if meta.get("suite") != suite:
@@ -1084,6 +1081,14 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
             raise ValueError(f"{suite} execution seed identity differs")
         if any(row.get("execution_status") != "written" for row in records):
             raise ValueError(f"{suite} has unsuccessful row execution")
+
+
+def _verify_executed_harness(harness: dict | None, metadata: dict, suite: str) -> None:
+    """Require an execution digest when an explicit acquisition harness was pinned."""
+    if harness is not None and metadata.get("sweep_harness_sha256") != harness.get(
+        "harness_sha256"
+    ):
+        raise ValueError(f"{suite} executed sweep harness differs from pinned provenance")
 
 
 def _index_raw_episodes(

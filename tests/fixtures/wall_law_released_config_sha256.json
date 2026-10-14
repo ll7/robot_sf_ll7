@@ -60,11 +60,20 @@
   "configs/releases/release_0_0_5_surface_disposition.yaml": "1c1dff3ee16ef1d3c4d7f623cd176569615e24b15e54413787ba72552f33194c",
   "configs/releases/release_0_0_6_preparation.yaml": "8be0f496882301b9cdb5c8e51cb719ed0714a57de4c4241525ddbe977ec47827",
   "configs/scenarios/classic_interactions_francis2023.yaml": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml": "214d0ce7830ab263a73d94525e7530cc015a7a2e87dd0cbc28680acdde1e4719",
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml": "8a8aa9adb2b098f039a3e92a4849e16eb8d3665e928211f08e0c689584c9f389",
   "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
   "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778",
+  "configs/scenarios/issue_9860_corrected_diagnostic_v1.yaml": "89e38c84af12a467599f0b76a60e5f80f7f5946b5438116378cfc4b2dee414ad",
   "configs/scenarios/release_0_0_8_endpoint_dispositions.yaml": "8e28e07b3c2cca8a822025200fdc5c9e113e2e1131dbd7380ee0b2a87944959c",
   "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9",
   "configs/scenarios/single/francis2023_blind_corner.yaml": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb",
   "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca",
-  "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785"
+  "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785",
+  "docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml": "8bff3f05ccfa2b7d3b915214711872002bab591670d91b8d0f095d53a70d56cf",
+  "docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/ensemble_boundary_demo/campaign_atlas_catalog.yaml": "6405d6a0ae9f8384b3fcd7a70a51604fec97b89c7b95a779a18c4eb3852f2a6b",
+  "docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml": "517b9dec6cdf725046af75a16886632a6e3a63b64887091bbe8d2ba679bfc09d",
+  "docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml": "6fae6cb13ad9c019b52ea1db17ee9c0fd53b7c73cd617508b734be6f9169dddf",
+  "docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml": "473ea3e27d50f2324cb7e146488fed36c6ff86927e01ecd3c775c997f20f3556",
+  "docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml": "d9155e7122cbc6ecb89f80a798290951c235261b43eae42f5fe6d7c97e0bccf9"
 }

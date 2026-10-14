@@ -1735,6 +1735,9 @@ def build_robot_config_from_scenario(
     ) or scenario_path.name in {
         # Unversioned scenario inputs referenced by archived release manifests.
         "classic_interactions_francis2023.yaml",
+        "classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml",
+        "classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml",
+        "issue_9860_corrected_diagnostic_v1.yaml",
         "paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
         "francis2023_blind_corner.yaml",
         "francis2023_blind_corner_goal_zone_entry_v1.yaml",

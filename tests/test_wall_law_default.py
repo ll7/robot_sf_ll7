@@ -86,6 +86,9 @@ def test_released_scenario_retains_legacy(filename):
     "relative",
     [
         "configs/scenarios/classic_interactions_francis2023.yaml",
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml",
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml",
+        "configs/scenarios/issue_9860_corrected_diagnostic_v1.yaml",
         "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
         "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
     ],

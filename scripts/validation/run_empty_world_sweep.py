@@ -891,7 +891,12 @@ def main(argv: list[str] | None = None) -> int:
                 cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
             )
             incomplete_execution |= not axes["complete"]
-            meta = {"suite": suite, "head_sha": full_sha, **axes}
+            meta = {
+                "suite": suite,
+                "head_sha": full_sha,
+                "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                **axes,
+            }
             write_outputs(out_dir, rows, suite, meta)
             receipt.write_text(json.dumps(meta, indent=2) + "\n")
             continue
@@ -933,6 +938,7 @@ def main(argv: list[str] | None = None) -> int:
         meta = {
             "suite": suite,
             "head_sha": full_sha,
+            "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "seeds": seeds,
             "workers": args.workers,
             "runtime_s": round(time.time() - t0, 1),

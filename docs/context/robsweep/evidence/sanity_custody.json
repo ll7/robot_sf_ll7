@@ -1,0 +1,7 @@
+{
+  "final_kernel": "wrapped_v2",
+  "final_corridor": "physically_clear_uniform_rejection",
+  "final_bidirectional_door": "physically_clear_uniform_rejection; goals aligned to opening",
+  "final_unidirectional_door": "physically_clear_jittered_grid; target beyond opening",
+  "excluded_prior_probes": "legacy kernel; invalid reset grid; failed rejection; off-axis bidirectional door. Prior artifacts retained."
+}

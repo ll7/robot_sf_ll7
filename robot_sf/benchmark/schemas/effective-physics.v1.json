@@ -132,10 +132,7 @@
                   "type": "object",
                   "required": [
                     "factor",
-                    "sigma",
-                    "threshold",
                     "agent_radius",
-                    "effective_offset",
                     "distance_floor"
                   ],
                   "properties": {
@@ -156,7 +153,75 @@
                     },
                     "distance_floor": {
                       "type": "number"
+                    },
+                    "amplitude_unscaled": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "amplitude_m_s2": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "decay_m": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "range_m": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "contact_radius_margin_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_bias_unscaled": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_bias_m_s2": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_stiffness_unscaled_per_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "contact_stiffness_m_s2_per_m": {
+                      "type": "number",
+                      "minimum": 0
                     }
+                  }
+                }
+              },
+              "if": {
+                "properties": {
+                  "law_version": {
+                    "enum": [
+                      "body_edge_exponential_v3",
+                      "body_edge_exponential_v3_range_only",
+                      "body_edge_exponential_v3_physical_margin",
+                      "body_edge_exponential_v3_contact_stiff",
+                      "body_edge_exponential_v3_multi_segment"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "parameters": {
+                    "required": [
+                      "amplitude_unscaled",
+                      "amplitude_m_s2",
+                      "decay_m",
+                      "range_m"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "parameters": {
+                    "required": ["sigma", "threshold", "effective_offset"]
                   }
                 }
               }

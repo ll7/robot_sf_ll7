@@ -1,0 +1,5 @@
+Shared-venv scratch preflight passed: path=/tmp available=525607000KiB required=1048576KiB
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=<environment-path>
+Shared-venv tool freshness preflight skipped: tool=python reason=interpreter-or-shell elapsed_ms=425 venv=<environment-path>
+evidence-registry ratchet: findings=492 (baseline=492).
+evidence-registry ratchet passed: no net-new findings; clean files stayed clean.

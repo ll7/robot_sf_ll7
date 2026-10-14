@@ -1,0 +1,8 @@
+Shared-venv scratch preflight passed: path=/tmp available=525634144KiB required=1048576KiB
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=<environment-path>
+Shared-venv tool freshness preflight skipped: tool=python reason=interpreter-or-shell elapsed_ms=214 venv=<environment-path>
+ty advisory ratchet: general=6435 (baseline general=6435), optional_import_excluded=169.
+NOTICE: narrow exception 'robot_sf/sim/fast_pysf_wrapper.py'/'invalid-argument-type': 10 matching findings, 1 approved additional; The additional line-404 NumPy-point finding has a receipt-scoped call site and shared kernel; neither is edited by this ratchet PR. Fix its input type at source in the next behaviour-receipted simulation change, then remove this one-finding increment and lower the baseline/fixture (follow-up #10306). Nine findings for this exact path/rule were already covered by the ordinary baseline.
+NOTICE: narrow exception 'scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py'/'invalid-argument-type': 2 matching findings, 2 approved additional; This file is evidence-bound; an edit would invalidate its archived source hash. Fix the file when its evidence is next regenerated, then remove this two-finding exception and lower the baseline/fixture (follow-up #10312).
+NOTICE: exception-adjusted general total: current=6432, baseline=6432 (3 approved additional).
+ty advisory ratchet passed: no per-module increase; clean modules stayed clean.

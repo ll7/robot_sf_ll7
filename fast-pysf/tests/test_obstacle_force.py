@@ -294,7 +294,7 @@ def test_obstacle_force_config_copy_with_law_override_is_explicit() -> None:
     assert copied.obstacle_force_law_resolution_mode == "explicit"
 
 
-def test_obstacle_force_component_dispatches_corrected_law_without_changing_default():
+def test_obstacle_force_component_preserves_historical_and_explicit_laws():
     """The registered force component keeps legacy available and selects v2 explicitly."""
 
     class _Peds:
@@ -318,10 +318,10 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     legacy_component = ObstacleForce(legacy_config, _Simulation())
     legacy_expected = obstacle_force((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), -0.57)
     np.testing.assert_array_equal(legacy_component()[0], np.asarray(legacy_expected) * 10.0)
-    default_component = ObstacleForce(
-        ObstacleForceConfig(threshold=-0.57, law_version=LEGACY_SHIFTED_GRADIENT_V1), _Simulation()
+    historical_component = ObstacleForce(
+        ObstacleForceConfig(threshold=-0.57, law_version={}), _Simulation()
     )
-    np.testing.assert_array_equal(default_component()[0], legacy_component()[0])
+    np.testing.assert_array_equal(historical_component()[0], legacy_component()[0])
     legacy_metadata = legacy_component.law_metadata()
     assert legacy_metadata["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
     assert legacy_metadata["resolution_mode"] == "explicit"

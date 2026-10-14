@@ -1,0 +1,410 @@
+"""Dev-only examiner robustness diagnostics; never release evidence."""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import copy
+import gzip
+import json
+import multiprocessing
+import os
+import subprocess
+import time
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+CONFIG = ROOT / "configs/benchmarks/robsweep"
+EVIDENCE = ROOT / "docs/context/robsweep/evidence"
+RELEASE = "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
+FAMILIES = {
+    "bottleneck": "classic_bottleneck_medium",
+    "cross_trap": "classic_cross_trap_medium",
+    "doorway": "classic_doorway_medium",
+    "group_crossing": "classic_group_crossing_medium",
+    "head_on_corridor": "classic_head_on_corridor_medium",
+    "entering_room": "francis2023_entering_room",
+    "exiting_room": "francis2023_exiting_room",
+    "circular_crossing": "francis2023_circular_crossing",
+    "robot_crowding": "francis2023_robot_crowding",
+    "crowd_navigation": "francis2023_crowd_navigation",
+}
+SWEEP = {"orca", "social_force", "goal", "ppo", "hybrid_rule_v4_fast_progress_static_escape"}
+SEEDS = list(range(1061, 1091))
+
+
+def write_json(path: Path, value: object) -> None:
+    """Write portable diagnostic output without checkout-specific home paths."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(value, indent=2, default=str).replace(str(ROOT) + "/", "")
+    path.write_text(text + "\n")
+
+
+def prepare() -> None:
+    """Generate only new configs and bind every selected seed explicitly."""
+    from loguru import logger
+
+    from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    logger.remove()
+    payload = yaml.safe_load((ROOT / RELEASE).read_text())
+    budgets = yaml.safe_load((ROOT / payload["scenario_horizons"]).read_text())["scenarios"]
+    matrix = ROOT / payload["scenario_matrix"]
+    loaded = load_scenarios(matrix, base_dir=matrix.parent)
+    selected = [copy.deepcopy(dict(s)) for s in loaded if s["name"] in FAMILIES.values()]
+    if len(selected) != 10:
+        raise ValueError("Figure family selection must resolve to exactly ten cells")
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    facts = []
+    for s in selected:
+        s["seeds"] = SEEDS
+        s["simulation_config"]["max_episode_steps"] = budgets[s["name"]][
+            "recommended_horizon_steps"
+        ]
+        env = build_env_config(s, scenario_path=matrix)
+        map_file = Path(s["map_file"])
+        if not map_file.is_absolute():
+            map_file = next(
+                p.resolve() for p in (matrix.parent / map_file, ROOT / map_file) if p.is_file()
+            )
+        s["map_file"] = os.path.relpath(map_file, CONFIG)
+        facts.append(
+            {
+                "scenario": s["name"],
+                "robot_radius_m": env.robot_config.radius,
+                "physical_speed_cap_m_s": env.robot_config.max_linear_speed,
+                "peds_speed_multiplier": env.sim_config.peds_speed_mult,
+                "desired_speed_mean": env.sim_config.desired_speed_mean,
+                "single_pedestrians": s.get("single_pedestrians", []),
+                "authored_steps": budgets[s["name"]]["recommended_horizon_steps"],
+            }
+        )
+    roster = payload["planners"]
+    for p in roster:
+        cfg = yaml.safe_load((ROOT / p["algo_config"]).read_text()) if p.get("algo_config") else {}
+        # Candidate bindings wrap runtime planner config under params.
+        runtime = cfg.get("params", cfg)
+        p["diagnostic_release_cap"] = runtime.get(
+            "max_linear_speed", runtime.get("v_max", 1.0 if p["key"] == "goal" else 2.0)
+        )
+        p["diagnostic_config"] = str(CONFIG.relative_to(ROOT) / f"{p['key']}_legacy.yaml")
+        (ROOT / p["diagnostic_config"]).write_text(yaml.safe_dump(cfg, sort_keys=False))
+        swapped = copy.deepcopy(cfg)
+        swapped.pop("release_parameter_freeze", None)
+        target = 2.0 if p["diagnostic_release_cap"] != 2.0 else 1.2
+        runtime = swapped.get("params", swapped)
+        runtime["max_linear_speed"] = target
+        if p["key"] == "goal":
+            runtime["max_speed"] = target
+        if "v_max" in runtime:
+            runtime["v_max"] = target
+        if "linear_candidates" in runtime:
+            # Preserve the number and relative spacing of DWA candidates.
+            runtime["linear_candidates"] = [
+                round(v * target / p["diagnostic_release_cap"], 10)
+                for v in runtime["linear_candidates"]
+            ]
+        (CONFIG / f"{p['key']}_swap.yaml").write_text(yaml.safe_dump(swapped, sort_keys=False))
+    for label, radius, speed in [("legacy", 1.0, None)] + [
+        (f"r{r:g}_v{v:g}", r, v) for r in (0.3, 0.5, 1.0) for v in (0.65, 1.0, 1.3)
+    ]:
+        scenarios = copy.deepcopy(selected)
+        for s in scenarios:
+            s.setdefault("robot_config", {})["radius"] = radius
+            if speed is not None:
+                s.setdefault("simulation_config", {}).update(
+                    desired_speed_mean=speed, desired_speed_std=0.0
+                )
+        (CONFIG / f"{label}.yaml").write_text(
+            yaml.safe_dump({"scenarios": scenarios}, sort_keys=False)
+        )
+    write_json(
+        CONFIG / "study.json",
+        {"roster": roster, "families": FAMILIES, "seeds": SEEDS, "sweep": sorted(SWEEP)},
+    )
+    write_json(EVIDENCE / "facts.json", facts)
+    write_json(
+        EVIDENCE / "source.json",
+        {
+            "base": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+            "release_template": RELEASE,
+            "evidence_tier": "diagnostic-only",
+        },
+    )
+
+
+def run_arm(job: tuple[str, dict, int]) -> dict:
+    """Run one existing canonical map batch; retain all completed and failed rows."""
+    from loguru import logger
+
+    from robot_sf.benchmark.map_runner.map_runner import run_map_batch
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    treatment, planner, seed_count = job
+    out_dir = EVIDENCE / "episodes"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{treatment}_{planner['key']}"
+    out = out_dir / f"{stem}.jsonl"
+    logger.remove()
+    logger.add(out_dir / f"{stem}.log", level="ERROR")
+    matrix = CONFIG / f"{'legacy' if treatment == 'swap' else treatment}.yaml"
+    scenarios = load_scenarios(matrix, base_dir=ROOT)
+    for scenario in scenarios:
+        scenario["seeds"] = SEEDS[:seed_count]
+        scenario["map_file"] = str((ROOT / scenario["map_file"]).resolve())
+        if treatment == "swap":
+            scenario["robot_config"]["max_linear_speed"] = (
+                2.0 if planner["diagnostic_release_cap"] != 2.0 else 1.2
+            )
+    algo_config = CONFIG / f"{planner['key']}_{'swap' if treatment == 'swap' else 'legacy'}.yaml"
+    started = time.monotonic()
+    try:
+        result = run_map_batch(
+            scenarios,
+            out,
+            ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+            scenario_path=matrix,
+            dt=0.1,
+            record_forces=True,
+            algo=planner["algo"],
+            algo_config_path=str(algo_config),
+            benchmark_profile=planner.get("benchmark_profile", "experimental"),
+            adapter_impact_eval=planner.get("adapter_impact_eval", False),
+            workers=1,
+            resume=False,
+        )
+    except Exception as exc:
+        result = {"error_type": type(exc).__name__, "error": str(exc)}
+    result = {
+        "treatment": treatment,
+        "planner": planner["key"],
+        "requested": 10 * seed_count,
+        "elapsed_s": time.monotonic() - started,
+        "result": result,
+    }
+    write_json(out_dir / f"{stem}_execution.json", result)
+    # Public-byte projection: only checkout prefix normalization; no metric edits.
+    if out.exists():
+        with gzip.open(out.with_suffix(".jsonl.gz"), "wt") as compressed:
+            compressed.write(out.read_text().replace(str(ROOT) + "/", ""))
+        out.unlink()
+    for path in out_dir.glob(f"{stem}*.log"):
+        path.write_text(path.read_text().replace(str(ROOT) + "/", ""))
+    return result
+
+
+def sweep(workers: int, seed_count: int) -> None:
+    """Schedule independent canonical batches on host CPUs, without retries."""
+    study = json.loads((CONFIG / "study.json").read_text())
+    jobs = []
+    for p in study["roster"]:
+        jobs.extend((t, p, seed_count) for t in ("legacy", "swap"))
+        if p["key"] in SWEEP:
+            jobs.extend(
+                (f"r{r:g}_v{v:g}", p, seed_count) for r in (0.3, 0.5, 1.0) for v in (0.65, 1.0, 1.3)
+            )
+    existing = [EVIDENCE / "episodes" / f"{t}_{p['key']}_execution.json" for t, p, _ in jobs]
+    if any(p.exists() for p in existing):
+        raise ValueError(
+            "Existing execution receipts: use a separate immutable run namespace, never overwrite"
+        )
+    write_json(
+        EVIDENCE / "jobs.json",
+        {
+            "workers": workers,
+            "seed_count": seed_count,
+            "jobs": [
+                {"treatment": t, "planner": p["key"], "requested": 10 * seed_count}
+                for t, p, _ in jobs
+            ],
+        },
+    )
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+    ) as pool:
+        futures = [pool.submit(run_arm, job) for job in jobs]
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            print(json.dumps({k: v for k, v in result.items() if k != "result"}), flush=True)
+
+
+def canary() -> None:
+    """Retain real episode traces for treatment and planner binding inspection."""
+    from loguru import logger
+
+    from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    logger.remove()
+    logger.add(EVIDENCE / "canary.log", level="WARNING")
+    study = json.loads((CONFIG / "study.json").read_text())
+    for treatment in ("legacy", "swap", "r0.3_v1.3"):
+        matrix = CONFIG / f"{'legacy' if treatment == 'swap' else treatment}.yaml"
+        scenarios = load_scenarios(matrix, base_dir=ROOT)
+        scenario = next(s for s in scenarios if s["name"] == "classic_head_on_corridor_medium")
+        scenario["map_file"] = str((ROOT / scenario["map_file"]).resolve())
+        for planner in study["roster"]:
+            if treatment == "r0.3_v1.3" and planner["key"] not in SWEEP:
+                continue
+            episode_scenario = copy.deepcopy(scenario)
+            if treatment == "swap":
+                episode_scenario["robot_config"]["max_linear_speed"] = (
+                    2.0 if planner["diagnostic_release_cap"] != 2.0 else 1.2
+                )
+            cfg_path = (
+                CONFIG / f"{planner['key']}_{'swap' if treatment == 'swap' else 'legacy'}.yaml"
+            )
+            cfg = yaml.safe_load(cfg_path.read_text()) or {}
+            try:
+                row = _run_map_episode(
+                    episode_scenario,
+                    SEEDS[0],
+                    horizon=5,
+                    dt=0.1,
+                    record_forces=True,
+                    snqi_weights=None,
+                    snqi_baseline=None,
+                    algo=planner["algo"],
+                    scenario_path=matrix,
+                    algo_config=cfg,
+                    algo_config_path=str(cfg_path),
+                    adapter_impact_eval=planner.get("adapter_impact_eval", False),
+                    record_simulation_step_trace=True,
+                )
+            except Exception as exc:
+                row = {
+                    "error_type": type(exc).__name__,
+                    "error": str(exc).replace(str(ROOT) + "/", ""),
+                }
+            write_json(EVIDENCE / "canary" / f"{treatment}_{planner['key']}.json", row)
+            print(
+                json.dumps(
+                    {
+                        "treatment": treatment,
+                        "planner": planner["key"],
+                        "error": row.get("error"),
+                        "keys": list(row)[:8],
+                    }
+                ),
+                flush=True,
+            )
+
+
+def sanity() -> None:
+    """Measure lane formation and actual aperture throughput, retaining trajectories."""
+    import numpy as np
+    import pysocialforce as pysf
+    from loguru import logger
+
+    from robot_sf.research.emergent_phenomena import (
+        RELEASED_DEFAULT_CALIBRATION,
+        ScenarioConfig,
+        TrajectoryRecord,
+        build_bidirectional_corridor,
+        build_narrow_doorway,
+        lane_purity,
+        lane_segregation_index,
+        released_default_config,
+        simulator_config_snapshot,
+    )
+
+    logger.remove()
+    results = []
+    for seed in SEEDS:
+        for name in ("bidirectional_corridor", "narrow_doorway"):
+            cfg = ScenarioConfig(name, 24.0, 2.5, 40, seed, 600, {"door_half_width": 0.6})
+            builder = (
+                build_bidirectional_corridor
+                if name == "bidirectional_corridor"
+                else build_narrow_doorway
+            )
+            state, obstacles, directions = builder(cfg, RELEASED_DEFAULT_CALIBRATION)
+            sim_cfg = released_default_config()
+            sim = pysf.Simulator(state=state.copy(), obstacles=obstacles, config=sim_cfg)
+            pos = [sim.peds.pos().copy()]
+            vel = [sim.peds.vel().copy()]
+            for _ in range(cfg.n_steps):
+                sim.step()
+                pos.append(sim.peds.pos().copy())
+                vel.append(sim.peds.vel().copy())
+            positions, velocities = np.asarray(pos), np.asarray(vel)
+            traj = TrajectoryRecord(positions, velocities, directions, np.arange(601) * 0.1, 0.1)
+            row = {
+                "seed": seed,
+                "scenario": name,
+                "finite": bool(np.isfinite(positions).all()),
+                "preferred_speed_min": float(sim.peds.max_speeds.min()),
+                "preferred_speed_max": float(sim.peds.max_speeds.max()),
+                "lane_segregation": lane_segregation_index(traj),
+                "lane_purity": lane_purity(traj),
+            }
+            if name == "narrow_doorway":
+                # Count each pedestrian's first crossing in its desired direction.
+                # Interpolate crossing y; a valid physical disc fits within the aperture.
+                sign = directions[:, 0]
+                before, after = positions[:-1], positions[1:]
+                crossing = ((before[:, :, 0] - 12.0) * sign < 0) & (
+                    (after[:, :, 0] - 12.0) * sign >= 0
+                )
+                alpha = np.zeros(crossing.shape)
+                np.divide(
+                    12.0 - before[:, :, 0],
+                    after[:, :, 0] - before[:, :, 0],
+                    out=alpha,
+                    where=crossing,
+                )
+                crossing_y = before[:, :, 1] + alpha * (after[:, :, 1] - before[:, :, 1])
+                physical_radius = 0.4  # benchmark contact radius; substrate force radius is 0.35.
+                valid = crossing & (np.abs(crossing_y) <= 0.6 - physical_radius)
+                row.update(
+                    valid_unique_crossings=int(valid.any(axis=0).sum()),
+                    invalid_unique_crossings=int((crossing & ~valid).any(axis=0).sum()),
+                    throughput_person_s=float(valid.any(axis=0).sum() / 60.0),
+                    raw_unique_crossings=int(crossing.any(axis=0).sum()),
+                )
+            folder = EVIDENCE / "sanity"
+            folder.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(
+                folder / f"{name}_{seed}.npz",
+                positions=positions,
+                velocities=velocities,
+                directions=directions,
+            )
+            results.append(row)
+        print(json.dumps({"sanity_seed": seed, "completed": len(results)}), flush=True)
+    write_json(
+        EVIDENCE / "sanity.json",
+        {
+            "config": simulator_config_snapshot(released_default_config()),
+            "rows": results,
+            "duration_s": 60.0,
+            "corridor_width_m": 5.0,
+            "door_width_m": 1.2,
+            "population": 40,
+            "claim_boundary": "Substrate diagnostic without robot; no empirical calibration or wrapper qualification.",
+        },
+    )
+
+
+def main() -> None:
+    """Execute an explicitly selected bounded diagnostic phase."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=["prepare", "canary", "sanity", "sweep"])
+    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--seed-count", type=int, default=30, choices=range(1, 31))
+    args = parser.parse_args()
+    if args.mode == "prepare":
+        prepare()
+    elif args.mode == "canary":
+        canary()
+    elif args.mode == "sanity":
+        sanity()
+    else:
+        sweep(args.workers, args.seed_count)
+
+
+if __name__ == "__main__":
+    main()

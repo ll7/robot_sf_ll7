@@ -149,13 +149,17 @@ def test_orca_reset_replays_current_population(empty) -> None:
         env.close()
 
 
-def test_orca_rejects_sfm_tracing_and_ego_pedestrian_env() -> None:
+@pytest.mark.parametrize(
+    "selector", [ORCA_PEDESTRIANS_V1, f" {ORCA_PEDESTRIANS_V1} "], ids=["canonical", "whitespace"]
+)
+def test_orca_rejects_sfm_tracing_and_ego_pedestrian_env(selector) -> None:
     """Unsupported SFM provenance and ego control cannot silently use another model."""
     from robot_sf.gym_env.environment_factory import make_pedestrian_env
     from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
     from robot_sf.sim.sim_config import SimulationSettings
 
     scenario = deepcopy(load_scenarios(SCENARIO_PATH)[2])
+    scenario["simulation_config"]["pedestrian_model"] = selector
     scenario["simulation_config"]["oracle_force_trace_enabled"] = True
     config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_PATH)
     with pytest.raises(ValueError, match="SFM force tracing or residuals"):
@@ -163,5 +167,8 @@ def test_orca_rejects_sfm_tracing_and_ego_pedestrian_env() -> None:
     ped_config = PedestrianSimulationConfig(
         sim_config=SimulationSettings(pedestrian_model=ORCA_PEDESTRIANS_V1)
     )
+    # Scenario-style overrides are applied after dataclass construction.
+    ped_config.sim_config.pedestrian_model = selector
     with pytest.raises(ValueError, match="not ego-pedestrian"):
-        make_pedestrian_env(ped_config, seed=1001)
+        env = make_pedestrian_env(ped_config, seed=1001)
+        env.close()

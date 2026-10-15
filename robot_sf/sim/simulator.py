@@ -730,7 +730,7 @@ class Simulator:
         Route spawning honors SimulationSettings route spawn options when provided.
         """
         check_seed_config(self.config, boundary="simulator construction")
-        if self.config.pedestrian_model == ORCA_PEDESTRIANS_V1:
+        if normalize_pedestrian_model(self.config.pedestrian_model) == ORCA_PEDESTRIANS_V1:
             self._validate_orca_pedestrians()
         # The ``peds_have_obstacle_forces is None`` warning-and-default-to-False guard
         # stays in Simulator (issue #6465): it mutates ``self`` before the shared
@@ -2310,7 +2310,7 @@ class PedSimulator(Simulator):
         forces and robot interactions, and prepares robot navigation paths.
         """
         check_seed_config(self.config, boundary="simulator construction")
-        if self.config.pedestrian_model == ORCA_PEDESTRIANS_V1:
+        if normalize_pedestrian_model(self.config.pedestrian_model) == ORCA_PEDESTRIANS_V1:
             raise ValueError(
                 "orca_pedestrians_v1 supports robot environments, not ego-pedestrian environments"
             )

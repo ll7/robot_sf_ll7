@@ -134,7 +134,12 @@ the new selector test failing on the previous runtime; then prove the full path.
   `robot_sf.common.optional_import.try_import` to retain the import-guard ratchet.
   Both were corrected without changing fixed-seed fixtures or inventory ceilings.
   The export/guard/runtime verification passed 113 tests; its clean-HEAD-only
-  nested gate must be rerun after committing these fixes.
+  nested gate passed after committing these fixes.
+- Review reproduced padded-selector overrides bypassing ORCA-only rejection
+  guards, which could mislabel an ego-pedestrian SFM environment as ORCA. The
+  whitespace regression failed with `DID NOT RAISE ValueError`; normalizing at
+  both constructor guards fixed it. Focused runtime/export/import verification
+  then passed 101 tests. Final readiness is rerun on the corrected frozen head.
 
 # Recovery and handoff
 

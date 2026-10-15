@@ -653,6 +653,31 @@ def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | N
     return np.array(rows, dtype=np.float64)
 
 
+@numba.njit(nogil=True)
+def _seed_compiled_rng(seed: int) -> None:
+    """Seed Numba's internal RNG state for the calling thread."""
+    np.random.seed(seed)
+
+
+def seed_compiled_lidar_rng(seed: int) -> None:
+    """Seed the compiled lidar-noise RNG for the calling thread (opt-in).
+
+    ``range_postprocessing`` is JIT-compiled and draws from Numba's own
+    per-thread RNG state, which ``np.random.seed`` / ``set_global_seed`` from
+    Python do not touch. Call this helper before environment construction (on
+    the same thread that will run the scans) to make repeated noisy scans
+    reproducible (issue #10373).
+
+    This is strictly opt-in: the legacy default leaves the compiled RNG
+    unseeded, so released stochastic paths, default settings, and serialized
+    artifacts are unchanged. In multi-threaded scan dispatch (batch
+    coordinator workers) each scan thread owns its own RNG state, so seed
+    every scanning thread explicitly; seeding here never affects another
+    thread's draws, nor the physical/config/metric evolution of the run.
+    """
+    _seed_compiled_rng(int(seed))
+
+
 @numba.njit(fastmath=True, nogil=True)
 def range_postprocessing(
     out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float

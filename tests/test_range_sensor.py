@@ -18,6 +18,7 @@ from robot_sf.sensor.range_sensor import (
     raycast_circles,
     raycast_obstacles,
     raycast_pedestrians,
+    seed_compiled_lidar_rng,
 )
 
 
@@ -255,6 +256,37 @@ def test_range_postprocessing_corruption_scales_down():
     _py_func(range_postprocessing)(out_ranges, np.array([0.0, 1.0]), 10.0)
     assert np.all(out_ranges >= 0.0)
     assert np.all(out_ranges <= 10.0)
+
+
+def test_seeded_compiled_rng_reproduces_noisy_postprocessing():
+    """Opt-in seeding reproduces compiled noisy output exactly (issue #10373)."""
+    base = np.linspace(1.0, 9.0, 64)
+    noise = np.array([0.5, 0.5])
+    seed_compiled_lidar_rng(1001)
+    first = base.copy()
+    range_postprocessing(first, noise, 10.0)
+    seed_compiled_lidar_rng(1001)
+    second = base.copy()
+    range_postprocessing(second, noise, 10.0)
+    assert np.array_equal(first, second)
+
+
+def test_compiled_rng_seeding_is_opt_in_and_thread_local():
+    """Seeding changes the compiled stream; defaults stay untouched (issue #10373)."""
+    base = np.linspace(1.0, 9.0, 64)
+    noise = np.array([0.0, 1.0])
+    seed_compiled_lidar_rng(1001)
+    first = base.copy()
+    range_postprocessing(first, noise, 10.0)
+    seed_compiled_lidar_rng(2002)
+    second = base.copy()
+    range_postprocessing(second, noise, 10.0)
+    assert not np.array_equal(first, second)
+    # Legacy default path is unchanged: zero noise is still the identity.
+    plain = base.copy()
+    range_postprocessing(plain, np.array([0.0, 0.0]), 10.0)
+    assert np.array_equal(plain, base)
+    assert LidarScannerSettings().scan_noise == [0.005, 0.002]
 
 
 def test_lidar_ray_scan_basic_obstacle():

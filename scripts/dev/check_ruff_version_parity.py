@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Guard against Ruff version drift across three independent version axes.
+"""Guard against Ruff version drift across four independent version axes.
 
 Checks that the Ruff version is consistent across:
 
 1. The ``astral-sh/ruff-pre-commit`` ``rev:`` in ``.pre-commit-config.yaml``
 2. ``[tool.ruff]`` ``required-version`` in ``pyproject.toml``
 3. The ``ruff==`` pin in ``[dependency-groups].dev`` in ``pyproject.toml``
+4. Every ``uvx --from ruff==<version>`` launcher pin in ``.github/workflows/*.yml``
+
+Axis 4 matters because the CI lint step launches Ruff through ``uvx --from
+ruff==<pin>`` (see ``.github/workflows/ci.yml``) while ``required-version``
+refuses to run any Ruff whose version disagrees with it. A bump of only axis 3
+therefore leaves the CI lint step unable to start, even though the first three
+axes still agree with each other.
 
 Exits non-zero when the versions disagree. It is wired into the development
 validation surface as a gating local pre-commit hook and a gating CI lint check
@@ -26,8 +33,14 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PRE_COMMIT = REPO_ROOT / ".pre-commit-config.yaml"
 DEFAULT_PYPROJECT = REPO_ROOT / "pyproject.toml"
+DEFAULT_WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 RUFF_PRE_COMMIT_REPO = "https://github.com/astral-sh/ruff-pre-commit"
 RUFF_PIN_PATTERN = re.compile(r"^ruff\s*==\s*(?P<version>\S+)$")
+# Matches the pinned Ruff launcher used by CI lint steps, e.g.
+# ``uvx --from ruff==0.16.10 ruff check .``. Only lines that mention ``uvx``
+# are considered, so prose or comments that merely name a version elsewhere
+# do not become an enforced axis.
+RUFF_WORKFLOW_PIN_PATTERN = re.compile(r"ruff\s*==\s*(?P<version>[^\s\"'`]+)")
 
 
 def normalize_version(raw: str) -> str:
@@ -101,15 +114,51 @@ def read_pyproject_dev_dep_pin(path: Path) -> str:
     raise ValueError(f"no exact ruff== pin found in [dependency-groups].dev in {path}")
 
 
+def read_workflow_ruff_pins(workflows_dir: Path) -> list[tuple[str, str]]:
+    """Return ``(location, raw_version)`` for every pinned Ruff CI launcher.
+
+    Scans ``*.yml``/``*.yaml`` directly inside ``workflows_dir`` and records
+    each ``ruff==<version>`` pin on a line that also mentions ``uvx``. The
+    location is ``"<filename>:<line>"`` so mismatch reports name the stale
+    pin exactly.
+
+    Returns:
+        Ordered ``(location, raw_version)`` pairs; empty when no launcher
+        pin exists (the caller treats that as fail-closed drift).
+    """
+    pins: list[tuple[str, str]] = []
+    if not workflows_dir.is_dir():
+        return pins
+    for candidate in sorted(workflows_dir.iterdir()):
+        if not candidate.is_file() or candidate.suffix not in {".yml", ".yaml"}:
+            continue
+        for lineno, line in enumerate(candidate.read_text(encoding="utf-8").splitlines(), start=1):
+            if "uvx" not in line or "ruff" not in line:
+                continue
+            for match in RUFF_WORKFLOW_PIN_PATTERN.finditer(line):
+                pins.append((f"{candidate.name}:{lineno}", match.group("version")))
+    return pins
+
+
 def evaluate(
     pre_commit_version: str,
     required_version: str,
     dev_pin: str,
+    workflow_pins: tuple[tuple[str, str], ...] | list[tuple[str, str]] = (),
 ) -> list[str]:
-    """Compare three Ruff version axes and return a list of mismatches.
+    """Compare four Ruff version axes and return a list of mismatches.
+
+    Args:
+        pre_commit_version: Raw ``rev:`` from ``.pre-commit-config.yaml``.
+        required_version: Raw ``required-version`` from ``pyproject.toml``.
+        dev_pin: Raw ``ruff==`` pin from ``[dependency-groups].dev``.
+        workflow_pins: ``(location, raw_version)`` pairs from
+            :func:`read_workflow_ruff_pins`; every pin must agree with the
+            other three axes. An empty collection means no launcher pin was
+            found and is reported as drift so a silent scan can never pass.
 
     Returns:
-        Human-readable problem strings; empty means all three agree.
+        Human-readable problem strings; empty means all four agree.
     """
     problems: list[str] = []
 
@@ -139,6 +188,22 @@ def evaluate(
             f"{dev_pin!r} (normalized {norm_dev!r})"
         )
 
+    if not workflow_pins:
+        problems.append(
+            "no uvx --from ruff== launcher pin found in .github/workflows/*.yml: "
+            "either the CI lint launchers were removed (update this guard) or the "
+            "workflows directory was not scanned"
+        )
+    for location, raw_version in workflow_pins:
+        norm_workflow = normalize_version(raw_version)
+        if norm_workflow != norm_dev:
+            problems.append(
+                f".github/workflows/{location} ruff=={raw_version} "
+                f"(normalized {norm_workflow!r}) != "
+                f"pyproject.toml [dependency-groups] ruff pin "
+                f"{dev_pin!r} (normalized {norm_dev!r})"
+            )
+
     return problems
 
 
@@ -162,6 +227,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to pyproject.toml (default: repo root)",
     )
     parser.add_argument(
+        "--workflows-dir",
+        type=Path,
+        default=DEFAULT_WORKFLOWS_DIR,
+        help="Directory of CI workflow files scanned for uvx ruff pins"
+        " (default: <repo>/.github/workflows)",
+    )
+    parser.add_argument(
         "--advisory",
         action="store_true",
         help="Report problems but always exit 0 (non-gating CI usage).",
@@ -171,15 +243,22 @@ def main(argv: list[str] | None = None) -> int:
     pre_commit_version = read_pre_commit_version(args.pre_commit_config)
     required_version = read_pyproject_required_version(args.pyproject)
     dev_pin = read_pyproject_dev_dep_pin(args.pyproject)
+    workflow_pins = read_workflow_ruff_pins(args.workflows_dir)
 
-    problems = evaluate(pre_commit_version, required_version, dev_pin)
+    problems = evaluate(pre_commit_version, required_version, dev_pin, tuple(workflow_pins))
 
     print(f".pre-commit-config.yaml rev:       {pre_commit_version!r}")
     print(f"pyproject.toml required-version:   {required_version!r}")
     print(f"pyproject.toml dev ruff pin:       {dev_pin!r}")
+    if workflow_pins:
+        print("workflow uvx ruff pins:")
+        for location, raw_version in workflow_pins:
+            print(f"  - .github/workflows/{location}: ruff=={raw_version}")
+    else:
+        print("workflow uvx ruff pins:          (none found)")
 
     if not problems:
-        print("OK: all three Ruff version axes agree.")
+        print("OK: all four Ruff version axes agree.")
         return 0
 
     print("\nRuff version drift detected:")

@@ -124,7 +124,8 @@ run_lint_phase() {
   # .github/workflows/release-functional-badge.yml.
   _run_lint_check uv run python scripts/dev/check_version_alignment.py --advisory
   # Ruff version parity is a lint contract: pre-commit, Ruff's required-version,
-  # and the development dependency pin must not drift independently.
+  # the development dependency pin, and the uvx launcher pins in
+  # .github/workflows must not drift independently.
   _run_lint_check uv run python scripts/dev/check_ruff_version_parity.py
 
   if [[ "$lint_status" -ne 0 ]]; then

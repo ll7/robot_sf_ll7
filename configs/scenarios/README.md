@@ -11,6 +11,9 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
   planner checks. It is intentionally separate from stress, adversarial, and camera-ready evidence.
 - `confirmation_v1.yaml`: compact confirmation matrix with issue-596 atomic and sparse
   interaction archetypes for non-paper robustness checks.
+- `predictor_pedestrian_models.yaml`: matched default Social Force and existing Zanlungo
+  pedestrian scenarios for predictor development on seed 1001. See the
+  [selection and limitations note](../../docs/sim/predictor_pedestrian_models.md).
 - `sets/issue_5592_atomic_topology_second_matrix.yaml`: issue #5592 pre-registered topology
   subset, reusing issue-596 definitions with an explicit paired five-seed override; it is a
   generalization-check contract, not benchmark evidence.

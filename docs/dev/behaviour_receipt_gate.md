@@ -178,6 +178,22 @@ from a written summary. Missing controller evidence fails the audit; fallback
 or degraded evidence produces a failed or degraded audit. Both head and baseline
 are audited, and unsuccessful audits prevent receipt emission.
 
+Receipt assembly decodes each linked raw campaign file once per invocation and
+indexes its scenario/seed identities. Duplicate matches, wrong arms, summary/raw
+outcome disagreements and escaping source paths retain their existing rejection
+checks. The index is discarded after each load; another invocation rereads current
+bytes. Keep input artifacts immutable during assembly, as with the artifact digest.
+
+For a bounded tooling cost comparison, run
+`scripts/validation/profile_receipt_loading.py --reference <pre-change-sha>
+--output-dir <new-directory>`. This clones one archived trace across dev seeds
+1001–1030, measures reference/current loading, checks identical serialized outputs
+and preserves compressed inputs/results. It executes no simulator episodes and
+emits no receipt. The [recorded cost diagnostics](../../tests/analysis/fixtures/valgate_cost_20261012/README.md)
+distinguish loader timing from the incomplete MPPI acquisition profile. The full
+gate's roster, seeds, horizons, controller traces, audits and independent refute
+requirements are unchanged.
+
 The artifact digest is SHA-256 of a canonical JSON mapping from every relative
 sweep file path to its SHA-256 (sorted keys, `separators=(",", ":")`). Supplied
 `--head-artifact-sha256` / `--baseline-artifact-sha256` values must match those

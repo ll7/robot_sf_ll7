@@ -1657,3 +1657,68 @@ def test_seed_guard_names_wider_dev_range_but_keeps_current_gate_contract():
         producer._check_seed_range([1031])
     with pytest.raises(ValueError, match="outside development range"):
         producer._check_seed_range([1201])
+
+
+def test_raw_trace_file_is_decoded_once_per_invocation(tmp_path, monkeypatch):
+    """Receipt assembly scales by raw bytes, rather than rereading per summary row."""
+    out = _sweep_rows(tmp_path, "head")
+    original = Path.read_text
+    reads = []
+
+    def track_reads(path, *args, **kwargs):
+        if path.name == "episodes.jsonl":
+            reads.append(path)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", track_reads)
+    rows = producer._load_sweep_rows(out)
+    assert len(rows) == 30
+    assert rows[("goal", "open", 1001)]["metrics"]["success"] is True
+    assert len(reads) == 1
+
+
+@pytest.mark.parametrize(
+    ("fault", "reason"),
+    [
+        ("missing_raw", "raw episode identity differs"),
+        ("duplicate_raw", "raw episode identity differs"),
+        ("wrong_arm", "raw episode identity differs"),
+        ("success", "raw episode outcome differs"),
+        ("collision", "raw episode outcome differs"),
+        ("duplicate_summary", "duplicate sweep row"),
+        ("escape", "raw controller trace path escapes"),
+        ("missing_source", "missing raw controller trace source"),
+    ],
+)
+def test_raw_index_preserves_planted_regression_detection(tmp_path, fault, reason):
+    """Reject tampering even after a previous successful read of the same files."""
+    out = _sweep_rows(tmp_path, "head")
+    assert len(producer._load_sweep_rows(out)) == 30
+    summary_path = out / "episodes_main.jsonl"
+    raw_path = out / "campaigns/empty_world_main/runs/goal__differential_drive/episodes.jsonl"
+    summary = [json.loads(line) for line in summary_path.read_text().splitlines()]
+    raw = [json.loads(line) for line in raw_path.read_text().splitlines()]
+    # Plant on the last slot: earlier successful rows must not hide a later fault.
+    if fault == "missing_raw":
+        raw.pop()
+    elif fault == "duplicate_raw":
+        raw.append(copy.deepcopy(raw[-1]))
+    elif fault == "wrong_arm":
+        wrong_path = raw_path.parent.with_name("orca__differential_drive") / "episodes.jsonl"
+        wrong_path.parent.mkdir()
+        wrong_path.write_text(raw_path.read_text())
+        summary[-1]["source_file"] = "runs/orca__differential_drive/episodes.jsonl"
+    elif fault == "success":
+        raw[-1]["metrics"]["success"] = False
+    elif fault == "collision":
+        raw[-1]["metrics"]["total_collision_count"] = 1
+    elif fault == "duplicate_summary":
+        summary.append(copy.deepcopy(summary[-1]))
+    elif fault == "escape":
+        summary[-1]["source_file"] = "../outside.jsonl"
+    elif fault == "missing_source":
+        summary[-1].pop("source_file")
+    raw_path.write_text("".join(json.dumps(row) + "\n" for row in raw))
+    summary_path.write_text("".join(json.dumps(row) + "\n" for row in summary))
+    with pytest.raises(ValueError, match=reason):
+        producer._load_sweep_rows(out)

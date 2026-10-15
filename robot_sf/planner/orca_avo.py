@@ -45,7 +45,7 @@ def build_orca_avo_config(payload: dict[str, Any]) -> ORCAAVOConfig:
     return ORCAAVOConfig(**{k: v for k, v in payload.items() if k in keys})
 
 
-def reachable_targets(preferred, current, delta, drive, *, rings=4, angles=32):
+def reachable_targets(preferred, current, delta, drive, *, rings=4, angles=32) -> np.ndarray:
     """Return deterministic candidates inside the speed and acceleration disks.
 
     The isotropic acceleration bound is the smaller of forward/braking authority.
@@ -78,7 +78,7 @@ def reachable_targets(preferred, current, delta, drive, *, rings=4, angles=32):
     return candidates
 
 
-def acceleration_paths(targets, current, position, delta, times):
+def acceleration_paths(targets, current, position, delta, times) -> np.ndarray:
     """Integrate a(t)=(target-v(t))/delta exactly, including initial velocity.
 
     Returns:
@@ -95,7 +95,9 @@ def acceleration_paths(targets, current, position, delta, times):
     )
 
 
-def trajectories_clear(paths, times, pedestrians, velocities, radii, static_geometry, padding):
+def trajectories_clear(
+    paths, times, pedestrians, velocities, radii, static_geometry, padding
+) -> np.ndarray:
     """Exclude swept relative contacts with CV pedestrians and static geometry.
 
     Linear chords cover samples; padding bounds exponential-path interpolation

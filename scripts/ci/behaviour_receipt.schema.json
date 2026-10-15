@@ -969,6 +969,60 @@
         "baseline"
       ],
       "additionalProperties": false
+    },
+    "source_outcomes": {
+      "description": "Required comparison observations shared by collection and admission. Paths list equivalent producer representations; multiple claims must agree.",
+      "type": "object",
+      "required": [
+        "success",
+        "collisions",
+        "steps"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "x-source-paths": [
+            [
+              "success"
+            ],
+            [
+              "metrics",
+              "success"
+            ],
+            [
+              "outcome",
+              "route_complete"
+            ]
+          ]
+        },
+        "collisions": {
+          "type": "integer",
+          "minimum": 0,
+          "x-source-paths": [
+            [
+              "collisions"
+            ],
+            [
+              "metrics",
+              "total_collision_count"
+            ],
+            [
+              "metrics",
+              "collisions"
+            ]
+          ]
+        },
+        "steps": {
+          "type": "integer",
+          "minimum": 1,
+          "x-source-paths": [
+            [
+              "steps"
+            ]
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

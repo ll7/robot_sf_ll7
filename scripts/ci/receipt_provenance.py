@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
 BINDING_FILE = "execution_binding.json"
@@ -17,6 +18,47 @@ class HardwareIdentityError(ValueError):
 def _require(condition: bool, reason: str) -> None:
     if not condition:
         raise HardwareIdentityError(f"hardware comparison invalid: provenance digest {reason}")
+
+
+@lru_cache(maxsize=1)
+def _outcome_validator():
+    """Load the comparison contract from the gate's canonical schema."""
+    from jsonschema import Draft202012Validator, validators
+
+    schema = json.loads(Path(__file__).with_name("behaviour_receipt.schema.json").read_text())
+    # JSON Schema allows integral floats; producer counters must be Python ints.
+    checker = Draft202012Validator.TYPE_CHECKER.redefine(
+        "integer", lambda _checker, value: type(value) is int
+    )
+    validator = validators.extend(Draft202012Validator, type_checker=checker)
+    return validator(schema["$defs"]["source_outcomes"])
+
+
+def comparison_outcomes(row: dict) -> dict:
+    """Require explicit typed observations, with no defaults or conflicting aliases."""
+    validator = _outcome_validator()
+    outcomes = {}
+    for field in validator.schema["required"]:
+        definition = validator.schema["properties"][field]
+        values = []
+        for path in definition["x-source-paths"]:
+            value = row
+            for part in path:
+                if not isinstance(value, dict) or part not in value:
+                    break
+                value = value[part]
+            else:
+                values.append(value)
+        _require(bool(values), f"required outcome {field} missing")
+        for value in values:
+            _require(
+                validator.evolve(schema=definition).is_valid(value),
+                f"required outcome {field} has invalid type or value",
+            )
+        _require(all(value == values[0] for value in values), f"outcome {field} claims conflict")
+        outcomes[field] = values[0]
+    validator.validate(outcomes)
+    return outcomes
 
 
 def source_files(root: Path) -> list[Path]:
@@ -320,6 +362,7 @@ def verified_raw_rows(
             row.setdefault("scheduler_job_id", job)
             row.setdefault("scheduler_node", node)
             validate_source_row_context(row, job, node)
+            comparison_outcomes(row)
             rows[key] = row
             locations[key] = path.resolve()
     _require(bool(rows), "source rows missing")
@@ -345,8 +388,7 @@ def verified_raw_rows(
             summary.setdefault("scheduler_node", node)
             validate_source_row_context(summary, job, node)
             _require(
-                producer._row_success(summary) == producer._row_success(raw)
-                and producer._row_collisions(summary) == producer._row_collisions(raw),
+                comparison_outcomes(summary) == comparison_outcomes(raw),
                 "producer summary/raw outcomes differ",
             )
             _producer_claim(summary, source_sha, arm_role, job, node)

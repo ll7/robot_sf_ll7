@@ -275,3 +275,91 @@ def test_collection_uses_the_same_raw_validity_rule(tmp_path, monkeypatch, side,
     assert result.returncode != 0, f"collection accepted {side} {attack}"
     assert result.stdout == ""
     assert not (tmp_path / "receipts/behaviour/synthetic.json").exists()
+
+
+def _remove_outcome(root, field, location):
+    """Remove an observation while preserving valid producer and transport seals."""
+    paths = []
+    if location in {"raw", "both"}:
+        paths.extend(root.glob("campaigns/**/episodes.jsonl"))
+    if location in {"summary", "both"}:
+        paths.extend(root.glob("episodes_*.jsonl"))
+    for path in paths:
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        row = rows[0]
+        row.pop(field, None)
+        if field == "success":
+            row.get("metrics", {}).pop("success", None)
+            row.get("outcome", {}).pop("route_complete", None)
+        elif field == "collisions":
+            row.get("metrics", {}).pop("total_collision_count", None)
+            row.get("metrics", {}).pop("collisions", None)
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+
+@pytest.mark.parametrize("side", ["head", "baseline"])
+@pytest.mark.parametrize("field", ["success", "collisions", "steps"])
+@pytest.mark.parametrize("location", ["raw", "summary", "both"])
+def test_collection_refuses_missing_outcome(tmp_path, monkeypatch, side, field, location):
+    _, head, baseline, command = _clean_fixture(tmp_path, monkeypatch)
+    root = head if side == "head" else baseline
+    _remove_outcome(root, field, location)
+    refresh_sweep_binding(root)
+    result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert result.returncode != 0, f"collection accepted missing {side} {location} {field}"
+    assert "outcome" in result.stderr.lower(), result.stderr
+    assert field in result.stderr, result.stderr
+    assert result.stdout == ""
+    assert not (tmp_path / "receipts/behaviour/synthetic.json").exists()
+
+
+@pytest.mark.parametrize("side", ["head", "baseline"])
+@pytest.mark.parametrize("field", ["success", "collisions", "steps"])
+@pytest.mark.parametrize("location", ["raw", "summary", "both"])
+def test_admission_refuses_missing_outcome(tmp_path, monkeypatch, side, field, location):
+    git, _, _, header, payload, payload_path = _collected(tmp_path, monkeypatch)
+    job = "123" if side == "head" else "456"
+    reference = payload["source_artifacts"][side][job]
+    root = _unpack(tmp_path, reference, "evidence")
+    source = header["scheduler" if side == "head" else "baseline"]["source_sha"]
+    (root / "execution_request.json").write_text(
+        json.dumps({"source_sha": source, "arm_role": side})
+    )
+    _remove_outcome(root, field, location)
+    seal_sweep(root)
+    _pack(tmp_path, root, reference, source, side, job)
+    blockers = _admit(tmp_path, monkeypatch, git, header, payload, payload_path)
+    assert blockers, f"admission accepted missing {side} {location} {field}"
+    assert any("outcome" in item.lower() and field in item for item in blockers), blockers
+
+
+@pytest.mark.parametrize("field", ["success", "collisions"])
+@pytest.mark.parametrize("value", [None, "0", -1, 0.5, [], {}])
+def test_comparison_refuses_malformed_outcomes(field, value):
+    from scripts.ci import make_behaviour_receipt as producer
+    from tests.validation.test_make_behaviour_receipt import _raw_row
+
+    row = _raw_row(1001)
+    row["metrics"]["success" if field == "success" else "total_collision_count"] = value
+    reader = producer._row_success if field == "success" else producer._row_collisions
+    with pytest.raises(gate.HardwareIdentityError, match=f"outcome {field}"):
+        reader(row)
+
+
+def test_comparison_preserves_false_and_zero():
+    from scripts.ci import make_behaviour_receipt as producer
+    from tests.validation.test_make_behaviour_receipt import _raw_row
+
+    row = _raw_row(1001, failing=True)
+    assert producer._row_success(row) is False
+    assert producer._row_collisions(row) == 0
+
+
+def test_comparison_refuses_conflicting_outcome_aliases():
+    from scripts.ci import make_behaviour_receipt as producer
+    from tests.validation.test_make_behaviour_receipt import _raw_row
+
+    row = _raw_row(1001, failing=True)
+    row["success"] = True
+    with pytest.raises(gate.HardwareIdentityError, match="outcome success.*conflict"):
+        producer._row_success(row)

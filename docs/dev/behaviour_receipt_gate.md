@@ -301,3 +301,15 @@ be internally consistent: independent review must verify its linked job,
 execution artifacts, body/config/source provenance and classifications. Review
 plus the digest/binding checks remain the safeguards against receipt forgery.
 Synthetic test rows prove validator behaviour only.
+
+### Required source outcomes
+
+Collection and admission use `source_outcomes` in
+`scripts/ci/behaviour_receipt.schema.json` for every raw episode and sweep summary.
+Success must be an explicit boolean, collisions a nonnegative integer, and steps a
+positive integer. The schema records the accepted producer field paths. If several
+paths are present, every value must be valid and they must agree. Raw and summary
+observations must agree on all three fields. Missing fields, nulls, coercible
+strings, invalid counters and conflicting aliases invalidate the comparison before
+outcomes are reported; explicit `false` success and zero collisions remain valid.
+Partial historical evidence must be reacquired, never backfilled into sealed files.

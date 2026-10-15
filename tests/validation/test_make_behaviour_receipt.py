@@ -133,6 +133,7 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
             "seed": row["seed"],
             "success": row["metrics"]["success"],
             "collisions": 0,
+            "steps": row["steps"],
             "execution_status": "written",
             "trace_complete": True,
             "source_file": "runs/goal__differential_drive/episodes.jsonl",

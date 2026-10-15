@@ -1,12 +1,12 @@
 """Default-off ORCA-seeded native-drive MPC, reusing the hybrid's CEM sampler."""
 
 from dataclasses import dataclass, fields
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from shapely import distance, linestrings
 
-from robot_sf.planner.clearance_geometry import swept_relative_clearance
+from robot_sf.planner.clearance_geometry import StaticObstacleClearance, swept_relative_clearance
 from robot_sf.planner.drive_rollout import native_drive_rollout_batch
 from robot_sf.planner.hybrid_orca_sampler import (
     HybridORCASamplerAdapter,
@@ -73,6 +73,8 @@ class ORCAMPCConfig(MPPISocialConfig):
 class _DriveMPCSampler(MPPISocialPlannerAdapter):
     """Use the unchanged MPPI/CEM loop with ORCA seeds and physical scoring."""
 
+    config: ORCAMPCConfig
+
     def __init__(self, config: ORCAMPCConfig) -> None:
         super().__init__(config)
         self.predictor = ConstantVelocityPedestrianPredictor()
@@ -82,7 +84,10 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
         self.last: dict[str, Any] = {}
 
     def _crowd_speed_cap(self, robot_pos, ped_pos) -> float:
-        return min(self.config.max_linear_speed, self.drive.max_linear_speed)
+        return min(
+            self.config.max_linear_speed,
+            cast("DifferentialDriveSettings", self.drive).max_linear_speed,
+        )
 
     def _extract_state(self, observation) -> tuple:
         state = list(super()._extract_state(observation))
@@ -123,7 +128,10 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
 
     def _initial_sequence(self, mean) -> np.ndarray:
         self.goal_seed = mean.copy()
-        self.goal_seed[:, 0] = min(self.config.max_linear_speed, self.drive.max_linear_speed)
+        self.goal_seed[:, 0] = min(
+            self.config.max_linear_speed,
+            cast("DifferentialDriveSettings", self.drive).max_linear_speed,
+        )
         mean[:] = self.seed_command
         self.seeds = [mean.copy(), self.goal_seed, np.zeros_like(mean)]
         if self.previous is not None:
@@ -131,7 +139,8 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
         for turn in (-1.0, 0.0, 1.0):
             sequence = self.goal_seed.copy()
             sequence[: len(mean) // 2, 1] = turn * min(
-                self.config.max_angular_speed, self.drive.max_angular_speed
+                self.config.max_angular_speed,
+                cast("DifferentialDriveSettings", self.drive).max_angular_speed,
             )
             self.seeds.append(sequence)
         self.best_cost = float("inf")
@@ -141,7 +150,11 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
 
     def _forecast(self, batch, *, braking_steps=0) -> tuple:
         return native_drive_rollout_batch(
-            batch, self.drive, *self.current_vw, self.dt, braking_steps=braking_steps
+            batch,
+            cast("DifferentialDriveSettings", self.drive),
+            *cast("tuple[float, float]", self.current_vw),
+            self.dt,
+            braking_steps=braking_steps,
         )
 
     def _prepare_candidates(self, batch) -> np.ndarray:
@@ -150,8 +163,10 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
         return self._forecast(batch)[2]
 
     def _batch_sequence_cost(self, *, batch, robot_pos, heading, goal, **_kwargs) -> np.ndarray:
-        drive, cfg = self.drive, self.config
-        tail = int(np.ceil(drive.max_linear_speed / drive.max_linear_decel / self.dt))
+        drive, cfg = cast("DifferentialDriveSettings", self.drive), self.config
+        tail = int(
+            np.ceil(drive.max_linear_speed / cast("float", drive.max_linear_decel) / self.dt)
+        )
         local, _headings, _velocities = self._forecast(batch, braking_steps=tail)
         rotation = np.array(
             [[np.cos(heading), np.sin(heading)], [-np.sin(heading), np.cos(heading)]]
@@ -162,7 +177,7 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
         # Bound chord interpolation error for a drive-limited continuous motion.
         padding = (
             (
-                max(drive.max_linear_accel, drive.max_linear_decel)
+                max(drive.max_linear_accel, cast("float", drive.max_linear_decel))
                 + drive.max_linear_speed * drive.max_angular_speed
             )
             * self.dt**2
@@ -170,8 +185,10 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
         )
         static = (
             np.full(len(batch), np.inf)
-            if self._static_clearance.geometry.is_empty
-            else distance(linestrings(paths), self._static_clearance.geometry)
+            if cast("StaticObstacleClearance", self._static_clearance).geometry.is_empty
+            else distance(
+                linestrings(paths), cast("StaticObstacleClearance", self._static_clearance).geometry
+            )
             - drive.radius
             - padding
         )
@@ -224,7 +241,10 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
         if np.linalg.norm(self.active_goal - robot["position"]) <= self.config.goal_tolerance:
             self.previous = None
             self.last = {"status": "goal_reached"}
-            return tuple(float(v) for v in self._forecast(np.zeros((1, 1, 2)))[2][0, 0])
+            return cast(
+                "tuple[float, float]",
+                tuple(float(v) for v in self._forecast(np.zeros((1, 1, 2)))[2][0, 0]),
+            )
         if self.best_sequence is None:
             command = tuple(self._forecast(np.zeros((1, 1, 2)))[2][0, 0])
             self.previous = None
@@ -242,6 +262,8 @@ class _DriveMPCSampler(MPPISocialPlannerAdapter):
 
 class ORCAMPCAdapter(HybridORCASamplerAdapter):
     """Reuse the hybrid ORCA/sampler composition and replan every control step."""
+
+    sampler_adapter: _DriveMPCSampler
 
     def __init__(self, config=None, *, allow_fallback=False) -> None:
         """Build the native ORCA seed head and existing CEM search head."""

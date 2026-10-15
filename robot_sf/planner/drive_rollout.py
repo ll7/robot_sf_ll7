@@ -1,5 +1,7 @@
 """Native differential-drive command forecasts shared by physical safety gates."""
 
+from typing import cast
+
 import numpy as np
 
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
@@ -87,7 +89,7 @@ def native_drive_rollout_batch(
         target = commands[:, index] if index < horizon else np.zeros((count, 2))
         acceleration = np.clip(
             (target - velocity) / dt,
-            [-settings.max_linear_decel, -settings.max_angular_accel],
+            [-cast("float", settings.max_linear_decel), -settings.max_angular_accel],
             [settings.max_linear_accel, settings.max_angular_accel],
         )
         velocity = np.clip(

@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
 AMMV_FEASIBILITY_SCHEMA = "ammv_feasibility.v1"
 
+_UNSET: Any = object()
+
 
 @dataclass(frozen=True, slots=True)
 class AmmvFeasibilityParams:
@@ -64,30 +66,59 @@ class AmmvFeasibilityParams:
 
     def __init__(
         self,
-        two_wheel_axle_track_m: float = 0.80,
+        two_wheel_axle_track_m: Any = _UNSET,
         wheelbase_m: float = 1.20,
         cog_height_m: float = 0.60,
-        single_wheel_axle_to_cog_m: float = 0.50,
+        single_wheel_axle_to_cog_m: Any = _UNSET,
         max_curvature_per_m: float = 1.0,
         in_place_yaw_rate_max: float = 0.5,
         zero_speed_eps: float = 1e-6,
         **kwargs: Any,
     ) -> None:
-        """Create proxy params, accepting deprecated aliases for one release."""
-        if "track_width_m" in kwargs:
+        """Create proxy params, accepting deprecated aliases for one release.
+
+        Passing a deprecated alias together with its layout-neutral replacement
+        carrying a different value raises ``TypeError`` instead of silently
+        letting the alias win (issue #10279).
+        """
+        alias_track = kwargs.pop("track_width_m", _UNSET)
+        if alias_track is not _UNSET:
             warnings.warn(
                 "track_width_m is deprecated; use two_wheel_axle_track_m instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            two_wheel_axle_track_m = kwargs.pop("track_width_m")
-        if "front_axle_to_cog_m" in kwargs:
+        alias_cog = kwargs.pop("front_axle_to_cog_m", _UNSET)
+        if alias_cog is not _UNSET:
             warnings.warn(
                 "front_axle_to_cog_m is deprecated; use single_wheel_axle_to_cog_m instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            single_wheel_axle_to_cog_m = kwargs.pop("front_axle_to_cog_m")
+        if (
+            alias_track is not _UNSET
+            and two_wheel_axle_track_m is not _UNSET
+            and alias_track != two_wheel_axle_track_m
+        ):
+            raise TypeError(
+                "Conflicting values for two_wheel_axle_track_m "
+                f"({two_wheel_axle_track_m!r}) and deprecated alias track_width_m "
+                f"({alias_track!r}); pass only one."
+            )
+        if (
+            alias_cog is not _UNSET
+            and single_wheel_axle_to_cog_m is not _UNSET
+            and alias_cog != single_wheel_axle_to_cog_m
+        ):
+            raise TypeError(
+                "Conflicting values for single_wheel_axle_to_cog_m "
+                f"({single_wheel_axle_to_cog_m!r}) and deprecated alias front_axle_to_cog_m "
+                f"({alias_cog!r}); pass only one."
+            )
+        if two_wheel_axle_track_m is _UNSET:
+            two_wheel_axle_track_m = alias_track if alias_track is not _UNSET else 0.80
+        if single_wheel_axle_to_cog_m is _UNSET:
+            single_wheel_axle_to_cog_m = alias_cog if alias_cog is not _UNSET else 0.50
         if kwargs:
             unexpected = ", ".join(sorted(kwargs))
             raise TypeError(

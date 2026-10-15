@@ -577,24 +577,23 @@ def _primary_checkout_doctor() -> tuple[str, str]:
     from scripts.dev.worktree_hygiene_snapshot import primary_checkout_staleness
 
     state = primary_checkout_staleness()
-    head = str(state["head_sha"] or "unresolved")
-    origin_main = str(state["origin_main_sha"] or "unresolved")
-    behind = state["head_behind_origin_main"]
-    if state["origin_main_sha"] is None:
+    head = state.head_sha or "unresolved"
+    origin_main = state.origin_main_sha or "unresolved"
+    if state.origin_main_sha is None:
         return (
             "unknown",
             f"origin/main could not be resolved from this checkout (HEAD {head}); "
             "run 'git fetch origin main' before trusting local reads",
         )
-    if state["stale_primary_checkout"]:
+    if state.stale_primary_checkout:
         return (
             "stale",
-            f"detached HEAD {head} is {behind} commits behind origin/main {origin_main}; "
-            "reads from this checkout return stale code. Repair: "
+            f"detached HEAD {head} is {state.head_behind_origin_main} commits behind "
+            f"origin/main {origin_main}; reads from this checkout return stale code. Repair: "
             "git fetch origin main && git checkout --detach origin/main",
         )
     detail = f"HEAD {head} vs origin/main {origin_main}"
-    if state["head_attached"] is False:
+    if not state.head_attached:
         detail += " (detached, current)"
     return "ok", detail
 

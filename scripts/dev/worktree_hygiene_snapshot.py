@@ -130,6 +130,17 @@ class RetirementProjection:
 
 
 @dataclass(frozen=True, slots=True)
+class PrimaryCheckoutState:
+    """Identity and staleness of the checkout a command was run from."""
+
+    head_sha: str | None
+    origin_main_sha: str | None
+    head_behind_origin_main: int | None
+    head_attached: bool
+    stale_primary_checkout: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RepoStatus:
     """Optional status for the current checkout."""
 
@@ -791,7 +802,7 @@ def _behind_origin_main() -> int | None:
     return int(value) if value.isdigit() else None
 
 
-def primary_checkout_staleness() -> dict[str, object]:
+def primary_checkout_staleness() -> PrimaryCheckoutState:
     """Describe whether the primary checkout is detached and behind ``origin/main``.
 
     ``stale_primary_checkout`` is ``True`` only for a detached HEAD that is behind the
@@ -805,14 +816,14 @@ def primary_checkout_staleness() -> dict[str, object]:
     origin_main_sha = _resolve_sha("origin/main")
     head_sha = _resolve_sha("HEAD")
     behind = _behind_origin_main() if origin_main_sha else None
-    stale = bool(head_attached is False and behind is not None and behind > 0)
-    return {
-        "head_sha": head_sha,
-        "origin_main_sha": origin_main_sha,
-        "head_behind_origin_main": behind,
-        "head_attached": head_attached,
-        "stale_primary_checkout": stale,
-    }
+    stale = bool(not head_attached and behind is not None and behind > 0)
+    return PrimaryCheckoutState(
+        head_sha=head_sha,
+        origin_main_sha=origin_main_sha,
+        head_behind_origin_main=behind,
+        head_attached=head_attached,
+        stale_primary_checkout=stale,
+    )
 
 
 def _repo_status() -> RepoStatus | None:
@@ -830,11 +841,11 @@ def _repo_status() -> RepoStatus | None:
         dirty_entries=max(0, len(lines) - 1),
         ahead=ahead,
         behind=behind,
-        head_sha=primary["head_sha"],
-        origin_main_sha=primary["origin_main_sha"],
-        head_behind_origin_main=primary["head_behind_origin_main"],
-        head_attached=bool(primary["head_attached"]),
-        stale_primary_checkout=primary["stale_primary_checkout"],
+        head_sha=primary.head_sha,
+        origin_main_sha=primary.origin_main_sha,
+        head_behind_origin_main=primary.head_behind_origin_main,
+        head_attached=primary.head_attached,
+        stale_primary_checkout=primary.stale_primary_checkout,
     )
 
 

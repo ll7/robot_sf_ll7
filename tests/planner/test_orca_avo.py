@@ -174,3 +174,30 @@ def test_opt_in_registration_and_default_byte_equivalence():
     variant, meta = _build_policy("orca_avo", config, robot_kinematics="differential_drive")
     assert isinstance(variant._planner_adapter, ORCAAVOPlannerAdapter)
     assert meta["status"] == "ok"
+
+
+def test_filter_rejects_local_grid_and_preserves_cv_velocity_frame(monkeypatch):
+    """The real integration excludes grid contacts and rotates ego CV predictions."""
+    adapter = ORCAAVOPlannerAdapter(ORCAAVOConfig(avo_horizon=1.0))
+    bind(adapter)
+    monkeypatch.setattr(ORCAPlannerAdapter, "plan_velocity_world", lambda *_: np.array([0.0, 1.0]))
+    obs = observation(speed=0.0, heading=np.pi / 2)
+    obs["pedestrians"]["count"] = [0]
+    np.testing.assert_allclose(adapter.plan_velocity_world(obs), [0, 0.1], atol=1e-12)
+    monkeypatch.setattr(
+        adapter,
+        "_extract_obstacles_from_grid",
+        lambda *_: (np.array([[0.0, 0.0]]), np.array([0.1])),
+    )
+    adapter.plan_velocity_world(obs)
+    assert adapter._avo_last["status"] == "no_safe_target_braking"
+    monkeypatch.setattr(
+        adapter, "_extract_obstacles_from_grid", lambda *_: (np.empty((0, 2)), np.empty(0))
+    )
+    # A pedestrian at world (0,1) moving ego-left travels toward the stationary
+    # robot at heading pi/2: ego (+1,0) -> world (0,+1), ego (-1,0) -> (0,-1).
+    obs["pedestrians"].update(
+        positions=np.array([[0.0, 1.0]]), velocities=np.array([[-1.0, 0.0]]), count=[1]
+    )
+    adapter.plan_velocity_world(obs)
+    assert adapter._avo_last["status"] == "no_safe_target_braking"

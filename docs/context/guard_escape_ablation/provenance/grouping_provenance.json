@@ -1,0 +1,14 @@
+{
+  "mapping_source": "[grouping-source]/scripts/dev/diss_job13175_group_success.py",
+  "mapping_source_sha256": "1badd54f21d8d5530aa7af8583fb06ab640039d3c97cec86ded98a260eb8a4e0",
+  "mapping_source_repository": "ll7/diss",
+  "mapping_source_checkout_commit": "dbd84542ac1942fd6fc9ea8220da9fe3dae62718",
+  "use": "Read-only literal reconstructed group mapping; no thesis change or claim admission",
+  "selected_groups": [
+    "static constriction",
+    "portal",
+    "crowding"
+  ],
+  "excluded": "francis2023_narrow_doorway; reconstructed mapping marks infeasible",
+  "ranking_scope": "Historical 0.0.7 group report supplied mapping rationale; this packet assumes no current-version portal rank."
+}

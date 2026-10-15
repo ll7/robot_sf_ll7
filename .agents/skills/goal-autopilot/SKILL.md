@@ -467,7 +467,7 @@ Before each phase, run a delegation checkpoint:
   incomplete and retry with an explicit local timeout + heartbeat plan.
 - Start at least one eligible routed worker for any phase likely to exceed about 10 minutes,
   unless the next action is a local-only publication step or all routes are unavailable. Resolve
-  the provider/model through the [shared model-routing pointer](../../.agents/README.md#shared-model-routing)
+  the provider/model through the [shared model-routing pointer](../../README.md#shared-model-routing)
   using the phase task class and current evidence state; do not select a model locally.
 - If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
   `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
@@ -823,7 +823,7 @@ subagent/worker, and should explain any dirty worktree left behind.
 
 ### Shared model routing
 
-Use the [shared model-routing pointer](../../.agents/README.md#shared-model-routing) before dispatching
+Use the [shared model-routing pointer](../../README.md#shared-model-routing) before dispatching
 any delegated phase. It owns the current native tiers, evidenced escalation rule, and external
 provider budget alternatives. This skill must not duplicate a model inventory or maintain a local
 sidecar route table. Route selection is route evidence only; the controller still reviews artifacts,

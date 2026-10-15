@@ -134,6 +134,7 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
     HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+    ORCA_PEDESTRIANS_V1,
     PYSF_POSITION_SLICE,
     PYSF_VELOCITY_SLICE,
     fov_attenuated_total_force,
@@ -729,6 +730,8 @@ class Simulator:
         Route spawning honors SimulationSettings route spawn options when provided.
         """
         check_seed_config(self.config, boundary="simulator construction")
+        if self.config.pedestrian_model == ORCA_PEDESTRIANS_V1:
+            self._validate_orca_pedestrians()
         # The ``peds_have_obstacle_forces is None`` warning-and-default-to-False guard
         # stays in Simulator (issue #6465): it mutates ``self`` before the shared
         # :func:`_build_pysf_simulation` factory reads the resolved value.
@@ -2031,10 +2034,58 @@ class Simulator:
                 self.social_force_kernel_metadata()
             )
 
-    def step_once(self, actions: list[RobotAction]) -> None:
+    def _validate_orca_pedestrians(self) -> None:
+        """Fail explicitly for unavailable native ORCA or incompatible force features."""
+        from robot_sf.ped_npc.orca_pedestrians import require_native_orca  # noqa: PLC0415
+
+        require_native_orca()
+        if self.config.oracle_force_trace_enabled or self.config.residual_adversary.is_active:
+            raise ValueError("orca_pedestrians_v1 does not support SFM force tracing or residuals")
+
+    def _step_orca_pedestrians(self) -> None:
+        """Step the independent crowd solver without evaluating Social Force components."""
+        from robot_sf.ped_npc.orca_pedestrians import step_orca_pedestrians  # noqa: PLC0415
+
+        self._validate_orca_pedestrians()
+        peds = self.pysf_sim.peds
+        if peds.max_speeds is None:
+            raise RuntimeError("ORCA pedestrian max_speeds are unavailable")
+        robots = []
+        for robot in self.robots:
+            position, heading = robot.pose
+            velocity = getattr(robot.state, "velocity_xy", None)
+            if velocity is None:
+                speed = float(robot.current_speed[0])
+                velocity = (speed * cos(heading), speed * sin(heading))
+            robots.append((*position, *velocity, float(robot.config.radius)))
+        before_velocity = peds.state[:, 2:4].copy()
+        next_state = step_orca_pedestrians(
+            peds.state,
+            peds.max_speeds,
+            dt=self.config.time_per_step_in_secs,
+            radius=self.config.ped_radius,
+            obstacle_segments=(
+                self.get_obstacle_lines() if self.peds_have_obstacle_forces else np.empty((0, 4))
+            ),
+            robot_discs=np.asarray(robots, dtype=float).reshape(-1, 5),
+        )
+        # Preserve the shared state-array identity used by route/zone controllers.
+        peds.state[...] = next_state
+        peds.update(peds.state, self.groups.groups_as_lists)
+        self.ped_headings = self._headings_from_current_ped_velocities()
+        # These are effective accelerations, not Social Force components.
+        self.last_ped_forces = (
+            next_state[:, 2:4] - before_velocity
+        ) / self.config.time_per_step_in_secs
+        self.last_robot_ped_forces = np.zeros_like(self.last_ped_forces)
+        self.last_robot_force_inputs = {}
+        self.last_force_computation = None
+        self.last_step_diagnostics = None
+
+    def step_once(self, actions: list[RobotAction]) -> None:  # noqa: C901
         """Advance simulation by one timestep.
 
-        Updates pedestrian behaviors and physics (via PySocialForce), applies
+        Updates pedestrian behaviors and selected physics (SFM or native ORCA), applies
         robot actions, and updates navigation state. Called once per episode
         timestep.
 
@@ -2050,6 +2101,12 @@ class Simulator:
             self._begin_oracle_transition()
         for behavior in self.peds_behaviors:
             behavior.step()
+        if self.pedestrian_model == ORCA_PEDESTRIANS_V1:
+            self._step_orca_pedestrians()
+            for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
+                robot.apply_action(action, self.config.time_per_step_in_secs)
+                nav.update_position(robot.pos)
+            return
         if trace_enabled:
             self._oracle_post_behavior_state = np.array(
                 self.pysf_state.pysf_states(),
@@ -2253,6 +2310,10 @@ class PedSimulator(Simulator):
         forces and robot interactions, and prepares robot navigation paths.
         """
         check_seed_config(self.config, boundary="simulator construction")
+        if self.config.pedestrian_model == ORCA_PEDESTRIANS_V1:
+            raise ValueError(
+                "orca_pedestrians_v1 supports robot environments, not ego-pedestrian environments"
+            )
         configured_policy = getattr(self.config, "goal_completion_policy", None)
         map_policy = getattr(self.map_def, "goal_completion_policy", None)
         self.goal_completion_policy = normalize_goal_completion_policy(

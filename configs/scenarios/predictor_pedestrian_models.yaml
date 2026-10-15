@@ -1,5 +1,5 @@
-# Diagnostic development pair for #10407; no benchmark or realism claim.
-# Reuses the existing Zanlungo model; not included in standard campaign manifests.
+# Diagnostic development options for #10407; no benchmark or realism claim.
+# Native ORCA is independent of SFM; Zanlungo is an SFM-related comparison.
 scenarios:
   - name: predictor_social_force_control
     map_file: ../../maps/svg_maps/classic_head_on_corridor.svg
@@ -31,4 +31,11 @@ scenarios:
         angle_threshold_rad: 0.7853981633974483
         max_force: 5.0
         include_ped_ped: true
+    metadata: *diagnostic_metadata
+  - name: predictor_orca_alternative
+    map_file: ../../maps/svg_maps/classic_head_on_corridor.svg
+    seeds: [1001]
+    simulation_config:
+      <<: *shared_simulation
+      pedestrian_model: orca_pedestrians_v1
     metadata: *diagnostic_metadata

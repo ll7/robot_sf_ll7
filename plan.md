@@ -37,7 +37,8 @@ and source reads supplied the survey. No graph result is authority.
   This is a stronger equation mismatch than adding TTC to the default force.
 - ORCA exists for robot planning (`robot_sf/planner/socnav_orca.py`); the inspected
   pedestrian controllers and supported-model registry contain no ORCA crowd
-  selector. No new solver dependency is warranted for this low-priority task.
+  selector. The vendored `third_party/python-rvo2` dependency is already installed;
+  its native solver can be reused without introducing a new dependency.
 - Replay exists for benchmark trace inspection and generated-scenario state
   initialization (`robot_sf/benchmark/scenario_generation/replay_adapter.py`);
   it is not a supported continuous trajectory-replay pedestrian-model selector.
@@ -51,14 +52,19 @@ and source reads supplied the survey. No graph result is authority.
 
 # Steps and decisions
 
-1. Add matched development scenarios selecting default and existing Zanlungo
-   dynamics. Pin inputs and use only dev seed 1001 (permitted band 1001–1200).
+1. Add matched development scenarios selecting default, existing Zanlungo, and
+   independent native ORCA dynamics. Pin inputs and use only dev seed 1001
+   (permitted band 1001–1200 for new runs/evidence).
 2. Test real scenario loading and real simulator stepping: identical initial
    populations; finite, deterministic, distinct alternative trajectories;
    omitted-selector default equals explicit default and direct legacy PedState
    stepping for the same forces.
-3. Document selection, retained shared SFM terms, and limits. This does not prove
-   predictor gains, physical realism, or full independence from SFM equations.
+3. ORCA bypasses SFM force calculation/integration, using existing route goals,
+   speed caps, wall segments, and current robot discs. Rebuild the small native
+   solver each step so reset/respawn cannot retain stale native actor state.
+   Document instant velocity choice, reciprocal avoidance, lack of SFM social
+   cohesion/robot forces, and diagnostic-only status. Reject SFM-only residual
+   adversary/force tracing and the ego-pedestrian simulator for this first mode.
 4. Run focused tests, lint/format, and required readiness checks. Inspect the
    final diff and GitHub PR head; never self-approve or merge.
 
@@ -77,19 +83,35 @@ and source reads supplied the survey. No graph result is authority.
 - Commands: shared-venv `uv run pytest tests/sim/test_predictor_pedestrian_models.py
   -q`, scoped Ruff check/format, then `BASE_REF=origin/main
   scripts/dev/pr_ready_check.sh`. Preserve exact outcomes and any blockers.
-  Held-out 111–140 and sealed 50036–59019 are forbidden. Existing broad tests
-  run with a lane-local copy of the repository's test seed harness tightened to
-  reject simulation seeds outside 1001–1200, including child interpreters. This
-  harness is outside the checkout and does not change repository seed policy.
-  A pre-existing fixture outside that band blocks the broad check rather than
-  authorizing a different seed. No benchmark execution is authorized.
+  New simulations/evidence use dev seeds 1001–1200; held-out 111–140 and sealed
+  50036–59019 remain forbidden. Per orchestrator clarification, existing unit
+  fixtures are not experiments. Run standard readiness with the repository's
+  own harness and no lane seed_policy plugin; leave existing fixture seeds alone.
+  No benchmark execution is authorized.
+
+# Clarified model choice and proof
+
+The initial Zanlungo-only delivery was insufficient for full equation
+independence: it retains several SFM terms. Source review at
+`c05bc6a3aa83ba75ecc169024a3e7b6c1b1ba2c7` found native `PyRVOSimulator`,
+agent position/velocity/preference APIs, wall obstacles, and collaboration
+coefficients in `socnav_orca.py` and the vendored wrapper. Broker exact-text
+results were verified against those bytes (partial retrieval, no absence claim).
+The generated replay adapter only initializes routes and does not enforce
+time-indexed positions; native ORCA is the smaller independent implementation.
+
+New tests protect native free motion/speed caps, head-on/wall avoidance, robot
+disc influence, empty crowd/reset handling, missing-backend rejection, and SFM
+independence (poison SFM force providers during real simulator steps). Existing
+pair tests miss this new solver. No production test seam is needed. First show
+the new selector test failing on the previous runtime; then prove the full path.
 
 # Implementation evidence
 
-- Reused the existing Zanlungo implementation with zero runtime code changes.
+- Initial delivery reused the existing Zanlungo implementation with zero runtime code changes.
   The scenario pair loads through the public loader and the factory constructs
   real simulators with identical four-pedestrian starting populations.
-- Focused suite: 31 passed (new pair/default-equivalence/runtime tests plus
+- Initial focused suite: 31 passed (new pair/default-equivalence/runtime tests plus
   existing Zanlungo and TTC tests), under the stricter lane seed guard.
 - Test sensitivity: temporarily scaling default dispatched forces by 0.5 made
   the default-equivalence assertion fail (16/28 state elements differed).
@@ -99,6 +121,14 @@ and source reads supplied the survey. No graph result is authority.
   of a pre-existing runtime bug: base runtime already supports this model.
 - Scoped Ruff lint and format checks passed. Final broad readiness outcomes are
   recorded in the external task report and PR validation section.
+- Clarified implementation: independent native ORCA now bypasses all SFM
+  providers. New selector test first failed on the previous runtime with
+  `Unsupported pedestrian_model 'orca_pedestrians_v1'`, then passed. Current
+  focused suite: 51 passed, including real ORCA construction/stepping, native
+  geometric contracts, default equivalence and existing SFM/timing coverage.
+- The previous lane-policy readiness failure is superseded by the explicit
+  orchestrator clarification. Standard readiness runs with no lane plugin and
+  no changes to existing fixtures.
 
 # Recovery and handoff
 

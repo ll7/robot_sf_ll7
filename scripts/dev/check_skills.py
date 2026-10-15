@@ -505,6 +505,44 @@ def _preflight(skill_name: str, json_output: bool = False) -> int:
     if not json_output:
         _print_preflight_header(canonical, requires)
 
+    available, missing, unrecognized = _collect_requirement_results(requires, results, json_output)
+
+    if not json_output:
+        print()
+        _print_preflight_summary(available, missing, unrecognized)
+
+    doctor_status, doctor_detail = _primary_checkout_doctor()
+    if json_output:
+        assert results is not None
+        results["summary"] = {
+            "available": available,
+            "missing": missing,
+            "unrecognized": unrecognized,
+        }
+        results["primary_checkout"] = {
+            "status": doctor_status,
+            "detail": doctor_detail,
+        }
+        if missing > 0 or unrecognized > 0 or doctor_status != "ok":
+            results["status"] = "fail"
+        print(json.dumps(results))
+    else:
+        print(f"  {doctor_status:12} checkout    {doctor_detail}")
+        if doctor_status != "ok":
+            print()
+            print(f"Result: FAIL (primary checkout is not current: {doctor_status})")
+
+    if missing > 0 or unrecognized > 0:
+        return 1
+    return 0 if doctor_status == "ok" else 1
+
+
+def _collect_requirement_results(
+    requires: list[str],
+    results: dict[str, Any] | None,
+    json_output: bool,
+) -> tuple[int, int, int]:
+    """Run every declared requirement check and return available/missing/unrecognized counts."""
     available = 0
     missing = 0
     unrecognized = 0
@@ -512,39 +550,53 @@ def _preflight(skill_name: str, json_output: bool = False) -> int:
     for req in requires:
         status, detail = _run_preflight_check(req, results, json_output)
 
-        if status == "ok":
+        if status in {"ok", "warning"}:
+            # project5 edge case: found gh but missing jq still counts as available.
             available += 1
             if not json_output:
-                print(f"  ok            {req:12}  {detail}")
-        elif status == "warning":
-            # project5 edge case: found gh but missing jq
-            available += 1
-            if not json_output:
-                print(f"  warning       {req:12}  {detail}")
+                print(f"  {status:12} {req:12}  {detail}")
         elif status == "missing":
             missing += 1
             if not json_output:
-                print(f"  missing       {req:12}  {detail}")
+                print(f"  {'missing':12} {req:12}  {detail}")
         else:
             unrecognized += 1
             if not json_output:
-                print(f"  UNRECOGNIZED  {req:12}  {detail}")
+                print(f"  {'UNRECOGNIZED':12} {req:12}  {detail}")
 
-    if json_output:
-        assert results is not None
-        if missing > 0 or unrecognized > 0:
-            results["status"] = "fail"
-        results["summary"] = {
-            "available": available,
-            "missing": missing,
-            "unrecognized": unrecognized,
-        }
-        print(json.dumps(results))
-    else:
-        print()
-        _print_preflight_summary(available, missing, unrecognized)
+    return available, missing, unrecognized
 
-    return 1 if missing > 0 or unrecognized > 0 else 0
+
+def _primary_checkout_doctor() -> tuple[str, str]:
+    """Return a preflight verdict and detail for the checkout the caller runs from.
+
+    ``stale_primary_checkout`` is True only for a detached HEAD behind the local
+    ``origin/main`` ref. An unreadable ``origin/main`` is reported as ``unknown`` so
+    the caller fails closed instead of certifying an unverified checkout.
+    """
+    from scripts.dev.worktree_hygiene_snapshot import primary_checkout_staleness
+
+    state = primary_checkout_staleness()
+    head = str(state["head_sha"] or "unresolved")
+    origin_main = str(state["origin_main_sha"] or "unresolved")
+    behind = state["head_behind_origin_main"]
+    if state["origin_main_sha"] is None:
+        return (
+            "unknown",
+            f"origin/main could not be resolved from this checkout (HEAD {head}); "
+            "run 'git fetch origin main' before trusting local reads",
+        )
+    if state["stale_primary_checkout"]:
+        return (
+            "stale",
+            f"detached HEAD {head} is {behind} commits behind origin/main {origin_main}; "
+            "reads from this checkout return stale code. Repair: "
+            "git fetch origin main && git checkout --detach origin/main",
+        )
+    detail = f"HEAD {head} vs origin/main {origin_main}"
+    if state["head_attached"] is False:
+        detail += " (detached, current)"
+    return "ok", detail
 
 
 def _print_preflight_header(skill: str, requires: list[str]) -> None:

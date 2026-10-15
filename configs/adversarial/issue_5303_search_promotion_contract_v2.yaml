@@ -171,7 +171,9 @@ input_provenance:
       # Refreshed for PR #9996: guarded_ppo default algorithm identity is now ppo;
       # hybrid_rule_local_planner and orca enrichment, including
       # default_execution_mode, are unchanged.
-      sha256: bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7
+      # Refreshed for issue #10404: additive, default-off orca_avo metadata only;
+      # existing ORCA/hybrid metadata and all powered design fields are unchanged.
+      sha256: 650afaca2a476d492276d64e2076b4be074f66ea3c9056c782b2f8ef6cd4a177
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099

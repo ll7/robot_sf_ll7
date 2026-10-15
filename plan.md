@@ -129,6 +129,12 @@ the new selector test failing on the previous runtime; then prove the full path.
 - The previous lane-policy readiness failure is superseded by the explicit
   orchestrator clarification. Standard readiness runs with no lane plugin and
   no changes to existing fixtures.
+- Standard readiness exposed two integration contracts: the new public selector
+  needs its reviewed export-list entry, and native backend discovery must use
+  `robot_sf.common.optional_import.try_import` to retain the import-guard ratchet.
+  Both were corrected without changing fixed-seed fixtures or inventory ceilings.
+  The export/guard/runtime verification passed 113 tests; its clean-HEAD-only
+  nested gate must be rerun after committing these fixes.
 
 # Recovery and handoff
 

@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
 
 import numpy as np
 
+from robot_sf.common.optional_import import try_import
+
 
 def require_native_orca() -> Any:
     """Return the existing rvo2 backend, failing explicitly without a fallback."""
-    try:
-        return import_module("rvo2")
-    except ImportError as exc:
+    backend = try_import("rvo2")
+    if backend is None:
         raise RuntimeError(
             "orca_pedestrians_v1 requires the native rvo2 backend; "
             "install the repository's third_party/python-rvo2 dependency"
-        ) from exc
+        )
+    return backend
 
 
 def _validate_orca_inputs(state, speeds, walls, robots, *, dt, radius) -> None:

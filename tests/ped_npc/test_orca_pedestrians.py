@@ -102,9 +102,6 @@ def test_empty_crowd_and_degenerate_wall_are_supported() -> None:
 def test_missing_native_backend_fails_without_sfm_fallback(monkeypatch) -> None:
     """A selected independent model cannot silently fall back to Social Force."""
 
-    def unavailable(_name):
-        raise ImportError("not installed")
-
-    monkeypatch.setattr(orca_pedestrians, "import_module", unavailable)
+    monkeypatch.setattr(orca_pedestrians, "try_import", lambda _name: None)
     with pytest.raises(RuntimeError, match="requires the native rvo2 backend"):
         _step(np.zeros((1, 6)))

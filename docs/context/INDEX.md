@@ -1,5 +1,7 @@
 # Context Retrieval Index
 
+[issue_10404_orca_avo.md](issue_10404_orca_avo.md): opt-in research-only ORCA acceleration filter and empirical claim boundary.
+
 Issue #10211 cross-CPU reconstruction: 12,000 native development episodes on EPYC
 9354P and dual Xeon Silver 4310, default/kernel-pinned/float64 comparisons, and
 checksum-verified external evidence:

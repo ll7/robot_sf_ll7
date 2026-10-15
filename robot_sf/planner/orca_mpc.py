@@ -283,7 +283,7 @@ class ORCAMPCAdapter(HybridORCASamplerAdapter):
             raise ValueError("orca_mpc requires exact map geometry")
         self.sampler_adapter.drive = drive
 
-    def reset(self, *, seed=None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear the prior sequence, decisions and sampler RNG for each episode."""
         super().reset(seed=seed)
         self.sampler_adapter._rng = np.random.default_rng(

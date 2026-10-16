@@ -698,7 +698,9 @@ preflight_check_docs_evidence_integrity() {
     while IFS= read -r -d '' changed_path; do
       case "$changed_path" in
         *.md|*.markdown|docs/*|*.json|*.yaml|*.yml|\
-        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md)
+        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md|\
+        scripts/dev/check_docs_evidence_integrity.py|\
+        tests/dev/test_docs_link_integrity_workflow.py)
           relevant=1 ;;
       esac
     done < "$pr_ready_docs_scope_file"

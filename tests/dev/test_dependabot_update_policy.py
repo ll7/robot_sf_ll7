@@ -911,3 +911,53 @@ def test_sync_apply_flag_requires_sync_action_pins_flag() -> None:
     """--apply alone fails closed instead of silently doing nothing."""
     with pytest.raises(SystemExit):
         main(["--apply"])
+
+
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_sync_action_pins_shared_contract_across_workflows(
+    tmp_path: Path, apply: bool, conflicting: bool
+) -> None:
+    """Shared pins sync once; disagreeing workflow destinations never write."""
+    old_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {OLD_ACTION_REF}\n"
+    _make_workflow_pin_repo(tmp_path, head_workflow=old_workflow + "\n")
+    other = tmp_path / ".github/workflows/other.yml"
+    other.write_text(old_workflow, encoding="utf-8")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "two workflows")
+    base_sha = _run_git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / ".github/workflows/ci.yml").write_text(
+        old_workflow.replace(OLD_ACTION_REF, NEW_ACTION_REF), encoding="utf-8"
+    )
+    other_ref = "example/demo-action@" + "c" * 40 if conflicting else NEW_ACTION_REF
+    other.write_text(old_workflow.replace(OLD_ACTION_REF, other_ref), encoding="utf-8")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "update both")
+    contract = tmp_path / "tests/dev/contract.py"
+    before = contract.read_bytes()
+    kwargs = {
+        "repo_root": tmp_path,
+        "base_ref": base_sha,
+        "changed_files": [".github/workflows/ci.yml", ".github/workflows/other.yml"],
+        "apply": apply,
+    }
+    if conflicting:
+        with pytest.raises(WorkflowActionPinSyncError, match="conflicting destinations"):
+            sync_workflow_action_pins(**kwargs)
+        assert contract.read_bytes() == before
+        assert not _run_git(tmp_path, "status", "--porcelain")
+        return
+
+    report = sync_workflow_action_pins(**kwargs)
+
+    assert report["status"] == ("applied" if apply else "dry_run")
+    assert report["applied"] is apply
+    assert len(report["files"]) == 1
+    assert report["files"][0]["replacements"] == [
+        {"old_ref": OLD_ACTION_REF, "new_ref": NEW_ACTION_REF, "occurrences": 1}
+    ]
+    assert f"-{OLD_ACTION_REF}" in report["files"][0]["diff"]
+    assert f"+{NEW_ACTION_REF}" in report["files"][0]["diff"]
+    assert contract.read_text(encoding="utf-8") == (
+        NEW_ACTION_REF + "\n" if apply else OLD_ACTION_REF + "\n"
+    )

@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -2762,11 +2762,113 @@ def _preflight_check_commit_provenance(
     return repository_commit, episode_commits
 
 
+def _snqi_v2_validate_metrics(metrics: object) -> None:  # noqa: C901
+    """Refuse incomplete v2 scores, impossible strata and inconsistent term sums."""
+    from robot_sf.benchmark.snqi.v2_spec import TERMS, WEIGHTS  # noqa: PLC0415
+
+    def number(value: object, label: str) -> float:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"SNQI-v2 {label} must be finite numeric data")
+        return float(value)
+
+    if not isinstance(metrics, dict):
+        raise ValueError("SNQI-v2 metrics are missing")
+    success = metrics.get("success")
+    if not isinstance(success, bool):
+        success = number(success, "success")
+        if success not in (0, 1):
+            raise ValueError("SNQI-v2 success must be binary")
+    collisions = number(metrics.get("total_collision_count"), "total_collision_count")
+    if collisions < 0 or collisions % 1 != 0:
+        raise ValueError("SNQI-v2 total_collision_count must be a nonnegative integer")
+    score = number(metrics.get("snqi_v2"), "score")
+    # compute.py suppresses T for failures and bounds every quality term in [0, 1].
+    quality_mass = math.fsum(WEIGHTS[t] for t in TERMS[2:] if success or t != "T")
+    upper = WEIGHTS["S"] * success - WEIGHTS["C"] * (collisions > 0)
+    if not upper - quality_mass - 1e-9 <= score <= upper + 1e-9:
+        raise ValueError("SNQI-v2 score violates the declared stratum bounds")
+    terms = metrics.get("snqi_v2_terms")
+    if not isinstance(terms, dict) or set(terms) != set(TERMS):
+        raise ValueError("SNQI-v2 requires all seven normalized terms")
+    term_values = cast("dict[str, Any]", terms)
+    normalized = {t: number(term_values[t], f"term {t}") for t in TERMS}
+    if any(not 0 <= value <= 1 for value in normalized.values()):
+        raise ValueError("SNQI-v2 normalized terms must be in [0, 1]")
+    if normalized["S"] != success or normalized["C"] != (collisions > 0):
+        raise ValueError("SNQI-v2 outcome terms disagree with raw metrics")
+    if not success and normalized["T"] != 0:
+        raise ValueError("SNQI-v2 failure time term must be zero")
+    expected = math.fsum((1 if t == "S" else -1) * WEIGHTS[t] * normalized[t] for t in TERMS)
+    if not math.isclose(score, expected, rel_tol=1e-9, abs_tol=1e-9):
+        raise ValueError("SNQI-v2 score disagrees with the declared weighted term sum")
+
+
+def _check_snqi_v2_field_consistency(  # noqa: C901
+    payload_dir: Path, *, declared: bool = False
+) -> dict[str, Any] | None:
+    """Check every v2 publication row even when legacy SNQI is explicitly excluded.
+
+    Returns:
+        Numerical evidence, or None when neither diagnostics nor rows declare v2.
+    """
+    diagnostics_path = payload_dir / "reports/snqi_v2_diagnostics.json"
+    declared = declared or diagnostics_path.exists()
+    rows = 0
+    invalid_rows = 0
+    rejections: list[str] = []
+    for path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        try:
+            with path.open(encoding="utf-8") as stream:
+                for line_number, line in enumerate(stream, 1):
+                    if not line.strip():
+                        continue
+                    rows += 1
+                    try:
+                        row = json.loads(line)
+                        metrics = row.get("metrics") if isinstance(row, dict) else None
+                        if isinstance(metrics, dict) and (
+                            "snqi_v2" in metrics or "snqi_v2_terms" in metrics
+                        ):
+                            declared = True
+                        _snqi_v2_validate_metrics(metrics)
+                    except (ValueError, TypeError) as exc:
+                        invalid_rows += 1
+                        if len(rejections) < 20:
+                            rejections.append(
+                                f"{path.relative_to(payload_dir)}:{line_number}: {exc}"
+                            )
+        except OSError:
+            invalid_rows += 1
+            rejections.append(f"SNQI-v2 cannot read {path.relative_to(payload_dir)}")
+    if not declared:
+        return None
+    try:
+        diagnostics = _read_json_file(diagnostics_path)
+        if diagnostics.get("schema_version") != "snqi-v2-diagnostics.v1":
+            raise ValueError("unsupported schema")
+        count = diagnostics.get("episode_count")
+        if type(count) is not int or count != rows or rows == 0:
+            raise ValueError("episode_count disagrees with nonempty publication rows")
+    except (OSError, ValueError) as exc:
+        rejections.append(f"SNQI-v2 diagnostics cannot be validated: {exc}")
+    return {
+        "checked": True,
+        "score_version": "SNQI-v2",
+        "rows": rows,
+        "invalid_rows": invalid_rows,
+        "violations": rejections,
+    }
+
+
 def _publication_snqi_evidence(payload_dir: Path) -> dict[str, Any]:
     """Keep legacy check 6 out of explicitly excluded acquisition/publication bundles.
 
     Returns:
-        A consistency result, refusing contradictory excluded/legacy payloads.
+        A v2 numerical or legacy consistency result, refusing contradictory payloads.
     """
     campaign_path = payload_dir / "campaign_manifest.json"
     campaign = _read_json_file(campaign_path) if campaign_path.is_file() else {}
@@ -2774,8 +2876,17 @@ def _publication_snqi_evidence(payload_dir: Path) -> dict[str, Any]:
         campaign.get("legacy_snqi") == "excluded"
         or campaign.get("snqi_v2") == "pending_calibration"
     )
+    campaign_metrics = campaign.get("metrics")
+    v2 = _check_snqi_v2_field_consistency(
+        payload_dir,
+        declared=isinstance(campaign_metrics, dict)
+        and campaign_metrics.get("snqi_v2_version") == "SNQI-v2",
+    )
     if not excluded:
-        return _check_snqi_field_consistency(payload_dir)
+        legacy = _check_snqi_field_consistency(payload_dir)
+        if v2 is None:
+            return legacy
+        return {**v2, "legacy": legacy, "violations": [*v2["violations"], *legacy["violations"]]}
     violations = []
     if (payload_dir / "reports/snqi_diagnostics.json").exists():
         violations.append("Legacy SNQI is excluded but its diagnostics are present")
@@ -2786,6 +2897,8 @@ def _publication_snqi_evidence(payload_dir: Path) -> dict[str, Any]:
         violations.append("Legacy SNQI is excluded but the release declares legacy assets")
     if (payload_dir / "release_metadata/snqi").exists():
         violations.append("Legacy SNQI is excluded but its bundle assets are present")
+    if v2 is not None:
+        return {**v2, "violations": [*v2["violations"], *violations]}
     return {"checked": False, "reason": "legacy_snqi_excluded", "violations": violations}
 
 
@@ -2879,6 +2992,8 @@ def verify_publication_bundle_preflight(
     6. for SNQI-bearing bundles (those declaring ``snqi_diagnostics.json``), every per-episode
        ``metrics.snqi`` field must match a curvature-aware recomputation and the field-derived
        arm ordering must agree with ``snqi_diagnostics.json`` ``planner_ordering`` (issue #5580).
+       V2 rows additionally require finite scores within formula-derived outcome strata and
+       agreement with the seven normalized terms, even when legacy SNQI is excluded.
 
     Args:
         bundle_dir: Built bundle directory (containing ``payload/``,
@@ -2942,8 +3057,7 @@ def verify_publication_bundle_preflight(
     violations.extend(goal_timeout_rejections)
 
     # ---- Check 6: per-episode SNQI field vs diagnostics basis (issue #5580) --
-    # Runs only on SNQI-bearing bundles (those declaring snqi_diagnostics.json); other
-    # bundles report checked=False and are unaffected.
+    # V2 diagnostics or scored rows activate numerical checks independently of legacy exclusion.
     snqi_evidence = _publication_snqi_evidence(payload_dir)
     violations.extend(snqi_evidence.get("violations", []))
 

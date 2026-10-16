@@ -134,3 +134,21 @@ def test_apply_fails_closed_on_readback_mismatch(monkeypatch: Any) -> None:
     monkeypatch.setattr(repair, "_patch_body", lambda number, *, repo, expected_sha256, body: None)
 
     assert repair.main(["apply", "--issue", "7601"]) == 2
+
+
+def test_plan_issue_preserves_live_label_snapshot(monkeypatch: Any, capsys: Any) -> None:
+    """Live `plan --issue` preserves the normalized label snapshot like `apply --issue` (#10422)."""
+    monkeypatch.setattr(
+        repair,
+        "_exact_read_body",
+        lambda number, *, repo: {
+            "body": REPAIRABLE_BODY,
+            "labels": [{"name": "technical-debt"}, "type:workflow"],
+        },
+    )
+
+    assert repair.main(["plan", "--issue", "10399"]) == 0
+
+    packet = json.loads(capsys.readouterr().out)
+    assert packet["repairable"] is True
+    assert packet["labels"] == ["technical-debt", "type:workflow"]

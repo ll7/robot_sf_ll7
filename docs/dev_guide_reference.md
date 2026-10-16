@@ -101,6 +101,19 @@ and excludes optional-only test paths listed in `tests/support/optional_test_all
 Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
 preflight-tool failures and never receive the missing-extra install guidance.
 
+The extended readiness lane uses Git name-status records so deletion-only changes and both
+endpoints of a rename can select the lane without passing removed paths to pytest or formatting.
+Its impact roots are `robot_sf/`, `configs/`, `maps/`, `scripts/validation/`, `tests/validation/`,
+and `tests/maps/`. The uncovered validation and map tests also depend on
+`fast-pysf/pysocialforce/` and the root or nested package/lock manifests (`pyproject.toml`,
+`uv.lock`, `fast-pysf/pyproject.toml`, and `fast-pysf/uv.lock`), so those paths select the same
+lane. `fast-pysf/tests/`, documentation, examples, benchmarks, and maps stay on their existing
+lanes. Each readiness run records the extended-lane decision and its impact-path reason in
+`output/validation/pr_ready/lane_coverage.txt`.
+The validation and map roots remain declared impact roots even when a change removes their last
+tracked file. In that case readiness records the required impact and a no-surviving-tests
+disposition without passing nonexistent roots to pytest.
+
 ### Claim-map validation
 
 The fast-results claim map is an executable issue queue, not only a context note. Before changing

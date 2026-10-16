@@ -32,6 +32,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from pickle import UnpicklingError
 from typing import Any
 
 import yaml
@@ -54,6 +55,7 @@ SUITES: dict[str, str] = {
 SWEEP_OWN_PATHS = (
     "scripts/validation/run_empty_world_sweep.py",
     "tests/validation/test_run_empty_world_sweep.py",
+    "tests/validation/test_empty_world_forecast_guard.py",
 )
 
 
@@ -188,6 +190,124 @@ def _write_authored_horizon_schedule(
     payload["scenario_horizons_sha256"] = hashlib.sha256(schedule_out.read_bytes()).hexdigest()
 
 
+def _checkpoint_forecast_steps(arm_key: str, predictor_config: Any) -> int:
+    """Measure the loaded model's output rather than its declared metadata."""
+    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
+
+    predictor = PredictionPlannerAdapter(predictor_config, allow_fallback=False)
+    try:
+        # Load the real checkpoint even when the receipt has no pedestrian actors.
+        # Neither configured horizon nor checkpoint metadata proves output support.
+        import torch
+
+        model = predictor._ensure_model()
+        if model is None:
+            raise RuntimeError("Predictive checkpoint did not load a model")
+        state, mask, *_ = predictor._build_model_input({})
+        with torch.no_grad():
+            output = model(
+                torch.from_numpy(state[None]).to(predictor._device),
+                torch.from_numpy(mask[None]).to(predictor._device),
+            )
+        future = output["future_positions"][0]
+
+    except (
+        ImportError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
+        EOFError,
+        UnpicklingError,
+    ) as error:
+        raise RuntimeError(
+            f"forecast guard: {arm_key}: checkpoint forecast load failed: {error}"
+        ) from error
+    if future.ndim != 3 or future.shape[-1] != 2:
+        raise ValueError(f"forecast guard: {arm_key}: malformed checkpoint forecast output")
+    return int(future.shape[1])
+
+
+def assert_forecast_support(cfg: Any) -> None:
+    """Reject receipt requests beyond the resolved checkpoint's real forecast output.
+
+    All arm configs are parsed. Predictive arms use the campaign's existing
+    config builder and model loader, with fallback disabled, and perform one
+    model inference without constructing an environment or collecting episodes.
+    """
+    from robot_sf.benchmark.map_runner.map_runner import _build_socnav_config
+    from robot_sf.planner.predictive_mppi import build_predictive_mppi_config
+
+    for arm in cfg.planners:
+        settings = (
+            yaml.safe_load(arm.algo_config_path.read_text(encoding="utf-8")) or {}
+            if arm.algo_config_path is not None
+            else {}
+        )
+        if not isinstance(settings, dict):
+            raise ValueError(f"forecast guard: {arm.key}: algorithm config must be a mapping")
+        requests: dict[str, int] = {}
+        if arm.algo == "predictive_mppi":
+            mppi = build_predictive_mppi_config(settings)
+            predictor_config = mppi.socnav
+            requests["horizon_steps"] = mppi.horizon_steps
+        elif arm.algo == "prediction_planner":
+            predictor_config = _build_socnav_config(settings)
+        elif settings.get("predictive_foresight_enabled"):
+            from types import SimpleNamespace
+
+            from robot_sf.planner.predictive_foresight import (
+                predictive_foresight_config_from_source,
+            )
+
+            foresight = predictive_foresight_config_from_source(SimpleNamespace(**settings))
+            predictor_config = _build_socnav_config(
+                {
+                    "predictive_model_id": foresight.model_id,
+                    "predictive_checkpoint_path": foresight.checkpoint_path,
+                    "predictive_device": foresight.device,
+                    "predictive_max_agents": foresight.max_agents,
+                    "predictive_horizon_steps": foresight.horizon_steps,
+                    "predictive_rollout_dt": foresight.rollout_dt,
+                    "predictive_ego_conditioning": foresight.ego_conditioning,
+                }
+            )
+        else:
+            continue
+        requests["predictive_horizon_steps"] = int(predictor_config.predictive_horizon_steps)
+        if (
+            arm.algo in {"prediction_planner", "predictive_mppi"}
+            and predictor_config.predictive_adaptive_horizon_enabled
+        ):
+            requests["predictive_adaptive_horizon_steps"] = int(
+                predictor_config.predictive_horizon_steps
+            ) + max(0, int(predictor_config.predictive_horizon_boost_steps))
+        supported = _checkpoint_forecast_steps(arm.key, predictor_config)
+        for field, requested in requests.items():
+            if not 1 <= requested <= supported:
+                raise ValueError(
+                    f"forecast guard: {arm.key}: requested {field}={requested}; "
+                    f"checkpoint supported horizon={supported}; no capping or extrapolation"
+                )
+
+
+def _bind_released_width_predictors(payload: dict[str, Any]) -> None:
+    """Take generated predictive bindings from the main release receipt template."""
+    # Keep the historical width matrix frozen. The main release receipt
+    # template is the authoritative source for generated predictive bindings.
+    release_payload = yaml.safe_load((REPO_ROOT / SUITES["main"]).read_text("utf-8"))
+    released = {planner["key"]: planner for planner in release_payload["planners"]}
+    for planner in payload["planners"]:
+        if planner["algo"] in {"prediction_planner", "predictive_mppi"}:
+            release_arm = released[planner["key"]]
+            if release_arm["algo"] != planner["algo"]:
+                raise ValueError(f"release receipt algorithm mismatch: {planner['key']}")
+            planner["algo_config"] = release_arm["algo_config"]
+
+
 def build_derived_inputs(  # noqa: C901
     suite: str,
     *,
@@ -203,7 +323,6 @@ def build_derived_inputs(  # noqa: C901
     Returns:
         The derived campaign config path and the actor-free scenario list.
     """
-    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
     from robot_sf.training.scenario_loader import load_scenarios
 
     seeds = assert_dev_seeds(seeds)
@@ -267,8 +386,18 @@ def build_derived_inputs(  # noqa: C901
         if missing:
             raise RuntimeError(f"unknown arms {sorted(missing)}")
         payload["planners"] = [p for p in payload["planners"] if p["key"] in arms]
+    if suite == "width":
+        _bind_released_width_predictors(payload)
     cfg_out = out_dir / f"campaign_{suite}_empty_world.yaml"
     cfg_out.write_text(yaml.safe_dump(payload, sort_keys=False), "utf-8")
+
+    _verify_derived_inputs(cfg_out)
+    return cfg_out, scenarios
+
+
+def _verify_derived_inputs(cfg_out: Path) -> None:
+    """Resolve the generated campaign through the normal loader and census."""
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 
     cfg = load_campaign_config(cfg_out)  # same loader the release runner uses
     from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
@@ -277,7 +406,6 @@ def build_derived_inputs(  # noqa: C901
     verify_actor_free(resolved, REPO_ROOT / "scoped_scenarios.json")
     seen = {int(s) for sc in resolved for s in sc.get("seeds", [])}
     assert_dev_seeds(sorted(seen))
-    return cfg_out, scenarios
 
 
 def verify_actor_free(scenarios: list[dict[str, Any]], matrix_path: Path) -> list[dict[str, Any]]:
@@ -681,13 +809,14 @@ def describe_trace(campaign_root: Path) -> str:
     return "No step traces were found in the episode rows."
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the sweep.
+def _preflight_receipt_inputs(derived: list[tuple]) -> None:
+    """Check every selected suite before starting the first collection."""
+    for _suite, _cfg_path, _scenarios, cfg in derived:
+        assert_forecast_support(cfg)
 
-    Returns:
-        Process exit code: 1 for failed/incomplete execution or requested traces;
-        episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
-    """
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """Parse the existing receipt sweep CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head-sha", required=True, help="Commit under test (checkout must match)")
     parser.add_argument("--suite", choices=[*SUITES, "both"], default="both")
@@ -702,7 +831,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check-only", action="store_true", help="Derive inputs, verify, stop")
     parser.add_argument("--no-step-trace", action="store_true")
     parser.add_argument("--arm-isolation", choices=("in_process", "subprocess"), default=None)
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the sweep.
+
+    Returns:
+        Process exit code: 1 for failed/incomplete execution or requested traces;
+        episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
+    """
+    args = _parse_args(argv)
 
     seeds = assert_dev_seeds(args.seeds)  # abort before anything else happens
     full_sha = verify_head(args.head_sha)
@@ -722,6 +861,7 @@ def main(argv: list[str] | None = None) -> int:
     started = time.time()
     trace_notes: list[str] = []
     incomplete_execution = False
+    derived = []
     for suite in suites:
         cfg_path, scenarios = build_derived_inputs(
             suite,
@@ -732,7 +872,12 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=out_dir,
             step_trace=not args.no_step_trace,
         )
-        cfg = load_campaign_config(cfg_path)
+        derived.append((suite, cfg_path, scenarios, load_campaign_config(cfg_path)))
+    # Stage models before check-only. Derive every config first so model staging
+    # can inspect the generated receipt even when the initial preflight fails.
+    if not args.summarize_only:
+        _preflight_receipt_inputs(derived)
+    for suite, cfg_path, scenarios, cfg in derived:
         if args.summarize_only:
             root = out_dir / "campaigns" / f"empty_world_{suite}"
             receipt = out_dir / f"execution_{suite}.json"
@@ -746,14 +891,18 @@ def main(argv: list[str] | None = None) -> int:
                 cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
             )
             incomplete_execution |= not axes["complete"]
-            meta = {"suite": suite, "head_sha": full_sha, **axes}
+            meta = {
+                "suite": suite,
+                "head_sha": full_sha,
+                "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                **axes,
+            }
             write_outputs(out_dir, rows, suite, meta)
             receipt.write_text(json.dumps(meta, indent=2) + "\n")
             continue
         if args.check_only:
             print(f"{suite}: derived inputs verified actor-free ({cfg_path})")
             continue
-        cfg = load_campaign_config(cfg_path)
         t0 = time.time()
         try:
             result = run_campaign(
@@ -789,6 +938,7 @@ def main(argv: list[str] | None = None) -> int:
         meta = {
             "suite": suite,
             "head_sha": full_sha,
+            "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "seeds": seeds,
             "workers": args.workers,
             "runtime_s": round(time.time() - t0, 1),

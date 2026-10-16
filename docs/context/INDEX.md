@@ -1,5 +1,9 @@
 # Context Retrieval Index
 
+Guard/escape factorial ablation: 2,160 paired development episodes, independently
+confirmed numerical results, portable compact inputs and SHA-256 custody:
+[guard_escape_ablation/README.md](guard_escape_ablation/README.md).
+
 Issue #10211 cross-CPU reconstruction: 12,000 native development episodes on EPYC
 9354P and dual Xeon Silver 4310, default/kernel-pinned/float64 comparisons, and
 checksum-verified external evidence:

@@ -282,6 +282,26 @@ def test_terminal_pr_state_blocks_ready_receipts(
     assert expected_reason in blocked["reason_codes"]
 
 
+@pytest.mark.parametrize(
+    "mergeable_status",
+    ["conflicting", "unknown"],
+)
+def test_merge_conflict_gate_status_blocks_ready_receipts(mergeable_status: str) -> None:
+    """A conflicted or unresolved PR mergeability state cannot report ready (issue #10421)."""
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "mergeable_status": mergeable_status,
+            "reasons": [f"mergeable_{mergeable_status}"],
+        }
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "merge_queue_gate_not_passed" in blocked["reason_codes"]
+    assert f"merge_queue_gate_mergeable_{mergeable_status}" in blocked["reason_codes"]
+
+
 def test_non_passing_gate_audit_blocks_ready_receipts() -> None:
     blocked = _receipt(
         gate_audit={
@@ -875,6 +895,75 @@ def test_build_live_evidence_keeps_rest_snapshot_failure_explicit(
 
     assert evidence is None
     assert error == "REST snapshot fallback failed"
+
+
+def test_build_live_evidence_flags_conflicting_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live CONFLICTING PR must not report ready in report-only mode (issue #10421)."""
+    snapshot = _snapshot_with_provenance()
+    # Keep the base fresh so only the mergeability dimension is under test.
+    snapshot["base_sha"] = CURRENT_BASE_SHA
+    snapshot["mergeable"] = "conflicting"
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_pr_snapshot",
+        lambda *args, **kwargs: (snapshot, None),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_main_sha",
+        lambda *args, **kwargs: CURRENT_BASE_SHA,
+    )
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_threads_resolved",
+        lambda *args, **kwargs: (True, None),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate._fetch_live_closing_discipline",
+        lambda *args, **kwargs: ("passed", []),
+    )
+
+    evidence, error = build_live_evidence(42, repository="owner/repo")
+
+    assert error is None
+    assert evidence is not None
+    assert evidence["gate_audit"]["mergeable_status"] == "conflicting"
+    assert "mergeable_conflict" in evidence["gate_audit"]["reasons"]
+
+    receipt = build_receipt(**evidence)
+    assert receipt["status"] == "blocked"
+    assert receipt["reason_codes"] != []
+    assert "merge_queue_gate_mergeable_conflict" in receipt["reason_codes"]
+
+
+def test_evaluate_merge_gate_fails_closed_on_conflicting_mergeability() -> None:
+    """The gate reads the live mergeability signal and fails closed on a conflict."""
+    from scripts.dev.merge_queue_gate import evaluate_merge_gate
+
+    conflicting = evaluate_merge_gate(
+        {"number": 42, "head_sha": HEAD_SHA, "labels": ["merge-ready"], "mergeable": "CONFLICTING"},
+        main_sha=BASE_SHA,
+    )
+    unknown = evaluate_merge_gate(
+        {"number": 42, "head_sha": HEAD_SHA, "labels": ["merge-ready"], "mergeable": "UNKNOWN"},
+        main_sha=BASE_SHA,
+    )
+    legacy = evaluate_merge_gate(
+        {"number": 42, "head_sha": HEAD_SHA, "labels": ["merge-ready"]},
+        main_sha=BASE_SHA,
+    )
+
+    assert conflicting.mergeable_status == "conflicting"
+    assert "mergeable_conflict" in conflicting.reasons
+    assert conflicting.passed is False
+
+    assert unknown.mergeable_status == "unknown"
+    assert "mergeable_unknown" in unknown.reasons
+    assert unknown.passed is False
+
+    # Legacy snapshots without a mergeability signal keep their prior behaviour.
+    assert legacy.mergeable_status == "not_evaluated"
+    assert "mergeable_conflict" not in legacy.reasons
+    assert "mergeable_unknown" not in legacy.reasons
 
 
 def test_review_carrier_precedence_and_fail_closed_states() -> None:

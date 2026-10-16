@@ -794,27 +794,31 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
-**Measured state, 2026-10-15 (issue #10398).** None of those toggles has been applied. The two
-enforcement surfaces currently disagree, so read both before assuming a merge is guarded:
+**Measured configuration, rechecked read-only on 2026-10-16 (issue #10398).** The queue
+requirements above are not active. Read both enforcement surfaces and the bypass policy before
+assuming a merge is guarded:
 
-| Surface | What it actually requires today |
+| Surface | What the snapshot establishes |
 | --- | --- |
-| GitHub, on `main` | No classic branch protection (`GET /branches/main/protection` → 404). The only protection is the `main-protection` ruleset, whose complete required status-check set is **`ty-advisory-ratchet`** and **`pr-contract-check`**. No `merge_queue` rule, so the native merge queue is not enabled and `merge_group` has never run. |
-| Local, `scripts/dev/single_account_merge_receipt.py` | Treats `merge-queue-gate` as required, so `gh_pr_merge.sh` refuses a merge until this job completes. Observed live on PR #10215: `required_check_merge-queue-gate_pending`, `status: blocked`. |
+| GitHub, on `main` | No classic branch protection (`GET /branches/main/protection` → 404). The active `main-protection` ruleset (ID `18917814`) requires exactly **`ty-advisory-ratchet`** and **`pr-contract-check`** for non-bypassing actors. It has an always-bypass actor: `actor_type: RepositoryRole`, `actor_id: 5`, `bypass_mode: always`; the authenticated reader reports `current_user_can_bypass: always`. There is no `merge_queue` rule. The workflow-run API returns zero retained `merge_group` runs; this does not rule out deleted historical runs. |
+| Local, `scripts/dev/single_account_merge_receipt.py` | Treats `merge-queue-gate` as required, so `gh_pr_merge.sh` refuses a merge until this job completes. Issue #10398 reports the historical PR #10215 receipt: `required_check_merge-queue-gate_pending`, `status: blocked`. This is not a fresh reproduction of that PR's receipt. |
 
-Two consequences worth stating plainly:
+Two consequences follow from this configuration:
 
-- **The check the local merger treats as mandatory is required by nobody.** A merge blocked on
-  `merge-queue-gate` locally would be accepted by GitHub. The fail-closed property depends on every
-  merge going through `gh_pr_merge.sh`.
-- **The check GitHub *does* require, `pr-contract-check`, is the behaviour-change receipt gate.** On
-  2026-10-15 it failed on 39 of 52 open non-draft PRs (see #10307), so those PRs are unmergeable
-  through any path. The required-check surface is dominated by the one gate that needs evidence
-  nobody has produced, while the gate that exists to catch a bad merge is not required at all.
+- **`merge-queue-gate` is required by the local merger, but absent from GitHub's required-check
+  set.** Its absence alone therefore does not block a merge under the measured GitHub ruleset.
+  The local fail-closed preflight applies to merges made through `gh_pr_merge.sh`; this observation
+  does not establish enforcement on other merge paths.
+- **GitHub requires the behaviour-change receipt gate, `pr-contract-check`, for non-bypassing
+  actors.** The [dated #10307 reconciliation](https://github.com/ll7/robot_sf_ll7/issues/10307#issuecomment-6191388572)
+  reported failures on 39 of 52 open non-draft PRs on 2026-10-15. This is a historical report,
+  not a current count. Such failures block non-bypassing merges under this ruleset; the active
+  always-bypass actor means they do not establish that those PRs are unmergeable through every path.
 
-The residual for #6274 is therefore stated against the *measured* configuration, not the intended one.
-Two changes remain maintainer decisions and are tracked in #10398: activate the queue as documented
-above, or align `single_account_merge_receipt.py` with the checks GitHub actually requires.
+The residual for #6274 is stated against the *measured* configuration, including its bypass,
+not the intended one. Two changes remain maintainer decisions and are tracked in #10398: activate
+the queue as documented above, or align `single_account_merge_receipt.py` with the checks GitHub
+actually requires. This documentation correction changes no repository setting, ruleset, or protection.
 
 ### Single-account merge receipt (issue #7669)
 

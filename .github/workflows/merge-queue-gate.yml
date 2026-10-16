@@ -2,15 +2,19 @@ name: Merge Queue Gate
 
 # NOT currently a required check anywhere. Read this before relying on it.
 #
-# Measured on 2026-10-15 against `ll7/robot_sf_ll7` (issue #10398):
+# Configuration rechecked read-only on 2026-10-16 (issue #10398):
 #   * `main` has no classic branch protection (404); the only protection is the
 #     `main-protection` ruleset, whose entire required status-check set is
-#     `ty-advisory-ratchet` and `pr-contract-check`.
+#     `ty-advisory-ratchet` and `pr-contract-check` for non-bypassing actors.
+#   * An active RepositoryRole actor (ID 5) has `bypass_mode: always`; the
+#     authenticated reader reports `current_user_can_bypass: always`.
 #   * That ruleset has no `merge_queue` rule, so the native merge queue is not
-#     enabled and the `merge_group:` trigger below has never run.
+#     enabled. The API lists zero retained `merge_group` runs; deleted
+#     historical runs cannot be ruled out by that observation.
 #   * `scripts/dev/single_account_merge_receipt.py` nevertheless treats
 #     `merge-queue-gate` as required, so `scripts/dev/gh_pr_merge.sh` refuses a
-#     merge until this job completes. GitHub itself would allow that merge.
+#     merge until this job completes. Its absence alone does not block a
+#     merge under the measured GitHub required-check set.
 #
 # So the queue-side contract below is dormant, and `gh_pr_merge.sh` is the only
 # thing enforcing it. Anyone reading this file alone would otherwise conclude a

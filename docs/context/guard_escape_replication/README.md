@@ -1,10 +1,20 @@
 # Guard/escape preregistered replication
 
 **Diagnostic-only, fixed-roster within-controller evidence.** This packet uses
-fresh development seeds 1031–1060 and the original execution source. It does not
+development seeds 1031–1060, fresh relative to the original guard/escape study
+(seeds 1001–1030), and the original execution source. It does not
 establish historical between-planner rankings, individual-component mediation,
 release evidence or manuscript admission. Intervals are pointwise, conditional
 on the 18-cell roster, and do not measure uncertainty over new scenarios.
+
+This is a separate guard/escape experiment. The earlier
+[settings-off experiment](https://github.com/ll7/robot_sf_ll7/issues/10006#issuecomment-6134330473)
+already used the same seed numbers, 1031–1060, across 48 cells at source
+`373dbfde4f39667cf9e8732dabe7df5118bdeab1`. Freshness here is relative to the
+original guard/escape study, not prior use in other experiments. No settings-off
+rows are pooled or compared with this replication. The permitted secondary
+60-seed pool contains only the original guard/escape study (1001–1030) and this
+replication (1031–1060); the settings-off experiment remains distinct.
 
 Primary stop-rule outcome: **EFFECT**. Guard: **EFFECT**.
 Escape: **NO EFFECT**. Overall agreement with the original:

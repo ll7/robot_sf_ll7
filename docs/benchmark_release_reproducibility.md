@@ -1,70 +1,97 @@
 # Benchmark Release Reproducibility
 
-This guide explains how to reproduce a benchmark release artifact set from a
-tagged code state.
-
-For the current approved benchmark-data release, use the 14-arm S30/H600
-campaign and keep the software release lane separate. The old seven-planner/S3
-paths below are retained only where they document historical release `0.0.2`;
-they must not be used as the current release contract.
+This guide identifies the published benchmark-data release and the inputs needed
+to verify or reconstruct its artifact set. The current release is **0.0.8, main
+track only**, with 14 arms × 48 scenarios × 30 evaluation seeds = **20,160
+rows**, differential-drive kinematics and authored per-scenario budgets. The
+August campaign and September erratum are historical releases.
 
 ## Canonical Inputs
 
-Current S30/H600 campaign config:
+The immutable scientific source is
+`373dbfde4f39667cf9e8732dabe7df5118bdeab1`, tagged
+`paper-matrix-v2-h600-s30-2026-10-373dbfde4f39667cf9e8732dabe7df5118bdeab1`.
+Use that tagged source for the following inputs:
 
-- `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
+- Campaign: `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml`.
+- Scenario matrix: `configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml`.
+- Horizon schedule: `configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml`.
+- Actual resolved release manifest: `payload/release/release_manifest.resolved.json`
+  inside the published archive. This is the concrete publication identity;
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
+  is the reusable template, not a substitute for that resolved manifest.
+- SNQI-v2 diagnostics and input path/digest declarations:
+  `payload/reports/snqi_v2_diagnostics.json` inside the archive.
 
-Bounded 14-arm runtime-smoke manifest:
+The `h600` strings in the immutable tag and filenames are historical names.
+The declared schedule has the following budgets, at `dt = 0.1 s`:
 
-- `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml`
+| Horizon steps | Scenario count | Episode budget |
+| --- | --- | --- |
+| 400 | 24 | 40 s |
+| 500 | 13 | 50 s |
+| 600 | 9 | 60 s |
+| 650 | 1 | 65 s |
+| 700 | 1 | 70 s |
 
-Publication-grade release manifest plus the frozen September 2026 erratum successor:
+Thus 39 of 48 scenarios use a budget other than H600.
+`classic_station_platform_medium` uses H650;
+`classic_realworld_double_bottleneck_high` uses H700. Resolve each cell's limit
+from the authored schedule; observed episode length is not its declared budget.
 
-- `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
-- `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`
-  (successor tag `paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1`,
-  version DOI `10.5281/zenodo.22265925`, concept DOI `10.5281/zenodo.22227034`,
-  orchestration SHA `09f6b1beeff71b4ee30deae7cc2504c0c7310729`).
-  Reproduce from a clean checkout at the orchestration SHA; a dirty tree voids the
-  derivation receipt.
+The [main-only scope amendment](release/0.0.8/main_only_scope_amendment_20261009.md)
+excludes the separate three-width doorway track and defers it to 0.1.0. Its
+incomplete diagnostic rows are outside the 20,160-row main denominator.
 
-The smoke keeps `workers: 1`, `horizon: 600`, differential-drive kinematics,
-one scenario, and seed `103`. It checks runtime compatibility only; it is not
-full benchmark evidence and does not authorize planner ranking.
+## Verify the Published Artifact
 
-## Reproduce From a Tag
+The [GitHub release](https://github.com/ll7/robot_sf_ll7/releases/tag/paper-matrix-v2-h600-s30-2026-10-373dbfde4f39667cf9e8732dabe7df5118bdeab1)
+and [version DOI 10.5281/zenodo.23150472](https://doi.org/10.5281/zenodo.23150472)
+identify the actual 0.0.8 publication. The concept DOI is
+[10.5281/zenodo.23150471](https://doi.org/10.5281/zenodo.23150471).
+The archive is
+`issue9850_release_snqi_v2_0_0_8_373dbfde4f_r39_20261008_publication_bundle.tar.gz`;
+its detached publication manifest and checksums are also release assets.
 
-1. Check out the repository tag that corresponds to the release.
-2. Install dependencies:
+Download the immutable assets into a fresh verification directory:
 
 ```bash
-uv sync --all-extras
+GH_TOKEN="$(gh auth token)" gh release download \
+  paper-matrix-v2-h600-s30-2026-10-373dbfde4f39667cf9e8732dabe7df5118bdeab1 \
+  --repo ll7/robot_sf_ll7 \
+  --dir output/release-008-cold-verification
+cd output/release-008-cold-verification
+tar -xzf issue9850_release_snqi_v2_0_0_8_373dbfde4f_r39_20261008_publication_bundle.tar.gz
+cd issue9850_release_snqi_v2_0_0_8_373dbfde4f_r39_20261008_publication_bundle
+sha256sum -c checksums.sha256
 ```
 
-3. Run release preflight:
+Checksum verification establishes retained-byte integrity. Numerical
+reconstruction also requires the acquired calibration anchors identified by
+path and digest in the diagnostics; the published 0.0.8 archive omits those
+anchors. Preserve the original bundle and obtain matching input bytes under
+separate custody. Future publication tooling enforces stricter completeness;
+its verdict must not be used to rewrite a frozen release.
 
-```bash
-uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
-  --mode preflight
-```
+## Reproduction and Development Boundaries
 
-4. Run the release:
+Scientific reconstruction binds the tagged source, actual resolved manifest,
+scenario schedule, planner/checkpoint identities and exact diagnostic inputs.
+The software release lane remains separate. Evaluation seed identities are
+recorded by the frozen release contract; any release replay requires its own
+explicit authorization. The general project development range is 1001–1200.
+For **0.0.8 release smoke and rehearsal**, use only authorized subsets of
+**1001–1030**, as specified by the [frozen runbook](release/0.0.8/runbook.md)
+and [D-068](release/0.0.8/decisions.md); the rehearsal validator rejects 1031
+and 1200. **SNQI-v2 calibration uses exactly 1001/1002**, with 1003 held apart
+for the N2 diagnostic. These development activities do not reproduce the frozen
+evaluation dataset.
 
-```bash
-uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
-  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
-  --stage \
-  --report-path output/release/checkpoints/runtime_smoke_staging_receipt.json
-uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
-  --label runtime-smoke \
-  --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
-```
-
-For the full benchmark-data release, run the separately reviewed S30/H600
-manifest paired with the campaign config. Do not substitute the historical v1
-seven-planner/S3 manifest, and do not publish the smoke output as a full result.
+Install the tagged source's dependencies with `uv sync --all-extras --frozen` in
+an isolated checkout. Prepare and review development-only smoke inputs before
+running a campaign. The historical `runtime_smoke_v0_5` manifest is not the
+current 0.0.8 reproduction contract. A smoke proves runtime compatibility only;
+full dataset reconstruction and scientific admission require the release gates.
 
 ## What Is Frozen
 
@@ -79,7 +106,8 @@ Comparable benchmark releases must keep these surfaces stable:
 - required artifact bundle contents
 
 For 0.0.8, the identity additionally includes 14 arms,
-48 scenarios, 30 fresh sealed seeds (`release_eval_0_0_8`; D-049), H600, and differential-drive
+48 scenarios, 30 release-evaluation seeds (`release_eval_0_0_8`; D-049), the authored
+H400/H500/H600/H650/H700 schedule above, and differential-drive
 kinematics. SNQI remains advisory/no-ranking even when its assets are present;
 report raw and component metrics separately if calibration does not support a
 composite interpretation.
@@ -110,7 +138,7 @@ attribution.
 
 The empirical rerun table in this section records the historical seven-planner
 v1/S3 contract. It remains useful for reproducing release `0.0.2`, but it is
-not evidence for the current S30/H600 benchmark-data release and does not
+not evidence for the current 0.0.8 authored-budget benchmark-data release and does not
 authorize SNQI ranking.
 
 Empirically verified by running the full frozen release twice under identical
@@ -251,7 +279,7 @@ The benchmark release artifact is the publication bundle generated from the
 release workflow, not the raw source checkout alone.
 
 The following is the historical seven-planner publication snapshot for release
-`0.0.2`, not the current S30/H600 benchmark-data release:
+`0.0.2`, not the current 0.0.8 authored-budget benchmark-data release:
 
 - `docs/experiments/publication/20260414_benchmark_release_0_0_2/summary.md`
 - `docs/experiments/publication/20260414_benchmark_release_0_0_2/release_metadata.json`
@@ -265,8 +293,8 @@ The following is the historical seven-planner publication snapshot for release
 > published archive and embedded artifacts; it is not an independent numeric subset replay.
 
 
-Historical durable endpoints (release `0.0.2` only; superseded for S30/H600 by the
-September 2026 erratum successor, version DOI `10.5281/zenodo.22265925`):
+Historical durable endpoints (release `0.0.2` only; the current 0.0.8 endpoints
+are listed above):
 
 - Release: `https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2`
 - DOI: `https://doi.org/10.5281/zenodo.19563812`
@@ -314,17 +342,13 @@ The release manifest also records:
 
 ## Smoke Validation
 
-For CI and local release-tool validation of the current contract, use the
-14-arm reduced smoke manifest:
-
-```bash
-uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml
-```
-
-This preserves the current S30/H600 release contract shape while avoiding a
-heavyweight full benchmark run. A passing smoke is runtime evidence only: it
-does not establish a benchmark result, SNQI ranking, or a software release.
+For 0.0.8 release smoke and rehearsal, use a reviewed development-only
+configuration with authorized seeds **1001–1030** and the authored budget for
+each selected scenario. The broader 1001–1200 range applies to general project
+development, not this release rehearsal contract. Calibration uses 1001/1002.
+The old `runtime_smoke_v0_5` examples document an earlier release and are not a current
+approved reproduction route. Smoke success is runtime evidence only and does
+not establish the 0.0.8 benchmark result or admit SNQI ranking.
 
 ## Benchmark Docker Reproduction Path
 

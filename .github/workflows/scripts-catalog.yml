@@ -14,6 +14,8 @@ on:
       - "tests/dev/test_scripts_catalog.py"
       - ".github/workflows/scripts-catalog.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "37 5 * * 3"
 
 permissions:
   contents: read
@@ -28,12 +30,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Fast-feedback already runs tests/dev/test_scripts_catalog.py, including
+      # validate_catalog() and the committed README render comparison. Retain
+      # this check name without provisioning a second Python environment on PRs.
+      - name: Report consolidated catalog validation
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: |
+          echo "Scripts catalog validation runs in CI fast-feedback."
+          echo "The standalone catalog audit runs weekly and on manual dispatch." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up CI Python environment
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: ./.github/actions/setup-ci-python
         with:
           install-system-packages: "false"
@@ -41,10 +54,13 @@ jobs:
           sync-args: "--frozen"
 
       - name: Validate scripts catalog
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: uv run python scripts/dev/check_scripts_catalog.py
 
       - name: Check generated scripts README
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: uv run python scripts/dev/render_scripts_readme.py --check
 
       - name: Test scripts catalog tooling
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: uv run pytest tests/dev/test_scripts_catalog.py -q

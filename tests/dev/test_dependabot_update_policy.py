@@ -15,6 +15,7 @@ import yaml
 
 from scripts.dev.check_dependabot_update_policy import (
     PolicyError,
+    WorkflowActionPinSyncError,
     _diff_vs_head,
     changed_files,
     changed_lock_package_names,
@@ -23,6 +24,8 @@ from scripts.dev.check_dependabot_update_policy import (
     evaluate_update,
     filter_normalization_only_classifications,
     load_policy,
+    main,
+    sync_workflow_action_pins,
     validate_ci_workflow,
     validate_dependabot_config,
     validate_direct_dependency_coverage,
@@ -788,3 +791,123 @@ exclude = [".worktrees", "mutants"]
 
     assert report["status"] == "not_applicable"
     assert "without modifying dependency declarations" in report["message"]
+
+
+def _stale_pin_repo(tmp_path: Path) -> str:
+    """Build the standard stale-pin repo: workflow moved, contract did not."""
+    head_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {NEW_ACTION_REF}\n"
+    return _make_workflow_pin_repo(tmp_path, head_workflow=head_workflow)
+
+
+def test_sync_action_pins_dry_run_reports_diff_without_writing(tmp_path: Path) -> None:
+    """Dry-run sync previews the coupled rewrite and leaves the tree alone."""
+    base_sha = _stale_pin_repo(tmp_path)
+
+    report = sync_workflow_action_pins(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+    )
+
+    assert report["status"] == "dry_run"
+    assert report["applied"] is False
+    assert [row["path"] for row in report["files"]] == ["tests/dev/contract.py"]
+    diff = report["files"][0]["diff"]
+    assert f"-{OLD_ACTION_REF}" in diff
+    assert f"+{NEW_ACTION_REF}" in diff
+    contract = tmp_path / "tests/dev/contract.py"
+    assert contract.read_text(encoding="utf-8") == OLD_ACTION_REF + "\n"
+
+
+def test_sync_action_pins_apply_rewrites_and_guard_passes(tmp_path: Path) -> None:
+    """Applied sync moves the coupled reference so the guard passes after commit."""
+    base_sha = _stale_pin_repo(tmp_path)
+
+    report = sync_workflow_action_pins(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+        apply=True,
+    )
+
+    assert report["status"] == "applied"
+    assert report["applied"] is True
+    contract = tmp_path / "tests/dev/contract.py"
+    assert contract.read_text(encoding="utf-8") == NEW_ACTION_REF + "\n"
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "sync")
+    guard = check_workflow_action_pin_guard(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+    )
+    assert guard["status"] == "pass"
+
+
+def test_sync_action_pins_reports_in_sync_without_stale_pins(tmp_path: Path) -> None:
+    """A clean tree reports in_sync with no file rows."""
+    head_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {NEW_ACTION_REF}\n"
+    base_sha = _make_workflow_pin_repo(
+        tmp_path,
+        head_workflow=head_workflow,
+        head_contract=NEW_ACTION_REF,
+    )
+
+    report = sync_workflow_action_pins(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+    )
+
+    assert report["status"] == "in_sync"
+    assert report["files"] == []
+
+
+def test_sync_action_pins_fails_closed_on_zero_occurrences(tmp_path: Path) -> None:
+    """A pin the guard sees in HEAD but not in the working tree stops the sync."""
+    base_sha = _stale_pin_repo(tmp_path)
+    contract = tmp_path / "tests/dev/contract.py"
+    contract.write_text("# pin moved elsewhere\n", encoding="utf-8")
+
+    with pytest.raises(WorkflowActionPinSyncError, match="zero times"):
+        sync_workflow_action_pins(
+            repo_root=tmp_path,
+            base_ref=base_sha,
+            changed_files=[".github/workflows/ci.yml"],
+            apply=True,
+        )
+
+
+def test_sync_action_pins_fails_closed_on_missing_file(tmp_path: Path) -> None:
+    """A deleted working-tree target stops the sync instead of being skipped."""
+    base_sha = _stale_pin_repo(tmp_path)
+    (tmp_path / "tests/dev/contract.py").unlink()
+
+    with pytest.raises(WorkflowActionPinSyncError, match="target file missing"):
+        sync_workflow_action_pins(
+            repo_root=tmp_path,
+            base_ref=base_sha,
+            changed_files=[".github/workflows/ci.yml"],
+            apply=True,
+        )
+
+
+def test_sync_action_pins_fails_closed_on_non_exact_substring(tmp_path: Path) -> None:
+    """A pin embedded in a longer token needs human review, not a rewrite."""
+    base_sha = _stale_pin_repo(tmp_path)
+    contract = tmp_path / "tests/dev/contract.py"
+    contract.write_text(f"prefix-{OLD_ACTION_REF}-suffix\n", encoding="utf-8")
+
+    with pytest.raises(WorkflowActionPinSyncError, match="non-exact substring"):
+        sync_workflow_action_pins(
+            repo_root=tmp_path,
+            base_ref=base_sha,
+            changed_files=[".github/workflows/ci.yml"],
+            apply=True,
+        )
+
+
+def test_sync_apply_flag_requires_sync_action_pins_flag() -> None:
+    """--apply alone fails closed instead of silently doing nothing."""
+    with pytest.raises(SystemExit):
+        main(["--apply"])

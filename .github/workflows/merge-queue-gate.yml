@@ -1,9 +1,26 @@
 name: Merge Queue Gate
 
-# Required status check for the GitHub native merge queue (issue #6274).
+# NOT currently a required check anywhere. Read this before relying on it.
 #
-# After a maintainer activates this required check, the native merge queue must
-# not auto-merge a PR until this gate passes. It enforces the same fail-closed
+# Measured on 2026-10-15 against `ll7/robot_sf_ll7` (issue #10398):
+#   * `main` has no classic branch protection (404); the only protection is the
+#     `main-protection` ruleset, whose entire required status-check set is
+#     `ty-advisory-ratchet` and `pr-contract-check`.
+#   * That ruleset has no `merge_queue` rule, so the native merge queue is not
+#     enabled and the `merge_group:` trigger below has never run.
+#   * `scripts/dev/single_account_merge_receipt.py` nevertheless treats
+#     `merge-queue-gate` as required, so `scripts/dev/gh_pr_merge.sh` refuses a
+#     merge until this job completes. GitHub itself would allow that merge.
+#
+# So the queue-side contract below is dormant, and `gh_pr_merge.sh` is the only
+# thing enforcing it. Anyone reading this file alone would otherwise conclude a
+# queue-time gate is in force. The maintained reference is
+# `docs/dev_guide_reference.md` ("Merge queue gate (issue #6274)"), which states
+# the same toggle requirement in prose.
+#
+# Intended behaviour once a maintainer activates this required check: the native
+# merge queue must not auto-merge a PR until this gate passes. It enforces the
+# same fail-closed
 # preflight as the in-repository `gh-pr-merger` skill:
 # non-draft state, current `merge-ready` label, a current exact-head
 # `gate-verdict: accepted @ <head_sha>` trailer, and a current
@@ -27,8 +44,8 @@ name: Merge Queue Gate
 # conversation resolution before merging" in the branch-protection rules for
 # `main`. The workflow does not locate or control direct merge dispatchers that
 # can bypass GitHub branch protection.
-# See docs/dev_guide.md ("Merge queue gate") for the exact configuration and
-# residual issue #6274 acceptance proof.
+# See docs/dev_guide_reference.md ("Merge queue gate (issue #6274)") for the exact
+# configuration and residual issue #6274 acceptance proof.
 
 on:
   pull_request:

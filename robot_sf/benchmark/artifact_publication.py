@@ -28,6 +28,12 @@ import numpy as np
 from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.metrics import snqi as _curvature_aware_snqi
+from robot_sf.benchmark.publication_inputs import (
+    PublicationInputCustody,
+    parse_publication_json,
+    publication_documents,
+    read_publication_object,
+)
 from robot_sf.benchmark.release_notes import NOTES_PATH, RECEIPT_NAME, is_release_0_0_8, notes_gate
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping as _load_snqi_baseline_mapping,
@@ -401,8 +407,8 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:  # noqa: C901
     manifest_path = run_dir / "manifest.json"
     if manifest_path.exists():
         try:
-            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, ValueError):
+            manifest_payload = parse_publication_json(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             manifest_payload = None
         if isinstance(manifest_payload, dict):
             selected = {
@@ -421,8 +427,8 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:  # noqa: C901
     run_meta_path = run_dir / "run_meta.json"
     if run_meta_path.exists():
         try:
-            run_meta_payload = json.loads(run_meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, ValueError):
+            run_meta_payload = parse_publication_json(run_meta_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             run_meta_payload = None
         if isinstance(run_meta_payload, dict):
             repo = run_meta_payload.get("repo")
@@ -1383,7 +1389,7 @@ def _compute_and_emit_badging_artifacts(  # noqa: C901
                 write_campaign_report,
             )
 
-            payload_data = json.loads(summary_path.read_text(encoding="utf-8"))
+            payload_data = parse_publication_json(summary_path.read_text(encoding="utf-8"))
             with tempfile.TemporaryDirectory() as tmpdir:
                 temp_report_path = Path(tmpdir) / "campaign_report.md"
                 write_campaign_report(temp_report_path, payload_data)
@@ -1445,6 +1451,135 @@ For details on verification, see [release_artifact_badging.md](docs/release_arti
     return computed_badging, achieved_level
 
 
+def _diagnostic_input_contract(root: Path) -> PublicationInputCustody:
+    """Reconcile every content declaration and episode before requiring custody.
+
+    Returns:
+        The shared accumulator used for subsequent detached/input declarations.
+    """
+    contract = PublicationInputCustody()
+    for path, document in publication_documents(root):
+        if path == root / "campaign_manifest.json":
+            contract.campaign(document)
+        contract.observe(path, document)
+    contract.require_custody()
+    return contract
+
+
+def _validate_diagnostic_v2_assets(
+    contract: PublicationInputCustody, inputs: dict[Path, Path]
+) -> None:
+    """Validate every anchors candidate with the unchanged canonical scorer."""
+    from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec  # noqa: PLC0415
+
+    try:
+        contract.require_custody()
+        anchors_path = inputs[contract.v2_assets["anchors"]]
+        horizons = contract.horizons
+        if contract.horizon_path is not None:
+            schedule = read_publication_object(inputs[contract.horizon_path])
+            horizons = {
+                name: entry["recommended_horizon_steps"]
+                for name, entry in schedule["scenarios"].items()
+            }
+        elif horizons is None:
+            # Standalone diagnostics validate the declared calibration schedule.
+            # Campaign publications require their independent schedule above.
+            horizons = (
+                read_publication_object(anchors_path)
+                .get("calibration", {})
+                .get("scenario_horizons")
+            )
+        weights_path = inputs[contract.v2_assets["weights"]]
+        candidates = {
+            (weights_path, anchor) for anchor in {anchors_path, *contract.anchors_candidates}
+        }
+        candidates.update((weight, anchors_path) for weight in contract.weights_candidates)
+        for candidate_weights, candidate_anchors in sorted(candidates):
+            spec = load_snqi_v2_spec(
+                candidate_weights,
+                candidate_anchors,
+                inputs[contract.v2_assets["family"]],
+                expected_metric_schema_version=contract.metric_schema_version,
+                evaluation_scenario_horizons=horizons,
+            )
+            canonical_provenance = spec.provenance()
+            for key, pin in contract.method_pins.items():
+                if pin != canonical_provenance[key]:
+                    raise ValueError(
+                        f"conflicting scoring provenance pin disagrees with canonical scorer: {key}"
+                    )
+            if contract.force_sources and contract.force_sources != {spec.force_source}:
+                raise ValueError("conflicting force source copies disagree with canonical scorer")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(f"diagnostic input SNQI-v2 scoring assets invalid: {exc}") from exc
+
+
+def _diagnostic_input_sources(run_root: Path) -> dict[Path, tuple[Path, str]]:
+    """Retain the complete input closure before writing any future publication.
+
+    Returns:
+        Cold payload paths with the exact matching source files and digests.
+    """
+    repo_root = get_repository_root().resolve()
+    contract = _diagnostic_input_contract(run_root)
+    sources: dict[Path, tuple[Path, str]] = {}
+    resolved: dict[Path, Path] = {}
+    while pending := set(contract.references) - set(resolved):
+        for relative in sorted(pending):
+            digest = contract.references[relative]
+            source = None
+            for root in (run_root, repo_root):
+                candidate = root / relative
+                if any(part.is_symlink() for part in (candidate, *candidate.parents)):
+                    raise ValueError(f"diagnostic input refuses symlinks: {relative}")
+                if candidate.is_file() and _sha256_file(candidate) == digest:
+                    source = candidate
+                    break
+            if source is None:
+                raise ValueError(f"diagnostic input missing or digest mismatch: {relative}")
+            for path, document in publication_documents(source, required=True):
+                contract.observe(path, document)
+            sources[Path("diagnostic_inputs") / relative] = (source, digest)
+            resolved[relative] = source
+    _validate_diagnostic_v2_assets(contract, resolved)
+    return sources
+
+
+def _preflight_check_diagnostic_inputs(
+    payload_dir: Path, checksums: dict[str, str], violations: list[str]
+) -> None:
+    """Reconcile every detached input without repository/source fallback."""
+    try:
+        contract = _diagnostic_input_contract(payload_dir)
+        resolved: dict[Path, Path] = {}
+        processed: set[Path] = set()
+        while pending := set(contract.references) - processed:
+            for relative in sorted(pending):
+                processed.add(relative)
+                digest = contract.references[relative]
+                signed_path = (Path("payload/diagnostic_inputs") / relative).as_posix()
+                if checksums.get(signed_path) != digest:
+                    violations.append(
+                        f"diagnostic input is not signed with its declared digest: {relative}"
+                    )
+                target = payload_dir / "diagnostic_inputs" / relative
+                if any(part.is_symlink() for part in (target, *target.parents)):
+                    violations.append(f"diagnostic input refuses symlinks: {relative}")
+                elif not target.is_file():
+                    violations.append(f"diagnostic input missing from publication: {relative}")
+                elif _sha256_file(target) != digest:
+                    violations.append(f"diagnostic input digest mismatch: {relative}")
+                else:
+                    for path, document in publication_documents(target, required=True):
+                        contract.observe(path, document)
+                    resolved[relative] = target
+        if len(resolved) == len(contract.references):
+            _validate_diagnostic_v2_assets(contract, resolved)
+    except (OSError, ValueError) as exc:
+        violations.append(f"diagnostic input verification failed: {exc}")
+
+
 def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
     run_dir: Path,
     out_dir: Path,
@@ -1476,6 +1611,7 @@ def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if not selected_files:
         raise ValueError(f"No eligible files found under {run_root}")
     _validate_publication_requirements(run_root, selected_files)
+    diagnostic_inputs = _diagnostic_input_sources(run_root)
     release_metadata = _resolve_release_publication_metadata(run_root)
     if release_metadata is not None:
         _reject_run_local_release_metadata_paths(selected_files)
@@ -1567,6 +1703,20 @@ def export_publication_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "sha256": rights_entry.sha256,
             "source": release_metadata.source_paths["rights_provenance"],
         }
+
+    for relative, (source, digest) in diagnostic_inputs.items():
+        destination = payload_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        if _sha256_file(destination) != digest:
+            raise ValueError(f"diagnostic input changed during export: {relative}")
+        size_bytes = int(destination.stat().st_size)
+        total_bytes += size_bytes
+        entries.append(
+            PublicationFileEntry(
+                path=relative.as_posix(), size_bytes=size_bytes, sha256=digest, kind="provenance"
+            )
+        )
 
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
@@ -1707,21 +1857,12 @@ def _parse_checksum_lines(text: str) -> dict[str, str]:
 
 
 def _read_json_file(path: Path) -> dict[str, Any]:
-    """Read a JSON object from a path.
+    """Read one strict metadata object by content.
 
     Returns:
-        Parsed JSON object.
-
-    Raises:
-        ValueError: If the file is missing, malformed, or not a JSON object.
+        The validated publication object.
     """
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError(f"{path}: invalid JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path}: expected a JSON object")
-    return payload
+    return read_publication_object(path)
 
 
 def _episode_row_software_commit(
@@ -1786,8 +1927,8 @@ def _gather_episode_software_commits(
             if not line:
                 continue
             try:
-                record = json.loads(line)
-            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                record = parse_publication_json(line)
+            except ValueError as exc:
                 violations.append(f"{episodes_path}:{line_number}: invalid JSON: {exc}")
                 continue
             row_count += 1
@@ -1816,8 +1957,8 @@ def _goal_timeout_row_rejection(episodes_path: Path, line_number: int, line: str
         A rejection message, or ``None`` when the row is acceptable.
     """
     try:
-        record = json.loads(line)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        record = parse_publication_json(line)
+    except ValueError:
         return None
     if not isinstance(record, dict):
         return None
@@ -1974,7 +2115,7 @@ def _ambiguous_goal_timeout_rows(
             if message is None:
                 continue
             rejections.append(message)
-            record = json.loads(stripped)
+            record = parse_publication_json(stripped)
             episode_id = record.get("episode_id") if isinstance(record, Mapping) else None
             if not isinstance(episode_id, str) or not episode_id:
                 identity_errors.append(
@@ -2042,8 +2183,8 @@ def _load_snqi_diagnostics(payload_dir: Path) -> dict[str, Any] | None:
     if not diagnostics_path.is_file():
         return None
     try:
-        payload = json.loads(diagnostics_path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        payload = parse_publication_json(diagnostics_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
         raise ValueError(f"{diagnostics_path}: invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"{diagnostics_path}: expected a JSON object")
@@ -2181,8 +2322,8 @@ def _snqi_validate_episode_record(  # noqa: C901
         the record is fully valid.
     """
     try:
-        record = json.loads(raw_line)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        record = parse_publication_json(raw_line)
+    except ValueError as exc:
         return f"{source}: invalid JSON: {exc}", False, None
     if not isinstance(record, Mapping):
         return f"{source}: expected a JSON object", False, None
@@ -2259,7 +2400,10 @@ def _snqi_scan_episode_snqi_fields(
             )
             if field_present:
                 episode_field_present += 1
-            if stored_snqi is not None and filter_evidence_eligible_records([json.loads(line)])[0]:
+            if (
+                stored_snqi is not None
+                and filter_evidence_eligible_records([parse_publication_json(line)])[0]
+            ):
                 per_arm_field_sum[arm] += stored_snqi
                 per_arm_field_count[arm] += 1
             if rejection is not None:
@@ -2909,6 +3053,9 @@ def verify_publication_bundle_preflight(
 
     try:
         manifest = _read_json_file(manifest_path)
+        campaign_path = payload_dir / "campaign_manifest.json"
+        if campaign_path.is_file():
+            _read_json_file(campaign_path)
     except ValueError as exc:
         raise PublicationPreflightError(f"Publication preflight failed: {exc}") from exc
     if not manifest.get("schema_version"):
@@ -2925,6 +3072,7 @@ def verify_publication_bundle_preflight(
     _preflight_release_notes(payload_dir, violations)
     _preflight_check_development_marker(payload_dir, manifest, violations)
     _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
+    _preflight_check_diagnostic_inputs(payload_dir, checksums, violations)
     try:
         _preflight_check_release_reconciliation(
             payload_dir,

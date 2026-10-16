@@ -490,26 +490,12 @@ def _preflight(skill_name: str, json_output: bool = False) -> int:
         else None
     )
 
-    if not requires:
-        if json_output:
-            assert results is not None
-            results["summary"] = {"available": 0, "missing": 0, "unrecognized": 0}
-            print(json.dumps(results))
-        else:
-            _print_preflight_header(canonical, requires)
-            print("  (no requirements declared)")
-            print()
-            print("Result: PASS (no requirements to check)")
-        return 0
-
     if not json_output:
         _print_preflight_header(canonical, requires)
+        if not requires:
+            print("  (no requirements declared)")
 
     available, missing, unrecognized = _collect_requirement_results(requires, results, json_output)
-
-    if not json_output:
-        print()
-        _print_preflight_summary(available, missing, unrecognized)
 
     doctor_status, doctor_detail = _primary_checkout_doctor()
     if json_output:
@@ -528,9 +514,11 @@ def _preflight(skill_name: str, json_output: bool = False) -> int:
         print(json.dumps(results))
     else:
         print(f"  {doctor_status:12} checkout    {doctor_detail}")
+        print()
         if doctor_status != "ok":
-            print()
             print(f"Result: FAIL (primary checkout is not current: {doctor_status})")
+        else:
+            _print_preflight_summary(available, missing, unrecognized)
 
     if missing > 0 or unrecognized > 0:
         return 1
@@ -571,10 +559,10 @@ def _primary_checkout_doctor() -> tuple[str, str]:
     """Return a preflight verdict and detail for the checkout the caller runs from.
 
     ``stale_primary_checkout`` is True only for a detached HEAD behind the local
-    ``origin/main`` ref. An unreadable ``origin/main`` is reported as ``unknown`` so
-    the caller fails closed instead of certifying an unverified checkout.
+    ``origin/main`` ref. Unreadable refs or ancestry are reported as ``unknown``
+    so the caller fails closed instead of certifying an unverified checkout.
     """
-    from scripts.dev.worktree_hygiene_snapshot import primary_checkout_staleness
+    from worktree_hygiene_snapshot import primary_checkout_staleness
 
     state = primary_checkout_staleness()
     head = state.head_sha or "unresolved"
@@ -584,6 +572,18 @@ def _primary_checkout_doctor() -> tuple[str, str]:
             "unknown",
             f"origin/main could not be resolved from this checkout (HEAD {head}); "
             "run 'git fetch origin main' before trusting local reads",
+        )
+    if state.head_sha is None:
+        return (
+            "unknown",
+            f"HEAD could not be resolved from this checkout (origin/main {origin_main}); "
+            "establish a valid HEAD before trusting local reads",
+        )
+    if state.head_behind_origin_main is None:
+        return (
+            "unknown",
+            f"HEAD..origin/main ancestry comparison failed (HEAD {head}, origin/main {origin_main}); "
+            "rerun 'git rev-list --count HEAD..origin/main' before trusting local reads",
         )
     if state.stale_primary_checkout:
         return (

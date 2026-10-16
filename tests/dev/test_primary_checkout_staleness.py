@@ -13,6 +13,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT_SCRIPT = REPO_ROOT / "scripts" / "dev" / "worktree_hygiene_snapshot.py"
 PREFLIGHT_SCRIPT = REPO_ROOT / "scripts" / "dev" / "check_skills.py"
@@ -236,3 +238,152 @@ def test_repo_status_markdown_omits_the_repair_when_current(tmp_path: Path) -> N
 
     assert "stale_primary_checkout=False" in rendered, rendered
     assert "git checkout --detach origin/main" not in rendered, rendered
+
+
+def test_preflight_direct_script_without_repository_import_path(tmp_path: Path) -> None:
+    """The direct CLI needs only PyYAML, not an editable install or PYTHONPATH."""
+    import os
+    import shutil
+    import venv
+
+    import yaml
+
+    repo, _shas = _build_repo(tmp_path, commits=1)
+    environment = tmp_path / "isolated-python"
+    venv.create(environment, with_pip=False)
+    interpreter = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    child_env = os.environ.copy()
+    child_env.pop("PYTHONPATH", None)
+    child_env.pop("PYTHONHOME", None)
+    site_packages = subprocess.check_output(
+        [str(interpreter), "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+        env=child_env,
+        text=True,
+    ).strip()
+    # Supply the one third-party dependency without processing editable-install .pth files.
+    shutil.copytree(Path(yaml.__file__).parent, Path(site_packages) / "yaml")
+
+    result = subprocess.run(
+        [str(interpreter), str(PREFLIGHT_SCRIPT), "--preflight", "goal-autopilot", "--json"],
+        cwd=repo,
+        env=child_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    assert _checkout_status(payload) == "ok"
+
+
+def test_preflight_fails_closed_on_unborn_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An existing origin/main cannot certify an unborn local HEAD."""
+    repo, shas = _build_repo(tmp_path, commits=1)
+    _git(repo, "checkout", "-q", "--orphan", "unborn")
+    assert _git(repo, "rev-parse", "origin/main") == shas[0]
+    assert (
+        subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--verify", "HEAD"], check=False
+        ).returncode
+        != 0
+    )
+
+    code, payload = _run_local_preflight(repo, tmp_path, monkeypatch, capsys)
+
+    assert _checkout_status(payload) == "unknown", payload
+    assert code == 1
+    assert payload["status"] == "fail"
+    assert payload["summary"] == {"available": 1, "missing": 0, "unrecognized": 0}
+    assert "HEAD" in payload["primary_checkout"]["detail"]
+
+
+def test_preflight_fails_closed_when_ancestry_count_times_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A Git timeout cannot label a detached, behind checkout as current."""
+    repo, shas = _build_repo(tmp_path, commits=2)
+    _git(repo, "checkout", "-q", "--detach", shas[0])
+    assert _git(repo, "rev-list", "--count", "HEAD..origin/main") == "1"
+    real_run = subprocess.run
+    timed_out = []
+
+    def run_with_count_timeout(command, *args, **kwargs):
+        if command == ["git", "rev-list", "--count", "HEAD..origin/main"]:
+            timed_out.append(command)
+            raise subprocess.TimeoutExpired(command, timeout=1)
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", run_with_count_timeout)
+
+    code, payload = _run_local_preflight(repo, tmp_path, monkeypatch, capsys)
+
+    assert timed_out, "the real ancestry command must hit the timeout boundary"
+    assert _checkout_status(payload) == "unknown", payload
+    assert code == 1
+    assert payload["status"] == "fail"
+    assert payload["summary"] == {"available": 1, "missing": 0, "unrecognized": 0}
+    assert "HEAD..origin/main" in payload["primary_checkout"]["detail"]
+
+
+@pytest.mark.parametrize("checkout", ["stale", "unknown"])
+@pytest.mark.parametrize("json_output", [True, False])
+def test_empty_requires_still_checks_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    checkout: str,
+    json_output: bool,
+) -> None:
+    """Skills with no tools still refuse stale or unverifiable checkout state."""
+    repo, shas = _build_repo(tmp_path, commits=2)
+    _git(repo, "checkout", "-q", "--detach", shas[0])
+    if checkout == "unknown":
+        _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+
+    code, payload = _run_local_preflight(
+        repo, tmp_path, monkeypatch, capsys, requires=[], json_output=json_output
+    )
+
+    assert code == 1, payload
+    if json_output:
+        assert _checkout_status(payload) == checkout, payload
+        assert payload["status"] == "fail"
+        assert payload["requires"] == []
+        assert payload["summary"] == {"available": 0, "missing": 0, "unrecognized": 0}
+    else:
+        assert "checkout" in payload
+        assert checkout in payload
+        assert "Result: FAIL" in payload
+        assert "Result: PASS" not in payload
+
+
+def _run_local_preflight(
+    repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    requires: list[str] | None = None,
+    json_output: bool = True,
+) -> tuple[int, dict | str]:
+    """Use the real CLI dispatcher and checkout reads with an explicit skill fixture."""
+    import yaml
+
+    from scripts.dev import check_skills
+
+    registry = tmp_path / "skills.yaml"
+    registry.write_text(
+        yaml.safe_dump(
+            {"skills": {"fixture-skill": {"requires": ["git"] if requires is None else requires}}}
+        )
+    )
+    monkeypatch.setattr(check_skills, "REGISTRY", registry)
+    monkeypatch.chdir(repo)
+    argv = ["--preflight", "fixture-skill"] + (["--json"] if json_output else [])
+    code = check_skills.main(argv)
+    output = capsys.readouterr().out
+    return code, json.loads(output) if json_output else output

@@ -20,7 +20,8 @@ def current_primary_checkout(monkeypatch: pytest.MonkeyPatch) -> None:
     The real stale/current checkout behavior is covered with disposable Git
     repositories in test_primary_checkout_staleness.py.
     """
-    from scripts.dev import worktree_hygiene_snapshot
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[2] / "scripts/dev"))
+    worktree_hygiene_snapshot = importlib.import_module("worktree_hygiene_snapshot")
 
     monkeypatch.setattr(
         worktree_hygiene_snapshot,
@@ -29,6 +30,7 @@ def current_primary_checkout(monkeypatch: pytest.MonkeyPatch) -> None:
             head_sha="a" * 40,
             origin_main_sha="a" * 40,
             head_attached=True,
+            head_behind_origin_main=0,
             stale_primary_checkout=False,
         ),
     )

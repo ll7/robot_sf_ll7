@@ -1,0 +1,21 @@
+static_constriction:
+- classic_bottleneck_low
+- classic_bottleneck_medium
+- classic_bottleneck_high
+- classic_realworld_double_bottleneck_high
+- classic_cross_trap_low
+- classic_cross_trap_medium
+- classic_cross_trap_high
+- francis2023_narrow_hallway
+portal:
+- classic_doorway_low
+- classic_doorway_medium
+- classic_doorway_high
+- francis2023_entering_room
+- francis2023_exiting_room
+- francis2023_entering_elevator
+- francis2023_exiting_elevator
+crowding_control:
+- classic_station_platform_medium
+- francis2023_crowd_navigation
+- francis2023_robot_crowding

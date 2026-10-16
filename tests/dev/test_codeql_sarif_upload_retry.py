@@ -12,8 +12,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "dev" / "codeql_sarif_upload_retry.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
-CODEQL_ACTION = "github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd"
-UPLOAD_ACTION = "github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd"
+CODEQL_ACTION = "github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d"
+UPLOAD_ACTION = "github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d"
 
 
 def _run_helper(

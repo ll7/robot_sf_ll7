@@ -794,6 +794,28 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+**Measured state, 2026-10-15 (issue #10398).** None of those toggles has been applied. The two
+enforcement surfaces currently disagree, so read both before assuming a merge is guarded:
+
+| Surface | What it actually requires today |
+| --- | --- |
+| GitHub, on `main` | No classic branch protection (`GET /branches/main/protection` → 404). The only protection is the `main-protection` ruleset, whose complete required status-check set is **`ty-advisory-ratchet`** and **`pr-contract-check`**. No `merge_queue` rule, so the native merge queue is not enabled and `merge_group` has never run. |
+| Local, `scripts/dev/single_account_merge_receipt.py` | Treats `merge-queue-gate` as required, so `gh_pr_merge.sh` refuses a merge until this job completes. Observed live on PR #10215: `required_check_merge-queue-gate_pending`, `status: blocked`. |
+
+Two consequences worth stating plainly:
+
+- **The check the local merger treats as mandatory is required by nobody.** A merge blocked on
+  `merge-queue-gate` locally would be accepted by GitHub. The fail-closed property depends on every
+  merge going through `gh_pr_merge.sh`.
+- **The check GitHub *does* require, `pr-contract-check`, is the behaviour-change receipt gate.** On
+  2026-10-15 it failed on 39 of 52 open non-draft PRs (see #10307), so those PRs are unmergeable
+  through any path. The required-check surface is dominated by the one gate that needs evidence
+  nobody has produced, while the gate that exists to catch a bad merge is not required at all.
+
+The residual for #6274 is therefore stated against the *measured* configuration, not the intended one.
+Two changes remain maintainer decisions and are tracked in #10398: activate the queue as documented
+above, or align `single_account_merge_receipt.py` with the checks GitHub actually requires.
+
 ### Single-account merge receipt (issue #7669)
 
 **Plain-language contract.** A merge may proceed with one account only when a versioned receipt

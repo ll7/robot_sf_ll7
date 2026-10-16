@@ -6,9 +6,14 @@ import gzip
 import importlib.util
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import yaml
+
+if TYPE_CHECKING:
+    from importlib.abc import Loader
+    from importlib.machinery import ModuleSpec
 
 
 def read_records(packet):
@@ -162,9 +167,11 @@ def main():
     )
     assert max_error < 2e-14, max_error
     # Same draw shape, order of means, percentile call and contrasts as original.
-    module_spec = importlib.util.spec_from_file_location("unchanged", a.packet / "analyze.py")
+    module_spec = cast(
+        "ModuleSpec", importlib.util.spec_from_file_location("unchanged", a.packet / "analyze.py")
+    )
     analyzer = importlib.util.module_from_spec(module_spec)
-    module_spec.loader.exec_module(analyzer)
+    cast("Loader", module_spec.loader).exec_module(analyzer)
     pooled = arrays(old + new, groups, list(range(1001, 1061)))
     draws = np.random.default_rng(1001).integers(0, 60, size=(10000, 60))
     pooled_rows = []

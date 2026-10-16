@@ -14,17 +14,25 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 import yaml
+
+if TYPE_CHECKING:
+    from importlib.abc import Loader
+    from importlib.machinery import ModuleSpec
 
 PACKET = Path(__file__).resolve().parent
 
 
 def load_analyzer(packet):
     """Import the archived analyzer without changing its source or globals."""
-    spec = importlib.util.spec_from_file_location("frozen_guardesc_analyzer", packet / "analyze.py")
+    spec = cast(
+        "ModuleSpec",
+        importlib.util.spec_from_file_location("frozen_guardesc_analyzer", packet / "analyze.py"),
+    )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    cast("Loader", spec.loader).exec_module(module)
     return module
 
 

@@ -472,7 +472,7 @@ def validate_receipt(
     """Check exact coverage, provenance, exceptions and exhaustive classifications."""
     import jsonschema
 
-    identities = validate_hardware_pair(receipt.get("hardware"))
+    identities = validate_hardware_pair(receipt.get("hardware", {}))
     schema = json.loads((Path(__file__).with_name("behaviour_receipt.schema.json")).read_text())
     validate_scheduler_rows(receipt.get("rows", []), identities)
     jsonschema.Draft202012Validator(schema).validate(receipt)

@@ -8,8 +8,15 @@ from pathlib import Path
 import pytest
 
 from scripts.ci import behaviour_receipt as adapter
+from tests.validation.receipt_scheduler_fixture import install_scheduler
 from tests.validation.test_behaviour_receipt_gate import _commit_receipt, _receipt
 from tests.validation.test_behaviour_receipt_transport import _git_repo
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,11 +60,13 @@ def test_rows_committed_after_execution_are_accepted(monkeypatch, tmp_path, fiel
     head = header["head_sha"]
     assert run != head
     git("merge-base", "--is-ancestor", run, head)
-    assert git("diff", "--name-only", run, head) == "receipts/behaviour/sweep.json"
+    assert set(git("diff", "--name-only", run, head).splitlines()) == {
+        "receipts/behaviour/sweep.json",
+        "receipts/behaviour/fixture-sources/head/12345.tar.gz",
+        "receipts/behaviour/fixture-sources/baseline/12345.tar.gz",
+    }
     assert header["refute_review"]["head_sha"] == head
-    # Isolate each execution identity; the shared transport fixtures also exercise both.
-    other = "interaction_audit" if field == "scheduler" else "scheduler"
-    header[other]["source_sha"] = head
+    # Both executed sources remain bound to their committed observations.
     assert (
         adapter.check_receipt(_body(header), ["robot_sf/planner/policy.py"], "ll7/robot_sf_ll7")
         == []
@@ -158,8 +167,7 @@ def test_committed_lfs_receipt_uses_verified_object(monkeypatch, tmp_path, fault
         object_file.unlink()
     elif fault == "wrong_digest":
         header["rows_artifact"]["sha256"] = "0" * 64
-    # This test isolates LFS transport; the run identity fixtures cover ancestry.
-    header["scheduler"]["source_sha"] = header["interaction_audit"]["source_sha"] = head
+    # Keep recorded sources intact while isolating committed LFS transport.
     blockers = adapter.check_receipt(
         _body(header), ["robot_sf/planner/policy.py"], "ll7/robot_sf_ll7"
     )

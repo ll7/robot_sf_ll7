@@ -7,11 +7,15 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import shlex
 import subprocess
 import sys
+import tarfile
+import tempfile
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,7 +26,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.ci import behaviour_receipt  # noqa: E402
+from scripts.ci import (  # noqa: E402
+    behaviour_receipt,
+    receipt_provenance,
+)
 
 DEV_SEED_MIN = 1001
 DEV_SEED_MAX = 1200
@@ -755,6 +762,111 @@ class SweepRun:
     artifact_uri: str
     artifact_sha256: str
     job_id: str
+    hardware: dict[str, Any] | None = None
+    shard_dirs: tuple[Path, ...] = ()
+
+
+def _record_request(
+    output_dir: Path, source_sha: str, job_id: str, node: str, arm_role: str
+) -> None:
+    (output_dir / "execution_request.json").write_bytes(
+        _json_bytes(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": node,
+                "source_sha": source_sha,
+                "arm_role": arm_role,
+                "job_id": job_id,
+            }
+        )
+    )
+
+
+def _shard_dirs(output_dir: Path, job_id: str) -> tuple[Path, ...]:
+    jobs = behaviour_receipt.scheduler_job_ids(job_id)
+    paths = tuple(
+        output_dir if len(jobs) == 1 and output_dir.name == job else output_dir / job
+        for job in jobs
+    )
+    for job, path in zip(jobs, paths, strict=True):
+        if path.name != job or path.is_symlink() or not path.is_dir():
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: missing job-ID-keyed shard directory"
+            )
+    return paths
+
+
+def _read_hardware(output_dir: Path, source_sha: str, job_id: str) -> dict[str, Any]:
+    jobs = behaviour_receipt.scheduler_job_ids(job_id)
+    snapshot = behaviour_receipt.scheduler_snapshot(jobs)
+    claims = []
+    for job, path in zip(jobs, _shard_dirs(output_dir, job_id), strict=True):
+        files = {}
+        for name in behaviour_receipt.HARDWARE_FILES:
+            if name == "execution_scheduler.json":
+                raw = _json_bytes(behaviour_receipt.scheduler_snapshot([job]))
+            else:
+                file = path / name
+                if file.is_symlink() or not file.is_file():
+                    raise behaviour_receipt.HardwareIdentityError(
+                        f"hardware comparison invalid: missing regular {name} claim file"
+                    )
+                try:
+                    raw = file.read_bytes()
+                except OSError as exc:
+                    raise behaviour_receipt.HardwareIdentityError(
+                        f"hardware comparison invalid: unreadable {name} claim file"
+                    ) from exc
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeError as exc:
+                raise behaviour_receipt.HardwareIdentityError(
+                    f"hardware comparison invalid: invalid {name} encoding"
+                ) from exc
+            files[name] = {"content": content, "sha256": hashlib.sha256(raw).hexdigest()}
+        identity = behaviour_receipt.hardware_identity(files)
+        if identity["source_sha"] != source_sha or identity["job_id"] != job:
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: shard source or job differs from request"
+            )
+        claims.append(files)
+    files = claims[0]
+    request = json.loads(files["execution_request.json"]["content"])
+    request["job_id"] = job_id
+    for name, payload in (
+        ("execution_request.json", request),
+        ("execution_scheduler.json", snapshot),
+    ):
+        raw = _json_bytes(payload)
+        files[name] = {"content": raw.decode(), "sha256": hashlib.sha256(raw).hexdigest()}
+    behaviour_receipt.hardware_identity(files)
+    return files
+
+
+def _stamp_scheduler_rows(output_dir: Path) -> int:
+    """Bind sealed comparison inputs without modifying any producer bytes."""
+    job = os.environ.get("SLURM_JOB_ID", "")
+    node = os.environ.get("SLURM_JOB_NODELIST", "")
+    behaviour_receipt.scheduler_job_ids(job)
+    if output_dir.name != job or not node:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: execution directory or scheduler context missing"
+        )
+    for path in (
+        *output_dir.glob("episodes_*.jsonl"),
+        *output_dir.glob("campaigns/**/episodes.jsonl"),
+    ):
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        for row in rows:
+            if any(key in row for key in ("scheduler_job_id", "scheduler_node")):
+                raise behaviour_receipt.HardwareIdentityError(
+                    "hardware comparison invalid: row already has an allocation binding"
+                )
+            behaviour_receipt.validate_source_row_context(
+                {**row, "scheduler_job_id": job, "scheduler_node": node}, job, node
+            )
+    receipt_provenance.write_binding(output_dir, job, node)
+    return 0
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -854,41 +966,6 @@ def _ensure_worktree(repo_root: Path, work_dir: Path, label: str, source_sha: st
     return checkout
 
 
-def _run_local_sweep(  # noqa: PLR0913
-    repo_root: Path,
-    work_dir: Path,
-    label: str,
-    source_sha: str,
-    seeds: list[int],
-    *,
-    arms: list[str] | None,
-    scenarios: list[str] | None,
-    workers: int,
-    check_only: bool,
-) -> SweepRun:
-    checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
-    output_dir = work_dir / "sweeps" / label
-    cmd = _sweep_command(
-        source_sha,
-        output_dir,
-        seeds,
-        arms=arms,
-        scenarios=scenarios,
-        workers=workers,
-        check_only=check_only,
-    )
-    subprocess.run(cmd, cwd=checkout, check=True)
-    manifest = output_dir / "README.md"
-    artifact_sha = _sha256(manifest) if manifest.is_file() else _canonical_digest(cmd)
-    return SweepRun(
-        source_sha=source_sha,
-        output_dir=output_dir,
-        artifact_uri=f"{PLACEHOLDER_EVIDENCE_URI}/{label}",
-        artifact_sha256=artifact_sha,
-        job_id="1",
-    )
-
-
 def _submit_sbatch_sweep(
     repo_root: Path,
     work_dir: Path,
@@ -896,55 +973,105 @@ def _submit_sbatch_sweep(
     source_sha: str,
     seeds: list[int],
     *,
-    arms: list[str] | None,
-    scenarios: list[str] | None,
-    workers: int,
+    args: argparse.Namespace,
 ) -> SweepRun:
+    node = args.sbatch_node
+    if node is None:
+        raise ValueError("--mode sbatch requires --sbatch-node to pair numerical hardware")
+    if re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", node) is None:
+        raise ValueError("--sbatch-node must name a single literal node hostname")
+    inventory, _ = behaviour_receipt.scheduler_inventory()
+    if node not in inventory:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: requested node is absent from trusted inventory"
+        )
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
-    output_dir = work_dir / "sweeps" / label
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_root = work_dir / "sweeps" / label
+    output_root.mkdir(parents=True, exist_ok=True)
     cmd = _sweep_command(
         source_sha,
-        output_dir,
+        Path("__RECEIPT_JOB_DIR__"),
         seeds,
-        arms=arms,
-        scenarios=scenarios,
-        workers=workers,
+        arms=args.arms,
+        scenarios=args.scenarios,
+        workers=args.workers,
         check_only=False,
     )
-    script = work_dir / f"behaviour_receipt_{label}.sbatch"
-    script.write_text(
-        "\n".join(
-            [
-                "#!/usr/bin/env bash",
-                f"#SBATCH --job-name=behaviour-{label}",
-                f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
-                "#SBATCH --time=24:00:00",
-                "set -euo pipefail",
-                f"cd {checkout}",
-                shlex.join(cmd),
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    shell_command = " ".join(
+        '"$RECEIPT_JOB_DIR"' if item == "__RECEIPT_JOB_DIR__" else shlex.quote(item) for item in cmd
     )
+    request_template = shlex.quote(
+        json.dumps(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": node,
+                "source_sha": source_sha,
+                "arm_role": label,
+            }
+        )
+    )
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix=f"behaviour_receipt_{label}_",
+        suffix=".sbatch",
+        dir=work_dir,
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        script = Path(handle.name)
+        handle.write(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    f"#SBATCH --job-name=behaviour-{label}",
+                    f"#SBATCH --output={output_root / 'slurm-%j.out'}",
+                    "#SBATCH --nodes=1",
+                    f"#SBATCH --nodelist={node}",
+                    f"#SBATCH --partition={inventory[node]['node_class']}",
+                    f"#SBATCH --cpus-per-task={args.workers}",
+                    "#SBATCH --time=24:00:00",
+                    "set -euo pipefail",
+                    f'RECEIPT_JOB_DIR={shlex.quote(str(output_root))}/"${{SLURM_JOB_ID:?}}"',
+                    'mkdir -- "$RECEIPT_JOB_DIR"',
+                    f"cd {shlex.quote(str(checkout))}",
+                    'hostname > "$RECEIPT_JOB_DIR/execution_node.txt"',
+                    'LC_ALL=C lscpu --json > "$RECEIPT_JOB_DIR/execution_cpu.json"',
+                    'printf "%s\\n" "${SLURM_JOB_PARTITION:?}" > "$RECEIPT_JOB_DIR/execution_node_class.txt"',
+                    f'test "$(cat "$RECEIPT_JOB_DIR/execution_node.txt")" = {shlex.quote(node)}',
+                    f"printf '%s\\n' {request_template} > \"$RECEIPT_JOB_DIR/request_template.json\"",
+                    f'uv run python {shlex.quote(str(Path(__file__).resolve()))} --record-job-request "$RECEIPT_JOB_DIR"',
+                    shell_command,
+                    f'uv run python {shlex.quote(str(Path(__file__).resolve()))} --record-scheduler-context "$RECEIPT_JOB_DIR"',
+                    "",
+                ]
+            )
+        )
     job_id = subprocess.check_output(["sbatch", "--parsable", str(script)], text=True).strip()
-    submission = {
-        "schema_version": "behaviour-sweep-submission.v1",
-        "label": label,
-        "source_sha": source_sha,
-        "job_id": job_id,
-        "command": cmd,
-        "script": str(script),
-    }
-    manifest = output_dir / "submission.json"
-    manifest.write_bytes(_json_bytes(submission))
+    behaviour_receipt.scheduler_job_ids(job_id)
+    output_dir = output_root / job_id
+    submissions = output_root / "submissions"
+    submissions.mkdir(exist_ok=True)
+    manifest = submissions / f"{job_id}.json"
+    with manifest.open("xb") as handle:
+        handle.write(
+            _json_bytes(
+                {
+                    "schema_version": "behaviour-sweep-submission.v2",
+                    "label": label,
+                    "source_sha": source_sha,
+                    "job_id": job_id,
+                    "command": cmd,
+                    "script": script.relative_to(work_dir).as_posix(),
+                    "requested_node": node,
+                }
+            )
+        )
     return SweepRun(
-        source_sha=source_sha,
-        output_dir=output_dir,
-        artifact_uri=f"{PLACEHOLDER_EVIDENCE_URI}/{label}",
-        artifact_sha256=_sha256(manifest),
-        job_id=job_id,
+        source_sha,
+        output_dir,
+        f"{PLACEHOLDER_EVIDENCE_URI}/{label}/{job_id}",
+        _sha256(manifest),
+        job_id,
     )
 
 
@@ -958,17 +1085,21 @@ def _existing_sweep(
 ) -> SweepRun:
     if not output_dir.is_dir():
         raise FileNotFoundError(output_dir)
-    _verify_sweep_metadata(output_dir, source_sha)
+    hardware = _read_hardware(output_dir, source_sha, job_id)
+    shards = _shard_dirs(output_dir, job_id)
+    for shard in shards:
+        _verify_sweep_metadata(shard, source_sha)
     digest = _canonical_digest(
         {
             path.relative_to(output_dir).as_posix(): _sha256(path)
-            for path in sorted(output_dir.rglob("*"))
+            for shard in shards
+            for path in sorted(shard.rglob("*"))
             if path.is_file()
         }
     )
     if artifact_sha256 is not None and artifact_sha256 != digest:
         raise ValueError("supplied sweep digest differs from actual artifact bytes")
-    return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id)
+    return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id, hardware, shards)
 
 
 def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
@@ -1039,11 +1170,25 @@ def _index_raw_episodes(
     return index
 
 
-def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, Any]]:
-    """Join summaries to raw traces with an invocation-local index of each file.
+def _validate_row_allocation(summary: dict, raw: dict, job: str | None, node: str | None) -> None:
+    if job is None:
+        return
+    if node is None:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: missing verified allocation node"
+        )
+    for context in (summary, raw):
+        # Fields absent from sealed producer rows come from the verified binding.
+        # Present fields remain claims and must agree with the scheduler.
+        context.setdefault("scheduler_job_id", job)
+        context.setdefault("scheduler_node", node)
+        behaviour_receipt.validate_source_row_context(context, job, node)
 
-    There is no persistent cache: subsequent calls reread the current bytes.
-    """
+
+def _load_sweep_rows(
+    sweep_dir: Path, *, scheduler_job_id: str | None = None, scheduler_node: str | None = None
+) -> dict[tuple[str, str, int], dict[str, Any]]:
+    receipt_provenance.verify_optional_binding(sweep_dir, scheduler_job_id, scheduler_node)
     rows: dict[tuple[str, str, int], dict[str, Any]] = {}
     raw_indexes: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]] = {}
     for path in sorted(sweep_dir.glob("episodes_*.jsonl")):
@@ -1064,9 +1209,10 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
             if len(matches) != 1 or source_path.parent.name.split("__")[0] != key[0]:
                 raise ValueError(f"raw episode identity differs for {key}")
             raw = matches[0]
-            if _row_success(raw) != _row_success(row) or _row_collisions(raw) != _row_collisions(
-                row
-            ):
+            _validate_row_allocation(row, raw, scheduler_job_id, scheduler_node)
+            if receipt_provenance.comparison_outcomes(
+                raw
+            ) != receipt_provenance.comparison_outcomes(row):
                 raise ValueError(f"raw episode outcome differs from summary for {key}")
             if key in rows:
                 raise ValueError(f"duplicate sweep row {key}")
@@ -1076,19 +1222,29 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
     return rows
 
 
+def _load_run_rows(run: SweepRun, arm_role: str) -> dict[tuple[str, str, int], dict[str, Any]]:
+    if run.hardware is None:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: unverified sweep cannot provide rows"
+        )
+    identity = behaviour_receipt.hardware_identity(run.hardware)
+    rows = {}
+    for shard in run.shard_dirs:
+        part = receipt_provenance.verified_raw_rows(
+            shard, shard.name, identity["node"], source_sha=run.source_sha, arm_role=arm_role
+        )
+        if set(part) & set(rows):
+            raise ValueError("duplicate rows across scheduler shards")
+        rows.update(part)
+    return rows
+
+
 def _row_success(row: dict[str, Any]) -> bool:
-    if "success" in row:
-        return bool(row["success"])
-    metrics = row.get("metrics") or {}
-    outcome = row.get("outcome") or {}
-    return bool(metrics.get("success") or outcome.get("route_complete"))
+    return receipt_provenance.comparison_outcomes(row)["success"]
 
 
 def _row_collisions(row: dict[str, Any]) -> int:
-    if row.get("collisions") is not None:
-        return int(row["collisions"])
-    metrics = row.get("metrics") or {}
-    return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
+    return receipt_provenance.comparison_outcomes(row)["collisions"]
 
 
 def _runtime_objects(
@@ -1337,15 +1493,37 @@ def _controller_runtime_marker(
 def _non_runtime_location(name: str, key: str) -> bool:
     path = re.sub(r"\[\d+\]", ".*", name)
     full = (*path.split("."), key) if path else (key,)
-    return full in {
+    return full in _non_runtime_paths()
+
+
+@cache
+def _non_runtime_paths() -> frozenset[tuple[str, ...]]:
+    """Compile the immutable, source-owned policy once per validator process."""
+    return frozenset(
         tuple(location.split("."))
         for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
-    }
+    )
 
 
 def _transport_path(path: tuple[str, ...]) -> tuple[str | None, ...]:
     """Normalize declared array indices without conflating literal dictionary keys."""
     return tuple(None if part == "*" else part for part in path)
+
+
+@cache
+def _runtime_policy_index() -> tuple[Any, ...]:
+    """Index the fixed runtime vocabulary; never cache decisions about evidence."""
+    return (
+        re.compile(EXECUTION_EVIDENCE_LOCATIONS["fault_key_pattern"], re.IGNORECASE),
+        set(EXECUTION_EVIDENCE_LOCATIONS["runtime_fields"])
+        | set(EXECUTION_EVIDENCE_LOCATIONS["runtime_aliases"]),
+        set(EXECUTION_EVIDENCE_LOCATIONS["counter_fields"]),
+        set(EXECUTION_EVIDENCE_LOCATIONS["mode_locations"])
+        | set(EXECUTION_EVIDENCE_LOCATIONS["required_values"]),
+        {_transport_path(path) for path in _non_runtime_paths()},
+        {_transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]},
+        {_transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["counter_objects"]},
+    )
 
 
 def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
@@ -1354,27 +1532,17 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     Source-key catalog membership is deliberately insufficient. Dict keys stay
     exact; only array indices normalize to '*'. No subtree is exempted.
     """
-    vocabulary = re.compile(EXECUTION_EVIDENCE_LOCATIONS["fault_key_pattern"], re.IGNORECASE)
-    runtime_fields = set(EXECUTION_EVIDENCE_LOCATIONS["runtime_fields"]) | set(
-        EXECUTION_EVIDENCE_LOCATIONS["runtime_aliases"]
-    )
-    counter_fields = set(EXECUTION_EVIDENCE_LOCATIONS["counter_fields"])
-    required = set(EXECUTION_EVIDENCE_LOCATIONS["mode_locations"]) | set(
-        EXECUTION_EVIDENCE_LOCATIONS["required_values"]
-    )
-
     # None represents an actual array index; a literal '*' dictionary key must
     # not acquire the array-only exemption. Keep dotted dictionary keys intact.
-    optional = {
-        _transport_path(tuple(location.split(".")))
-        for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
-    }
-    runtime_objects = {
-        _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]
-    }
-    counter_objects = {
-        _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["counter_objects"]
-    }
+    (
+        vocabulary,
+        runtime_fields,
+        counter_fields,
+        required,
+        optional,
+        runtime_objects,
+        counter_objects,
+    ) = _runtime_policy_index()
 
     def classified(path: tuple[str | None, ...], key: str) -> bool:
         return (
@@ -1475,6 +1643,7 @@ def build_rows_and_classifications(
     *,
     classification_class: str,
     evidence_base_uri: str,
+    execution_evidence: dict | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Join head/baseline sweep rows into gate payload rows and classifications."""
     rows: list[dict[str, Any]] = []
@@ -1502,7 +1671,15 @@ def build_rows_and_classifications(
                         "collisions": collisions,
                         "baseline_success": baseline_success,
                         "baseline_collisions": baseline_collisions,
-                        **_execution_evidence(head),
+                        "scheduler_job_id": head.get("scheduler_job_id"),
+                        "scheduler_node": head.get("scheduler_node"),
+                        "baseline_scheduler_job_id": baseline.get("scheduler_job_id"),
+                        "baseline_scheduler_node": baseline.get("scheduler_node"),
+                        **(
+                            _execution_evidence(head)
+                            if execution_evidence is None
+                            else execution_evidence[key]
+                        ),
                     }
                 )
                 evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
@@ -1538,6 +1715,73 @@ def build_rows_and_classifications(
         ),
     }
     return rows, classifications, totals
+
+
+def derive_valid_comparison(
+    head_rows: dict,
+    baseline_rows: dict,
+    scope: dict,
+    *,
+    classification_class: str,
+    evidence_base_uri: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    """Shared collection/admission trust decision, derived entirely from raw rows."""
+    from robot_sf.benchmark.algorithm_metadata import (
+        canonical_algorithm_name,
+        enrich_algorithm_metadata,
+    )
+
+    expected = {
+        (arm, map_id, seed)
+        for arm in scope["arms"]
+        for map_id in scope["maps"]
+        for seed in DEFAULT_SEEDS
+    }
+    profiles = {}
+    for arm in scope["arms"]:
+        algorithm = canonical_algorithm_name(scope.get("arm_algorithms", {}).get(arm, arm))
+        capabilities = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+        profiles[arm] = (algorithm, capabilities)
+    head_evidence = {}
+    for sources in (head_rows, baseline_rows):
+        if set(sources) != expected:
+            raise behaviour_receipt.HardwareIdentityError(
+                "raw execution invalid: scope coverage differs"
+            )
+        for key, raw in sources.items():
+            receipt_provenance.comparison_outcomes(raw)
+            evidence = _execution_evidence(raw)
+            arm = key[0]
+            algorithm, capabilities = profiles[arm]
+            require_valid_execution(evidence, algorithm, capabilities)
+            if sources is head_rows:
+                head_evidence[key] = evidence
+    return build_rows_and_classifications(
+        head_rows,
+        baseline_rows,
+        scope,
+        classification_class=classification_class,
+        evidence_base_uri=evidence_base_uri,
+        execution_evidence=head_evidence,
+    )
+
+
+def require_valid_execution(evidence: dict, algorithm: str, capabilities: dict) -> None:
+    """One execution rule for raw derivation and projected receipt validation."""
+    reason = None
+    mode = "native" if capabilities["supports_native_commands"] else "adapter"
+    if evidence.get("algorithm") != algorithm:
+        reason = "row algorithm differs from reviewed arm"
+    elif evidence.get("execution_mode") != mode or not (
+        capabilities["supports_native_commands"] or capabilities["supports_adapter_commands"]
+    ):
+        reason = "command execution mode does not satisfy the algorithm registry"
+    elif _audit_status([evidence]) == "fail":
+        reason = "intended solver/controller did not execute or trace is incomplete"
+    elif _audit_status([evidence]) != "pass":
+        reason = "fallback or degraded execution cannot satisfy the receipt"
+    if reason is not None:
+        raise behaviour_receipt.HardwareIdentityError(f"raw execution invalid: {reason}")
 
 
 def _audit_status(rows: list[dict[str, Any]]) -> str:
@@ -1577,6 +1821,31 @@ def write_real_row_audit(
     return _sha256(path)
 
 
+def _archive_source_bundle(shard: Path, bundle: Path) -> None:
+    """Preserve an existing identical evidence bundle; refuse conflicting bytes."""
+    files = [*receipt_provenance.source_files(shard), shard / receipt_provenance.BINDING_FILE]
+    expected = {path.relative_to(shard).as_posix(): path.read_bytes() for path in files}
+    if bundle.exists():
+        with tarfile.open(bundle, "r:gz") as archive:
+            actual = {}
+            for member in archive:
+                stream = archive.extractfile(member) if member.isfile() else None
+                if stream is None or member.name in actual:
+                    raise behaviour_receipt.HardwareIdentityError(
+                        "hardware comparison invalid: provenance digest bundle is invalid"
+                    )
+                actual[member.name] = stream.read()
+        if actual != expected:
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: provenance digest bundle already exists with different bytes"
+            )
+        return
+    bundle.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(bundle, "x:gz") as archive:
+        for path in files:
+            archive.add(path, arcname=path.relative_to(shard).as_posix(), recursive=False)
+
+
 def write_receipt_and_header(  # noqa: PLR0913
     *,
     repo_root: Path,
@@ -1599,8 +1868,50 @@ def write_receipt_and_header(  # noqa: PLR0913
     output_dir: Path,
 ) -> tuple[Path, dict[str, Any]]:
     """Write the committed rows payload and return the compact PR header."""
+    hardware = {"head": scheduler.hardware, "baseline": baseline.hardware}
+    identities = behaviour_receipt.validate_hardware_pair(hardware)
+    if scheduler.source_sha == baseline.source_sha:
+        raise behaviour_receipt.HardwareIdentityError(
+            "producer source invalid: head and baseline share a producer commit"
+        )
+    derived, _, derived_totals = derive_valid_comparison(
+        _load_run_rows(scheduler, "head"),
+        _load_run_rows(baseline, "baseline"),
+        scope,
+        classification_class="known_limitation",
+        evidence_base_uri="verified-source",
+    )
+    if rows != derived or totals != derived_totals:
+        raise behaviour_receipt.HardwareIdentityError(
+            "raw execution invalid: supplied receipt projection differs from sealed sources"
+        )
+    behaviour_receipt.validate_scheduler_rows(rows, identities)
+    source_artifacts = {}
+    for side, run in (("head", scheduler), ("baseline", baseline)):
+        references = {}
+        for shard in run.shard_dirs:
+            receipt_provenance.verify_binding(
+                shard,
+                shard.name,
+                identities[side]["node"],
+                source_sha=run.source_sha,
+                arm_role=side,
+            )
+            bundle = output_dir / f"{receipt_id}-sources" / side / f"{shard.name}.tar.gz"
+            _archive_source_bundle(shard, bundle)
+            references[shard.name] = {
+                "path": bundle.relative_to(repo_root).as_posix(),
+                "sha256": _sha256(bundle),
+                "binding": {
+                    "path": receipt_provenance.BINDING_FILE,
+                    "sha256": _sha256(shard / receipt_provenance.BINDING_FILE),
+                },
+            }
+        source_artifacts[side] = references
     payload = {
         "schema_version": "behaviour-change-rows.v1",
+        "hardware": hardware,
+        "source_artifacts": source_artifacts,
         "rows": rows,
         "classifications": classifications,
     }
@@ -1616,6 +1927,7 @@ def write_receipt_and_header(  # noqa: PLR0913
     job_id = scheduler.job_id
     if scheduler.job_id != baseline.job_id:
         job_id = f"{scheduler.job_id}_{baseline.job_id}"
+    job_id = job_id.replace(",", "_")
     header = {
         "schema_version": "behaviour-change-receipt-header.v2",
         "head_sha": head_sha,
@@ -1675,6 +1987,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--repo", default="ll7/robot_sf_ll7")
     parser.add_argument("--receipt-id", required=True)
     parser.add_argument("--mode", choices=("existing", "local", "sbatch"), default="existing")
+    parser.add_argument(
+        "--sbatch-node",
+        help="Required for sbatch: one literal node shared by baseline and head jobs",
+    )
     parser.add_argument("--submit-only", action="store_true")
     parser.add_argument("--head-sweep-dir", type=Path)
     parser.add_argument("--baseline-sweep-dir", type=Path)
@@ -1725,6 +2041,18 @@ def _prepare_sweeps(
     if args.mode == "existing":
         if args.head_sweep_dir is None or args.baseline_sweep_dir is None:
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
+        behaviour_receipt.validate_hardware_pair(
+            {
+                "head": _read_hardware(
+                    args.head_sweep_dir.resolve(),
+                    args.head_source_sha or args.head_sha,
+                    args.job_id,
+                ),
+                "baseline": _read_hardware(
+                    args.baseline_sweep_dir.resolve(), baseline_source, args.baseline_job_id
+                ),
+            }
+        )
         return (
             _existing_sweep(
                 args.head_source_sha or args.head_sha,
@@ -1742,29 +2070,8 @@ def _prepare_sweeps(
             ),
         )
     if args.mode == "local":
-        return (
-            _run_local_sweep(
-                repo_root,
-                work_dir,
-                "head",
-                args.head_sha,
-                seeds,
-                arms=args.arms,
-                scenarios=args.scenarios,
-                workers=args.workers,
-                check_only=args.check_only,
-            ),
-            _run_local_sweep(
-                repo_root,
-                work_dir,
-                "baseline",
-                baseline_source,
-                seeds,
-                arms=args.arms,
-                scenarios=args.scenarios,
-                workers=args.workers,
-                check_only=args.check_only,
-            ),
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: receipt evidence requires a Slurm allocation; use sbatch"
         )
     return (
         _submit_sbatch_sweep(
@@ -1773,9 +2080,7 @@ def _prepare_sweeps(
             "head",
             args.head_sha,
             seeds,
-            arms=args.arms,
-            scenarios=args.scenarios,
-            workers=args.workers,
+            args=args,
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1783,15 +2088,27 @@ def _prepare_sweeps(
             "baseline",
             baseline_source,
             seeds,
-            arms=args.arms,
-            scenarios=args.scenarios,
-            workers=args.workers,
+            args=args,
         ),
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run the behaviour receipt producer CLI."""
+    special = sys.argv[1:] if argv is None else argv
+    if len(special) == 2 and special[0] == "--record-scheduler-context":
+        return _stamp_scheduler_rows(Path(special[1]))
+    if len(special) == 2 and special[0] == "--record-job-request":
+        directory = Path(special[1])
+        request = json.loads((directory / "request_template.json").read_text())
+        _record_request(
+            directory,
+            request["source_sha"],
+            os.environ["SLURM_JOB_ID"],
+            request["requested_node"],
+            request["arm_role"],
+        )
+        return 0
     args = _parse_args(argv)
     repo_root = ROOT
     head_sha = _full_sha(repo_root, args.head_sha)
@@ -1807,10 +2124,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.submit_only:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
+    behaviour_receipt.validate_hardware_pair(
+        {"head": scheduler.hardware, "baseline": baseline.hardware}
+    )
     scope = _load_scope(args.scope_path)
-    head_rows = _load_sweep_rows(scheduler.output_dir)
-    baseline_rows = _load_sweep_rows(baseline.output_dir)
-    rows, classifications, totals = build_rows_and_classifications(
+    if scheduler.source_sha == baseline.source_sha:
+        raise behaviour_receipt.HardwareIdentityError(
+            "producer source invalid: head and baseline share a producer commit"
+        )
+    head_rows = _load_run_rows(scheduler, "head")
+    baseline_rows = _load_run_rows(baseline, "baseline")
+    rows, classifications, totals = derive_valid_comparison(
         head_rows,
         baseline_rows,
         scope,
@@ -1865,4 +2189,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except behaviour_receipt.HardwareIdentityError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc

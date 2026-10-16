@@ -7,11 +7,15 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import shlex
 import subprocess
 import sys
+import tarfile
+import tempfile
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,7 +26,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.ci import behaviour_receipt  # noqa: E402
+from scripts.ci import (  # noqa: E402
+    behaviour_receipt,
+    receipt_arm_execution,
+    receipt_outcomes,
+    receipt_provenance,
+)
 
 DEV_SEED_MIN = 1001
 DEV_SEED_MAX = 1200
@@ -755,6 +764,111 @@ class SweepRun:
     artifact_uri: str
     artifact_sha256: str
     job_id: str
+    hardware: dict[str, Any] | None = None
+    shard_dirs: tuple[Path, ...] = ()
+
+
+def _record_request(
+    output_dir: Path, source_sha: str, job_id: str, node: str, arm_role: str
+) -> None:
+    (output_dir / "execution_request.json").write_bytes(
+        _json_bytes(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": node,
+                "source_sha": source_sha,
+                "arm_role": arm_role,
+                "job_id": job_id,
+            }
+        )
+    )
+
+
+def _shard_dirs(output_dir: Path, job_id: str) -> tuple[Path, ...]:
+    jobs = behaviour_receipt.scheduler_job_ids(job_id)
+    paths = tuple(
+        output_dir if len(jobs) == 1 and output_dir.name == job else output_dir / job
+        for job in jobs
+    )
+    for job, path in zip(jobs, paths, strict=True):
+        if path.name != job or path.is_symlink() or not path.is_dir():
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: missing job-ID-keyed shard directory"
+            )
+    return paths
+
+
+def _read_hardware(output_dir: Path, source_sha: str, job_id: str) -> dict[str, Any]:
+    jobs = behaviour_receipt.scheduler_job_ids(job_id)
+    snapshot = behaviour_receipt.scheduler_snapshot(jobs)
+    claims = []
+    for job, path in zip(jobs, _shard_dirs(output_dir, job_id), strict=True):
+        files = {}
+        for name in behaviour_receipt.HARDWARE_FILES:
+            if name == "execution_scheduler.json":
+                raw = _json_bytes(behaviour_receipt.scheduler_snapshot([job]))
+            else:
+                file = path / name
+                if file.is_symlink() or not file.is_file():
+                    raise behaviour_receipt.HardwareIdentityError(
+                        f"hardware comparison invalid: missing regular {name} claim file"
+                    )
+                try:
+                    raw = file.read_bytes()
+                except OSError as exc:
+                    raise behaviour_receipt.HardwareIdentityError(
+                        f"hardware comparison invalid: unreadable {name} claim file"
+                    ) from exc
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeError as exc:
+                raise behaviour_receipt.HardwareIdentityError(
+                    f"hardware comparison invalid: invalid {name} encoding"
+                ) from exc
+            files[name] = {"content": content, "sha256": hashlib.sha256(raw).hexdigest()}
+        identity = behaviour_receipt.hardware_identity(files)
+        if identity["source_sha"] != source_sha or identity["job_id"] != job:
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: shard source or job differs from request"
+            )
+        claims.append(files)
+    files = claims[0]
+    request = json.loads(files["execution_request.json"]["content"])
+    request["job_id"] = job_id
+    for name, payload in (
+        ("execution_request.json", request),
+        ("execution_scheduler.json", snapshot),
+    ):
+        raw = _json_bytes(payload)
+        files[name] = {"content": raw.decode(), "sha256": hashlib.sha256(raw).hexdigest()}
+    behaviour_receipt.hardware_identity(files)
+    return files
+
+
+def _stamp_scheduler_rows(output_dir: Path) -> int:
+    """Bind sealed comparison inputs without modifying any producer bytes."""
+    job = os.environ.get("SLURM_JOB_ID", "")
+    node = os.environ.get("SLURM_JOB_NODELIST", "")
+    behaviour_receipt.scheduler_job_ids(job)
+    if output_dir.name != job or not node:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: execution directory or scheduler context missing"
+        )
+    for path in (
+        *output_dir.glob("episodes_*.jsonl"),
+        *output_dir.glob("campaigns/**/episodes.jsonl"),
+    ):
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        for row in rows:
+            if any(key in row for key in ("scheduler_job_id", "scheduler_node")):
+                raise behaviour_receipt.HardwareIdentityError(
+                    "hardware comparison invalid: row already has an allocation binding"
+                )
+            behaviour_receipt.validate_source_row_context(
+                {**row, "scheduler_job_id": job, "scheduler_node": node}, job, node
+            )
+    receipt_provenance.write_binding(output_dir, job, node)
+    return 0
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -782,6 +896,7 @@ def _full_sha(repo_root: Path, ref: str) -> str:
 def _check_seed_range(seeds: list[int]) -> list[int]:
     if not seeds:
         raise ValueError("at least one development seed is required")
+    receipt_provenance.validate_seed_ids(seeds)
     bad = [seed for seed in seeds if seed < DEV_SEED_MIN or seed > DEV_SEED_MAX]
     if bad:
         raise ValueError(f"seeds outside development range {DEV_SEED_MIN}-{DEV_SEED_MAX}: {bad}")
@@ -854,41 +969,6 @@ def _ensure_worktree(repo_root: Path, work_dir: Path, label: str, source_sha: st
     return checkout
 
 
-def _run_local_sweep(  # noqa: PLR0913
-    repo_root: Path,
-    work_dir: Path,
-    label: str,
-    source_sha: str,
-    seeds: list[int],
-    *,
-    arms: list[str] | None,
-    scenarios: list[str] | None,
-    workers: int,
-    check_only: bool,
-) -> SweepRun:
-    checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
-    output_dir = work_dir / "sweeps" / label
-    cmd = _sweep_command(
-        source_sha,
-        output_dir,
-        seeds,
-        arms=arms,
-        scenarios=scenarios,
-        workers=workers,
-        check_only=check_only,
-    )
-    subprocess.run(cmd, cwd=checkout, check=True)
-    manifest = output_dir / "README.md"
-    artifact_sha = _sha256(manifest) if manifest.is_file() else _canonical_digest(cmd)
-    return SweepRun(
-        source_sha=source_sha,
-        output_dir=output_dir,
-        artifact_uri=f"{PLACEHOLDER_EVIDENCE_URI}/{label}",
-        artifact_sha256=artifact_sha,
-        job_id="1",
-    )
-
-
 def _submit_sbatch_sweep(
     repo_root: Path,
     work_dir: Path,
@@ -896,55 +976,105 @@ def _submit_sbatch_sweep(
     source_sha: str,
     seeds: list[int],
     *,
-    arms: list[str] | None,
-    scenarios: list[str] | None,
-    workers: int,
+    args: argparse.Namespace,
 ) -> SweepRun:
+    node = args.sbatch_node
+    if node is None:
+        raise ValueError("--mode sbatch requires --sbatch-node to pair numerical hardware")
+    if re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", node) is None:
+        raise ValueError("--sbatch-node must name a single literal node hostname")
+    inventory, _ = behaviour_receipt.scheduler_inventory()
+    if node not in inventory:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: requested node is absent from trusted inventory"
+        )
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
-    output_dir = work_dir / "sweeps" / label
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_root = work_dir / "sweeps" / label
+    output_root.mkdir(parents=True, exist_ok=True)
     cmd = _sweep_command(
         source_sha,
-        output_dir,
+        Path("__RECEIPT_JOB_DIR__"),
         seeds,
-        arms=arms,
-        scenarios=scenarios,
-        workers=workers,
+        arms=args.arms,
+        scenarios=args.scenarios,
+        workers=args.workers,
         check_only=False,
     )
-    script = work_dir / f"behaviour_receipt_{label}.sbatch"
-    script.write_text(
-        "\n".join(
-            [
-                "#!/usr/bin/env bash",
-                f"#SBATCH --job-name=behaviour-{label}",
-                f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
-                "#SBATCH --time=24:00:00",
-                "set -euo pipefail",
-                f"cd {checkout}",
-                shlex.join(cmd),
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    shell_command = " ".join(
+        '"$RECEIPT_JOB_DIR"' if item == "__RECEIPT_JOB_DIR__" else shlex.quote(item) for item in cmd
     )
+    request_template = shlex.quote(
+        json.dumps(
+            {
+                "schema_version": "behaviour-hardware-request.v1",
+                "requested_node": node,
+                "source_sha": source_sha,
+                "arm_role": label,
+            }
+        )
+    )
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix=f"behaviour_receipt_{label}_",
+        suffix=".sbatch",
+        dir=work_dir,
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        script = Path(handle.name)
+        handle.write(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    f"#SBATCH --job-name=behaviour-{label}",
+                    f"#SBATCH --output={output_root / 'slurm-%j.out'}",
+                    "#SBATCH --nodes=1",
+                    f"#SBATCH --nodelist={node}",
+                    f"#SBATCH --partition={inventory[node]['node_class']}",
+                    f"#SBATCH --cpus-per-task={args.workers}",
+                    "#SBATCH --time=24:00:00",
+                    "set -euo pipefail",
+                    f'RECEIPT_JOB_DIR={shlex.quote(str(output_root))}/"${{SLURM_JOB_ID:?}}"',
+                    'mkdir -- "$RECEIPT_JOB_DIR"',
+                    f"cd {shlex.quote(str(checkout))}",
+                    'hostname > "$RECEIPT_JOB_DIR/execution_node.txt"',
+                    'LC_ALL=C lscpu --json > "$RECEIPT_JOB_DIR/execution_cpu.json"',
+                    'printf "%s\\n" "${SLURM_JOB_PARTITION:?}" > "$RECEIPT_JOB_DIR/execution_node_class.txt"',
+                    f'test "$(cat "$RECEIPT_JOB_DIR/execution_node.txt")" = {shlex.quote(node)}',
+                    f"printf '%s\\n' {request_template} > \"$RECEIPT_JOB_DIR/request_template.json\"",
+                    f'uv run python {shlex.quote(str(Path(__file__).resolve()))} --record-job-request "$RECEIPT_JOB_DIR"',
+                    shell_command,
+                    f'uv run python {shlex.quote(str(Path(__file__).resolve()))} --record-scheduler-context "$RECEIPT_JOB_DIR"',
+                    "",
+                ]
+            )
+        )
     job_id = subprocess.check_output(["sbatch", "--parsable", str(script)], text=True).strip()
-    submission = {
-        "schema_version": "behaviour-sweep-submission.v1",
-        "label": label,
-        "source_sha": source_sha,
-        "job_id": job_id,
-        "command": cmd,
-        "script": str(script),
-    }
-    manifest = output_dir / "submission.json"
-    manifest.write_bytes(_json_bytes(submission))
+    behaviour_receipt.scheduler_job_ids(job_id)
+    output_dir = output_root / job_id
+    submissions = output_root / "submissions"
+    submissions.mkdir(exist_ok=True)
+    manifest = submissions / f"{job_id}.json"
+    with manifest.open("xb") as handle:
+        handle.write(
+            _json_bytes(
+                {
+                    "schema_version": "behaviour-sweep-submission.v2",
+                    "label": label,
+                    "source_sha": source_sha,
+                    "job_id": job_id,
+                    "command": cmd,
+                    "script": script.relative_to(work_dir).as_posix(),
+                    "requested_node": node,
+                }
+            )
+        )
     return SweepRun(
-        source_sha=source_sha,
-        output_dir=output_dir,
-        artifact_uri=f"{PLACEHOLDER_EVIDENCE_URI}/{label}",
-        artifact_sha256=_sha256(manifest),
-        job_id=job_id,
+        source_sha,
+        output_dir,
+        f"{PLACEHOLDER_EVIDENCE_URI}/{label}/{job_id}",
+        _sha256(manifest),
+        job_id,
     )
 
 
@@ -958,23 +1088,28 @@ def _existing_sweep(
 ) -> SweepRun:
     if not output_dir.is_dir():
         raise FileNotFoundError(output_dir)
-    _verify_sweep_metadata(output_dir, source_sha)
+    hardware = _read_hardware(output_dir, source_sha, job_id)
+    shards = _shard_dirs(output_dir, job_id)
+    for shard in shards:
+        _verify_sweep_metadata(shard, source_sha)
     digest = _canonical_digest(
         {
             path.relative_to(output_dir).as_posix(): _sha256(path)
-            for path in sorted(output_dir.rglob("*"))
+            for shard in shards
+            for path in sorted(shard.rglob("*"))
             if path.is_file()
         }
     )
     if artifact_sha256 is not None and artifact_sha256 != digest:
         raise ValueError("supplied sweep digest differs from actual artifact bytes")
-    return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id)
+    return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id, hardware, shards)
 
 
 def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
     summaries = sorted(output_dir.glob("episodes_*.jsonl"))
     if not summaries:
         raise ValueError("sweep has no episode suites")
+    episodes = receipt_provenance.joined_sweep_episodes(output_dir)
     for summary in summaries:
         suite = summary.stem.removeprefix("episodes_")
         metadata_path = output_dir / f"execution_{suite}.json"
@@ -1004,91 +1139,111 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
         )
         if not complete:
             raise ValueError(f"{suite} sweep execution is incomplete")
-        records = [json.loads(line) for line in summary.read_text().splitlines() if line.strip()]
+        records = [
+            episode.summary for episode in episodes.values() if episode.summary_path == summary
+        ]
+        keys = [key for key, episode in episodes.items() if episode.summary_path == summary]
         counts = [meta.get(key) for key in ("expected_slots", "written_rows", "total_episodes")]
         if not records or any(count != len(records) for count in counts):
             raise ValueError(f"{suite} execution row counts differ")
         seeds = meta.get("seeds")
         if not isinstance(seeds, list) or sorted(_check_seed_range(seeds)) != sorted(
-            {row["seed"] for row in records}
+            {key.seed for key in keys}
         ):
             raise ValueError(f"{suite} execution seed identity differs")
         if any(row.get("execution_status") != "written" for row in records):
             raise ValueError(f"{suite} has unsuccessful row execution")
 
 
-def _index_raw_episodes(
-    path: Path, cache: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]]
-) -> dict[tuple[Any, Any], list[dict[str, Any]]]:
-    """Decode a raw file once, retaining duplicate identities for the existing check."""
-    if path in cache:
-        return cache[path]
-    index: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        raw = json.loads(line)
-        identity = (raw.get("scenario_id"), raw.get("seed"))
-        try:
-            index.setdefault(identity, []).append(raw)
-        except TypeError:
-            # JSON arrays/objects cannot match a summary's (str, int) identity.
-            # The former linear scan ignored these nonmatching identities too.
-            continue
-    cache[path] = index
-    return index
+def _validate_row_allocation(summary: dict, raw: dict, job: str | None, node: str | None) -> None:
+    if job is None:
+        return
+    if node is None:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: missing verified allocation node"
+        )
+    for context in (summary, raw):
+        # Fields absent from sealed producer rows come from the verified binding.
+        # Present fields remain claims and must agree with the scheduler.
+        context.setdefault("scheduler_job_id", job)
+        context.setdefault("scheduler_node", node)
+        behaviour_receipt.validate_source_row_context(context, job, node)
 
 
-def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, Any]]:
+def _load_sweep_rows(
+    sweep_dir: Path,
+    *,
+    scheduler_job_id: str | None = None,
+    scheduler_node: str | None = None,
+    preserve_raw: bool = False,
+) -> dict[receipt_provenance.EpisodeSlot, dict[str, Any]]:
     """Join summaries to raw traces with an invocation-local index of each file.
 
     There is no persistent cache: subsequent calls reread the current bytes.
+    Allocation reads verify custody before decoding; raw hashing never overlays status.
     """
-    rows: dict[tuple[str, str, int], dict[str, Any]] = {}
-    raw_indexes: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]] = {}
-    for path in sorted(sweep_dir.glob("episodes_*.jsonl")):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            key = (str(row["arm"]), str(row["scenario"]), int(row["seed"]))
-            suite = path.stem.removeprefix("episodes_")
-            campaign = sweep_dir / "campaigns" / f"empty_world_{suite}"
-            source = row.get("source_file")
-            if not isinstance(source, str):
-                raise ValueError(f"missing raw controller trace source for {key}")
-            source_path = (campaign / source).resolve()
-            if not source_path.is_relative_to(campaign.resolve()):
-                raise ValueError("raw controller trace path escapes the campaign")
-            matches = _index_raw_episodes(source_path, raw_indexes).get(key[1:], [])
-            if len(matches) != 1 or source_path.parent.name.split("__")[0] != key[0]:
-                raise ValueError(f"raw episode identity differs for {key}")
-            raw = matches[0]
-            if _row_success(raw) != _row_success(row) or _row_collisions(raw) != _row_collisions(
-                row
-            ):
-                raise ValueError(f"raw episode outcome differs from summary for {key}")
-            if key in rows:
-                raise ValueError(f"duplicate sweep row {key}")
-            rows[key] = {**raw, "execution_status": row["execution_status"]}
-    if not rows:
-        raise ValueError(f"no sweep rows found in {sweep_dir}")
+    receipt_provenance.verify_optional_binding(sweep_dir, scheduler_job_id, scheduler_node)
+
+    episodes = receipt_provenance.joined_sweep_episodes(sweep_dir)
+    rows: dict[receipt_provenance.EpisodeSlot, dict[str, Any]] = {}
+    for key, episode in episodes.items():
+        raw, row = episode.raw, episode.summary
+        _validate_row_allocation(row, raw, scheduler_job_id, scheduler_node)
+        if receipt_outcomes.raw_outcomes(raw) != receipt_outcomes.summary_outcomes(row):
+            raise ValueError(f"raw episode outcome differs from summary for {key}")
+        rows[key] = raw if preserve_raw else {**raw, "execution_status": row["execution_status"]}
+    return rows
+
+
+def _load_run_rows(
+    run: SweepRun, arm_role: str, *, preserve_raw: bool = False
+) -> dict[receipt_provenance.EpisodeSlot, dict[str, Any]]:
+
+    if run.hardware is None:
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: unverified sweep cannot provide rows"
+        )
+    identity = behaviour_receipt.hardware_identity(run.hardware)
+    rows = {}
+    for shard in run.shard_dirs:
+        part = receipt_provenance.verified_raw_rows(
+            shard, shard.name, identity["node"], source_sha=run.source_sha, arm_role=arm_role
+        )
+        if preserve_raw:
+            original = _load_sweep_rows(
+                shard,
+                scheduler_job_id=shard.name,
+                scheduler_node=identity["node"],
+                preserve_raw=True,
+            )
+            if set(original) != set(part):
+                raise behaviour_receipt.HardwareIdentityError(
+                    "raw execution invalid: reread scope differs"
+                )
+            preserved = {}
+            for key, raw in original.items():
+                audit = dict(raw)
+                for field in ("execution_status", "scheduler_job_id", "scheduler_node"):
+                    if field not in audit and field in part[key]:
+                        audit[field] = part[key][field]
+                if audit != dict(part[key]):
+                    raise behaviour_receipt.HardwareIdentityError(
+                        "raw execution invalid: reread source differs"
+                    )
+                preserved[key] = receipt_arm_execution.carry_execution_proof(part[key], raw)
+            part = preserved
+        if set(part) & set(rows):
+            raise ValueError("duplicate rows across scheduler shards")
+        rows.update(part)
     return rows
 
 
 def _row_success(row: dict[str, Any]) -> bool:
-    if "success" in row:
-        return bool(row["success"])
-    metrics = row.get("metrics") or {}
-    outcome = row.get("outcome") or {}
-    return bool(metrics.get("success") or outcome.get("route_complete"))
+    return receipt_outcomes.raw_outcomes(row)["success"]
 
 
 def _row_collisions(row: dict[str, Any]) -> int:
-    if row.get("collisions") is not None:
-        return int(row["collisions"])
-    metrics = row.get("metrics") or {}
-    return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
+    return receipt_outcomes.raw_outcomes(row)["collisions"]
 
 
 def _runtime_objects(
@@ -1337,15 +1492,37 @@ def _controller_runtime_marker(
 def _non_runtime_location(name: str, key: str) -> bool:
     path = re.sub(r"\[\d+\]", ".*", name)
     full = (*path.split("."), key) if path else (key,)
-    return full in {
+    return full in _non_runtime_paths()
+
+
+@cache
+def _non_runtime_paths() -> frozenset[tuple[str, ...]]:
+    """Compile the immutable, source-owned policy once per validator process."""
+    return frozenset(
         tuple(location.split("."))
         for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
-    }
+    )
 
 
 def _transport_path(path: tuple[str, ...]) -> tuple[str | None, ...]:
     """Normalize declared array indices without conflating literal dictionary keys."""
     return tuple(None if part == "*" else part for part in path)
+
+
+@cache
+def _runtime_policy_index() -> tuple[Any, ...]:
+    """Index the fixed runtime vocabulary; never cache decisions about evidence."""
+    return (
+        re.compile(EXECUTION_EVIDENCE_LOCATIONS["fault_key_pattern"], re.IGNORECASE),
+        set(EXECUTION_EVIDENCE_LOCATIONS["runtime_fields"])
+        | set(EXECUTION_EVIDENCE_LOCATIONS["runtime_aliases"]),
+        set(EXECUTION_EVIDENCE_LOCATIONS["counter_fields"]),
+        set(EXECUTION_EVIDENCE_LOCATIONS["mode_locations"])
+        | set(EXECUTION_EVIDENCE_LOCATIONS["required_values"]),
+        {_transport_path(path) for path in _non_runtime_paths()},
+        {_transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]},
+        {_transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["counter_objects"]},
+    )
 
 
 def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
@@ -1354,27 +1531,18 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     Source-key catalog membership is deliberately insufficient. Dict keys stay
     exact; only array indices normalize to '*'. No subtree is exempted.
     """
-    vocabulary = re.compile(EXECUTION_EVIDENCE_LOCATIONS["fault_key_pattern"], re.IGNORECASE)
-    runtime_fields = set(EXECUTION_EVIDENCE_LOCATIONS["runtime_fields"]) | set(
-        EXECUTION_EVIDENCE_LOCATIONS["runtime_aliases"]
-    )
-    counter_fields = set(EXECUTION_EVIDENCE_LOCATIONS["counter_fields"])
-    required = set(EXECUTION_EVIDENCE_LOCATIONS["mode_locations"]) | set(
-        EXECUTION_EVIDENCE_LOCATIONS["required_values"]
-    )
-
     # None represents an actual array index; a literal '*' dictionary key must
     # not acquire the array-only exemption. Keep dotted dictionary keys intact.
-    optional = {
-        _transport_path(tuple(location.split(".")))
-        for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
-    }
-    runtime_objects = {
-        _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]
-    }
-    counter_objects = {
-        _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["counter_objects"]
-    }
+    (
+        vocabulary,
+        runtime_fields,
+        counter_fields,
+        required,
+        optional,
+        runtime_objects,
+        counter_objects,
+    ) = _runtime_policy_index()
+    guarded_diagnostics = _GUARDED_DIAGNOSTIC_PATHS if _guarded_mixed_context(row) else frozenset()
 
     def classified(path: tuple[str | None, ...], key: str) -> bool:
         return (
@@ -1382,6 +1550,7 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
             or (path in counter_objects and key in counter_fields)
             or (*path, key) in required
             or (*path, key) in optional
+            or (*path, key) in guarded_diagnostics
         )
 
     def walk(value: Any, path: tuple[str | None, ...] = ()) -> tuple[str, str] | None:
@@ -1406,6 +1575,256 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     return walk(row)
 
 
+# These leaves are source-emitted declarations, not runtime fault reports.
+# guarded_ppo.py:1243 and safety_shield.py:117 emit exactly not_calibrated;
+# map_runner.py:1637-1641 binds the RiskDWA shield configuration. No subtree
+# or arbitrary status/value is excluded from the recursive runtime checker.
+_GUARDED_DIAGNOSTIC_PATHS = frozenset(
+    {
+        ("algorithm_metadata", "safety_shield_contract", "calibration_status"),
+        ("algorithm_metadata", "safety_shield_contract", "fallback_policy"),
+        (
+            "algorithm_metadata",
+            "planner_runtime",
+            "last_decision",
+            "prediction",
+            "calibration",
+            "status",
+        ),
+        (
+            "algorithm_metadata",
+            "shield_stats",
+            "last_decision",
+            "prediction",
+            "calibration",
+            "status",
+        ),
+    }
+)
+
+_GUARDED_NATIVE_IDENTITIES = {
+    ("algorithm_metadata", "planner_runtime", "planner_type"): "GuardedPPOAdapter",
+    ("algorithm_metadata", "policy_semantics"): "guarded_policy_network_inference",
+    ("event_ledger", "planner"): "guarded_ppo",
+    ("scenario_params", "algo"): "guarded_ppo",
+    (
+        "algorithm_metadata",
+        "paired_effect_metric_producer",
+        "pairing",
+        "key",
+        "planner",
+    ): "guarded_ppo",
+    (
+        "algorithm_metadata",
+        "planner_runtime",
+        "fallback_diagnostics",
+        "planner_type",
+    ): "RiskDWAPlannerAdapter",
+}
+
+# guarded_ppo.py:820/981/991/1062/1098/1158/1166. The reviewed matrix
+# has no optional prior or uncertainty branch; unknown decisions refuse.
+_GUARDED_DECISION_POLICIES = {
+    "goal_reached": "RiskDWAPlannerAdapter",
+    "ppo_clear": "RiskDWAPlannerAdapter",
+    "ppo_safe": "RiskDWAPlannerAdapter",
+    "fallback_safe": "RiskDWAPlannerAdapter",
+    "fallback_best_effort": "RiskDWAPlannerAdapter",
+    "stop_safe": "stop",
+    "stop_best_effort": "stop",
+}
+
+
+def required_execution_mode(algorithm: str, capabilities: dict) -> str:
+    """Honor the two reviewed registry defaults; retain other command-mode rules."""
+    if (
+        algorithm == "guarded_ppo"
+        and capabilities.get("execution_mode") == "mixed"
+        and capabilities.get("supports_native_commands") is True
+        and capabilities.get("supports_adapter_commands") is True
+        and capabilities.get("adapter_name") == "guarded_ppo_action_to_unicycle"
+    ):
+        return "mixed"
+    if (
+        algorithm == "hybrid_rule_local_planner"
+        and capabilities.get("execution_mode") == "adapter"
+        and capabilities.get("supports_native_commands") is True
+        and capabilities.get("supports_adapter_commands") is True
+        and capabilities.get("adapter_name") == "HybridRuleLocalPlannerAdapter"
+    ):
+        return "adapter"
+    return "native" if capabilities["supports_native_commands"] else "adapter"
+
+
+_HYBRID_NATIVE_IDENTITIES = {
+    ("algo",): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "algorithm"): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "canonical_algorithm"): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "planner_contract", "planner_id"): "hybrid_rule_local_planner",
+    ("algorithm_metadata", "policy_semantics"): "hybrid_rule_deterministic_local_planner",
+    ("event_ledger", "planner"): "hybrid_rule_local_planner",
+    ("scenario_params", "algo"): "hybrid_rule_local_planner",
+    (
+        "algorithm_metadata",
+        "paired_effect_metric_producer",
+        "pairing",
+        "key",
+        "planner",
+    ): "hybrid_rule_local_planner",
+}
+
+
+def _hybrid_adapter_context(row: dict[str, Any]) -> bool:
+    """Bind the registered hybrid adapter to its complete native row identity."""
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+
+    algorithm = "hybrid_rule_local_planner"
+    if (
+        any(
+            list(_runtime_objects(row, path)) != [(".".join(path), expected)]
+            for path, expected in _HYBRID_NATIVE_IDENTITIES.items()
+        )
+        or ("algorithm" in row and row["algorithm"] != algorithm)
+        or required_execution_mode(
+            algorithm, enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+        )
+        != "adapter"
+    ):
+        return False
+    metadata = row["algorithm_metadata"]
+    profile = metadata.get("planner_kinematics")
+    if not isinstance(profile, dict) or any(
+        profile.get(key) != value or type(profile.get(key)) is not type(value)
+        for key, value in {
+            "execution_mode": "adapter",
+            "supports_native_commands": True,
+            "supports_adapter_commands": True,
+            "adapter_active": True,
+            "adapter_name": "HybridRuleLocalPlannerAdapter",
+        }.items()
+    ):
+        return False
+    # Native hybrid diagnostics do not emit planner_type. A supplied assertion
+    # must agree; absence is not filled with a manufactured adapter identity.
+    runtime_identity = list(
+        _runtime_objects(row, ("algorithm_metadata", "planner_runtime", "planner_type"))
+    )
+    return not runtime_identity or runtime_identity == [
+        ("algorithm_metadata.planner_runtime.planner_type", "HybridRuleLocalPlannerAdapter")
+    ]
+
+
+def _guarded_mixed_context(row: dict[str, Any]) -> bool:
+    """Authenticate the source-defined guarded profile and its exact declarations."""
+    from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+    from robot_sf.benchmark.fallback_policy import is_verified_guarded_ppo
+
+    metadata = row.get("algorithm_metadata")
+    if (
+        not isinstance(metadata, dict)
+        or row.get("algo", row.get("algorithm")) != "guarded_ppo"
+        or ("algorithm" in row and row["algorithm"] != "guarded_ppo")
+        or not is_verified_guarded_ppo(metadata, expected_algorithm="guarded_ppo")
+        or required_execution_mode(
+            "guarded_ppo", enrich_algorithm_metadata(algo="guarded_ppo")["planner_kinematics"]
+        )
+        != "mixed"
+    ):
+        return False
+    if any(
+        list(_runtime_objects(row, path)) != [(".".join(path), expected)]
+        for path, expected in _GUARDED_NATIVE_IDENTITIES.items()
+    ):
+        return False
+    planner_contract = metadata.get("planner_contract")
+    if (
+        metadata.get("algorithm") != "ppo"
+        or metadata.get("canonical_algorithm") != "guarded_ppo"
+        or not isinstance(planner_contract, dict)
+        or planner_contract.get("planner_id") != "guarded_ppo"
+    ):
+        return False
+    profile = metadata.get("planner_kinematics")
+    if not isinstance(profile, dict) or any(
+        profile.get(key) != value or type(profile.get(key)) is not type(value)
+        for key, value in {
+            "execution_mode": "mixed",
+            "supports_native_commands": True,
+            "supports_adapter_commands": True,
+            "adapter_active": True,
+            "adapter_name": "guarded_ppo_action_to_unicycle",
+        }.items()
+    ):
+        return False
+    contract = metadata.get("safety_shield_contract")
+    if not isinstance(contract, dict) or any(
+        contract.get(key) != value
+        for key, value in {
+            "schema_version": "safety-shield-contract.v1",
+            "shield_name": "GuardedPPOAdapter",
+            "prediction_source": "short_horizon_rollout",
+            "fallback_policy": "RiskDWAPlannerAdapter",
+            "calibration_status": "not_calibrated",
+        }.items()
+    ):
+        return False
+    decision_identities = []
+    for container in ("planner_runtime", "shield_stats"):
+        owner = metadata.get(container)
+        decision = owner.get("last_decision") if isinstance(owner, dict) else None
+        prediction = decision.get("prediction") if isinstance(decision, dict) else None
+        if (
+            not isinstance(decision, dict)
+            or decision.get("schema_version") != "shield-decision.v1"
+            or not isinstance(prediction, dict)
+            or prediction.get("source") != "short_horizon_rollout"
+            or prediction.get("calibration") != {"status": "not_calibrated"}
+        ):
+            return False
+        label = decision.get("decision_label")
+        expected_policy = _GUARDED_DECISION_POLICIES.get(label) if isinstance(label, str) else None
+        state = decision.get("fallback_controller_state")
+        if (
+            expected_policy is None
+            or not isinstance(state, dict)
+            or state.get("policy") != expected_policy
+            or state.get("prior_available") is not False
+        ):
+            return False
+        decision_identities.append((label, expected_policy))
+    return decision_identities[0] == decision_identities[1]
+
+
+def _guarded_commands_complete(row: dict[str, Any]) -> bool:
+    """Require both finite command axes and the source conversion at every step."""
+    try:
+        trace = row["algorithm_metadata"]["simulation_step_trace"]
+        for step in trace["steps"]:
+            planner = step["planner"]
+            for name in ("selected_action", "applied_environment_action"):
+                command = planner[name]
+                if not isinstance(command, dict) or set(command) != {
+                    "linear_velocity",
+                    "angular_velocity",
+                }:
+                    return False
+                if not all(
+                    type(value) in (int, float) and math.isfinite(value)
+                    for value in command.values()
+                ):
+                    return False
+            conversion = planner["action_conversion"]
+            if (
+                not isinstance(conversion, dict)
+                or conversion.get("schema_version") != "policy-action-conversion.v1"
+                or conversion.get("kind") != "unicycle_velocity_to_acceleration"
+            ):
+                return False
+        return True
+    except (KeyError, TypeError, AttributeError, OverflowError, ValueError):
+        return False
+
+
 def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     from robot_sf.benchmark.fallback_policy import resolve_execution_mode
     from scripts.validation.run_empty_world_sweep import _trace_complete
@@ -1419,13 +1838,23 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
         for path in EXECUTION_EVIDENCE_LOCATIONS["mode_locations"]
         for _, value in _runtime_objects(row, path)
     ]
-    if mode not in {"native", "adapter"} or any(value != mode for value in modes):
+    guarded_mixed = mode == "mixed" and _guarded_mixed_context(row)
+    hybrid_adapter = (
+        algorithm == "hybrid_rule_local_planner"
+        and mode == "adapter"
+        and _hybrid_adapter_context(row)
+    )
+    if algorithm == "hybrid_rule_local_planner" and not hybrid_adapter:
+        mode = "unknown"
+    if (mode not in {"native", "adapter"} and not guarded_mixed) or any(
+        value != mode for value in modes
+    ):
         mode = "unknown"
     profile = metadata.get("planner_kinematics") or {}
     if isinstance(profile, dict) and any(
         path[-1] in profile for path in EXECUTION_EVIDENCE_LOCATIONS["mode_capabilities"]
     ):
-        if profile.get(f"supports_{mode}_commands") is not True:
+        if not guarded_mixed and profile.get(f"supports_{mode}_commands") is not True:
             mode = "unknown"
     marker = (
         _controller_runtime_marker(row, metadata, algorithm)
@@ -1443,6 +1872,7 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
             type(row.get("steps")) is int
             and row["steps"] > 0
             and _trace_complete(row)
+            and (not (guarded_mixed or hybrid_adapter) or _guarded_commands_complete(row))
             and all(
                 isinstance((step.get("planner") or {}).get("selected_action"), dict)
                 and step["planner"]["selected_action"]
@@ -1458,78 +1888,110 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
         and bool(algorithm.strip())
         and row.get("controller_executed", True) is True
     )
-    return {
-        "algorithm": algorithm or "unknown",
-        "execution_mode": mode,
-        "controller_executed": bool(executed),
-        "fallback": row.get("fallback") is True
-        or (marker is not None and "fallback" in str(marker)),
-        "degraded": row.get("degraded") is True or marker is not None,
-    }
+    return receipt_arm_execution.carry_execution_proof(
+        row,
+        {
+            "algorithm": algorithm or "unknown",
+            "execution_mode": mode,
+            "controller_executed": bool(executed),
+            "fallback": row.get("fallback") is True
+            or (marker is not None and "fallback" in str(marker)),
+            "degraded": row.get("degraded") is True or marker is not None,
+        },
+    )
 
 
 def build_rows_and_classifications(
-    head_rows: dict[tuple[str, str, int], dict[str, Any]],
-    baseline_rows: dict[tuple[str, str, int], dict[str, Any]],
+    head_rows: dict[receipt_provenance.EpisodeSlot, dict[str, Any]],
+    baseline_rows: dict[receipt_provenance.EpisodeSlot, dict[str, Any]],
     scope: dict[str, Any],
     *,
     classification_class: str,
     evidence_base_uri: str,
+    execution_evidence: dict | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Join head/baseline sweep rows into gate payload rows and classifications."""
+    receipt_provenance.validate_scope_ids(scope)
+    for sources in (head_rows, baseline_rows, execution_evidence):
+        if sources is not None:
+            receipt_provenance.validate_pair_keys(sources)
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
-    for arm in scope["arms"]:
-        for map_id in scope["maps"]:
-            for seed in DEFAULT_SEEDS:
-                key = (arm, map_id, seed)
-                if key not in head_rows:
-                    raise ValueError(f"head sweep omitted {key}")
-                if key not in baseline_rows:
-                    raise ValueError(f"baseline sweep omitted {key}")
-                head = head_rows[key]
-                baseline = baseline_rows[key]
-                success = _row_success(head)
-                collisions = _row_collisions(head)
-                baseline_success = _row_success(baseline)
-                baseline_collisions = _row_collisions(baseline)
-                rows.append(
-                    {
-                        "arm": arm,
-                        "map": map_id,
-                        "seed": seed,
-                        "success": success,
-                        "collisions": collisions,
-                        "baseline_success": baseline_success,
-                        "baseline_collisions": baseline_collisions,
-                        **_execution_evidence(head),
-                    }
-                )
-                evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
-                if baseline_success and not success:
-                    classifications.append(
-                        {
-                            "arm": arm,
-                            "map": map_id,
-                            "seed": seed,
-                            "kind": "success_to_failure",
-                            "class": classification_class,
-                            "evidence": evidence,
-                            "count": 1,
-                        }
-                    )
-                if collisions > baseline_collisions:
-                    classifications.append(
-                        {
-                            "arm": arm,
-                            "map": map_id,
-                            "seed": seed,
-                            "kind": "new_collision",
-                            "class": classification_class,
-                            "evidence": evidence,
-                            "count": collisions - baseline_collisions,
-                        }
-                    )
+    head_rows = receipt_provenance.native_keyed_rows(head_rows)
+    baseline_rows = receipt_provenance.native_keyed_rows(baseline_rows)
+    if execution_evidence is not None:
+        execution_evidence = {
+            key
+            if isinstance(key, receipt_provenance.EpisodeSlot)
+            else receipt_provenance.canonical_pair_key(*key): value
+            for key, value in execution_evidence.items()
+        }
+    expected = receipt_provenance.reviewed_slots(scope, DEFAULT_SEEDS)
+    if set(head_rows) != expected or set(baseline_rows) != expected:
+        raise ValueError("raw execution invalid: scope coverage differs")
+    for key in sorted(expected):
+        arm, map_id, seed = key.arm, key.scenario, key.seed
+        if key not in head_rows:
+            raise ValueError(f"head sweep omitted {key}")
+        if key not in baseline_rows:
+            raise ValueError(f"baseline sweep omitted {key}")
+        head = head_rows[key]
+        baseline = baseline_rows[key]
+        success = _row_success(head)
+        collisions = _row_collisions(head)
+        baseline_success = _row_success(baseline)
+        baseline_collisions = _row_collisions(baseline)
+        rows.append(
+            {
+                "native_slot": key._asdict(),
+                "arm": arm,
+                "map": map_id,
+                "seed": seed,
+                "success": success,
+                "collisions": collisions,
+                "baseline_success": baseline_success,
+                "baseline_collisions": baseline_collisions,
+                "scheduler_job_id": head.get("scheduler_job_id"),
+                "scheduler_node": head.get("scheduler_node"),
+                "baseline_scheduler_job_id": baseline.get("scheduler_job_id"),
+                "baseline_scheduler_node": baseline.get("scheduler_node"),
+                **(
+                    _execution_evidence(head)
+                    if execution_evidence is None
+                    else execution_evidence[key]
+                ),
+            }
+        )
+        rows[-1] = receipt_arm_execution.carry_execution_proof(
+            head if execution_evidence is None else execution_evidence[key], rows[-1]
+        )
+        evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
+        if baseline_success and not success:
+            classifications.append(
+                {
+                    "native_slot": key._asdict(),
+                    "arm": arm,
+                    "map": map_id,
+                    "seed": seed,
+                    "kind": "success_to_failure",
+                    "class": classification_class,
+                    "evidence": evidence,
+                    "count": 1,
+                }
+            )
+        if collisions > baseline_collisions:
+            classifications.append(
+                {
+                    "native_slot": key._asdict(),
+                    "arm": arm,
+                    "map": map_id,
+                    "seed": seed,
+                    "kind": "new_collision",
+                    "class": classification_class,
+                    "evidence": evidence,
+                    "count": collisions - baseline_collisions,
+                }
+            )
     totals = {
         "episodes": len(rows),
         "new_failures": sum(row["kind"] == "success_to_failure" for row in classifications),
@@ -1540,10 +2002,81 @@ def build_rows_and_classifications(
     return rows, classifications, totals
 
 
+def derive_valid_comparison(
+    head_rows: dict,
+    baseline_rows: dict,
+    scope: dict,
+    *,
+    classification_class: str,
+    evidence_base_uri: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    """Shared collection/admission trust decision, derived entirely from raw rows."""
+    from robot_sf.benchmark.algorithm_metadata import (
+        enrich_algorithm_metadata,
+    )
+
+    receipt_provenance.validate_scope_ids(scope)
+    for sources in (head_rows, baseline_rows):
+        receipt_provenance.validate_pair_keys(sources)
+    head_rows = receipt_provenance.native_keyed_rows(head_rows)
+    baseline_rows = receipt_provenance.native_keyed_rows(baseline_rows)
+    expected = receipt_provenance.reviewed_slots(scope, DEFAULT_SEEDS)
+    head_evidence = {}
+    for sources in (head_rows, baseline_rows):
+        if set(sources) != expected:
+            raise behaviour_receipt.HardwareIdentityError(
+                "raw execution invalid: scope coverage differs"
+            )
+        for key, raw in sources.items():
+            evidence = _execution_evidence(raw)
+            arm, scenario = key.arm, key.scenario
+            algorithm = receipt_arm_execution.expected_algorithm(
+                arm,
+                scenario,
+                scope.get("arm_algorithms", {}).get(arm, arm),
+                row=raw,
+                source_sha=raw.get("git_hash"),
+                repo_root=behaviour_receipt.ROOT,
+            )
+            capabilities = enrich_algorithm_metadata(algo=algorithm)["planner_kinematics"]
+            require_valid_execution(evidence, algorithm, capabilities)
+            if sources is head_rows:
+                head_evidence[key] = evidence
+    return build_rows_and_classifications(
+        head_rows,
+        baseline_rows,
+        scope,
+        classification_class=classification_class,
+        evidence_base_uri=evidence_base_uri,
+        execution_evidence=head_evidence,
+    )
+
+
+def require_valid_execution(evidence: dict, algorithm: str, capabilities: dict) -> None:
+    """One execution rule for raw derivation and projected receipt validation."""
+    reason = None
+    mode = required_execution_mode(algorithm, capabilities)
+    if evidence.get("algorithm") != algorithm:
+        reason = "row algorithm differs from reviewed arm"
+    elif evidence.get("execution_mode") != mode or not (
+        capabilities["supports_native_commands"] or capabilities["supports_adapter_commands"]
+    ):
+        reason = "command execution mode does not satisfy the algorithm registry"
+    elif _audit_status([evidence]) == "fail":
+        reason = "intended solver/controller did not execute or trace is incomplete"
+    elif _audit_status([evidence]) != "pass":
+        reason = "fallback or degraded execution cannot satisfy the receipt"
+    if reason is not None:
+        raise behaviour_receipt.HardwareIdentityError(f"raw execution invalid: {reason}")
+
+
 def _audit_status(rows: list[dict[str, Any]]) -> str:
     if not rows or any(
         row.get("controller_executed") is not True
-        or row.get("execution_mode") not in {"native", "adapter"}
+        or (
+            row.get("execution_mode") not in {"native", "adapter"}
+            and not (row.get("execution_mode") == "mixed" and row.get("algorithm") == "guarded_ppo")
+        )
         or not row.get("algorithm")
         or row.get("algorithm") == "unknown"
         or type(row.get("fallback")) is not bool
@@ -1577,6 +2110,71 @@ def write_real_row_audit(
     return _sha256(path)
 
 
+def _archive_source_bundle(
+    shard: Path, bundle: Path, *, extra_files: tuple[Path, ...] = ()
+) -> None:
+    """Preserve an existing identical evidence bundle; refuse conflicting bytes."""
+    files = [
+        *receipt_provenance.source_files(shard),
+        shard / receipt_provenance.BINDING_FILE,
+        *extra_files,
+    ]
+    expected = {path.relative_to(shard).as_posix(): path.read_bytes() for path in files}
+    if bundle.exists():
+        with tarfile.open(bundle, "r:gz") as archive:
+            actual = {}
+            for member in archive:
+                stream = archive.extractfile(member) if member.isfile() else None
+                if stream is None or member.name in actual:
+                    raise behaviour_receipt.HardwareIdentityError(
+                        "hardware comparison invalid: provenance digest bundle is invalid"
+                    )
+                actual[member.name] = stream.read()
+        if actual != expected:
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: provenance digest bundle already exists with different bytes"
+            )
+        return
+    bundle.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(bundle, "x:gz") as archive:
+        for path in files:
+            archive.add(path, arcname=path.relative_to(shard).as_posix(), recursive=False)
+
+
+def _equivalence_source_artifacts(
+    repo_root: Path, receipt_id: str, output_dir: Path, scheduler: SweepRun, baseline: SweepRun
+) -> dict:
+    """Archive unchanged sealed inputs and the pinned wrapper for independent admission."""
+    artifacts = {}
+    for side, run in (("head", scheduler), ("baseline", baseline)):
+        if run.hardware is None:
+            raise behaviour_receipt.HardwareIdentityError(
+                "hardware comparison invalid: unverified sweep cannot provide source artifacts"
+            )
+        identity = behaviour_receipt.hardware_identity(run.hardware)
+        references = {}
+        for shard in run.shard_dirs:
+            receipt_provenance.verify_binding(
+                shard, shard.name, identity["node"], source_sha=run.source_sha, arm_role=side
+            )
+            bundle = output_dir / f"{receipt_id}-sources" / side / f"{shard.name}.tar.gz"
+            _archive_source_bundle(
+                shard,
+                bundle,
+                extra_files=(shard / "acquisition_harness.py", shard / "execution_request.json"),
+            )
+            references[shard.name] = {
+                "path": bundle.relative_to(repo_root).as_posix(),
+                "sha256": _sha256(bundle),
+                "binding": {
+                    "path": receipt_provenance.BINDING_FILE,
+                    "sha256": _sha256(shard / receipt_provenance.BINDING_FILE),
+                },
+            }
+        artifacts[side] = references
+    return artifacts
+
+
 def write_receipt_and_header(  # noqa: PLR0913
     *,
     repo_root: Path,
@@ -1599,8 +2197,50 @@ def write_receipt_and_header(  # noqa: PLR0913
     output_dir: Path,
 ) -> tuple[Path, dict[str, Any]]:
     """Write the committed rows payload and return the compact PR header."""
+    hardware = {"head": scheduler.hardware, "baseline": baseline.hardware}
+    identities = behaviour_receipt.validate_hardware_pair(hardware)
+    if scheduler.source_sha == baseline.source_sha:
+        raise behaviour_receipt.HardwareIdentityError(
+            "producer source invalid: head and baseline share a producer commit"
+        )
+    derived, _, derived_totals = derive_valid_comparison(
+        _load_run_rows(scheduler, "head"),
+        _load_run_rows(baseline, "baseline"),
+        scope,
+        classification_class="known_limitation",
+        evidence_base_uri="verified-source",
+    )
+    if rows != derived or totals != derived_totals:
+        raise behaviour_receipt.HardwareIdentityError(
+            "raw execution invalid: supplied receipt projection differs from sealed sources"
+        )
+    behaviour_receipt.validate_scheduler_rows(rows, identities)
+    source_artifacts = {}
+    for side, run in (("head", scheduler), ("baseline", baseline)):
+        references = {}
+        for shard in run.shard_dirs:
+            receipt_provenance.verify_binding(
+                shard,
+                shard.name,
+                identities[side]["node"],
+                source_sha=run.source_sha,
+                arm_role=side,
+            )
+            bundle = output_dir / f"{receipt_id}-sources" / side / f"{shard.name}.tar.gz"
+            _archive_source_bundle(shard, bundle)
+            references[shard.name] = {
+                "path": bundle.relative_to(repo_root).as_posix(),
+                "sha256": _sha256(bundle),
+                "binding": {
+                    "path": receipt_provenance.BINDING_FILE,
+                    "sha256": _sha256(shard / receipt_provenance.BINDING_FILE),
+                },
+            }
+        source_artifacts[side] = references
     payload = {
         "schema_version": "behaviour-change-rows.v1",
+        "hardware": hardware,
+        "source_artifacts": source_artifacts,
         "rows": rows,
         "classifications": classifications,
     }
@@ -1616,6 +2256,7 @@ def write_receipt_and_header(  # noqa: PLR0913
     job_id = scheduler.job_id
     if scheduler.job_id != baseline.job_id:
         job_id = f"{scheduler.job_id}_{baseline.job_id}"
+    job_id = job_id.replace(",", "_")
     header = {
         "schema_version": "behaviour-change-receipt-header.v2",
         "head_sha": head_sha,
@@ -1662,12 +2303,22 @@ def write_receipt_and_header(  # noqa: PLR0913
 
 
 def _load_scope(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    scope = json.loads(path.read_text(encoding="utf-8"))
+    receipt_provenance.validate_scope_ids(scope)
+    return scope
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head-sha", required=True)
+    parser.add_argument(
+        "--receipt-route", choices=("full", "default-path-equivalence"), default="full"
+    )
+    parser.add_argument(
+        "--base-ref", default="origin/main", help="Current main for PR-only equivalence"
+    )
+    parser.add_argument("--tooling-sha", help="Separately pinned acquisition harness source SHA")
+    parser.add_argument("--receipt-context", choices=("pr", "release"), default="pr")
     parser.add_argument(
         "--head-source-sha", help="Recorded execution source before receipt-only commits"
     )
@@ -1675,7 +2326,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--repo", default="ll7/robot_sf_ll7")
     parser.add_argument("--receipt-id", required=True)
     parser.add_argument("--mode", choices=("existing", "local", "sbatch"), default="existing")
+    parser.add_argument(
+        "--sbatch-node",
+        help="Required for sbatch: one literal node shared by baseline and head jobs",
+    )
     parser.add_argument("--submit-only", action="store_true")
+    parser.add_argument(
+        "--comparison-only",
+        action="store_true",
+        help="Private equivalence diagnostic only; never emit a receipt/header",
+    )
     parser.add_argument("--head-sweep-dir", type=Path)
     parser.add_argument("--baseline-sweep-dir", type=Path)
     parser.add_argument("--work-dir", type=Path, default=Path("output/behaviour_receipt"))
@@ -1725,6 +2385,18 @@ def _prepare_sweeps(
     if args.mode == "existing":
         if args.head_sweep_dir is None or args.baseline_sweep_dir is None:
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
+        behaviour_receipt.validate_hardware_pair(
+            {
+                "head": _read_hardware(
+                    args.head_sweep_dir.resolve(),
+                    args.head_source_sha or args.head_sha,
+                    args.job_id,
+                ),
+                "baseline": _read_hardware(
+                    args.baseline_sweep_dir.resolve(), baseline_source, args.baseline_job_id
+                ),
+            }
+        )
         return (
             _existing_sweep(
                 args.head_source_sha or args.head_sha,
@@ -1742,29 +2414,8 @@ def _prepare_sweeps(
             ),
         )
     if args.mode == "local":
-        return (
-            _run_local_sweep(
-                repo_root,
-                work_dir,
-                "head",
-                args.head_sha,
-                seeds,
-                arms=args.arms,
-                scenarios=args.scenarios,
-                workers=args.workers,
-                check_only=args.check_only,
-            ),
-            _run_local_sweep(
-                repo_root,
-                work_dir,
-                "baseline",
-                baseline_source,
-                seeds,
-                arms=args.arms,
-                scenarios=args.scenarios,
-                workers=args.workers,
-                check_only=args.check_only,
-            ),
+        raise behaviour_receipt.HardwareIdentityError(
+            "hardware comparison invalid: receipt evidence requires a Slurm allocation; use sbatch"
         )
     return (
         _submit_sbatch_sweep(
@@ -1773,9 +2424,7 @@ def _prepare_sweeps(
             "head",
             args.head_sha,
             seeds,
-            arms=args.arms,
-            scenarios=args.scenarios,
-            workers=args.workers,
+            args=args,
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1783,22 +2432,291 @@ def _prepare_sweeps(
             "baseline",
             baseline_source,
             seeds,
-            arms=args.arms,
-            scenarios=args.scenarios,
-            workers=args.workers,
+            args=args,
         ),
     )
 
 
+def _sweep_episode_paths(sweep_dir: Path) -> dict[receipt_provenance.EpisodeSlot, str]:
+    """Locate every projected digest's raw episode in its hashed sweep archive."""
+    return {
+        key: episode.source_path.relative_to(sweep_dir).as_posix()
+        for key, episode in receipt_provenance.joined_sweep_episodes(sweep_dir).items()
+    }
+
+
+def _sweep_execution_statuses(sweep_dir: Path) -> dict[receipt_provenance.EpisodeSlot, str]:
+    """Keep verified summary transport status separate from untouched raw episode bytes."""
+    return {
+        key: episode.summary["execution_status"]
+        for key, episode in receipt_provenance.joined_sweep_episodes(sweep_dir).items()
+    }
+
+
+def _run_episode_transport(run: SweepRun) -> tuple[dict, dict]:
+    """Join verified job-directory paths and summary status without altering raw rows."""
+    paths, statuses = {}, {}
+    for shard in run.shard_dirs:
+        for key, path in _sweep_episode_paths(shard).items():
+            if key in paths:
+                raise ValueError("duplicate episode transport across scheduler shards")
+            paths[key] = (shard.relative_to(run.output_dir) / path).as_posix()
+        statuses.update(_sweep_execution_statuses(shard))
+    return paths, statuses
+
+
+def _verify_equivalence_tooling(
+    sweeps: tuple[SweepRun, SweepRun], tooling_sha: str, seeds: list[int], repo_root: Path
+) -> tuple[str, str, str]:
+    """Verify separately pinned script bytes and the same archived acquisition wrapper."""
+    tooling_path = "scripts/validation/run_empty_world_sweep.py"
+    tooling_bytes = subprocess.check_output(
+        ["git", "show", f"{tooling_sha}:{tooling_path}"], cwd=repo_root
+    )
+    tooling_digest = hashlib.sha256(tooling_bytes).hexdigest()
+    harnesses = set()
+    for shard in (directory for sweep in sweeps for directory in sweep.shard_dirs):
+        wrapper = shard / "acquisition_harness.py"
+        if wrapper.is_symlink() or not wrapper.is_file():
+            raise ValueError("equivalence acquisition wrapper must be an archived regular file")
+        wrapper_digest = _sha256(wrapper)
+        for summary in shard.glob("episodes_*.jsonl"):
+            suite = summary.stem.removeprefix("episodes_")
+            metadata = json.loads((shard / f"execution_{suite}.json").read_text())
+            if (
+                metadata.get("tooling_sha") != tooling_sha
+                or metadata.get("tooling_path") != tooling_path
+                or metadata.get("tooling_file_sha256") != tooling_digest
+            ):
+                raise ValueError("equivalence acquisition tooling differs from the pinned Git blob")
+            harness = metadata.get("private_harness_sha256")
+            if not behaviour_receipt._digest(harness) or harness != wrapper_digest:
+                raise ValueError("equivalence acquisition wrapper bytes differ from metadata")
+            harnesses.add(harness)
+            if metadata.get("seeds") != seeds:
+                raise ValueError("equivalence acquisition development seed slice differs")
+    if len(harnesses) != 1:
+        raise ValueError("equivalence base/head acquisition harness differs")
+    return tooling_path, tooling_digest, next(iter(harnesses))
+
+
+def _validate_equivalence_input_json(args: argparse.Namespace) -> None:
+    """Decode no source claims before rejecting ambiguous fields in this route."""
+    from scripts.ci import default_path_equivalence as equivalence
+
+    for directory, jobs in (
+        (args.head_sweep_dir, args.job_id),
+        (args.baseline_sweep_dir, args.baseline_job_id),
+    ):
+        if directory is None:
+            raise ValueError("existing equivalence requires both exact-source sweep directories")
+        for shard in _shard_dirs(directory.resolve(), jobs):
+            equivalence.validate_source_json(shard)
+
+
+def _validate_equivalence_sources(
+    scheduler: SweepRun, baseline: SweepRun, identities: dict, source_context: dict
+) -> None:
+    """Private comparison uses the same sealed source proof as committed admission."""
+    for side, sweep in (("head", scheduler), ("baseline", baseline)):
+        for shard in sweep.shard_dirs:
+            raw = receipt_provenance.verified_raw_rows(
+                shard,
+                shard.name,
+                identities[side]["node"],
+                source_sha=sweep.source_sha,
+                arm_role=side,
+            )
+            behaviour_receipt._equivalence_source_projection(
+                shard, raw, source_context, identities[side]
+            )
+
+
+def _make_equivalence_receipt(args: argparse.Namespace, repo_root: Path) -> int:
+    """Consume exact-source sweeps acquired once per source on one pinned node.
+
+    Acquisition may use a separately pinned harness. Existing mode intentionally
+    requires its recorded identity instead of stamping an unverified identity
+    onto a source checkout's own acquisition script.
+    """
+    from scripts.ci import default_path_equivalence as equivalence
+
+    if args.receipt_context != "pr":
+        raise ValueError("equivalence refused: releases require full behaviour receipt")
+    if args.mode != "existing" or args.submit_only:
+        raise ValueError("equivalence requires existing exact-source, pinned-harness sweeps")
+    _check_seed_range(args.seeds)
+    if args.seeds != list(equivalence.SEEDS):
+        raise ValueError("equivalence requires --seeds 1001 1002 1003")
+    if not behaviour_receipt._digest(args.tooling_sha, 40):
+        raise ValueError("equivalence requires --tooling-sha with exact acquisition source")
+    base_source = _full_sha(repo_root, args.base_ref)
+    if base_source != behaviour_receipt.current_main_source(args.repo):
+        raise ValueError(
+            "equivalence freshness refused: recorded baseline must match current remote main"
+        )
+    execution_source = args.head_source_sha or args.head_sha
+    behaviour_receipt._hardware_require(
+        execution_source != base_source,
+        "producer source invalid: head and baseline share a producer commit",
+    )
+    changed = _git(
+        repo_root, "diff", "--name-only", "--no-renames", base_source, execution_source
+    ).splitlines()
+    transitions = equivalence.classify_scope(changed, base_source, execution_source)
+    _validate_equivalence_input_json(args)
+    scheduler, baseline = _prepare_sweeps(args, repo_root, base_source)
+    hardware = {"head": scheduler.hardware, "baseline": baseline.hardware}
+    identities = behaviour_receipt.validate_hardware_pair(hardware)
+    tooling_path, tooling_digest, harness_digest = _verify_equivalence_tooling(
+        (scheduler, baseline), args.tooling_sha, args.seeds, repo_root
+    )
+    scope = _load_scope(args.scope_path)
+    equivalence.validate_scope_entries(scope)
+    if len(scope["arms"]) != 14 or len(scope["maps"]) != 51:
+        raise ValueError("equivalence requires the full reviewed 14-arm/51-slot matrix")
+    source_context = {
+        "hardware": hardware,
+        "tooling_sha": args.tooling_sha,
+        "tooling_path": tooling_path,
+        "tooling_file_sha256": tooling_digest,
+        "harness_sha256": harness_digest,
+        "seeds": args.seeds,
+    }
+    _validate_equivalence_sources(scheduler, baseline, identities, source_context)
+    head_paths, head_statuses = _run_episode_transport(scheduler)
+    baseline_paths, baseline_statuses = _run_episode_transport(baseline)
+    rows = equivalence.comparison_rows(
+        _load_run_rows(scheduler, "head", preserve_raw=True),
+        _load_run_rows(baseline, "baseline", preserve_raw=True),
+        scope,
+        head_execution_statuses=head_statuses,
+        baseline_execution_statuses=baseline_statuses,
+        allocation_identities=identities,
+    )
+    behaviour_receipt._require(
+        len(rows) == 2142, "equivalence refused: expected 2142 paired episodes"
+    )
+    behaviour_receipt.validate_scheduler_rows(rows, identities)
+    for row in rows:
+        key = behaviour_receipt._key(row)
+        row.update(head_path=head_paths[key], baseline_path=baseline_paths[key])
+    changed_rows = [row for row in rows if row["head_sha256"] != row["baseline_sha256"]]
+    diagnostic_path = (repo_root / args.work_dir / f"{args.receipt_id}.comparison.json").resolve()
+    diagnostic_path.parent.mkdir(parents=True, exist_ok=True)
+    diagnostic_path.write_bytes(
+        _json_bytes(
+            {
+                "schema_version": "default-path-equivalence-diagnostic.v1",
+                "head_source_sha": execution_source,
+                "baseline_source_sha": base_source,
+                "rows": rows,
+                "changed_episodes": len(changed_rows),
+                "result": "refused" if changed_rows else "equal_pending_independent_review",
+            }
+        )
+    )
+    if args.comparison_only:
+        print(
+            json.dumps(
+                {
+                    "result": "refused" if changed_rows else "equal",
+                    "episodes": len(rows),
+                    "changed_episodes": len(changed_rows),
+                    "diagnostic_file": diagnostic_path.name,
+                }
+            )
+        )
+        return 1 if changed_rows else 0
+    if changed_rows:
+        raise ValueError(
+            f"equivalence refused: changed behavioral byte in {len(changed_rows)} episodes; inspect comparison diagnostic"
+        )
+    job_id = (
+        scheduler.job_id
+        if scheduler.job_id == baseline.job_id
+        else f"{scheduler.job_id}_{baseline.job_id}"
+    ).replace(",", "_")
+    source_artifacts = _equivalence_source_artifacts(
+        repo_root, args.receipt_id, (repo_root / args.output_dir).resolve(), scheduler, baseline
+    )
+    receipt = {
+        "schema_version": equivalence.VERSION,
+        "admission_context": "pull_request",
+        "declaration": "default_benchmark_behaviour_unchanged",
+        "head_source_sha": execution_source,
+        "baseline": {
+            "source_sha": base_source,
+            "artifact": {"uri": baseline.artifact_uri, "sha256": baseline.artifact_sha256},
+        },
+        "scheduler": {"source_sha": execution_source, "job_id": job_id},
+        "tooling_sha": args.tooling_sha,
+        "tooling_path": tooling_path,
+        "tooling_file_sha256": tooling_digest,
+        "harness_sha256": harness_digest,
+        "harness_path": "acquisition_harness.py",
+        "artifact": {"uri": scheduler.artifact_uri, "sha256": scheduler.artifact_sha256},
+        "scope_sha256": equivalence.digest(scope),
+        "projection_sha256": equivalence.digest(equivalence.EXCLUDED_LEAVES),
+        "scope_transitions": transitions,
+        "seeds": args.seeds,
+        "hardware": hardware,
+        "source_artifacts": source_artifacts,
+        "rows": rows,
+        "totals": {"episodes": len(rows), "changed_episodes": 0},
+    }
+    output = (repo_root / args.output_dir / f"{args.receipt_id}.json").resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(_json_bytes(receipt))
+    header = {
+        "schema_version": "default-path-equivalence-header.v1",
+        "admission_context": "pull_request",
+        "head_sha": args.head_sha,
+        "refute_review": {
+            "head_sha": args.head_sha,
+            "verdict": "pending_independent_review",
+            "uri": args.refute_review_uri,
+            "comparison_sha256": equivalence.digest(rows),
+        },
+        "rows_artifact": {
+            "path": output.relative_to(repo_root).as_posix(),
+            "sha256": _sha256(output),
+        },
+    }
+    print(f"wrote {output.relative_to(repo_root)} (pending independent review)", file=sys.stderr)
+    print("<!-- default-path-equivalence:v1")
+    print(json.dumps(header, indent=2, sort_keys=True))
+    print("-->")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the behaviour receipt producer CLI."""
+    special = sys.argv[1:] if argv is None else argv
+    if len(special) == 2 and special[0] == "--record-scheduler-context":
+        return _stamp_scheduler_rows(Path(special[1]))
+    if len(special) == 2 and special[0] == "--record-job-request":
+        directory = Path(special[1])
+        request = json.loads((directory / "request_template.json").read_text())
+        _record_request(
+            directory,
+            request["source_sha"],
+            os.environ["SLURM_JOB_ID"],
+            request["requested_node"],
+            request["arm_role"],
+        )
+        return 0
     args = _parse_args(argv)
+    if args.comparison_only and args.receipt_route != "default-path-equivalence":
+        raise ValueError("--comparison-only requires the default-path equivalence route")
     repo_root = ROOT
     head_sha = _full_sha(repo_root, args.head_sha)
     args.head_sha = head_sha
     if args.head_source_sha:
         args.head_source_sha = _full_sha(repo_root, args.head_source_sha)
         behaviour_receipt.require_receipt_only_ancestor(args.head_source_sha, head_sha, "job")
+    if args.receipt_route == "default-path-equivalence":
+        return _make_equivalence_receipt(args, repo_root)
     baseline_release = (
         behaviour_receipt.latest_release(args.repo) if args.baseline == "latest" else args.baseline
     )
@@ -1807,10 +2725,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.submit_only:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
+    behaviour_receipt.validate_hardware_pair(
+        {"head": scheduler.hardware, "baseline": baseline.hardware}
+    )
     scope = _load_scope(args.scope_path)
-    head_rows = _load_sweep_rows(scheduler.output_dir)
-    baseline_rows = _load_sweep_rows(baseline.output_dir)
-    rows, classifications, totals = build_rows_and_classifications(
+    if scheduler.source_sha == baseline.source_sha:
+        raise behaviour_receipt.HardwareIdentityError(
+            "producer source invalid: head and baseline share a producer commit"
+        )
+    head_rows = _load_run_rows(scheduler, "head")
+    baseline_rows = _load_run_rows(baseline, "baseline")
+    rows, classifications, totals = derive_valid_comparison(
         head_rows,
         baseline_rows,
         scope,
@@ -1865,4 +2790,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except behaviour_receipt.HardwareIdentityError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc

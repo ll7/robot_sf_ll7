@@ -1,1 +1,2 @@
 receipts/behaviour/*.json filter=lfs diff=lfs merge=lfs -text
+receipts/behaviour/*-sources/**/*.tar.gz filter=lfs diff=lfs merge=lfs -text

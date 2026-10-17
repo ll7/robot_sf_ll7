@@ -3,10 +3,13 @@
 This is a diff gate, not an audit of historical releases or archived evidence.
 See issue #9668 for the evaluation split and anchor barrier.
 
-Accepted syntactic limits: non-literal or aliased seed generation (including
+Accepted Python syntactic limits: non-literal or aliased seed generation (including
 dynamic ``range`` bounds), dynamically named environment keys, and non-literal
 environment seed values need exact-head review. Literal environment assignments
 and quoted numeric seed-list continuations are checked.
+Changed YAML files use parser events to refuse new anchors, aliases and merge keys;
+only byte-identical base lines may retain existing indirection. All resolved scalars
+and range-like containers are checked across each post-change document.
 Literal Python ``range`` loops use complete-file AST context when available.
 Positional episode seeds require a resolvable local or directly imported source
 signature with a parameter named ``seed``; unresolved callees use keywords only.
@@ -33,6 +36,7 @@ import textwrap
 import tokenize
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import yaml
@@ -67,6 +71,7 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "tests/analysis/test_pinned_successor_lineage.py",
         "tests/analysis/test_compare_issue_9431_release.py",
         "tests/validation/test_check_seed_holdout_diff.py",
+        "tests/validation/test_seed_hardening.py",
         "tests/benchmark/test_newseeds.py",
         "tests/benchmark/test_release_campaign_authority.py",
         "tests/benchmark/test_release_candidate.py",
@@ -724,71 +729,169 @@ def _integer_seed_bound(value: object) -> int:
     return int(number)
 
 
-def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with cycle guards
-    path: str, number: int, content: str, lines: list[str]
-) -> bool:
-    """Inspect the resolved value of an added YAML merge or seed alias."""
-    if not path.endswith((".yaml", ".yml")) or "*" not in content:
-        return False
-    try:
-        root = yaml.compose("\n".join(lines), Loader=yaml.SafeLoader)
-    except yaml.YAMLError:
-        return bool("<<:" in content or SEED_FIELD.search(content))
+def _yaml_indirection(source: str) -> list[tuple[int, int, str, str]]:
+    """Locate actual YAML indirection tokens, including alias occurrence marks."""
+    found = []
+    # Each frame records whether it is a mapping and whether its next node is a key.
+    stack: list[tuple[bool, bool]] = []
+    for event in yaml.parse(source, Loader=yaml.SafeLoader):
+        if isinstance(event, yaml.events.CollectionEndEvent):
+            stack.pop()
+        elif isinstance(event, yaml.events.NodeEvent):
+            is_key = bool(stack and stack[-1] == (True, True))
+            if stack and stack[-1][0]:
+                stack[-1] = (True, not stack[-1][1])
+            kind = ""
+            if isinstance(event, yaml.events.AliasEvent):
+                kind = "alias"
+            elif event.anchor is not None:
+                kind = "anchor"
+            elif (
+                isinstance(event, yaml.events.ScalarEvent)
+                and is_key
+                and (event.value == "<<" or event.tag == "tag:yaml.org,2002:merge")
+            ):
+                kind = "merge"
+            if kind:
+                found.append(
+                    (
+                        event.start_mark.line + 1,
+                        event.start_mark.column,
+                        kind,
+                        event.anchor or getattr(event, "value", ""),
+                    )
+                )
+            if isinstance(event, yaml.events.CollectionStartEvent):
+                stack.append((isinstance(event, yaml.events.MappingStartEvent), True))
+    return found
 
-    def seed_value_overlaps(node):
-        resolved = yaml.safe_load(yaml.serialize(node))
-        if isinstance(resolved, dict):
-            low = resolved.get("min", resolved.get("low"))
-            high = resolved.get("max", resolved.get("high"))
+
+def _base_yaml(root: Path, path: str, base_ref: str | None) -> str:
+    """Missing base blobs grant no grandfathered indirection."""
+    if base_ref is None:
+        return ""
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f"{base_ref}:{path}"],
+        capture_output=True,
+        check=False,
+    )
+    return result.stdout.decode("utf-8") if result.returncode == 0 else ""
+
+
+def _unchanged_yaml_indirection(source: str, base: str) -> set[tuple[int, int, str, str]]:
+    """Match event identities only on byte-identical complete base lines."""
+    before, after = base.splitlines(keepends=True), source.splitlines(keepends=True)
+    base_events = set(_yaml_indirection(base))
+    unchanged = set()
+    for block in SequenceMatcher(None, before, after, autojunk=False).get_matching_blocks():
+        for line, column, kind, value in base_events:
+            if block.a < line <= block.a + block.size:
+                unchanged.add((line - block.a + block.b, column, kind, value))
+    return unchanged
+
+
+def _yaml_semantic_findings(  # noqa: C901 - graph traversal, range checks and source exemptions
+    path: str, source: str
+) -> list[Finding]:
+    """Inspect every resolved scalar and range, independent of seed-key spelling."""
+    lines = source.splitlines()
+    marked = _marked_block_lines(lines, path)
+    findings: dict[int, Finding] = {}
+    loader = yaml.SafeLoader(source)
+
+    def exempt(node):
+        number = node.start_mark.line + 1
+        return number in marked or _line_marker_exempts(path, lines[number - 1])
+
+    def report(node):
+        number = node.start_mark.line + 1
+        findings[number] = Finding(path, number, lines[number - 1].strip())
+
+    def overlaps(values):
+        try:
+            low, high = sorted(_integer_seed_bound(value) for value in values)
+        except (ValueError, InvalidOperation):
+            return False
+        return any(low <= seed <= high for seed in HELD_OUT_SEEDS)
+
+    def visit(node, seen):  # noqa: C901 - handle scalar, mapping and sequence nodes
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        resolved = loader.construct_object(node, deep=True)
+        if isinstance(node, yaml.ScalarNode):
             try:
-                low, high = _integer_seed_bound(low), _integer_seed_bound(high)
+                if not exempt(node) and _integer_seed_bound(resolved) in HELD_OUT_SEEDS:
+                    report(node)
             except (ValueError, InvalidOperation):
-                return True
-            return any(low <= seed <= high for seed in HELD_OUT_SEEDS)
-        values = resolved if isinstance(resolved, list) else [resolved]
-        return any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values)
-
-    def contains_seed(node, seen):
-        if id(node) in seen:
-            return False
-        seen = seen | {id(node)}
+                pass
+            return
         if isinstance(node, yaml.MappingNode):
-            for key, value in node.value:
-                if SEED_FIELD.search(key.value + ":") and seed_value_overlaps(value):
-                    return True
-                if contains_seed(value, seen):
-                    return True
-        elif isinstance(node, yaml.SequenceNode):
-            return any(contains_seed(value, seen) for value in node.value)
-        return False
+            if isinstance(resolved, dict) and len(resolved) == 2 and overlaps(resolved.values()):
+                if not all(exempt(value) for _, value in node.value):
+                    report(node)
+            for lower, upper in (
+                ("min", "max"),
+                ("low", "high"),
+                ("start", "stop"),
+                ("start", "end"),
+            ):
+                if (
+                    lower in resolved
+                    and upper in resolved
+                    and overlaps((resolved[lower], resolved[upper]))
+                ):
+                    bounds = [value for key, value in node.value if key.value in (lower, upper)]
+                    if not all(exempt(value) for value in bounds):
+                        report(node)
+            children = [child for pair in node.value for child in pair]
+        else:
+            if (
+                len(resolved) == 2
+                and overlaps(resolved)
+                and not all(exempt(value) for value in node.value)
+            ):
+                report(node)
+            children = node.value
+        for child in children:
+            visit(child, seen)
 
-    def visit(node, seen, seed_context=False):
-        if id(node) in seen:
-            return False
-        seen = seen | {id(node)}
-        if isinstance(node, yaml.MappingNode):
-            for key, value in node.value:
-                is_seed = bool(SEED_FIELD.search(key.value + ":"))
-                if key.start_mark.line == number - 1:
-                    # A changed merge inherits the enclosing range's seed role.
-                    # Resolve the whole mapping so local bound overrides apply.
-                    if (
-                        seed_context
-                        and key.tag == "tag:yaml.org,2002:merge"
-                        and seed_value_overlaps(node)
-                    ):
-                        return True
-                    if contains_seed(value, set()):
-                        return True
-                    if is_seed and seed_value_overlaps(value):
-                        return True
-                if visit(value, seen, is_seed):
-                    return True
-        elif isinstance(node, yaml.SequenceNode):
-            return any(visit(value, seen, seed_context) for value in node.value)
-        return False
+    try:
+        while loader.check_data():
+            node = loader.get_node()
+            # Construct the complete graph first; SafeLoader resolves aliases and merges.
+            loader.construct_document(node)
+            visit(node, set())
+    finally:
+        loader.dispose()
+    return list(findings.values())
 
-    return visit(root, set()) if root is not None else False
+
+def _yaml_file_findings(path: str, root: Path, base_ref: str | None) -> list[Finding]:
+    """Fail closed on new indirection before checking complete post-change semantics."""
+    if not (_eligible(path) and path.endswith((".yaml", ".yml")) and (root / path).is_file()):
+        return []
+    try:
+        # Decode bytes directly so CRLF changes cannot masquerade as identical lines.
+        source = (root / path).read_bytes().decode("utf-8")
+        events = _yaml_indirection(source)
+        unchanged = (
+            _unchanged_yaml_indirection(source, _base_yaml(root, path, base_ref))
+            if events
+            else set()
+        )
+        forbidden = [event for event in events if event not in unchanged]
+        if forbidden:
+            return [
+                Finding(path, line, "YAML indirection is not allowed in seed-bearing configs")
+                for line in sorted({event[0] for event in forbidden})
+            ]
+        return [] if path in RELEASE_CONFIGS else _yaml_semantic_findings(path, source)
+    except (yaml.YAMLError, UnicodeError, RecursionError, ValueError) as exc:
+        mark = getattr(exc, "problem_mark", None)
+        return [
+            Finding(path, mark.line + 1 if mark else 1, "cannot validate seed-bearing YAML config")
+        ]
 
 
 def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
@@ -798,7 +901,7 @@ def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
     return lines, _marked_block_lines(lines, path)
 
 
-def _reference_finding(path: str, number: int, content: str, lines: list[str]) -> Finding | None:
+def _reference_finding(path: str, number: int, content: str) -> Finding | None:
     """Report misplaced markers and unreviewed named release-seed consumers."""
     if _eligible(path) and _misplaced_release_marker(path, content):
         return Finding(
@@ -806,15 +909,13 @@ def _reference_finding(path: str, number: int, content: str, lines: list[str]) -
             number,
             f"{content.strip()}  [release-evaluation marker outside release manifests]",
         )
-    if _unallowlisted_sealed_reference(path, content) or _yaml_alias_holdout(
-        path, number, content, lines
-    ):
+    if _unallowlisted_sealed_reference(path, content):
         return Finding(path, number, content.strip())
     return None
 
 
-def check_diff(diff: str, root: Path) -> list[Finding]:
-    """Return violations on added lines; root supplies complete file context."""
+def check_diff(diff: str, root: Path, *, base_ref: str | None = None) -> list[Finding]:
+    """Check added code lines and complete changed YAML documents against the holdout."""
     findings: list[Finding] = []
     path = ""
     line_number = 0
@@ -827,6 +928,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
         if row.startswith("+++ b/"):
             path = row[6:]
             file_lines, marked_block_lines = _diff_file_context(root, path)
+            findings.extend(_yaml_file_findings(path, root, base_ref))
             environment_seed_lines = (
                 _literal_environment_seed_lines(file_lines) if path.endswith(".py") else set()
             )
@@ -845,7 +947,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
             episode_seed = line_number in episode_seed_lines or (
                 not file_lines and _episode_range_context(content, before, [], root)
             )
-            reference = _reference_finding(path, line_number, content, file_lines)
+            reference = _reference_finding(path, line_number, content)
             if reference is not None:
                 findings.append(reference)
             elif (
@@ -877,7 +979,15 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
         elif row.startswith(" "):
             before.append(row[1:])
             line_number += 1
-    return findings
+    return _unique_findings(findings)
+
+
+def _unique_findings(findings: list[Finding]) -> list[Finding]:
+    """Keep parser refusal messages when text checks flag the same location."""
+    by_location = {}
+    for finding in findings:
+        by_location.setdefault((finding.path, finding.line), finding)
+    return list(by_location.values())
 
 
 def main() -> int:
@@ -904,7 +1014,7 @@ def main() -> int:
         "docs/context/evidence/",
     ]
     result = subprocess.run(command, check=True, capture_output=True, text=True)
-    findings = check_diff(result.stdout, Path.cwd())
+    findings = check_diff(result.stdout, Path.cwd(), base_ref=args.base_ref)
     for finding in findings:
         print(
             f"{finding.path}:{finding.line}: evaluation seed in executable context: {finding.text}"

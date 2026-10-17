@@ -46,7 +46,7 @@ def test_yaml_merge_cannot_inherit_heldout_seed(tmp_path):
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+  <<: *defaults\n"
     assert check_diff(diff, tmp_path)
     target.write_text("defaults: &defaults\n  seeds: [1001]\nscenario:\n  <<: *defaults\n")
-    assert not check_diff(diff, tmp_path)
+    assert check_diff(diff, tmp_path)  # New indirection is forbidden even for dev values.
 
 
 def test_seedless_dispatch_requires_a_declared_inventory():
@@ -78,7 +78,7 @@ def test_scalar_and_mapping_aliases_cannot_hide_heldout_seeds(tmp_path, anchor, 
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+  {alias}\n"
     assert check_diff(diff, tmp_path)
     target.write_text(f"{anchor.replace('111', '1001')}\nscenario:\n  {alias}\n")
-    assert not check_diff(diff, tmp_path)
+    assert check_diff(diff, tmp_path)  # New indirection is forbidden even for dev values.
 
 
 @pytest.mark.parametrize("bounds", ["min: 110, max: 142", "low: 110, high: 142"])
@@ -92,11 +92,11 @@ def test_yaml_alias_cannot_inherit_heldout_seed_range(tmp_path, bounds, alias):
     target.write_text(source)
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+  {alias}\n"
     findings = check_diff(diff, tmp_path)
-    assert [(finding.line, finding.text) for finding in findings] == [(4, alias)]
+    assert any(f.line == 4 and "indirection is not allowed" in f.text for f in findings)
 
-    # Identical alias syntax with a development range must remain admissible.
+    # The parser barrier also rejects new indirection with development bounds.
     target.write_text(source.replace("110", "1001").replace("142", "1003"))
-    assert not check_diff(diff, tmp_path)
+    assert check_diff(diff, tmp_path)  # New indirection is forbidden even for dev values.
 
 
 @pytest.mark.parametrize("band", ["RETIRED_EVAL_SEEDS_0_0_7", "EVAL_SEEDS_0_0_8"])
@@ -123,9 +123,11 @@ def test_yaml_alias_coercible_seed_range(tmp_path, band, names, spelling, alias)
         )
 
     write_range(min(seeds) - 1, max(seeds) + 1)
-    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(3, alias)]
+    assert any(
+        f.line == 3 and "indirection is not allowed" in f.text for f in check_diff(diff, tmp_path)
+    )
     write_range(1001, 1003)
-    assert not check_diff(diff, tmp_path)
+    assert check_diff(diff, tmp_path)  # New indirection is forbidden even for dev values.
 
 
 @pytest.mark.parametrize("names", [("min", "max"), ("low", "high")])
@@ -159,7 +161,9 @@ def test_yaml_alias_invalid_seed_range_fails_closed(tmp_path, names, bound_index
         f"defaults: &defaults {{scenario_seed: {{{bounds}}}}}\nscenario:\n  <<: *defaults\n"
     )
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+  <<: *defaults\n"
-    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(3, "<<: *defaults")]
+    assert any(
+        f.line == 3 and "indirection is not allowed" in f.text for f in check_diff(diff, tmp_path)
+    )
 
 
 @pytest.mark.parametrize("band", ["RETIRED_EVAL_SEEDS_0_0_7", "EVAL_SEEDS_0_0_8"])
@@ -185,9 +189,11 @@ def test_yaml_merge_retains_enclosing_seed_range(tmp_path, band, names, flow):
         )
 
     write_range(min(seeds) - 1, max(seeds) + 1)
-    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(4, alias)]
+    assert any(
+        f.line == 4 and "indirection is not allowed" in f.text for f in check_diff(diff, tmp_path)
+    )
     write_range(1001, 1003)
-    assert not check_diff(diff, tmp_path)
+    assert check_diff(diff, tmp_path)  # New indirection is forbidden even for dev values.
 
 
 # seed-holdout: synthetic-fixture end

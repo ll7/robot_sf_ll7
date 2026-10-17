@@ -677,6 +677,10 @@ def _review_residual_rows(tmp_path):
     return rows
 
 
+class _ReviewMissingRefusal(AssertionError):
+    """Only the documented missing guard decision may be an expected failure."""
+
+
 @pytest.mark.parametrize(
     "name",
     [
@@ -684,6 +688,7 @@ def _review_residual_rows(tmp_path):
             "json-string-bounds",
             marks=pytest.mark.xfail(
                 strict=True,
+                raises=_ReviewMissingRefusal,
                 reason="#10059: JSON semantic admission remains outside the YAML repair",
             ),
         ),
@@ -691,26 +696,33 @@ def _review_residual_rows(tmp_path):
             "json-unicode-scalar",
             marks=pytest.mark.xfail(
                 strict=True,
+                raises=_ReviewMissingRefusal,
                 reason="#10059: JSON semantic admission remains outside the YAML repair",
             ),
         ),
         pytest.param(
             "yaml-content-non-yaml-extension",
             marks=pytest.mark.xfail(
-                strict=True, reason="#10059: content sniffing remains outside the YAML repair"
+                strict=True,
+                raises=_ReviewMissingRefusal,
+                reason="#10059: content sniffing remains outside the YAML repair",
             ),
         ),
         pytest.param(
             "activate-unchanged-two-level-include",
             marks=pytest.mark.xfail(
-                strict=True, reason="#10059: recursive include closure remains separately owned"
+                strict=True,
+                raises=_ReviewMissingRefusal,
+                reason="#10059: recursive include closure remains separately owned",
             ),
         ),
         "changed-nested-leaf-literal",
         pytest.param(
             "cli-base-seed",
             marks=pytest.mark.xfail(
-                strict=True, reason="#10059: CLI base-seed residual outside YAML repair"
+                strict=True,
+                raises=_ReviewMissingRefusal,
+                reason="#10059: CLI base-seed residual outside YAML repair",
             ),
         ),
         "cli-literal-seed-control",
@@ -718,7 +730,9 @@ def _review_residual_rows(tmp_path):
         pytest.param(
             "environment-computed-string",
             marks=pytest.mark.xfail(
-                strict=True, reason="#10059: dynamic environment values require exact-head review"
+                strict=True,
+                raises=_ReviewMissingRefusal,
+                reason="#10059: dynamic environment values require exact-head review",
             ),
         ),
         "runtime-environment-permission-control",
@@ -728,7 +742,8 @@ def test_review_residual_boundaries(tmp_path, name):
     rows = {row[0]: row[1:] for row in _review_residual_rows(tmp_path)}
     refused, consumer_heldout = rows[name]
     assert consumer_heldout
-    assert refused
+    if not refused:
+        raise _ReviewMissingRefusal(name)
 
 
 # seed-holdout: synthetic-fixture end

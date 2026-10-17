@@ -1720,6 +1720,7 @@ def sample_baseline_data():
 # =====================================================================# Occupancy Grid Fixtures
 # ================================================
 
+
 @pytest.fixture
 def simple_grid_config():
     """Basic 10x10m grid with 0.1m resolution (100x100 cells)."""
@@ -1866,6 +1867,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 # =====================================================================# Shared Subprocess Mock Fixture
 # ================================================
+
 
 def _build_matcher_predicate(
     matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],

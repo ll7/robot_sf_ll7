@@ -28,7 +28,7 @@ from collections import Counter, deque
 from dataclasses import dataclass, field, fields
 from itertools import pairwise
 from pathlib import Path  # noqa: TC003 - public builder type hints resolve Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from scipy.ndimage import distance_transform_edt
@@ -681,16 +681,17 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             The route guide command with its configured waypoint tolerance restored.
         """
-        guide_tolerance = self._route_guide.config.goal_tolerance
-        waypoint_tolerance = self._route_guide.config.waypoint_reached_distance
+        guide = cast("GridRoutePlannerAdapter", self._route_guide)
+        guide_tolerance = guide.config.goal_tolerance
+        waypoint_tolerance = guide.config.waypoint_reached_distance
         if state.get("terminal_goal", False):
-            self._route_guide.config.goal_tolerance = 0.0
-            self._route_guide.config.waypoint_reached_distance = 0.0
+            guide.config.goal_tolerance = 0.0
+            guide.config.waypoint_reached_distance = 0.0
         try:
-            return self._route_guide.plan(state["observation"])
+            return guide.plan(state["observation"])
         finally:
-            self._route_guide.config.goal_tolerance = guide_tolerance
-            self._route_guide.config.waypoint_reached_distance = waypoint_tolerance
+            guide.config.goal_tolerance = guide_tolerance
+            guide.config.waypoint_reached_distance = waypoint_tolerance
 
     def _extract_state(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Extract the structured planner state from map-runner observations.

@@ -9,6 +9,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import numpy as np
@@ -49,6 +50,7 @@ def run_probe():
 
         def policy(*args, **kwargs):
             nonlocal checks
+            fn: Any
             fn, meta = original_policy(*args, **kwargs)
             cfg = fn._planner_adapter.config
             assert (cfg.physical_static_exclusion_enabled, cfg.goal_next_validity_enabled) == bits[

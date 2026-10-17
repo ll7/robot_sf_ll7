@@ -94,6 +94,32 @@ def test_stationary_pedestrian_still_requires_full_stop():
     assert result is not None
 
 
+def test_predictive_stop_uses_measured_speed_above_planner_ceiling():
+    """The stopping certificate starts from odometry, not the planner speed cap."""
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    p = planner(max_linear_speed=0.05, v4_braking_margin=0.0, v4_prediction_speed_error=0.0)
+    p.bind_env(
+        SimpleNamespace(
+            config=SimpleNamespace(
+                robot_config=DifferentialDriveSettings(
+                    max_linear_speed=0.05,
+                    max_linear_accel=1.0,
+                    max_linear_decel=1.0,
+                )
+            )
+        )
+    )
+    s = state(position=(1.50315, 0.0), velocity=(0.0, 0.0), speed=0.0525)
+    result = p._v4_braking_rejection(
+        candidate=HybridRuleCandidate(0.0, 0.0, "dynamic_window"),
+        state=s,
+        collision_radius=1.5,
+    )
+    assert result is not None, "clipping odometry to the planner cap shortens the stop"
+    assert result["reason"] == "braking_infeasible"
+
+
 def test_disabled_switch_preserves_legacy_cap():
     """An unchanged 0.0.8 mapping retains its present-position speed band."""
     p = planner(v4_predictive_braking_enabled=False)

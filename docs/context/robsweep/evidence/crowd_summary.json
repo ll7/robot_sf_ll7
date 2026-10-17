@@ -1,0 +1,109 @@
+{
+  "evidence_tier": "diagnostic-only",
+  "kernel": "wrapped_v2",
+  "rows": {
+    "lane_[7.5, 15.0]": {
+      "segregation": {
+        "mean": 0.1704639859268793,
+        "seed_bootstrap_ci95": [
+          0.12682930276327828,
+          0.21825560179559594
+        ],
+        "min": 0.010153153466216435,
+        "max": 0.5636549065386375,
+        "seed_count": 30
+      },
+      "purity": {
+        "mean": 0.39543859649122803,
+        "seed_bootstrap_ci95": [
+          0.3679364035087719,
+          0.4234281798245613
+        ],
+        "min": 0.26907894736842103,
+        "max": 0.5447368421052632,
+        "seed_count": 30
+      },
+      "weak_runs": 16,
+      "clear_runs": 1
+    },
+    "lane_[15.0, 30.0]": {
+      "segregation": {
+        "mean": 0.26561530600505584,
+        "seed_bootstrap_ci95": [
+          0.21436113350393535,
+          0.31399277593114633
+        ],
+        "min": 0.034452222472675556,
+        "max": 0.4856380338031977,
+        "seed_count": 30
+      },
+      "purity": {
+        "mean": 0.43322295805739514,
+        "seed_bootstrap_ci95": [
+          0.40482284768211924,
+          0.46130353200882995
+        ],
+        "min": 0.2910596026490066,
+        "max": 0.5562913907284768,
+        "seed_count": 30
+      },
+      "weak_runs": 21,
+      "clear_runs": 0
+    },
+    "lane_[30.0, 60.0]": {
+      "segregation": {
+        "mean": 0.05054822573030669,
+        "seed_bootstrap_ci95": [
+          0.04106565138605664,
+          0.06204205489775007
+        ],
+        "min": 0.014159873310804495,
+        "max": 0.17065939418559248,
+        "seed_count": 30
+      },
+      "purity": {
+        "mean": 0.21957364341085273,
+        "seed_bootstrap_ci95": [
+          0.2128828903654485,
+          0.22684952934662236
+        ],
+        "min": 0.17574750830564784,
+        "max": 0.2571428571428571,
+        "seed_count": 30
+      },
+      "weak_runs": 1,
+      "clear_runs": 0
+    },
+    "unidirectional_throughput_person_s": {
+      "mean": 0.2677777777777778,
+      "seed_bootstrap_ci95": [
+        0.25277777777777777,
+        0.28111111111111114
+      ],
+      "min": 0.15,
+      "max": 0.35,
+      "seed_count": 30
+    },
+    "wall_clear_actor_throughput_person_s": {
+      "mean": 0.20777777777777778,
+      "seed_bootstrap_ci95": [
+        0.18611111111111114,
+        0.22779166666666667
+      ],
+      "min": 0.05,
+      "max": 0.3,
+      "seed_count": 30
+    },
+    "bidirectional_throughput_person_s": {
+      "mean": 0.0,
+      "seed_bootstrap_ci95": [
+        0.0,
+        0.0
+      ],
+      "min": 0.0,
+      "max": 0.0,
+      "seed_count": 30
+    }
+  },
+  "uncertainty_boundary": "Percentiles over 1000 resamples of 30 observed seeds in fixed fixtures; no empirical fit or geometry uncertainty. Degenerate zero interval is not a guarantee for unobserved conditions."
+}

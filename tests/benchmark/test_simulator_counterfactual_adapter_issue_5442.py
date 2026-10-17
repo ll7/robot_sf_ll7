@@ -25,6 +25,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from pysocialforce.config import BODY_EDGE_EXPONENTIAL_V3, LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.benchmark.last_avoidable_fixtures import (
     KinematicCollisionModel,
@@ -80,11 +81,12 @@ def _preserve_numpy_rng():
     np.random.set_state(state)
 
 
-def _build_simulator() -> object:
+def _build_simulator(obstacle_force_law: str = LEGACY_SHIFTED_GRADIENT_V1) -> object:
     """Construct a deterministic, headless ``Simulator`` for the fixture map."""
     np.random.seed(_FIXTURE_GLOBAL_SEED)
     map_def = convert_map(str(_FIXTURE_MAP))
     sim_config = SimulationSettings(
+        obstacle_force_law=obstacle_force_law,
         difficulty=0,
         ped_density_by_difficulty=_FIXTURE_DENSITY,
         pedestrian_seed=_FIXTURE_SEED,
@@ -102,6 +104,7 @@ def _build_dense_simulator() -> object:
     np.random.seed(_DENSE_GLOBAL_SEED)
     map_def = convert_map(str(_FIXTURE_MAP))
     sim_config = SimulationSettings(
+        obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1,
         difficulty=0,
         ped_density_by_difficulty=[0.15],
         pedestrian_seed=_DENSE_GLOBAL_SEED,
@@ -130,25 +133,32 @@ def _run_engine(model: SimulatorCounterfactualModel, *, determinism_replays: int
 
 
 # -- snapshot/restore seam ------------------------------------------------
-def test_snapshot_restore_reproduces_baseline_deterministically() -> None:
+@pytest.mark.parametrize(
+    ("law", "contact_step"),
+    [(LEGACY_SHIFTED_GRADIENT_V1, 26), (BODY_EDGE_EXPONENTIAL_V3, 29)],
+)
+def test_snapshot_restore_reproduces_baseline_deterministically(
+    law: str, contact_step: int
+) -> None:
     """Restoring a snapshot and replaying yields the same contact step every time."""
-    sim = _build_simulator()
+    # #10017 gives the new law a separate contact identity; the old fixture stays 26.
+    sim = _build_simulator(obstacle_force_law=law)
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
     snap0 = model.snapshot()
     contacts: list[int | None] = []
     for _ in range(4):
         model.restore(snap0)
         c = None
-        for i in range(_FIXTURE_CONTACT_STEP + 5):
+        for i in range(contact_step + 5):
             if model.collision():
                 c = i
                 break
             model.step((float(_FIXTURE_SPEED), 0.0))
         else:
             if model.collision():
-                c = _FIXTURE_CONTACT_STEP + 5
+                c = contact_step + 5
         contacts.append(c)
-    assert contacts == [_FIXTURE_CONTACT_STEP] * 4
+    assert contacts == [contact_step] * 4
 
 
 def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:

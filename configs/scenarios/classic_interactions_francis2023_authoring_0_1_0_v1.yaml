@@ -1,0 +1,39 @@
+# Successor authoring input for 0.1.0. Released 0.0.8 inputs stay unchanged.
+# Native speeds are inherited; speed tiers can be selected independently.
+includes:
+- classic_interactions_francis2023_release_0_0_8_v1.yaml
+scenario_overrides_by_name:
+  classic_realworld_double_bottleneck_high:
+    simulation_config:
+      ped_density: 0.08
+    metadata:
+      spawn_mode: routes_and_markers
+      density_advisory: high_route_density
+    # Opposing lanes clear both openings (y=13..17 and y=12..17) and wall faces.
+    single_pedestrians:
+    - {id: l1, speed_m_s: 0.7, start: [10.0, 13.5], goal: [50.0, 13.5]}
+    - {id: l2, speed_m_s: 0.7, start: [8.5, 13.5], goal: [50.0, 13.5]}
+    - {id: l3, speed_m_s: 0.7, start: [7.0, 13.5], goal: [50.0, 13.5]}
+    - {id: l4, speed_m_s: 0.7, start: [10.0, 14.2], goal: [50.0, 14.2]}
+    - {id: r1, speed_m_s: 0.7, start: [50.0, 16.5], goal: [10.0, 16.5]}
+    - {id: r2, speed_m_s: 0.7, start: [51.5, 16.5], goal: [10.0, 16.5]}
+    - {id: r3, speed_m_s: 0.7, start: [53.0, 16.5], goal: [10.0, 16.5]}
+    - {id: r4, speed_m_s: 0.7, start: [50.0, 15.8], goal: [10.0, 15.8]}
+  classic_station_platform_medium:
+    single_pedestrians:
+    - id: p1
+      goal: null
+      trajectory: [[24.0, 22.0], [24.0, 18.5], [38.0, 22.0], [76.0, 22.0]]
+      wait_at:
+      - waypoint_index: 1
+        wait_s: 6.0
+        note: wait near the left stair landing before continuing
+      note: left-to-right pause near stair access
+    - id: p3
+      goal: null
+      trajectory: [[60.0, 4.2], [60.0, 5.5], [44.0, 4.2], [9.0, 4.2]]
+      wait_at:
+      - waypoint_index: 1
+        wait_s: 5.0
+        note: short dwell outside the right stair block
+      note: right-to-left pause near stair access

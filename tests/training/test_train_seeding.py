@@ -72,6 +72,7 @@ def test_predictive_planner_calls_set_global_seed(monkeypatch, tmp_path: Path) -
             str(tmp_path / "out"),
             "--epochs",
             "1",
+            "--allow-legacy-supervision",
             "--seed",
             str(seed),
             "--hidden-dim",

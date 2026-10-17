@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "purpose": "Pre-result duplicated-original seed-label fixture; no replication outcomes used",
+  "pooled_contrasts": 36,
+  "max_absolute_point_error": 0.0,
+  "seed_blocks": 60,
+  "bootstrap_replicates": 10000,
+  "bootstrap_rng": 1001,
+  "temporary_fixture_removed": true
+}

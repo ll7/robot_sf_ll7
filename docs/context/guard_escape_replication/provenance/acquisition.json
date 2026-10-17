@@ -1,0 +1,16 @@
+{
+  "registration_commit": "ab9b418e69fb61a2ed85133a1036d5a87299cd51",
+  "registration_push_completed_utc": "2026-10-16T10:57:58Z",
+  "acquisition_start_utc": "2026-10-16T10:58:51.797846+00:00",
+  "load_average": [
+    0.904296875,
+    1.1513671875,
+    1.44189453125
+  ],
+  "workers": 4,
+  "pid": 1811519,
+  "child_pid": 1811521,
+  "exit_code": 0,
+  "acquisition_end_utc": "2026-10-16T13:00:27.957921+00:00",
+  "command": "python scripts/tools/run_camera_ready_benchmark.py --config docs/context/guard_escape_replication/inputs/full.yaml --output-root <outside-git> --label exp_guardesc_replication --log-level INFO"
+}

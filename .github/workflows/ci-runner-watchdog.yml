@@ -1,0 +1,39 @@
+name: CI runner queue watchdog
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [requested]
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ci-runner-watchdog-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: >-
+      github.repository == 'll7/robot_sf_ll7' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.actor.login == 'll7' &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # workflow_run uses the default-branch SHA, never the triggering PR head.
+      - name: Checkout trusted watchdog source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Recover a stranded first attempt
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          retries: 0
+          script: |
+            const { watch } = require('./scripts/ci/runner_fallback.cjs');
+            await watch({ github, context, core });

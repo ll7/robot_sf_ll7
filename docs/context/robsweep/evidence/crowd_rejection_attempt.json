@@ -1,0 +1,6 @@
+{
+  "status": "fixture_generation_failed",
+  "cause": "greedy uniform rejection could not place 40 centers with minimum distance 0.8 in the specified finite region",
+  "remedy": "replace placement only with independently checked jittered grid; no force-model change",
+  "trajectories_retained": []
+}

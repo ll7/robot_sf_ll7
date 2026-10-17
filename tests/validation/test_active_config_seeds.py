@@ -70,7 +70,9 @@ def seed_field(label: str, parent_seed: bool, inventory: bool) -> bool:
 def role_predicate(keys):
     """Enforce numeric training inputs; explicit selection/evaluation fields keep their roles."""
     field = ".".join(keys).lower()
-    if any(word in field for word in ("evaluation", "validation", "holdout", "eval_")):
+    if field == "report.seed_range" or any(
+        word in field for word in ("evaluation", "validation", "holdout", "eval_")
+    ):
         return lambda value: not 1101 <= value <= 1130
     if any(word in field for word in ("selection", "sampler")):
         return lambda value: not 1031 <= value <= 1060
@@ -386,6 +388,31 @@ def test_role_scan_accepts_separate_pools_and_ignores_counts():
 
 
 # seed-holdout: synthetic-fixture end
+
+
+def test_role_scan_accepts_actual_pilot_report_evaluation_seeds():
+    """The unchanged pilot report bank is evaluation after checkpoint choice."""
+    pilot = ROOT / "configs/training/ppo/ftplan/pilot_protocol_20261012.yaml"
+    assert not seed_hits(pilot.read_text(), training=True)
+
+
+@pytest.mark.parametrize(
+    ("text", "has_violation"),
+    [
+        ("report: {seed_range: [1101, 1130]}", False),
+        ("report: {seed_range: [100000, 199999]}", True),
+        ("report: {seed_range: [1001, 1030]}", True),
+        ("training: {seed_range: [1101, 1130]}", True),
+        ("training: {report: {seed_range: [1101, 1130]}}", True),
+        ("training: {report: {seed_range: [100000, 199999]}}", False),
+        ("reporting: {seed_range: [1101, 1130]}", True),
+        ("unknown: {seed_range: [1101, 1130]}", True),
+        ("report: {training_seed_range: [1101, 1130]}", True),
+    ],
+)
+def test_role_scan_keeps_report_role_narrow(text, has_violation):
+    """Only the declared report seed range gets the existing evaluation bank."""
+    assert bool(seed_hits(text, training=True)) is has_violation
 
 
 def test_live_optuna_launcher_uses_training_reset_seeds():

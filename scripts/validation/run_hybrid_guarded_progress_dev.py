@@ -13,9 +13,11 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import yaml
@@ -35,6 +37,9 @@ from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_empty_world_sweep import remove_pedestrians
 from scripts.validation.run_policy_search_candidate import _effective_candidate_runtime_for_scenario
 from scripts.validation.run_policy_search_step_diagnostics import _json_ready
+
+if TYPE_CHECKING:
+    from robot_sf.sim.simulator import Simulator
 
 ROOT = Path(__file__).resolve().parents[2]
 MATRIX = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
@@ -66,8 +71,8 @@ def episode(task) -> dict:  # noqa: PLR0915 - keep the native control loop in ex
     name, seed, profile, variant, empty = task
     assert 1001 <= seed <= 1030
     logger.remove()
-    logger.add(os.sys.stderr, level="ERROR")
-    source = copy.deepcopy(next(s for s in load_scenarios(MATRIX) if s["name"] == name))
+    logger.add(sys.stderr, level="ERROR")
+    source = copy.deepcopy(dict(next(s for s in load_scenarios(MATRIX) if s["name"] == name)))
     source["seeds"] = [seed]
     path = CANDIDATES / (PROFILES[profile] + "_s30_h600_release_0_0_8_frozen.yaml")
     manifest = yaml.safe_load(path.read_text())
@@ -100,6 +105,7 @@ def episode(task) -> dict:  # noqa: PLR0915 - keep the native control loop in ex
         env = make_robot_env(config=ecfg, seed=seed, debug=False)
     with defaults_for_source(path):
         policy, meta = _build_policy(algo, cfg, robot_kinematics="differential_drive")
+        policy = cast("Any", policy)
     contacts = Counter()
     gates = Counter()
     streak = longest = 0
@@ -108,28 +114,29 @@ def episode(task) -> dict:  # noqa: PLR0915 - keep the native control loop in ex
     trace = []
     try:
         obs, _ = env.reset(seed=seed)
+        simulator = cast("Simulator", env.simulator)
         policy._planner_bind_env(env)
         policy._planner_reset(seed=seed)
-        final_goal = np.asarray(env.simulator.robot_navs[0].waypoints[-1]).copy()
+        final_goal = np.asarray(simulator.robot_navs[0].waypoints[-1]).copy()
         reset_digest = digest(
             {
-                "position": env.simulator.robot_pos,
-                "peds": env.simulator.ped_pos,
+                "position": simulator.robot_pos,
+                "peds": simulator.ped_pos,
                 "final_goal": final_goal,
             }
         )
         if empty:
-            assert len(env.simulator.ped_pos) == 0, "empty-world pedestrian residue"
+            assert len(simulator.ped_pos) == 0, "empty-world pedestrian residue"
         planner = getattr(policy, "_planner_adapter", None)
         for step in range(horizon):
-            pre = np.asarray(env.simulator.robot_pos[0]).copy()
+            pre = np.asarray(simulator.robot_pos[0]).copy()
             command = policy(obs)
             decision = (
                 planner.last_decision() if planner and algo == "hybrid_rule_local_planner" else {}
             )
             action = _policy_command_to_env_action(env=env, config=ecfg, command=command)
             obs, _, terminated, truncated, info = env.step(action)
-            end = np.asarray(env.simulator.robot_pos[0]).copy()
+            end = np.asarray(simulator.robot_pos[0]).copy()
             distance = float(np.linalg.norm(end - pre))
             path_length += distance
             collided |= collision_event(info)

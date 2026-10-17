@@ -260,7 +260,7 @@ def test_pre_commit_hook_runs_on_workflow_changes() -> None:
 
 
 def test_read_workflow_ruff_pins_enumerates_pins(tmp_path: Path) -> None:
-    """Every uvx ruff launcher pin is enumerated with file:line locations."""
+    """Every uvx Ruff launcher pin is enumerated with its workflow job and step."""
     workflows = tmp_path / "workflows"
     workflows.mkdir()
     (workflows / "ci.yml").write_text(
@@ -285,9 +285,9 @@ def test_read_workflow_ruff_pins_enumerates_pins(tmp_path: Path) -> None:
     pins = read_workflow_ruff_pins(workflows)
 
     assert pins == [
-        ("ci.yml:4", "0.16.10"),
-        ("ci.yml:5", "0.16.10"),
-        ("other.yaml:4", "0.16.10"),
+        ("ci.yml:jobs.lint.steps[0].run", "0.16.10"),
+        ("ci.yml:jobs.lint.steps[1].run", "0.16.10"),
+        ("other.yaml:jobs.x.steps[0].run", "0.16.10"),
     ]
 
 
@@ -368,7 +368,7 @@ def test_main_detects_stale_workflow_pin(
     )
 
     assert exit_code != 0
-    assert "ci.yml:4" in capsys.readouterr().out
+    assert "ci.yml:jobs.lint.steps[0].run" in capsys.readouterr().out
 
 
 def test_main_detects_dev_only_bump(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

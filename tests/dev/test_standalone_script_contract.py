@@ -17,10 +17,6 @@ EXEMPTED_SCRIPTS = [
 
 WORKFLOW_INVOCATIONS = [
     (
-        Path(".github/workflows/docs-link-integrity.yml"),
-        "scripts/dev/check_docs_evidence_integrity.py",
-    ),
-    (
         Path(".github/workflows/docs-evidence-integrity.yml"),
         "scripts/dev/check_docs_evidence_integrity.py",
     ),

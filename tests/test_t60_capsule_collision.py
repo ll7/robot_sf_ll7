@@ -232,3 +232,28 @@ def test_dynamic_disc_peer_uses_its_own_contact_radius():
     assert not occs[0].is_dynamic_collision  # 0.7 - 0.239 - 0.2 > 0
     neighbor.reset_state(((5.0, 5.4), 0.0))
     assert occs[0].is_dynamic_collision
+
+
+def test_ego_pedestrian_side_gap_and_tangent_contact():
+    """Both query directions retain an open side gap and inclusive tangency."""
+    from robot_sf.nav.occupancy import EgoPedContinuousOccupancy
+
+    config = capsule_config().robot_config
+    body = getattr(config, "capsule", None)
+    pedestrian = [(5.0, 5.6391)]
+    body_fields = {"enemy_capsule": body, "get_enemy_pose": lambda: ((5.0, 5.0), 0.0)}
+    ego = EgoPedContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: pedestrian[0],
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: [],
+        get_pedestrian_coords=lambda: [],
+        agent_radius=0.4,
+        get_enemy_coords=lambda: (5.0, 5.0),
+        enemy_radius=config.radius,
+        **(body_fields if body is not None else {}),
+    )
+    assert not ego.is_agent_agent_collision
+    pedestrian[0] = (5.0, 5.639)
+    assert ego.is_agent_agent_collision

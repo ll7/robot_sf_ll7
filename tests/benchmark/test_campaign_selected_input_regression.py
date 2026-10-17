@@ -1,5 +1,6 @@
 """Selected campaign inputs remain authoritative over fully re-signed producer rows."""
 
+import inspect
 import json
 from copy import deepcopy
 from types import SimpleNamespace
@@ -85,6 +86,13 @@ def test_resigned_producer_row_cannot_replace_selected_input(tmp_path, substitut
 
     def admit(row):
         path.write_text(json.dumps(row) + "\n")
+        # Main predates the trusted-campaign argument. Reach its original admission path
+        # so the baseline witness fails on the substituted input, not an API mismatch.
+        context = (
+            {"cfg": cfg}
+            if "cfg" in inspect.signature(validate_campaign_integrity).parameters
+            else {}
+        )
         return validate_campaign_integrity(
             [
                 {
@@ -102,7 +110,7 @@ def test_resigned_producer_row_cannot_replace_selected_input(tmp_path, substitut
             resolved_seeds=[1001],
             campaign_root=tmp_path,
             campaign_manifest={"git": {"commit": _git_hash_fallback()}},
-            cfg=cfg,
+            **context,
         )["benchmark_success_allowed"]
 
     assert admit(_signed_record(selected)) is True

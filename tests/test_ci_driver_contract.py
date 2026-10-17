@@ -1407,7 +1407,7 @@ def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> N
     assert "--snapshot-input .test_durations --output .test_durations" in freeze["run"]
     assert freeze["if"] == "steps.decision.outputs.run_full_ci == 'true'"
     upload = next(s for s in dispatch["steps"] if s["name"] == "Upload frozen test durations")
-    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    assert upload["uses"] == "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
     assert upload["if"] == freeze["if"]
     assert upload["with"] == {
         "name": "test-duration-snapshot",
@@ -1419,7 +1419,7 @@ def test_matrix_shares_one_duration_snapshot_including_failed_job_retries() -> N
     assert fast["needs"] == ["dispatch-ownership", "self-hosted-admission", "runner-availability"]
     assert fast["permissions"] == {"contents": "read", "actions": "read"}
     download = next(s for s in fast["steps"] if s["name"] == "Download frozen test durations")
-    assert download["uses"] == "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    assert download["uses"] == "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"
     # An explicit token selects the run-scoped REST lookup, which sees the
     # successful owner's original artifact during a failed-jobs-only rerun.
     assert download["with"] == {

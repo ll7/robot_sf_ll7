@@ -44,7 +44,7 @@ SCHEMA = "lifecycle_state_reconcile.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
 PAGE_SIZE = 100
-DEFAULT_MAX_PAGES = 5
+DEFAULT_MAX_PAGES = 10
 DEFAULT_CLOSED_LIMIT = 100
 
 ACTIONS = ("remove_labels", "report_only", "deferred", "no_action")
@@ -331,6 +331,87 @@ def _read_covering_prs(issue: int, *, repo: str) -> dict[str, Any]:
         return {"ok": False, "covering_prs": [], "truncated": False, "error": str(exc)}
 
 
+def _build_batch_claim_reader(*, remote: str) -> Callable[[int], dict[str, Any]]:
+    """Build a lazy one-shot remote claim-ref reader for open-row planning."""
+    snapshot_cache: dict[str, Any] | None = None
+    by_issue: dict[int, dict[str, Any]] = {}
+
+    def _read(issue: int) -> dict[str, Any]:
+        nonlocal snapshot_cache, by_issue
+        if snapshot_cache is None:
+            try:
+                snapshot_cache = issue_claim._parse_claim_snapshot(
+                    issue_claim._run(issue_claim.build_claim_snapshot_command(remote=remote)),
+                    issue_number=None,
+                    limit=sys.maxsize,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                snapshot_cache = {"ok": False, "truncated": False, "error": str(exc)}
+            if snapshot_cache.get("ok") is True and not snapshot_cache.get("truncated"):
+                claims_raw = snapshot_cache.get("claims")
+                if isinstance(claims_raw, list):
+                    by_issue = {
+                        int(row["issue"]): row
+                        for row in claims_raw
+                        if isinstance(row, dict) and isinstance(row.get("issue"), int)
+                    }
+        if snapshot_cache.get("ok") is not True or snapshot_cache.get("truncated") is True:
+            return {
+                "ok": False,
+                "claimed": False,
+                "error": str(snapshot_cache.get("error") or "claim snapshot truncated"),
+            }
+        matched = by_issue.get(issue)
+        return {
+            "schema": "issue_claim.v1",
+            "action": "status",
+            "ok": True,
+            "claimed": matched is not None,
+            "issue": issue,
+            "remote": remote,
+            "claim_ref": issue_claim.short_claim_ref(issue),
+            "sha": matched.get("sha") if matched is not None else None,
+        }
+
+    return _read
+
+
+def _build_batch_covering_reader(*, repo: str) -> Callable[[int], dict[str, Any]]:
+    """Build a lazy one-shot open-PR coverage reader for open-row planning."""
+    snapshot_result: issue_claim.CommandResult | None = None
+    snapshot_error: str | None = None
+
+    def _read(issue: int) -> dict[str, Any]:
+        nonlocal snapshot_result, snapshot_error
+        if snapshot_result is None and snapshot_error is None:
+            try:
+                primary = issue_claim._run(issue_claim.build_open_pr_command(repo=repo))
+                probe = issue_claim._open_prs_covering_issue(primary, issue_number=1)
+                if not probe.get("ok") and issue_claim._is_graphql_rest_fallback_error(primary):
+                    snapshot_result = issue_claim._run_bounded_pr_rest_snapshot(
+                        repo=repo,
+                        build_command=issue_claim.build_open_pr_rest_command,
+                        empty_error="open PR response is empty",
+                    )
+                else:
+                    snapshot_result = primary
+            except (OSError, RuntimeError, ValueError) as exc:
+                snapshot_error = str(exc)
+        if snapshot_error is not None or snapshot_result is None:
+            return {
+                "ok": False,
+                "covering_prs": [],
+                "truncated": False,
+                "error": snapshot_error or "open PR snapshot unavailable",
+            }
+        try:
+            return issue_claim._open_prs_covering_issue(snapshot_result, issue_number=issue)
+        except (OSError, RuntimeError, ValueError) as exc:
+            return {"ok": False, "covering_prs": [], "truncated": False, "error": str(exc)}
+
+    return _read
+
+
 def _needs_evidence(labels: set[str]) -> bool:
     """Return whether a row needs claim/PR evidence for classification."""
     return "state:running" in labels
@@ -426,8 +507,8 @@ def collect_open_rows(
     """
     if not isinstance(max_pages, int) or isinstance(max_pages, bool) or max_pages < 1:
         raise ValueError(f"max_pages must be >= 1, got {max_pages}")
-    read_claim = claim_reader or (lambda issue: _read_claim(issue, remote=remote))
-    read_covering = covering_reader or (lambda issue: _read_covering_prs(issue, repo=repo))
+    read_claim = claim_reader or _build_batch_claim_reader(remote=remote)
+    read_covering = covering_reader or _build_batch_covering_reader(repo=repo)
     candidates, inventory = _fetch_open_state_pages(repo, max_pages=max_pages)
     rows = [
         _plan_open_entry(entry, repo=repo, read_claim=read_claim, read_covering=read_covering)

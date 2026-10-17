@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import robot_sf.adversarial.matched_budget_packet as packet_module
 from robot_sf.adversarial.matched_budget_packet import (
     SIMULATOR_INVOCATIONS_PER_SLOT,
     TEMPORAL_SIDECAR_SCHEMA_VERSION,
@@ -120,6 +122,140 @@ def test_historical_validation_uses_committed_inputs(
             "message": f"stale since {packet['source']['base_commit']}",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "prefix", ["", "/", "../", "./", "scripts/../", "escape/../", "scripts//", "scripts/./"]
+)
+def test_pinned_path_rejects_unsafe_segments(packet: dict, tmp_path: Path, prefix: str) -> None:
+    """Reject traversal before normalization, including the review's symlink/.. escape."""
+    root = _historical_checkout(packet, tmp_path / "repo")
+    outside = tmp_path / "outside/nested"
+    outside.mkdir(parents=True)
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+    item = packet["source"]["inputs"]["runner"]
+    original = item["path"]
+    item["path"] = prefix + original if prefix else str(root / original)
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path.*(repo-relative|path)"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("value", ["", ".", "..", "scripts/", "scripts\\runner", "bad\0path"])
+def test_pinned_path_rejects_malformed_spelling(packet: dict, tmp_path: Path, value: str) -> None:
+    """Pins have one canonical, nonempty POSIX-relative spelling."""
+    root = _historical_checkout(packet, tmp_path)
+    packet["source"]["inputs"]["runner"]["path"] = value
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path.*(repo-relative|path)"):
+        validate_packet(packet, repo_root=root)
+
+
+def test_all_pinned_paths_checked_before_any_git_lookup(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A malformed late pin is rejected before even resolving the commit."""
+    root = _historical_checkout(packet, tmp_path)
+    packet["source"]["inputs"]["scenario_template"]["path"] = "./bad-path"
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Git lookup preceded pinned path validation")
+
+    monkeypatch.setattr(packet_module, "_git_output", forbidden)
+    with pytest.raises(PacketError, match="source.inputs.scenario_template.path"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("failure", ["digest", "semantics", "execution"])
+def test_immutable_failure_never_inspects_working_tree(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Every historical gate must precede all current-tree operations."""
+    root = _historical_checkout(packet, tmp_path)
+    if failure == "digest":
+        packet["source"]["inputs"]["confirmation"]["sha256"] = "0" * 64
+        message = "immutable source hash confirmation"
+    elif failure == "semantics":
+        packet["scenario"]["parameters"][0]["bounds"]["min"] += 1
+        message = "scenario parameters"
+    else:
+        packet["private_ops"]["execution_authorized"] = True
+        message = "private execution boundary"
+
+    def guard(original):
+        def checked(path, *args, **kwargs):
+            if Path(os.fsdecode(path)).is_relative_to(root):
+                pytest.fail("historical validation touched the working tree")
+            return original(path, *args, **kwargs)
+
+        return checked
+
+    with monkeypatch.context() as patch:
+        for name in ("resolve", "stat", "lstat", "open", "read_bytes"):
+            patch.setattr(Path, name, guard(getattr(Path, name)))
+        patch.setattr(os.path, "abspath", guard(os.path.abspath))
+        with pytest.raises(PacketError, match=message):
+            validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("kind", ["directory", "external-link", "internal-link", "loop"])
+def test_current_objects_are_only_informational(packet: dict, tmp_path: Path, kind: str) -> None:
+    """Current objects cannot redirect or invalidate regular committed inputs."""
+    root = _historical_checkout(packet, tmp_path / "repo")
+    item = packet["source"]["inputs"]["runner"]
+    path = root / item["path"]
+    original = path.read_bytes()
+    path.unlink()
+    if kind == "directory":
+        path.mkdir()
+    elif kind == "loop":
+        path.symlink_to(path.name)
+    else:
+        target = tmp_path / "external" if kind == "external-link" else root / "internal"
+        target.write_bytes(original)
+        path.symlink_to(target)
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["campaign_execution_allowed"] is False
+    assert result["claim_eligible"] is False
+    assert [entry["input_id"] for entry in result["source_staleness"]] == (
+        [] if kind == "internal-link" else ["runner"]
+    )
+
+
+def test_current_fifo_does_not_hang_historical_validation(packet: dict, tmp_path: Path) -> None:
+    """Run the review's FIFO-with-no-writer probe with bounded, explicit child cleanup."""
+    root = _historical_checkout(packet, tmp_path)
+    path = root / packet["source"]["inputs"]["runner"]["path"]
+    path.unlink()
+    os.mkfifo(path)
+    code = (
+        "import json, sys, yaml; from pathlib import Path; "
+        "from robot_sf.adversarial.matched_budget_packet import validate_packet; "
+        "print(json.dumps(validate_packet(yaml.safe_load(sys.stdin.read()), repo_root=Path(sys.argv[1]))))"
+    )
+    child = subprocess.Popen(
+        [sys.executable, "-c", code, str(root)],
+        cwd=ROOT,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        try:
+            stdout, stderr = child.communicate(yaml.safe_dump(packet), timeout=60)
+        except subprocess.TimeoutExpired:
+            pytest.fail("historical validation hung opening a current FIFO without a writer")
+        assert child.returncode == 0, stderr
+        result = json.loads(stdout)
+        assert result["status"] == "ok"
+        assert result["campaign_execution_allowed"] is False
+        assert result["claim_eligible"] is False
+        assert [entry["input_id"] for entry in result["source_staleness"]] == ["runner"]
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.communicate()
+        path.unlink()
 
 
 def _pin_source_entry(packet: dict, root: Path, kind: str) -> None:

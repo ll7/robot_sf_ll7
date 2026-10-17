@@ -15,6 +15,22 @@ that evidence was regenerated. Legacy `working_tree_sha256` fields remain
 readable and format-checked for compatibility, but do not establish provenance
 or suppress staleness.
 
+Pinned paths are validated lexically before lookup: absolute paths, parent
+traversal, empty or dot segments, backslashes and NUL are rejected. Historical
+validation never inspects the working tree. Each exact, literal tree path must
+resolve to one Git `blob` with mode `100644` or `100755`; its bytes are read by
+object ID with `git cat-file blob`. Trees, symlink blobs and submodules cannot
+serve as pinned inputs, even with a matching digest.
+
+Only after every historical gate passes does drift reporting inspect current
+paths. It checks file types before opening, rejects symlinks escaping the repo,
+and uses descriptor-relative, no-follow, nonblocking opens so a current FIFO or
+file replacement cannot stall the audit or redirect the read outside the repo.
+Missing, unreadable, non-regular or unsafe current objects are informational
+staleness; symlinks to regular files within the repo can still report equality.
+On platforms without safe descriptor-relative reads, drift is reported as
+unavailable through the same staleness records.
+
 This applies only to the outcome-free, read-only planning audit. It grants no
 permission to run current code or admit results: `claim_eligible` and
 `campaign_execution_allowed` remain false. The immutable input roster still

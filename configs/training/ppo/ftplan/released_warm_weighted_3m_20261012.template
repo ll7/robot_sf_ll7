@@ -1,0 +1,41 @@
+# Prepared dependent template, excluded from the canonical runnable *.yaml inventory.
+# Prepared pilot only. Do not launch before the controlled seed replication reports.
+# Preserve the source observation/action contract; no alignment-lane config changes.
+base_config: ../expert_ppo_release_contract_b_seed1002.yaml
+policy_id: ppo_ftplan_released_warm_weighted_3m_20261012
+seeds: []
+randomize_seeds: true
+training_seed_range: [100000, 199999]
+training_master_seed: 100001
+ppo_initialization_seed: 100001
+training_seed_telemetry: true
+total_timesteps: 3000000
+num_envs: 18
+worker_mode: subproc
+scenario_sampling:
+  strategy: random
+  episode_seed_pool: null
+  family_weights:
+    bottleneck: 2.0
+    doorway: 2.0
+    exiting_elevator: 2.0
+    exiting_room: 2.0
+    frontal_approach: 2.0
+# Internal trainer evaluation is a diagnostic; pilot selection is external CPU
+# benchmark-runner evaluation, with every selection seed crossed with all 48 cells.
+evaluation:
+  randomize_seeds: false
+  evaluation_seeds: [1031, 1032, 1033, 1034, 1035, 1036, 1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052, 1053, 1054, 1055, 1056, 1057, 1058, 1059, 1060]
+  evaluation_seed_manifest: null
+  evaluation_episodes: 1
+  step_schedule:
+    - every_steps: 1000000
+  full_policy_analysis_on_new_best: false
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: ppo-ftplan-released-20261012
+    job_type: development-fine-tuning
+    tags: [ftplan, warm-start, development-only, extra-tuning]

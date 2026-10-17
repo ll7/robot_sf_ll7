@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10318/revision3/affected.csv",
+  "artifact_sha256": "f100fb5525d600b5fdbdf01c3b41078761968887f79c8d7c4a9b441b52075dc5",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -1,0 +1,19 @@
+scenario,seed,main_outcome,before_outcome,after_outcome,before_steps,after_steps,before_min_clearance_m,after_min_clearance_m,before_final_clearance_m,after_final_clearance_m,contacts,trace_changed,classification
+entering_elevator,1001,timeout,timeout,timeout,400,400,0.8028822924123332,0.8028822924123332,0.810226203600524,0.810226203600524,0,False,unchanged trace and timeout
+entering_elevator,1002,timeout,timeout,timeout,400,400,0.8339230388347899,0.8339230388347899,0.8341073296361227,0.8341073296361227,0,False,unchanged trace and timeout
+entering_elevator,1003,timeout,success,success,84,84,0.8186774456348606,0.8186774456348606,0.8186774456348606,0.8186774456348606,0,False,unchanged trace and completion
+exiting_elevator,1001,timeout,timeout,timeout,400,400,0.8823700463460126,0.8823700463460126,0.890925428001576,0.890925428001576,0,False,unchanged trace and timeout
+exiting_elevator,1002,timeout,timeout,timeout,400,400,0.8803471665252868,0.8803471665252868,0.8892915053784701,0.8892915053784701,0,False,unchanged trace and timeout
+exiting_elevator,1003,timeout,timeout,timeout,400,400,0.8804479520179783,0.8804479520179783,0.889611966120268,0.889611966120268,0,False,unchanged trace and timeout
+following_human,1001,timeout,success,success,244,244,0.7068264235846183,0.7068264235846183,13.751112261948881,13.751112261948881,0,False,unchanged trace and completion
+following_human,1002,timeout,success,success,242,242,0.6805792858828695,0.6805792858828695,13.685479046279823,13.685479046279823,0,False,unchanged trace and completion
+following_human,1003,timeout,timeout,timeout,400,400,0.5918522052281162,0.5918522052281162,0.7875959794009407,0.7875959794009407,0,False,unchanged trace and timeout
+join_group,1001,timeout,timeout,timeout,400,400,0.730637292732541,0.730637292732541,0.7791370552309019,0.7791370552309019,0,False,unchanged trace and timeout
+join_group,1002,timeout,timeout,timeout,400,400,0.7040470335996515,0.7040470335996515,0.8013805395355637,0.8013805395355637,0,False,unchanged trace and timeout
+join_group,1003,timeout,timeout,timeout,400,400,0.6515380605099138,0.6515380605099138,0.7452399459174982,0.7452399459174982,0,False,unchanged trace and timeout
+narrow_hallway,1001,timeout,timeout,timeout,400,400,0.5190948961275926,0.5190948961275926,0.5457185565377626,0.5457185565377626,0,False,unchanged trace and timeout
+narrow_hallway,1002,timeout,timeout,timeout,400,400,0.5170955095566826,0.5170955095566826,0.5449542725518391,0.5449542725518391,0,False,unchanged trace and timeout
+narrow_hallway,1003,timeout,timeout,timeout,400,400,0.5225500806487319,0.5225500806487319,0.5456657179777967,0.5456657179777967,0,False,unchanged trace and timeout
+robot_crowding,1001,timeout,timeout,timeout,400,400,1.3517504116302805,1.3517504116302805,2.815129270130621,2.815129270130621,0,False,unchanged trace and capacity hold
+robot_crowding,1002,timeout,timeout,timeout,400,400,1.1836291589203949,1.1836291589203949,1.4147695478031523,1.4147695478031523,0,False,unchanged trace and capacity hold
+robot_crowding,1003,timeout,timeout,timeout,400,400,1.8058943773322689,1.8058943773322689,2.582318219202924,2.582318219202924,0,False,unchanged trace and capacity hold

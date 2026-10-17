@@ -1,0 +1,24 @@
+[
+  {
+    "suite": "main",
+    "episodes": 96,
+    "before_successes": 94,
+    "after_successes": 94,
+    "before_collisions": 0,
+    "after_collisions": 0,
+    "trace_changes": 90,
+    "trajectory_changes": 73,
+    "new_failures": 0
+  },
+  {
+    "suite": "width",
+    "episodes": 6,
+    "before_successes": 6,
+    "after_successes": 6,
+    "before_collisions": 0,
+    "after_collisions": 0,
+    "trace_changes": 6,
+    "trajectory_changes": 3,
+    "new_failures": 0
+  }
+]

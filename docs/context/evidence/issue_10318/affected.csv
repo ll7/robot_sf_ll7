@@ -1,0 +1,19 @@
+scenario,seed,before_outcome,after_outcome,before_steps,after_steps,before_remaining_m,after_remaining_m,before_min_clearance_m,after_min_clearance_m,before_stalled_s,after_stalled_s,before_collisions,after_collisions,classification
+francis2023_narrow_hallway,1001,timeout,timeout,400,400,8.266,8.272,0.518,0.519,29.5,29.5,0,0,trajectory changed; timeout remains
+francis2023_narrow_hallway,1002,timeout,timeout,400,400,7.908,7.81,0.529,0.517,29.7,29.6,0,0,progress improved; timeout remains; lower clearance
+francis2023_narrow_hallway,1003,timeout,timeout,400,400,8.214,8.212,0.522,0.523,29.2,29.2,0,0,trajectory changed; timeout remains
+francis2023_entering_elevator,1001,timeout,timeout,400,400,0.941,0.866,0.873,0.803,30.9,31.1,0,0,progress improved; timeout remains; more stall; lower clearance
+francis2023_entering_elevator,1002,timeout,timeout,400,400,0.639,0.561,0.901,0.834,31.5,31.6,0,0,progress improved; timeout remains; more stall; lower clearance
+francis2023_entering_elevator,1003,timeout,success,400,84,0.749,0.575,0.99,0.819,31.0,0.0,0,0,completion restored; lower clearance
+francis2023_exiting_elevator,1001,timeout,timeout,400,400,7.042,6.797,0.926,0.882,31.7,29.2,0,0,progress improved; timeout remains; lower clearance
+francis2023_exiting_elevator,1002,timeout,timeout,400,400,7.432,7.184,0.925,0.88,31.3,28.1,0,0,progress improved; timeout remains; lower clearance
+francis2023_exiting_elevator,1003,timeout,timeout,400,400,7.324,7.077,0.924,0.88,32.0,34.1,0,0,progress improved; timeout remains; more stall; lower clearance
+francis2023_following_human,1001,timeout,success,400,244,27.71,0.771,0.762,0.707,29.9,0.0,0,0,completion restored; lower clearance
+francis2023_following_human,1002,timeout,success,400,242,27.413,0.38,0.768,0.681,30.8,0.0,0,0,completion restored; lower clearance
+francis2023_following_human,1003,timeout,timeout,400,400,29.759,27.144,0.786,0.591,34.6,30.9,0,0,progress improved; timeout remains; lower clearance
+francis2023_join_group,1001,timeout,timeout,400,400,4.932,4.848,0.819,0.731,30.4,30.2,0,0,progress improved; timeout remains; lower clearance
+francis2023_join_group,1002,timeout,timeout,400,400,4.574,4.489,0.802,0.704,30.8,30.8,0,0,progress improved; timeout remains; lower clearance
+francis2023_join_group,1003,timeout,timeout,400,400,4.731,4.657,0.755,0.652,27.8,30.1,0,0,progress improved; timeout remains; more stall; lower clearance
+francis2023_robot_crowding,1001,timeout,timeout,400,400,9.016,3.916,0.136,0.348,29.9,20.2,0,0,progress improved; timeout remains
+francis2023_robot_crowding,1002,timeout,timeout,400,400,9.299,7.056,0.138,0.121,32.4,31.2,0,0,progress improved; timeout remains; lower clearance
+francis2023_robot_crowding,1003,timeout,timeout,400,400,9.032,5.909,0.247,0.118,30.5,21.6,0,0,progress improved; timeout remains; lower clearance

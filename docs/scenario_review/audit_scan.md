@@ -92,7 +92,11 @@ path metrics (`time_to_goal`, `time_to_goal_norm_success_only`,
 `time_to_goal_ideal_ratio`, `path_efficiency`), `aggregated_time`, the documented
 pedestrian distance/clearance metrics and `time_to_collision_min`, force and
 per-pedestrian force quantiles, `ped_force_mean`, `force_exceed_events`,
-`comfort_exposure`, and `force_gradient_norm_mean`. The structured
+`comfort_exposure`, `force_gradient_norm_mean`, and the optional signal measurements
+`signal_min_distance_to_stop_line_before_crossing_m` and
+`signal_delay_after_green_onset_s`. Signal measurements may be undefined when
+signal metadata or the relevant crossing/phase observation is absent; normalization
+does not change `signal_metrics_evidence` or establish signal availability. The structured
 `force_quantiles.q50/q90/q95` copies, including the supported flattened record,
 use the same rule. Definitions and missing-input conditions remain owned by
 [the metric specification](../dev/issues/social-navigation-benchmark/metrics_spec.md)
@@ -100,7 +104,7 @@ and `benchmark.metrics`; normalization does not establish why a recorded value
 was undefined. Other NaN paths, invalid value types, and positive/negative
 infinity remain errors. Existing context-gated disabled-tracking and
 pedestrian-free predicted-separation rules retain their own reasons.
-Engine v1.6 invalidates prior detector cache entries for this admission change.
+Engine v1.7 invalidates prior detector cache entries for this admission change.
 
 All cohort detectors require complete row admission. The scan separately indexes
 rejected observations (invalid, unsupported, duplicate, or missing) before forming

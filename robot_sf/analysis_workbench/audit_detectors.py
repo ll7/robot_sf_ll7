@@ -31,7 +31,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 )
 
 DETECTOR_REGISTRY_SCHEMA_VERSION = "audit-detector-registry.v1"
-DETECTOR_ENGINE_VERSION = "audit-detectors.v1.6"
+DETECTOR_ENGINE_VERSION = "audit-detectors.v1.7"
 DETECTOR_REGISTRY_VERSION = DETECTOR_REGISTRY_SCHEMA_VERSION
 GOAL_ADJACENT_TIMEOUT_VERSION = "goal_adjacent_timeout.v1"
 
@@ -1090,7 +1090,7 @@ def _admission_containers(row: Mapping[str, Any]) -> tuple[tuple[str, Mapping[st
     return tuple(containers)
 
 
-# Explicit NaN sentinels from benchmark.metrics and its canonical metrics_spec.md.
+# Explicit NaN sentinels from benchmark.metrics, signal_metrics, and metrics_spec.md.
 # This is a path/name contract, never a substring rule for distance/force names.
 # Do not include always-defined measurements, validity flags, or always-defined event counts.
 _DOCUMENTED_UNDEFINED_METRIC_NAMES = (
@@ -1118,6 +1118,8 @@ _DOCUMENTED_UNDEFINED_METRIC_NAMES = (
     "force_exceed_events",
     "comfort_exposure",
     "force_gradient_norm_mean",
+    "signal_min_distance_to_stop_line_before_crossing_m",
+    "signal_delay_after_green_onset_s",
 )
 
 

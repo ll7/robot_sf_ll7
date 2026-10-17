@@ -13,6 +13,7 @@ from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.benchmark.metrics import (
     EpisodeData,
     comfort_exposure,
+    compute_all_metrics,
     force_quantiles,
     min_distance,
     time_to_goal,
@@ -45,6 +46,8 @@ UNDEFINED_SCALARS = (
     "force_exceed_events",
     "comfort_exposure",
     "force_gradient_norm_mean",
+    "signal_min_distance_to_stop_line_before_crossing_m",
+    "signal_delay_after_green_onset_s",
 )
 
 
@@ -81,7 +84,15 @@ def test_quantile_nan_is_missing_at_supported_structured_aliases(container):
 
 
 @pytest.mark.parametrize("value", [float("inf"), float("-inf"), True, "NaN", [], {}])
-@pytest.mark.parametrize("name", ["path_efficiency", "force_q50"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "path_efficiency",
+        "force_q50",
+        "signal_min_distance_to_stop_line_before_crossing_m",
+        "signal_delay_after_green_onset_s",
+    ],
+)
 def test_other_invalid_values_at_allowlisted_names_remain_errors(name, value):
     row = {"episode_id": "invalid", "metrics": {name: value, "clearance_m": 1.0}}
     assert normalize_recorded_undefined(row) is row
@@ -133,4 +144,44 @@ def test_production_undefined_metrics_survive_serialization_and_scan(tmp_path):
     report = scan_campaign(source, root=tmp_path, detector_ids=["extreme_measurements"])
     assert report.inventory[0].status == "readable"
     assert report.signals[0].status == "clear"
+    assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize("container", ["metrics", "operational_metrics"])
+def test_complete_producer_unavailable_signal_metrics_are_admitted(tmp_path, container):
+    """Admit the complete raw producer dictionary without altering its source bytes."""
+    data = EpisodeData(
+        robot_pos=np.zeros((3, 2)),
+        robot_vel=np.zeros((3, 2)),
+        robot_acc=np.zeros((3, 2)),
+        peds_pos=np.empty((3, 0, 2)),
+        ped_forces=np.empty((3, 0, 2)),
+        goal=np.array([5.0, 0.0]),
+        dt=0.1,
+    )
+    raw = compute_all_metrics(data, horizon=3)
+    assert raw["signal_metrics_evidence"] == {
+        "state": "unavailable",
+        "exclusion_reason": "signal_state_metadata_absent",
+    }
+    row = {"episode_id": "complete-producer", container: raw}
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    original = source.read_bytes()
+    report = scan_campaign(source, root=tmp_path, detector_ids=["extreme_measurements"])
+    assert report.inventory[0].status == "readable"
+    assert report.signals[0].reason_code != "episode_invalid"
+    projected = normalize_recorded_undefined(row)
+    for name in (
+        "signal_min_distance_to_stop_line_before_crossing_m",
+        "signal_delay_after_green_onset_s",
+    ):
+        assert projected[container][name] is None
+        assert math.isnan(raw[name])
+        assert {
+            "path": f"{container}.{name}",
+            "source_token": "NaN",
+            "reason": "documented_undefined_metric",
+        } in projected["audit_adapter_missingness"]
+    json.dumps(projected, allow_nan=False)
     assert source.read_bytes() == original

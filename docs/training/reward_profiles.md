@@ -52,7 +52,7 @@ profile does not use that term (weight 0 / term absent).
 | `living` | `1.0` (per-step) | −0.01 | −0.01 | −0.02 |
 | `collision` | `{0, 1}` (any collision) | −5.0 | −10.0 | −6.0 |
 | `near_miss` | `[0, 1]` | −0.8 | −1.0 | −1.2 |
-| `ttc_risk` | `[0, 1]` (inverse TTC / near-miss proxy) | −0.6 | −0.8 | −0.9 |
+| `ttc_risk` | `[0, 1]` (inverse predicted disc-contact TTC) | −0.6 | −0.8 | −0.9 |
 | `comfort` | `[0, 1]` | −0.4 | −0.5 | −0.9 |
 | `smoothness` | `[0, 1]` (jerk normalised by 5) | −0.15 | −0.2 | −0.2 |
 | `timeout` | `{0, 1}` (timeout w/o success/collision) | — | −3.0 | — |
@@ -62,6 +62,10 @@ profile does not use that term (weight 0 / term absent).
 Per-term decomposition is written back into the step metadata as `reward_terms` and `reward_total`
 for logging. **Success is route completion only** (waypoint completion does not trigger the terminal
 bonus). Collisions invalidate the terminal bonus.
+
+TTC uses constant-velocity robot–pedestrian disc contact, in seconds. Existing overlap is
+maximum risk; missing/non-finite TTC or no predicted contact gives zero risk. It never falls
+back to `near_miss`. See [TTC signal semantics](reward_ttc_signal.md).
 
 Each profile also has a canonical YAML config under `configs/training/rewards/`
 (`route_completion_v2.yaml`, `route_completion_v3.yaml`, `social_quality_v1.yaml`) that records the

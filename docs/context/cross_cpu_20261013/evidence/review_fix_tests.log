@@ -1,0 +1,15 @@
+.........................................                                [100%]
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/benchmark/test_pinned_numerical_mode.py::test_manifest_records_actor_mode  0.94s
+2) tests/benchmark/test_pinned_numerical_mode.py::test_campaign_resolves_pinned_mode  0.61s
+3) tests/validation/test_check_broad_exceptions.py::test_broad_exception_ratchet_rejects_stale_summary_counts  0.10s
+4) tests/validation/test_check_broad_exceptions.py::test_broad_exception_ratchet_fails_on_unapproved_replacement  0.10s
+5) tests/validation/test_check_broad_exceptions.py::test_broad_exception_ratchet_fails_on_added_broad_catch  0.10s
+6) tests/validation/test_check_broad_exceptions.py::test_broad_exception_ratchet_passes_generated_baseline  0.10s
+7) tests/benchmark/test_pinned_numerical_mode.py::test_full_float64_actor_matches_independent_torch  0.07s
+8) tests/benchmark/test_cross_cpu_diagnostic_20261013.py::test_startup_hook_exits_before_user_code_on_unexpected_library_error[default]  0.03s
+9) tests/benchmark/test_cross_cpu_diagnostic_20261013.py::test_startup_hook_exits_before_user_code_on_unexpected_library_error[pinned]  0.03s
+10) tests/benchmark/test_cross_cpu_diagnostic_20261013.py::test_float64_config_binds_both_actors_without_changing_kernel_only_arm  0.02s
+
+41 passed in 3.12s

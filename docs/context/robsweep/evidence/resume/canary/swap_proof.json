@@ -1,0 +1,26 @@
+{
+  "arm": "swap",
+  "seed": 1061,
+  "steps": 5,
+  "workers": [
+    1,
+    2
+  ],
+  "equal_fields": [
+    "outcome",
+    "steps",
+    "effective_physics",
+    "metric_values"
+  ],
+  "artifacts": [
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/swap_w1.jsonl.gz",
+      "sha256": "c5721dbf39376b778a4fa061a64e61fda044522d128e0bb417d34420df384b4e"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/swap_w2.jsonl.gz",
+      "sha256": "0f3206d96364e6bee60b27a06959bd0a865129a821c1360d851e2b78ac13c942"
+    }
+  ],
+  "claim_boundary": "Dispatch binding canary only; not a full-trajectory determinism proof or ranking episode."
+}

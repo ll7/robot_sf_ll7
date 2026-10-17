@@ -6,7 +6,7 @@ These simplified rigid-disc probes are diagnostics, not source-study replication
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from shapely.geometry import Point
@@ -40,7 +40,7 @@ def build_probe(
     require_dev_seeds([seed])
     scenario = profile_scenario({"simulation_config": {"ped_density": 0}}, profile, seed)
     config = build_robot_config_from_scenario(scenario, scenario_path=Path(__file__)).sim_config
-    bounds = [
+    bounds: list[tuple[tuple[int | float, int | float], tuple[int | float, int | float]]] = [
         ((0, 0), (width, 0)),
         ((width, 0), (width, height)),
         ((width, height), (0, height)),
@@ -94,7 +94,7 @@ def manipulation_checks(profile: dict, seeds: list[int]) -> dict:
             for i in range(32)
         ]
         sim, behaviors, radius = build_probe(profile, seed, actors, [])
-        desired = sim.peds.max_speeds.copy()
+        desired = cast("np.ndarray", sim.peds.max_speeds).copy()
         speeds = []
         for step in range(100):
             advance(sim, behaviors)

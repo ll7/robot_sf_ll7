@@ -502,6 +502,9 @@ _LEGACY_FAST_FILES = {
     "test_resume_plan.py",
     # Campaign integrity/resume contracts use static rows and mocked runner seams.
     "test_cmpfix_integrity.py",
+    # Re-signed scenario substitutions are pure validation, without simulator steps.
+    "test_campaign_scenario_binding.py",
+    "test_campaign_selected_input_regression.py",
     "test_campaign_resume_scheduler.py",
     "test_camera_ready_campaign_characterization.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).

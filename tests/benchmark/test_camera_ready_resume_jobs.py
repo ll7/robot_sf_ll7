@@ -98,6 +98,7 @@ def _plan(cfg, campaign: Path, scenarios):
         ],
         kinematics_matrix=["differential_drive"],
         scenarios=scenarios,
+        cfg=cfg,
     )[0]
 
 

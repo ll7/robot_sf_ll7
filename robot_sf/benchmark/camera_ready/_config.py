@@ -592,6 +592,7 @@ def _apply_scenario_horizon_schedule(
     schedule_path: Path | None,
     expected_sha256: str | None = None,
     protocol_version: str | None = None,
+    repository_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Apply a scenario-specific horizon schedule to scenario max-step limits.
 
@@ -618,6 +619,12 @@ def _apply_scenario_horizon_schedule(
             "Scenario horizon schedule is missing entries for campaign scenarios: "
             f"{preview}{suffix}"
         )
+
+    source = _repo_relative(schedule_path)
+    if repository_root is not None and schedule_path.resolve().is_relative_to(
+        repository_root.resolve()
+    ):
+        source = schedule_path.resolve().relative_to(repository_root.resolve()).as_posix()
 
     patched_scenarios: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -646,7 +653,7 @@ def _apply_scenario_horizon_schedule(
         if not isinstance(metadata, dict):
             raise ValueError(f"Scenario '{scenario_id}' metadata must be a mapping")
         metadata["scenario_horizon"] = {
-            "source": _repo_relative(schedule_path),
+            "source": source,
             "recommended_horizon_steps": horizon_steps,
             "status": entry["status"],
             "bucket": entry["bucket"],
@@ -905,6 +912,7 @@ def _load_campaign_scenarios(
         schedule_path=cfg.scenario_horizons_path,
         expected_sha256=cfg.scenario_horizons_sha256,
         protocol_version=cfg.protocol_version,
+        repository_root=repository_root,
     )
     scenario_dicts = _apply_fixed_campaign_horizon(
         scenario_dicts,

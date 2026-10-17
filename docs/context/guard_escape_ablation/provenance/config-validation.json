@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "only_factor_keys_change": true,
+  "cells": 18,
+  "arms": 4,
+  "planned_episodes": 2160,
+  "scenario_name_overrides_in_selected_cells": 0,
+  "escape_bundle_not_single_component": true,
+  "simulation_reset_or_step": false
+}

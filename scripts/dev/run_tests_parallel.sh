@@ -28,7 +28,8 @@ Environment overrides:
     coverage also requires a unique COVERAGE_FILE per shard for later combine.
   ROBOT_SF_SHARD_INCLUDE_SLOW=1
     Include slow tests in a pytest-split shard. The default sharded lane keeps
-    excluding slow tests for pull-request and local fast feedback.
+    excluding slow tests for local fast feedback. PRs also admit affected slow
+    files and unconditional integrity witnesses via ROBOT_SF_AFFECTED_BASE_REF.
   ROBOT_SF_TEST_LANE=core|optional|all
   COVERAGE_FILE=<path>
   PYTEST_FAST_FAIL=1|0
@@ -407,6 +408,11 @@ if [[ -n "${ROBOT_SF_AFFECTED_BASE_REF:-}" ]]; then
   selection_mode="$(uv run python "$SCRIPT_DIR/affected_test_selection.py" "${selection_args[@]}")"
   case "$selection_mode" in
     full) include_slow=1 ;;
+    affected)
+      selection_args+=(--format paths)
+      ROBOT_SF_AFFECTED_TEST_PATHS="$(uv run python "$SCRIPT_DIR/affected_test_selection.py" "${selection_args[@]}")"
+      export ROBOT_SF_AFFECTED_TEST_PATHS
+      ;;
     unchanged) ;;
     *) echo "Invalid affected-test selection decision." >&2; exit 2 ;;
   esac
@@ -416,7 +422,7 @@ if [[ -n "${ROBOT_SF_AFFECTED_BASE_REF:-}" ]]; then
   fi
 fi
 if [[ "$sharding_active" == "1" && "$has_marker" == "0" && "$include_slow" != "1" ]]; then
-  cmd+=("-m" "not slow")
+  cmd+=("-m" "not slow or affected")
 fi
 
 coverage_requested="${ROBOT_SF_PYTEST_COVERAGE:-}"

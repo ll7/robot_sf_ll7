@@ -20,6 +20,8 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
     _build_verdict_str,
     _count_jsonl_episodes,
     _expected_jobs,
+    _validate_resume_job_identities,
+    _validate_resume_runtime_identities,
     build_resume_plan,
     emit_resume_plan_log,
     resume_plan_summary,
@@ -561,3 +563,50 @@ def test_map_resume_rejects_ambiguous_plan_or_stale_denominator(tmp_path, bad_pl
             scenarios=scenarios,
             **kwargs,
         )
+
+
+# --- strict integer seeds in saved resume rows ---
+
+
+def _write_saved_rows(tmp_path: Path, records: list[dict[str, Any]]) -> Path:
+    """Write saved campaign rows to a temporary episodes.jsonl."""
+    path = tmp_path / "episodes.jsonl"
+    path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+    return path
+
+
+# Otherwise-valid row for the declared job ("a", 1001), copied from
+# tests/fixtures/train_resume_identities/valid so only the seed field varies.
+_VALID_ROW: dict[str, Any] = {
+    "scenario_id": "a",
+    "seed": 1001,
+    "scenario_params": {"algo": "goal", "algo_config_hash": "44136fa355b3678a"},
+    "config_hash": "77e8b7a11f8d8196",
+}
+_RUNTIME_PLANNER: dict[str, Any] = {"key": "sf", "algo": "goal"}
+_RUNTIME_SCENARIOS: list[dict[str, Any]] = [
+    {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4}
+]
+
+
+def test_valid_integer_seed_row_is_accepted_by_both_identity_checks(tmp_path):
+    """Control: the row used by the strict-seed tests is valid, so only its seed can fail."""
+    path = _write_saved_rows(tmp_path, [_VALID_ROW])
+    _validate_resume_job_identities(path, {("a", 1001)})
+    _validate_resume_runtime_identities(path, _RUNTIME_PLANNER, _RUNTIME_SCENARIOS)
+
+
+@pytest.mark.parametrize("bad_seed", ["1001", 1001.7], ids=["string", "fractional"])
+def test_saved_row_with_non_integer_seed_cannot_pass_job_identity_check(tmp_path, bad_seed):
+    """A string or fractional seed is not the declared seed and must be refused, not coerced."""
+    path = _write_saved_rows(tmp_path, [{**_VALID_ROW, "seed": bad_seed}])
+    with pytest.raises(ResumeMismatchError, match="malformed resume job identity"):
+        _validate_resume_job_identities(path, {("a", 1001)})
+
+
+@pytest.mark.parametrize("bad_seed", ["1001", 1001.7], ids=["string", "fractional"])
+def test_saved_row_with_non_integer_seed_cannot_pass_runtime_identity_check(tmp_path, bad_seed):
+    """The runtime-identity preflight must refuse the same row instead of re-reading a coerced seed."""
+    path = _write_saved_rows(tmp_path, [{**_VALID_ROW, "seed": bad_seed}])
+    with pytest.raises(ResumeMismatchError, match="malformed resume job identity"):
+        _validate_resume_runtime_identities(path, _RUNTIME_PLANNER, _RUNTIME_SCENARIOS)

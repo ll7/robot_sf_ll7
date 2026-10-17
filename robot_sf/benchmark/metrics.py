@@ -103,6 +103,21 @@ CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
 
 
+# Contracts declared by the metric implementations below. Runtime witnesses import
+# these identities from the executing metric module rather than release defaults.
+TTC_DEFINITION = {
+    "identity": "time_to_collision_min.center_distance_v1",
+    "geometry": "center_based",
+    "formula": "min(distance/relative_speed), dot(relative_velocity,displacement)>0",
+    "relative_speed_floor_m_s": 1e-9,
+    "ped_velocity": "finite_difference_post_step_positions/dt",
+}
+CLEARANCE_DEFINITION = {
+    "identity": "surface_clearance_v1",
+    "formula": "center_distance-robot_radius-pedestrian_radius",
+}
+
+
 @dataclass
 class EpisodeData:
     """Container for a single episode trajectory.
@@ -1491,8 +1506,9 @@ def evaluate_stability_margin(
 
     A value of ``1.0`` indicates no lateral-acceleration load, while ``0.0`` means the
     estimated lateral acceleration is at or beyond the critical rollover threshold. Geometry
-    parameters follow the reviewer-supplied TWV proxy: rear track width ``t_w``, wheelbase
-    ``L``, center-of-gravity height ``h_c``, and CG distance from the front axle ``a``.
+    parameters follow the reviewer-supplied TWV proxy: track ``t_w`` of the axle with two
+    wheels, wheelbase ``L``, center-of-gravity height ``h_c``, and CG distance from the axle
+    with one wheel ``a``. The single wheel may be at the front or at the rear.
 
     Returns:
         Stability margin in ``[0.0, 1.0]`` or ``NaN`` when speed/yaw-rate samples are invalid.

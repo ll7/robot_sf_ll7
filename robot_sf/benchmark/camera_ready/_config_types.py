@@ -194,6 +194,7 @@ class CampaignConfig:
     workers: int = 1
     horizon: int | None = None
     horizon_policy: str | None = None
+    numerical_mode: str | None = None
     protocol_version: str | None = None
     dt: float | None = None
     record_forces: bool = True

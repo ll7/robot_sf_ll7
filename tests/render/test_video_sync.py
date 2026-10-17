@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import os
+import select
 import subprocess
 import sys
 from pathlib import Path
@@ -900,27 +901,57 @@ def test_cli_special_input_file_returns_failed_result_without_blocking(tmp_path:
     input_path = tmp_path / "request.fifo"
     os.mkfifo(input_path)
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "robot_sf.render.video_sync",
-            "--input",
-            str(input_path),
-            "--output",
-            "out",
-            "--base",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=Path(__file__).resolve().parents[2],
-        check=False,
-        timeout=5,
-    )
+    # Cold imports on macOS can exceed the operation's five-second budget.
+    # Signal readiness on a separate pipe so startup cannot consume that budget
+    # or mix a marker into the CLI's JSON output.
+    launcher = """
+import os
+import sys
+from robot_sf.render.video_sync import main
+ready_fd = int(sys.argv[1])
+os.write(ready_fd, b"R")
+os.close(ready_fd)
+raise SystemExit(main(sys.argv[2:]))
+"""
+    ready_read, ready_write = os.pipe()
+    try:
+        with subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                launcher,
+                str(ready_write),
+                "--input",
+                str(input_path),
+                "--output",
+                "out",
+                "--base",
+                str(tmp_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=Path(__file__).resolve().parents[2],
+            pass_fds=(ready_write,),
+        ) as process:
+            os.close(ready_write)
+            ready_write = None
+            try:
+                assert select.select([ready_read], [], [], 30)[0], "CLI startup did not finish"
+                assert os.read(ready_read, 1) == b"R", "CLI exited before completing imports"
+                stdout, stderr = process.communicate(timeout=5)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate()
+    finally:
+        os.close(ready_read)
+        if ready_write is not None:
+            os.close(ready_write)
 
-    assert completed.returncode == 1
-    result = json.loads(completed.stdout)
+    assert process.returncode == 1
+    assert stderr == ""
+    result = json.loads(stdout)
     assert component_result_from_dict(result).status == "failed"
     assert result["reason"] == "invalid_input: request JSON cannot be parsed safely"
 

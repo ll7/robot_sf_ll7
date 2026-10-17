@@ -1,4 +1,8 @@
-"""Fail-closed admission for resuming an immutable benchmark release campaign."""
+"""Fail-closed admission for resuming an immutable benchmark release campaign.
+
+The receipt campaign_id must be the normalized campaign ID (the directory name under the
+campaign output root), not the raw --campaign-id argument.
+"""
 
 from __future__ import annotations
 
@@ -92,7 +96,11 @@ def _validate_receipt_header(
     max_age_hours: float,
     now: datetime | None,
 ) -> None:
-    """Validate the operator's explicit infrastructure-only resume ruling."""
+    """Validate the operator's explicit infrastructure-only resume ruling.
+
+    The receipt campaign_id must be the normalized campaign ID (the directory name under the
+    campaign output root), not the raw --campaign-id argument.
+    """
     if payload.get("schema_version") != RELEASE_RESUME_RECEIPT_SCHEMA:
         raise ReleaseResumeAdmissionError(
             f"resume receipt schema must be {RELEASE_RESUME_RECEIPT_SCHEMA}"

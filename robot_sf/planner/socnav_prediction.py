@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import LineString, MultiLineString
 
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi
@@ -25,6 +26,7 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_observation,
     validate_predictive_runtime_feature_schema,
 )
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
@@ -62,6 +64,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
+        self._static_obstacle_geometry: MultiLineString | None = None
+        self._prediction_drive_settings: DifferentialDriveSettings | None = None
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
@@ -276,11 +280,19 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
         """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
         self._bound_obstacle_lines = normalize_obstacle_lines(obstacle_lines)
+        self._static_obstacle_geometry = (
+            MultiLineString(self._bound_obstacle_lines) if self._bound_obstacle_lines else None
+        )
         self._obstacle_feature_extractor.precompute(self._bound_obstacle_lines)
 
     def bind_env(self, env: Any) -> None:
         """Bind static map obstacle geometry from a live Robot SF environment."""
         simulator = getattr(env, "simulator", None)
+        robots = getattr(simulator, "robots", None)
+        settings = getattr(robots[0], "config", None) if robots else None
+        self._prediction_drive_settings = (
+            settings if isinstance(settings, DifferentialDriveSettings) else None
+        )
         map_def = getattr(env, "map_def", None)
         if map_def is None:
             map_def = getattr(simulator, "map_def", None)
@@ -289,8 +301,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             iter_segments = getattr(simulator, "iter_obstacle_segments", None)
             if callable(iter_segments):
                 lines = normalize_obstacle_lines(iter_segments())
-        self._bound_obstacle_lines = lines
-        self._obstacle_feature_extractor.precompute(lines)
+        self.bind_obstacle_lines(lines)
 
     def _resolve_device(self) -> str:
         """Resolve runtime device string for predictive model inference.
@@ -943,15 +954,45 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         # Keep deterministic ordering for stable benchmark outputs.
         return sorted(set(candidates), key=lambda x: (round(x[0], 6), round(x[1], 6)))
 
-    @staticmethod
+    def _bound_drive_rollout(self, commands, dt, observation):
+        """Integrate bound wheel odometry at the observed control clock.
+
+        Returns:
+            tuple: Local positions and headings at each prediction sample.
+        """
+        if observation is None and len(commands) > 0:
+            raise ValueError("Bound prediction requires a measured-motion observation")
+        state, _, _ = self._socnav_fields(observation or {})
+        drive = DifferentialDriveRobot(self._prediction_drive_settings)
+        drive.state.velocity = (
+            float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0]),
+            float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
+        )
+        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+        control_dt = self._simulation_timestep(observation) if observation is not None else dt
+        positions, headings = [], []
+        for command in commands:
+            remaining = dt
+            while remaining > 1e-12:
+                step_dt = min(control_dt, remaining)
+                drive.apply_action(
+                    tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
+                )
+                remaining -= step_dt
+            positions.append(drive.pos)
+            headings.append(drive.pose[1])
+        return np.asarray(positions), np.asarray(headings)
+
     def _rollout_robot(
+        self,
         *,
         v: float,
         w: float,
         dt: float,
         steps: int,
+        observation: dict | None = None,
     ) -> np.ndarray:
-        """Roll out robot trajectory in its local frame under unicycle dynamics.
+        """Forecast the bound differential drive, or an unbound unicycle command.
 
         Returns:
             np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.
@@ -961,6 +1002,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         v = float(v)
         w = float(w)
         dt = float(dt)
+        if self._prediction_drive_settings is not None:
+            if steps == 0:
+                return np.zeros((0, 2))
+            positions, _ = self._bound_drive_rollout(
+                np.tile((v, w), (steps, 1)),
+                dt,
+                observation,
+            )
+            return positions
 
         # Closed-form cumulative unicycle integration that reproduces the legacy
         # sequential scalar recurrence (heading is not wrapped here, so the
@@ -1211,6 +1261,30 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         penalty = float(np.sum(shortfall * time_weights))
         return penalty
 
+    def _static_footprint_clearance(self, observation: dict, local_traj: np.ndarray) -> float:
+        """Measure swept body clearance against the bound map, including between samples.
+
+        Returns:
+            float: Static surface gap; infinity when native geometry is unbound.
+        """
+        if self._prediction_drive_settings is None or self._static_obstacle_geometry is None:
+            return float("inf")
+        state, _, _ = self._socnav_fields(observation)
+        position = np.asarray(state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        heading = float(self._as_1d_float(state.get("heading", [0.0]), pad=1)[0])
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        rotation = np.array([[cos_h, sin_h], [-sin_h, cos_h]])
+        # Include the measured origin: a zero command still has a braking path,
+        # and testing only endpoints misses thin walls crossed between samples.
+        points = np.vstack([np.zeros(2), local_traj]) @ rotation + position
+        if len(points) == 1:
+            points = np.repeat(points, 2, axis=0)
+        swept_center = LineString(points)
+        return (
+            float(swept_center.distance(self._static_obstacle_geometry))
+            - self._prediction_drive_settings.radius
+        )
+
     def _score_action(
         self,
         *,
@@ -1228,7 +1302,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         steps_val = max(1, int(steps))
-        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
+        if self._static_footprint_clearance(observation, robot_traj) <= 0.0:
+            return float("inf")
 
         valid_idx = np.where(mask > 0.5)[0]
         if valid_idx.size > 0:
@@ -1281,8 +1357,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         candidate_heading = robot_heading + w * dt
         direction = np.array([np.cos(candidate_heading), np.sin(candidate_heading)], dtype=float)
-        # Method limitation: retain the historical pedestrian-only occupancy cost.
-        # The centre-line probe is not effective footprint-aware wall avoidance.
+        # The historical pedestrian occupancy cost follows the independent
+        # swept static-footprint veto above; it cannot waive a wall contact.
         _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,
@@ -1311,12 +1387,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         sequence: list[tuple[float, float]],
         segment_steps: int,
         dt: float,
+        observation: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Roll out a piecewise-constant action sequence in the robot local frame.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Local positions and headings for rollout steps.
         """
+        if self._prediction_drive_settings is not None and sequence:
+            commands = np.repeat(sequence, max(1, segment_steps), axis=0)
+            return self._bound_drive_rollout(commands, dt, observation)
         pos = np.zeros(2, dtype=float)
         heading = 0.0
         traj = np.zeros((max(1, len(sequence) * max(1, segment_steps)), 2), dtype=float)
@@ -1357,10 +1437,13 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             sequence=sequence,
             segment_steps=segment_steps,
             dt=dt,
+            observation=observation,
         )
         horizon = min(local_traj.shape[0], int(steps), int(future_peds.shape[1]))
         local_traj = local_traj[:horizon]
         local_headings = local_headings[:horizon]
+        if self._static_footprint_clearance(observation, local_traj) <= 0.0:
+            return float("inf")
 
         radius_margin = (
             float(self.config.predictive_robot_radius)
@@ -1845,8 +1928,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return best
 
     def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
-        return {"planner_type": "PredictionPlannerAdapter"}
+        """Return execution diagnostics, including before adapter initialization."""
+        return {
+            "planner_type": "PredictionPlannerAdapter",
+            "prediction_execution_contract": (
+                "native_motion_static_footprint_v2"
+                if getattr(self, "_prediction_drive_settings", None) is not None
+                else "unbound_command_rollout_v1"
+            ),
+            "static_geometry_bound": getattr(self, "_static_obstacle_geometry", None) is not None,
+        }
 
 
 def make_prediction_policy(

@@ -78,10 +78,10 @@ def test_matches_benchmark_surface_stability_margin() -> None:
     expected = evaluate_stability_margin(
         1.0,
         1.5,
-        t_w=params.track_width_m,
+        t_w=params.two_wheel_axle_track_m,
         L=params.wheelbase_m,
         h_c=params.cog_height_m,
-        a=params.front_axle_to_cog_m,
+        a=params.single_wheel_axle_to_cog_m,
     )
 
     assert report["min_stability_margin"] == pytest.approx(expected)
@@ -239,3 +239,36 @@ def test_invalid_params_rejected() -> None:
     """Non-physical proxy params must fail closed."""
     with pytest.raises(ValueError):
         AmmvFeasibilityParams(max_curvature_per_m=0.0)
+
+
+def test_layout_neutral_names_match_deprecated_aliases() -> None:
+    """Layout-neutral geometry must reproduce the old-name verdict (issue #10192)."""
+    with pytest.warns(DeprecationWarning, match="track_width_m|front_axle_to_cog_m"):
+        legacy = AmmvFeasibilityParams(track_width_m=0.9, front_axle_to_cog_m=0.4)
+    neutral = AmmvFeasibilityParams(two_wheel_axle_track_m=0.9, single_wheel_axle_to_cog_m=0.4)
+    velocities = np.array([1.0])
+    turn_rates = np.array([1.5])
+
+    legacy_report = evaluate_command_feasibility(velocities, turn_rates, legacy)
+    neutral_report = evaluate_command_feasibility(velocities, turn_rates, neutral)
+
+    assert neutral == legacy
+    assert neutral_report["min_stability_margin"] == pytest.approx(
+        legacy_report["min_stability_margin"]
+    )
+
+
+def test_deprecated_geometry_alias_properties_warn() -> None:
+    """Deprecated geometry property aliases remain available during the transition."""
+    params = AmmvFeasibilityParams(two_wheel_axle_track_m=0.9, single_wheel_axle_to_cog_m=0.4)
+
+    with pytest.warns(DeprecationWarning, match="track_width_m"):
+        assert params.track_width_m == pytest.approx(0.9)
+    with pytest.warns(DeprecationWarning, match="front_axle_to_cog_m"):
+        assert params.front_axle_to_cog_m == pytest.approx(0.4)
+
+
+def test_layout_neutral_params_reject_unknown_aliases() -> None:
+    """Unexpected constructor aliases must fail instead of being silently ignored."""
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        AmmvFeasibilityParams(rear_axle_to_cog_m=0.4)

@@ -23,6 +23,7 @@ from robot_sf.planner.socnav_base import (
 from robot_sf.planner.socnav_sampling_v2 import (
     GoalPathField,
     _ObstacleClearance,
+    _pedestrian_world_velocities,
     _repulsion_direction,
     _rollout,
     braking_speed_limit,
@@ -345,10 +346,63 @@ def test_obstacle_clearance_handles_frames_and_missing_payloads() -> None:
 
     no_channel = _observation(wall=lambda xs, ys: xs > 0)
     no_channel["occupancy_grid_meta"]["channel_indices"] = [-1, 1, -1, -1]
-    assert not _ObstacleClearance(adapter, no_channel).available
+    with pytest.raises(ValueError, match="static obstacle channel.*sampler clearance"):
+        _ObstacleClearance(adapter, no_channel)
     bad_res = _observation(wall=lambda xs, ys: xs > 0)
     bad_res["occupancy_grid_meta"]["resolution"] = [0.0]
     assert not _ObstacleClearance(adapter, bad_res).available
+
+
+def _reviewer_occupied_grid_observation() -> dict:
+    """The real-planner probe: one fully occupied channel around a stopped robot."""
+    return {
+        "robot": {
+            "position": np.zeros(2),
+            "heading": [0.0],
+            "speed": [0.0],
+            "angular_velocity": [0.0],
+        },
+        "goal": {"current": [10.0, 0.0]},
+        "pedestrians": {},
+        "sim": {"timestep": [0.1]},
+        "occupancy_grid": np.ones((1, 20, 20)),
+        "occupancy_grid_meta": {
+            "origin": [-1.0, -1.0],
+            "resolution": [0.1],
+            "size": [2.0, 2.0],
+            "channel_indices": [0],
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "indices", [None, [-1, -1, -1, -1], [9]], ids=["missing", "absent", "out_of_range"]
+)
+def test_bounded_sampler_rejects_populated_grid_without_valid_static_channel(indices) -> None:
+    """Invalid channel metadata must not turn occupied geometry into a moving command."""
+    observation = _reviewer_occupied_grid_observation()
+    if indices is None:
+        del observation["occupancy_grid_meta"]["channel_indices"]
+    else:
+        observation["occupancy_grid_meta"]["channel_indices"] = indices
+    adapter = _adapter("bounded_v2")
+    with pytest.raises(ValueError, match="static obstacle channel.*sampler clearance"):
+        adapter.plan(observation)
+
+
+def test_bounded_sampler_occupied_grid_probe_and_absent_empty_grid_controls() -> None:
+    """Valid occupied geometry stops; intentionally absent or zero-sized grids stay usable."""
+    observation = _reviewer_occupied_grid_observation()
+    adapter = _adapter("bounded_v2")
+    assert _ObstacleClearance(adapter, observation)(np.zeros((1, 2)))[0] == pytest.approx(
+        -0.1207106781
+    )
+    assert adapter.plan(observation) == (0.0, 0.0)
+    del observation["occupancy_grid"]
+    assert adapter.plan(observation) == (3.0, 0.0)
+    observation["occupancy_grid"] = np.empty((0, 0, 0))
+    observation["occupancy_grid_meta"]["channel_indices"] = [-1, -1, -1, -1]
+    assert adapter.plan(observation) == (3.0, 0.0)
 
 
 def test_rollout_respects_drive_limits() -> None:
@@ -542,3 +596,31 @@ def test_social_force_and_sampling_version_selectors_coexist() -> None:
     sampler.plan(_observation())
     assert sampler._last_sampling_v2["desired_heading"] == pytest.approx(0.0)
     assert sampler.diagnostics()["socnav_sampling_version"] == SOCNAV_SAMPLING_BOUNDED_V2
+
+
+def test_pedestrian_world_velocities_converts_ego_at_nonzero_heading() -> None:
+    """Opt-in pedestrian prediction rotates the ego-frame observation velocity to world.
+
+    The flat map-runner contract supplies ``pedestrians_velocities`` in the robot
+    ego frame, so the sampling arm's opt-in prediction path must rotate by the
+    robot heading. A heading of 0.0 would hide a missing conversion, so this uses
+    pi/2 and also pins the release default, where prediction is off and the
+    pedestrian velocity must not be consumed at all (issue #9845).
+    """
+    heading = 0.5 * math.pi
+    ego_velocity = np.array([[0.6, -0.35]])
+    ped_positions = np.array([[2.0, 1.0]])
+    ped_state = {"velocities": ego_velocity, "count": np.array([1.0])}
+
+    enabled = SimpleNamespace(sampling_pedestrian_prediction=True)
+    converted = _pedestrian_world_velocities(enabled, ped_state, ped_positions, heading)
+    np.testing.assert_allclose(converted, np.array([[0.35, 0.6]]), rtol=0.0, atol=1e-12)
+    assert not np.allclose(converted, ego_velocity, atol=1e-6)
+
+    disabled = SimpleNamespace(sampling_pedestrian_prediction=False)
+    np.testing.assert_allclose(
+        _pedestrian_world_velocities(disabled, ped_state, ped_positions, heading),
+        np.zeros_like(ped_positions),
+        rtol=0.0,
+        atol=0.0,
+    )

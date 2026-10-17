@@ -1,0 +1,15 @@
+{
+  "sweep_source": "77669076f261c1e4c9dae94b913f3f1397d745cb",
+  "admission_head": "644aaee2ed4ff2e99e420c5c03eda8b35d2f2b9b",
+  "changed_adapter_methods": [
+    "bind_env"
+  ],
+  "stopping_predicates_ast_unchanged": true,
+  "note": "Only the bound differential-drive admission guard was added after sweep launch. Native sweep uses DifferentialDriveSettings; stopping geometry, config, scoring and predicates are unchanged.",
+  "final_admission_native_confirmation": {
+    "seed": 1003,
+    "scenario": "classic_station_platform_medium",
+    "matches_sweep_episode_all_fields": true,
+    "head": "644aaee2ed4ff2e99e420c5c03eda8b35d2f2b9b"
+  }
+}

@@ -144,6 +144,14 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             "load_error": None,
         }
 
+    def reset(self, *, seed: int | None = None) -> None:
+        """Clear episode fallback flags while preserving checkpoint and load state."""
+        del seed
+        self._checkpoint_provenance["fallback_triggered"] = bool(
+            self._load_error is not None and self._allow_fallback
+        )
+        self._checkpoint_provenance.pop("fallback_reason", None)
+
     def diagnostics(self) -> dict[str, Any]:
         """Return runtime checkpoint provenance for benchmark episode metadata."""
         return {"checkpoint_provenance": dict(self._checkpoint_provenance)}
@@ -167,8 +175,20 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         obs_vec, pref_speed, _dist_to_goal = self._build_network_input(observation)
 
         predictions = model.predict(obs_vec)[0]
+        if not np.isfinite(predictions).all():
+            self._checkpoint_provenance.update(
+                fallback_triggered=True,
+                fallback_reason="nonfinite_model_output",
+            )
+            return 0.0, 0.0
         action_idx = int(np.argmax(predictions))
         raw_action = model.actions[action_idx]
+        if not np.isfinite(raw_action).all() or not np.isfinite(pref_speed):
+            self._checkpoint_provenance.update(
+                fallback_triggered=True,
+                fallback_reason="nonfinite_model_output",
+            )
+            return 0.0, 0.0
         linear = float(pref_speed * raw_action[0])
         delta_heading = float(raw_action[1])
 

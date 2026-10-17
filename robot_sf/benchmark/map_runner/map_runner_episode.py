@@ -28,6 +28,7 @@ from robot_sf.benchmark.analysis_trace import (
     telemetry_from_scenario,
 )
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
+from robot_sf.benchmark.effective_physics import capture_effective_physics
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
@@ -1990,6 +1991,7 @@ class _EpisodeStepLoopResult:
     view_integrity: dict[str, Any] | None
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
+    effective_physics: dict[str, Any] | None = None
     sampler_capture: dict[str, Any] | None = None
     robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
     reset_spawn_clearance: dict[str, Any] | None = None
@@ -2057,6 +2059,7 @@ class _StepLoopState:
     planner_runtime_snapshot: dict[str, Any] | None = None
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
+    effective_physics: dict[str, Any] | None = None
     sampler_capture: dict[str, Any] | None = None
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
@@ -3666,6 +3669,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_metadata=state.planner_obstacle_force_law_metadata,
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
+        effective_physics=state.effective_physics,
         sampler_capture=state.sampler_capture,
         reset_spawn_clearance=state.reset_spawn_clearance,
         reset_spawn_clearance_error=state.reset_spawn_clearance_error,
@@ -3902,6 +3906,8 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
+            if hasattr(env.simulator, "pysf_sim"):
+                state.effective_physics = capture_effective_physics(env)
     finally:
         _teardown_step_loop(
             env,
@@ -5357,6 +5363,11 @@ def _assemble_episode_record(  # noqa: PLR0913
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
     )
+    if loop_result.effective_physics is not None:
+        record["effective_physics"] = deepcopy(loop_result.effective_physics)
+        record["release_design_parameters"] = deepcopy(
+            loop_result.effective_physics["release_design_parameters"]
+        )
     runtime_law = record.get("algorithm_metadata", {}).get("obstacle_force_law")
     if isinstance(runtime_law, dict) and isinstance(runtime_law.get("sites"), dict):
         for site_metadata in runtime_law["sites"].values():

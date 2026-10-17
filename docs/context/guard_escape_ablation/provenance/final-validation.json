@@ -1,0 +1,103 @@
+{
+  "passed": true,
+  "raw_rows": 2160,
+  "unique_paired_slots": 2160,
+  "missing_slots": 0,
+  "duplicates": 0,
+  "development_seeds": [
+    1001,
+    1030
+  ],
+  "seed_blocks": 30,
+  "rates_checked_against_raw": 48,
+  "contrasts_independently_recomputed": 36,
+  "non_factor_runtime_config_equal": true,
+  "observation_contract_equal": true,
+  "mode": "source_declared_adapter",
+  "fallback": 0,
+  "degraded": 0,
+  "mode_census_derived_from_raw": {
+    "adapter": 2160
+  },
+  "canonical_nested_runtime_marker_checked": true,
+  "enriched_sidecar_rowwise_equal_to_raw": true,
+  "termination_census": {
+    "G0E0": {
+      "success": 298,
+      "collision": 204,
+      "max_steps": 38
+    },
+    "G0E1": {
+      "success": 306,
+      "collision": 191,
+      "max_steps": 43
+    },
+    "G1E0": {
+      "success": 483,
+      "max_steps": 54,
+      "collision": 3
+    },
+    "G1E1": {
+      "success": 483,
+      "max_steps": 57
+    }
+  },
+  "collision_type_census": {
+    "wall": 357,
+    "pedestrian": 41
+  },
+  "smoke_full_outcome_and_length_matches": 4,
+  "source_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+  "horizon_counts_per_arm": {
+    "G0E0": {
+      "500": 180,
+      "700": 30,
+      "650": 30,
+      "600": 90,
+      "400": 210
+    },
+    "G0E1": {
+      "500": 180,
+      "700": 30,
+      "650": 30,
+      "600": 90,
+      "400": 210
+    },
+    "G1E0": {
+      "500": 180,
+      "700": 30,
+      "650": 30,
+      "600": 90,
+      "400": 210
+    },
+    "G1E1": {
+      "500": 180,
+      "700": 30,
+      "650": 30,
+      "600": 90,
+      "400": 210
+    }
+  },
+  "source_files": [
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g0e0__differential_drive/episodes.jsonl",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g0e1__differential_drive/episodes.jsonl",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g1e0__differential_drive/episodes.jsonl",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g1e1__differential_drive/episodes.jsonl"
+  ],
+  "input_sha256": {
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g0e0__differential_drive/episodes.jsonl": "2aa21fe4006ecd398518cb46a264b06cab76be370c055e0e1b26fefa16287637",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g0e1__differential_drive/episodes.jsonl": "e614f497d635bf12cf8ba56341dd9c8bcdb033f441eb880814b729459848d6db",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g1e0__differential_drive/episodes.jsonl": "4f9bf28ebc63e16e8d6c68dd955ed0d6da5e4d68d113da5e000271146a33189d",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g1e1__differential_drive/episodes.jsonl": "1118599c926059b6fbcc8de94583bb5e073ea9ff0afa8748c6115766fdf46762",
+    "out/raw/smoke/campaigns/exp_guardesc_smoke/runs/g1e0__differential_drive/episodes.jsonl": "5a27c4488d3c53ca63fb9e0718b82e1a9587d10de7b51ea32bc642e061bf29a2",
+    "out/raw/smoke/campaigns/exp_guardesc_smoke/runs/g1e1__differential_drive/episodes.jsonl": "bd7e362ef6551d7ed726a4c3b587f8fbff9c143247509ff632dcb23f60fa7742",
+    "out/raw/smoke/campaigns/exp_guardesc_smoke/runs/g0e0__differential_drive/episodes.jsonl": "37abef2581e71fc305cc71446e47c8b0c4abfb4a31e0b6055901bb266909eb8e",
+    "out/raw/smoke/campaigns/exp_guardesc_smoke/runs/g0e1__differential_drive/episodes.jsonl": "cb8421b6f41c89dbfb435cf34d11a690ea879bf407a9558e692019507b0ff900",
+    "out/raw/full/episodes.mode.jsonl": "354d111729bc40bbfd9bf89e069bf9df4a237672c59ba737b41d53ea428ad672",
+    "out/figure_data.csv": "0d0020f519f8e029b88079ce7efe4032c8b71eb445069f7b47b1f47aa249f157",
+    "out/paired_effects.csv": "84dc61a0c8e46ccaf84c625bee9da845ec598305ce0fb615d5a7cc62566cfdb1",
+    "out/contract.yaml": "2c11395f5a3bebe5c5be408c7e25a2fcd994d6fb4914edc10740e629a29c6b69",
+    "out/execution-complete.json": "a27a8663a1cb95230878ea2f7826dc7ed2388584be6ac209aab1c045deae36eb"
+  },
+  "validator_sha256": "319cdb0e838161da56a6b3ea4244a2ca0059034cd9043ad133638003b352f48d"
+}

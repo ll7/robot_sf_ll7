@@ -1,0 +1,25 @@
+{
+  "source_main": "e251a2f94e9478ab7fd5252e88d0296666876ab1",
+  "focused_pytest": {
+    "command": "uv run pytest tests/benchmark/test_cross_cpu_diagnostic_20261013.py tests/benchmark/test_pinned_numerical_mode.py -q -n 0 -o addopts=''",
+    "passed": 29,
+    "exit_code": 0
+  },
+  "ruff": {
+    "format_checked": true,
+    "lint_passed": true
+  },
+  "typecheck": {
+    "command": "uv tool run ty check scripts/validation/cross_cpu_dispatch_20261013.py scripts/validation/cross_cpu_20261013/sitecustomize.py",
+    "exit_code": 0
+  },
+  "derived_configs": {
+    "all_modes_validated": true,
+    "dev_seeds": "1001-1030"
+  },
+  "checksums": {
+    "test_log": "caad09684edf2088cc1339214d86c52d99c6b196e4884d141255c039c72c9bef",
+    "type_log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "full_suite": "not run; shared runtime untouched; canonical staged preflights, real acquisitions and focused comparison/numerical-mode tests supply relevant proof"
+}

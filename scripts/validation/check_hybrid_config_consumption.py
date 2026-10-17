@@ -17,6 +17,7 @@ import yaml
 from robot_sf.benchmark.policy_search_manifest import (
     is_candidate_manifest,
     resolve_candidate_manifest_runtime,
+    scenario_family,
 )
 from robot_sf.planner.hybrid_rule_local_planner import build_hybrid_rule_local_planner_config
 
@@ -31,9 +32,14 @@ def _read_mapping(path: Path) -> dict[str, Any]:
     return data
 
 
-def _contexts(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    """Enumerate declared override contexts, retaining runtime family precedence."""
-    contexts: list[dict[str, Any]] = [{"name": "default"}]
+def _contexts(manifest: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Cover unconditional params and every compatible family/scenario composition.
+
+    Without a scenario roster, an ordinary name can belong to any declared
+    family. Check those possibilities conservatively; the runtime resolver still
+    owns prefix-based family inference and override precedence.
+    """
+    declared: dict[str, dict[str, Any]] = {}
     for key in ("scenario_overrides", "scenario_algo_overrides", "family_overrides"):
         overrides = manifest.get(key, {})
         if not isinstance(overrides, dict):
@@ -41,11 +47,27 @@ def _contexts(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         for name, value in overrides.items():
             if not isinstance(name, str) or not isinstance(value, dict):
                 raise ValueError(f"{key} entries must map names to mappings")
-            contexts.append(
-                {"name": f"family:{name}", "family": name}
-                if key == "family_overrides"
-                else {"name": name}
-            )
+        declared[key] = overrides
+
+    names = dict.fromkeys((*declared["scenario_overrides"], *declared["scenario_algo_overrides"]))
+    families = declared["family_overrides"]
+    # Neither synthetic identifier may select a user override, including nominal.
+    fallback_name = "__consumption_default__"
+    while fallback_name in names:
+        fallback_name += "_"
+    fallback_family = "__consumption_family__"
+    while fallback_family in families:
+        fallback_family += "_"
+    contexts = [("default", {"name": fallback_name, "family": fallback_family})]
+    contexts.extend(
+        (f"family:{family}", {"name": fallback_name, "family": family}) for family in families
+    )
+    for name in names:
+        contexts.append((name, {"name": name}))
+        for family in families:
+            scenario = {"name": name, "family": family}
+            if scenario_family(scenario) == family:
+                contexts.append((f"{name}/family:{family}", scenario))
     return contexts
 
 
@@ -74,7 +96,7 @@ def check_config(path: Path) -> list[str]:
     """
     manifest = _read_mapping(path)
     problems = []
-    for scenario in _contexts(manifest):
+    for label, scenario in _contexts(manifest):
         algo, effective = resolve_candidate_manifest_runtime(
             default_algo=str(manifest.get("algo", "hybrid_rule_local_planner")),
             manifest=manifest,
@@ -82,7 +104,7 @@ def check_config(path: Path) -> list[str]:
             load_config=lambda raw_path: _load_base(path, raw_path),
         )
         if algo != "hybrid_rule_local_planner":
-            raise ValueError(f"{scenario['name']}: unsupported algorithm {algo!r}")
+            raise ValueError(f"{label}: unsupported algorithm {algo!r}")
         config = build_hybrid_rule_local_planner_config(effective)
         if not (
             config.continuous_static_clearance_enabled
@@ -92,7 +114,7 @@ def check_config(path: Path) -> list[str]:
         for key in MASKED_RULES:
             if getattr(config, key):
                 problems.append(
-                    f"{path}:{scenario['name']}: {key} is unreachable on the configured "
+                    f"{path}:{label}: {key} is unreachable on the configured "
                     "continuous-geometry path; disable the masked rule or select its coarse path"
                 )
     return list(dict.fromkeys(problems))

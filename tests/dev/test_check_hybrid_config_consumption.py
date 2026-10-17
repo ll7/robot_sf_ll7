@@ -113,3 +113,58 @@ def test_family_override_uses_runtime_boolean_coercion(tmp_path: Path) -> None:
     assert any(
         "family:classic" in p and "static_corridor_transit_enabled" in p for p in check_config(path)
     )
+
+
+@pytest.mark.parametrize(
+    ("manifest", "scenario"),
+    [
+        (
+            {
+                "params": {
+                    "continuous_static_clearance_enabled": True,
+                    "static_corridor_transit_enabled": True,
+                },
+                "scenario_overrides": {"default": {"static_corridor_transit_enabled": False}},
+            },
+            {"name": "classic_join_group"},
+        ),
+        (
+            {
+                "params": {},
+                "family_overrides": {"custom": {"continuous_static_clearance_enabled": True}},
+                "scenario_overrides": {"custom_case": {"static_corridor_transit_enabled": True}},
+            },
+            {"name": "custom_case", "family": "custom"},
+        ),
+    ],
+    ids=["default-name-collision", "family-scenario-composition"],
+)
+def test_reviewer_runtime_masked_contexts_are_rejected(
+    tmp_path: Path, manifest: dict, scenario: dict
+) -> None:
+    """Reject reviewer fixtures whose real runtime configuration masks the corridor rule."""
+    from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
+    from robot_sf.planner.hybrid_rule_local_planner import build_hybrid_rule_local_planner_config
+
+    _, effective = resolve_candidate_manifest_runtime(
+        default_algo="hybrid_rule_local_planner",
+        manifest=manifest,
+        scenario=scenario,
+        load_config=lambda _: {},
+    )
+    config = build_hybrid_rule_local_planner_config(effective)
+    assert config.continuous_static_clearance_enabled is True
+    assert config.corridor_subgoal_use_continuous_static_check is True
+    assert config.static_corridor_transit_enabled is True
+
+    path = tmp_path / "reviewer.yaml"
+    path.write_text(yaml.safe_dump(manifest))
+    assert any("static_corridor_transit_enabled" in p for p in check_config(path))
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.validation.check_hybrid_config_consumption", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    assert "static_corridor_transit_enabled" in result.stdout

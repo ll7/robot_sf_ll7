@@ -12,7 +12,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from robot_sf.models import get_registry_entry
-from robot_sf.training.released_warm_start import load_warm_start
+from robot_sf.training import released_warm_start
+from robot_sf.training.released_warm_start import load_warm_start, released_checkpoint
 
 
 def test_loaded_actions_and_value_weights_equal_checkpoint(tmp_path):
@@ -176,3 +177,74 @@ def test_b1002_release_actions_values_and_three_seed_round_trips(tmp_path):
         for key, value in source.policy.state_dict().items():
             assert torch.equal(value, reloaded.policy.state_dict()[key]), key
         del reloaded
+
+
+def test_released_checkpoint_checks_pinned_bytes_and_returns_portable_provenance(
+    tmp_path, monkeypatch
+):
+    """A registry entry and actual artifact must agree before warm-start loading."""
+    checkpoint = tmp_path / "released.zip"
+    checkpoint.write_bytes(b"unit checkpoint transport")
+    digest = hashlib.sha256(b"unit checkpoint transport").hexdigest()
+    url = "https://example.invalid/releases/checkpoint.zip"
+    release = {"sha256": digest, "size_bytes": 25, "url": url}
+    monkeypatch.setattr(
+        released_warm_start, "get_registry_entry", lambda _: {"github_release": release}
+    )
+    downloads = []
+
+    def resolve(model_id, *, allow_download):
+        downloads.append((model_id, allow_download))
+        return str(checkpoint)
+
+    monkeypatch.setattr(released_warm_start, "resolve_model_path", resolve)
+    path, provenance = released_checkpoint("unit-release")
+    assert path == checkpoint
+    assert provenance == {"model_id": "unit-release", "artifact_path": url, "sha256": digest}
+    assert downloads == [("unit-release", True)]
+
+
+@pytest.mark.parametrize(
+    "release", [None, {}, {"sha256": "0" * 64}, {"url": "https://example.invalid/checkpoint.zip"}]
+)
+def test_released_checkpoint_rejects_missing_pins_before_resolution(monkeypatch, release):
+    """Unpinned registry records cannot initiate checkpoint download or loading."""
+    monkeypatch.setattr(
+        released_warm_start, "get_registry_entry", lambda _: {"github_release": release}
+    )
+
+    def unexpected_resolution(*args, **kwargs):
+        pytest.fail("unpinned checkpoint reached artifact resolution")
+
+    monkeypatch.setattr(released_warm_start, "resolve_model_path", unexpected_resolution)
+    with pytest.raises(ValueError, match="registry-pinned released checkpoint"):
+        released_checkpoint("unit-release")
+
+
+@pytest.mark.parametrize("mismatch", ["digest", "size"])
+def test_released_checkpoint_rejects_corrupt_bytes_or_wrong_size(tmp_path, monkeypatch, mismatch):
+    """A valid-looking registry row does not waive independent artifact integrity."""
+    checkpoint = tmp_path / "released.zip"
+    checkpoint.write_bytes(b"unit checkpoint transport")
+    release = {
+        "sha256": "0" * 64
+        if mismatch == "digest"
+        else hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        "size_bytes": 25 if mismatch == "digest" else 26,
+        "url": "https://example.invalid/releases/checkpoint.zip",
+    }
+    monkeypatch.setattr(
+        released_warm_start, "get_registry_entry", lambda _: {"github_release": release}
+    )
+    monkeypatch.setattr(
+        released_warm_start, "resolve_model_path", lambda *args, **kwargs: checkpoint
+    )
+    with pytest.raises(ValueError, match="digest/size mismatch"):
+        released_checkpoint("unit-release")
+
+
+@pytest.mark.parametrize("seed", [0, 99999, 200000])
+def test_initialization_seed_is_rejected_before_checkpoint_io(tmp_path, seed):
+    """Out-of-range initialization cannot be hidden by a missing checkpoint error."""
+    with pytest.raises(ValueError, match="training-only range"):
+        load_warm_start(tmp_path / "absent.zip", init_seed=seed)

@@ -72,6 +72,21 @@ Each iteration performs:
 
 Episodes are added via `adaptive_sampling_iteration` in batches (default 1) until criteria met.
 
+### Metric definition compatibility
+
+`aggregate_metrics` validates the metric definitions of the complete input before
+grouping by archetype and density. Historical unmarked rows resolve to
+`robot-sf-metrics.v1`; current rows declare `robot-sf-metrics.v2`. Mixing these
+definitions raises `ValueError`, including when the rows would enter separate
+groups. Contradictory or unsupported version markers also fail closed through the
+shared metric-definition validator. Recompute incompatible inputs from their
+source traces; changing version labels does not make metric meanings compatible.
+Uniform historical and current inputs remain supported, including generators.
+
+This aggregation guard does not validate the producer code revision of resumed
+episodes. That admission check and the remaining metric follow-ups stay in
+[#10022](https://github.com/ll7/robot_sf_ll7/issues/10022).
+
 ### Force metrics note
 Pedestrian force metrics (`force_q*`, `ped_force_*`, `force_exceed_events`, `ped_force_mean`)
 use the simulator's **total pedestrian force vector**. This is the sum of all

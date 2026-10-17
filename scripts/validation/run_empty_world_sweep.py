@@ -2,7 +2,7 @@
 """Empty-world sweep: the 0.0.8 roster on every scenario with all pedestrians removed (#9978).
 
 The sweep loads the 0.0.8 campaign template and its scenario matrix (and, with
-``--suite width``, the 90-cell doorway width slice) exactly as the release runner does
+``--suite width``, the versioned development-only doorway width successor) as the release runner does
 (``load_campaign_config`` + ``load_scenarios``), removes every pedestrian through the existing
 ``make_actor_free_scenario`` diagnostic hook, keeps everything else identical, and executes the
 result through the normal camera-ready campaign path (``run_campaign``). No simulator loop is
@@ -47,7 +47,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 SUITES: dict[str, str] = {
     "main": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-    "width": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+    "width": "configs/benchmarks/three_width_doorway_diagnostic_v2.yaml",
 }
 
 # Files that may differ between the tested head and the checkout (the sweep itself).
@@ -188,6 +188,31 @@ def _write_authored_horizon_schedule(
     payload["scenario_horizons_sha256"] = hashlib.sha256(schedule_out.read_bytes()).hexdigest()
 
 
+def _preflight_width_mppi(payload: dict[str, Any]) -> None:
+    """Exercise the selected real predictor and reject incompatible width inputs."""
+    from robot_sf.planner.predictive_mppi import (
+        PredictiveMPPIAdapter,
+        build_predictive_mppi_config,
+    )
+
+    for arm in payload["planners"]:
+        if arm["algo"] != "predictive_mppi":
+            continue
+        settings = yaml.safe_load((REPO_ROOT / arm["algo_config"]).read_text("utf-8"))
+        config = build_predictive_mppi_config(settings)
+        planner = PredictiveMPPIAdapter(config, allow_fallback=False)
+        # The production guard rejects unsupported requests, including 12 > 8.
+        planner._predict_future({})
+        if planner.foresight_degraded():
+            raise RuntimeError("width MPPI preflight requires a loaded predictor without fallback")
+        # This diagnostic uses the checked 0.1 s forecast grid. Both the robot
+        # rollout and nested anchor must score the same grid as the campaign.
+        if not (
+            config.rollout_dt == config.socnav.predictive_rollout_dt == float(payload["dt"]) == 0.1
+        ):
+            raise ValueError("width MPPI forecast and rollout cadence must both be 0.1 s")
+
+
 def build_derived_inputs(  # noqa: C901
     suite: str,
     *,
@@ -254,9 +279,7 @@ def build_derived_inputs(  # noqa: C901
         _write_authored_horizon_schedule(payload, scenarios, out_dir, suite)
     payload["seed_policy"] = {"mode": "fixed-list", "seeds": list(seeds)}
     payload["workers"] = int(workers)
-    payload["resume"] = False
-    payload["stop_on_failure"] = False
-    payload["export_publication_bundle"] = False
+    payload.update(resume=False, stop_on_failure=False, export_publication_bundle=False)
     # Dev diagnostics emit v2 rows; historical width anchors use v1 metrics.
     # Omit this unrelated scalar report without altering protected anchors.
     payload.update(paper_facing=False, snqi_weights=None, snqi_baseline=None)
@@ -267,6 +290,8 @@ def build_derived_inputs(  # noqa: C901
         if missing:
             raise RuntimeError(f"unknown arms {sorted(missing)}")
         payload["planners"] = [p for p in payload["planners"] if p["key"] in arms]
+    if suite == "width":
+        _preflight_width_mppi(payload)
     cfg_out = out_dir / f"campaign_{suite}_empty_world.yaml"
     cfg_out.write_text(yaml.safe_dump(payload, sort_keys=False), "utf-8")
 

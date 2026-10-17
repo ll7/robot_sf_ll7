@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from importlib import import_module
 from importlib.abc import MetaPathFinder
 from importlib.machinery import PathFinder, SourceFileLoader
@@ -38,7 +39,7 @@ class _BuiltinObjectiveFinder(MetaPathFinder):
     """One-shot hook restricted to the two built-in objective source modules."""
 
     def find_spec(
-        self, fullname: str, path: list[str] | None, target: ModuleType | None = None
+        self, fullname: str, path: Sequence[str] | None, target: ModuleType | None = None
     ) -> ModuleSpec | None:
         if fullname not in {_REGISTRY, _SCORER}:
             return None

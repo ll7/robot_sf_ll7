@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal, TypeGuard, cast
 from urllib.parse import quote
 
 from robot_sf.adversarial.episode_store_binding import validate_episode_store_row_binding
@@ -120,7 +120,7 @@ def planner_color(key: str) -> str:
     return import_module("robot_sf.benchmark.figures.style").planner_color(key)
 
 
-def publication_style(*, size: str) -> Any:
+def publication_style(*, size: Literal["single", "double"]) -> Any:
     """Load the shared publication style only when rendering needs it."""
     return import_module("robot_sf.benchmark.figures.style").publication_style(size=size)
 
@@ -1277,7 +1277,7 @@ def _validate_same_round_case_observation(
 def _validate_followup_case_observation(
     current_round: int,
     observation: dict[str, Any],
-    previous_verdict: str,
+    previous_verdict: Any,
     errors: list[str],
 ) -> None:
     observed_verdict = observation.get("admissibility_verdict")
@@ -1966,13 +1966,13 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912, PLR0915 - report all indep
         unsupported_fields = sorted(episode.keys() - accepted_episode_fields, key=repr)
         if unsupported_fields:
             errors.append(f"{row_prefix} contains unsupported fields: {unsupported_fields}")
-        _require_text(episode, "record_id", errors, row_prefix)
+        _require_text(cast("dict[str, Any]", episode), "record_id", errors, row_prefix)
         record_id = episode.get("record_id")
         if isinstance(record_id, str):
             if record_id in seen:
                 errors.append(f"{row_prefix}.record_id is duplicated")
             seen.add(record_id)
-        _require_text(episode, "scenario_id", errors, row_prefix)
+        _require_text(cast("dict[str, Any]", episode), "scenario_id", errors, row_prefix)
         scenario_id = episode.get("scenario_id")
         scenario_seed = episode.get("scenario_seed")
         if not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool):
@@ -2961,10 +2961,8 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
 
     if verdict == "empirically_feasible":
         completed_execution = any(
-            valid_runs[role]
-            and isinstance(runs[role], dict)
-            and runs[role].get("route_complete") is True
-            for role in ("reference", "target", "replay")
+            valid_runs[role] and isinstance(run, dict) and run.get("route_complete") is True
+            for role, run in runs.items()
         )
         oracle_support = _validate_admissibility_oracle_support(
             source,
@@ -3155,7 +3153,7 @@ def _validate_reported_replay_binding(
 
 
 def _validate_replay_artifact_reference(
-    replay: dict[str, Any],
+    replay: Any,
     context: _AdmissibilityContext,
     prefix: str,
     errors: list[str],
@@ -3634,7 +3632,7 @@ def _reported_episode_row_identity_matches(binding: Any, episode: dict[str, Any]
     )
 
 
-def _reported_producer_binding_is_valid(binding: Any) -> bool:
+def _reported_producer_binding_is_valid(binding: Any) -> TypeGuard[dict[str, Any]]:
     """Require an explicit valid producer manifest and run-context binding."""
     if not isinstance(binding, dict) or binding.get("status") != "valid":
         return False
